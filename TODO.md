@@ -5,8 +5,7 @@
 _(rien d'actif à l'instant T)_
 
 ## À faire (priorité)
-- [ ] Déployer sur le Pi : pas d'accès SSH depuis cet environnement, `deploy-web-pi.sh` à lancer manuellement
-      (script corrigé cette session — il ne syncait pas `agent/`, `static/`, `pc_client.py`)
+_(rien de priorisé à l'instant T)_
 
 ## Backlog
 - [ ] Reasoning par round de tool-calling en streaming (actuellement fusionné en un seul bloc
@@ -15,6 +14,9 @@ _(rien d'actif à l'instant T)_
       posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
 
 ## Terminé (session du 2026-07-06)
+- [x] Retrait du sous-titre "Agent local" sous le logo ccremote (sidebar)
+- [x] Déployé en prod via `~/.ssh/id_ed25519_ccremote` (accès direct au Pi, `pi@pi.exemple`) —
+      confirmé fonctionnel : sidebar corrigée, pill de contexte visible, zéro erreur console
 - [x] Suivi d'usage API Cerebras : quotas requêtes/tokens par minute/heure/jour (headers `x-ratelimit-*`
       réels capturés à chaque appel), + contexte de la conversation active (tokens utilisés/limite du
       modèle) — visible en pill dans le header agent et en détail dans Paramètres
