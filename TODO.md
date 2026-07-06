@@ -1,17 +1,28 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-07-06*
+*Dernière mise à jour : 2026-07-06 (soir)*
 
 ## En cours
 _(rien d'actif à l'instant T)_
 
 ## À faire (priorité)
-_(rien de priorisé à l'instant T)_
+- [ ] Confirmer depuis l'app que le bouton extinction PC fonctionne réellement (fix polkit déployé,
+      non re-testé en réel — irréversible, à valider par Chris)
+- [ ] Confirmer que les quotas repassent bien à zéro après une fenêtre pleine sans nouvel appel
+      (fix déployé, heuristique non observée sur un vrai cycle prod)
 
 ## Backlog
 - [ ] Reasoning par round de tool-calling en streaming (actuellement fusionné en un seul bloc
       pour tout l'échange, simplification assumée)
 - [ ] Décider si `zai-glm-4.7`/`gpt-oss-120b`/`gemma-4-31b` ont vraiment les tailles de contexte
       posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
+
+## Terminé (session du 2026-07-06, soir)
+- [x] Fix bouton extinction PC : ajout règle polkit `/etc/polkit-1/rules.d/49-ccremote-poweroff.rules`
+      (le service `ccremote-server`, hors session logind, n'était pas couvert par le `CanPowerOff` de
+      session) — vérifié via `pkcheck`, non testé en réel (irréversible)
+- [x] Fix quotas pas "temps réel" : `agent/usage.py::_effective_quotas()` resynthétise `remaining =
+      limit` quand la fenêtre (minute/heure/jour) est dépassée depuis le dernier appel réel, au lieu
+      de garder le snapshot figé — déployé sur le Pi
 
 ## Terminé (session du 2026-07-06)
 - [x] Quotas combinés (somme des clés configurées) affichés en priorité dans Paramètres, avec

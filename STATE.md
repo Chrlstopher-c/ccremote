@@ -1,5 +1,5 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-07-06*
+*Dernière mise à jour : 2026-07-06 (soir)*
 
 ## Résumé de l'état actuel
 
@@ -12,6 +12,27 @@ le tout en langage naturel : statut PC, sessions tmux, métriques, comptes Claud
 Design "Anthropic-style" (cream/serif/orange) repris d'un mockup fourni par Chris, entièrement
 re-câblé sur le vrai backend (aucune donnée fictive). Mobile-first, streaming SSE, markdown stylisé,
 conversations persistantes en localStorage. Déployé et vérifié fonctionnel en prod.
+
+## Ce qui a été fait — session du 2026-07-06 (suite, fin de journée)
+
+- **Fix bouton extinction PC (bug signalé par Chris)** : `subprocess.Popen(["poweroff"])` échouait
+  silencieusement côté serveur (`Access denied — interactive authentication required`, vu dans
+  `journalctl -u ccremote-server`). Cause : `ccremote-server.service` tourne comme service systemd
+  (`User=trinity`) hors session logind — le `CanPowerOff=yes` vérifié précédemment ne valait que
+  pour la session graphique active, pas pour un process de service. Fix : règle polkit dédiée
+  `/etc/polkit-1/rules.d/49-ccremote-poweroff.rules` autorisant `org.freedesktop.login1.power-off`
+  pour l'uid `trinity` sans condition de session. Vérifié via `pkcheck` (`result=yes`) ; pas de test
+  réel déclenché (irréversible), à valider par Chris depuis l'app.
+- **Fix quotas Cerebras pas "temps réel" (bug signalé par Chris)** : les quotas affichés restaient
+  figés sur les valeurs du dernier appel API réel — après un appel épuisant un quota (ex: 5/min),
+  la minute suivante sans nouvel appel montrait toujours l'ancien `remaining`, donnant l'impression
+  fausse que le quota ne se régénère jamais. Cause : `agent/usage.py` stocke un snapshot passif des
+  headers `x-ratelimit-*`, jamais recalculé entre deux appels. Fix : `_effective_quotas()` compare
+  le temps écoulé depuis `updated_at` à la durée de la fenêtre (`WINDOW_SECONDS`) et resynthétise
+  `remaining = limit` si la fenêtre est dépassée — heuristique "reset complet après un cycle entier
+  sans appel", cohérente avec une fenêtre glissante Cerebras. Appliqué à `get_snapshot()` et
+  `_combined_quotas()`. Déployé sur le Pi (`scp` + `systemctl restart ccremote-web`), service
+  vérifié actif.
 
 ## Ce qui a été fait — session du 2026-07-06
 
@@ -108,6 +129,8 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 | `poweroff` nu (pas `systemctl poweroff`) | Préférence explicite de Chris, habitude déjà validée sans sudo | 2026-07-06 |
 | Rotation round-robin réactive (sur 429), pas proactive | Simplicité — bascule seulement quand la clé active est réellement épuisée, pas d'alternance systématique qui compliquerait le suivi de quota par clé | 2026-07-06 |
 | Quotas affichés en combiné (somme des clés) + détail par clé | Chris a fait remarquer que le fallback étant réel et automatique, un total combiné n'est pas trompeur — seulement l'était le fait de ne montrer que la clé active | 2026-07-06 |
+| Reset quota simulé par seuil (pas d'interpolation progressive) | Chris a explicitement décrit l'attente comme un reset complet après une fenêtre pleine ("la minute d'après ça doit revenir à zéro"), pas une régénération graduelle — plus simple et fidèle à la demande | 2026-07-06 |
+| Règle polkit dédiée plutôt que modifier le service pour tourner en session utilisateur | Le service `ccremote-server` doit rester un service système auto-démarré au boot, indépendant d'une session graphique ouverte | 2026-07-06 |
 
 ## Contexte non-évident
 
@@ -123,6 +146,11 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
   indéfiniment si le serveur ne répondait jamais (c'était plausiblement la cause du "crash" rapporté).
 - **`X-Accel-Buffering: no`** ajouté sur la réponse SSE pour éviter tout buffering par un reverse
   proxy intermédiaire (Cloudflare Tunnel) qui casserait le streaming en prod.
+- **`poweroff` (symlink vers `systemctl`) passe toujours par polkit**, même lancé depuis un service
+  systemd tournant sous un utilisateur non-root — polkit distingue "session active" de "process de
+  cet uid", et une règle basée sur `CanPowerOff` de session ne couvre pas le second cas. Toute
+  action privilégiée déclenchée par `ccremote-server` (pas seulement poweroff) devra passer par une
+  règle polkit explicite sur l'uid, jamais s'appuyer sur un test fait en session interactive.
 - **Coût réel par appel bien plus élevé que le message tapé** : `TOOL_SCHEMAS` (tous les tools
   disponibles) est envoyé à chaque appel Cerebras, même sans tool call. Vérifié en prod (test session
   du 2026-07-06) : un message de 8 mots sans tool a consommé ~16 650 tokens sur le quota "tokens/minute"
@@ -136,6 +164,13 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Points en suspens
 
+- **Bouton extinction non re-testé en réel** après le fix polkit (le test aurait réellement éteint
+  la machine) — vérification faite uniquement via `pkcheck` (résultat `yes`). À confirmer par Chris
+  depuis l'app à sa prochaine utilisation.
+- **Heuristique de reset des quotas non vérifiée en conditions réelles prolongées** — la logique
+  "reset complet après une fenêtre pleine sans appel" est un best-effort cohérent avec une fenêtre
+  glissante, mais n'a pas été observée sur un vrai cycle minute/heure/jour en prod. À surveiller si
+  Chris rapporte encore un écart.
 - **Les deux clés Cerebras sont sur le tier gratuit** (5 req/min, 30k tokens/min chacune, confirmé
   par les vraies limites remontées dans l'UI) — la rotation double la marge mais ne résout pas le
   problème structurel. Si les 429 reviennent fréquemment malgré les 2 clés, la vraie solution est
