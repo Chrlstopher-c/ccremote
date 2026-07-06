@@ -35,3 +35,30 @@ def get_snapshot(key_label: str | None) -> dict:
         "quotas": _snapshots.get(key_label, _empty_quotas()),
         "updated_at": _updated_at.get(key_label),
     }
+
+
+def _combined_quotas(key_labels: list[str]) -> dict:
+    combined = _empty_quotas()
+    for kind in KINDS:
+        for window in WINDOWS:
+            limits = [_snapshots.get(label, _empty_quotas())[kind][window]["limit"] for label in key_labels]
+            remainings = [_snapshots.get(label, _empty_quotas())[kind][window]["remaining"] for label in key_labels]
+            if limits and all(v is not None for v in limits):
+                combined[kind][window]["limit"] = sum(limits)
+            if remainings and all(v is not None for v in remainings):
+                combined[kind][window]["remaining"] = sum(remainings)
+    return combined
+
+
+def get_all(key_labels: list[str], active_key: str | None) -> dict:
+    """Vue complète multi-clés : le fallback rend la capacité combinée réelle (pas cosmétique),
+    donc on l'affiche — mais chaque clé reste visible séparément pour ne rien cacher."""
+    updates = [_updated_at[label] for label in key_labels if label in _updated_at]
+    return {
+        "active_key": active_key,
+        "keys": {label: get_snapshot(label) for label in key_labels},
+        "combined": {
+            "quotas": _combined_quotas(key_labels),
+            "updated_at": max(updates) if updates else None,
+        },
+    }

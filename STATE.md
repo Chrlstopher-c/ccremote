@@ -15,6 +15,12 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Ce qui a été fait — session du 2026-07-06
 
+- Affichage des quotas repensé après remarque de Chris : la carte "Utilisation" montrait
+  seulement la clé active, ce qui donnait l'impression fausse d'être proche du mur en cas de
+  quasi-épuisement de key1 alors que key2 est intacte à côté. Vu que le fallback est réel et
+  automatique, la capacité combinée (10 req/min, 60k tokens/min avec 2 clés) n'est pas fictive —
+  affichée en priorité (`agent/usage.py::get_all`, somme des limites/restants des clés
+  configurées), avec le détail par clé toujours visible en dessous pour ne rien cacher.
 - Fix signalé par Chris : le snapshot de quotas (en mémoire) redevenait vide à chaque restart du
   serveur, ce qui donnait l'impression trompeuse que le quota réel était remis à zéro — alors que
   le quota côté Cerebras n'est jamais affecté par un restart de notre process, seul notre miroir

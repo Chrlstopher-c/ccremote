@@ -1,7 +1,7 @@
 // ============ UTILISATION (contexte + quotas API) ============
 const WINDOW_LABELS = { minute: 'minute', hour: 'heure', day: 'jour' };
 const KIND_LABELS = { requests: 'Requêtes', tokens: 'Tokens' };
-const KEY_LABELS = { key1: 'clé #1', key2: 'clé #2' };
+const KEY_LABELS = { key1: 'Clé #1', key2: 'Clé #2' };
 
 function usageRatioColor(ratio) {
   if (ratio >= 0.9) return 'var(--err)';
@@ -28,17 +28,7 @@ function renderContextUsage(usage) {
   }
 }
 
-function renderQuotaUsage(payload) {
-  const quotas = payload && payload.quotas;
-  const grid = document.getElementById('quotaGrid');
-  const keyEl = document.getElementById('quotaKeyLabel');
-  if (keyEl) keyEl.textContent = payload && payload.active_key ? KEY_LABELS[payload.active_key] || payload.active_key : '';
-  if (!grid) return;
-  if (!quotas) {
-    grid.innerHTML = `<div class="text-[12px]" style="color: var(--ink-3);">Aucun appel effectué depuis le démarrage du serveur.</div>`;
-    return;
-  }
-
+function quotaBarsHtml(quotas) {
   const rows = [];
   for (const window of ['minute', 'hour', 'day']) {
     for (const kind of ['requests', 'tokens']) {
@@ -55,15 +45,48 @@ function renderQuotaUsage(payload) {
         </div>`);
     }
   }
-  grid.innerHTML = rows.length
-    ? rows.join('')
-    : `<div class="text-[12px]" style="color: var(--ink-3);">Aucun appel effectué depuis le démarrage du serveur.</div>`;
+  return rows.join('');
+}
+
+function renderQuotaUsage(payload) {
+  const grid = document.getElementById('quotaGrid');
+  const byKeyEl = document.getElementById('quotaByKey');
+  const countEl = document.getElementById('quotaKeyCount');
+  if (!grid) return;
+
+  const keyLabels = payload && payload.keys ? Object.keys(payload.keys) : [];
+  if (countEl) countEl.textContent = keyLabels.length > 1 ? `${keyLabels.length} clés` : (keyLabels[0] ? KEY_LABELS[keyLabels[0]] || keyLabels[0] : '');
+
+  const combinedQuotas = payload && payload.combined && payload.combined.quotas;
+  const bars = combinedQuotas ? quotaBarsHtml(combinedQuotas) : '';
+  grid.innerHTML = bars || `<div class="text-[12px]" style="color: var(--ink-3);">Aucun appel effectué depuis le démarrage du serveur.</div>`;
+
+  if (byKeyEl) {
+    byKeyEl.innerHTML = keyLabels.map(label => {
+      const info = payload.keys[label];
+      const active = label === payload.active_key;
+      const w = info.quotas.requests.minute;
+      const detail = w.limit == null
+        ? 'aucun appel encore'
+        : `${formatNum(w.limit - w.remaining)} / ${formatNum(w.limit)} req/min`;
+      return `
+        <div class="flex items-center justify-between px-3 py-2 rounded-lg text-[12px]" style="background: var(--bg-2);">
+          <div class="flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full" style="background: ${active ? 'var(--ok)' : 'var(--line-2)'};"></span>
+            <span style="color: var(--ink);">${KEY_LABELS[label] || label}</span>
+            ${active ? '<span class="badge" style="background: var(--ok-soft); color: var(--ok);">active</span>' : ''}
+          </div>
+          <span class="mono" style="color: var(--ink-3);">${detail}</span>
+        </div>`;
+    }).join('') || `<div class="text-[12px]" style="color: var(--ink-3);">Aucune clé configurée.</div>`;
+  }
 
   const updatedEl = document.getElementById('quotaUpdatedAt');
   if (updatedEl) {
-    if (!payload.updated_at) { updatedEl.textContent = ''; }
+    const updatedAt = payload && payload.combined && payload.combined.updated_at;
+    if (!updatedAt) { updatedEl.textContent = ''; }
     else {
-      const secAgo = Math.max(0, Math.round(Date.now() / 1000 - payload.updated_at));
+      const secAgo = Math.max(0, Math.round(Date.now() / 1000 - updatedAt));
       updatedEl.textContent = secAgo < 60 ? `il y a ${secAgo}s` : `il y a ${Math.round(secAgo / 60)}min`;
     }
   }

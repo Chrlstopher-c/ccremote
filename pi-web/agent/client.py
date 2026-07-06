@@ -47,6 +47,10 @@ def active_key_label() -> str | None:
     return _clients[_active][0] if _clients else None
 
 
+def configured_key_labels() -> list[str]:
+    return [label for label, _ in _clients]
+
+
 def _rotate() -> None:
     global _active
     _active = (_active + 1) % len(_clients)

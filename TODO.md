@@ -14,6 +14,9 @@ _(rien de priorisé à l'instant T)_
       posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
 
 ## Terminé (session du 2026-07-06)
+- [x] Quotas combinés (somme des clés configurées) affichés en priorité dans Paramètres, avec
+      détail par clé toujours visible en dessous — le fallback étant réel, le total combiné
+      est honnête, pas cosmétique
 - [x] Fix : le snapshot de quotas se videait à chaque restart serveur (trompeur — le vrai quota
       Cerebras n'est jamais affecté) — warm-up au démarrage (`lifespan` FastAPI) qui repeuple le
       snapshot avant toute requête utilisateur

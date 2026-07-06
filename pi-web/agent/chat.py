@@ -8,6 +8,7 @@ from agent.client import (
     MODEL_CONTEXT_TOKENS,
     SYSTEM_PROMPT,
     active_key_label,
+    configured_key_labels,
     create_completion_stream,
     is_configured,
     resolve_model,
@@ -24,7 +25,7 @@ def _usage_payload(messages: list[dict], model: str | None) -> dict:
         "tokens_used": estimate_messages_tokens(messages),
         "tokens_limit": MODEL_CONTEXT_TOKENS.get(resolved, 32_000),
         "model": resolved,
-        **agent_usage.get_snapshot(active_key_label()),
+        **agent_usage.get_all(configured_key_labels(), active_key_label()),
     }
 
 
