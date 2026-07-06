@@ -8,6 +8,8 @@ const state = {
   agentBusy: false,
   config: null,
   termInterval: null,
+  currentConvId: null,
+  convTitle: null,
 };
 
 function loadPrefs() {
@@ -42,6 +44,7 @@ function switchView(view) {
   if (view === 'sessions') renderSessions();
   if (view === 'pc') renderPcView();
   if (view === 'history') renderHistory();
+  if (view === 'settings') renderClaudeAccounts();
   closeSidebar();
 }
 

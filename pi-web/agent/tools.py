@@ -90,6 +90,36 @@ TOOL_SCHEMAS = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown_pc",
+            "description": "Éteint le PC distant proprement (systemctl poweroff). Irréversible sans accès physique ou Wake-on-LAN.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_claude_accounts",
+            "description": "Liste les comptes Claude Code disponibles sur le PC et indique lequel est actif.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "switch_claude_account",
+            "description": "Change le compte Claude Code actif sur le PC (redémarre les sessions tmux en cours).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account": {"type": "string", "description": "Identifiant du compte, ex 'account1' ou 'account2'."}
+                },
+                "required": ["account"],
+            },
+        },
+    },
 ]
 
 
@@ -126,6 +156,18 @@ async def _wake_pc(**_: object) -> dict:
     return {"status": "sent"}
 
 
+async def _shutdown_pc(**_: object) -> dict:
+    return await ws_cmd({"cmd": "shutdown"})
+
+
+async def _list_claude_accounts(**_: object) -> dict:
+    return await ws_cmd({"cmd": "list_claude_accounts"})
+
+
+async def _switch_claude_account(account: str, **_: object) -> dict:
+    return await ws_cmd({"cmd": "switch_claude_account", "account": account}, timeout=20)
+
+
 TOOL_EXECUTORS: dict[str, Callable[..., Awaitable[dict]]] = {
     "get_status": _get_status,
     "get_metrics": _get_metrics,
@@ -135,4 +177,7 @@ TOOL_EXECUTORS: dict[str, Callable[..., Awaitable[dict]]] = {
     "capture_pane": _capture_pane,
     "send_keys": _send_keys,
     "wake_pc": _wake_pc,
+    "shutdown_pc": _shutdown_pc,
+    "list_claude_accounts": _list_claude_accounts,
+    "switch_claude_account": _switch_claude_account,
 }

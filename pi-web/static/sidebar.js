@@ -58,5 +58,17 @@ async function wakePc() {
   }
 }
 
+document.getElementById('shutdownBtn').addEventListener('click', () => {
+  if (!state.pcOnline) { showToast('Le PC est déjà éteint', 'warn'); return; }
+  confirmAction('Éteindre le PC', 'Le PC va s\'éteindre proprement. Il faudra le réveiller via Wake-on-LAN pour y accéder à nouveau. Continuer ?', shutdownPc, { danger: true });
+});
+
+async function shutdownPc() {
+  await api('POST', '/api/shutdown');
+  showToast('Extinction en cours…', 'warn');
+  addHistory('wake', 'PC éteint', 'Arrêt demandé via l\'interface');
+  setPcOnline(false);
+}
+
 setInterval(pollSidebar, 4000);
 pollSidebar();

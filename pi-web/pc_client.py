@@ -1,3 +1,4 @@
+import asyncio
 import json
 import socket
 
@@ -5,6 +6,8 @@ import websockets
 from loguru import logger
 
 from config import PC_HOST, PC_MAC, PC_PORT, WS_TIMEOUT
+
+RECV_TIMEOUT = 30
 
 
 def send_magic_packet(mac: str = PC_MAC) -> None:
@@ -15,12 +18,12 @@ def send_magic_packet(mac: str = PC_MAC) -> None:
         s.sendto(packet, ("<broadcast>", 9))
 
 
-async def ws_cmd(payload: dict) -> dict:
+async def ws_cmd(payload: dict, timeout: float = RECV_TIMEOUT) -> dict:
     uri = f"ws://{PC_HOST}:{PC_PORT}"
     try:
         async with websockets.connect(uri, open_timeout=WS_TIMEOUT) as ws:
             await ws.send(json.dumps(payload))
-            resp = await ws.recv()
+            resp = await asyncio.wait_for(ws.recv(), timeout=timeout)
             return {"pc_online": True, **json.loads(resp)}
     except Exception as e:
         logger.warning(f"ws_cmd failed: {e}")

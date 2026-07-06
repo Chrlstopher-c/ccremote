@@ -20,12 +20,21 @@ document.getElementById('sendBtn').addEventListener('click', sendMessage);
 document.querySelectorAll('.suggestion').forEach(b => b.addEventListener('click', () => { chatInput.value = b.textContent; chatInput.focus(); chatInput.dispatchEvent(new Event('input')); }));
 
 document.getElementById('newChatBtn').addEventListener('click', () => {
+  if (state.currentConvId) persistCurrentConversation();
   state.chatHistory = [];
+  state.currentConvId = null;
+  state.convTitle = null;
   messagesInner.innerHTML = `<div class="text-center pt-4 pb-2 msg-in"><h2 class="serif text-[22px] font-medium mb-1.5" style="color: var(--ink);">Nouvelle conversation</h2><p class="text-[13.5px]" style="color: var(--ink-3);">Que voulez-vous faire ?</p></div>`;
+  renderConversationList();
   showToast('Nouvelle conversation créée', 'ok');
 });
 
 function scrollBottom() { setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 50); }
+
+function renderMarkdown(text) {
+  if (!window.marked || !window.DOMPurify) return escapeHtml(text || '');
+  return DOMPurify.sanitize(marked.parse(text || ''));
+}
 
 function addUserMessage(text) {
   const div = document.createElement('div');
@@ -38,11 +47,11 @@ function addUserMessage(text) {
 function addAssistantBlock(html) {
   const div = document.createElement('div');
   div.className = 'msg-in';
-  div.innerHTML = `<div class="flex gap-3.5"><div class="shrink-0 w-7 h-7 rounded-md flex items-center justify-center" style="background: var(--accent);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.5"/></svg></div><div class="flex-1 min-w-0 space-y-3">${html}</div></div>`;
+  div.innerHTML = `<div class="flex gap-3.5"><div class="shrink-0 w-7 h-7 rounded-md flex items-center justify-center" style="background: var(--accent);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.5"/></svg></div><div class="flex-1 min-w-0 space-y-3 stream-content">${html}</div></div>`;
   messagesInner.appendChild(div);
   bindDynamicElements(div);
   scrollBottom();
-  return div;
+  return div.querySelector('.stream-content');
 }
 
 function showTyping() {
@@ -89,6 +98,7 @@ function toolBlock(trace) {
   </div>`;
 }
 
+function mdBlock(text) { return `<div class="md text-[14px] leading-relaxed" style="color: var(--ink);">${renderMarkdown(text)}</div>`; }
 function textBlock(text) { return `<p class="text-[14px] leading-relaxed" style="color: var(--ink);">${escapeHtml(text)}</p>`; }
 
 function bindDynamicElements(container) {
@@ -107,27 +117,162 @@ function historyLabelFor(trace) {
   return meta.label;
 }
 
+// ============ CONVERSATIONS PERSISTANTES ============
+function loadConversations() {
+  try { return JSON.parse(localStorage.getItem('ccr_conversations') || '[]'); } catch { return []; }
+}
+function saveConversations(list) { localStorage.setItem('ccr_conversations', JSON.stringify(list.slice(0, 40))); }
+function newConversationId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+function persistCurrentConversation() {
+  if (!state.currentConvId) return;
+  const list = loadConversations();
+  const idx = list.findIndex(c => c.id === state.currentConvId);
+  const entry = {
+    id: state.currentConvId,
+    title: state.convTitle || 'Conversation',
+    updatedAt: Date.now(),
+    apiHistory: state.chatHistory,
+    displayHtml: messagesInner.innerHTML,
+  };
+  if (idx >= 0) list[idx] = entry; else list.unshift(entry);
+  saveConversations(list);
+  renderConversationList();
+}
+
+function resumeConversation(id) {
+  const conv = loadConversations().find(c => c.id === id);
+  if (!conv) return;
+  state.currentConvId = conv.id;
+  state.convTitle = conv.title;
+  state.chatHistory = conv.apiHistory || [];
+  messagesInner.innerHTML = conv.displayHtml;
+  bindDynamicElements(messagesInner);
+  switchView('agent');
+  renderConversationList();
+  scrollBottom();
+}
+
+function deleteConversation(id) {
+  const list = loadConversations().filter(c => c.id !== id);
+  saveConversations(list);
+  if (state.currentConvId === id) {
+    state.chatHistory = [];
+    state.currentConvId = null;
+    state.convTitle = null;
+    messagesInner.innerHTML = `<div class="text-center pt-4 pb-2 msg-in"><h2 class="serif text-[22px] font-medium mb-1.5" style="color: var(--ink);">Nouvelle conversation</h2><p class="text-[13.5px]" style="color: var(--ink-3);">Que voulez-vous faire ?</p></div>`;
+  }
+  renderConversationList();
+}
+
+function renderConversationList() {
+  const el = document.getElementById('convList');
+  if (!el) return;
+  const list = loadConversations();
+  if (list.length === 0) {
+    el.innerHTML = `<div class="px-2.5 py-1.5 text-[11.5px]" style="color: var(--ink-3);">Aucune conversation enregistrée</div>`;
+    return;
+  }
+  el.innerHTML = list.map(c => `
+    <div class="conv-item group w-full px-2.5 py-1.5 rounded-md text-[12.5px] flex items-center justify-between gap-1.5 cursor-pointer ${c.id === state.currentConvId ? 'nav-item active' : ''}" data-id="${c.id}" style="color: var(--ink-2);">
+      <span class="truncate">${escapeHtml(c.title)}</span>
+      <button class="conv-delete shrink-0 p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100" data-id="${c.id}" title="Supprimer">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--ink-3);"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`).join('');
+  el.querySelectorAll('.conv-item').forEach(row => row.addEventListener('click', (e) => {
+    if (e.target.closest('.conv-delete')) return;
+    resumeConversation(row.dataset.id);
+  }));
+  el.querySelectorAll('.conv-delete').forEach(btn => btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    deleteConversation(btn.dataset.id);
+  }));
+}
+
+// ============ STREAMING ============
+function renderStreamState(container, st) {
+  let html = '';
+  if (st.reasoning) html += thinkBlock(st.reasoning);
+  html += st.toolsHtml;
+  if (st.content) html += mdBlock(st.content);
+  container.innerHTML = html;
+  bindDynamicElements(container);
+  scrollBottom();
+}
+
 async function sendMessage() {
   if (state.agentBusy) { showToast('L\'agent traite déjà une demande…', 'warn'); return; }
   const text = chatInput.value.trim();
   if (!text) return;
+  if (!state.currentConvId) {
+    state.currentConvId = newConversationId();
+    state.convTitle = text.length > 42 ? text.slice(0, 42) + '…' : text;
+  }
   addUserMessage(text);
   chatInput.value = '';
   chatInput.style.height = 'auto';
   state.agentBusy = true;
   showTyping();
+
+  const st = { reasoning: '', content: '', toolsHtml: '' };
+  let container = null;
+  let finalHistory = state.chatHistory;
+
   try {
-    const resp = await api('POST', '/api/agent/chat', { message: text, history: state.chatHistory, model: prefs.model });
-    hideTyping();
-    state.chatHistory = resp.history || [];
-    let html = '';
-    (resp.reasoning || []).forEach(r => { html += thinkBlock(r); });
-    (resp.tool_calls || []).forEach(t => { html += toolBlock(t); addHistory('tool', historyLabelFor(t), JSON.stringify(t.result).slice(0, 80)); });
-    html += textBlock(resp.reply || '');
-    addAssistantBlock(html);
+    const res = await fetch('/api/agent/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ message: text, history: state.chatHistory, model: prefs.model }),
+    });
+    if (!res.ok || !res.body) throw new Error(`/api/agent/chat -> ${res.status}`);
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      for (const part of parts) {
+        if (!part.startsWith('data: ')) continue;
+        const event = JSON.parse(part.slice(6));
+        if (!container && (event.type === 'content_delta' || event.type === 'reasoning_delta' || event.type === 'tool_call')) {
+          hideTyping();
+          container = addAssistantBlock('');
+        }
+        if (event.type === 'compacted') {
+          showToast('Conversation compactée pour respecter le contexte du modèle', 'warn');
+          addHistory('tool', 'Conversation compactée', 'Résumé automatique appliqué');
+        } else if (event.type === 'reasoning_delta') {
+          st.reasoning += event.text;
+          renderStreamState(container, st);
+        } else if (event.type === 'content_delta') {
+          st.content += event.text;
+          renderStreamState(container, st);
+        } else if (event.type === 'tool_call') {
+          st.toolsHtml += toolBlock(event);
+          renderStreamState(container, st);
+          addHistory('tool', historyLabelFor(event), JSON.stringify(event.result).slice(0, 80));
+        } else if (event.type === 'done') {
+          hideTyping();
+          if (!container) container = addAssistantBlock('');
+          st.content = event.reply || st.content;
+          renderStreamState(container, st);
+          finalHistory = event.history || finalHistory;
+        }
+      }
+    }
+    state.chatHistory = finalHistory;
+    persistCurrentConversation();
   } catch (e) {
     hideTyping();
     addAssistantBlock(textBlock('Erreur de communication avec l\'agent : ' + e.message));
   }
   state.agentBusy = false;
 }
+
+renderConversationList();

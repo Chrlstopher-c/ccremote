@@ -2,10 +2,12 @@
 import asyncio
 import json
 import re
+import shutil
 import socket
 import struct
 import subprocess
 import time
+from pathlib import Path
 
 import psutil
 import websockets
@@ -13,6 +15,66 @@ from loguru import logger
 from config import HOST, PORT, TMUX_SESSION
 
 _net_prev: dict = {}
+
+CLAUDE_DIR = Path.home() / ".claude"
+CREDENTIALS_FILE = CLAUDE_DIR / ".credentials.json"
+ACCOUNTS_META_FILE = CLAUDE_DIR / ".ccremote-accounts.json"
+DEFAULT_ACCOUNTS = {"account1": "compte-a@exemple.fr", "account2": "compte-b@exemple.fr"}
+
+
+def _load_accounts_meta() -> dict:
+    if ACCOUNTS_META_FILE.exists():
+        return json.loads(ACCOUNTS_META_FILE.read_text())
+    meta = {"accounts": DEFAULT_ACCOUNTS, "active": "account1"}
+    ACCOUNTS_META_FILE.write_text(json.dumps(meta))
+    return meta
+
+
+def _save_accounts_meta(meta: dict) -> None:
+    ACCOUNTS_META_FILE.write_text(json.dumps(meta))
+
+
+def list_claude_accounts() -> dict:
+    meta = _load_accounts_meta()
+    return {
+        "status": "ok",
+        "accounts": [
+            {"id": aid, "label": label, "active": aid == meta["active"]}
+            for aid, label in meta["accounts"].items()
+        ],
+    }
+
+
+def switch_claude_account(target: str) -> dict:
+    meta = _load_accounts_meta()
+    if target not in meta["accounts"]:
+        return {"status": "error", "message": f"compte inconnu: {target}"}
+    if target == meta["active"]:
+        return {"status": "already_active", "account": target}
+
+    current = meta["active"]
+    current_snapshot = CLAUDE_DIR / f".credentials_{current}.json"
+    target_snapshot = CLAUDE_DIR / f".credentials_{target}.json"
+    if not target_snapshot.exists():
+        return {"status": "error", "message": f"snapshot manquant pour {target}: {target_snapshot}"}
+
+    try:
+        shutil.copy2(CREDENTIALS_FILE, current_snapshot)
+        shutil.copy2(target_snapshot, CREDENTIALS_FILE)
+    except Exception as e:
+        return {"status": "error", "message": f"échec de la copie des credentials: {e}"}
+
+    meta["active"] = target
+    _save_accounts_meta(meta)
+
+    restarted = []
+    for session in list_tmux_sessions():
+        name = session["name"]
+        subprocess.run(["tmux", "kill-session", "-t", name])
+        launch_claude(name)
+        restarted.append(name)
+
+    return {"status": "ok", "account": target, "restarted_sessions": restarted}
 
 
 def tmux_session_exists(name: str = TMUX_SESSION) -> bool:
@@ -152,13 +214,27 @@ async def handle(websocket: websockets.ServerConnection) -> None:
                     name = msg.get("session", TMUX_SESSION)
                     keys = msg.get("keys", "")
                     if tmux_session_exists(name):
-                        subprocess.run(["tmux", "send-keys", "-t", name, keys, "Enter"])
+                        # texte et Enter envoyés séparément avec un délai : envoyés d'un coup,
+                        # les TUI en bracketed-paste (Claude Code) avalent l'Enter sans soumettre.
+                        subprocess.run(["tmux", "send-keys", "-t", name, "-l", keys])
+                        await asyncio.sleep(0.2)
+                        subprocess.run(["tmux", "send-keys", "-t", name, "Enter"])
                         resp = {"status": "ok"}
                     else:
                         resp = {"status": "error", "message": "session not found"}
 
                 elif cmd == "metrics":
                     resp = {"status": "ok", **get_metrics()}
+
+                elif cmd == "shutdown":
+                    subprocess.Popen(["poweroff"])
+                    resp = {"status": "shutting_down"}
+
+                elif cmd == "list_claude_accounts":
+                    resp = list_claude_accounts()
+
+                elif cmd == "switch_claude_account":
+                    resp = switch_claude_account(msg.get("account", ""))
 
                 else:
                     resp = {"status": "error", "message": f"unknown cmd: {cmd}"}
