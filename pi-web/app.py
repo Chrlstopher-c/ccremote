@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+import asyncio
+import hashlib
+import json
+import socket
+import struct
+
+import websockets
+from fastapi import Body, Cookie, Depends, FastAPI, Form, HTTPException, Query, status
+from fastapi.requests import Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from loguru import logger
+
+from config import PC_HOST, PC_PORT, PC_MAC, WS_TIMEOUT, UI_PASSWORD
+
+app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+
+
+@app.middleware("http")
+async def no_cache(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+SESSION_TOKEN = hashlib.sha256(UI_PASSWORD.encode()).hexdigest()
+
+
+def check_session(session: str | None = Cookie(default=None)) -> str:
+    if session != SESSION_TOKEN:
+        raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/login"})
+    return session
+
+
+def send_magic_packet(mac: str) -> None:
+    mac_bytes = bytes.fromhex(mac.replace(":", "").replace("-", ""))
+    packet = b"\xff" * 6 + mac_bytes * 16
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        s.sendto(packet, ("<broadcast>", 9))
+
+
+async def ws_cmd(payload: dict) -> dict:
+    uri = f"ws://{PC_HOST}:{PC_PORT}"
+    try:
+        async with websockets.connect(uri, open_timeout=WS_TIMEOUT) as ws:
+            await ws.send(json.dumps(payload))
+            resp = await ws.recv()
+            return {"pc_online": True, **json.loads(resp)}
+    except Exception:
+        return {"pc_online": False, "status": "error", "message": "PC unreachable"}
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    return templates.TemplateResponse(request=request, name="login.html")
+
+
+@app.post("/login")
+async def do_login(password: str = Form(...)):
+    if password != UI_PASSWORD:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Mauvais mot de passe")
+    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
+    response.set_cookie("session", SESSION_TOKEN, httponly=True, samesite="strict", secure=True)
+    return response
+
+
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse("/login", status_code=status.HTTP_302_FOUND)
+    response.delete_cookie("session")
+    return response
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request, _: str = Depends(check_session)):
+    return templates.TemplateResponse(request=request, name="index.html")
+
+
+@app.get("/api/status")
+async def api_status(_: str = Depends(check_session)):
+    return await ws_cmd({"cmd": "status"})
+
+
+@app.post("/api/wake")
+async def api_wake(_: str = Depends(check_session)):
+    send_magic_packet(PC_MAC)
+    return {"status": "sent"}
+
+
+@app.post("/api/launch")
+async def api_launch(session: str = Query(default="claude"), _: str = Depends(check_session)):
+    return await ws_cmd({"cmd": "launch", "session": session})
+
+
+@app.post("/api/kill")
+async def api_kill(session: str = Query(default="claude"), _: str = Depends(check_session)):
+    return await ws_cmd({"cmd": "kill", "session": session})
+
+
+@app.get("/api/sessions")
+async def api_sessions(_: str = Depends(check_session)):
+    return await ws_cmd({"cmd": "list_sessions"})
+
+
+@app.get("/api/capture")
+async def api_capture(session: str = Query(default="claude"), _: str = Depends(check_session)):
+    return await ws_cmd({"cmd": "capture_pane", "session": session, "lines": 80})
+
+
+@app.post("/api/send")
+async def api_send(
+    session: str = Query(default="claude"),
+    body: dict = Body(default={}),
+    _: str = Depends(check_session),
+):
+    keys = body.get("keys", "")
+    return await ws_cmd({"cmd": "send_keys", "session": session, "keys": keys})
+
+
+@app.get("/api/metrics")
+async def api_metrics(_: str = Depends(check_session)):
+    return await ws_cmd({"cmd": "metrics"})
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8766)
