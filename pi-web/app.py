@@ -1,18 +1,14 @@
 #!/usr/bin/env python3
-import asyncio
 import hashlib
-import json
-import socket
-import struct
 
-import websockets
 from fastapi import Body, Cookie, Depends, FastAPI, Form, HTTPException, Query, status
 from fastapi.requests import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from loguru import logger
 
-from config import PC_HOST, PC_PORT, PC_MAC, WS_TIMEOUT, UI_PASSWORD
+from agent.chat import run_agent
+from config import UI_PASSWORD
+from pc_client import send_magic_packet, ws_cmd
 
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
@@ -32,25 +28,6 @@ def check_session(session: str | None = Cookie(default=None)) -> str:
     if session != SESSION_TOKEN:
         raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/login"})
     return session
-
-
-def send_magic_packet(mac: str) -> None:
-    mac_bytes = bytes.fromhex(mac.replace(":", "").replace("-", ""))
-    packet = b"\xff" * 6 + mac_bytes * 16
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.sendto(packet, ("<broadcast>", 9))
-
-
-async def ws_cmd(payload: dict) -> dict:
-    uri = f"ws://{PC_HOST}:{PC_PORT}"
-    try:
-        async with websockets.connect(uri, open_timeout=WS_TIMEOUT) as ws:
-            await ws.send(json.dumps(payload))
-            resp = await ws.recv()
-            return {"pc_online": True, **json.loads(resp)}
-    except Exception:
-        return {"pc_online": False, "status": "error", "message": "PC unreachable"}
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -86,7 +63,7 @@ async def api_status(_: str = Depends(check_session)):
 
 @app.post("/api/wake")
 async def api_wake(_: str = Depends(check_session)):
-    send_magic_packet(PC_MAC)
+    send_magic_packet()
     return {"status": "sent"}
 
 
@@ -123,6 +100,13 @@ async def api_send(
 @app.get("/api/metrics")
 async def api_metrics(_: str = Depends(check_session)):
     return await ws_cmd({"cmd": "metrics"})
+
+
+@app.post("/api/agent/chat")
+async def api_agent_chat(body: dict = Body(...), _: str = Depends(check_session)):
+    message = body.get("message", "")
+    history = body.get("history", [])
+    return await run_agent(history, message)
 
 
 if __name__ == "__main__":

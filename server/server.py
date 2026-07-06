@@ -71,10 +71,10 @@ def get_metrics() -> dict:
     recv_rate = (net.bytes_recv - _net_prev.get("recv", net.bytes_recv)) / delta
     _net_prev = {"ts": now, "sent": net.bytes_sent, "recv": net.bytes_recv}
 
-    gpu_util, gpu_mem_used, gpu_mem_total = 0, 0, 0
+    gpu_util, gpu_mem_used, gpu_mem_total, gpu_temp = 0, 0, 0, 0
     try:
         out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total",
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu",
              "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=2
         ).stdout.strip()
@@ -83,17 +83,30 @@ def get_metrics() -> dict:
             gpu_util = int(parts[0])
             gpu_mem_used = int(parts[1])
             gpu_mem_total = int(parts[2])
+            gpu_temp = int(parts[3])
+    except Exception:
+        pass
+
+    cpu_temp = 0
+    try:
+        temps = psutil.sensors_temperatures()
+        for label in ("k10temp", "coretemp", "zenpower"):
+            if label in temps and temps[label]:
+                cpu_temp = round(temps[label][0].current, 1)
+                break
     except Exception:
         pass
 
     return {
         "cpu": round(cpu, 1),
+        "cpu_temp": cpu_temp,
         "mem_percent": round(mem.percent, 1),
         "mem_used_mb": mem.used // 1024 // 1024,
         "mem_total_mb": mem.total // 1024 // 1024,
         "gpu_util": gpu_util,
         "gpu_mem_used_mb": gpu_mem_used,
         "gpu_mem_total_mb": gpu_mem_total,
+        "gpu_temp": gpu_temp,
         "net_up_kb": round(sent_rate / 1024, 1),
         "net_down_kb": round(recv_rate / 1024, 1),
     }
