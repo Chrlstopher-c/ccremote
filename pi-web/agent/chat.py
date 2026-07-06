@@ -3,11 +3,22 @@ from collections.abc import AsyncIterator
 
 from loguru import logger
 
-from agent.client import SYSTEM_PROMPT, create_completion_stream, is_configured
-from agent.context import maybe_compact
+from agent import usage as agent_usage
+from agent.client import MODEL_CONTEXT_TOKENS, SYSTEM_PROMPT, create_completion_stream, is_configured, resolve_model
+from agent.context import estimate_messages_tokens, maybe_compact
 from agent.tools import TOOL_EXECUTORS, TOOL_SCHEMAS
 
 MAX_TOOL_ROUNDS = 6
+
+
+def _usage_payload(messages: list[dict], model: str | None) -> dict:
+    resolved = resolve_model(model)
+    return {
+        "tokens_used": estimate_messages_tokens(messages),
+        "tokens_limit": MODEL_CONTEXT_TOKENS.get(resolved, 32_000),
+        "model": resolved,
+        **agent_usage.get_snapshot(),
+    }
 
 
 async def _execute_tool_call(call: dict) -> dict:
@@ -101,6 +112,7 @@ async def run_agent_stream(history: list[dict], message: str, model: str | None 
                 "tool_calls": tool_calls_trace,
                 "reasoning": reasoning_trace,
                 "history": messages[1:],
+                "usage": _usage_payload(messages, model),
             }
             return
 
@@ -129,4 +141,5 @@ async def run_agent_stream(history: list[dict], message: str, model: str | None 
         "tool_calls": tool_calls_trace,
         "reasoning": reasoning_trace,
         "history": messages[1:],
+        "usage": _usage_payload(messages, model),
     }

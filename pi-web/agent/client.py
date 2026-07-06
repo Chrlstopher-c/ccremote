@@ -1,5 +1,6 @@
 from openai import AsyncOpenAI
 
+from agent import usage as agent_usage
 from config import AGENT_MODEL, CEREBRAS_API_KEY, CEREBRAS_BASE_URL
 
 AVAILABLE_MODELS = ["gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"]
@@ -52,13 +53,15 @@ async def create_completion(
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
-    return await _client.chat.completions.create(**kwargs)
+    raw = await _client.chat.completions.with_raw_response.create(**kwargs)
+    agent_usage.record_headers(raw.headers)
+    return raw.parse()
 
 
 async def create_completion_stream(messages: list[dict], tools: list[dict], model: str | None = None) -> object:
     if _client is None:
         raise RuntimeError("CEREBRAS_API_KEY non configurée")
-    return await _client.chat.completions.create(
+    raw = await _client.chat.completions.with_raw_response.create(
         model=resolve_model(model),
         messages=messages,
         tools=tools,
@@ -66,3 +69,5 @@ async def create_completion_stream(messages: list[dict], tools: list[dict], mode
         temperature=0.3,
         stream=True,
     )
+    agent_usage.record_headers(raw.headers)
+    return raw.parse()

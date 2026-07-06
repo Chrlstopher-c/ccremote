@@ -5,7 +5,8 @@
 _(rien d'actif à l'instant T)_
 
 ## À faire (priorité)
-_(rien de priorisé à l'instant T)_
+- [ ] Déployer sur le Pi : pas d'accès SSH depuis cet environnement, `deploy-web-pi.sh` à lancer manuellement
+      (script corrigé cette session — il ne syncait pas `agent/`, `static/`, `pc_client.py`)
 
 ## Backlog
 - [ ] Reasoning par round de tool-calling en streaming (actuellement fusionné en un seul bloc
@@ -14,6 +15,11 @@ _(rien de priorisé à l'instant T)_
       posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
 
 ## Terminé (session du 2026-07-06)
+- [x] Suivi d'usage API Cerebras : quotas requêtes/tokens par minute/heure/jour (headers `x-ratelimit-*`
+      réels capturés à chaque appel), + contexte de la conversation active (tokens utilisés/limite du
+      modèle) — visible en pill dans le header agent et en détail dans Paramètres
+- [x] Fix `deploy-web-pi.sh` : ne synchronisait que app.py/config.py/requirements.txt/index.html,
+      jamais `agent/`, `static/`, `pc_client.py` (bug pré-existant, découvert en voulant déployer)
 - [x] `gemma-4-31b` confirmé utilisé et fonctionnel par Chris — commentaire de doute retiré
 - [x] Conformité standards projet : `README.md`, `ARCHITECTURE.md`, `start.sh`/`stop.sh`/`restart.sh`,
       `.env.example` racine

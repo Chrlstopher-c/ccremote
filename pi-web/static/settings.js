@@ -21,6 +21,7 @@ function setModel(model) {
   savePrefs();
   document.getElementById('headerModel').textContent = model;
   document.querySelectorAll('.model-select').forEach(sel => { if (sel.value !== model) sel.value = model; });
+  refreshContextUsage();
 }
 
 function populateModelSelect(select, models, current) {

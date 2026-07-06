@@ -9,8 +9,10 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from agent import usage as agent_usage
 from agent.chat import run_agent_stream
-from agent.client import AVAILABLE_MODELS
+from agent.client import AVAILABLE_MODELS, MODEL_CONTEXT_TOKENS, resolve_model
+from agent.context import estimate_messages_tokens
 from config import AGENT_MODEL, PC_HOST, PC_MAC, UI_PASSWORD
 from pc_client import send_magic_packet, ws_cmd
 
@@ -130,6 +132,22 @@ async def api_agent_chat(body: dict = Body(...), _: str = Depends(check_session)
 @app.get("/api/config")
 async def api_config(_: str = Depends(check_session)):
     return {"pc_host": PC_HOST, "pc_mac": PC_MAC, "default_model": AGENT_MODEL, "models": AVAILABLE_MODELS}
+
+
+@app.get("/api/agent/usage")
+async def api_agent_usage(_: str = Depends(check_session)):
+    return agent_usage.get_snapshot()
+
+
+@app.post("/api/agent/context-usage")
+async def api_agent_context_usage(body: dict = Body(...), _: str = Depends(check_session)):
+    history = body.get("history", [])
+    model = resolve_model(body.get("model"))
+    return {
+        "model": model,
+        "tokens_used": estimate_messages_tokens(history),
+        "tokens_limit": MODEL_CONTEXT_TOKENS.get(model, 32_000),
+    }
 
 
 @app.get("/api/claude-accounts")

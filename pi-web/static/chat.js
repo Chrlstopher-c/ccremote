@@ -26,6 +26,7 @@ document.getElementById('newChatBtn').addEventListener('click', () => {
   state.convTitle = null;
   messagesInner.innerHTML = `<div class="text-center pt-4 pb-2 msg-in"><h2 class="serif text-[22px] font-medium mb-1.5" style="color: var(--ink);">Nouvelle conversation</h2><p class="text-[13.5px]" style="color: var(--ink-3);">Que voulez-vous faire ?</p></div>`;
   renderConversationList();
+  refreshContextUsage();
   showToast('Nouvelle conversation créée', 'ok');
 });
 
@@ -150,6 +151,7 @@ function resumeConversation(id) {
   bindDynamicElements(messagesInner);
   switchView('agent');
   renderConversationList();
+  refreshContextUsage();
   scrollBottom();
 }
 
@@ -161,6 +163,7 @@ function deleteConversation(id) {
     state.currentConvId = null;
     state.convTitle = null;
     messagesInner.innerHTML = `<div class="text-center pt-4 pb-2 msg-in"><h2 class="serif text-[22px] font-medium mb-1.5" style="color: var(--ink);">Nouvelle conversation</h2><p class="text-[13.5px]" style="color: var(--ink-3);">Que voulez-vous faire ?</p></div>`;
+    refreshContextUsage();
   }
   renderConversationList();
 }
@@ -263,6 +266,7 @@ async function sendMessage() {
           st.content = event.reply || st.content;
           renderStreamState(container, st);
           finalHistory = event.history || finalHistory;
+          if (event.usage) { renderContextUsage(event.usage); renderQuotaUsage(event.usage); }
         }
       }
     }

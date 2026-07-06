@@ -73,6 +73,8 @@
   @keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
   .modal-in { animation: modalIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
   .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 10.5px; font-weight: 500; }
+  .usage-track { height: 6px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+  .usage-fill { height: 100%; border-radius: 999px; background: var(--ok); transition: width 0.3s ease, background 0.3s ease; }
   .switch { position: relative; width: 36px; height: 20px; border-radius: 9999px; background: var(--line-2); cursor: pointer; transition: background 0.2s; }
   .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
   .switch.on { background: var(--accent); }
@@ -217,6 +219,8 @@
               <span id="headerHost" class="text-[11px] mono px-1.5 py-0.5 rounded" style="background: var(--bg-2); color: var(--ink-2);">—</span>
               <span class="divider-dot"></span>
               <span id="headerModel" class="text-[11px] mono" style="color: var(--ink-3);">—</span>
+              <span class="divider-dot"></span>
+              <span id="headerContextUsage" class="text-[11px] mono" style="color: var(--ink-3);" title="Contexte de la conversation utilisé">—</span>
             </div>
           </div>
         </div>
@@ -444,6 +448,25 @@
         </div>
 
         <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Utilisation</h3>
+          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Contexte de la conversation active et quotas de l'API Cerebras.</p>
+
+          <div class="mb-5">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[12px] font-medium" style="color: var(--ink-2);">Contexte de la conversation</span>
+              <span id="ctxUsageLabel" class="text-[11.5px] mono" style="color: var(--ink-3);">—</span>
+            </div>
+            <div class="usage-track"><div id="ctxUsageBar" class="usage-fill" style="width: 0%;"></div></div>
+          </div>
+
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[12px] font-medium" style="color: var(--ink-2);">Quotas API Cerebras</span>
+            <span id="quotaUpdatedAt" class="text-[10.5px]" style="color: var(--ink-3);">—</span>
+          </div>
+          <div id="quotaGrid" class="space-y-2.5"></div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
           <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Compte Claude Code</h3>
           <p class="text-[12px] mb-4" style="color: var(--ink-3);">Bascule le compte utilisé par Claude Code sur le PC. Les sessions tmux en cours sont redémarrées.</p>
           <div id="claudeAccounts" class="space-y-2"></div>
@@ -552,6 +575,7 @@
 <script src="/static/chat.js"></script>
 <script src="/static/sessions.js"></script>
 <script src="/static/pcview.js"></script>
+<script src="/static/usage.js"></script>
 <script src="/static/settings.js"></script>
 </body>
 </html>

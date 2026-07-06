@@ -15,6 +15,20 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Ce qui a été fait — session du 2026-07-06
 
+- Suivi d'usage API Cerebras (`agent/usage.py`) : `create_completion`/`create_completion_stream` passent
+  par `with_raw_response` pour capturer les vrais headers `x-ratelimit-{limit,remaining}-{requests,tokens}-
+  {minute,hour,day}` renvoyés par Cerebras à chaque appel, stockés en snapshot mémoire (process unique,
+  pas de DB nécessaire). Exposé via `GET /api/agent/usage` et embarqué dans chaque event `done` du stream
+  (`agent/chat.py`), donc mis à jour dans l'UI sans requête supplémentaire après chaque échange.
+- Contexte de la conversation active : `POST /api/agent/context-usage` réutilise
+  `estimate_messages_tokens`/`MODEL_CONTEXT_TOKENS` déjà en place pour le compactage — donne
+  tokens_used/tokens_limit pour l'historique + le modèle courants, rafraîchi au changement de vue/modèle/
+  conversation. Affiché en pill compacte dans le header Agent IA (`headerContextUsage`) et en détail dans
+  une nouvelle carte "Utilisation" (Paramètres), avec les 6 barres de quotas (2 types × 3 fenêtres),
+  couleur verte/orange/rouge selon le ratio consommé (seuils 70%/90%).
+- Fix `deploy-web-pi.sh` : ne synchronisait que 4 fichiers (app.py/config.py/requirements.txt/
+  templates/index.html), jamais `agent/`, `static/`, ni `pc_client.py` — bug pré-existant découvert
+  en tentant de déployer cette feature. Corrigé pour syncer les dossiers entiers.
 - Fix header mobile dupliqué (topbar séparée + header de vue) → hamburger intégré dans chaque
   header de vue, un seul header visible par vue
 - Fix bug de propagation d'event : le clic sur le hamburger bubblait jusqu'au listener global
@@ -81,6 +95,11 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
   indéfiniment si le serveur ne répondait jamais (c'était plausiblement la cause du "crash" rapporté).
 - **`X-Accel-Buffering: no`** ajouté sur la réponse SSE pour éviter tout buffering par un reverse
   proxy intermédiaire (Cloudflare Tunnel) qui casserait le streaming en prod.
+- **Coût réel par appel bien plus élevé que le message tapé** : `TOOL_SCHEMAS` (tous les tools
+  disponibles) est envoyé à chaque appel Cerebras, même sans tool call. Vérifié en prod (test session
+  du 2026-07-06) : un message de 8 mots sans tool a consommé ~16 650 tokens sur le quota "tokens/minute"
+  (limite 30 000) — la marge réelle avant un 429 est donc bien plus faible que ce que la longueur de
+  la conversation seule suggérerait. C'est justement ce que le nouveau suivi de quotas rend visible.
 
 ## Prochaines étapes
 

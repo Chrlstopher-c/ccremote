@@ -22,6 +22,7 @@ pi-web/
     context.py              Estimation de tokens + compactage automatique de l'historique de conversation
     chat.py                  Boucle agentique streaming (SSE) : appelle le modèle, exécute les tool calls, yield les events
     tools.py                 Schémas de tools (OpenAI function-calling) + exécuteurs réels (status/metrics/sessions/comptes/shutdown)
+    usage.py                 Capture des headers x-ratelimit-* Cerebras (requêtes/tokens par minute/heure/jour), snapshot en mémoire
 
   templates/
     index.html               Page principale SPA (Jinja2) : sidebar, 5 vues, panneau sessions/terminal, modals
@@ -33,6 +34,7 @@ pi-web/
     chat.js                    Chat agent : streaming SSE, markdown, conversations persistantes (localStorage)
     sessions.js                CRUD sessions tmux, terminal live (panneau droit), redimensionnement draggable
     pcview.js                  Vue "État du PC" : métriques détaillées (CPU/RAM/GPU/temp/disque/réseau)
+    usage.js                   Contexte de la conversation + quotas API Cerebras (barres, couleurs par seuil)
     settings.js                Préférences agent, sélection de modèle, switch de compte Claude Code
 
 server/

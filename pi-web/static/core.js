@@ -44,7 +44,7 @@ function switchView(view) {
   if (view === 'sessions') renderSessions();
   if (view === 'pc') renderPcView();
   if (view === 'history') renderHistory();
-  if (view === 'settings') renderClaudeAccounts();
+  if (view === 'settings') { renderClaudeAccounts(); refreshQuotaUsage(); refreshContextUsage(); }
   closeSidebar();
 }
 

@@ -7,11 +7,14 @@ SUBDOMAIN="ccremote.exemple.com"
 PORT=8766
 
 echo "→ Envoi des fichiers"
-ssh "$TARGET" "mkdir -p $REMOTE_DIR/templates"
+ssh "$TARGET" "mkdir -p $REMOTE_DIR/templates $REMOTE_DIR/agent $REMOTE_DIR/static"
 scp /mnt/projects/ccremote/pi-web/app.py          "$TARGET:$REMOTE_DIR/"
 scp /mnt/projects/ccremote/pi-web/config.py        "$TARGET:$REMOTE_DIR/"
+scp /mnt/projects/ccremote/pi-web/pc_client.py      "$TARGET:$REMOTE_DIR/"
 scp /mnt/projects/ccremote/pi-web/requirements.txt "$TARGET:$REMOTE_DIR/"
-scp /mnt/projects/ccremote/pi-web/templates/index.html "$TARGET:$REMOTE_DIR/templates/"
+scp /mnt/projects/ccremote/pi-web/templates/*.html "$TARGET:$REMOTE_DIR/templates/"
+scp /mnt/projects/ccremote/pi-web/agent/*.py       "$TARGET:$REMOTE_DIR/agent/"
+scp /mnt/projects/ccremote/pi-web/static/*         "$TARGET:$REMOTE_DIR/static/"
 
 echo "→ Installation des dépendances"
 ssh "$TARGET" "cd $REMOTE_DIR && python3 -m venv venv && venv/bin/pip install -q -r requirements.txt"
