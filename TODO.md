@@ -14,6 +14,8 @@ _(rien de priorisé à l'instant T)_
       posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
 
 ## Terminé (session du 2026-07-06)
+- [x] Rotation automatique vers une 2e clé Cerebras (`CEREBRAS_API_KEY_2`) sur 429 — quotas suivis
+      séparément par clé, toast + historique quand la bascule a lieu
 - [x] Retrait du sous-titre "Agent local" sous le logo ccremote (sidebar)
 - [x] Déployé en prod via `~/.ssh/id_ed25519_ccremote` (accès direct au Pi, `pi@pi.exemple`) —
       confirmé fonctionnel : sidebar corrigée, pill de contexte visible, zéro erreur console

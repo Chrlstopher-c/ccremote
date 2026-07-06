@@ -4,7 +4,14 @@ from collections.abc import AsyncIterator
 from loguru import logger
 
 from agent import usage as agent_usage
-from agent.client import MODEL_CONTEXT_TOKENS, SYSTEM_PROMPT, create_completion_stream, is_configured, resolve_model
+from agent.client import (
+    MODEL_CONTEXT_TOKENS,
+    SYSTEM_PROMPT,
+    active_key_label,
+    create_completion_stream,
+    is_configured,
+    resolve_model,
+)
 from agent.context import estimate_messages_tokens, maybe_compact
 from agent.tools import TOOL_EXECUTORS, TOOL_SCHEMAS
 
@@ -17,7 +24,7 @@ def _usage_payload(messages: list[dict], model: str | None) -> dict:
         "tokens_used": estimate_messages_tokens(messages),
         "tokens_limit": MODEL_CONTEXT_TOKENS.get(resolved, 32_000),
         "model": resolved,
-        **agent_usage.get_snapshot(),
+        **agent_usage.get_snapshot(active_key_label()),
     }
 
 
@@ -78,7 +85,10 @@ async def run_agent_stream(history: list[dict], message: str, model: str | None 
         tool_call_acc: dict[int, dict] = {}
 
         try:
+            key_before = active_key_label()
             stream = await create_completion_stream(messages, TOOL_SCHEMAS, model)
+            if active_key_label() != key_before:
+                yield {"type": "key_rotated", "from": key_before, "to": active_key_label()}
             async for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:

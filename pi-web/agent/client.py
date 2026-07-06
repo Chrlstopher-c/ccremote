@@ -1,7 +1,7 @@
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 
 from agent import usage as agent_usage
-from config import AGENT_MODEL, CEREBRAS_API_KEY, CEREBRAS_BASE_URL
+from config import AGENT_MODEL, CEREBRAS_API_KEY, CEREBRAS_API_KEY_2, CEREBRAS_BASE_URL
 
 AVAILABLE_MODELS = ["gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"]
 
@@ -13,11 +13,13 @@ MODEL_CONTEXT_TOKENS = {
     "gemma-4-31b": 32_000,
 }
 
-_client = (
-    AsyncOpenAI(api_key=CEREBRAS_API_KEY, base_url=CEREBRAS_BASE_URL)
-    if CEREBRAS_API_KEY
-    else None
-)
+# Plusieurs clés Cerebras possibles : rotation automatique vers la suivante sur 429 (rate limit).
+_clients: list[tuple[str, AsyncOpenAI]] = [
+    (label, AsyncOpenAI(api_key=key, base_url=CEREBRAS_BASE_URL))
+    for label, key in (("key1", CEREBRAS_API_KEY), ("key2", CEREBRAS_API_KEY_2))
+    if key
+]
+_active = 0
 
 SYSTEM_PROMPT = """Tu es l'agent de contrôle de ccremote, un panneau de gestion pour un PC distant \
 qui héberge des sessions Claude Code dans tmux.
@@ -37,7 +39,16 @@ instant plutôt que d'envoyer les touches à l'aveugle."""
 
 
 def is_configured() -> bool:
-    return _client is not None
+    return len(_clients) > 0
+
+
+def active_key_label() -> str | None:
+    return _clients[_active][0] if _clients else None
+
+
+def _rotate() -> None:
+    global _active
+    _active = (_active + 1) % len(_clients)
 
 
 def resolve_model(model: str | None) -> str:
@@ -47,27 +58,49 @@ def resolve_model(model: str | None) -> str:
 async def create_completion(
     messages: list[dict], tools: list[dict] | None = None, model: str | None = None
 ) -> object:
-    if _client is None:
+    if not _clients:
         raise RuntimeError("CEREBRAS_API_KEY non configurée")
     kwargs: dict = {"model": resolve_model(model), "messages": messages, "temperature": 0.3}
     if tools:
         kwargs["tools"] = tools
         kwargs["tool_choice"] = "auto"
-    raw = await _client.chat.completions.with_raw_response.create(**kwargs)
-    agent_usage.record_headers(raw.headers)
-    return raw.parse()
+
+    for attempt in range(len(_clients)):
+        label, client = _clients[_active]
+        try:
+            raw = await client.chat.completions.with_raw_response.create(**kwargs)
+            agent_usage.record_headers(label, raw.headers)
+            return raw.parse()
+        except RateLimitError as e:
+            if e.response is not None:
+                agent_usage.record_headers(label, e.response.headers)
+            if attempt < len(_clients) - 1:
+                _rotate()
+                continue
+            raise
 
 
 async def create_completion_stream(messages: list[dict], tools: list[dict], model: str | None = None) -> object:
-    if _client is None:
+    if not _clients:
         raise RuntimeError("CEREBRAS_API_KEY non configurée")
-    raw = await _client.chat.completions.with_raw_response.create(
-        model=resolve_model(model),
-        messages=messages,
-        tools=tools,
-        tool_choice="auto",
-        temperature=0.3,
-        stream=True,
-    )
-    agent_usage.record_headers(raw.headers)
-    return raw.parse()
+
+    for attempt in range(len(_clients)):
+        label, client = _clients[_active]
+        try:
+            raw = await client.chat.completions.with_raw_response.create(
+                model=resolve_model(model),
+                messages=messages,
+                tools=tools,
+                tool_choice="auto",
+                temperature=0.3,
+                stream=True,
+            )
+            agent_usage.record_headers(label, raw.headers)
+            return raw.parse()
+        except RateLimitError as e:
+            if e.response is not None:
+                agent_usage.record_headers(label, e.response.headers)
+            if attempt < len(_clients) - 1:
+                _rotate()
+                continue
+            raise

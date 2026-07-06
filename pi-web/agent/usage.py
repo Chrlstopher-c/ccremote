@@ -3,26 +3,35 @@ import time
 WINDOWS = ("minute", "hour", "day")
 KINDS = ("requests", "tokens")
 
-_snapshot: dict = {
-    kind: {window: {"limit": None, "remaining": None} for window in WINDOWS} for kind in KINDS
-}
-_updated_at: float | None = None
+
+def _empty_quotas() -> dict:
+    return {kind: {window: {"limit": None, "remaining": None} for window in WINDOWS} for kind in KINDS}
 
 
-def record_headers(headers) -> None:
-    global _updated_at
+_snapshots: dict[str, dict] = {}
+_updated_at: dict[str, float] = {}
+
+
+def record_headers(key_label: str, headers) -> None:
+    snapshot = _snapshots.setdefault(key_label, _empty_quotas())
     found = False
     for kind in KINDS:
         for window in WINDOWS:
-            for field, key in (("limit", "limit"), ("remaining", "remaining")):
-                header = f"x-ratelimit-{key}-{kind}-{window}"
+            for field in ("limit", "remaining"):
+                header = f"x-ratelimit-{field}-{kind}-{window}"
                 value = headers.get(header)
                 if value is not None:
-                    _snapshot[kind][window][field] = int(value)
+                    snapshot[kind][window][field] = int(value)
                     found = True
     if found:
-        _updated_at = time.time()
+        _updated_at[key_label] = time.time()
 
 
-def get_snapshot() -> dict:
-    return {"quotas": _snapshot, "updated_at": _updated_at}
+def get_snapshot(key_label: str | None) -> dict:
+    if key_label is None:
+        return {"active_key": None, "quotas": _empty_quotas(), "updated_at": None}
+    return {
+        "active_key": key_label,
+        "quotas": _snapshots.get(key_label, _empty_quotas()),
+        "updated_at": _updated_at.get(key_label),
+    }

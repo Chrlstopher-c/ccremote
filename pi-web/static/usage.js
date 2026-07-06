@@ -1,6 +1,7 @@
 // ============ UTILISATION (contexte + quotas API) ============
 const WINDOW_LABELS = { minute: 'minute', hour: 'heure', day: 'jour' };
 const KIND_LABELS = { requests: 'Requêtes', tokens: 'Tokens' };
+const KEY_LABELS = { key1: 'clé #1', key2: 'clé #2' };
 
 function usageRatioColor(ratio) {
   if (ratio >= 0.9) return 'var(--err)';
@@ -30,6 +31,8 @@ function renderContextUsage(usage) {
 function renderQuotaUsage(payload) {
   const quotas = payload && payload.quotas;
   const grid = document.getElementById('quotaGrid');
+  const keyEl = document.getElementById('quotaKeyLabel');
+  if (keyEl) keyEl.textContent = payload && payload.active_key ? KEY_LABELS[payload.active_key] || payload.active_key : '';
   if (!grid) return;
   if (!quotas) {
     grid.innerHTML = `<div class="text-[12px]" style="color: var(--ink-3);">Aucun appel effectué depuis le démarrage du serveur.</div>`;

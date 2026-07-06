@@ -15,6 +15,14 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Ce qui a été fait — session du 2026-07-06
 
+- Rotation automatique de clé API Cerebras (`CEREBRAS_API_KEY_2`) : `create_completion`/
+  `create_completion_stream` (`agent/client.py`) essaient la clé active, et sur `RateLimitError`
+  (429) basculent vers la clé suivante et retentent une fois avant de propager l'erreur. Quotas
+  suivis séparément par clé (`agent/usage.py`, `get_snapshot(key_label)`). Un event SSE
+  `key_rotated` prévient l'UI (toast + entrée historique) quand la bascule a lieu en cours de
+  conversation. Logique de rotation validée par un test isolé (mock de RateLimitError, sans
+  requête réseau — le rate limit Cerebras (fenêtre glissante) rendait un test live peu fiable
+  sans gaspiller le quota réel).
 - Suivi d'usage API Cerebras (`agent/usage.py`) : `create_completion`/`create_completion_stream` passent
   par `with_raw_response` pour capturer les vrais headers `x-ratelimit-{limit,remaining}-{requests,tokens}-
   {minute,hour,day}` renvoyés par Cerebras à chaque appel, stockés en snapshot mémoire (process unique,

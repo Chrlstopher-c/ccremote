@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from agent import usage as agent_usage
 from agent.chat import run_agent_stream
-from agent.client import AVAILABLE_MODELS, MODEL_CONTEXT_TOKENS, resolve_model
+from agent.client import AVAILABLE_MODELS, MODEL_CONTEXT_TOKENS, active_key_label, resolve_model
 from agent.context import estimate_messages_tokens
 from config import AGENT_MODEL, PC_HOST, PC_MAC, UI_PASSWORD
 from pc_client import send_magic_packet, ws_cmd
@@ -136,7 +136,7 @@ async def api_config(_: str = Depends(check_session)):
 
 @app.get("/api/agent/usage")
 async def api_agent_usage(_: str = Depends(check_session)):
-    return agent_usage.get_snapshot()
+    return agent_usage.get_snapshot(active_key_label())
 
 
 @app.post("/api/agent/context-usage")

@@ -250,6 +250,9 @@ async function sendMessage() {
         if (event.type === 'compacted') {
           showToast('Conversation compactée pour respecter le contexte du modèle', 'warn');
           addHistory('tool', 'Conversation compactée', 'Résumé automatique appliqué');
+        } else if (event.type === 'key_rotated') {
+          showToast('Quota atteint — bascule automatique vers la clé API de secours', 'warn');
+          addHistory('tool', 'Clé API basculée', `${event.from} → ${event.to}`);
         } else if (event.type === 'reasoning_delta') {
           st.reasoning += event.text;
           renderStreamState(container, st);

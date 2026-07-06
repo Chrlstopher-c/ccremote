@@ -22,7 +22,7 @@ pi-web/
     context.py              Estimation de tokens + compactage automatique de l'historique de conversation
     chat.py                  Boucle agentique streaming (SSE) : appelle le modèle, exécute les tool calls, yield les events
     tools.py                 Schémas de tools (OpenAI function-calling) + exécuteurs réels (status/metrics/sessions/comptes/shutdown)
-    usage.py                 Capture des headers x-ratelimit-* Cerebras (requêtes/tokens par minute/heure/jour), snapshot en mémoire
+    usage.py                 Capture des headers x-ratelimit-* Cerebras par clé (requêtes/tokens par minute/heure/jour), snapshot en mémoire
 
   templates/
     index.html               Page principale SPA (Jinja2) : sidebar, 5 vues, panneau sessions/terminal, modals
