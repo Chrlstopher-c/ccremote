@@ -402,9 +402,13 @@
       <div class="max-w-2xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
         <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
           <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">PC distant</h3>
-          <div class="grid grid-cols-2 gap-x-8 gap-y-2.5 text-[13px]">
-            <div class="flex justify-between"><span style="color: var(--ink-3);">Hôte</span><span id="setHost" class="mono">—</span></div>
-            <div class="flex justify-between"><span style="color: var(--ink-3);">MAC (Wake-on-LAN)</span><span id="setMac" class="mono">—</span></div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-[13px]">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
+              <span style="color: var(--ink-3);">Hôte</span><span id="setHost" class="mono">—</span>
+            </div>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
+              <span style="color: var(--ink-3);">MAC (Wake-on-LAN)</span><span id="setMac" class="mono">—</span>
+            </div>
           </div>
         </div>
 

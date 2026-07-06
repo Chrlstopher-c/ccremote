@@ -5,7 +5,7 @@ from config import AGENT_MODEL, CEREBRAS_API_KEY, CEREBRAS_BASE_URL
 AVAILABLE_MODELS = ["gpt-oss-120b", "zai-glm-4.7", "gemma-4-31b"]
 
 # Cerebras ne renvoie pas la taille de contexte via /v1/models — valeurs documentées,
-# gemma-4-31b non confirmée publiquement donc estimation prudente.
+# gemma-4-31b (utilisé et confirmé par Chris) sur estimation prudente faute de doc publique.
 MODEL_CONTEXT_TOKENS = {
     "gpt-oss-120b": 128_000,
     "zai-glm-4.7": 128_000,

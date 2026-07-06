@@ -5,18 +5,20 @@
 _(rien d'actif à l'instant T)_
 
 ## À faire (priorité)
-- [ ] Vérifier si `gemma-4-31b` est réellement utilisé — sinon le retirer de `AVAILABLE_MODELS`
-      pour ne pas laisser un choix de contexte deviné dans l'UI
+_(rien de priorisé à l'instant T)_
 
 ## Backlog
-- [ ] Conformité standards projet : `README.md`, `ARCHITECTURE.md`, `start.sh`/`stop.sh`/`restart.sh`,
-      `.env.example` pour `server/` et `client/`
 - [ ] Reasoning par round de tool-calling en streaming (actuellement fusionné en un seul bloc
       pour tout l'échange, simplification assumée)
-- [ ] Décider si `zai-glm-4.7`/`gpt-oss-120b` ont vraiment 128k de contexte côté Cerebras, ou si
-      les valeurs de `MODEL_CONTEXT_TOKENS` doivent être resserrées
+- [ ] Décider si `zai-glm-4.7`/`gpt-oss-120b`/`gemma-4-31b` ont vraiment les tailles de contexte
+      posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
 
 ## Terminé (session du 2026-07-06)
+- [x] `gemma-4-31b` confirmé utilisé et fonctionnel par Chris — commentaire de doute retiré
+- [x] Conformité standards projet : `README.md`, `ARCHITECTURE.md`, `start.sh`/`stop.sh`/`restart.sh`,
+      `.env.example` racine
+- [x] Fix responsive carte "PC distant" dans Paramètres (grid-cols-2 illisible sur mobile → stack vertical)
+- [x] Fix hauteur mobile Safari (`100vh` → `100dvh`) sur index.html et login.html
 - [x] Fix header mobile dupliqué (topbar + header de vue → un seul header, hamburger intégré)
 - [x] Fix bug stopPropagation empêchant l'ouverture de la sidebar mobile
 - [x] Streaming SSE des réponses de l'agent IA

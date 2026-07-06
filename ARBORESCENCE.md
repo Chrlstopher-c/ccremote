@@ -45,6 +45,15 @@ server/
 
 deploy-pi.sh                Déploiement du client CLI vers le Raspberry Pi
 deploy-web-pi.sh            Déploiement de pi-web vers le Raspberry Pi (scp + restart systemd)
-.gitignore                  Exclusions : venv/, __pycache__/, chroma_data/, logs/, .env
-logs/                        Répertoire de logs (vide dans le repo)
+start.sh                     Démarre pi-web en local pour le dev (PID file, logs/pi-web.log)
+stop.sh                       Arrête l'instance de dev local de pi-web (via le PID file)
+restart.sh                    stop.sh puis start.sh
+.gitignore                   Exclusions : venv/, __pycache__/, chroma_data/, logs/, .env
+.env.example                 Gabarit racine des secrets (chargés depuis pi-web/.env)
+README.md                    Stack, ports, lancement manuel, déploiement
+ARCHITECTURE.md              Carte des domaines, règles de frontière, définitions anti-rot
+STATE.md                     État courant du projet, décisions, contexte non-évident
+TODO.md                       Tâches en cours et backlog
+ARBORESCENCE.md               Ce fichier
+logs/                        Répertoire de logs (vide dans le repo, reset à chaque start.sh)
 ```

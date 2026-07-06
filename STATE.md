@@ -41,6 +41,20 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
   session active via `CanPowerOff` → yes)
 - Déployé et vérifié en prod à chaque étape (curl direct + Playwright DOM/console, jamais de
   screenshot sur demande explicite de Chris)
+- Fix hauteur mobile Safari : `h-screen`/`min-h-screen` (`100vh`) remplacés par `100dvh` (avec
+  fallback `vh`) sur `index.html` (`.app-shell`) et `login.html` — la barre d'outils dynamique de
+  Safari iOS rendait `100vh` plus grand que la zone réellement visible, poussant le bas de page
+  hors écran et rendant toute la page scrollable (cachait tour à tour header et input selon le
+  scroll). Confirmé par Chris sur iPhone XS.
+- Fix responsive carte "PC distant" (Paramètres) : `grid-cols-2` forçait deux colonnes même sur
+  mobile, coupant la valeur MAC. Passé en `grid-cols-1 sm:grid-cols-2` avec label/valeur empilés
+  verticalement sur mobile.
+- `gemma-4-31b` confirmé réellement utilisé et fonctionnel par Chris (levée du doute posé plus tôt
+  dans la session sur ce modèle)
+- Conformité complète aux standards projet : `README.md`, `ARCHITECTURE.md` (avec justification
+  explicite de la déviation "découpage par machine" plutôt que par domaine métier pur — pertinent
+  pour un outil perso à 3 exécutables physiques), `start.sh`/`stop.sh`/`restart.sh` (gèrent le
+  dev local de `pi-web` par PID file, `server.py` reste géré par systemd), `.env.example` racine
 
 ## Décisions prises
 
@@ -75,14 +89,12 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Points en suspens
 
-- **Conformité aux standards projet** : ccremote n'a pas encore de `README.md`, `ARCHITECTURE.md`,
-  `start.sh`/`stop.sh`/`restart.sh`, ni de `.env.example` pour `server/` et `client/` — seul
-  `pi-web/.env.example` existe. Non bloquant, mais à combler si le projet grandit encore.
 - **Reasoning en un seul bloc par échange** (pas par round de tool-calling) : simplification
   assumée pour le streaming — acceptable visuellement mais perd la granularité "un think block
   par round" qu'avait l'ancienne version non-streamée.
-- **`gemma-4-31b`** : nom de modèle non confirmé publiquement (Cerebras ne documente pas ce
-  modèle sous ce nom) — contexte fixé à 32k par prudence, à vérifier si Chris l'utilise vraiment.
+- **Tailles de contexte des modèles Cerebras** (`MODEL_CONTEXT_TOKENS`) restent des estimations
+  faute de documentation publique — `gemma-4-31b` est confirmé utilisé par Chris, mais sa vraie
+  fenêtre de contexte n'est pas vérifiée (32k posé par prudence).
 
 ## Historique
 
