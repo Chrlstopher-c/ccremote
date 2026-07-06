@@ -15,6 +15,11 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Ce qui a été fait — session du 2026-07-06
 
+- Retrait du sous-titre "Agent local" sous le logo ccremote dans la sidebar (demande directe de Chris)
+- Déploiement effectué directement par l'agent via `~/.ssh/id_ed25519_ccremote` (accès SSH direct
+  au Pi `pi@pi.exemple`, sudo passwordless pour le restart du service) — plus besoin que Chris
+  exécute les commandes lui-même à chaque déploiement pi-web. Voir mémoire sémantique
+  `ccremote-pi-ssh-access`.
 - Affichage des quotas repensé après remarque de Chris : la carte "Utilisation" montrait
   seulement la clé active, ce qui donnait l'impression fausse d'être proche du mur en cas de
   quasi-épuisement de key1 alors que key2 est intacte à côté. Vu que le fallback est réel et
@@ -101,6 +106,8 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 | localStorage pour conversations/prefs (pas de DB) | Cohérent avec l'architecture stateless existante, pas de comptes utilisateurs | 2026-07-06 |
 | Switch de compte : snapshot + restart tmux, pas de hot-reload | Claude Code garde son token en mémoire process ; seul un restart du process charge la nouvelle identité | 2026-07-06 |
 | `poweroff` nu (pas `systemctl poweroff`) | Préférence explicite de Chris, habitude déjà validée sans sudo | 2026-07-06 |
+| Rotation round-robin réactive (sur 429), pas proactive | Simplicité — bascule seulement quand la clé active est réellement épuisée, pas d'alternance systématique qui compliquerait le suivi de quota par clé | 2026-07-06 |
+| Quotas affichés en combiné (somme des clés) + détail par clé | Chris a fait remarquer que le fallback étant réel et automatique, un total combiné n'est pas trompeur — seulement l'était le fait de ne montrer que la clé active | 2026-07-06 |
 
 ## Contexte non-évident
 
@@ -129,6 +136,10 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Points en suspens
 
+- **Les deux clés Cerebras sont sur le tier gratuit** (5 req/min, 30k tokens/min chacune, confirmé
+  par les vraies limites remontées dans l'UI) — la rotation double la marge mais ne résout pas le
+  problème structurel. Si les 429 reviennent fréquemment malgré les 2 clés, la vraie solution est
+  un tier payant côté Cerebras (décision business de Chris, pas un fix côté code).
 - **Reasoning en un seul bloc par échange** (pas par round de tool-calling) : simplification
   assumée pour le streaming — acceptable visuellement mais perd la granularité "un think block
   par round" qu'avait l'ancienne version non-streamée.
