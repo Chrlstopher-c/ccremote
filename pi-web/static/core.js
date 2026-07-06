@@ -54,7 +54,7 @@ function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sidebarOverlay').classList.add('hidden');
 }
-document.getElementById('sidebarToggle').addEventListener('click', openSidebar);
+document.querySelectorAll('.sidebarToggle').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); openSidebar(); }));
 document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
 document.getElementById('sidebarOverlay').addEventListener('click', closeSidebar);
 

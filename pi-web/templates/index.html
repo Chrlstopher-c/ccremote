@@ -180,18 +180,13 @@
   <!-- ====== MAIN ====== -->
   <main class="flex-1 flex flex-col min-w-0 w-full" style="background: var(--bg);">
 
-    <!-- ====== MOBILE TOPBAR ====== -->
-    <div class="lg:hidden flex items-center gap-3 px-4 py-3 border-b shrink-0" style="border-color: var(--line); background: var(--bg);">
-      <button id="sidebarToggle" class="p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <span class="serif text-[15px] font-medium" style="color: var(--ink);">ccremote</span>
-    </div>
-
     <!-- ============ VIEW: AGENT ============ -->
     <div class="view active flex-1 flex-col min-h-0" data-view="agent">
       <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b" style="border-color: var(--line);">
         <div class="flex items-center gap-3 min-w-0">
+          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
           <div class="min-w-0">
             <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Agent IA</h1>
             <div class="hidden sm:flex items-center gap-2 mt-1">
@@ -256,9 +251,14 @@
     <!-- ============ VIEW: SESSIONS ============ -->
     <div class="view flex-1 flex-col overflow-y-auto" data-view="sessions">
       <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
-        <div class="min-w-0">
-          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Sessions Claude Code</h1>
-          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Sessions tmux actives sur le PC distant</div>
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Sessions Claude Code</h1>
+            <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Sessions tmux actives sur le PC distant</div>
+          </div>
         </div>
         <button id="newSessionBtn2" class="btn-accent rounded-lg px-2.5 lg:px-3.5 py-2 text-[12.5px] font-medium flex items-center gap-2 shrink-0">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -271,9 +271,14 @@
     <!-- ============ VIEW: PC STATUS ============ -->
     <div class="view flex-1 flex-col overflow-y-auto" data-view="pc">
       <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
-        <div class="min-w-0">
-          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du PC</h1>
-          <div id="pcSubHeader" class="text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du PC</h1>
+            <div id="pcSubHeader" class="text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+          </div>
         </div>
         <button id="refreshPc" class="btn-ghost rounded-lg px-3 py-2 text-[12px] flex items-center gap-1.5 shrink-0">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -340,9 +345,14 @@
     <!-- ============ VIEW: HISTORY ============ -->
     <div class="view flex-1 flex-col overflow-y-auto" data-view="history">
       <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
-        <div class="min-w-0">
-          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Historique</h1>
-          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Actions réellement exécutées via l'agent, stockées localement</div>
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Historique</h1>
+            <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Actions réellement exécutées via l'agent, stockées localement</div>
+          </div>
         </div>
         <button id="clearHistoryBtn" class="btn-ghost rounded-lg px-3 py-2 text-[12px] shrink-0">Effacer</button>
       </header>
@@ -353,7 +363,10 @@
 
     <!-- ============ VIEW: SETTINGS ============ -->
     <div class="view flex-1 flex-col overflow-y-auto" data-view="settings">
-      <header class="flex items-center justify-between px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
         <div>
           <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Paramètres</h1>
           <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Configuration de l'agent (préférences stockées sur ce navigateur)</div>
