@@ -2,6 +2,8 @@
 import hashlib
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import Body, Cookie, Depends, FastAPI, Form, HTTPException, Query, status
 from fastapi.requests import Request
@@ -11,12 +13,19 @@ from fastapi.templating import Jinja2Templates
 
 from agent import usage as agent_usage
 from agent.chat import run_agent_stream
-from agent.client import AVAILABLE_MODELS, MODEL_CONTEXT_TOKENS, active_key_label, resolve_model
+from agent.client import AVAILABLE_MODELS, MODEL_CONTEXT_TOKENS, active_key_label, resolve_model, warm_up_usage
 from agent.context import estimate_messages_tokens
 from config import AGENT_MODEL, PC_HOST, PC_MAC, UI_PASSWORD
 from pc_client import send_magic_packet, ws_cmd
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    await warm_up_usage()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 

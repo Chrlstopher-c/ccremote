@@ -15,6 +15,13 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Ce qui a été fait — session du 2026-07-06
 
+- Fix signalé par Chris : le snapshot de quotas (en mémoire) redevenait vide à chaque restart du
+  serveur, ce qui donnait l'impression trompeuse que le quota réel était remis à zéro — alors que
+  le quota côté Cerebras n'est jamais affecté par un restart de notre process, seul notre miroir
+  local l'était. Fix : `warm_up_usage()` (`agent/client.py`) fait un appel minimal (max_tokens=1)
+  par clé configurée au démarrage du serveur (`lifespan` FastAPI, `app.py` — migré depuis
+  `on_event("startup")` déprécié au passage), pour peupler le vrai snapshot avant toute requête
+  utilisateur. Coût : 1 requête par clé et par restart.
 - Rotation automatique de clé API Cerebras (`CEREBRAS_API_KEY_2`) : `create_completion`/
   `create_completion_stream` (`agent/client.py`) essaient la clé active, et sur `RateLimitError`
   (429) basculent vers la clé suivante et retentent une fois avant de propager l'erreur. Quotas

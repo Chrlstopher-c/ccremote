@@ -14,6 +14,9 @@ _(rien de priorisé à l'instant T)_
       posées dans `MODEL_CONTEXT_TOKENS` (estimations faute de doc publique Cerebras)
 
 ## Terminé (session du 2026-07-06)
+- [x] Fix : le snapshot de quotas se videait à chaque restart serveur (trompeur — le vrai quota
+      Cerebras n'est jamais affecté) — warm-up au démarrage (`lifespan` FastAPI) qui repeuple le
+      snapshot avant toute requête utilisateur
 - [x] Rotation automatique vers une 2e clé Cerebras (`CEREBRAS_API_KEY_2`) sur 429 — quotas suivis
       séparément par clé, toast + historique quand la bascule a lieu
 - [x] Retrait du sous-titre "Agent local" sous le logo ccremote (sidebar)

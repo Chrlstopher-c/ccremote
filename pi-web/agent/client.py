@@ -1,3 +1,4 @@
+from loguru import logger
 from openai import AsyncOpenAI, RateLimitError
 
 from agent import usage as agent_usage
@@ -53,6 +54,24 @@ def _rotate() -> None:
 
 def resolve_model(model: str | None) -> str:
     return model if model in AVAILABLE_MODELS else AGENT_MODEL
+
+
+async def warm_up_usage() -> None:
+    """Récupère les vrais quotas de chaque clé au démarrage du serveur — le snapshot en mémoire
+    (agent/usage.py) est vide après un restart alors que le quota réel côté Cerebras, lui, n'a
+    pas bougé. Sans ça l'UI afficherait "aucun appel" juste après un déploiement, ce qui est
+    trompeur. Coût : 1 requête minimale (max_tokens=1) par clé configurée."""
+    for label, client in _clients:
+        try:
+            raw = await client.chat.completions.with_raw_response.create(
+                model=AGENT_MODEL, messages=[{"role": "user", "content": "hi"}], max_tokens=1
+            )
+            agent_usage.record_headers(label, raw.headers)
+        except RateLimitError as e:
+            if e.response is not None:
+                agent_usage.record_headers(label, e.response.headers)
+        except Exception as e:
+            logger.warning(f"warm-up usage échoué pour {label}: {e}")
 
 
 async def create_completion(
