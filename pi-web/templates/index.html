@@ -22,6 +22,8 @@
   }
   * { -webkit-font-smoothing: antialiased; }
   html, body { background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; }
+  body { min-height: 100vh; min-height: 100dvh; }
+  .app-shell { height: 100vh; height: 100dvh; }
   .serif { font-family: 'Source Serif 4', serif; }
   .mono { font-family: 'JetBrains Mono', monospace; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -104,7 +106,7 @@
 </head>
 <body class="min-h-screen">
 
-<div class="relative z-10 flex h-screen overflow-hidden">
+<div class="relative z-10 flex overflow-hidden app-shell">
 
   <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden" style="background: rgba(31,30,29,0.35);"></div>
 
