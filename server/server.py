@@ -64,6 +64,8 @@ def get_metrics() -> dict:
     cpu = psutil.cpu_percent(interval=0.1)
     mem = psutil.virtual_memory()
     net = psutil.net_io_counters()
+    disk = psutil.disk_usage("/")
+    uptime_s = int(time.time() - psutil.boot_time())
 
     now = time.time()
     delta = now - _net_prev.get("ts", now - 1)
@@ -109,6 +111,9 @@ def get_metrics() -> dict:
         "gpu_temp": gpu_temp,
         "net_up_kb": round(sent_rate / 1024, 1),
         "net_down_kb": round(recv_rate / 1024, 1),
+        "disk_used_gb": round(disk.used / 1024**3, 1),
+        "disk_total_gb": round(disk.total / 1024**3, 1),
+        "uptime_s": uptime_s,
     }
 
 

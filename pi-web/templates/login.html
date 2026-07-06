@@ -2,12 +2,224 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>ccremote — Connexion</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCremote — Connexion</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAF9F5; --card: #FFFFFF; --ink: #1F1E1D; --ink-2: #4A4845; --ink-3: #86827B;
+    --line: #E5E1D8; --line-2: #D8D3C6;
+    --accent: #D97757; --accent-2: #C15F3C; --accent-soft: #F4E4DC;
+    --ok: #5E8C61; --err: #B5524A;
+    --dark-bg: #181715; --dark-card: #211F1D; --dark-line: #2C2A28;
+  }
+  * { -webkit-font-smoothing: antialiased; }
+  html, body { background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; height: 100%; margin: 0; }
+  .serif { font-family: 'Source Serif 4', serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.1 0 0 0 0 0.05 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.35; mix-blend-mode: multiply;
+  }
+  .input-field { background: var(--bg); border: 1px solid var(--line-2); transition: all 0.2s ease; }
+  .input-field:focus { border-color: var(--ink-2); background: var(--card); box-shadow: 0 1px 3px rgba(31,30,29,0.06); }
+  .btn-primary { background: var(--ink); color: var(--bg); transition: all 0.2s ease; }
+  .btn-primary:hover { background: #2C2A28; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(31,30,29,0.15); }
+  .btn-primary.loading { pointer-events: none; opacity: 0.7; }
+  @keyframes cursorBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+  .cursor-blink { animation: cursorBlink 1s infinite; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-up { animation: fadeUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .delay-1 { animation-delay: 0.1s; }
+  .delay-2 { animation-delay: 0.2s; }
+  .delay-3 { animation-delay: 0.3s; }
+  @keyframes sparkle { 0%, 100% { opacity: 0.3; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.05); } }
+  .sparkle { animation: sparkle 2.5s ease-in-out infinite; }
+  @keyframes scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+  .scan-line { animation: scan 4s linear infinite; }
+  @keyframes blink-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(250,249,245,0.3); border-top-color: var(--bg); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </head>
-<body>
-<form method="post" action="/login">
-  <input type="password" name="password">
-  <button type="submit">Connexion</button>
-</form>
+<body class="h-screen">
+
+<div class="relative z-10 h-full flex">
+
+  <!-- ====== LEFT BRANDING PANEL ====== -->
+  <aside class="hidden lg:flex w-1/2 flex-col justify-between p-12 relative overflow-hidden" style="background: var(--dark-bg); color: var(--bg);">
+    <div class="absolute inset-x-0 h-px scan-line" style="background: linear-gradient(90deg, transparent, rgba(217,119,87,0.2), transparent);"></div>
+
+    <div class="fade-up">
+      <div class="flex items-center gap-2.5">
+        <div class="relative w-8 h-8 rounded-md flex items-center justify-center" style="background: var(--accent);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FAF9F5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </div>
+        <div class="leading-tight">
+          <div class="serif text-[17px] font-medium">CCremote</div>
+          <div class="text-[10.5px] uppercase tracking-wider" style="color: #86827B;">Local Agent</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="space-y-8">
+      <div class="fade-up delay-1">
+        <h1 class="serif text-[42px] font-light leading-[1.1] mb-4">
+          Le contrôle de votre PC,<br>
+          <span style="color: var(--accent);">au creux de votre Pi.</span>
+        </h1>
+        <p class="text-[14px] max-w-md" style="color: #A8A49B;">
+          Gérez votre machine distante via un agent IA conversationnel. Réveillez votre PC, lancez des sessions Claude Code et surveillez votre système en toute sécurité.
+        </p>
+      </div>
+
+      <div class="fade-up delay-2 rounded-xl p-4 max-w-md border" style="background: var(--dark-card); border-color: var(--dark-line);">
+        <div class="flex items-center gap-1.5 mb-3 pb-2 border-b" style="border-color: var(--dark-line);">
+          <span class="w-2.5 h-2.5 rounded-full" style="background: #B5524A;"></span>
+          <span class="w-2.5 h-2.5 rounded-full" style="background: #C99A2E;"></span>
+          <span class="w-2.5 h-2.5 rounded-full" style="background: #5E8C61;"></span>
+          <span class="ml-2 text-[10.5px] mono" style="color: #86827B;">agent@ccremote</span>
+        </div>
+        <div class="mono text-[12.5px] space-y-1.5 leading-relaxed">
+          <div><span style="color: var(--accent);">agent</span> <span style="color: #A8A49B;">&gt; Réveille le PC et lance une session</span></div>
+          <div style="color: #86827B;">↳ wake_pc — magic packet envoyé <span style="color: var(--ok);">✓</span></div>
+          <div style="color: #8FB8E0;">→ launch_session(claude)</div>
+          <div style="color: var(--ok);">✓ Session tmux lancée</div>
+          <div class="flex items-center gap-1">
+            <span style="color: var(--accent);">agent</span>
+            <span style="color: #E8E4D8;">&gt; </span>
+            <span class="cursor-blink" style="color: var(--accent);">▋</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fade-up delay-3 flex items-center justify-between text-[11px]" style="color: #86827B;">
+      <span>CCremote</span>
+      <div class="flex items-center gap-4">
+        <span class="flex items-center gap-1.5"><span class="w-1.5 h-1.5 rounded-full" style="background: var(--ok);"></span> Agent actif</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ====== RIGHT LOGIN PANEL ====== -->
+  <main class="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12">
+    <div class="w-full max-w-sm">
+
+      <div class="lg:hidden flex items-center justify-center gap-2.5 mb-12">
+        <div class="relative w-7 h-7 rounded-md flex items-center justify-center" style="background: var(--ink);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FAF9F5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </div>
+        <span class="serif text-[16px] font-medium" style="color: var(--ink);">CCremote</span>
+      </div>
+
+      <div class="text-center mb-8 fade-up">
+        <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4 sparkle" style="background: var(--accent-soft);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97757" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h2 class="serif text-[26px] font-medium mb-1.5" style="color: var(--ink);">Accès sécurisé</h2>
+        <p class="text-[13.5px]" style="color: var(--ink-3);">Entrez votre mot de passe pour déverrouiller l'interface</p>
+      </div>
+
+      <form id="loginForm" class="space-y-4 fade-up delay-1">
+        <div>
+          <label class="text-[11px] uppercase tracking-wider font-medium" style="color: var(--ink-3);">Mot de passe</label>
+          <div class="mt-1.5 relative">
+            <div class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color: var(--ink-3);"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <input type="password" id="password" name="password" autofocus autocomplete="current-password" class="input-field w-full rounded-lg pl-9 pr-10 py-2.5 text-[13.5px] outline-none" style="color: var(--ink);">
+            <button type="button" id="togglePassword" class="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-black/5">
+              <svg id="eyeIcon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-3);"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" id="loginBtn" class="btn-primary w-full rounded-lg py-3 text-[13.5px] font-medium flex items-center justify-center gap-2 mt-2">
+          <span id="btnText">Se connecter</span>
+          <svg id="btnArrow" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          <div id="btnSpinner" class="spinner hidden"></div>
+        </button>
+      </form>
+
+      <div class="text-center mt-8 text-[11px] flex items-center justify-center gap-1.5" style="color: var(--ink-3);">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Connexion chiffrée · cookie httpOnly
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<div id="toasts" class="fixed bottom-5 right-5 z-50 space-y-2"></div>
+
+<script>
+  const togglePassword = document.getElementById('togglePassword');
+  const passwordInput = document.getElementById('password');
+  const eyeIcon = document.getElementById('eyeIcon');
+
+  togglePassword.addEventListener('click', () => {
+    const type = passwordInput.type === 'password' ? 'text' : 'password';
+    passwordInput.type = type;
+    eyeIcon.innerHTML = type === 'text'
+      ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+  });
+
+  const loginForm = document.getElementById('loginForm');
+  const loginBtn = document.getElementById('loginBtn');
+  const btnText = document.getElementById('btnText');
+  const btnArrow = document.getElementById('btnArrow');
+  const btnSpinner = document.getElementById('btnSpinner');
+
+  loginForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btnText.textContent = 'Authentification...';
+    btnArrow.classList.add('hidden');
+    btnSpinner.classList.remove('hidden');
+    loginBtn.classList.add('loading');
+
+    const formData = new FormData();
+    formData.set('password', passwordInput.value);
+
+    try {
+      const res = await fetch('/login', { method: 'POST', body: formData, credentials: 'same-origin' });
+      if (res.ok) {
+        btnSpinner.style.borderColor = 'rgba(94,140,97,0.3)';
+        btnSpinner.style.borderTopColor = 'var(--ok)';
+        btnText.textContent = 'Succès ! Redirection...';
+        showToast('Accès autorisé. Bienvenue.', 'ok');
+        window.location.href = '/';
+        return;
+      }
+      throw new Error('Mot de passe incorrect');
+    } catch (err) {
+      showToast(err.message, 'err');
+      loginBtn.classList.remove('loading');
+      btnText.textContent = 'Se connecter';
+      btnArrow.classList.remove('hidden');
+      btnSpinner.classList.add('hidden');
+    }
+  });
+
+  function showToast(msg, type = 'ok') {
+    const colors = {
+      ok: { bg: '#E3EDE3', fg: '#5E8C61', icon: '<polyline points="20 6 9 17 4 12"/>' },
+      err: { bg: '#E8C9C6', fg: '#B5524A', icon: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>' },
+    };
+    const c = colors[type] || colors.ok;
+    const toast = document.createElement('div');
+    toast.className = 'flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 shadow-sm border';
+    toast.style.cssText = 'background: var(--card); border-color: var(--line); min-width: 260px; animation: fadeUp 0.3s ease-out;';
+    toast.innerHTML = `<div class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center" style="background: ${c.bg};"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="${c.fg}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${c.icon}</svg></div><span class="text-[12.5px]" style="color: var(--ink);">${msg}</span>`;
+    document.getElementById('toasts').appendChild(toast);
+    setTimeout(() => { toast.style.transition = 'all 0.3s'; toast.style.opacity = '0'; toast.style.transform = 'translateY(8px)'; setTimeout(() => toast.remove(), 300); }, 3200);
+  }
+</script>
+
 </body>
 </html>

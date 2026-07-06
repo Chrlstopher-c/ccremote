@@ -2,8 +2,506 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>ccremote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ccremote — Agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,300;8..60,400;8..60,500;8..60,600&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAF9F5; --bg-2: #F0EEE6; --bg-3: #E9E6DB;
+    --card: #FFFFFF; --ink: #1F1E1D; --ink-2: #4A4845; --ink-3: #86827B;
+    --line: #E5E1D8; --line-2: #D8D3C6;
+    --accent: #D97757; --accent-2: #C15F3C; --accent-soft: #F4E4DC;
+    --ok: #5E8C61; --ok-soft: #E3EDE3;
+    --warn: #C99A2E; --warn-soft: #F5EACF;
+    --err: #B5524A; --err-soft: #E8C9C6;
+  }
+  * { -webkit-font-smoothing: antialiased; }
+  html, body { background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; }
+  .serif { font-family: 'Source Serif 4', serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
+  .think { background: linear-gradient(180deg, #F5F2EA 0%, #F0EDE3 100%); border: 1px solid var(--line); border-left: 2px solid var(--line-2); border-radius: 10px; transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .think.collapsed .think-body { display: none; }
+  .think-chevron { transition: transform 0.3s ease; }
+  .think.collapsed .think-chevron { transform: rotate(-90deg); }
+  .tool { background: var(--card); border: 1px solid var(--line); border-radius: 12px; transition: all 0.25s ease; overflow: hidden; }
+  .tool-success { border-color: #D4E3D5; }
+  .tool-error { border-color: #E8C9C6; }
+  @keyframes blink-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .dot-live { animation: blink-soft 2s infinite; }
+  @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.3; } 30% { transform: translateY(-4px); opacity: 1; } }
+  .typing-dot { animation: typing 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .msg-in { animation: msgIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .codeblock { background: #1F1E1D; color: #E8E4D8; border-radius: 10px; font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.7; }
+  .nav-item { transition: all 0.2s ease; position: relative; }
+  .nav-item.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(31,30,29,0.04), 0 0 0 1px var(--line); }
+  .nav-item.active::before { content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 3px; height: 16px; background: var(--accent); border-radius: 0 3px 3px 0; }
+  .nav-item:not(.active):hover { background: rgba(31,30,29,0.04); }
+  .btn-primary { background: var(--ink); color: var(--bg); transition: all 0.2s ease; }
+  .btn-primary:hover { background: #2C2A28; transform: translateY(-1px); }
+  .btn-accent { background: var(--accent); color: white; transition: all 0.2s ease; }
+  .btn-accent:hover { background: var(--accent-2); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(217,119,87,0.25); }
+  .btn-ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); transition: all 0.2s ease; }
+  .btn-ghost:hover { background: var(--card); color: var(--ink); border-color: var(--line-2); }
+  .btn-danger { background: var(--err); color: white; transition: all 0.2s ease; }
+  .btn-danger:hover { background: #9A453E; }
+  .input-wrap:focus-within { border-color: var(--ink-3); box-shadow: 0 1px 3px rgba(31,30,29,0.06); }
+  @keyframes sparkle { 0%, 100% { opacity: 0.3; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.05); } }
+  .sparkle { animation: sparkle 2.5s ease-in-out infinite; }
+  .lift { transition: all 0.25s ease; }
+  .lift:hover { transform: translateY(-2px); }
+  @keyframes ripple { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(2.4); opacity: 0; } }
+  .ripple { animation: ripple 1.5s ease-out infinite; }
+  .divider-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-3); display: inline-block; }
+  .view { display: none; }
+  .view.active { display: flex; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin { animation: spin 1.2s linear infinite; }
+  .modal-backdrop { backdrop-filter: blur(4px); background: rgba(31,30,29,0.25); }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  .modal-in { animation: modalIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 10.5px; font-weight: 500; }
+  .switch { position: relative; width: 36px; height: 20px; border-radius: 9999px; background: var(--line-2); cursor: pointer; transition: background 0.2s; }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+  .switch.on { background: var(--accent); }
+  .switch.on::after { transform: translateX(16px); }
+  .hist-item:hover { background: var(--bg-2); }
+  #sidebar { transition: transform 0.2s ease; }
+  @media (max-width: 1023px) {
+    #sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); width: 82vw; max-width: 300px; }
+    #sidebar.open { transform: translateX(0); }
+    #rightPanel { position: fixed; inset: 0; z-index: 40; width: 100% !important; }
+  }
+  .resize-handle { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 5; }
+  .resize-handle:hover, .resize-handle.dragging { background: var(--accent-soft); }
+</style>
 </head>
-<body>
+<body class="min-h-screen">
+
+<div class="relative z-10 flex h-screen overflow-hidden">
+
+  <div id="sidebarOverlay" class="fixed inset-0 z-30 hidden" style="background: rgba(31,30,29,0.35);"></div>
+
+  <!-- ====== SIDEBAR ====== -->
+  <aside id="sidebar" class="w-64 shrink-0 flex flex-col border-r" style="border-color: var(--line); background: var(--bg-2);">
+    <div class="px-5 pt-5 pb-4 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="relative w-7 h-7 rounded-md flex items-center justify-center" style="background: var(--ink);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FAF9F5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </div>
+        <div class="leading-tight">
+          <div class="serif text-[15px] font-medium" style="color: var(--ink);">ccremote</div>
+          <div class="text-[10.5px] uppercase tracking-wider" style="color: var(--ink-3);">Agent local</div>
+        </div>
+      </div>
+      <button id="sidebarClose" class="lg:hidden p-1.5 rounded-md hover:bg-black/5">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--ink-3);"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <div class="px-3 pb-3">
+      <button id="newChatBtn" class="btn-primary w-full rounded-lg py-2 text-[13px] font-medium flex items-center justify-center gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        Nouvelle conversation
+      </button>
+    </div>
+
+    <nav class="px-3 space-y-0.5 mt-1">
+      <button class="nav-item active w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="agent" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Agent IA
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="sessions" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Sessions Claude Code
+        <span id="sessionBadge" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--accent-soft); color: var(--accent-2);">0</span>
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="pc" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        État du PC
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="history" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Historique
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="settings" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Paramètres
+      </button>
+    </nav>
+
+    <div class="px-3 mt-5 flex-1"></div>
+
+    <div class="m-3 p-3.5 rounded-xl border" style="border-color: var(--line); background: var(--card);">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="flex items-center gap-2">
+          <span id="pcStatusDot" class="relative flex">
+            <span class="w-2 h-2 rounded-full" style="background: var(--ink-3);"></span>
+          </span>
+          <span id="pcStatusText" class="text-[12px] font-medium" style="color: var(--ink-3);">Vérification…</span>
+        </div>
+        <span id="pcHostLabel" class="text-[10px] mono" style="color: var(--ink-3);">—</span>
+      </div>
+      <div class="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <div class="mono" style="color: var(--ink-3);">CPU</div>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <div class="flex-1 h-1 rounded-full overflow-hidden" style="background: var(--bg-3);">
+              <div id="cpuBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div>
+            </div>
+            <span id="cpuVal" class="mono" style="color: var(--ink-2);">—</span>
+          </div>
+        </div>
+        <div>
+          <div class="mono" style="color: var(--ink-3);">RAM</div>
+          <div class="flex items-center gap-1.5 mt-0.5">
+            <div class="flex-1 h-1 rounded-full overflow-hidden" style="background: var(--bg-3);">
+              <div id="ramBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div>
+            </div>
+            <span id="ramVal" class="mono" style="color: var(--ink-2);">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="mt-2.5 pt-2.5 border-t flex items-center justify-between" style="border-color: var(--line);">
+        <span id="uptimeText" class="text-[10.5px]" style="color: var(--ink-3);">—</span>
+        <button class="text-[10.5px] font-medium" style="color: var(--accent-2);" data-view="pc">Détails →</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ====== MAIN ====== -->
+  <main class="flex-1 flex flex-col min-w-0 w-full" style="background: var(--bg);">
+
+    <!-- ====== MOBILE TOPBAR ====== -->
+    <div class="lg:hidden flex items-center gap-3 px-4 py-3 border-b shrink-0" style="border-color: var(--line); background: var(--bg);">
+      <button id="sidebarToggle" class="p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <span class="serif text-[15px] font-medium" style="color: var(--ink);">ccremote</span>
+    </div>
+
+    <!-- ============ VIEW: AGENT ============ -->
+    <div class="view active flex-1 flex-col min-h-0" data-view="agent">
+      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b" style="border-color: var(--line);">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="min-w-0">
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Agent IA</h1>
+            <div class="hidden sm:flex items-center gap-2 mt-1">
+              <span class="text-[11px]" style="color: var(--ink-3);">Connecté à</span>
+              <span id="headerHost" class="text-[11px] mono px-1.5 py-0.5 rounded" style="background: var(--bg-2); color: var(--ink-2);">—</span>
+              <span class="divider-dot"></span>
+              <span id="headerModel" class="text-[11px] mono" style="color: var(--ink-3);">—</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 lg:gap-2 shrink-0">
+          <button id="wakeBtn" class="btn-accent rounded-lg px-2.5 lg:px-3.5 py-2 text-[12.5px] font-medium flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <span class="hidden sm:inline">Wake on LAN</span>
+          </button>
+          <button id="newSessionBtn" class="btn-ghost rounded-lg px-2.5 lg:px-3.5 py-2 text-[12.5px] font-medium flex items-center gap-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span class="hidden sm:inline">Nouvelle session</span>
+          </button>
+          <button class="btn-ghost rounded-lg p-2" id="togglePanel" title="Panneau sessions">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="flex-1 overflow-y-auto" id="messages">
+        <div class="max-w-3xl mx-auto px-4 lg:px-7 py-6 lg:py-8 space-y-7" id="messagesInner">
+          <div class="text-center pt-4 pb-2 msg-in" id="welcomeBlock">
+            <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-4 sparkle" style="background: var(--accent-soft);">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97757" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <h2 class="serif text-[26px] font-medium mb-1.5" style="color: var(--ink);">Bonjour, comment puis-je vous aider ?</h2>
+            <p class="text-[13.5px] max-w-md mx-auto" style="color: var(--ink-3);">Je peux réveiller le PC, lancer ou gérer des sessions Claude Code, et surveiller CPU/RAM/GPU/températures — directement depuis ce Raspberry Pi.</p>
+          </div>
+          <div class="flex flex-wrap gap-2 justify-center msg-in" id="suggestionRow">
+            <button class="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] suggestion">Réveille le PC et vérifie l'état</button>
+            <button class="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] suggestion">Lance une session Claude Code</button>
+            <button class="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] suggestion">Quelles sont les températures ?</button>
+            <button class="btn-ghost rounded-full px-3.5 py-1.5 text-[12px] suggestion">Liste les sessions actives</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="border-t px-4 lg:px-7 py-3 lg:py-4" style="border-color: var(--line); background: var(--bg);">
+        <div class="max-w-3xl mx-auto">
+          <div class="input-wrap rounded-2xl border px-4 py-3 transition-all" style="border-color: var(--line-2); background: var(--card);">
+            <textarea id="chatInput" rows="1" placeholder="Demandez à l'agent — réveiller le PC, lancer une session, vérifier les températures…" class="w-full bg-transparent text-[14px] leading-relaxed resize-none outline-none" style="color: var(--ink);"></textarea>
+            <div class="flex items-center justify-between mt-2">
+              <select id="modelBadge" class="text-[11px] px-2 py-1 rounded-md mono outline-none cursor-pointer" style="background: var(--bg-2); color: var(--ink-2); border: 1px solid var(--line);"></select>
+              <div class="flex items-center gap-2">
+                <span class="text-[11px] hidden md:inline" style="color: var(--ink-3);">Entrée pour envoyer · ⇧↵ nouvelle ligne</span>
+                <button id="sendBtn" class="btn-primary rounded-lg p-2">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: SESSIONS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="sessions">
+      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Sessions Claude Code</h1>
+          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Sessions tmux actives sur le PC distant</div>
+        </div>
+        <button id="newSessionBtn2" class="btn-accent rounded-lg px-2.5 lg:px-3.5 py-2 text-[12.5px] font-medium flex items-center gap-2 shrink-0">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="hidden sm:inline">Nouvelle session</span>
+        </button>
+      </header>
+      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 py-6 space-y-3" id="sessionsList"></div>
+    </div>
+
+    <!-- ============ VIEW: PC STATUS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="pc">
+      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du PC</h1>
+          <div id="pcSubHeader" class="text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+        </div>
+        <button id="refreshPc" class="btn-ghost rounded-lg px-3 py-2 text-[12px] flex items-center gap-1.5 shrink-0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span class="hidden sm:inline">Actualiser</span>
+        </button>
+      </header>
+      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">CPU</div>
+            <div class="flex items-end gap-1.5"><span id="pcCpuVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">%</span></div>
+          </div>
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Mémoire</div>
+            <div class="flex items-end gap-1.5"><span id="pcRamVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
+            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcRamBar" class="h-full rounded-full" style="background: var(--accent); width: 0%; transition: width 0.5s;"></div></div>
+          </div>
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Temp. CPU</div>
+            <div class="flex items-end gap-1.5"><span id="pcTempVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">°C</span></div>
+          </div>
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Disque</div>
+            <div class="flex items-end gap-1.5"><span id="pcDiskVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
+            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcDiskBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div></div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">GPU</h3>
+            <span id="pcGpuTemp" class="text-[11px] mono" style="color: var(--ink-3);">—</span>
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Utilisation</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuUtil" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">%</span></div>
+            </div>
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Mémoire</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuMem" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">Réseau</h3>
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Envoi</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="netUp" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
+            </div>
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Réception</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="netDown" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: HISTORY ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="history">
+      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Historique</h1>
+          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Actions réellement exécutées via l'agent, stockées localement</div>
+        </div>
+        <button id="clearHistoryBtn" class="btn-ghost rounded-lg px-3 py-2 text-[12px] shrink-0">Effacer</button>
+      </header>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6">
+        <div id="historyTimeline" class="space-y-1"></div>
+      </div>
+    </div>
+
+    <!-- ============ VIEW: SETTINGS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="settings">
+      <header class="flex items-center justify-between px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <div>
+          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Paramètres</h1>
+          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Configuration de l'agent (préférences stockées sur ce navigateur)</div>
+        </div>
+      </header>
+      <div class="max-w-2xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">PC distant</h3>
+          <div class="grid grid-cols-2 gap-x-8 gap-y-2.5 text-[13px]">
+            <div class="flex justify-between"><span style="color: var(--ink-3);">Hôte</span><span id="setHost" class="mono">—</span></div>
+            <div class="flex justify-between"><span style="color: var(--ink-3);">MAC (Wake-on-LAN)</span><span id="setMac" class="mono">—</span></div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">Agent IA</h3>
+          <div class="space-y-3.5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[13px] font-medium" style="color: var(--ink);">Confirmation des actions sensibles</div>
+                <div class="text-[11.5px]" style="color: var(--ink-3);">Demander confirmation avant de tuer une session ou éveiller le PC</div>
+              </div>
+              <div class="switch on" id="setting-confirm"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[13px] font-medium" style="color: var(--ink);">Afficher la réflexion du modèle</div>
+                <div class="text-[11.5px]" style="color: var(--ink-3);">Déplie le raisonnement renvoyé par le modèle</div>
+              </div>
+              <div class="switch" id="setting-think"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[13px] font-medium" style="color: var(--ink);">Mode verbeux</div>
+                <div class="text-[11.5px]" style="color: var(--ink-3);">Déplier les paramètres et résultats des tool calls</div>
+              </div>
+              <div class="switch" id="setting-verbose"></div>
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-wider" style="color: var(--ink-3);">Modèle</label>
+              <select id="modelSelect" class="mt-1 w-full rounded-lg px-3 py-2 text-[13px] outline-none" style="background: var(--bg); border: 1px solid var(--line); color: var(--ink);"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--err-soft); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--err);">Zone sensible</h3>
+          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Efface la conversation, l'historique et les préférences stockés localement sur ce navigateur. N'affecte pas le PC distant.</p>
+          <button id="resetBtn" class="btn-danger rounded-lg px-4 py-2 text-[12.5px] font-medium">Réinitialiser ccremote</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ====== RIGHT PANEL ====== -->
+  <aside id="rightPanel" class="relative shrink-0 border-l flex flex-col" style="width: 320px; border-color: var(--line); background: var(--bg-2); display: none;">
+    <div id="panelResizeHandle" class="resize-handle hidden lg:block"></div>
+    <div class="px-4 py-3.5 border-b flex items-center justify-between" style="border-color: var(--line);">
+      <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">Sessions actives</h3>
+      <button class="p-1 rounded hover:bg-black/5" id="closePanel">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--ink-3);"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="px-3 py-3 space-y-2 border-b" style="border-color: var(--line);" id="panelSessionList"></div>
+    <div class="flex-1 flex flex-col min-h-0">
+      <div class="px-4 py-2.5 flex items-center justify-between border-b" style="border-color: var(--line);">
+        <div class="flex items-center gap-2">
+          <span id="activeSessionLabel" class="text-[11px] font-medium mono" style="color: var(--ink);">—</span>
+        </div>
+        <div class="flex items-center gap-1" id="termLiveBadge" style="display:none;">
+          <span class="w-1.5 h-1.5 rounded-full dot-live" style="background: var(--ok);"></span>
+          <span class="text-[10px] uppercase tracking-wider" style="color: var(--ok);">live</span>
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto p-3 mono text-[11.5px] leading-relaxed whitespace-pre-wrap" id="termOutput" style="background: #1F1E1D; color: #E8E4D8;"></div>
+      <div class="p-2.5 border-t" style="border-color: #3A3835;">
+        <div class="flex items-center gap-2 rounded-md px-2.5 py-1.5" style="background: #2C2A28;">
+          <span style="color: var(--accent);" class="mono text-[11px]">$</span>
+          <input id="termInput" type="text" placeholder="envoyer une instruction…" class="flex-1 bg-transparent outline-none mono text-[11.5px]" style="color: #E8E4D8;">
+          <button id="termSend" class="text-[10px] uppercase tracking-wider" style="color: var(--ink-3);">↵</button>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<!-- ====== MODAL: New Session ====== -->
+<div id="modalNewSession" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="modal-in rounded-2xl border w-full max-w-md mx-4 overflow-hidden" style="border-color: var(--line); background: var(--card);">
+    <div class="px-6 pt-5 pb-4 border-b" style="border-color: var(--line);">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center" style="background: var(--accent-soft);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D97757" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        </div>
+        <h3 class="serif text-[17px] font-medium" style="color: var(--ink);">Nouvelle session Claude Code</h3>
+      </div>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <div>
+        <label class="text-[11px] uppercase tracking-wider" style="color: var(--ink-3);">Nom de la session tmux</label>
+        <input id="nsName" type="text" value="claude" class="mt-1 w-full rounded-lg px-3 py-2 text-[13px] mono outline-none" style="background: var(--bg); border: 1px solid var(--line); color: var(--ink);">
+      </div>
+      <div class="flex items-center justify-between p-3 rounded-lg" style="background: var(--bg-2);">
+        <span class="text-[11.5px]" style="color: var(--ink-2);">Le PC doit être en ligne pour lancer une session</span>
+        <span id="nsPcStatus" class="badge" style="background: var(--warn-soft); color: var(--warn);">Vérification…</span>
+      </div>
+    </div>
+    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
+      <button id="nsCreate" class="btn-accent rounded-lg px-4 py-2 text-[12.5px] font-medium flex items-center gap-2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Lancer la session
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODAL: Confirm ====== -->
+<div id="modalConfirm" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden" style="border-color: var(--line); background: var(--card);">
+    <div class="px-6 pt-5 pb-4">
+      <div class="flex gap-3.5">
+        <div id="confirmIcon" class="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style="background: var(--warn-soft);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C99A2E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div>
+          <h3 id="confirmTitle" class="serif text-[16px] font-medium mb-1" style="color: var(--ink);">Confirmer l'action</h3>
+          <p id="confirmMsg" class="text-[13px] leading-relaxed" style="color: var(--ink-2);">Êtes-vous sûr ?</p>
+        </div>
+      </div>
+    </div>
+    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
+      <button id="confirmOk" class="btn-accent rounded-lg px-4 py-2 text-[12.5px] font-medium">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toasts" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
+
+<script src="/static/core.js"></script>
+<script src="/static/sidebar.js"></script>
+<script src="/static/chat.js"></script>
+<script src="/static/sessions.js"></script>
+<script src="/static/pcview.js"></script>
+<script src="/static/settings.js"></script>
 </body>
 </html>

@@ -28,26 +28,32 @@ async def _execute_tool_call(call: object) -> dict:
     return {"name": name, "args": args, "result": result}
 
 
-async def run_agent(history: list[dict], message: str) -> dict:
+async def run_agent(history: list[dict], message: str, model: str | None = None) -> dict:
     if not is_configured():
         return {
             "reply": "L'agent n'est pas configuré — CEREBRAS_API_KEY manquante côté serveur.",
             "tool_calls": [],
+            "reasoning": [],
             "history": history,
         }
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}, *history, {"role": "user", "content": message}]
     tool_calls_trace: list[dict] = []
+    reasoning_trace: list[str] = []
 
     for _ in range(MAX_TOOL_ROUNDS):
-        completion = await create_completion(messages, TOOL_SCHEMAS)
+        completion = await create_completion(messages, TOOL_SCHEMAS, model)
         choice = completion.choices[0].message
+        reasoning = getattr(choice, "reasoning", None)
+        if reasoning:
+            reasoning_trace.append(reasoning)
 
         if not choice.tool_calls:
             messages.append({"role": "assistant", "content": choice.content or ""})
             return {
                 "reply": choice.content or "",
                 "tool_calls": tool_calls_trace,
+                "reasoning": reasoning_trace,
                 "history": messages[1:],
             }
 
@@ -73,5 +79,6 @@ async def run_agent(history: list[dict], message: str) -> dict:
     return {
         "reply": "Trop d'appels d'outils enchaînés, je m'arrête là.",
         "tool_calls": tool_calls_trace,
+        "reasoning": reasoning_trace,
         "history": messages[1:],
     }
