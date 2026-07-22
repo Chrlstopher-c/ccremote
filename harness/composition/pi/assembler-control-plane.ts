@@ -184,10 +184,20 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     // Référence différée : le gestionnaire n'existe pas encore quand on décrit
     // comment construire ses sessions — mais il existera à l'appel.
     let gestionnaire: GestionnaireConversations | null = null;
-    const construireSession: ConstruireSessionConversation = (stockageIdentite: StockageIdentite, conversationId: string) =>
+    const construireSession: ConstruireSessionConversation = (
+      stockageIdentite: StockageIdentite,
+      conversationId: string,
+      forcerReprise?: boolean,
+    ) =>
       demarrerOrchestrateur({
         stockageIdentite,
-        verificateurSessionExistante: creerVerificateurSessionSdk(options.cwdOrchestrateur),
+        // `☠` Le vérificateur a besoin du CONFIG DIR : les transcripts vivent
+        // sous le dossier du compte orchestrateur, pas sous `~/.claude`. L'oubli
+        // faisait repartir toute reprise à froid sur un id déjà pris (prod, 23/07).
+        verificateurSessionExistante:
+          forcerReprise === true
+            ? { existe: async (): Promise<boolean> => true }
+            : creerVerificateurSessionSdk(options.cwdOrchestrateur, options.configDirOrchestrateur),
         serveurControle: construireServeurControle({
           demander: () =>
             gestionnaire?.demanderCompaction(conversationId) ?? { arme: false, detail: 'gestionnaire indisponible' },

@@ -49,7 +49,10 @@ function hRenderConvBar(list, erreur) {
   }
   // ☠ Signature de l'état affiché : sans ce garde, chaque sondage réécrivait la
   // barre à l'identique et faisait clignoter les pastilles.
-  const sig = JSON.stringify([hOrch.convId, list.map((c) => [c.id, c.titre, c.active, c.contextPct])]);
+  // ☠ `contextPct` est VOLONTAIREMENT hors signature : il bouge à chaque mesure,
+  // et l'inclure faisait réécrire la barre en boucle — donc clignoter les
+  // pastilles et casser toute sélection de texte en cours.
+  const sig = JSON.stringify([hOrch.convId, list.map((c) => [c.id, c.titre, c.active])]);
   if (sig === hOrch.barreSig) return;
   hOrch.barreSig = sig;
   const chips = list.map((c) => {
@@ -101,20 +104,41 @@ function hRenderStats(d) {
   if (!el) return;
   const pct = (d && typeof d.contextPct === 'number') ? d.contextPct : null;
   const nb = (d && typeof d.compactions === 'number') ? d.compactions : 0;
-  // ☠ Pas de mesure = « — », jamais 0 % : un contexte inconnu n'est pas un contexte vide.
-  const cls = pct === null ? '' : pct >= 75 ? 'crit' : pct >= 50 ? 'warn' : '';
-  const enCours = hOrch.generating;
-  el.innerHTML = `
-    <div class="ostat ${cls}">
-      <span class="ok">Contexte</span>
-      <span class="ov">${pct === null ? '—' : pct + ' %'}</span>
-      <span class="obar"><i style="width:${pct === null ? 0 : pct}%"></i></span>
-    </div>
-    <div class="ostat">
-      <span class="ok">Compactages</span>
-      <span class="ov">${nb}</span>
-      <button onclick="hCompacterMaintenant()" ${enCours ? 'disabled' : ''} title="Compacter le contexte de ce fil">Compacter</button>
-    </div>`;
+
+  // ☠ La structure n'est construite QU'UNE FOIS. Ensuite on ne touche que les
+  // valeurs qui changent réellement. Réécrire innerHTML à chaque sondage faisait
+  // clignoter l'en-tête et, pire, effondrait la sélection de texte en cours :
+  // modifier un nœud pendant un glisser-sélectionner fait sauter la sélection
+  // sur toute la page.
+  if (!el.firstElementChild) {
+    el.innerHTML = `
+      <div class="ostat" id="hStatCtx">
+        <span class="ok">Contexte</span>
+        <span class="ov">—</span>
+        <span class="obar"><i style="width:0%"></i></span>
+      </div>
+      <div class="ostat">
+        <span class="ok">Compactages</span>
+        <span class="ov">0</span>
+        <button onclick="hCompacterMaintenant()" title="Compacter le contexte de ce fil">Compacter</button>
+      </div>`;
+  }
+
+  const boite = el.firstElementChild;
+  const valeurCtx = pct === null ? '—' : pct + ' %';
+  const champCtx = boite.querySelector('.ov');
+  if (champCtx.textContent !== valeurCtx) champCtx.textContent = valeurCtx;
+  const barre = boite.querySelector('.obar i');
+  const largeur = (pct === null ? 0 : pct) + '%';
+  if (barre.style.width !== largeur) barre.style.width = largeur;
+  const classe = 'ostat' + (pct === null ? '' : pct >= 75 ? ' crit' : pct >= 50 ? ' warn' : '');
+  if (boite.className !== classe) boite.className = classe;
+
+  const bloc2 = el.lastElementChild;
+  const champNb = bloc2.querySelector('.ov');
+  if (champNb.textContent !== String(nb)) champNb.textContent = String(nb);
+  const bouton = bloc2.querySelector('button');
+  if (bouton.disabled !== hOrch.generating) bouton.disabled = hOrch.generating;
 }
 
 /**
@@ -174,7 +198,9 @@ async function hOpenConversation(id) {
 // qui permet au bloc partiel de grandir en place, token après token.
 function hEnsureAssistant(chat) {
   if (hOrch.cur && hOrch.cur.isConnected) return hOrch.cur;
-  const a = document.createElement('div'); a.className = 'bubble-a';
+  const a = document.createElement('div'); a.className = 'bubble-a msg-wrap';
+  // Copie tout le texte rendu du groupe (hors réflexion repliée et outils).
+  a.appendChild(hBoutonCopier(() => [...a.querySelectorAll('.md')].map((n) => n.innerText).join('\n\n').trim()));
   chat.appendChild(a); hOrch.cur = a; return a;
 }
 function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
@@ -201,43 +227,95 @@ function hPeindreTexte(noeud, contenu, live) {
   (noeud.lastElementChild || noeud).appendChild(c);
 }
 
-/** Construit le nœud d'un bloc. `live` = bloc encore en cours de frappe. */
+/**
+ * Construit le nœud d'un bloc. `live` = bloc encore en cours de frappe.
+ * `☠` Réutilise les classes du chat (`.think`, `.tool`, `.md`, `.codeblock`) —
+ * même ADN visuel, une seule définition à maintenir.
+ */
 function hBlocNode(type, contenu, live) {
   if (type === 'texte') {
     const d = document.createElement('div');
-    d.className = 'orch-md';
+    d.className = 'md text-[14px] leading-relaxed';
+    d.style.color = 'var(--ink)';
     hPeindreTexte(d, contenu, live);
     return d;
   }
   if (type === 'reflexion') {
-    const d = document.createElement('details');
-    d.className = 'orch-think' + (live ? ' live' : '');
-    if (live) d.open = true; // on voit l'orchestrateur réfléchir, puis ça se replie
-    const s = document.createElement('summary'); s.textContent = live ? 'Réflexion en cours…' : 'Réflexion';
-    const b = document.createElement('div'); b.className = 'think-body'; b.textContent = contenu;
-    d.append(s, b);
+    const d = document.createElement('div');
+    d.className = 'think rounded-lg' + (live ? '' : ' collapsed');
+    d.innerHTML = `
+      <button class="think-toggle w-full flex items-center gap-2 px-3.5 py-2.5 text-left">
+        <svg class="think-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-3);"><polyline points="6 9 12 15 18 9"/></svg>
+        <span class="text-[11.5px] font-medium uppercase tracking-wider" style="color: var(--ink-3);">${live ? 'Réflexion en cours' : 'Réflexion'}</span>
+      </button>
+      <div class="think-body px-3.5 pb-3.5 pt-0"><div class="pl-5 border-l-2 text-[13px] italic leading-relaxed serif" style="border-color: var(--line-2); color: var(--ink-2);"></div></div>`;
+    d.querySelector('.think-body > div').textContent = contenu;
+    d.querySelector('.think-toggle').addEventListener('click', () => d.classList.toggle('collapsed'));
     return d;
   }
   if (type === 'outil') {
-    const t = document.createElement('div'); t.className = 'orch-tool';
-    t.textContent = hToolLabel(contenu);
-    return t;
+    const d = document.createElement('div');
+    d.className = 'tool tool-success my-1';
+    d.innerHTML = `
+      <div class="flex items-center gap-3 px-3.5 py-2.5">
+        <div class="shrink-0 w-7 h-7 rounded-md flex items-center justify-center" style="background: var(--bg-2);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-2);"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="text-[12.5px] font-medium mono nomOutil" style="color: var(--ink);"></span>
+            <span class="badge" style="background: var(--ok-soft); color: var(--ok);">terminé</span>
+          </div>
+          <div class="text-[11.5px] mt-0.5 truncate cheminOutil" style="color: var(--ink-3);"></div>
+        </div>
+      </div>`;
+    d.querySelector('.nomOutil').textContent = hToolLabel(contenu);
+    // Chemin complet de l'outil MCP : utile pour savoir d'où il vient.
+    d.querySelector('.cheminOutil').textContent = contenu;
+    return d;
   }
   if (type === 'erreur') {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
     return e;
   }
   if (type === 'compaction') {
-    // Marqueur visible dans le fil : l'opérateur doit savoir OÙ le contexte a été
-    // remplacé, et par quoi — le résumé est consultable, jamais caché.
     const d = document.createElement('details');
     d.className = 'orch-compact';
-    const s = document.createElement('summary'); s.textContent = 'Contexte compacté — voir le résumé retenu';
+    const s2 = document.createElement('summary'); s2.textContent = 'Contexte compacté — voir le résumé retenu';
     const b = document.createElement('div'); b.className = 'think-body'; b.textContent = contenu;
-    d.append(s, b);
+    d.append(s2, b);
     return d;
   }
   return null;
+}
+
+/** Bulle d'un message opérateur, avec son bouton de copie. */
+function hBulleOperateur(texte) {
+  const u = document.createElement('div');
+  u.className = 'bubble-u msg-wrap';
+  const t = document.createElement('span');
+  t.textContent = texte;
+  u.append(t, hBoutonCopier(() => texte));
+  return u;
+}
+
+/** Bouton « copier » révélé au survol d'un message. */
+function hBoutonCopier(getTexte) {
+  const b = document.createElement('button');
+  b.className = 'msg-copy';
+  b.title = 'Copier';
+  b.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+  b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(getTexte());
+      b.classList.add('ok');
+      setTimeout(() => b.classList.remove('ok'), 1200);
+    } catch {
+      showToast('Copie refusée par le navigateur', 'warn');
+    }
+  });
+  return b;
 }
 
 function hAppendEvent(ev) {
@@ -256,7 +334,7 @@ function hAppendEvent(ev) {
       if (ev.seq !== undefined) optimiste.dataset.seq = ev.seq;
       hOrch.cur = null; return;
     }
-    const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = ev.contenu;
+    const u = hBulleOperateur(ev.contenu);
     if (ev.seq !== undefined) u.dataset.seq = ev.seq;
     chat.appendChild(u); hOrch.cur = null; return;
   }
@@ -273,7 +351,18 @@ function hAppendEvent(ev) {
   const noeud = hBlocNode(ev.type, ev.contenu, false);
   if (!noeud) return;
   if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
-  hEnsureAssistant(chat).appendChild(noeud);
+  hInsererDansGroupe(hEnsureAssistant(chat), noeud);
+}
+
+/**
+ * Pose un bloc finalisé dans le groupe, en le glissant AVANT le bloc encore en
+ * cours de frappe s'il y en a un — sinon le fil se lirait à l'envers. Ne touche
+ * jamais au bloc en cours : c'est ce qui évite de le recréer à chaque cycle.
+ */
+function hInsererDansGroupe(groupe, noeud) {
+  const enCours = hOrch.partielEl;
+  const ancre = enCours && enCours.parentNode === groupe ? enCours : null;
+  groupe.insertBefore(noeud, ancre);
 }
 
 /**
@@ -292,7 +381,19 @@ function hRenderPartiel(partiel) {
   if (hOrch.partielEl && hOrch.partielEl.isConnected && hOrch.partielEl.dataset.ptype === partiel.type) {
     // Mise à jour en place du MÊME nœud : le fil ne se reconstruit pas, donc rien
     // ne clignote même si le Markdown est repeint à chaque sondage.
-    if (partiel.type === 'reflexion') hOrch.partielEl.querySelector('.think-body').textContent = partiel.contenu;
+    // Rien de neuf : on ne touche pas au DOM. Repeindre à l'identique suffirait
+    // à casser une sélection en cours.
+    if (hOrch.partielEl.dataset.pcontenu === partiel.contenu) return;
+    // ☠ Une sélection en cours a une extrémité dans ce nœud : le prochain sondage
+    // (400 ms) réessaiera. Repeindre maintenant couperait la sélection — parfois
+    // jusqu'à « sélectionner toute la page » quand le Range perd son ancre.
+    if (hSelectionDansNoeud(hOrch.partielEl)) return;
+    hOrch.partielEl.dataset.pcontenu = partiel.contenu;
+    // ☠ La réflexion est structurée `.think-body > div` (le div porte le style
+    // italique/bordure). Écrire le texte sur `.think-body` lui-même détruisait ce
+    // div à chaque token et le remplaçait par un nœud texte nu — la réflexion
+    // perdait sa mise en forme en boucle pendant tout le streaming.
+    if (partiel.type === 'reflexion') hOrch.partielEl.querySelector('.think-body > div').textContent = partiel.contenu;
     else hPeindreTexte(hOrch.partielEl, partiel.contenu, true);
     return;
   }
@@ -300,6 +401,7 @@ function hRenderPartiel(partiel) {
   const noeud = hBlocNode(partiel.type, partiel.contenu, true);
   if (!noeud) return;
   noeud.dataset.ptype = partiel.type;
+  noeud.dataset.pcontenu = partiel.contenu;
   hEnsureAssistant(chat).appendChild(noeud);
   hOrch.partielEl = noeud;
 }
@@ -307,6 +409,18 @@ function hRenderPartiel(partiel) {
 function hClearPartiel() {
   if (hOrch.partielEl && hOrch.partielEl.isConnected) hOrch.partielEl.remove();
   hOrch.partielEl = null;
+}
+
+/**
+ * Vrai si la sélection en cours a au moins une extrémité dans `noeud`. Sert de
+ * garde avant toute repeinture destructive : couper une sélection en place fait
+ * parfois « sauter » le navigateur vers une sélection de toute la page (le Range
+ * perd son ancre quand le nœud qui la portait est détruit puis recréé).
+ */
+function hSelectionDansNoeud(noeud) {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed) return false;
+  return noeud.contains(sel.anchorNode) || noeud.contains(sel.focusNode);
 }
 
 /** Pastille « il travaille » : entre l'envoi et le premier token. */
@@ -331,10 +445,10 @@ async function hPollNow() {
   if (r.erreur) { hStopPoll(); return; } // silencieux : un prochain envoi relancera
   const d = r.data || {};
   const auBas = hEstEnBas();
-  // ☠ Ordre imposé : retirer le bloc en cours AVANT de poser les blocs finalisés,
-  // sinon un bloc terminé s'insérerait derrière le texte encore en train de
-  // s'écrire et le fil se lirait à l'envers.
-  if (d.events && d.events.length) hClearPartiel();
+  // ☠ Le bloc en cours n'est PLUS détruit à chaque arrivée d'événements : les
+  // blocs finalisés s'insèrent AVANT lui (voir `hInsererDansGroupe`). L'ancienne
+  // version le supprimait puis le recréait à chaque cycle — un nœud recréé
+  // rejoue son animation d'entrée (clignotement) et casse la sélection en cours.
   (d.events || []).forEach((ev) => { hAppendEvent(ev); hOrch.cursor = ev.seq; });
   hOrch.generating = !!d.generating;
   hRenderPartiel(d.partial || null);
@@ -375,7 +489,7 @@ async function hSendOrchMessage() {
   // `seq` au prochain sondage, la garde d'idempotence évitera le doublon.
   const chat = document.getElementById('hChatBody');
   const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
-  const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = text;
+  const u = hBulleOperateur(text);
   u.dataset.optimiste = '1';
   chat.appendChild(u); hOrch.cur = null;
   hOrch.generating = true; btn.disabled = true;

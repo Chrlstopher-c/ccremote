@@ -59,6 +59,12 @@ export function amorceApresCompaction(resume: string): string {
 export type ConstruireSessionConversation = (
   stockageIdentite: StockageIdentite,
   conversationId: string,
+  /**
+   * Force le mode `resume` au lieu de laisser le vérificateur trancher. Utilisé
+   * comme filet quand le CLI refuse un démarrage froid parce qu'il connaît déjà
+   * l'identifiant (`Session ID … is already in use`).
+   */
+  forcerReprise?: boolean,
 ) => Promise<PoigneeOrchestrateur>;
 
 /**
@@ -321,7 +327,7 @@ export class GestionnaireConversations {
   async #demarrer(conversationId: string): Promise<SessionActive> {
     const avant = this.registre.conversations.lire(conversationId);
     const stockage = new StockageIdentiteConversation(this.registre, conversationId);
-    const poignee = await this.construireSession(stockage, conversationId);
+    const poignee = await this.#construireAvecFilet(stockage, conversationId);
     // Fixe l'identité SDK réelle (idempotent — `ecrire` a pu déjà l'écrire au froid).
     this.registre.conversations.majSessionId(conversationId, poignee.sessionId);
     const collecteur = new CollecteurConversation(conversationId, this.registre.conversations);
@@ -348,6 +354,25 @@ export class GestionnaireConversations {
 
     log.info({ conversationId, sessionId: poignee.sessionId }, 'session de conversation démarrée');
     return session;
+  }
+
+  /**
+   * `☠` Filet sur l'identité de session. Le vérificateur peut se tromper (il
+   * répond sur des faits de système de fichiers) : s'il conclut « inconnue »
+   * alors que le CLI la connaît, le démarrage froid échoue sur
+   * `Session ID … is already in use`. Plutôt que de rendre le fil définitivement
+   * inutilisable — ce qui est arrivé en production le 2026-07-23 —, on retente
+   * une fois en reprise explicite.
+   */
+  async #construireAvecFilet(stockage: StockageIdentite, conversationId: string): Promise<PoigneeOrchestrateur> {
+    try {
+      return await this.construireSession(stockage, conversationId);
+    } catch (erreur) {
+      const message = erreur instanceof Error ? erreur.message : String(erreur);
+      if (!/already in use/i.test(message)) throw erreur;
+      log.warn({ conversationId }, 'identifiant de session déjà pris — nouvelle tentative en reprise explicite');
+      return this.construireSession(stockage, conversationId, true);
+    }
   }
 
   /** Boucle de lecture UNIQUE de la session. À sa fin (fermeture/erreur), on oublie la session : le prochain envoi la reprendra (contexte via session_id). */
