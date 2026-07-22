@@ -39,9 +39,14 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 | M-02 générateur d'entrée | `control-plane/orchestrateur/entree/` | livré |
 | M-03 registre SQLite | `control-plane/registre/` | livré |
 | M-04 harnais de pannes | `test-harness/` | livré — voir `test-harness/README.md` |
-| Maquette UI v2 | `../design-v2/` | livré — voir `../design-v2/COMPARAISON.md` |
+| Maquette UI v2 | `../design-v2/` | **validée par Chris le 2026-07-22** |
 
-**Lot 0 complet. 180 tests verts.**
+**Lot 0 complet. 180 tests verts.** Maquette v2 validée : `index.html` (1717 l., autonome, navigable
+et simulant les événements). Sa DA cream/serif/orange est actée — la reprendre, ne pas la réinventer.
+
+`⚠` La v1 de cette maquette avait été rejetée : « plus une vitrine qu'autre chose », rien de
+cliquable. Voir **H-65** : pour ce produit, une maquette statique ne prouve rien — l'essentiel est le
+comportement dans le temps.
 
 ### Ce que le harnais de pannes ne pourra jamais tester
 
@@ -91,6 +96,26 @@ reviendrait à construire la surface avant le transport.
 **Exception** : H-66 (attribution de l'émetteur) a une conséquence sur le **schéma du registre** —
 prévoir le champ émetteur quand M-31/M-30 toucheront au stockage des messages, plutôt que de migrer
 après coup.
+
+---
+
+## ▶ ACTION SUIVANTE — à faire en premier à la reprise
+
+**Lancer la vague 2.** Rien n'est en cours, aucun agent ne tourne, l'arbre de travail est propre.
+
+Lancer **M-10** et **M-20** en priorité (chemin critique + garde-fou minimal), en subagents
+`model="sonnet"`, périmètres disjoints. Puis M-21, M-22, M-31, M-34 si le parallélisme le permet.
+
+Brief type qui a fonctionné au Lot 0, à reproduire :
+- socle imposé : `01`, `02`, `03`, **`16`** (celui-ci fait autorité) + **un seul** fichier de branche
+  + `15-grille-revue.md` + `rules/code-standards.md`
+- interdiction explicite de lancer un test E2E ou une session Claude Code réelle — **le subagent
+  produit, le parent valide**
+- « une `⚠ HYP` constatée fausse ⇒ remonter, ne pas improviser »
+- « tout `☠ CASSE` de ta branche a un test associé »
+- rappel de ne pas casser les tests existants (compte de référence à jour ci-dessus)
+
+Correspondance mission → fichier de branche : voir le tableau de `../Upgrade/12-graphe-dependances.md`.
 
 ---
 
@@ -146,6 +171,8 @@ Le seul test qui n'a pas pu être fait (il exige une vraie session, interdite au
 | `env` sans `...process.env` | `env` **remplace**, `PATH` perdu ⇒ git/node/credentials introuvables |
 | Plancher Sonnet validé sur l'alias | `'inherit'` ne garantit rien — valider sur le **modèle résolu** |
 | `res.changes` de bun:sqlite comme compteur métier | compte **aussi** les lignes supprimées en cascade (bug réel corrigé le 2026-07-22) |
+| Fencing qui ne rejette que les epochs **strictement inférieurs** | deux workers de même epoch coexistent sans trace — la panne #2 **avec** le fencing activé. Traiter l'égalité explicitement (bug réel corrigé) |
+| `maxBudgetUsd` présenté comme l'anti-boucle | **faux** — un montant mesure du volume, pas une boucle. Voir **H-68** : paliers d'inspection + juge Haiku. `12 $ ≈ 6 min de Sonnet 5` |
 | API V2 du SDK (`unstable_v2_*`, `send()`/`stream()`) | **supprimée** en SDK 0.3.142, encore recommandée par des articles récents |
 | `TeamCreate` / `TeamDelete` / `team_name` | **supprimés** en Claude Code v2.1.178 |
 | Nom d'outil nu dans le plancher de déni | ampute la capacité au lieu de borner le danger — seules les règles **scopées** survivent à tous les modes |
