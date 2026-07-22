@@ -10,6 +10,7 @@
  */
 
 import type { DemandePermission } from '../bus-permissions/index.ts';
+import { ageLisible } from './duree.ts';
 
 export interface EscaladeApi {
   readonly id: string;
@@ -34,14 +35,6 @@ const SEUIL_ANCIENNETE_MS = 15 * 60 * 1000;
  * agent bloqué sans qu'aucun humain ait tranché — exactement ce que le bus
  * d'escalade existe pour empêcher.
  */
-function ageLisible(depuisMs: number): string {
-  const minutes = Math.floor(depuisMs / 60_000);
-  if (minutes < 1) return "à l'instant";
-  if (minutes < 60) return `${minutes} min`;
-  const heures = Math.floor(minutes / 60);
-  return heures < 24 ? `${heures} h` : `${Math.floor(heures / 24)} j`;
-}
-
 export function versEscaladeApi(demande: DemandePermission, maintenant: number): EscaladeApi {
   const depuis = demande.enAttenteDepuisA ?? demande.recueA;
   const attenteMs = Math.max(0, maintenant - depuis);
@@ -50,7 +43,9 @@ export function versEscaladeApi(demande: DemandePermission, maintenant: number):
     missionId: demande.idWorker,
     title: demande.outil,
     sub: demande.agentId ?? 'lead',
-    age: ageLisible(attenteMs),
+    // `depuis` est toujours défini ici (`recueA` en dernier recours), donc
+    // jamais `null` — le `??` n'est qu'un filet de typage.
+    age: ageLisible(depuis, maintenant) ?? "à l'instant",
     old: attenteMs >= SEUIL_ANCIENNETE_MS,
     tool: demande.outil,
     // `☠` Ce que l'agent voulait faire. Sans le `decisionReason` du plancher de

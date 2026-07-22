@@ -7,23 +7,21 @@
 
 ## 🎯 OBJECTIF COURANT (priorités données par Chris, 2026-07-22 au soir)
 
-1. **Communication PC↔Pi réellement fonctionnelle** — priorité n°1. Architecture tranchée : **H-75**
-   (le Pi héberge, le PC est client, un seul lien, reconnexion automatique après une nuit d'arrêt).
-2. **Câblage concret de l'interface** — elle est intégrée à `pi-web/` (routeur, modules, vraie app
-   FastAPI), mais **toutes les données du bloc harness sont des mocks**. Contrat des 27 endpoints :
-   `pi-web/CONTRAT-API-HARNESS.md`, il fait foi des deux côtés. Point de branchement unique :
-   `pi-web/static/harness-api.js`.
-3. Puis le reste des dettes ci-dessous.
+1. ~~Communication PC↔Pi (H-75)~~ — **livrée et revue** (`6b91242`), 3 défauts corrigés.
+2. ~~Câblage de l'interface~~ — **livré en LECTURE** (`9c695d2`, `b8d542f`) : parc, escalades et
+   comptes viennent du vrai registre, à travers `pi-web` qui porte l'authentification.
+3. **Le chemin d'ÉCRITURE** — priorité n°1 désormais. L'interface observe, elle ne pilote pas
+   encore : instruction, pause/reprise, arrêt d'urgence, résolution d'escalade. `☠` Ces ordres
+   traversent le lien vers le PC — une route à moitié câblée est **pire qu'absente**, l'interface
+   croirait l'ordre passé.
+4. **Remonter `subagents` / `feed` / `inspection` du PC vers le Pi** — les vues Mission et Agent
+   restent en démo faute de source.
+5. **Exercer le lien entre deux vraies machines** — il n'a tourné qu'en boucle locale. Rien ne
+   remplacera un vrai cycle « j'éteins le PC le soir, je le rallume le lendemain ».
+6. Puis le reste des dettes ci-dessous.
 
-`⚠` **Le harness n'est pas exécutable de bout en bout** en déploiement Pi/PC séparé (verdict de la
-mission d'assemblage). Le mode colocalisé, lui, s'assemble.
-
-`☠` **Coupure quota du 2026-07-22 au soir — trois agents interrompus en plein vol.** Aucune casse
-(904 tests verts, typecheck propre, `git stash` vide, app debout), travail rescapé commité
-(`3cdf465`). **Mais** : le code du lien PC↔Pi est livré et **jamais revu** (rapport perdu), tandis
-que l'API HTTP et le branchement de l'UI **n'ont jamais commencé**. Points de revue précis dans
-`harness/REPRISE.md`, section « ☠ À FAIRE EN PREMIER ». Du code vert et non revu ressemble
-exactement à du code fini — sur ce projet, c'est le piège qui coûte le plus cher.
+`⚠` **Ce qui serait faux de croire** : que le harness est *éprouvé*. Il s'assemble des deux côtés et
+sert de vraies données, mais aucun octet n'a encore circulé entre deux machines distinctes.
 
 ## 📋 REGISTRE DES DETTES — état au 2026-07-22
 

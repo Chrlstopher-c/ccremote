@@ -4,6 +4,18 @@ Arbre complet du dossier `harness/`, un fichier `.ts` par ligne. Généré par l
 2026-07-22, à la clôture de la mission de composition. Les fichiers `*.test.ts` ne sont pas
 recommentés individuellement (même rôle que leur fichier testé, suffixe `.test.ts`).
 
+## `control-plane/api-web/` — API web lue par pi-web
+
+- `control-plane/api-web/index.ts` — interface publique du module
+- `control-plane/api-web/serveur-api.ts` — serveur HTTP en loopback (refuse de démarrer sur une interface publique : aucune authentification propre, pi-web la lui apporte)
+- `control-plane/api-web/enveloppe.ts` — l'enveloppe `pcOnline`/`stale`/`data` : le PC absent n'est JAMAIS une erreur (H-75), une panne du control plane en reste une
+- `control-plane/api-web/vue-missions.ts` — `Mission` du registre → forme d'affichage ; champs sans source réelle rendus vides, jamais fabriqués
+- `control-plane/api-web/vue-escalades.ts` — demandes réellement escaladées uniquement (H-40/M-20)
+- `control-plane/api-web/vue-comptes.ts` — jauges 5 h / 7 j en pourcentage (les dollars sont `null` sur abonnement, H-70)
+- `control-plane/api-web/duree.ts` — libellés d'ancienneté partagés par les vues
+- `control-plane/api-web/serveur-api.test.ts` — banc : vrai serveur, vrai registre, les trois issues de l'enveloppe
+- `control-plane/api-web/logger.ts` — journal pino du domaine
+
 ## `composition/` — racine d'assemblage (cette mission)
 
 - `composition/logger.ts` — journal pino du domaine composition
@@ -11,11 +23,12 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/assemblage.test.ts` — test d'assemblage H-74/M-53 : garde-fous branchés sur le produit réel
 - `composition/assemblage-lien-pc-pi.test.ts` — test d'assemblage H-75 : multiplexage contrôle/permissions sur le lien unique, reconnexion, réconciliation sur rattachement (aucun socket réel)
 - `composition/lien-pc-pi/protocole.ts` — enveloppes multiplexées (`controle_requete/reponse`, `permission_demande/verdict`) sur l'unique lien Pi↔PC (H-75)
-- `composition/lien-pc-pi/secret.ts` — authentification du lien (secret partagé, comparaison à temps constant, jamais journalisé)
+- `composition/lien-pc-pi/secret.ts` — authentification du lien : secret en en-tête `Authorization: Bearer` (jamais dans l'URL, qui serait journalisée par Cloudflare Tunnel), comparaison à temps constant
 - `composition/lien-pc-pi/correlateur.ts` — corrélation requête/réponse par id, partagée par les deux sens de multiplexage
 - `composition/pi/assembler-control-plane.ts` — racine de composition du Pi (registre, bus, mcp-controle, orchestrateur, lien Pi↔PC)
 - `composition/pi/bin-pi.ts` — point d'entrée exécutable du process Pi (`bun run start:pi`)
-- `composition/pi/serveur-lien-pc.ts` — H-75 : le Pi HÉBERGE le lien unique (Bun.serve WS, authentification, `LienWebSocket` symétrique en mode « attend la prochaine connexion »)
+- `composition/pi/serveur-lien-pc.ts` — H-75 : le Pi HÉBERGE le lien unique (Bun.serve WS, authentification, `LienWebSocket` symétrique en mode « attend la prochaine connexion »), oublie la connexion à sa fermeture pour ne pas compter chaque reconnexion du matin comme un doublon
+- `composition/pi/serveur-lien-pc.test.ts` — banc d'assemblage du cycle extinction/rallumage : vrai `Bun.serve`, vrai client, refus 4401, supersede réel vs reconnexion légitime
 - `composition/pi/client-superviseur-pc.ts` — `InventairePc`/`ReinitialisateurSession`/`ArreteurMission`/`RelanceurMission` réels, multiplexés sur le lien unique (D.3, inversé H-75)
 - `composition/pi/permission-verdict-distant.ts` — reçoit les `permission_demande` du PC, interroge la vraie `MachineEtatsDemandes`, pousse le verdict (H-73.1 fermé pour de vrai en déploiement 2 machines)
 - `composition/pi/reconciliation-sur-rattachement.ts` — câble `reconcilier(..., 'reconnexion')` sur CHAQUE rattachement du PC (epoch incrémenté à l'adoption d'orphelins, D.2.3/D.2.4)

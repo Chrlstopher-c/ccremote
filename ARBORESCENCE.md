@@ -12,6 +12,7 @@ pi-web/
   app.py                   App FastAPI : routes HTTP/SSE, auth par cookie de session, proxy vers le PC
   config.py                Constantes + secrets (.env) : hôte/MAC du PC, mot de passe UI, clés Cerebras (1 ou 2)
   pc_client.py             Client websocket vers server.py (ws_cmd) + envoi du magic packet WOL
+  harness_proxy.py         Relais /api/harness/* vers l'API du control plane (loopback), derrière check_session
   requirements.txt         Dépendances Python de pi-web
   .env                     Secrets locaux (gitignored) : UI_PASSWORD, CEREBRAS_API_KEY(_2 optionnelle)
   .env.example             Gabarit des variables d'environnement requises

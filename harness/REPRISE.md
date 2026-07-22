@@ -29,12 +29,12 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 
 ---
 
-## État au 2026-07-22 (soir) — MVP fonctionnellement incomplet, chantier réorienté
+## État au 2026-07-22 (nuit) — le lien, l'API et l'UI en lecture sont livrés
 
-`⚠` **Le harness n'est PAS exécutable de bout en bout** en déploiement Pi/PC séparé — c'est le
-verdict de la mission d'assemblage, pas une prudence de rédaction. Le mode colocalisé s'assemble.
-La priorité n°1 donnée par Chris est désormais la communication PC↔Pi réelle (voir « ACTION
-SUIVANTE » plus bas et **H-75**).
+Le harness s'assemble maintenant des deux côtés et l'interface affiche de vraies données de
+registre. `⚠` Ce qui reste faux serait de le croire **éprouvé** : rien n'a encore tourné entre deux
+machines réelles — le lien n'a été exercé qu'en boucle locale, et l'interface ne sait qu'observer,
+pas piloter (aucune route d'écriture). Détail complet dans « ACTION SUIVANTE ».
 
 ## État détaillé — clôture du MVP
 
@@ -154,43 +154,75 @@ d'objectif depuis, sur décision de Chris.*
    encore des mocks.
 3. Poursuivre le reste des dettes.
 
-### ☠ À FAIRE EN PREMIER : revoir le lien PC↔Pi, livré par un agent interrompu
+### État au 2026-07-22, nuit — les trois chantiers coupés par le quota sont FAITS
 
-Trois agents ont été **coupés en plein vol** par la limite de quota (2026-07-22 au soir). Vérifié
-immédiatement après : **aucune casse** — 904 tests verts, typecheck propre, pile de `git stash`
-vide, `pi-web` répond. Le travail rescapé est commité (`3cdf465`).
+Les trois agents coupés en plein vol ont été repris **à la main**, un par un. Aucune casse à
+réparer : la vérification faite juste après la coupure (904 tests verts, `git stash` vide, app
+debout) tenait.
 
-**Mais un seul des trois a produit du code, et son rapport n'a jamais été rendu.** Ce qui est sur
-disque n'a donc **pas été revu** :
-
-| Agent | État |
+| Chantier | État |
 |---|---|
-| Inversion du lien PC↔Pi | **code livré, rapport perdu** — `composition/lien-pc-pi/`, `composition/pc/client-lien-pi.ts`, `composition/pi/serveur-lien-pc.ts`, `composition/deploiement/ccremote-pc.service`, `horloge-avec-gigue.ts`, `port-bus-permissions-distant.ts`, `permission-verdict-distant.ts`, `reconciliation-sur-rattachement.ts` · `composition/pc/serveur-controle.ts` **supprimé** (le PC n'écoute plus) |
-| API HTTP du control-plane | **rien écrit** — `control-plane/api-web/` n'existe pas |
-| Branchement de l'UI sur l'API | **rien écrit** — `pi-web/` inchangé, données toujours mockées |
+| Lien PC↔Pi (H-75) | **revu, 3 défauts corrigés** — commit `6b91242` |
+| API web du control plane | **livrée** — `control-plane/api-web/`, commit `9c695d2` |
+| Branchement de l'UI | **livré en lecture** — commit `b8d542f` |
 
-**Revue à faire sur le code du lien, sur ces points précis** (c'est ce que le rapport aurait dû
-établir) :
-1. l'**epoch est-il réellement incrémenté à chaque rattachement** ? Sans ça le fencing (M-11) ne
-   peut pas distinguer la nouvelle instance de l'ancienne ;
-2. le backoff a-t-il une **gigue** ? Sans elle, PC et Pi qui redémarrent ensemble se resynchronisent
-   et se martèlent ;
-3. une coupure **transitoire** ne remonte-t-elle jamais comme terminale ? (`transport/lien-websocket.ts`
-   implémente déjà cette distinction — a-t-elle été réutilisée, ou un second mécanisme réinventé ?)
-4. le secret partagé est-il bien **hors du code et hors des logs** ?
-5. **rien de mutant ne s'exécute au rattachement** : le retour du PC restaure un état lisible,
-   relancer une mission reste une décision (voir H-75).
+**923 tests verts, typecheck propre.**
 
-`⚠` Aucun de ces points n'a été exercé en réel : pas de vrai réseau, pas de vrai redémarrage.
+#### Les 3 défauts trouvés en revoyant le lien (aucun n'était visible en test unitaire)
 
-### Ensuite : les deux chantiers jamais commencés
+1. **Le secret transitait en `?secret=…`.** Nos logs étaient propres, mais Cloudflare Tunnel
+   journalise les URLs : le secret partagé finissait en clair dans les access logs d'un tiers.
+   Passé en en-tête `Authorization: Bearer` (support Bun **mesuré** avant d'écrire).
+2. **La connexion PC n'était jamais oubliée à sa fermeture.** Chaque reconnexion légitime du matin
+   était comptée comme un supersede « deux PC connectés ». Une alarme qui crie tous les matins ne
+   garde plus rien le jour où elle est vraie. Banc d'assemblage ajouté sur le cycle
+   extinction/rallumage, **vérifié rouge sans le correctif**.
+3. **Le refus terminal 4401 était neutralisé par systemd.** Le transport traite un secret refusé
+   comme terminal — précisément pour ne pas marteler le Pi — mais l'unité relançait le process
+   toutes les 10 s. Même forme que les cinq garde-fous branchés sur rien : le garde-fou existait,
+   l'assemblage l'annulait. `RestartSec=60` + code de sortie `78` (`EX_CONFIG`) distinct d'un
+   plantage.
 
-- **API HTTP du control-plane** (`control-plane/api-web/`, à créer). Spécification :
-  `pi-web/CONTRAT-API-HARNESS.md`, 27 endpoints. `☠` Exposer un état existant, **jamais** le recréer :
-  une donnée absente du harness se déclare absente, elle ne s'invente pas.
-- **Branchement de l'UI** : proxy `/api/harness/*` dans `pi-web/app.py` derrière `check_session`,
-  puis `static/harness-api.js` sur les vrais endpoints, en gardant un **basculement explicite** vers
-  les mocks (on doit savoir en regardant l'écran si l'on voit du réel).
+Les points 1 (epoch), 2 (gigue) et 5 (rien de mutant au rattachement) de la revue prévue ont été
+**vérifiés conformes sur le code**, pas sur un rapport.
+
+#### Ce que sert l'API web, et ce qu'elle refuse de servir
+
+`control-plane/api-web/` → missions, escalades, comptes, depuis le **vrai registre**. Derrière
+`pi-web`, qui porte l'authentification ; le serveur **refuse de démarrer sur `0.0.0.0`** (il n'a
+aucune authentification propre).
+
+`☠` Trois issues distinctes, jamais confondues — c'est le cœur du module :
+
+| Réponse | Sens |
+|---|---|
+| `200` + `pcOnline:true` | données fraîches |
+| `200` + `pcOnline:false` | **PC éteint — régime nominal, pas une erreur** |
+| `502 harness_injoignable` | le control plane est mort sur le Pi |
+
+Écraser la troisième en deuxième ferait chercher une panne sur le PC pendant que le serveur est
+mort sur le Pi.
+
+**Honnêteté des champs** : `subagents`, `feed`, `inspection` et `landing` sortent **vides**. Ils
+vivent sur le PC et ne sont pas encore remontés. Une donnée fabriquée qui a l'air vraie se propage
+dans les décisions avant qu'on découvre qu'elle ment. Les libellés d'ancienneté
+(`pausedAgo`, `doneAgo`…), eux, sont **dérivés de la vraie date de transition**.
+
+Vérifié **en réel**, pas déclaré : registre semé sur disque, les trois cas exercés bout en bout par
+`curl` à travers `pi-web` (200 avec données, 303 sans session, 502 harness éteint).
+
+### ACTION SUIVANTE
+
+1. **Le chemin d'ÉCRITURE** — instruction, pause/reprise, arrêt d'urgence, résolution d'escalade.
+   C'est ce qui manque pour que l'interface pilote au lieu d'observer. `☠` Ces ordres traversent le
+   lien vers le PC : une route à moitié câblée est **pire qu'absente**, l'interface croirait l'ordre
+   passé. Chacune veut son banc d'assemblage avant d'être exposée.
+2. **Remonter `subagents` / `feed` / `inspection` du PC vers le Pi** — c'est ce qui rendrait les
+   vues Mission et Agent réelles ; elles sont encore en démo.
+3. **Exercer le lien pour de vrai** : vrai réseau, vrai redémarrage du PC. Rien de tout ça n'a
+   encore tourné entre deux machines — seulement en boucle locale.
+4. Dettes restantes : voir `../TODO.md` (fenêtre de grâce n°2a, `reponse-reinitialize.ts` code mort,
+   M-51 à recâbler sur `rate_limit_event`).
 
 ### L'architecture est tranchée : lire H-75 avant de toucher au transport
 
@@ -206,8 +238,9 @@ un worker mort encore vivant — worktree bloqué chaque nuit — ou signalerait
 ### État de l'interface
 
 Les vues du harness sont **réellement intégrées** à `pi-web/` (routeur, modules, template servis par
-la vraie app FastAPI) — ce n'est pas une maquette posée à côté. Mais **toutes les données du bloc
-harness sont mockées**. Le contrat des 27 endpoints est écrit :
+la vraie app FastAPI) — ce n'est pas une maquette posée à côté. Les **lectures** (parc, escalades,
+comptes) viennent maintenant du vrai registre ; les **écritures** et les vues Mission/Agent restent
+en démo, et le mélange est explicité en tête de `harness-api.js`. Le contrat des 27 endpoints :
 **`pi-web/CONTRAT-API-HARNESS.md`**, et il fait foi des deux côtés. Tout accès passe par
 `pi-web/static/harness-api.js` — point unique de branchement.
 
