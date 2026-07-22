@@ -295,6 +295,25 @@ comporte comme une démo.
 sont ceux de la vue Comptes, servis par le registre — à 0 % tant qu'aucune session ne les a
 mesurés (l'API d'usage du SDK exige une session vivante).
 
+### ☠ ÉTAT AU 2026-07-23 (nuit) — ce qui marche, ce qui reste
+
+**EN PRODUCTION, RÉEL et vérifié :**
+- Lien Pi↔PC de bout en bout (2 bugs transport corrigés : émission avant branchement `97481a4`, compteur de réception persistant `a455900`).
+- Parc, escalades, comptes/quotas : servis par le vrai registre.
+- Écritures : instruction, pause, reprise, terminaison, verdict d'escalade (`3467ead`).
+- **Conversation orchestrateur RÉELLE** (`23f91aa`) : message → vraie session Claude sur le Pi → réponse. Testé « dis OK » → « OK ».
+- Jauge de contexte : vraie sentinelle (`contextPct` mesuré, `null` → « — » si pas encore échantillonné).
+- Comptes garantis au boot du service (`CCREMOTE_PI_COMPTES`, idempotent, plus de course WAL) : `compte-a`, `compte-b` survivent à tout déploiement.
+
+**⚠ SOUCIS / MOCK RESTANTS sur la page Orchestrateur et ailleurs :**
+1. **Jauges « Fin de fenêtre » et « $ consommés » = non mesurées.** Elles affichent « non mesuré ». Dépendent de la CHAÎNE DE QUOTAS qui n'existe pas (voir point 2). C'est LE prochain chantier, demandé par Chris.
+2. **Chaîne des quotas 5h/7j INEXISTANTE.** `releverQuota` appelée par aucun code de prod, `ObservateurUsage` jamais fourni (7ᵉ « branché sur rien »). Les jauges de compte resteront à 0 % — alors que compte A est réellement >70 % sur 7j. PLAN validé, mesure commencée puis interrompue : un releveur périodique (toutes les qq minutes) qui lit l'usage au message `init` d'une session SDK courte, l'INTERROMPT aussitôt (coût quasi nul, pas de génération), et pousse au registre. L'usage EST disponible à `init` (vérifié dans `acceptation/multi-comptes-reel.ts`). Script de mesure : `scratchpad/mesure-usage.ts`.
+3. **`compactOrchestratorContext` non câblé** : le bouton « Compacter » affiche « non disponible ». À câbler sur une vraie compaction de session.
+4. **Encore MOCK dans `harness-api.js`** : `getModels`, `getAgent`, `proposeMandate`/`approveProposal`/`rejectProposal` (dispatch de mission), `runInspection`, `simulate*`. Les vues Mission/Agent restent en démo (sous-agents/feed vivent sur le PC, pas remontés).
+5. **Dispatch de mission depuis l'orchestrateur** : `proposeMandate`/`approveProposal` sont mock — l'orchestrateur RÉPOND mais ne peut pas encore réellement créer une équipe via l'UI.
+
+**Ce qui n'a jamais été éprouvé :** le tunnel Cloudflare (lien en LAN direct), un vrai redémarrage machine (boot_id jamais changé), la tempête d'évictions à 2 clients PC (1268 observées, non corrigée).
+
 ### ✅ RÉSOLU — le lien de contrôle Pi↔PC fonctionne de bout en bout (2026-07-23)
 
 Deux bugs de transport trouvés par sonde entre les vraies machines, corrigés et vérifiés en prod :
