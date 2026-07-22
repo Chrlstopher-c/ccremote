@@ -65,6 +65,8 @@ export interface OptionsAssemblageControlPlanePi {
   readonly portApiWeb: number;
   readonly configDirOrchestrateur?: string;
   readonly seuilUtilisationPctPlafondParc?: number;
+  /** Comptes Claude à garantir dans le registre au démarrage (idempotent). */
+  readonly comptes?: readonly { readonly id: string; readonly configDir: string; readonly libelle?: string }[];
   /**
    * Démarre la session orchestrateur maître. `☠` Par défaut FAUX : cette
    * session consomme du quota en continu et exige des credentials Claude
@@ -113,6 +115,18 @@ function construireDependancesReconciliation(client: ClientSuperviseurPc, machin
 export async function assemblerControlPlanePi(options: OptionsAssemblageControlPlanePi): Promise<ControlPlanePiAssemble> {
   const registre = ouvrirRegistre({ chemin: options.cheminRegistreDb });
   const machineEtatsDemandes = new MachineEtatsDemandes();
+
+  // `☠` Les comptes sont garantis ICI, dans la connexion du service lui-même,
+  // idempotent à chaque démarrage. Un script d'enregistrement séparé écrivait
+  // dans une autre connexion et se faisait effacer par une course WAL au
+  // redémarrage (constaté en prod : comptes disparus après chaque déploiement).
+  // Ici, aucune course : c'est la même connexion, à chaque boot.
+  for (const compte of options.comptes ?? []) {
+    if (registre.comptes.lire(compte.id) === null) {
+      registre.comptes.enregistrer({ id: compte.id, configDir: compte.configDir, organisation: compte.libelle });
+      log.info({ id: compte.id }, 'compte enregistré au démarrage (idempotent)');
+    }
+  }
 
   // `☠` Le déclencheur de réconciliation est câblé APRÈS `dependancesReconciliation`
   // (qui a besoin de `clientSuperviseurPc`), mais `demarrerServeurLienPc` doit

@@ -5,13 +5,12 @@
 let hModelsCache = [];
 
 async function hRenderGauges() {
-  const res = await HarnessAPI.getOrchestratorGauges();
-  const g = res || {};
+  // getOrchestratorGauges renvoie { contextPct, active, erreur? } au niveau racine.
+  const g = await HarnessAPI.getOrchestratorGauges() || {};
+  if (g.erreur) { document.getElementById('hGaugeStrip').innerHTML = hPcAbsentBanner('les jauges de l\'orchestrateur'); return; }
   // ☠ contextPct null = session inactive ou pas encore de mesure : « — », jamais un faux %.
   const ctxTxt = (typeof g.contextPct === 'number') ? g.contextPct + ' %' : '—';
   const ctxW = (typeof g.contextPct === 'number') ? g.contextPct : 0;
-  const g = res.data;
-  if (!g) { document.getElementById('hGaugeStrip').innerHTML = hPcAbsentBanner('les jauges de l\'orchestrateur'); return; }
   document.getElementById('hGaugeStrip').innerHTML = `
     <div class="gauge">
       <div class="gh"><span>Contexte utilisé</span></div>
@@ -24,9 +23,9 @@ async function hRenderGauges() {
   hRenderMiniGauges(); hRenderQuotaStrip();
 }
 async function hCompactContext() {
-  const res = await HarnessAPI.compactOrchestratorContext();
-  hRenderGauges();
-  showToast('Compaction manuelle effectuée — contexte ramené à ' + res.data.contextPct + ' %', 'ok');
+  // ☠ La compaction déclenchée à distance n'est pas encore câblée sur la vraie
+  // session : on ne prétend pas l'avoir faite. Honnête plutôt que faux succès.
+  showToast('Compaction à distance non encore disponible — à câbler.', 'warn');
 }
 
 async function hRenderModelSelector() {

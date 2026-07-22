@@ -14,6 +14,18 @@ import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'bin-pi' });
 
+/** Parse `id=configDir,id2=configDir2` en liste de comptes. Entrées mal formées ignorées. */
+function parserComptes(brut: string): { id: string; configDir: string; libelle: string }[] {
+  const comptes: { id: string; configDir: string; libelle: string }[] = [];
+  for (const paire of brut.split(',').map((p) => p.trim()).filter((p) => p.length > 0)) {
+    const sep = paire.indexOf('=');
+    if (sep === -1) continue;
+    const id = paire.slice(0, sep);
+    comptes.push({ id, configDir: paire.slice(sep + 1), libelle: `Compte ${id.slice(-1).toUpperCase()}` });
+  }
+  return comptes;
+}
+
 async function main(): Promise<void> {
   // `☠` La session orchestrateur est OPT-IN : elle consomme du quota en continu
   // et exige des credentials Claude valides sur le Pi. Tout le reste du control
@@ -42,6 +54,9 @@ async function main(): Promise<void> {
   // Toujours en local : ce serveur n'a pas d'authentification propre.
   const portApiWeb = envNombreOptionnel('CCREMOTE_API_WEB_PORT', 8722);
   const seuilUtilisationPctPlafondParc = envSeuilPctOptionnel('CCREMOTE_PLAFOND_PARC_SEUIL_PCT');
+  // Comptes Claude garantis au démarrage. Format : `id=configDir` séparés par
+  // des virgules — ex. `compte-a=/home/.../compte-a,compte-b=/home/.../compte-b`.
+  const comptes = parserComptes(envOptionnel('CCREMOTE_PI_COMPTES', ''));
 
   const assemble = await assemblerControlPlanePi({
     cheminRegistreDb,
@@ -56,6 +71,7 @@ async function main(): Promise<void> {
     portApiWeb,
     seuilUtilisationPctPlafondParc,
     avecOrchestrateur,
+    comptes,
   });
 
   const arreterProprement = (signal: string): void => {
