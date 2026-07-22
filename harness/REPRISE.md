@@ -1,7 +1,7 @@
 # REPRISE — harness d'orchestration ccremote
 
 Point d'entrée unique pour reprendre le chantier à froid, sans le contexte de la conversation d'origine.
-*Dernière mise à jour : 2026-07-22*
+*Dernière mise à jour : 2026-07-23 — orchestrateur multi-conversations + streaming livré (voir la section datée).*
 
 ---
 
@@ -313,6 +313,32 @@ mesurés (l'API d'usage du SDK exige une session vivante).
 5. **Dispatch de mission depuis l'orchestrateur** : `proposeMandate`/`approveProposal` sont mock — l'orchestrateur RÉPOND mais ne peut pas encore réellement créer une équipe via l'UI.
 
 **Ce qui n'a jamais été éprouvé :** le tunnel Cloudflare (lien en LAN direct), un vrai redémarrage machine (boot_id jamais changé), la tempête d'évictions à 2 clients PC (1268 observées, non corrigée).
+
+### ✅ LIVRÉ 2026-07-23 (suite) — orchestrateur MULTI-CONVERSATIONS + STREAMING + persistance
+
+Refonte demandée par Chris : streaming réel, balises `think` affichées, commentaires d'outils
+pendant la génération, persistance qui survit au **hard-reload**, et **plusieurs conversations**.
+Décision de Chris (AskUserQuestion) : **sessions indépendantes, type ChatGPT** — chaque fil = sa
+propre session Agent SDK, contexte isolé, `session_id` persisté pour reprise. Commit `f590056`.
+
+**Architecture (le store serveur sert 3 besoins à la fois : persistance, substrat de streaming, historique par fil) :**
+- Migration 2 : tables `conversation` + `conversation_evenement` (`seq` AUTOINCREMENT = curseur de streaming ET point de reprise après rechargement dur).
+- `registre/conversations.ts` — `DepotConversations` (CRUD + journal, écrire un événement bouge `maj_a` dans la même transaction).
+- `orchestrateur/collecteur-conversation.ts` — éclate chaque message SDK en événements typés : `reflexion` (thinking), `outil` (tool_use), `texte`, `resultat`, `erreur`. Ne lève jamais.
+- `orchestrateur/gestionnaire-conversations.ts` — N sessions **LAZY** (aucune au boot, une par fil au 1er message ; le quota ne brûle que quand on écrit). Une boucle de lecture UNIQUE par session → sentinelle + collecteur. Reprise via `session_id` après fermeture/redémarrage.
+- API : `GET/POST /orchestrator/conversations{,/{id}{,/events?since=,/message,/rename,/archive}}`. `POST message` NON bloquant (enfile puis rend la main ; la réponse remonte par sondage `/events`).
+- Frontend : barre de conversations (chips + « Nouveau »), rendu **streaming incrémental** (polling 600 ms), blocs de réflexion **repliables** (`<details>`), puces d'outil, curseur ; `localStorage` retient le fil ouvert.
+
+**Vérifié EN PROD, réel :** create → list → detail → events sérialisés (test loopback Pi) ; puis
+**Chris lui-même sur la page live** : « test » → session SDK démarrée → « Je te reçois, Chris. Parc
+opérationnel… » streamé de retour. Chaîne complète navigateur → Cloudflare → pi-web → proxy POST →
+API → gestionnaire → vraie session SDK → polling. **965 tests verts, typecheck propre.**
+
+**Ce qui reste sur cette page (ordre de priorité) :**
+1. **`contextPct` revient `null`** sur les sessions courtes (la sentinelle n'a pas encore de mesure). Lié à la chaîne de quotas encore inexistante (voir ci-dessus, point 2). Affiché « — » honnêtement.
+2. **Streaming au niveau BLOC**, pas token-par-token. Chaque bloc (réflexion/texte/outil) apparaît entier. Le token-par-token exigerait `includePartialMessages: true` + coalescence serveur. Suffisant et robuste sur le transport multi-sauts ; raffinement possible.
+3. **Rendu réflexion/outil non vu avec une vraie réponse à raisonnement** (les prompts de test « OK »/« test » n'en produisent pas). Logique d'extraction **couverte par tests unitaires** fidèles aux formes de bloc SDK. Chris le verra sur une vraie tâche d'orchestration.
+4. **Dispatch de mission** (`proposeMandate`/`approveProposal`) toujours mock + DOM-only (ne persiste pas par fil).
 
 ### ✅ RÉSOLU — le lien de contrôle Pi↔PC fonctionne de bout en bout (2026-07-23)
 
