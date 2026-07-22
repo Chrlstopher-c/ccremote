@@ -36,9 +36,11 @@ import { mcpControleLogger as journal } from './logger.ts';
 import type {
   ArbitreEscalade,
   ArreteurMission,
+  ConfigPlafondParc,
   ContratRetour,
   DefinisseurBudget,
   LecteurEscalades,
+  LecteurUtilisationParc,
   RelanceurMission,
   RepertoireCibles,
 } from './types.ts';
@@ -51,7 +53,19 @@ export interface DependancesServeurControle {
   readonly arreteur: ArreteurMission;
   readonly relanceur: RelanceurMission;
   readonly budget: DefinisseurBudget;
+  /**
+   * G.1.3 — plafond de parc, consommé par `creer_equipe` (voir `outils-cycle-vie.ts`).
+   * Optionnels : absent ⇒ aucun compte connu / plafond désactivé, comportement
+   * strictement identique à avant ce câblage (H-58 : « désactivé par défaut »).
+   * Optionnalité délibérée pour ne pas casser les assembleurs de dépendances déjà
+   * écrits ailleurs dans le dépôt (hors périmètre de cette mission) au moment où
+   * ils adoptent une vraie source d'utilisation.
+   */
+  readonly utilisationParc?: LecteurUtilisationParc;
+  readonly configPlafondParc?: ConfigPlafondParc;
 }
+
+const UTILISATION_PARC_DESACTIVEE: LecteurUtilisationParc = { comptesConnus: () => [], releves: () => [] };
 
 /** Convertit le contrat uniforme (A.2.3) en `CallToolResult` MCP. Jamais `isError`. */
 function rendre(retour: ContratRetour): CallToolResult {
@@ -115,7 +129,16 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         perimetre: z.string(),
       },
       async ({ projet, objectif, critereArret, perimetre }) =>
-        protege('creer_equipe', () => proposerCreationEquipe(projet, objectif, critereArret, perimetre)),
+        protege('creer_equipe', () =>
+          proposerCreationEquipe(
+            projet,
+            objectif,
+            critereArret,
+            perimetre,
+            deps.utilisationParc ?? UTILISATION_PARC_DESACTIVEE,
+            deps.configPlafondParc ?? {},
+          ),
+        ),
     ),
     tool(
       'envoyer_a_equipe',

@@ -16,6 +16,7 @@
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { FileEntreeCiblee, SourceInterruption } from '../../../pause/index.ts';
 import type { Verdict } from '../../bus-permissions/index.ts';
+import type { ConfigPlafondParc, RelevePourPlafond } from '../../../budgets/index.ts';
 
 /**
  * `'accepte'` ≠ `'applique'` (A.2.3) : le premier dit « pris en compte, pas
@@ -90,4 +91,20 @@ export interface DefinisseurBudget {
   definir(missionId: string, maxUsd: number): Promise<void>;
 }
 
-export type { SDKUserMessage };
+/**
+ * Port de garde-fou (G.1.3) — lecture d'utilisation pour le plafond de parc
+ * (`deciderCreationMission`, `budgets/plafond-parc.ts`). Délibérément
+ * SYNCHRONE : la donnée vient d'un relevé de quota déjà en registre (lecture
+ * locale, jamais un appel réseau depuis `proposerCreationEquipe` — acceptation
+ * (a)/(d)). Une implémentation qui introduirait de l'I/O réelle derrière ce
+ * port violerait son contrat ; elle doit alors passer par `avecPlafond` comme
+ * les autres ports asynchrones de ce fichier.
+ */
+export interface LecteurUtilisationParc {
+  /** Comptes actifs connus au moment de l'appel — pas un snapshot mis en cache. */
+  comptesConnus(): readonly string[];
+  /** Relevés de quota (toutes fenêtres connues) pour un compte donné. `[]` si inconnu. */
+  releves(compteId: string): readonly RelevePourPlafond[];
+}
+
+export type { ConfigPlafondParc, SDKUserMessage };

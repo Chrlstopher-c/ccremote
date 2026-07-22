@@ -45,6 +45,8 @@ beforeEach(() => {
     arreteur: { arreter: async () => {} },
     relanceur: { relancer: async () => {} },
     budget: { definir: async () => {} },
+    utilisationParc: { comptesConnus: () => [], releves: () => [] },
+    configPlafondParc: {},
   };
 });
 

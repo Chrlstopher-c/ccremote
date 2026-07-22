@@ -962,3 +962,42 @@ Ce qu'on en retient pour l'implémentation :
 - `resetsAt` / `overageResetsAt` sont des **secondes Unix**, pas des millisecondes ni une chaîne ISO.
 - ⇒ **H-70 (atterrissage avant saturation) a désormais son signal réel** : ce message, `rateLimitType`
   et `resetsAt` suffisent à déclencher l'atterrissage — sans jamais interroger `usage_EXPERIMENTAL`.
+
+---
+
+## H-73 `[MESURÉ 2026-07-22]` · `pending_permission_requests` — l'HYP de M-13 est tranchée, et elle est fausse
+
+Dernier point ouvert de la dette n°3. Tranché **sur le code du SDK `0.3.217` lui-même**, pas sur un
+raisonnement : `sdk.d.ts` pour les types, `sdk.mjs` pour l'implémentation réelle.
+
+### Ce que le SDK fait vraiment
+
+1. `reinitialize()` est un simple alias : `reinitialize() { return …("sdk_reinitialize", () => this.initialize()) }`.
+2. Le champ `pending_permission_requests` **existe bel et bien**, mais **pas** sur
+   `SDKControlInitializeResponse` (le payload). Il vit sur `ControlResponse` / `ControlErrorResponse`
+   — l'**enveloppe de transport** de la réponse de contrôle.
+3. `☠` **Le SDK les consomme lui-même** : `if (s.pending_permission_requests) this.processPendingPermissionRequests(...)`.
+   Il ne les remonte **jamais** à l'appelant par la valeur de retour — il les **rejoue** comme des
+   `control_request` ordinaires, c'est-à-dire **par le chemin `canUseTool`**.
+4. Sur toute réponse qui n'est pas l'`initialize`, ces champs sont **ignorés** avec un log explicite :
+   « Ignoring prompt-redelivery fields on non-initialize response ».
+
+### Conséquences fermes
+
+- **`superviseur/reponse-reinitialize.ts` (`extraireDemandesEnAttente`) est du code mort.** Il lit un
+  champ qui n'arrive jamais sur la valeur résolue par `reinitialize()`. Il ne plante pas — il rend
+  toujours `[]` — ce qui est pire : la réconciliation en conclut « rien en attente » et se croit à
+  jour. C'est la lecture (a) de l'HYP de M-13 qui était la bonne, et le code défensif écrit pour
+  couvrir les deux ne couvre en réalité rien du tout.
+- `☠ CASSE` **Le vrai trou est ailleurs, et il est plus grave.** La redélivrance passe par
+  `canUseTool` — or il est **mesuré** (H-64) qu'en `permissionMode: 'auto'`, **`canUseTool` n'est
+  jamais appelé** : le classifieur tranche seul. ⇒ Il faut établir ce que deviennent des demandes
+  rejouées après une coupure dans le mode que le harness utilise en production. Tant que ce n'est pas
+  mesuré, la propriété « reprise » de la couche 1 reste conditionnelle, exactement comme M-53 l'a dit.
+- `⚠` **Sibling jamais pris en compte par le projet** : `pending_user_dialog_requests`, documenté comme
+  le frère de `pending_permission_requests`. Une seconde famille de demandes en vol que le harness
+  ignore entièrement aujourd'hui.
+- `⚠` **Déduplication obligatoire**, et la doc du SDK l'impose noir sur blanc : « Receivers must
+  tolerate the same `request_id` also arriving as a live or replayed `control_request` frame and
+  render it once. » La dédup par `request_id` que M-53 a testée sur la réconciliation n'est donc pas
+  une précaution : c'est une exigence du protocole.

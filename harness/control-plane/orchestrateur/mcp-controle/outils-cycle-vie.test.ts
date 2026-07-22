@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import { arreterEquipe, envoyerAEquipe, interrompreEquipe, proposerCreationEquipe, relancerEquipe } from './outils-cycle-vie.ts';
-import type { ArreteurMission, CibleEquipe, RelanceurMission, RepertoireCibles } from './types.ts';
+import type {
+  ArreteurMission,
+  CibleEquipe,
+  ConfigPlafondParc,
+  LecteurUtilisationParc,
+  RelanceurMission,
+  RepertoireCibles,
+} from './types.ts';
+import type { RelevePourPlafond } from '../../../budgets/index.ts';
 
 let registre: Registre;
 
@@ -23,17 +31,93 @@ function fabriquerCible(overrides: Partial<CibleEquipe> = {}): CibleEquipe {
   };
 }
 
+/** Lecteur de test : aucun compte connu ⇒ plafond de parc non contraignant (défaut). */
+const LECTEUR_PERMISSIF: LecteurUtilisationParc = { comptesConnus: () => [], releves: () => [] };
+const PLAFOND_DESACTIVE: ConfigPlafondParc = {};
+
+function fabriquerLecteur(parCompte: Record<string, readonly RelevePourPlafond[]>): LecteurUtilisationParc {
+  return {
+    comptesConnus: () => Object.keys(parCompte),
+    releves: (compteId) => parCompte[compteId] ?? [],
+  };
+}
+
 describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)', () => {
   test("retourne 'differe' avec une proposition de mandat, jamais 'applique'", () => {
-    const resultat = proposerCreationEquipe('alpha', 'refaire l’auth', 'tests verts', 'src/auth/**');
+    const resultat = proposerCreationEquipe(
+      'alpha',
+      'refaire l’auth',
+      'tests verts',
+      'src/auth/**',
+      LECTEUR_PERMISSIF,
+      PLAFOND_DESACTIVE,
+    );
     expect(resultat.effet).toBe('differe');
     expect(resultat.ref).toBeDefined();
     expect(resultat.etat).toContain('refaire l’auth');
   });
 
   test('☠ ne touche à AUCUN registre — aucune mission créée', () => {
-    proposerCreationEquipe('alpha', 'x', 'y', 'z');
+    proposerCreationEquipe('alpha', 'x', 'y', 'z', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE);
     expect(registre.missions.listerActives().length).toBe(0);
+  });
+});
+
+describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M-53 corrigé)', () => {
+  test('seuil bas dépassé sur le seul compte connu ⇒ refus, jamais differe', () => {
+    const lecteur = fabriquerLecteur({
+      compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
+    });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 10 });
+    expect(resultat.ok).toBe(false);
+    expect(resultat.effet).toBe('refuse');
+    expect(resultat.raison).toContain('compte1');
+    expect(resultat.raison).toContain('five_hour');
+  });
+
+  test('seuil haut, sous le seuil ⇒ autorisé, differe', () => {
+    const lecteur = fabriquerLecteur({
+      compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 20, statut: 'allowed' }],
+    });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 });
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('un compte saturé mais un second disponible ⇒ autorisé (au moins un compte viable)', () => {
+    const lecteur = fabriquerLecteur({
+      compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 99, statut: 'allowed' }],
+      compte2: [{ compteId: 'compte2', typeFenetre: 'five_hour', utilisation: 5, statut: 'allowed' }],
+    });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 });
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('tous les comptes saturés ⇒ refus, motif lisible par compte', () => {
+    const lecteur = fabriquerLecteur({
+      compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
+      compte2: [{ compteId: 'compte2', typeFenetre: 'seven_day', utilisation: 95, statut: 'allowed' }],
+    });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 });
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('compte1');
+    expect(resultat.raison).toContain('compte2');
+  });
+
+  test('aucun compte connu ⇒ rien à borner, autorisé', () => {
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 });
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('☠ un port qui lève une exception ne bloque jamais l’outil ⇒ refus propre, pas de throw', () => {
+    const lecteur: LecteurUtilisationParc = {
+      comptesConnus: () => {
+        throw new Error('port hors service');
+      },
+      releves: () => [],
+    };
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, PLAFOND_DESACTIVE);
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('port hors service');
   });
 });
 

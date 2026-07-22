@@ -10,28 +10,75 @@
 import { randomUUID } from 'node:crypto';
 import type { Registre } from '../../registre/index.ts';
 import { construireMessageUtilisateur } from '../entree/index.ts';
+import { deciderCreationMission } from '../../../budgets/index.ts';
 import { accepte, applique, echecInattendu, refuse } from './contrat.ts';
 import { construireMandatPropose } from './mandat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import { avecPlafond } from './plafond.ts';
-import type { ArreteurMission, ContratRetour, RelanceurMission, RepertoireCibles } from './types.ts';
+import type {
+  ArreteurMission,
+  ConfigPlafondParc,
+  ContratRetour,
+  LecteurUtilisationParc,
+  RelanceurMission,
+  RepertoireCibles,
+} from './types.ts';
 
 const RAISON_DELAI = "aucune confirmation du port dans le délai — le lien avec l'équipe est peut-être coupé";
+
+/**
+ * Évalue le plafond de parc (G.1.3, `deciderCreationMission`) sur TOUS les comptes
+ * connus, faute d'un compte déjà assigné à ce stade (la proposition n'en choisit
+ * aucun — H-61). Autorise dès qu'AU MOINS UN compte peut encore héberger une
+ * mission ; l'assignation réelle du compte reste hors périmètre de A.2 (branche F).
+ * Aucun compte connu ⇒ rien à borner, autorisé par défaut (cohérent avec H-58 :
+ * le plafond est un frein, pas une exigence de préconditions).
+ */
+function evaluerPlafondParc(
+  lecteur: LecteurUtilisationParc,
+  config: ConfigPlafondParc,
+): { readonly autorise: boolean; readonly motif: string } {
+  const comptes = lecteur.comptesConnus();
+  if (comptes.length === 0) {
+    return { autorise: true, motif: 'aucun compte connu — rien à borner (G.1.3)' };
+  }
+  const decisions = comptes.map((compteId) => ({
+    compteId,
+    decision: deciderCreationMission(lecteur.releves(compteId), config),
+  }));
+  const viable = decisions.find((d) => d.decision.autorise);
+  if (viable !== undefined) {
+    return { autorise: true, motif: `compte « ${viable.compteId} » disponible (G.1.3) : ${viable.decision.motif}` };
+  }
+  const detail = decisions.map((d) => `compte « ${d.compteId} » : ${d.decision.motif}`).join(' ; ');
+  return { autorise: false, motif: `plafond de parc (G.1.3) atteint sur tous les comptes connus — ${detail}` };
+}
 
 /**
  * `creer_equipe` (A.2.2, H-61 — TRANCHÉ, FAIT AUTORITÉ). Ne crée RIEN et ne
  * dispatche RIEN : retourne une proposition de mandat que l'UI présente à
  * l'approbation humaine explicite. La création effective part du clic de
  * l'opérateur, pas du tour de l'orchestrateur — voir `mandat.ts`.
+ *
+ * G.1.3 : la proposition elle-même est bornée par le plafond de parc — inutile
+ * de présenter à l'opérateur un mandat qu'aucun compte ne peut plus héberger.
+ * `lecteur` est un port SYNCHRONE (voir `types.ts`) : une exception qu'il lève
+ * retombe dans le `catch` ci-dessous comme n'importe quelle autre, sans jamais
+ * bloquer l'outil (acceptation (a)/(d)) — `avecPlafond` n'a pas de raison
+ * d'être ici, il n'y a pas d'attente à borner.
  */
 export function proposerCreationEquipe(
   projet: string,
   objectif: string,
   critereArret: string | null,
   perimetre: string,
+  lecteur: LecteurUtilisationParc,
+  config: ConfigPlafondParc,
 ): ContratRetour {
   const intention = `proposer une équipe sur ${projet}`;
   try {
+    const plafond = evaluerPlafondParc(lecteur, config);
+    if (!plafond.autorise) return refuse(intention, plafond.motif);
     const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre);
     return {
       ok: true,
@@ -118,7 +165,21 @@ export async function arreterEquipe(
   }
 }
 
-/** `relancer_equipe` (A.2.2) — reprise après crash, `resume` (B.3.3). Toujours `accepte`. */
+/**
+ * `relancer_equipe` (A.2.2) — reprise après crash, `resume` (B.3.3). Toujours `accepte`.
+ *
+ * `⚖` Arbitrage explicite (voir consigne de mission) : NE PASSE PAS par le plafond
+ * de parc (G.1.3). `deciderCreationMission` documente lui-même sa portée : « Décide
+ * si une NOUVELLE mission peut être créée » (`budgets/plafond-parc.ts`). Une relance
+ * réutilise le `missionId` et le `compteId` déjà attribués en registre (H-53) — le
+ * parc ne grandit pas, une mission déjà comptée reprend. La bloquer ici punirait un
+ * crash (panne infra) exactement comme une saturation de quota, alors que G.1.3 vise
+ * spécifiquement la CROISSANCE du parc, pas la continuité d'un travail déjà approuvé
+ * par l'opérateur (H-61). Le frein sur compte saturé existe déjà à la bonne couche :
+ * `politique-usage.ts` (G.1.4) suspend les CRÉATIONS sur limite atteinte, et un
+ * `statut: 'rejected'` (H-54) est un fait déjà porté par le registre, indépendant de
+ * ce module.
+ */
 export async function relancerEquipe(relanceur: RelanceurMission, registre: Registre, missionId: string): Promise<ContratRetour> {
   const intention = `relancer ${missionId}`;
   try {

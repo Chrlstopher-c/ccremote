@@ -35,11 +35,20 @@ passe les tests sans faire le travail. Rien de ce qui suit n'apparaît dans le c
       reste couverte par des doublures uniquement. La dette n'est pas fermée de ce côté-là.
 
 ### 🟡 DETTE N°3 — hypothèses non vérifiées sur le comportement réel du SDK
-- [ ] **`pending_permission_requests` absent des types publics** (M-13). Le commentaire de
-      `reinitialize()` affirme que le SDK redélivre les demandes en attente, mais
-      `SDKControlInitializeResponse` ne déclare pas ce champ. Implémenté défensivement sur les deux
-      lectures. **À trancher au premier banc réel de reconnexion** — si la mauvaise lecture est
-      retenue, les permissions demandées pendant une coupure ne réatteignent jamais personne.
+- [x] ~~**`pending_permission_requests` absent des types publics** (M-13)~~ — **TRANCHÉE le
+      2026-07-22** sur le code du SDK lui-même (`sdk.mjs`), voir **H-73**. Verdict : **l'HYP était
+      fausse**. Le SDK **consomme** ces demandes lui-même (`processPendingPermissionRequests`) et les
+      **rejoue par le chemin `canUseTool`** — il ne les remonte jamais par la valeur de retour.
+      ⇒ **Deux conséquences ouvertes, à traiter** :
+- [ ] **`superviseur/reponse-reinitialize.ts` est du code mort à supprimer ou à réorienter.** Il rend
+      toujours `[]`, ce qui est pire qu'une erreur : la réconciliation en conclut « rien en attente »
+      et se croit à jour.
+- [ ] `☠` **Que deviennent les demandes rejouées en `permissionMode: 'auto'` ?** La redélivrance passe
+      par `canUseTool`, dont il est **mesuré** (H-64) qu'il n'est **jamais appelé** dans ce mode — celui
+      que le harness utilise en production. Tant que ce n'est pas mesuré, la propriété « reprise » de la
+      couche 1 reste conditionnelle. **C'est désormais le trou le plus sérieux de la dette n°3.**
+- [ ] `⚠` **`pending_user_dialog_requests` totalement ignoré par le projet** — seconde famille de
+      demandes en vol, frère documenté de la première.
 - [x] ~~**Messages d'usage jamais vus en vrai** (M-51)~~ — **FERMÉE le 2026-07-22** par
       `acceptation/observabilite-5-sousagents-reel.ts`. `☠` Le message réel est un type à part
       entière, **`rate_limit_event`**, absent des types publics : il n'arrive **ni** par
