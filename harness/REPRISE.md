@@ -250,6 +250,29 @@ d'évictions** — chacun chasse l'autre en boucle (**1268 supersedes** observé
 seul PC, mais un process resté vivant après un redémarrage de service suffirait à la déclencher.
 Le `supersede` n'a aucun amortissement. À traiter avant tout déploiement durable.
 
+### EN PRODUCTION depuis le 2026-07-22 (nuit)
+
+| Machine | Service | Rôle |
+|---|---|---|
+| Pi | `ccremote-harness` | registre + API web (`127.0.0.1:8722`) + serveur du lien (`0.0.0.0:8721`) |
+| Pi | `ccremote-web` | interface, `ccremote.exemple.com` |
+| PC | `ccremote-pc` (`systemd --user`, linger) | client du lien, reconnexion automatique |
+
+Secret du lien : `~/.ccremote-lien-secret` sur le PC (600), `/home/pi/ccremote-harness/.env` sur le
+Pi. **Le même des deux côtés** — en régénérer un couperait le PC en silence.
+
+Déploiement : `./deploy-harness-pi.sh` (control plane, exige `CCREMOTE_LIEN_SECRET`) puis
+`./deploy-web-pi.sh` (interface).
+
+`☠` **La session orchestrateur est OPT-IN** (`CCREMOTE_PI_ORCHESTRATEUR=1`). Elle consomme du quota
+en continu et exige des credentials Claude valides sur le Pi — ceux présents datent du 2 juillet et
+les refresh tokens tournent, donc un `/login` humain est nécessaire. Tout le reste (parc, escalades,
+pilotage) fonctionne sans elle : les coupler ferait tomber le produit entier sur un login expiré.
+
+`☠` **Le lien passe par le LAN**, pas par Cloudflare : les deux machines sont sur le même réseau,
+ce qui évite un aller-retour par un service externe. Conséquence à connaître — **le pilotage hors du
+réseau local n'est pas prouvé**, la voie tunnel n'a jamais été exercée.
+
 ### ACTION SUIVANTE
 
 1. **Le chemin d'ÉCRITURE** — instruction, pause/reprise, arrêt d'urgence, résolution d'escalade.

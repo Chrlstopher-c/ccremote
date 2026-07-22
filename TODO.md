@@ -10,26 +10,38 @@
 1. ~~Communication PC↔Pi (H-75)~~ — **livrée et revue** (`6b91242`), 3 défauts corrigés.
 2. ~~Câblage de l'interface~~ — **livré en LECTURE** (`9c695d2`, `b8d542f`) : parc, escalades et
    comptes viennent du vrai registre, à travers `pi-web` qui porte l'authentification.
-3. **Le chemin d'ÉCRITURE** — priorité n°1 désormais. L'interface observe, elle ne pilote pas
-   encore : instruction, pause/reprise, arrêt d'urgence, résolution d'escalade. `☠` Ces ordres
-   traversent le lien vers le PC — une route à moitié câblée est **pire qu'absente**, l'interface
-   croirait l'ordre passé.
+3. ~~Le chemin d'ÉCRITURE~~ — **livré** (`3467ead`). Instruction, pause, reprise, terminaison et
+   résolution d'escalade vont de l'écran jusqu'au superviseur. `ControleurPause` a enfin son
+   premier appelant réel (6ᵉ occurrence du défaut « écrit, testé, branché sur rien »).
+   `⚠` Reste : `arret_urgence` n'a pas de méthode sur `ClientSuperviseurPc` ⇒ la route répond 501.
 4. **Remonter `subagents` / `feed` / `inspection` du PC vers le Pi** — les vues Mission et Agent
-   restent en démo faute de source.
+   restent en démo faute de source. C'est le prochain vrai manque.
+4bis. **Session orchestrateur sur le Pi** — code prêt, activée par
+   `CCREMOTE_PI_ORCHESTRATEUR=1`. Bloquée sur une action humaine : les credentials Claude du Pi
+   datent du 2 juillet et les refresh tokens tournent, il faut un `/login` sur la machine.
 5. ~~Exercer le lien entre deux vraies machines~~ — **fait le 2026-07-22**, 2 défauts trouvés et
    corrigés (`3ff794c`). Restent non éprouvés : le passage par **Cloudflare Tunnel** (banc en LAN
    direct) et un **vrai redémarrage machine** (le `boot_id` n'a jamais changé pendant le banc).
 6. `⚠` **Tempête d'évictions à deux clients PC** — découverte au banc, NON corrigée. Deux process
-   PC simultanés se chassent en boucle : **1268 évictions** observées. La v1 suppose un seul PC,
-   mais un process survivant à un redémarrage de service suffit. Le `supersede` n'a aucun
-   amortissement (ni délai, ni détection d'identité de client). À traiter avant déploiement
-   durable.
+   PC simultanés se chassent en boucle : **1268 évictions** observées. Le `supersede` n'a aucun
+   amortissement (ni délai, ni identité de client). **Priorité montée** : le service PC tourne
+   désormais sous systemd, où un `restart` qui chevauche l'ancien process suffit à la déclencher.
 7. Puis le reste des dettes ci-dessous.
 
-`⚠` **Ce qui serait faux de croire** : que le harness est *éprouvé*. Le lien a maintenant tourné
-entre deux vraies machines — et ce seul essai a suffi à trouver deux défauts. Mais l'interface ne
-sait toujours qu'observer, le tunnel Cloudflare n'a jamais été traversé, et aucune machine n'a
-réellement redémarré.
+## 🚀 EN PRODUCTION depuis le 2026-07-22
+
+| Machine | Service | État |
+|---|---|---|
+| Pi | `ccremote-harness` | registre + API web (loopback) + serveur du lien (LAN) |
+| Pi | `ccremote-web` | interface sur `ccremote.exemple.com` |
+| PC | `ccremote-pc` (`--user`, linger) | client du lien, reconnexion automatique |
+
+Cycle éteindre/rallumer vérifié en prod : `pcOnline` suit, sans intervention.
+
+`⚠` **Ce qui serait encore faux de croire** : que tout est éprouvé. Les vues Mission et Agent
+n'ont pas de source réelle (sous-agents et flux vivent sur le PC), la vue conversation attend un
+`/login` sur le Pi, et le lien passe par le LAN — le tunnel Cloudflare n'a toujours jamais été
+traversé, donc le pilotage hors du réseau local n'est pas prouvé.
 
 ## 📋 REGISTRE DES DETTES — état au 2026-07-22
 
