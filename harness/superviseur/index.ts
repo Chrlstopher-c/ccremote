@@ -4,11 +4,20 @@
  * importer les fichiers internes de ce dossier.
  */
 
-export type { DemandeDemarrage, EnregistrementWorker, ObservateurRelance } from './types.ts';
+export type {
+  DemandeDemarrage,
+  EnregistrementWorker,
+  EtapeArretUrgence,
+  ObservateurRelance,
+  ObservateurUsage,
+  RapportArretUrgence,
+  ResultatArretUnitaireUrgence,
+} from './types.ts';
 
 export { RegistreWorkers } from './registre-workers.ts';
 
 export {
+  GRACE_ARRET_URGENCE_MS_DEFAUT,
   SuperviseurError,
   SuperviseurWorkers,
   type DemarrerWorkerFn,

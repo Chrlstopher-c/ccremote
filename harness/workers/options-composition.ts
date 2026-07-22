@@ -8,6 +8,7 @@
  */
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import { assertRetryWatchdogCoherent } from '../budgets/index.ts';
 import { DEFAULT_SETTING_SOURCES } from './preflight-config.ts';
 import { sessionLogger } from './logger.ts';
 import type { ResolvedModel, WorkerSpec } from './types.ts';
@@ -39,6 +40,10 @@ export function buildWorkerEnv(spec: WorkerSpec): Record<string, string | undefi
   const env: Record<string, string | undefined> = { ...process.env, ...spec.extraEnv };
   if (spec.configDir !== undefined) env[CONFIG_DIR_ENV] = spec.configDir;
   if (spec.agentTeams === true) env[AGENT_TEAMS_ENV] = '1';
+  // ☠ Panne #15 (G.1.4, acceptation d) — vérifié ICI, au point de composition réel,
+  // pas seulement documenté : `CLAUDE_CODE_RETRY_WATCHDOG=1` sans budget actif est une
+  // consommation de quota non bornée. `extraEnv` est la seule voie qui pourrait le poser.
+  assertRetryWatchdogCoherent(env, spec.maxBudgetUsd);
   return env;
 }
 

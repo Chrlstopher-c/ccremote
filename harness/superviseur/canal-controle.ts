@@ -23,7 +23,7 @@
 
 import type { DemandeEnAttenteReinitialisation, DescripteurWorkerPc } from '../control-plane/reconciliation/types.ts';
 import { superviseurLogger as journal } from './logger.ts';
-import type { DemandeDemarrage } from './types.ts';
+import type { DemandeDemarrage, RapportArretUrgence } from './types.ts';
 
 /**
  * Sous-ensemble de `SuperviseurWorkers` réellement utilisé ici — un port, pas la
@@ -40,6 +40,12 @@ export interface PortSuperviseurControle {
   reinitialiser(
     sessionId: string,
   ): Promise<{ readonly demandesEnAttente: readonly DemandeEnAttenteReinitialisation[] }>;
+  /**
+   * G.4, mission M-52 — optionnel : un superviseur qui ne l'implémente pas fait
+   * REFUSER l'opération (voir `#executer`) plutôt que de planter sur un appel
+   * de méthode absente. `SuperviseurWorkers` réel l'implémente toujours.
+   */
+  arretUrgence?(graceMs?: number): Promise<RapportArretUrgence>;
 }
 
 export type OperationControle =
@@ -48,7 +54,14 @@ export type OperationControle =
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
   | { readonly type: 'relancer_worker'; readonly missionId: string; readonly sessionId: string }
-  | { readonly type: 'reinitialiser'; readonly sessionId: string };
+  | { readonly type: 'reinitialiser'; readonly sessionId: string }
+  /**
+   * G.4.1/G.4.2, mission M-52 — LE chemin de l'arrêt d'urgence : téléphone →
+   * control plane → CE canal (D.3) → superviseur, sans jamais traverser
+   * l'orchestrateur (aucune dépendance de ce fichier vers
+   * `control-plane/orchestrateur/`, vérifiable statiquement).
+   */
+  | { readonly type: 'arret_urgence'; readonly graceMs?: number };
 
 /** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
 type OperationMutative = Exclude<OperationControle, { readonly type: 'inventaire' }>;
@@ -67,6 +80,8 @@ export interface ReponseControle {
   readonly detail?: string;
   readonly inventaire?: readonly DescripteurWorkerPc[];
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
+  /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
+  readonly rapportArretUrgence?: RapportArretUrgence;
 }
 
 const TAILLE_MAX_CACHE_DEFAUT = 1000;
@@ -132,6 +147,19 @@ export class CanalControle {
         case 'reinitialiser': {
           const resultat = await this.#superviseur.reinitialiser(operation.sessionId);
           return { ok: true, effet: 'applique', demandesEnAttente: resultat.demandesEnAttente };
+        }
+        case 'arret_urgence': {
+          if (this.#superviseur.arretUrgence === undefined) {
+            journal.error({}, "arret_urgence demandé mais le superviseur ne l'implémente pas — REFUSÉ, jamais un faux succès");
+            return { ok: false, effet: 'refuse', detail: "arrêt d'urgence non câblé sur ce superviseur" };
+          }
+          const rapport = await this.#superviseur.arretUrgence(operation.graceMs);
+          return {
+            ok: true,
+            effet: 'applique',
+            detail: `arrêt d'urgence appliqué à ${rapport.missions.length} mission(s)`,
+            rapportArretUrgence: rapport,
+          };
         }
         default: {
           const exhaustif: never = operation;

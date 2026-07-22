@@ -5,6 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import { GardeBudgetError, RETRY_WATCHDOG_ENV } from '../budgets/index.ts';
 import {
   AGENT_TEAMS_ENV,
   CONFIG_DIR_ENV,
@@ -56,6 +57,17 @@ describe('env', () => {
     const env = buildWorkerEnv(spec({ configDir: '/a', extraEnv: { [CONFIG_DIR_ENV]: '/b', FOO: 'bar' } }));
     expect(env[CONFIG_DIR_ENV]).toBe('/a');
     expect(env['FOO']).toBe('bar');
+  });
+
+  test('☠ panne #15 (G.1.4) : CLAUDE_CODE_RETRY_WATCHDOG=1 sans budget actif lève', () => {
+    expect(() =>
+      buildWorkerEnv(spec({ maxBudgetUsd: Number.POSITIVE_INFINITY, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } })),
+    ).toThrow(GardeBudgetError);
+  });
+
+  test('CLAUDE_CODE_RETRY_WATCHDOG=1 avec un maxBudgetUsd actif : autorisé', () => {
+    const env = buildWorkerEnv(spec({ maxBudgetUsd: 25, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }));
+    expect(env[RETRY_WATCHDOG_ENV]).toBe('1');
   });
 });
 

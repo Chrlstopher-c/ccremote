@@ -19,6 +19,7 @@ import type { WorkerHandle, WorkerSpec } from '../workers/index.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 
 export type { FileEntreeCiblee } from '../pause/index.ts';
+export type { ObservateurUsage } from '../budgets/index.ts';
 
 /** Ce que le Pi fournit en plus du `WorkerSpec` au moment du dispatch (D.2.3, D.3.1). */
 export interface DemandeDemarrage {
@@ -57,4 +58,29 @@ export interface EnregistrementWorker {
    */
   readonly entree: GenerateurEntree;
   vivant: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Arrêt d'urgence (G.4, mission M-52) — formes de données.
+//
+// `☠` Distinct de la PAUSE GLOBALE (M-33, `pause/`) : H-57 tranche que ce sont
+// deux gestes séparés. Ici, chaque étape est un fait observable pour l'audit,
+// jamais une supposition — un rapport qui ne liste QUE 'forcage' dit que la
+// pause et la fermeture propre ont échoué mais que le filet a quand même agi.
+// ---------------------------------------------------------------------------
+
+/** Étape réellement exécutée pour UNE mission, dans l'ordre de tentative (jamais l'ordre de succès). */
+export type EtapeArretUrgence = 'pause_globale' | 'fermeture_propre' | 'forcage';
+
+/** Résultat d'un arrêt d'urgence appliqué à UNE mission (utilisé aussi par le banc de drill récurrent, G.4.3). */
+export interface ResultatArretUnitaireUrgence {
+  readonly missionId: string;
+  readonly sessionId: string;
+  readonly etapes: readonly EtapeArretUrgence[];
+}
+
+/** Rapport agrégé d'un arrêt d'urgence déclenché sur tout le parc vivant du PC (G.4.2). */
+export interface RapportArretUrgence {
+  readonly declencheA: number;
+  readonly missions: readonly ResultatArretUnitaireUrgence[];
 }

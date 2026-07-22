@@ -13,6 +13,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { EvenementQuotaObserve, ObservateurUsage } from '../budgets/index.ts';
 import { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 import type { WorkerCapabilities, WorkerHandle, WorkerSpec } from '../workers/index.ts';
@@ -400,5 +401,168 @@ describe('câblage de deciderRelance() sur un SDKResultMessage réel', () => {
     await superviseur.demarrer(demande());
     await laisserPasserLesMicrotaches();
     expect(decisions.map((d) => d.action)).toEqual(['rien']);
+  });
+});
+
+describe('câblage des budgets (mission M-51) sur un flux réel', () => {
+  function rateLimitEvent(overrides: Partial<{ status: string; utilization: number; rateLimitType: string; resetsAt: number }> = {}): SDKMessage {
+    return {
+      type: 'rate_limit_event',
+      rate_limit_info: {
+        status: overrides.status ?? 'allowed_warning',
+        rateLimitType: overrides.rateLimitType ?? 'five_hour',
+        utilization: overrides.utilization ?? 41,
+        resetsAt: overrides.resetsAt ?? 1784714400,
+      },
+      uuid: '11111111-2222-3333-4444-555555555555',
+      session_id: spec().sessionId,
+    } as unknown as SDKMessage;
+  }
+
+  function bannièreInformationnelle(content: string): SDKMessage {
+    return {
+      type: 'system',
+      subtype: 'informational',
+      content,
+      level: 'warning',
+      uuid: '11111111-2222-3333-4444-555555555555',
+      session_id: spec().sessionId,
+    } as unknown as SDKMessage;
+  }
+
+  function notification(text: string): SDKMessage {
+    return {
+      type: 'system',
+      subtype: 'notification',
+      key: 'usage',
+      text,
+      priority: 'high',
+      uuid: '11111111-2222-3333-4444-555555555555',
+      session_id: spec().sessionId,
+    } as unknown as SDKMessage;
+  }
+
+  function resultMessageOk(): SDKMessage {
+    return {
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 1,
+      duration_api_ms: 1,
+      is_error: false,
+      num_turns: 1,
+      result: 'ok',
+      stop_reason: null,
+      total_cost_usd: 0.01,
+      usage: {} as never,
+      modelUsage: {},
+      permission_denials: [],
+      terminal_reason: 'completed' as never,
+      uuid: '11111111-2222-3333-4444-555555555555',
+      session_id: spec().sessionId,
+    } as unknown as SDKMessage;
+  }
+
+  test('rate_limit_event : relayé à observateurUsage.surQuota(), sans jamais interrompre le flux', async () => {
+    const evenements: EvenementQuotaObserve[] = [];
+    const observateurUsage: ObservateurUsage = { surQuota: (e) => evenements.push(e) };
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurUsage,
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([rateLimitEvent(), resultMessageOk()])),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(evenements).toEqual([
+      {
+        missionId: 'mission-1',
+        sessionId: spec().sessionId,
+        statut: 'allowed_warning',
+        rateLimitType: 'five_hour',
+        utilisation: 41,
+        resetsAt: 1784714400,
+      },
+    ]);
+    // ☠ le rate_limit_event n'a PAS provoqué de break : le `result` qui suit a bien été traité.
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test('☠ panne #16 : une bannière d’avertissement ne suspend rien et ne notifie rien', async () => {
+    const decisions: unknown[] = [];
+    const observateurUsage: ObservateurUsage = { surMessageUsage: (_id, d) => decisions.push(d) };
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurUsage,
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([bannièreInformationnelle("You've used 80% of your five-hour limit."), resultMessageOk()]),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(decisions).toEqual([
+      {
+        classification: { categorie: 'avertissement', prefixe: "You've used", texteBrut: "You've used 80% of your five-hour limit." },
+        suspendreCreations: false,
+        notifier: false,
+        tracer: true,
+        motif: expect.any(String),
+      },
+    ]);
+  });
+
+  test('une limite réellement atteinte (notification) : suspend les créations ET notifie', async () => {
+    const decisions: Array<{ suspendreCreations: boolean; notifier: boolean }> = [];
+    const observateurUsage: ObservateurUsage = {
+      surMessageUsage: (_id, d) => decisions.push({ suspendreCreations: d.suspendreCreations, notifier: d.notifier }),
+    };
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurUsage,
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([notification("You've hit your usage limit for this session."), resultMessageOk()]),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(decisions).toEqual([{ suspendreCreations: true, notifier: true }]);
+  });
+
+  test('texte hors sujet : aucun appel à surMessageUsage (rien à relayer)', async () => {
+    let appels = 0;
+    const observateurUsage: ObservateurUsage = { surMessageUsage: () => { appels += 1; } };
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurUsage,
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([bannièreInformationnelle('slash command exécutée'), resultMessageOk()])),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(appels).toBe(0);
+  });
+
+  test("un observateur qui lève n'interrompt jamais la surveillance (best-effort, H-15)", async () => {
+    const observateurUsage: ObservateurUsage = {
+      surQuota: () => {
+        throw new Error('observateur défaillant');
+      },
+    };
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurUsage,
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([rateLimitEvent(), resultMessageOk()])),
+    });
+    await expect(superviseur.demarrer(demande())).resolves.toBeDefined();
+    await laisserPasserLesMicrotaches();
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test("sans observateurUsage fourni : aucune exception (port optionnel)", async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([rateLimitEvent(), notification("You're close to your limit."), resultMessageOk()]),
+      ),
+    });
+    await expect(superviseur.demarrer(demande())).resolves.toBeDefined();
+    await laisserPasserLesMicrotaches();
   });
 });

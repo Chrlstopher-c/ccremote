@@ -37,6 +37,8 @@ import { arbitrerFencing, type DetenteurEpoch } from './fencing-epoch.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
+import { classifierMessageUsage, deciderActionUsage } from '../budgets/index.ts';
+import type { EvenementQuotaObserve, ObservateurUsage } from '../budgets/index.ts';
 import type {
   ArreteurMission,
   CibleEquipe,
@@ -55,7 +57,30 @@ import { startWorker as startWorkerReel } from '../workers/index.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
 import { RegistreWorkers } from './registre-workers.ts';
 import { extraireDemandesEnAttente } from './reponse-reinitialize.ts';
-import type { DemandeDemarrage, ObservateurRelance } from './types.ts';
+import {
+  executerArretUrgenceMission,
+  executerArretUrgenceParc,
+  type CibleArretUrgence,
+  type DependancesArretUrgence,
+} from './arret-urgence-sequence.ts';
+import type {
+  DemandeDemarrage,
+  EnregistrementWorker,
+  ObservateurRelance,
+  RapportArretUrgence,
+  ResultatArretUnitaireUrgence,
+} from './types.ts';
+
+/**
+ * Fenêtre de grâce par défaut avant le forçage (G.4.2, mission M-52). `⚠ HYP`
+ * — la valeur exacte de B.1.5 (fenêtre de grâce du superviseur) n'a pas été
+ * relue ici (hors du fichier de branche unique imposé à cette mission,
+ * `10-arbre-G-gardefous.md`) : ce nombre est un défaut raisonnable et
+ * délibérément configurable via `arretUrgence(graceMs)`, pas une valeur
+ * réputée alignée sur B.1.5 sans vérification. À confirmer contre `05-arbre-B`
+ * si une mission future en a besoin.
+ */
+export const GRACE_ARRET_URGENCE_MS_DEFAUT = 5000;
 
 export class SuperviseurError extends Error {
   constructor(message: string) {
@@ -71,11 +96,22 @@ export interface DependancesSuperviseur {
   readonly compteurRelances: CompteurRelances;
   /** Best-effort (H-15) : la remontée réelle vers le Pi passe par E.2, hors périmètre. */
   readonly observateurRelance?: ObservateurRelance;
+  /**
+   * Best-effort (H-15, mission M-51) : quotas (`rate_limit_event`) et messages d'usage
+   * classifiés (G.1.4). Même contrat que `observateurRelance` — aucune connexion ouverte.
+   */
+  readonly observateurUsage?: ObservateurUsage;
   /** Injectable pour les tests : jamais de spawn réel en unitaire (règle du dépôt). */
   readonly demarrerWorker?: DemarrerWorkerFn;
   readonly startWorkerDeps?: StartWorkerDeps;
   /** Ordonnancement du délai de backoff avant une relance. Réel = `setTimeout`, synchrone en test. */
   readonly planifier?: (delaiMs: number, tache: () => void) => void;
+  /**
+   * Fenêtre de grâce de l'arrêt d'urgence (G.4.2, mission M-52), attendue entre
+   * la fermeture propre et le forçage. Réel = `setTimeout`, contrôlable en test
+   * (jamais une vraie attente dans un test unitaire).
+   */
+  readonly attendreGrace?: (delaiMs: number) => Promise<void>;
 }
 
 /**
@@ -86,16 +122,20 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #registre = new RegistreWorkers();
   readonly #compteurRelances: CompteurRelances;
   readonly #observateurRelance: ObservateurRelance | undefined;
+  readonly #observateurUsage: ObservateurUsage | undefined;
   readonly #demarrerWorker: DemarrerWorkerFn;
   readonly #startWorkerDeps: StartWorkerDeps;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
+  readonly #attendreGrace: (delaiMs: number) => Promise<void>;
 
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
     this.#observateurRelance = deps.observateurRelance;
+    this.#observateurUsage = deps.observateurUsage;
     this.#demarrerWorker = deps.demarrerWorker ?? startWorkerReel;
     this.#startWorkerDeps = deps.startWorkerDeps ?? {};
     this.#planifier = deps.planifier ?? ((delaiMs, tache) => void setTimeout(tache, delaiMs));
+    this.#attendreGrace = deps.attendreGrace ?? ((delaiMs) => new Promise((resolve) => setTimeout(resolve, delaiMs)));
   }
 
   /**
@@ -308,11 +348,25 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * `terminal_reason`. Un `result` clôt tout le process (mesuré) : chaque
    * occurrence est traitée puis la boucle s'arrête (`break`) plutôt que de
    * supposer que le flux continuera de lui-même.
+   *
+   * `rate_limit_event` et les bannières `system`/informational|notification
+   * (mission M-51, G.1.4/H-54/H-63) sont observés AVANT le `result` — ils
+   * arrivent en cours de tour, jamais après — et ne provoquent PAS de `break` :
+   * seul un `result` ferme le flux.
    */
   async #surveillerResultats(missionId: string, handle: WorkerHandle): Promise<void> {
     const log = missionLogger(missionId);
     try {
       for await (const message of handle.query) {
+        if (message.type === 'rate_limit_event') {
+          this.#surveillerQuota(missionId, handle.sessionId, message.rate_limit_info);
+          continue;
+        }
+        if (message.type === 'system' && (message.subtype === 'informational' || message.subtype === 'notification')) {
+          const texte = message.subtype === 'informational' ? message.content : message.text;
+          this.#surveillerMessageUsage(missionId, texte);
+          continue;
+        }
         if (message.type !== 'result') continue;
         this.#registre.marquerMort(handle.sessionId);
         const decision = deciderRelance(handle.sessionId, message.terminal_reason, {
@@ -347,5 +401,130 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     } catch (erreur) {
       missionLogger(missionId).error({ err: erreur }, "l'observateur de relance a levé — ignoré, jamais bloquant");
     }
+  }
+
+  /**
+   * Relaie un `rate_limit_event` brut (H-54/H-63, mission M-51). Best-effort,
+   * jamais bloquant : la persistance (registre du Pi) et l'agrégation par compte
+   * sont hors périmètre de ce module (frontière A↔B).
+   */
+  #surveillerQuota(
+    missionId: string,
+    sessionId: string,
+    info: { status: string; rateLimitType?: string; utilization?: number; resetsAt?: number },
+  ): void {
+    const evenement: EvenementQuotaObserve = {
+      missionId,
+      sessionId,
+      statut: info.status as EvenementQuotaObserve['statut'],
+      rateLimitType: info.rateLimitType ?? null,
+      utilisation: info.utilization ?? null,
+      resetsAt: info.resetsAt ?? null,
+    };
+    missionLogger(missionId).info({ evenement }, 'rate_limit_event observé (H-54/H-63)');
+    try {
+      this.#observateurUsage?.surQuota?.(evenement);
+    } catch (erreur) {
+      missionLogger(missionId).error({ err: erreur }, "l'observateur de quota a levé — ignoré, jamais bloquant");
+    }
+  }
+
+  /**
+   * Classifie une bannière `system` (G.1.4, panne #16, mission M-51) et relaie la
+   * décision. `☠` Ne fait AUCUN effet lui-même (pas de suspension réelle des
+   * créations ici) — ce module ignore le registre (frontière A↔B) ; il ne fait
+   * que rendre le signal observable, exactement comme `#notifierDecision`.
+   */
+  #surveillerMessageUsage(missionId: string, texte: string): void {
+    const classification = classifierMessageUsage(texte);
+    if (classification.categorie === 'aucune') return;
+    const decision = deciderActionUsage(classification);
+    missionLogger(missionId).info(
+      { categorie: decision.classification.categorie, suspendreCreations: decision.suspendreCreations, notifier: decision.notifier },
+      'message d’usage classifié (G.1.4)',
+    );
+    try {
+      this.#observateurUsage?.surMessageUsage?.(missionId, decision);
+    } catch (erreur) {
+      missionLogger(missionId).error({ err: erreur }, "l'observateur de message d'usage a levé — ignoré, jamais bloquant");
+    }
+  }
+
+  // -- Arrêt d'urgence (G.4, mission M-52) -----------------------------------
+  //
+  // ☠ Ne passe jamais par l'orchestrateur (a) : accessible uniquement via
+  // `CanalControle` (D.3) → ces méthodes. La frontière A↔B inexistante
+  // (03-couche-1.md) garantit ce point mécaniquement.
+  // ☠ Ne détruit jamais de travail non commité (b) : ni ce fichier ni
+  // `arret-urgence-sequence.ts` n'importent `projets/cycle-vie-worktree.ts` —
+  // aucun chemin de code vers la suppression d'un worktree n'existe ici.
+  // La séquence elle-même (pause → fermeture → grâce → forçage, c) vit dans
+  // `arret-urgence-sequence.ts` (limite de 500 lignes de ce fichier).
+
+  /**
+   * Filet de dernier recours (c) — DIFFÉRENT de `tuerSansPreavis()` : celui-ci
+   * refuse d'agir dès que `vivant === false` (B.2.2, usage routinier, où un
+   * enregistrement mort n'a jamais besoin d'être re-tué). Or `arreter()`
+   * marque `vivant = false` de façon OPTIMISTE, avant même que `query.close()`
+   * ait fini son cycle de grâce interne (~2 s, 01-verification-sdk.md) — un
+   * filet qui se fierait au même drapeau ne se déclencherait donc JAMAIS après
+   * une fermeture propre déjà tentée. `AbortController.abort()` est nativement
+   * idempotent : c'est ce qui rend sûr d'appeler cette méthode SANS condition
+   * sur `vivant`, y compris quand la fermeture propre a déjà réussi.
+   */
+  forcerArretUrgence(sessionId: string): void {
+    const enregistrement = this.#registre.parSession(sessionId);
+    if (enregistrement === null) return;
+    this.#registre.marquerMort(sessionId);
+    enregistrement.handle.abortController.abort();
+    missionLogger(enregistrement.missionId).warn(
+      { sessionId },
+      "arrêt d'urgence : forçage appliqué (filet de dernier recours, idempotent, G.4)",
+    );
+  }
+
+  /**
+   * Arrêt d'urgence ciblé sur UNE mission (G.4). Utilisé par le déclenchement
+   * global (`arretUrgence()`) et par le banc de drill récurrent (G.4.3,
+   * `arret-urgence/exercice-periodique.ts`) — c'est la même vraie séquence de
+   * production qui est exercée à froid, pas une simulation.
+   */
+  async arreterMissionEnUrgence(
+    missionId: string,
+    graceMs: number = GRACE_ARRET_URGENCE_MS_DEFAUT,
+  ): Promise<ResultatArretUnitaireUrgence | null> {
+    const enregistrement = this.#registre.parMission(missionId);
+    if (enregistrement === null || !enregistrement.vivant) return null;
+    return executerArretUrgenceMission(this.#cibleArretUrgence(enregistrement), this.#depsArretUrgence(graceMs));
+  }
+
+  /**
+   * Point d'entrée du bouton d'arrêt d'urgence (G.4.1/G.4.2) : arrête TOUTES
+   * les missions vivantes du PC, en parallèle (isolation). Idempotent : un
+   * second appel ne trouve que ce qui reste vivant (snapshot à l'instant de
+   * l'appel) et ne relève jamais d'exception sur ce qui est déjà à l'arrêt.
+   */
+  async arretUrgence(graceMs: number = GRACE_ARRET_URGENCE_MS_DEFAUT): Promise<RapportArretUrgence> {
+    const cibles = this.#registre.tous().filter((e) => e.vivant).map((e) => this.#cibleArretUrgence(e));
+    return executerArretUrgenceParc(cibles, this.#depsArretUrgence(graceMs));
+  }
+
+  #cibleArretUrgence(e: EnregistrementWorker): CibleArretUrgence {
+    return {
+      missionId: e.missionId,
+      sessionId: e.sessionId,
+      interrupt: () => e.handle.query.interrupt(),
+      cible: e.entree,
+      capacites: e.handle.capabilities,
+    };
+  }
+
+  #depsArretUrgence(graceMs: number): DependancesArretUrgence {
+    return {
+      fermerProprement: (missionId: string) => this.arreter(missionId),
+      forcer: (sessionId: string) => this.forcerArretUrgence(sessionId),
+      attendreGrace: this.#attendreGrace,
+      graceMs,
+    };
   }
 }

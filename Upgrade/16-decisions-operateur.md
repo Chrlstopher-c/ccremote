@@ -808,3 +808,69 @@ du modèle parent** ? Les deux sont des choses différentes et la distinction d�
   transcripts à la source (JSONL du `CLAUDE_CONFIG_DIR`, ou `SessionStore`).
 
 Ne pas trancher au raisonnement : **c'est un banc réel**.
+
+### H-72.2 · `forwardSubagentText` — MESURÉ, la question de H-72.1 est tranchée
+
+Banc réel du 2026-07-22, même tâche jouée deux fois (Sonnet 5, sous-agent délégué) :
+
+| | `forward=false` | `forward=true` |
+|---|---|---|
+| messages portant `parent_tool_use_id` | 1 | **2** |
+| blocs texte/thinking de sous-agent | 1 | **2** |
+| **caractères** de contenu de sous-agent dans le flux | 81 | **725** (× 9) |
+| **contexte du parent** (catégorie « Messages ») | 10 476 tokens | **10 458 tokens** |
+
+**Conclusion : l'option enrichit le FLUX sans charger le CONTEXTE du parent.** Neuf fois plus de
+contenu de sous-agent arrive au programme, et le contexte du modèle parent ne bouge pas (l'écart de
+18 tokens est du bruit, et il va dans le mauvais sens pour l'hypothèse inverse).
+
+Cohérent avec la doc du SDK : « the full subagent conversation is forwarded **so consumers can render
+a nested transcript** » — le destinataire est le consommateur, pas le modèle.
+
+⇒ **Réponse (a) de H-72.1 : `forwardSubagentText: true` est l'outil légitime pour alimenter l'UI.**
+Pas besoin de lire les transcripts JSONL à la source. Le chaînage se fait par `parent_tool_use_id`.
+
+`☠` **Cela ne change RIEN pour l'orchestrateur maître.** M-41 interdit cette option sur sa session
+(`assertAucunFluxBrutSubagent`) et cette interdiction **reste** : l'orchestrateur n'a aucun besoin de
+ce flux, et l'autoriser rouvrirait la porte par mégarde. L'option s'active sur les sessions de
+**team leaders**, dont le flux part vers l'UI — jamais vers un contexte de modèle.
+
+`⚠ HYP restante` : mesuré sur **un** sous-agent. Le comportement avec cinq sous-agents simultanés —
+le cas d'usage réel de Chris — n'est pas vérifié : volume, entrelacement des `parent_tool_use_id`,
+et charge sur le lien. À mesurer avant de figer M-50.
+
+`⚠` Piège de protocole rencontré : le modèle **ne délègue pas toujours** quand on le lui demande —
+un premier banc a produit des résultats incohérents (le run « true » avait *moins* de messages) parce
+que les deux tours n'avaient pas délégué pareil. Toute mesure comparative sur les sous-agents doit
+**vérifier que la délégation a bien eu lieu** dans les deux branches avant de comparer quoi que ce soit.
+
+### H-72.3 · MESURE À CINQ SOUS-AGENTS — `forwardSubagentText` ne suffit PAS
+
+Banc `acceptation/observabilite-5-sousagents-reel.ts`, 2026-07-22, Sonnet 5, `forwardSubagentText: true`.
+
+**Résultat, sur trois exécutions : 5 sous-agents lancés, 3 à 4 lignes de travail reçues.**
+Jamais les cinq. Une ligne est même arrivée avec **0 caractère** de contenu.
+
+⇒ **La conclusion de H-72.2 doit être nuancée.** `forwardSubagentText` reste **nécessaire** (il fait
+passer le contenu de sous-agent dans le flux sans charger le contexte du parent, ce point tient), mais
+il n'est **pas suffisant** pour le besoin de Chris : l'UI ne peut pas garantir un onglet par
+sous-agent si deux d'entre eux n'émettent jamais rien dans le flux.
+
+`☠` **Conséquence pour M-50** : le flux SDK sert de **canal temps réel best-effort** (ce qui arrive,
+arrive vite), et la **source de vérité par sous-agent** doit être lue ailleurs — les transcripts JSONL
+du `CLAUDE_CONFIG_DIR`, accessibles via `SessionStore.listSubkeys()` (H.3.1 : les sous-agents ont leur
+propre `subpath`). M-31 a implémenté `listSubkeys` — c'est précisément ce qui la rend indispensable.
+Concevoir M-50 sur le seul flux produirait une UI qui **perd des agents au hasard**.
+
+`☠` **Piège mesuré, coûteux** : appeler `getContextUsage()` **dans la boucle de lecture** du flux fait
+**perdre les messages des sous-agents** — 0 ligne reçue avec l'appel, 3 à 4 sans, toutes choses égales
+par ailleurs. Les appels de contrôle ne doivent pas être entrelacés avec la consommation du flux.
+Corollaire du « un seul consommateur par `Query` » : ne pas le perturber non plus.
+
+`⚠` **Nom d'outil** : l'outil de délégation à un sous-agent s'appelle **`Agent`**, pas `Task`.
+Un détecteur qui cherche `Task` compte zéro délégation alors que cinq ont eu lieu (erreur réellement
+commise sur ce banc).
+
+`⚠` Le contexte du parent n'a **pas pu être relu** à cinq sous-agents, à cause du piège ci-dessus.
+La mesure de H-72.2 (contexte inchangé) tient sur un sous-agent ; à cinq, elle reste **à confirmer**
+par un protocole qui lit le contexte hors de la boucle.
