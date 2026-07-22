@@ -217,9 +217,23 @@ découvre qu'au moment où on en a besoin.
 (`/login` interactif, action de Chris) et laissé se rafraîchir tout seul. Ne jamais recopier un
 snapshot dans le dossier d'un worker au moment de la bascule.
 
-`⚠` Reste à faire : Chris doit refaire un `/login` sur les deux comptes, chacun dans son dossier
-dédié. Tant que ce n'est pas fait, **la rotation multi-comptes n'est pas opérationnelle** — seul le
-compte du poste fonctionne.
+**Emplacement retenu** : `~/.claude-comptes/<compte>/`, un dossier persistant par compte.
+`compte-a` est en place et vérifié le 2026-07-22 (banc d'essai passé 5/5 dessus). Il s'est peuplé
+tout seul de `projects/`, `sessions/`, `.claude.json` — conforme à H.3.1 : les transcripts JSONL
+vivent dans le `CLAUDE_CONFIG_DIR`, ce qui rend chaque compte réellement autonome.
+
+`⚠` **`compte-a` est le compte du poste** (amorcé par copie une fois — acceptable, contrairement à
+une recopie à chaque bascule). Le **second** compte n'existe pas encore : il exige un `/login`
+interactif dans son propre dossier, action de Chris :
+
+```bash
+CLAUDE_CONFIG_DIR=/home/trinity/.claude-comptes/compte-b claude   # puis /login
+```
+
+Tant que `compte-b` n'est pas authentifié, **la rotation n'a qu'un seul compte** et ne rote rien.
+
+`⚠` Non vérifié : que le rafraîchissement automatique du jeton s'écrive bien **dans** le dossier
+isolé. Ça ne s'observe qu'à l'expiration, non forçable. À confirmer à la première bascule réelle.
 
 **Quotas** : `rate_limit_event` (poussé, temps réel) et
 `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` (tiré, donne le **pourcentage 0-100**

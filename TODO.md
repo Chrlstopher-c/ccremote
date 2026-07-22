@@ -50,14 +50,22 @@
 
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
 
-### Action de Chris requise — rotation multi-comptes bloquée
-- [ ] **Refaire un `/login` sur chaque compte, dans son propre dossier de config.** Les deux
-      snapshots (`.credentials_account1.json` 11/07, `_account2.json` 19/07) sont périmés :
-      `OAuth session expired and could not be refreshed`. Les refresh tokens tournent, donc un
-      snapshot copié se périme seul et en silence.
-      ⇒ Conception : **un `CLAUDE_CONFIG_DIR` persistant par compte**, authentifié une fois et
-      laissé se rafraîchir. Ne jamais recopier un snapshot au moment de la bascule.
-      `☠` Tant que ce n'est pas fait, la rotation multi-comptes n'est **pas** opérationnelle.
+### Action de Chris requise — rotation multi-comptes à moitié en place
+Conception retenue : **un `CLAUDE_CONFIG_DIR` persistant par compte** sous `~/.claude-comptes/`,
+authentifié une fois et laissé se rafraîchir. Ne jamais recopier un snapshot au moment de la bascule
+(les refresh tokens tournent : un snapshot copié se périme seul et en silence — constaté le 22/07 sur
+les deux anciens `.credentials_account*.json`).
+
+- [x] `compte-a` en place et vérifié (banc d'essai 5/5 dessus, dossier autonome)
+- [ ] **`compte-b` : `/login` interactif à faire par Chris** — seule action non automatisable :
+      ```bash
+      CLAUDE_CONFIG_DIR=/home/trinity/.claude-comptes/compte-b claude   # puis /login
+      ```
+      `☠` Tant que ce n'est pas fait, la rotation n'a qu'un compte et ne rote rien.
+- [ ] À confirmer à la première bascule réelle : que le rafraîchissement du jeton s'écrit bien
+      **dans** le dossier isolé (non forçable, ne s'observe qu'à l'expiration).
+- [ ] Purger les deux snapshots périmés `~/.claude/.credentials_account{1,2}.json` une fois les deux
+      dossiers en place — ils ne servent plus qu'à induire en erreur.
 
 ### Design v2 — arbitrages à trancher par Chris (source : `design-v2/COMPARAISON.md`)
 - [ ] **Parler à une mission en cours** — trou le plus concret. Chris avait posé l'exigence
