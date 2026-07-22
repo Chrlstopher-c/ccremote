@@ -1,0 +1,42 @@
+# Unité systemd du control plane sur le Pi (H-75 : le Pi héberge).
+#
+# Installation (sur le Pi, en root) :
+#   sudo cp ccremote-harness.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ccremote-harness
+#
+# `☠` Ne PAS ajouter d'arrêt par `pkill`/`kill` sur un motif générique (`bun`,
+# `node`…) — incident réel déjà payé sur ce parc : un motif générique a tué un
+# service tiers sans rapport. `systemctl stop` envoie SIGTERM au PID exact.
+#
+# Le secret du lien et les chemins vivent dans `/home/pi/ccremote-harness/.env`,
+# jamais dans cette unité versionnée.
+#
+# `☠` La session orchestrateur maître est OPT-IN (`CCREMOTE_PI_ORCHESTRATEUR=1`
+# dans le `.env`) : elle consomme du quota en continu et exige des credentials
+# Claude valides sur le Pi. Le parc, les escalades et le pilotage des missions
+# n'en dépendent EN RIEN — les lier ferait tomber tout le produit sur un
+# `/login` expiré.
+
+[Unit]
+Description=ccremote — control plane du harness (Bun, H-75 : le Pi héberge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/ccremote-harness
+EnvironmentFile=/home/pi/ccremote-harness/.env
+ExecStart=/home/pi/.bun/bin/bun run composition/pi/bin-pi.ts
+Restart=always
+# `☠` 60 s, pas 10 — même raison que côté PC : une configuration fausse doit
+# coûter une tentative par minute, pas six, et se réparer seule dès correction.
+RestartSec=60
+StartLimitIntervalSec=0
+
+# Codes de sortie : 78 = configuration fausse (variable absente), 1 = plantage.
+# `systemctl status ccremote-harness` les distingue sans ouvrir le journal.
+
+[Install]
+WantedBy=multi-user.target

@@ -64,6 +64,15 @@ export interface OptionsAssemblageControlPlanePi {
   readonly portApiWeb: number;
   readonly configDirOrchestrateur?: string;
   readonly seuilUtilisationPctPlafondParc?: number;
+  /**
+   * Démarre la session orchestrateur maître. `☠` Par défaut FAUX : cette
+   * session consomme du quota en continu et exige des credentials Claude
+   * valides sur le Pi. Le reste du control plane — parc, escalades, pilotage,
+   * lien vers le PC — n'en dépend en RIEN : l'opérateur pilote ses missions
+   * même sans elle. La coupler d'office rendrait tout le produit tributaire
+   * d'un `/login` sur le Pi.
+   */
+  readonly avecOrchestrateur?: boolean;
 }
 
 export interface ControlPlanePiAssemble {
@@ -72,7 +81,8 @@ export interface ControlPlanePiAssemble {
   readonly clientSuperviseurPc: ClientSuperviseurPc;
   readonly serveurLien: ServeurLienPc;
   readonly serveurApiWeb: ServeurApiWeb;
-  readonly orchestrateur: PoigneeOrchestrateur;
+  /** `null` quand `avecOrchestrateur` est faux — voir cette option. */
+  readonly orchestrateur: PoigneeOrchestrateur | null;
 }
 
 function construireDependancesReconciliation(client: ClientSuperviseurPc, machine: MachineEtatsDemandes): DependancesReconciliation {
@@ -147,6 +157,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
 
   const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
   declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
+
+  if (options.avecOrchestrateur !== true) {
+    log.warn(
+      {},
+      'control plane assemblé SANS session orchestrateur (avecOrchestrateur absent) — parc, escalades et pilotage restent pleinement opérationnels ; seule la vue conversation est inactive',
+    );
+    return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur: null };
+  }
 
   const orchestrateur = await demarrerOrchestrateur({
     stockageIdentite: new StockageIdentiteFichier(options.cheminIdentiteOrchestrateur),

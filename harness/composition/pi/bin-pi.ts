@@ -15,9 +15,20 @@ import { compositionLogger } from '../logger.ts';
 const log = compositionLogger.child({ composant: 'bin-pi' });
 
 async function main(): Promise<void> {
+  // `☠` La session orchestrateur est OPT-IN : elle consomme du quota en continu
+  // et exige des credentials Claude valides sur le Pi. Tout le reste du control
+  // plane fonctionne sans elle — la lier d'office rendrait le pilotage du parc
+  // tributaire d'un `/login` sur le Pi.
+  const avecOrchestrateur = process.env['CCREMOTE_PI_ORCHESTRATEUR'] === '1';
   const cheminRegistreDb = envObligatoire('CCREMOTE_PI_REGISTRE_DB');
-  const cheminIdentiteOrchestrateur = envObligatoire('CCREMOTE_PI_IDENTITE_ORCHESTRATEUR');
-  const cheminIncidentsOrchestrateur = envObligatoire('CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR');
+  // Exigés seulement si la session maître est demandée : sans elle, imposer ces
+  // chemins ferait échouer un démarrage parfaitement valide.
+  const cheminIdentiteOrchestrateur = avecOrchestrateur
+    ? envObligatoire('CCREMOTE_PI_IDENTITE_ORCHESTRATEUR')
+    : envOptionnel('CCREMOTE_PI_IDENTITE_ORCHESTRATEUR', '/tmp/ccremote-identite-inutilisee');
+  const cheminIncidentsOrchestrateur = avecOrchestrateur
+    ? envObligatoire('CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR')
+    : envOptionnel('CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR', '/tmp/ccremote-incidents-inutilises');
   const repertoireProjets = envObligatoire('CCREMOTE_PI_REPERTOIRE_PROJETS');
   const cwdOrchestrateur = envOptionnel('CCREMOTE_PI_CWD_ORCHESTRATEUR', process.cwd());
   const configDirOrchestrateur = process.env['CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR'];
@@ -44,13 +55,14 @@ async function main(): Promise<void> {
     secretLienPc,
     portApiWeb,
     seuilUtilisationPctPlafondParc,
+    avecOrchestrateur,
   });
 
   const arreterProprement = (signal: string): void => {
     log.info({ signal }, 'arrêt du process Pi demandé');
     assemble.serveurApiWeb.arreter();
     assemble.serveurLien.arreter();
-    assemble.orchestrateur.fermer();
+    assemble.orchestrateur?.fermer();
     process.exit(0);
   };
   process.on('SIGINT', () => arreterProprement('SIGINT'));
@@ -60,8 +72,15 @@ async function main(): Promise<void> {
   // consomme jamais `query` lui-même). Ici, en attendant une vraie UI/API
   // (hors périmètre de cette mission), on se contente d'alimenter la
   // discipline de contexte — aucune décision n'est prise sur le contenu.
-  for await (const message of assemble.orchestrateur.query) {
-    assemble.orchestrateur.ingererMessage(message);
+  const orchestrateur = assemble.orchestrateur;
+  if (orchestrateur === null) {
+    log.info({}, 'control plane en service — parc, escalades et pilotage actifs, vue conversation inactive');
+    // Rien à consommer : les serveurs (lien + API) tiennent le process vivant.
+    return;
+  }
+
+  for await (const message of orchestrateur.query) {
+    orchestrateur.ingererMessage(message);
   }
 }
 
