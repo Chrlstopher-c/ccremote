@@ -131,9 +131,20 @@ minimal avant toute exécution non surveillée).
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51.** Développer sans plancher de déni
 ni budget est acceptable ; laisser tourner une nuit sans eux ne l'est pas.
 
-### Point de synchronisation de la vague 1, à valider par le parent
+### Point de synchronisation de la vague 1 — ✅ PASSÉ le 2026-07-22
 
-Le seul test qui n'a pas pu être fait (il exige une vraie session, interdite aux subagents) :
+Script rejouable : `acceptation/m02-flux-entree.ts` (hors `bun test` **volontairement** : il ouvre une
+vraie session). `SILENCE_S=20` pour répéter le protocole à blanc, `MODE=default` pour exercer
+`canUseTool`.
+
+Résultat réel, 10 minutes de silence (09:51 → 10:01) : tour 2 reçu après le silence · hook
+`PreToolUse` appelé · générateur resté `ouvert` · aucun `Stream closed` · `surFermetureImprevue`
+jamais déclenché. **La panne #1 ne se produit pas** sur le transport du SDK 0.3.217.
+
+`⚠` Le critère d'origine « `canUseTool` appelé » était **inatteignable en mode production** : voir la
+ligne correspondante du tableau des pièges. Il n'est exigé que sous `MODE=default`.
+
+Protocole d'origine, conservé pour mémoire :
 
 1. Instancier `GenerateurEntree` avec un `surFermetureImprevue` qui **échoue bruyamment**.
 2. `query({ prompt: generateur.flux, options: { canUseTool, hooks: { PreToolUse } } })`.
@@ -172,6 +183,7 @@ Le seul test qui n'a pas pu être fait (il exige une vraie session, interdite au
 | Plancher Sonnet validé sur l'alias | `'inherit'` ne garantit rien — valider sur le **modèle résolu** |
 | `res.changes` de bun:sqlite comme compteur métier | compte **aussi** les lignes supprimées en cascade (bug réel corrigé le 2026-07-22) |
 | Fencing qui ne rejette que les epochs **strictement inférieurs** | deux workers de même epoch coexistent sans trace — la panne #2 **avec** le fencing activé. Traiter l'égalité explicitement (bug réel corrigé) |
+| Compter sur `canUseTool` pour l'audit ou le garde-fou | **mesuré le 2026-07-22 : en `permissionMode: 'auto'`, il n'est JAMAIS appelé** — pas même sur `rm -rf`. Le classifieur tranche seul. Ce n'est pas un défaut de câblage (prouvé : en `default` il est appelé, **après** le hook). ⇒ l'audit passe par `PreToolUse`, et le plancher de déni est le seul garde-fou mécanique restant |
 | `maxBudgetUsd` présenté comme l'anti-boucle | **faux** — un montant mesure du volume, pas une boucle. Voir **H-68** : paliers d'inspection + juge Haiku. `12 $ ≈ 6 min de Sonnet 5` |
 | API V2 du SDK (`unstable_v2_*`, `send()`/`stream()`) | **supprimée** en SDK 0.3.142, encore recommandée par des articles récents |
 | `TeamCreate` / `TeamDelete` / `team_name` | **supprimés** en Claude Code v2.1.178 |

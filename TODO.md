@@ -12,18 +12,32 @@
       epoch coexistaient sans trace, soit la panne #2 **avec** le fencing activé)
 - [x] **`design-v2/`** — maquette + `COMPARAISON.md`
 
-### Point de synchronisation vague 1 — à valider par le parent, pas par un subagent
-- [ ] **Test d'acceptation réel de M-02** : session ouverte, **10 minutes réelles** de silence, puis
-      action nécessitant une permission ⇒ `canUseTool` appelé, aucun `Error: Stream closed`.
-      Protocole détaillé dans `harness/REPRISE.md`. `☠` Ne pas être en `bypassPermissions`, sinon le
-      test est vert pour la mauvaise raison.
+### Point de synchronisation vague 1 — ✅ PASSÉ le 2026-07-22 (par le parent)
+- [x] **Test d'acceptation réel de M-02** — 10 min de silence réel, flux survivant, aucun
+      `Stream closed`. Script rejouable : `harness/acceptation/m02-flux-entree.ts`.
+      **Découverte** : en `permissionMode: 'auto'`, `canUseTool` n'est jamais appelé (le classifieur
+      tranche seul, même sur `rm -rf`). Le critère d'origine était donc inatteignable en production.
+      ⇒ **l'audit doit passer par `PreToolUse`** — à répercuter sur M-22.
 
 ### Vague 2 (dépend du Lot 0)
-- [ ] **M-10** tunnel Pi↔PC — chemin critique. Décision déléguée : SSH / WebSocket / TCP, à mesurer
-      et documenter. Piste : WebSocket, pour réutiliser l'infra ccremote existante (`server.py:8765`)
-- [ ] **M-20** plancher de déni — garde-fou minimal, **avant toute exécution non surveillée**
+- [x] **M-10** tunnel Pi↔PC — livré 2026-07-22, `harness/transport/`. **WebSocket retenu** (natif à
+      Bun, zéro dépendance ; framing et codes de fermeture 4000-4999 gratuits pour la taxonomie
+      D.2.1 ; la reprise devant de toute façon être écrite à la main quel que soit le support).
+      Raisonnement complet : `harness/transport/DECISION-TRANSPORT.md`.
+- [ ] **M-10 — reste à faire, signalé par l'agent lui-même** : pas de ping/pong applicatif, donc une
+      coupure **silencieuse** (ni `close` ni `error`) n'est pas détectée. Le lien paraît vivant et ne
+      transporte plus rien. `☠` À couvrir avant toute exécution non surveillée.
+- [ ] **M-10 — à mesurer en réel par le parent** : aucune latence de reconnexion réelle n'a pu être
+      mesurée (interdiction de réseau réel en subagent). Le critère (a) — coupure de 30 s, zéro octet
+      perdu ou dupliqué — est prouvé sur doublures, pas sur socket.
+- [x] **M-20** plancher de déni — livré 2026-07-22, `harness/plancher-deni/`. 16 motifs scopés
+      (plafond porté de 15 à 16 pour loger `pkill -f`, incident réel du 2026-07-08 sur le Pi).
+      `⚠` Son `simulerArbitrage` est un **modèle** de la sémantique des règles, pas le moteur réel du
+      binaire (fermé) — à confirmer sur une exécution réelle avant toute nuit non surveillée.
 - [ ] M-21 machine à états des demandes de permission
-- [ ] M-22 arbitrage délégué + trace d'audit (c'est cette trace qui valide ou invalide H-40)
+- [ ] M-22 arbitrage délégué + trace d'audit (c'est cette trace qui valide ou invalide H-40).
+      `☠` **Brancher l'audit sur `PreToolUse`, jamais sur `canUseTool`** — mesuré le 2026-07-22 :
+      en `auto`, `canUseTool` n'est pas appelé, la trace serait vide en silence.
 - [ ] M-31 adaptateur `SessionStore`
 - [ ] M-34 relance et classification des `TerminalReason`
 
