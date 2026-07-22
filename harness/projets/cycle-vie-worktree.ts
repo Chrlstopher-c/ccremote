@@ -16,6 +16,20 @@
  * de la branche `!sale`. Impossible d'atteindre la suppression sans être passé
  * par le contrôle git — y compris quand ce contrôle lui-même échoue (F.2.3 :
  * on suppose alors le pire cas sûr, voir `git-projet.ts`).
+ *
+ * `☠ CASSE #2` (D.2.3, mission M-11) — cette mission PORTE l'epoch sans jamais
+ * l'arbitrer (`ParametresAllocation.epoch` traversait `allouer()` sans être
+ * comparé à rien). L'arbitrage RÉEL du fencing — qui doit terminer un worker
+ * périmé — vit dans `superviseur/fencing-epoch.ts` (branche B, seul endroit qui
+ * détient un vrai process à tuer). Ce module ajoute la validation COMPLÉMENTAIRE
+ * qui lui revient en propre, à ce niveau logique : `allouer()` refuse toute
+ * revendication dont l'epoch ne progresse PAS strictement par rapport au dernier
+ * epoch connu pour cette équipe — égalité comprise (piège déjà payé : un
+ * fencing qui ne rejette que le strictement inférieur laisse une collision
+ * passer). Elle ne supersède jamais une revendication encore `revendiquee` : ça
+ * resterait `WorktreeDejaRevendiqueeError`, sans changement — cette mission ne
+ * décide PAS qui doit mourir, elle refuse seulement qu'un epoch stagnant ou
+ * régressé s'approprie l'allocation logique du worktree.
  */
 
 import { join } from 'node:path';
@@ -34,6 +48,28 @@ export class AucuneRevendicationActiveError extends Error {
   constructor(readonly idEquipe: IdEquipe) {
     super(`aucune revendication active pour l'équipe "${idEquipe}" — rien à libérer.`);
     this.name = 'AucuneRevendicationActiveError';
+  }
+}
+
+/**
+ * D.2.3, fencing — un epoch qui ne progresse PAS strictement (égal OU inférieur
+ * au dernier connu pour cette équipe) ne peut jamais revendiquer le worktree,
+ * qu'une revendication précédente soit encore active ou déjà libérée. L'égalité
+ * est un cas de première classe ici aussi (☠ piège déjà payé) : elle ne tombe
+ * jamais dans une simple comparaison « inférieur ».
+ */
+export class EpochNonCroissantError extends Error {
+  constructor(
+    readonly idEquipe: IdEquipe,
+    readonly epochRecu: number,
+    readonly epochConnu: number,
+  ) {
+    super(
+      `l'équipe "${idEquipe}" a déjà un epoch connu de ${epochConnu} ; ` +
+        `epoch reçu ${epochRecu} (${epochRecu === epochConnu ? 'égal' : 'inférieur'}) — ` +
+        'ne peut pas revendiquer le worktree (D.2.3, fencing).',
+    );
+    this.name = 'EpochNonCroissantError';
   }
 }
 
@@ -68,6 +104,14 @@ export class GestionnaireCycleVieWorktree {
   /** F.2.1 — enregistrement **avant** tout usage du chemin rendu. */
   async allouer(params: ParametresAllocation): Promise<RevendicationWorktree> {
     const existante = this.#revendications.get(params.idEquipe);
+
+    // ☠ Fencing (D.2.3) : vérifié AVANT le contrôle d'état, et pour TOUT état
+    // connu (active ou déjà libérée) — une équipe déjà libérée avec un epoch
+    // rejoué ou stagnant ne doit pas pouvoir se réapproprier le worktree en
+    // silence. Égalité traitée comme l'inférieur : jamais une reprise légitime.
+    if (existante !== undefined && params.epoch <= existante.epoch) {
+      throw new EpochNonCroissantError(params.idEquipe, params.epoch, existante.epoch);
+    }
     if (existante !== undefined && existante.etat === 'revendiquee') {
       throw new WorktreeDejaRevendiqueeError(params.idEquipe);
     }

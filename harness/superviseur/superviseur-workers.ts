@@ -22,8 +22,18 @@
  * L'idempotence PAR IDENTIFIANT fourni par le Pi (dédup mécanique d'un rejeu exact)
  * est portée par `canal-controle.ts`, la couche au-dessus — les deux se combinent :
  * même sans dédup par opId, rejouer ces méthodes n'a jamais d'effet double.
+ *
+ * **Fencing par epoch** (D.2.3, mission M-11, panne #2) : `demarrer()` est le SEUL
+ * point d'entrée qui revendique un worktree — c'est donc le seul endroit où
+ * `arbitrerFencing()` doit être consulté. Un candidat au même epoch qu'un détenteur
+ * vivant, ou à un epoch inférieur, est REFUSÉ avant tout effet (aucun spawn). Un
+ * candidat au epoch strictement supérieur est accepté et les détenteurs périmés
+ * du MÊME worktree sont RÉELLEMENT terminés via `tuerSansPreavis` (le même chemin
+ * qu'un arrêt d'urgence — abort de leur `AbortController` propre) : « périmé » ne
+ * reste jamais un simple libellé dans le registre, un seul process reste en vie.
  */
 
+import { arbitrerFencing, type DetenteurEpoch } from './fencing-epoch.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
@@ -93,9 +103,14 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * message est mis en file AVANT le spawn (piège H-60 : un flux silencieux
    * n'émet jamais `init`) ; le flux reste ouvert ensuite pour permettre
    * `envoyer_a_equipe`/`interrompre_equipe` (A.2.2) sur ce worker.
+   *
+   * `☠` Le fencing (D.2.3) est arbitré ICI, EN PREMIER — avant toute création de
+   * `GenerateurEntree` ou tout spawn : un candidat rejeté ne doit produire AUCUN
+   * effet de bord. Voir `#arbitrerFencingWorktree`.
    */
   async demarrer(demande: DemandeDemarrage): Promise<WorkerHandle> {
     const log = missionLogger(demande.missionId);
+    this.#arbitrerFencingWorktree(demande, log);
     const entree = new GenerateurEntree({ sessionId: demande.spec.sessionId });
     await entree.envoyer(demande.promptInitial);
 
@@ -241,6 +256,49 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     });
     missionLogger(missionId).info({ sessionId }, 'worker relancé (resume, B.3.3)');
     void this.#surveillerResultats(missionId, handle);
+  }
+
+  /**
+   * Arbitre la revendication du worktree (D.2.3, panne #2). Concurrents = tout
+   * enregistrement vivant sur le MÊME `cwd`, hors la session candidate elle-même
+   * (un rattachement de la session à elle-même n'est jamais un concurrent).
+   *
+   * `☠ CASSE` — rejeter n'est PAS suffisant sur une égalité d'epoch : sans le
+   * traiter comme un cas de première classe (`fencing-epoch.ts`), deux workers du
+   * même epoch coexisteraient silencieusement. Ici, une décision `rejete` lève
+   * AVANT tout spawn ; une décision `accepte_evince` termine réellement (pas
+   * seulement « marque périmé ») chaque détenteur dépassé via `tuerSansPreavis`,
+   * qui aborte l'`AbortController` propre à CE worker — le même mécanisme que
+   * l'arrêt d'urgence, pas une nouvelle voie de terminaison à auditer séparément.
+   */
+  #arbitrerFencingWorktree(demande: DemandeDemarrage, log: ReturnType<typeof missionLogger>): void {
+    const concurrents: DetenteurEpoch[] = this.#registre
+      .tous()
+      .filter((e) => e.vivant && e.worktree === demande.spec.cwd && e.sessionId !== demande.spec.sessionId)
+      .map((e) => ({ sessionId: e.sessionId, epoch: e.epoch }));
+
+    const decision = arbitrerFencing(concurrents, { sessionId: demande.spec.sessionId, epoch: demande.epoch });
+
+    if (decision.type === 'rejete') {
+      log.warn(
+        { worktree: demande.spec.cwd, epochCandidat: demande.epoch, motif: decision.motif, epochCourant: decision.epochCourant },
+        'demande de démarrage REJETÉE par le fencing epoch (D.2.3, panne #2) — aucun spawn',
+      );
+      throw new SuperviseurError(
+        `fencing epoch : requête rejetée (${decision.motif}) pour le worktree "${demande.spec.cwd}" ` +
+          `— epoch candidat ${demande.epoch}, epoch courant ${decision.epochCourant}`,
+      );
+    }
+
+    if (decision.type === 'accepte_evince') {
+      for (const sessionEvincee of decision.sessionsAEvincer) {
+        log.warn(
+          { worktree: demande.spec.cwd, sessionEvincee, nouvelEpoch: demande.epoch },
+          'epoch strictement supérieur revendiqué — TERMINAISON RÉELLE du worker périmé (D.2.3)',
+        );
+        this.tuerSansPreavis(sessionEvincee);
+      }
+    }
   }
 
   /**

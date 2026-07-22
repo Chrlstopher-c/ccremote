@@ -159,6 +159,19 @@ les deux anciens `.credentials_account*.json`).
       Corrigé par liens symboliques (voir `harness/REPRISE.md`, section multi-comptes).
       `⚠` **À refaire pour tout nouveau compte ajouté** — sinon ses workers repartiront nus.
 
+### M-11 fencing par epoch — LIVRÉ 2026-07-22 (dernière panne muette connue, fermée)
+- [x] `superviseur/fencing-epoch.ts` (arbitre pur) + câblage dans `superviseur-workers.ts`,
+      + garde complémentaire dans `projets/cycle-vie-worktree.ts` (`EpochNonCroissantError`).
+      **Clé = le worktree**, pas le `missionId` : ce qu'on protège est le répertoire où deux process
+      pourraient écrire. `☠` **Égalité d'epoch traitée explicitement** — une reprise légitime porte
+      toujours un epoch strictement supérieur (le Pi l'incrémente à chaque rattachement), donc une
+      égalité est forcément une collision. Le **candidat entrant** perd (règle symétrique = non
+      déterministe). Un worker évincé **meurt réellement** : `abortController.signal.aborted`
+      vérifié en test, sur l'AbortController propre au worker.
+- [ ] `⚠` **Limite signalée, hors périmètre M-11** : si **le superviseur PC** redémarre (et pas
+      seulement le Pi), il perd son `RegistreWorkers` en mémoire et ne sait plus quels workers
+      vivent — aucun fencing ne peut y remédier. Axe distinct : **persistance du registre côté PC**.
+
 ### Dettes ouvertes du lot 3
 - [ ] **Ports non implémentés** : `InventairePc` et `ReinitialisateurSession` (M-30) sont des
       contrats sans implémentation réelle — la réconciliation ne tourne donc **pas** de bout en bout.

@@ -10,7 +10,12 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { AucuneRevendicationActiveError, GestionnaireCycleVieWorktree, WorktreeDejaRevendiqueeError } from './cycle-vie-worktree.ts';
+import {
+  AucuneRevendicationActiveError,
+  EpochNonCroissantError,
+  GestionnaireCycleVieWorktree,
+  WorktreeDejaRevendiqueeError,
+} from './cycle-vie-worktree.ts';
 import { GestionnaireWorktreeGitFactice, InterrogateurGitFactice } from './git-projet-factice.ts';
 import type { ConfigProjet } from './types.ts';
 
@@ -87,6 +92,67 @@ describe('allouer — F.2.1, enregistrement avant tout usage du chemin (panne #1
     const seconde = await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 2, racineWorktrees: RACINE_WORKTREES });
     expect(seconde.etat).toBe('revendiquee');
     expect(gestionnaire.appelsCreer).toHaveLength(2);
+  });
+});
+
+describe('allouer — D.2.3 fencing (mission M-11, panne #2) : epoch non croissant refusé', () => {
+  test('deuxième allocation au MÊME epoch qu’une revendication encore active : rejetée par le fencing, pas par « déjà revendiquée »', async () => {
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire: new GestionnaireWorktreeGitFactice() });
+    await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 1, racineWorktrees: RACINE_WORKTREES });
+
+    // ☠ Piège déjà payé : l'égalité n'est PAS une reprise légitime, même face à
+    // une revendication encore vivante — elle est traitée avant le contrôle d'état.
+    await expect(
+      cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 1, racineWorktrees: RACINE_WORKTREES }),
+    ).rejects.toThrow(EpochNonCroissantError);
+  });
+
+  test('epoch inférieur à une revendication active : rejetée par le fencing', async () => {
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire: new GestionnaireWorktreeGitFactice() });
+    await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 5, racineWorktrees: RACINE_WORKTREES });
+
+    await expect(
+      cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 2, racineWorktrees: RACINE_WORKTREES }),
+    ).rejects.toThrow(EpochNonCroissantError);
+  });
+
+  test('epoch strictement supérieur mais revendication encore active : refusée quand même, par « déjà revendiquée »', async () => {
+    // Distinction structurante : cette mission (F.2.2) ne supersède JAMAIS une
+    // revendication active — seul le superviseur (branche B) décide qui meurt.
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire: new GestionnaireWorktreeGitFactice() });
+    await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 1, racineWorktrees: RACINE_WORKTREES });
+
+    await expect(
+      cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 2, racineWorktrees: RACINE_WORKTREES }),
+    ).rejects.toThrow(WorktreeDejaRevendiqueeError);
+  });
+
+  test('après libération, un epoch REJOUÉ (identique à l’ancien) est refusé — pas une reprise légitime', async () => {
+    const interrogateur = new InterrogateurGitFactice({ sale: false });
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur, gestionnaire: new GestionnaireWorktreeGitFactice() });
+    await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 1, racineWorktrees: RACINE_WORKTREES });
+    await cycle.liberer('equipe-1');
+
+    await expect(
+      cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 1, racineWorktrees: RACINE_WORKTREES }),
+    ).rejects.toThrow(EpochNonCroissantError);
+  });
+
+  test('après libération, un epoch inférieur au dernier connu est refusé', async () => {
+    const interrogateur = new InterrogateurGitFactice({ sale: false });
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur, gestionnaire: new GestionnaireWorktreeGitFactice() });
+    await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 5, racineWorktrees: RACINE_WORKTREES });
+    await cycle.liberer('equipe-1');
+
+    await expect(
+      cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-1', epoch: 3, racineWorktrees: RACINE_WORKTREES }),
+    ).rejects.toThrow(EpochNonCroissantError);
+  });
+
+  test('premier rattachement pour une équipe encore jamais vue : jamais bloqué, quel que soit l’epoch', async () => {
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire: new GestionnaireWorktreeGitFactice() });
+    const revendication = await cycle.allouer({ projet: projetGit(), idEquipe: 'equipe-jamais-vue', epoch: 0, racineWorktrees: RACINE_WORKTREES });
+    expect(revendication.etat).toBe('revendiquee');
   });
 });
 

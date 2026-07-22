@@ -18,6 +18,13 @@ export {
 export { extraireDemandesEnAttente } from './reponse-reinitialize.ts';
 
 export {
+  arbitrerFencing,
+  type DecisionFencing,
+  type DetenteurEpoch,
+  type MotifRejetFencing,
+} from './fencing-epoch.ts';
+
+export {
   CanalControle,
   type EffetControle,
   type OperationControle,

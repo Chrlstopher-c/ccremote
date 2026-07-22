@@ -252,6 +252,86 @@ describe('RelanceurMission.relancer (B.3.3, resume)', () => {
   });
 });
 
+describe('fencing par epoch (D.2.3, panne #2) — demarrer() arbitre AVANT tout spawn', () => {
+  test('scénario "le Pi redémarre" : epoch supérieur évince RÉELLEMENT l’ancien worker', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([])),
+    });
+    const ancien = await superviseur.demarrer(
+      demande({ epoch: 1, spec: spec({ sessionId: 'session-ancienne', cwd: '/tmp/worktree-alpha' }) }),
+    );
+    expect(ancien.abortController.signal.aborted).toBe(false);
+
+    await superviseur.demarrer(
+      demande({ epoch: 2, spec: spec({ sessionId: 'session-nouvelle', cwd: '/tmp/worktree-alpha' }) }),
+    );
+
+    // ☠ « se termine réellement » : l'AbortController PROPRE à l'ancien worker
+    // est aboté — pas un simple champ marqué dans le registre.
+    expect(ancien.abortController.signal.aborted).toBe(true);
+    expect(superviseur.inventaire()).toEqual([
+      { sessionId: 'session-ancienne', worktree: '/tmp/worktree-alpha', epoch: 1, vivant: false },
+      { sessionId: 'session-nouvelle', worktree: '/tmp/worktree-alpha', epoch: 2, vivant: true },
+    ]);
+  });
+
+  test('égalité d’epoch : la requête ENTRANTE est rejetée, l’ancien n’est PAS terminé (le piège déjà payé)', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([])),
+    });
+    const ancien = await superviseur.demarrer(
+      demande({ epoch: 3, spec: spec({ sessionId: 'session-a', cwd: '/tmp/worktree-beta' }) }),
+    );
+
+    await expect(
+      superviseur.demarrer(demande({ epoch: 3, spec: spec({ sessionId: 'session-b', cwd: '/tmp/worktree-beta' }) })),
+    ).rejects.toThrow(SuperviseurError);
+
+    // Un seul worker vivant sur le worktree : pas de collision silencieuse.
+    expect(ancien.abortController.signal.aborted).toBe(false);
+    expect(superviseur.inventaire()).toEqual([
+      { sessionId: 'session-a', worktree: '/tmp/worktree-beta', epoch: 3, vivant: true },
+    ]);
+  });
+
+  test('epoch périmé : requête rejetée, aucun effet sur le worker en place', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([])),
+    });
+    await superviseur.demarrer(
+      demande({ epoch: 5, spec: spec({ sessionId: 'session-courante', cwd: '/tmp/worktree-gamma' }) }),
+    );
+
+    await expect(
+      superviseur.demarrer(
+        demande({ epoch: 2, spec: spec({ sessionId: 'session-retardataire', cwd: '/tmp/worktree-gamma' }) }),
+      ),
+    ).rejects.toThrow(SuperviseurError);
+
+    expect(superviseur.inventaire()).toEqual([
+      { sessionId: 'session-courante', worktree: '/tmp/worktree-gamma', epoch: 5, vivant: true },
+    ]);
+  });
+
+  test('worktrees distincts : aucun arbitrage, deux missions cohabitent normalement', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([])),
+    });
+    await superviseur.demarrer(
+      demande({ missionId: 'mission-alpha', epoch: 1, spec: spec({ sessionId: 'session-alpha', cwd: '/tmp/worktree-alpha' }) }),
+    );
+    await superviseur.demarrer(
+      demande({ missionId: 'mission-beta', epoch: 1, spec: spec({ sessionId: 'session-beta', cwd: '/tmp/worktree-beta' }) }),
+    );
+
+    expect(superviseur.inventaire().filter((w) => w.vivant)).toHaveLength(2);
+  });
+});
+
 describe('câblage de deciderRelance() sur un SDKResultMessage réel', () => {
   function resultMessage(terminal_reason: string): SDKMessage {
     return {

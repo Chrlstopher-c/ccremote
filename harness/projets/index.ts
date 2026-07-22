@@ -27,6 +27,7 @@ export type { DependancesChargeur } from './chargeur-projets.ts';
 
 export {
   AucuneRevendicationActiveError,
+  EpochNonCroissantError,
   GestionnaireCycleVieWorktree,
   WorktreeDejaRevendiqueeError,
 } from './cycle-vie-worktree.ts';
