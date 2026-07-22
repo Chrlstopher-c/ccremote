@@ -54,6 +54,17 @@ export interface WebSocketLike {
 
 const WS_OUVERT = 1;
 
+/**
+ * `☠ CONTRAT` — la promesse ne doit se résoudre que sur une socket RÉELLEMENT
+ * ouverte, et rejeter si la connexion échoue.
+ *
+ * Ce n'est pas une préférence de style : `#tenterConnexion` interprète la
+ * résolution comme « connecté » et remet le compteur de backoff à zéro. Un
+ * connecteur qui résout trop tôt neutralise donc le backoff entier — mesuré en
+ * réel le 2026-07-22 avec `Promise.resolve(new WebSocket(url))`, qui ne rejette
+ * jamais : ~2 tentatives par seconde au lieu d'une toutes les 10 s. Voir
+ * `composition/pc/client-lien-pi.ts` pour un connecteur conforme.
+ */
 export type ConnecteurWebSocket = () => Promise<WebSocketLike>;
 
 /** Mappage des codes de fermeture applicatifs (plage WS 4000-4999 + repli HTTP-like). */
@@ -205,6 +216,15 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
   async #tenterConnexion(): Promise<void> {
     try {
       const ws = await this.options.connecter();
+      // `☠` Garde-fou du contrat de `ConnecteurWebSocket` (voir sa doc). Un
+      // connecteur qui résout sur une socket non ouverte éteindrait tout le
+      // backoff en silence — l'échec doit être BRUYANT ici, pas découvert un
+      // mois plus tard en regardant les journaux du serveur d'en face.
+      if (ws.readyState !== WS_OUVERT) {
+        throw new Error(
+          `connecteur non conforme : socket en readyState=${ws.readyState}, attendu ${WS_OUVERT} (ouvert). Voir le contrat de ConnecteurWebSocket.`,
+        );
+      }
       this.#brancher(ws);
       this.#etat = 'ouvert';
       this.#tentative = 0;
@@ -310,7 +330,34 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
     this.#planifierReconnexion();
   }
 
+  /**
+   * Classe une fermeture survenue AVANT que la socket ne soit branchée — le
+   * cas du refus d'authentification, que le serveur ferme (4401) juste après
+   * l'upgrade, donc parfois avant même l'événement `open` côté client.
+   *
+   * `☠` Sans ce point d'entrée, un connecteur conforme au contrat (qui ne
+   * résout que sur `open`) ferait DISPARAÎTRE la taxonomie terminale : le refus
+   * de secret redeviendrait une coupure transitoire retentée à l'infini, sans
+   * jamais nommer sa cause. Mesuré en réel le 2026-07-22, c'est la régression
+   * qu'a introduite la correction du backoff avant d'être complétée ici.
+   */
+  signalerFermetureAvantOuverture(code: number, raison: string): void {
+    // `☠` STRICTEMENT le classement d'un code TERMINAL, jamais la reprise. Le
+    // connecteur qui appelle cette méthode va rejeter juste après, et c'est ce
+    // rejet qui planifie la reconnexion. Traiter aussi le cas transitoire ici
+    // planifierait DEUX reconnexions par échec — mesuré en réel : les
+    // tentatives se multipliaient au lieu de s'espacer (211 en 60 s au lieu
+    // de 8). Une correction qui aggrave le défaut qu'elle vise est encore
+    // possible tant qu'on ne la mesure pas.
+    if (CODES_WS_VERS_TAXONOMIE[code] === undefined) return;
+    this.#surFermetureWs(code, raison);
+  }
+
   #planifierReconnexion(): void {
+    // `☠` Une fermeture terminale ne se reconnecte JAMAIS, quel que soit le
+    // chemin qui mène ici — y compris le `catch` de `#tenterConnexion`, qui
+    // s'exécute après que le connecteur a déjà classé la fermeture.
+    if (this.#etat === 'ferme_terminal') return;
     const index = Math.min(this.#tentative, this.#backoff.length - 1);
     const delai = this.#backoff[index] ?? this.#backoff[this.#backoff.length - 1] ?? 1000;
     this.#tentative += 1;
