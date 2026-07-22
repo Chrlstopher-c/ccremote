@@ -68,19 +68,20 @@ La v2 pilote **un parc de missions sur N projets**, avec un humain en boucle asy
 
 ## Tensions
 
-Cinq points où le domaine et l'ergonomie actuelle se contredisent réellement. Ils demandent un arbitrage, la maquette a tranché seule.
+Cinq points où le domaine et l'ergonomie actuelle se contredisaient. Trois ont été tranchées par la
+réécriture interactive (H-65) ; deux restent ouvertes.
 
-**1. Le PC éteint n'est pas le lien coupé — et la v2 n'a plus de bouton pour l'allumer.**
-Le WOL a disparu au profit de la carte « lien Pi↔PC ». Mais tout le parc dépend d'un PC allumé : si l'opérateur éteint son poste le soir, aucune mission ne tourne la nuit, et l'UI affichera seulement « lien coupé » sans offrir le geste qui corrige. Trois sorties : (a) réintégrer un réveil discret dans la carte lien, (b) réveil automatique par le Pi au dispatch d'une mission, (c) assumer que le PC reste allumé en permanence et documenter. À trancher, la maquette a implicitement choisi (c).
+**1. Le PC éteint n'est pas le lien coupé — et la v2 n'a plus de bouton pour l'allumer.** `⚠ OUVERT`
+Le WOL a disparu au profit de la carte « lien Pi↔PC ». Mais tout le parc dépend d'un PC allumé : si l'opérateur éteint son poste le soir, aucune mission ne tourne la nuit, et l'UI affichera seulement « lien coupé » sans offrir le geste qui corrige. Trois sorties : (a) réintégrer un réveil discret dans la carte lien, (b) réveil automatique par le Pi au dispatch d'une mission, (c) assumer que le PC reste allumé en permanence et documenter. Toujours non tranché ; la maquette continue d'assumer (c).
 
-**2. Aucun chemin pour parler à une mission en cours.**
-La v1 avait un champ d'entrée direct vers la session tmux. La v2 l'a retiré — à raison : l'orchestrateur n'a pas le droit de parler aux workers (frontière A↔B), et une injection brute rendrait [E] aveugle. Mais il n'existe aucun remplaçant : le bouton « Ouvrir le flux brut » du détail de mission ne mène nulle part dans la maquette. Or corriger un lead qui part de travers sans arrêter la mission est un besoin réel, et le seul canal spécifié aujourd'hui est le refus motivé d'une permission — qui suppose que l'agent demande quelque chose. **C'est le trou le plus concret de la maquette.** Il faut soit un « message à la mission » qui transite par le MCP de contrôle et est journalisé dans [E], soit assumer que la seule correction possible est pause → nouveau mandat.
+**2. `[TRANCHÉ dans la réécriture interactive]` Parler à une mission en cours.**
+Résolu par un champ « Parler à cette mission » dans le détail de mission (`sendInstruction()`) : le message est journalisé comme évènement `instruction` dans le fil, avec un accusé explicite (« reçue, prise en compte au prochain point de contrôle, n'interrompt pas le tour ») — il ne s'injecte pas dans la session, ne contourne pas [E], et reste distinct d'une réponse à une permission. Désactivé quand le lien est coupé, comme les autres actions qui traversent le transport.
 
-**3. Les boutons de sûreté sont absents de la vue Orchestrateur.**
-La barre de sûreté est injectée dans Parc / Mission / Escalades / Comptes, pas dans Orchestrateur ni Paramètres — sur Orchestrateur, le composer occupe le bas de l'écran. H-57 insiste : le bouton doit marcher *précisément* quand l'orchestrateur déraille ou boucle. Fonctionnellement le chemin ne passe pas par lui, mais visuellement il disparaît sur l'écran où on constate le dérapage. Arbitrage : sacrifier de la hauteur de composer sur mobile, ou accepter un aller-retour vers Parc pour freiner.
+**3. `[TRANCHÉ dans la réécriture interactive]` Boutons de sûreté absents de l'Orchestrateur et des Paramètres.**
+Les six vues (Parc, Mission, Escalades, Comptes, Orchestrateur, Paramètres) portent désormais chacune leur `.safety-bar` (`safetyBar1` à `safetyBar6`), rendue par le même gabarit JS. Le composer de l'Orchestrateur perd un peu de hauteur sur mobile — accepté, conforme à H-57 : le bouton doit marcher précisément là où l'orchestrateur peut dérailler.
 
-**4. Métriques machine : supprimées alors que le domaine les rend plus pertinentes, pas moins.**
-Argument pour la suppression : la télémétrie ne pilote aucune décision. Argument contre, tiré de H-57 : les processus lancés par les agents (serveurs de dev, builds, watchers) **survivent à la pause** et s'accumulent. N missions concurrentes sur un même PC, ça se voit en RAM avant de se voir ailleurs. La v2 a supprimé le seul endroit où ça se serait vu. Compromis raisonnable : pas de vue dédiée, mais une ligne de charge dans la carte lien, et une alerte quand elle décroche.
+**4. Métriques machine : supprimées alors que le domaine les rend plus pertinentes, pas moins.** `⚠ OUVERT`
+Argument pour la suppression : la télémétrie ne pilote aucune décision. Argument contre, tiré de H-57 : les processus lancés par les agents (serveurs de dev, builds, watchers) **survivent à la pause** et s'accumulent. La réécriture n'a pas rouvert ce point — pas de ligne de charge ajoutée dans la carte lien. Reste un compromis à trancher plus tard.
 
-**5. Deux entrées pour le même arbitrage.**
-Une demande `requires_action` apparaît à la fois en tête du Parc (carte accentuée) et dans la vue Escalades. Voulu — la notification pousse vers l'une, le balayage matinal vers l'autre — mais la carte Parc n'offre pas Autoriser/Refuser, elle renvoie vers Escalades. Sur mobile, à 3 h du matin, ce détour est un clic de trop. Arbitrage : rendre la carte Parc actionnable en place (et Escalades devient une pure file), ou assumer le détour pour forcer la lecture du `decisionReason` avant le verdict — ce qui est défendable, et est probablement la vraie raison de le garder.
+**5. `[TRANCHÉ par H-64, appliqué dans la réécriture]` Deux entrées pour le même arbitrage.**
+H-64 corrige la question à la racine : la vue Escalades n'est plus la surface principale d'arbitrage — elle ne contient que ce qui a franchi le plancher de déni (2 cas au chargement), tandis que **toutes** les permissions, y compris celles auto-résolues par le lead, se lisent dans le fil de chaque mission (filtre tout/activité/autorisations). Le détour Parc → Escalades reste réel pour les deux cas `requires_action` du seed, mais il n'est plus la voie unique de lecture des autorisations — l'essentiel du volume (H-64 : « ça peut spammer, c'est voulu ») vit désormais dans le fil.

@@ -501,6 +501,67 @@ dans le system prompt, pas sur une supervision de règles étendue.
 
 ---
 
+## H-68 `[TRANCHÉE]` `[I]` — L'anti-boucle est un juge, pas un plafond en dollars
+
+**Corrige H-58.** J'y avais conservé `maxBudgetUsd` par mission « comme anti-boucle ». C'était une
+erreur de conception, relevée par l'opérateur : **un montant en dollars ne mesure pas une boucle, il
+mesure du volume.** Il coupe une mission longue et légitime, et laisse passer une boucle courte. Sur
+abonnement mensuel, il ne borne en plus aucune dépense réelle (H-58) — il ne restait donc qu'un
+mauvais détecteur déguisé en garde-fou.
+
+Ordre de grandeur qui rend le défaut concret : **12 $ ≈ 6 minutes de Sonnet 5.** Un plafond à cette
+valeur n'aurait pas protégé le parc, il l'aurait rendu inutilisable.
+
+### Le principe retenu
+
+Ce qu'on veut savoir n'est pas « combien ça a coûté » mais **« est-ce que ça progresse »**. On mesure
+donc le progrès, directement.
+
+| Rôle | Mécanisme |
+|---|---|
+| **Déclencher une inspection** | paliers de consommation croissants — le dollar devient un *déclencheur*, plus une *limite* |
+| **Juger** | un modèle **Haiku** dédié, une seule question : boucle, ou fonctionnement normal ? |
+| **Couper** | seulement sur verdict de boucle, ou au filet de dernier recours |
+
+**Paliers** (base proposée par l'opérateur, à ajuster par mesure) : 12, 30, 50, 70, 100, 120, 150,
+170, 200 $… — resserrés au début, écartés ensuite. Une mission qui boucle se trahit tôt ; une mission
+longue et saine ne doit pas être inspectée toutes les cinq minutes pour rien.
+
+`maxBudgetUsd` **reste passé au SDK**, mais très haut : filet de dernier recours contre une boucle
+que le juge aurait manquée, pas un instrument de conduite.
+
+### Le juge
+
+- Modèle **Haiku** (coût négligeable, appelé seulement aux paliers).
+- Entrée : les N derniers tours — outils appelés, cibles, erreurs, fichiers modifiés. **Pas le
+  transcript complet** : le juge doit rester bon marché.
+- Sortie **structurée** : `boucle` | `progres` | `incertain`, plus un motif court.
+
+Signaux de boucle à lui donner explicitement : mêmes outils sur les mêmes cibles, même erreur
+répétée, aucun fichier modifié depuis plusieurs tours, tests échouant à l'identique, réécriture
+alternée des mêmes lignes.
+
+`☠ CASSE` — **un juge qui se trompe en disant « boucle » détruit du travail légitime en silence.** Le
+biais est donc asymétrique et non négociable : dans le doute, **laisser continuer**. `incertain` ne
+coupe jamais. Un `incertain` répété sur plusieurs paliers consécutifs escalade à l'humain (H-61) au
+lieu de trancher tout seul.
+
+`⚠ HYP` — la fiabilité du juge n'est pas démontrée. À vérifier tôt sur des cas réels, dans les deux
+sens : une vraie boucle est-elle détectée, et une mission longue saine est-elle laissée tranquille ?
+Le second test est le plus important — c'est celui dont l'échec coûte du travail.
+
+### Ce que ça change ailleurs
+
+- **G.1.1** : `maxBudgetUsd` n'est plus décrit comme l'anti-boucle. Il devient un filet haut.
+- **B.3.2** : `budget_exhausted` reste classé « borne atteinte » ⇒ remonter, ne jamais relancer
+  automatiquement. Inchangé, et d'autant plus vrai qu'atteindre ce plafond signifie désormais que le
+  juge est passé à côté de quelque chose.
+- **UI** : la jauge par mission n'affiche plus « X $ / Y $ » comme une limite proche, mais la
+  consommation et le **prochain point d'inspection**. Ce qui borne réellement le parc reste le rate
+  limit du compte (H-63), pas le dollar.
+
+---
+
 ## H-66 `[TRANCHÉE]` `[I]` — Attribution de l'émetteur : un lead sait toujours qui lui parle
 
 **La décision la plus importante de cette série, parce qu'elle porte sur la véracité de ce que
