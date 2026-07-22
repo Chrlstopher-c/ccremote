@@ -734,6 +734,46 @@ sans redémarrer la session.
 `api_error_status: 404`, `terminal_reason: "api_error"`. ⇒ valider le modèle **contre
 `supportedModels()`** avant de l'offrir, et lire `is_error`, **jamais** `subtype`.
 
+### H-71.1 `[MESURÉ 2026-07-22]` — ce que `supportedModels()` déclare réellement
+
+Banc : `acceptation/modeles-effort-reel.ts`. Ferme le dernier point de la dette n°3. `☠` L'identité
+d'un modèle est `value` (+ `resolvedModel` pour l'alias), **jamais `model`** — lecture par `model`
+rend un tableau de `undefined` sans lever.
+
+| Modèle | Effort | Niveaux déclarés | Adaptatif | Mode rapide |
+|---|---|---|---|---|
+| `claude-opus-4-8` | oui | `low, medium, high, xhigh, max` | oui | **oui — le seul** |
+| `claude-sonnet-5` | oui | `low, medium, high, xhigh, max` | oui | non |
+| `claude-fable-5` | oui | `low, medium, high, xhigh, max` | oui | non |
+| `claude-haiku-4-5-20251001` | **non** | *(absent)* | **non** | non |
+| `claude-opus-4-7` | — | **absent de la liste** | — | — |
+
+**Trois conséquences fermes :**
+
+1. **`opus-4-7` ne doit pas figurer dans le sélecteur.** Il répond, mais n'est pas déclaré : l'UI ne
+   peut lui prêter aucun niveau d'effort sans mentir. Conforme à l'arbitrage de l'opérateur
+   (« pour Opus 4.7, tant pis »), désormais fondé sur une mesure et non sur une préférence.
+2. **L'exclusion de Haiku (H-71) est confirmée mécaniquement** : ni effort, ni pensée adaptative.
+3. Les cinq niveaux prêtés par la maquette v3 à Opus 4.8, Sonnet 5 et Fable 5 sont **exacts** — la
+   maquette n'a rien à corriger de ce côté.
+
+### Le mode « ultra » existe : c'est `ultracode` (Settings)
+
+Question de l'opérateur, tranchée sur les types du SDK `0.3.217` :
+
+> *« Enable ultracode for the session: xhigh effort plus standing dynamic-workflow orchestration.
+> Session-scoped — typically provided via `--settings` or the `apply_flag_settings` control request;
+> interactive toggles never persist it. Requires workflows to be enabled and an xhigh-capable
+> model. »*
+
+⇒ Ce n'est **pas un sixième niveau d'effort** : c'est `xhigh` **plus** une orchestration de workflows
+permanente. Trois contraintes à respecter dans l'UI : portée **session** (jamais persisté), exige que
+les workflows soient activés, exige un modèle capable de `xhigh` — soit **Opus 4.8, Sonnet 5 et
+Fable 5**, et eux seuls.
+
+`⚠` Le champ `effort` accepte aussi **un entier**, pas seulement les cinq niveaux nommés. Non exploré :
+l'échelle n'est pas documentée. Ne pas l'exposer dans l'UI sans mesure préalable.
+
 ---
 
 ## H-72 · Observabilité : jauges de quota et navigation par agent
@@ -874,3 +914,51 @@ commise sur ce banc).
 `⚠` Le contexte du parent n'a **pas pu être relu** à cinq sous-agents, à cause du piège ci-dessus.
 La mesure de H-72.2 (contexte inchangé) tient sur un sous-agent ; à cinq, elle reste **à confirmer**
 par un protocole qui lit le contexte hors de la boucle.
+
+### H-72.4 `[MESURÉ 2026-07-22, plus tard]` — le flux n'est pas seulement insuffisant, il est **non déterministe**
+
+Deux exécutions supplémentaires du même banc, sans appel `getContextUsage()` d'aucune sorte, session
+**saine** (`is_error: false`, `terminal_reason: "completed"`, 6 tours, les **cinq** outils `Agent`
+bien observés) :
+
+> **0 ligne de sous-agent reçue. Deux fois de suite. 0 caractère.**
+
+Là où trois exécutions antérieures en donnaient 3 à 4. Le banc a été instrumenté exprès pour
+distinguer les deux causes possibles — session en échec, ou flux muet — parce qu'**une session ratée
+produit elle aussi zéro ligne** et se lirait à tort comme une conclusion sur le flux. C'est bien le
+flux qui est muet.
+
+⇒ La formulation de H-72.3 (« nécessaire mais pas suffisant ») était encore trop optimiste. Le compte
+de lignes reçues varie de **0 à 4 sur 5**, d'une exécution à l'autre, à prompt et options identiques.
+`forwardSubagentText` n'offre **aucune garantie de plancher** : concevoir quoi que ce soit d'observable
+sur lui seul revient à parier.
+
+`☠` **Conséquence ferme, qui renforce la conception de M-50** : le transcript du store est la **seule**
+source d'autorité pour « quels sous-agents existent et ce qu'ils font ». Le flux est un **agrément
+temps réel**, jamais un inventaire. La divergence flux/store que M-50 chiffre n'est donc pas un cas
+limite à surveiller — c'est le **cas nominal**, et elle peut valoir 100 %.
+
+### H-63.1 `[MESURÉ 2026-07-22]` — forme réelle du message de limite d'usage
+
+Dette n°3, deuxième point (« messages d'usage jamais vus en vrai ») : **fermée**. Capturé tel quel
+sur le banc à cinq sous-agents, type de message **`rate_limit_event`** — absent des types publics :
+
+```json
+{ "type": "rate_limit_event",
+  "rate_limit_info": { "status": "rejected", "resetsAt": 1784750400,
+    "rateLimitType": "five_hour", "overageStatus": "allowed",
+    "overageResetsAt": 1785542400, "isUsingOverage": true, "overageInUse": true },
+  "uuid": "…", "session_id": "…" }
+```
+
+Ce qu'on en retient pour l'implémentation :
+
+- Le message n'arrive **ni** par `SDKInformationalMessage.content` **ni** par `SDKNotificationMessage.text`
+  — les deux canaux sur lesquels M-51 avait bâti sa classification. C'est un **type de message à part
+  entière**, qu'un `switch` exhaustif sur les types publics **ne verrait jamais passer**.
+- `status: "rejected"` ne coupe pas la session : elle se poursuit **sur l'`extra_usage`**
+  (`isUsingOverage: true`), conformément à H-69. La bascule est donc **silencieuse** — rien d'autre que
+  ce message ne la signale.
+- `resetsAt` / `overageResetsAt` sont des **secondes Unix**, pas des millisecondes ni une chaîne ISO.
+- ⇒ **H-70 (atterrissage avant saturation) a désormais son signal réel** : ce message, `rateLimitType`
+  et `resetsAt` suffisent à déclencher l'atterrissage — sans jamais interroger `usage_EXPERIMENTAL`.

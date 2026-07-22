@@ -32,6 +32,10 @@ const lignes = new Map<string, LigneSousAgent>()
 let tachesLancees = 0
 let contexteMessages: number | null = null
 let contexteFinal: number | null = null
+const typesVus = new Map<string, number>()
+const messagesHorsTronc: string[] = []
+let resultat: { isError: boolean | null; terminalReason: unknown; tours: number | null; apiErrorStatus: unknown } | null =
+  null
 const debut = Date.now()
 
 const options: Options = {
@@ -108,7 +112,31 @@ for await (const message of q as AsyncIterable<SDKMessage>) {
   // pendant la lecture fait perdre les messages des sous-agents (mesuré 2026-07-22 —
   // 0 ligne reçue avec l'appel, 4 lignes sans). Le contexte se lit avant la boucle.
 
+  typesVus.set(message.type, (typesVus.get(message.type) ?? 0) + 1)
+
+  // Dette n°3 : les messages d'usage n'avaient jamais été vus en vrai. On capture
+  // la forme exacte de tout message hors du tronc commun, pour que la
+  // classification (M-51) s'appuie sur du mesuré et non sur les constantes seules.
+  if (message.type !== 'assistant' && message.type !== 'user' && message.type !== 'result' && message.type !== 'system') {
+    messagesHorsTronc.push(JSON.stringify(message).slice(0, 600))
+  }
+
   if (message.type === 'result') {
+    // ☠ Le résultat DOIT être inspecté : une session qui a échoué produit elle
+    // aussi 0 ligne de sous-agent, et se lirait à tort comme « le flux ne
+    // transmet rien ». Distinguer les deux est tout l'objet de ce banc.
+    const r = message as unknown as {
+      is_error?: boolean
+      terminal_reason?: unknown
+      num_turns?: number
+      api_error_status?: unknown
+    }
+    resultat = {
+      isError: r.is_error ?? null,
+      terminalReason: r.terminal_reason ?? null,
+      tours: r.num_turns ?? null,
+      apiErrorStatus: r.api_error_status ?? null,
+    }
     contexteFinal = await lireContexteMessages()
     break
   }
@@ -132,6 +160,15 @@ const total = [...lignes.values()].reduce((s, l) => s + l.caracteres, 0)
 // donc que le feed du lead était bien vide pendant ce temps (le problème de Chris).
 const vals = [...lignes.values()]
 const enParallele = vals.filter((a) => vals.some((b) => a !== b && a.premierVuA < b.dernierVuA && b.premierVuA < a.dernierVuA)).length
+
+console.log('\n— Ce que la session a réellement fait —')
+console.log(`  types de messages vus : ${[...typesVus].map(([t, n]) => `${t}×${n}`).join(' · ')}`)
+console.log(
+  `  résultat : is_error=${resultat?.isError ?? 'n/a'} · terminal_reason=${String(resultat?.terminalReason ?? 'n/a')} ` +
+    `· tours=${resultat?.tours ?? 'n/a'} · api_error_status=${String(resultat?.apiErrorStatus ?? 'n/a')}`,
+)
+
+for (const brut of messagesHorsTronc) console.log(`\n— message hors tronc commun (forme réelle) —\n  ${brut}`)
 
 console.log('\n— Verdict du banc —')
 console.log(`${tachesLancees >= 5 ? '✓' : '✗'} cinq sous-agents réellement lancés (vu : ${tachesLancees})`)

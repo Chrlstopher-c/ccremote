@@ -9,6 +9,11 @@
  * `superviseur/canal-controle.ts` (opération `arret_urgence`). Ce module-ci
  * est UNIQUEMENT le banc qui prouve, à intervalle, que ce chemin fonctionne
  * encore (acceptation d).
+ *
+ * `PortDrillCanariProcess` (dette n°2, TODO.md) branche ce banc sur une cible
+ * réelle : un process OS trivial, jamais une session Claude Code, jamais le
+ * chemin de production `superviseur/` — voir son en-tête pour l'isolation
+ * structurelle vis-à-vis d'une vraie mission.
  */
 
 export {
@@ -26,3 +31,5 @@ export {
 } from './types.ts';
 
 export { arretUrgenceLogger } from './logger.ts';
+
+export { PortDrillCanariProcess, type OptionsCanariProcess } from './canari-process.ts';

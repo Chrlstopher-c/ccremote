@@ -23,9 +23,16 @@ passe les tests sans faire le travail. Rien de ce qui suit n'apparaît dans le c
       a été choisi par défaut raisonnable, **sans vérification** contre `05-arbre-B` (hors périmètre
       de M-52). Trop court : on tue avant la fin d'une écriture. Trop long : le bouton d'urgence
       n'est plus urgent. À trancher sur mesure, pas au jugé.
-- [ ] **Le drill d'arrêt d'urgence n'est branché sur aucun canari réel.** La machinerie de récurrence
-      et d'alerte de péremption est testée et prête (M-52), mais elle n'exerce rien en production.
-      `☠` Critère (d) de la mission : « test récurrent, pas unique » — aujourd'hui il est **zéro**.
+- [x] ~~**Le drill d'arrêt d'urgence n'est branché sur aucun canari réel.**~~ — **FERMÉE le
+      2026-07-22** : `arret-urgence/canari-process.ts` démarre un **vrai process**, le cible **par PID
+      exact** (jamais par motif de commande), applique SIGTERM → grâce → SIGKILL, et **constate la mort
+      par `/proc`** — jamais en se fiant au code de retour du kill. Un canari survivant fait échouer le
+      drill (`sequence_incomplete`), il ne produit pas un faux succès. Isolation structurelle : le
+      module n'importe rien de `superviseur/`, et tout `missionId` autre que le canari retourne
+      `cible_absente` — un vrai `missionId` ne peut pas être atteint.
+      `⚠` **Ce que le canari n'exerce pas** : la vraie séquence de production
+      (`ControleurPause`, `interrupt()` SDK, `RegistreWorkers`, `abort()`) exige une session réelle et
+      reste couverte par des doublures uniquement. La dette n'est pas fermée de ce côté-là.
 
 ### 🟡 DETTE N°3 — hypothèses non vérifiées sur le comportement réel du SDK
 - [ ] **`pending_permission_requests` absent des types publics** (M-13). Le commentaire de
@@ -33,16 +40,28 @@ passe les tests sans faire le travail. Rien de ce qui suit n'apparaît dans le c
       `SDKControlInitializeResponse` ne déclare pas ce champ. Implémenté défensivement sur les deux
       lectures. **À trancher au premier banc réel de reconnexion** — si la mauvaise lecture est
       retenue, les permissions demandées pendant une coupure ne réatteignent jamais personne.
-- [ ] **Messages d'usage jamais vus en vrai** (M-51). La classification s'appuie sur les vraies
-      constantes du SDK, mais aucun message de limite réel n'a transité par
-      `SDKInformationalMessage.content` / `SDKNotificationMessage.text` sur un banc.
+- [x] ~~**Messages d'usage jamais vus en vrai** (M-51)~~ — **FERMÉE le 2026-07-22** par
+      `acceptation/observabilite-5-sousagents-reel.ts`. `☠` Le message réel est un type à part
+      entière, **`rate_limit_event`**, absent des types publics : il n'arrive **ni** par
+      `SDKInformationalMessage.content` **ni** par `SDKNotificationMessage.text`, les deux canaux sur
+      lesquels M-51 avait bâti sa classification. ⇒ **M-51 doit être recâblée sur ce type** :
+      aujourd'hui elle ne verrait jamais passer une vraie limite. Forme exacte en H-63.1.
 - [ ] **Contexte du parent à cinq sous-agents : non mesuré** (H-72.3). Vérifié sur **un** sous-agent
       (inchangé) ; à cinq, la lecture a échoué à cause du piège `getContextUsage()` dans la boucle.
       À refaire avec un protocole qui lit le contexte **hors** de la boucle.
-- [ ] **Niveaux d'effort réels d'`opus-4-7` et `sonnet-4-6` inconnus** : ils répondent mais ne
-      figurent pas dans `supportedModels()`. La maquette v3 leur prête les cinq niveaux — hypothèse
-      optimiste, à mesurer avant implémentation. `☠` Un effort invalide est **silencieusement ignoré**
-      par le SDK, jamais rejeté : rien ne signalerait l'erreur.
+- [x] ~~**Niveaux d'effort réels d'`opus-4-7` et `sonnet-4-6` inconnus**~~ — **FERMÉE le 2026-07-22**
+      par `acceptation/modeles-effort-reel.ts`. `opus-4-8` / `sonnet-5` / `fable-5` déclarent bien les
+      cinq niveaux + pensée adaptative ; `opus-4-7` est **absent** de `supportedModels()` et ne doit
+      donc pas figurer au sélecteur ; Haiku n'a ni effort ni adaptatif (exclusion H-71 confirmée
+      mécaniquement). Le mode « ultra » existe : c'est `ultracode` (Settings). Détail en **H-71.1**.
+      `☠` L'identité d'un modèle est `value`/`resolvedModel`, **jamais `model`** — piège rencontré.
+
+- [ ] `⚠` **AGGRAVÉ le 2026-07-22 — le flux de sous-agents est non déterministe** (H-72.4). Deux
+      exécutions supplémentaires du banc à cinq sous-agents, session parfaitement saine, ont donné
+      **0 ligne** là où trois exécutions antérieures en donnaient 3 à 4. `forwardSubagentText` n'offre
+      **aucun plancher garanti** : la divergence flux/store que M-50 chiffre n'est pas un cas limite,
+      c'est le cas **nominal**, et elle peut valoir 100 %. Le contexte du parent à cinq sous-agents
+      reste, lui, non mesuré — `getContextUsage()` n'est pas lisible après `result`.
 
 ### 🟢 DETTE N°4 — qualité de code et arbitrages en attente
 - [ ] **`superviseur/superviseur-workers.ts` dépasse 530 lignes** (limite : 500). Conséquence de
