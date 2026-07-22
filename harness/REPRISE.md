@@ -39,7 +39,20 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 | M-02 générateur d'entrée | `control-plane/orchestrateur/entree/` | livré |
 | M-03 registre SQLite | `control-plane/registre/` | livré |
 | M-04 harnais de pannes | `test-harness/` | livré — voir `test-harness/README.md` |
+| M-10 tunnel WebSocket + ping/pong | `transport/` | livré — voir `transport/DECISION-TRANSPORT.md` |
+| M-20 plancher de déni | `plancher-deni/` | livré · **moteur réel vérifié** |
+| M-21 machine à états des demandes | `control-plane/bus-permissions/` | livré |
+| M-31 adaptateur `SessionStore` | `control-plane/session-store/` | livré · **vérifié sur vrai SDK** |
 | Maquette UI v2 | `../design-v2/` | **validée par Chris le 2026-07-22** |
+
+**Bancs d'essai réels** (`acceptation/`, hors `bun test` volontairement — ils ouvrent de vraies
+sessions) : `m02-flux-entree.ts` · `plancher-moteur-reel.ts` · `multi-comptes-reel.ts` ·
+`session-store-reel.ts`. **H-69 lève la parcimonie** : un banc réel est le moyen normal de lever un
+doute. Chacun de ceux-ci a trouvé ce que le raisonnement seul avait manqué.
+
+**Faits mesurés sur le `SessionStore` réel** : le SDK appelle `append` par lots (~480-530 ms
+d'intervalle), la `projectKey` est le **cwd sanitisé** (`-mnt-projects-ccremote-harness`), et sur une
+session courte **seul `append` est sollicité** — `load`/`delete`/`listSubkeys` restent non exercés.
 
 **Lot 0 complet. 180 tests verts.** Maquette v2 validée : `index.html` (1717 l., autonome, navigable
 et simulant les événements). Sa DA cream/serif/orange est actée — la reprendre, ne pas la réinventer.

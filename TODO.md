@@ -41,11 +41,26 @@
       `⚠` Piège de détection payé : chercher « refus »/« denied » dans le JSON entier des messages
       fait passer les témoins pour refusés (le résumé final du modèle cite tous les verdicts). Le
       verdict se lit sur les blocs `tool_result` appariés à leur `tool_use`.
-- [ ] M-21 machine à états des demandes de permission
+- [x] **M-21** machine à états des demandes — livré 2026-07-22,
+      `harness/control-plane/bus-permissions/`. 5 invariants testés. Ne suppose **aucune source
+      unique** : conséquence directe de `canUseTool` jamais appelé en `auto`. Deux entrées
+      symétriques — `resoudreAuto()` (le lead tranche seul) et `escalader()` (humain).
+- [x] **Ping/pong transport** — dette de M-10 comblée, `harness/transport/lien-websocket.ts`.
+      Le `PONG` est généré par la **couche transport**, jamais par le processus Claude Code : c'est
+      ce qui rend « agent lent » et « tunnel mort » structurellement discernables. Seuil 3 tics de
+      silence total (~45 s), reprise par le même chemin que les coupures signalées.
 - [ ] M-22 arbitrage délégué + trace d'audit (c'est cette trace qui valide ou invalide H-40).
       `☠` **Brancher l'audit sur `PreToolUse`, jamais sur `canUseTool`** — mesuré le 2026-07-22 :
       en `auto`, `canUseTool` n'est pas appelé, la trace serait vide en silence.
-- [ ] M-31 adaptateur `SessionStore`
+- [x] **M-31** adaptateur `SessionStore` — livré 2026-07-22, `harness/control-plane/session-store/`.
+      Miroir best-effort, mais la divergence est **détectable** : table `session_defaillance`
+      indépendante du flux SDK (un consommateur qui n'écoute pas `mirror_error` le raterait sinon)
+      + `etatMiroir().divergent`. Colonne `emetteur` posée pour H-66 sans être peuplée.
+- [x] **M-31 — validé sur le vrai SDK** (`harness/acceptation/session-store-reel.ts`) : le SDK
+      sollicite réellement l'adaptateur (`append` ×2, cadence ~480-530 ms), la `projectKey` est le
+      **cwd sanitisé** (`-mnt-projects-ccremote-harness`), 10 entrées relues, `divergent: false`,
+      aucun `mirror_error`. `⚠` Seul `append` a été observé sur une session courte : `load`,
+      `delete`, `listSubkeys` restent non exercés par le SDK réel (à revoir sur une reprise).
 - [ ] M-34 relance et classification des `TerminalReason`
 
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
