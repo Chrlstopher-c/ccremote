@@ -149,6 +149,31 @@
   .bubble-a p { margin: 0 0 8px; white-space: pre-wrap; }
   .bubble-a p:last-child { margin-bottom: 0; }
 
+  /* ---- rendu Markdown des réponses (marked + DOMPurify, cf. chat.js) ---- */
+  .orch-md { font-size: 13.5px; line-height: 1.65; color: var(--ink); }
+  .orch-md > *:first-child { margin-top: 0; }
+  .orch-md > *:last-child { margin-bottom: 0; }
+  .orch-md p { margin: 0 0 10px; white-space: normal; }
+  .orch-md h1, .orch-md h2, .orch-md h3, .orch-md h4 { font-family: 'Source Serif 4', serif; font-weight: 600; color: var(--ink); line-height: 1.3; margin: 16px 0 8px; }
+  .orch-md h1 { font-size: 18px; } .orch-md h2 { font-size: 16px; } .orch-md h3 { font-size: 14.5px; } .orch-md h4 { font-size: 13.5px; }
+  .orch-md ul, .orch-md ol { margin: 0 0 10px; padding-left: 20px; }
+  .orch-md li { margin: 3px 0; }
+  .orch-md li::marker { color: var(--ink-3); }
+  .orch-md strong { font-weight: 600; color: var(--ink); }
+  .orch-md em { font-style: italic; }
+  .orch-md a { color: var(--accent-2); text-decoration: underline; text-underline-offset: 2px; }
+  .orch-md code { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; color: var(--ink); }
+  .orch-md pre { background: var(--bg-2); border: 1px solid var(--line); border-radius: 11px; padding: 11px 13px; overflow-x: auto; margin: 0 0 10px; }
+  .orch-md pre code { background: none; border: none; padding: 0; font-size: 11.5px; line-height: 1.55; display: block; }
+  .orch-md blockquote { margin: 0 0 10px; padding: 3px 0 3px 12px; border-left: 2px solid var(--accent-2); color: var(--ink-2); }
+  .orch-md blockquote p { margin: 0; }
+  .orch-md hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+  /* Le tableau défile dans son propre cadre — jamais la page (contrainte mobile). */
+  .orch-md table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0 0 10px; font-size: 12.5px; }
+  .orch-md th, .orch-md td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; white-space: nowrap; }
+  .orch-md th { background: var(--bg-2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-2); }
+  .orch-md .orch-cursor { vertical-align: text-bottom; }
+
   /* ---- barre des conversations (multi-fils, type ChatGPT) ---- */
   .conv-bar { display: flex; gap: 6px; align-items: center; overflow-x: auto; padding: 2px 0 4px; -webkit-overflow-scrolling: touch; }
   .conv-bar::-webkit-scrollbar { height: 0; }

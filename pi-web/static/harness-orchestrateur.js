@@ -116,18 +116,35 @@ function hEnsureAssistant(chat) {
 }
 function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
 
+/**
+ * Rend le Markdown d'une réponse. Réutilise `renderMarkdown` (chat.js) —
+ * marked + DOMPurify, déjà chargés par l'app — plutôt qu'un second moteur.
+ * `☠` Le repli de `renderMarkdown` échappe le texte si les libs manquent : le
+ * contenu du modèle n'atteint donc JAMAIS le DOM sans passer par un assainissement.
+ */
+function hMd(texte) {
+  // Garde d'indépendance : si chat.js n'était pas chargé, on affiche du texte
+  // échappé plutôt que de casser toute la vue.
+  if (typeof renderMarkdown !== 'function') return escapeHtml(texte || '');
+  return renderMarkdown(texte || '');
+}
+
+/** Écrit le Markdown dans un nœud, en gardant le curseur de frappe à la fin. */
+function hPeindreTexte(noeud, contenu, live) {
+  noeud.innerHTML = hMd(contenu);
+  if (!live) return;
+  const c = document.createElement('span'); c.className = 'orch-cursor';
+  // Collé à la fin du dernier bloc pour que le curseur suive le texte, pas la marge.
+  (noeud.lastElementChild || noeud).appendChild(c);
+}
+
 /** Construit le nœud d'un bloc. `live` = bloc encore en cours de frappe. */
 function hBlocNode(type, contenu, live) {
   if (type === 'texte') {
-    const p = document.createElement('p');
-    // ☠ Nœud texte créé explicitement : `textContent = ''` n'en crée aucun, et la
-    // mise à jour en place viserait alors le curseur au lieu du texte.
-    p.appendChild(document.createTextNode(contenu));
-    if (live) {
-      const c = document.createElement('span'); c.className = 'orch-cursor';
-      p.appendChild(c);
-    }
-    return p;
+    const d = document.createElement('div');
+    d.className = 'orch-md';
+    hPeindreTexte(d, contenu, live);
+    return d;
   }
   if (type === 'reflexion') {
     const d = document.createElement('details');
@@ -192,10 +209,10 @@ function hRenderPartiel(partiel) {
   const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
 
   if (hOrch.partielEl && hOrch.partielEl.isConnected && hOrch.partielEl.dataset.ptype === partiel.type) {
+    // Mise à jour en place du MÊME nœud : le fil ne se reconstruit pas, donc rien
+    // ne clignote même si le Markdown est repeint à chaque sondage.
     if (partiel.type === 'reflexion') hOrch.partielEl.querySelector('.think-body').textContent = partiel.contenu;
-    else {
-      hOrch.partielEl.firstChild.nodeValue = partiel.contenu; // le curseur reste en place
-    }
+    else hPeindreTexte(hOrch.partielEl, partiel.contenu, true);
     return;
   }
   hClearPartiel();
