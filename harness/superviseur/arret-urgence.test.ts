@@ -69,6 +69,8 @@ function demarrerWorkerFactice(fabriqueQuery: (spec: WorkerSpec) => Query): Dema
         effectiveModel: 'sonnet',
         failures: [],
       },
+      pid: null,
+      pidStarttime: null,
       abortController: new AbortController(),
       query: fabriqueQuery(workerSpec),
     };

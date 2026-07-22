@@ -76,6 +76,8 @@ function demarrerWorkerFactice(
         effectiveModel: 'sonnet',
         failures: [],
       },
+      pid: null,
+      pidStarttime: null,
       abortController: new AbortController(),
       query: fabriqueQuery(workerSpec),
     };

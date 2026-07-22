@@ -64,6 +64,8 @@ function demarrerWorkerFactice(messages: readonly SDKMessage[]) {
       effectiveModel: null,
       failures: [],
     },
+    pid: null,
+    pidStarttime: null,
     abortController: new AbortController(),
     query: fakeQuery(messages),
   });

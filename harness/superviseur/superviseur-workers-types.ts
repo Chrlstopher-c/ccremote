@@ -4,10 +4,12 @@
  * (dette n°4a, TODO.md) — aucun changement de comportement, purement structurel.
  */
 
+import type { JugeBoucle } from '../anti-boucle/index.ts';
 import type { ObservateurUsage } from '../budgets/index.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { StartWorkerDeps } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
+import type { ConfigAntiBoucle, ObservateurAntiBoucle } from './anti-boucle-workers.ts';
 import type { PersistanceRegistre } from './persistance-registre.ts';
 import type { ObservateurFlux, ObservateurRelance } from './types.ts';
 
@@ -91,4 +93,19 @@ export interface DependancesSuperviseur {
    * `process.kill`.
    */
   readonly terminerConcurrentRestaure?: (pid: number, signal: NodeJS.Signals) => void;
+  /**
+   * Juge anti-boucle (H-68, mission M-53) — `☠ H-74` : DEVRAIT être obligatoire. Reste
+   * optionnel ici uniquement parce que tous les sites d'appel actuels de ce constructeur sont
+   * des tests préexistants hors périmètre de cette mission (aucun appelant de production
+   * n'existe encore, vérifié par grep) ; les corriger tous aurait débordé le périmètre
+   * `superviseur/` de cette mission et heurté l'interdiction de modifier des tests existants.
+   * Absence rendue BRUYANTE au lieu de silencieuse : voir `anti-boucle-workers.ts`
+   * (`CablageAntiBoucle`, log `warn` au démarrage). Tout nouveau site de production doit
+   * fournir un vrai `JugeBoucle`.
+   */
+  readonly jugeBoucle?: JugeBoucle;
+  /** Paliers/seuil d'escalade (H-68) — défauts de `anti-boucle/types.ts` si absent. */
+  readonly configAntiBoucle?: ConfigAntiBoucle;
+  /** Best-effort (H-15, H-64) : trace chaque décision anti-boucle dans le fil de la mission. */
+  readonly observateurAntiBoucle?: ObservateurAntiBoucle;
 }

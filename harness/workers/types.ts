@@ -147,6 +147,23 @@ export interface WorkerHandle {
   readonly abortController: AbortController;
   /** Flux SDK, déjà positionné après le message `init`. */
   readonly query: Query;
+  /**
+   * Capturé par le spawner local (`process-spawner.ts`) au moment du spawn.
+   * `null` explicite si `spec.spawnProcess` était fourni par l'appelant (spawn
+   * distant, B.2.1 — pas de pid local à capturer) ou si le spawn local n'a pas
+   * pu livrer de pid. Jamais confondu avec une valeur par défaut (H-74, point 7).
+   * Consommé par `superviseur/` pour la persistance du registre (dette n°1) —
+   * `☠` le pid seul ne prouve rien (recyclage noyau), toujours coupler à
+   * `pidStarttime`.
+   */
+  readonly pid: number | null;
+  /**
+   * `starttime` (22e champ de `/proc/<pid>/stat`) au moment du spawn, capturé
+   * dans la même fenêtre que `pid`. `null` explicite (process déjà mort,
+   * `/proc` indisponible, plateforme non Linux, ou spawn distant) — jamais une
+   * chaîne vide qui se confondrait avec une vraie mesure.
+   */
+  readonly pidStarttime: string | null;
 }
 
 /** Signature de `query()` du SDK, isolée pour l'injection en test. */

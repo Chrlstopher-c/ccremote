@@ -12,6 +12,7 @@ import { composeWorkerOptions } from './options-composition.ts';
 import { sessionLogger } from './logger.ts';
 import { resolveModelWithFloor } from './model-floor.ts';
 import { runPreflight } from './preflight-config.ts';
+import { creerSpawnerLocal, type IdentiteProcessSpawn } from './process-spawner.ts';
 import type { PreflightReport, QueryFn, WorkerCapabilities, WorkerHandle, WorkerSpec } from './types.ts';
 
 /** Au-delà, on considère que le binaire ne parlera pas. */
@@ -127,7 +128,27 @@ export async function startWorker(
   const preflight = await preflightStage(spec, deps);
   await worktreeStage(spec, deps);
   const model = resolveModelWithFloor(spec.model, preflight.effectiveModel);
-  const { options, abortController } = composeWorkerOptions(spec, model, deps.resume === true ? 'reprise' : 'nouvelle');
+
+  // ☠ H-74 : sans capture ici, WorkerHandle.pid/pidStarttime ne sont jamais
+  // alimentés et restaurerRegistre() reste condamné à `indetermine` pour
+  // toujours (voir process-spawner.ts). Si l'appelant fournit déjà son propre
+  // spawnProcess (spawn distant, B.2.1), on ne le remplace pas — pas de pid
+  // local à capturer dans ce cas, pid/pidStarttime resteront `null` (explicite).
+  // Boîte mutable plutôt qu'un `let` réassigné dans la closure du spawner :
+  // TS ne suit pas la réassignation à travers l'appel de callback et narrowe
+  // sinon la variable à `null` au point de lecture, plus bas dans la fonction.
+  const identiteRef: { courante: IdentiteProcessSpawn | null } = { courante: null };
+  const specPourSpawn: WorkerSpec =
+    spec.spawnProcess !== undefined
+      ? spec
+      : {
+          ...spec,
+          spawnProcess: creerSpawnerLocal((identite) => {
+            identiteRef.courante = identite;
+          }),
+        };
+
+  const { options, abortController } = composeWorkerOptions(specPourSpawn, model, deps.resume === true ? 'reprise' : 'nouvelle');
 
   let stream: Query;
   try {
@@ -138,6 +159,19 @@ export async function startWorker(
 
   const init = await pullInitMessage(stream, deps.initTimeoutMs ?? DEFAULT_INIT_TIMEOUT_MS);
   const capabilities = readCapabilities(init);
-  log.info({ capabilities, model }, 'worker démarré, capacités lues depuis init');
-  return { sessionId: spec.sessionId, cwd: spec.cwd, capabilities, model, preflight, abortController, query: stream };
+  log.info(
+    { capabilities, model, pid: identiteRef.courante?.pid ?? null },
+    'worker démarré, capacités lues depuis init',
+  );
+  return {
+    sessionId: spec.sessionId,
+    cwd: spec.cwd,
+    capabilities,
+    model,
+    preflight,
+    abortController,
+    query: stream,
+    pid: identiteRef.courante?.pid ?? null,
+    pidStarttime: identiteRef.courante?.pidStarttime ?? null,
+  };
 }

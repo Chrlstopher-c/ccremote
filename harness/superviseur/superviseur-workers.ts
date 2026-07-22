@@ -25,7 +25,8 @@
  * RÉELLEMENT terminés via `tuerSansPreavis` (même chemin que l'arrêt d'urgence).
  */
 
-import { arbitrerFencing, type DetenteurEpoch } from './fencing-epoch.ts';
+import { creerCablageAntiBoucle, type CablageAntiBoucle } from './anti-boucle-workers.ts';
+import { arbitrerFencingWorktree } from './fencing-arbitrage-workers.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
@@ -93,6 +94,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #terminerConcurrentRestaure: (pid: number, signal: NodeJS.Signals) => void;
   /** Concurrents restaurés depuis la persistance (dette n°1) — voir `fencing-restauration.ts`. */
   readonly #concurrentsRestaures = new ConcurrentsRestaures();
+  readonly #antiBoucle: CablageAntiBoucle; // juge anti-boucle H-68 — voir anti-boucle-workers.ts
 
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
@@ -106,6 +108,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     this.#persistance = deps.persistance;
     this.#terminerConcurrentRestaure = deps.terminerConcurrentRestaure ?? ((pid, signal) => void process.kill(pid, signal));
     this.#registre = new RegistreWorkers(deps.persistance ?? null);
+    this.#antiBoucle = creerCablageAntiBoucle(deps);
   }
 
   /**
@@ -287,63 +290,18 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     void this.#surveillerResultats(missionId, handle);
   }
 
-  /**
-   * Arbitre la revendication du worktree (D.2.3, panne #2). Concurrents = tout
-   * enregistrement vivant sur le MÊME `cwd`, hors la session candidate elle-même
-   * (un rattachement de la session à elle-même n'est jamais un concurrent).
-   *
-   * `☠ CASSE` — rejeter n'est PAS suffisant sur une égalité d'epoch : sans le
-   * traiter comme un cas de première classe (`fencing-epoch.ts`), deux workers du
-   * même epoch coexisteraient silencieusement. Ici, une décision `rejete` lève
-   * AVANT tout spawn ; une décision `accepte_evince` termine réellement (pas
-   * seulement « marque périmé ») chaque détenteur dépassé via `tuerSansPreavis`,
-   * qui aborte l'`AbortController` propre à CE worker — le même mécanisme que
-   * l'arrêt d'urgence, pas une nouvelle voie de terminaison à auditer séparément.
-   *
-   * `☠` dette n°1 (TODO.md) — les concurrents restaurés (`ConcurrentsRestaures`)
-   * participent à L'ARBITRAGE comme les workers en mémoire : ferme M-53
-   * (`validation-proprietes/isolation.test.ts`), un candidat jusque-là accepté en
-   * silence est désormais REJETÉ ou ÉVINCÉ.
-   */
+  /** Fencing par epoch (D.2.3, panne #2) — implémentation extraite dans `fencing-arbitrage-workers.ts` (dette n°4a). */
   #arbitrerFencingWorktree(demande: DemandeDemarrage, log: ReturnType<typeof missionLogger>): void {
-    const concurrentsReels: DetenteurEpoch[] = this.#registre
-      .tous()
-      .filter((e) => e.vivant && e.worktree === demande.spec.cwd && e.sessionId !== demande.spec.sessionId)
-      .map((e) => ({ sessionId: e.sessionId, epoch: e.epoch }));
-
-    const concurrentsFantomes = this.#concurrentsRestaures.concurrentsSur(demande.spec.cwd, demande.spec.sessionId);
-
-    const decision = arbitrerFencing([...concurrentsReels, ...concurrentsFantomes], { sessionId: demande.spec.sessionId, epoch: demande.epoch });
-
-    if (decision.type === 'rejete') {
-      log.warn(
-        { worktree: demande.spec.cwd, epochCandidat: demande.epoch, motif: decision.motif, epochCourant: decision.epochCourant },
-        'demande de démarrage REJETÉE par le fencing epoch (D.2.3, panne #2) — aucun spawn',
-      );
-      throw new SuperviseurError(
-        `fencing epoch : requête rejetée (${decision.motif}) pour le worktree "${demande.spec.cwd}" ` +
-          `— epoch candidat ${demande.epoch}, epoch courant ${decision.epochCourant}`,
-      );
-    }
-
-    if (decision.type === 'accepte_evince') {
-      for (const sessionEvincee of decision.sessionsAEvincer) {
-        log.warn(
-          { worktree: demande.spec.cwd, sessionEvincee, nouvelEpoch: demande.epoch },
-          'epoch strictement supérieur revendiqué — TERMINAISON RÉELLE du worker périmé (D.2.3)',
-        );
-        this.#evincerConcurrent(sessionEvincee, demande.spec.cwd);
-      }
-    }
-  }
-
-  /** Un worker RÉEL passe par `tuerSansPreavis`. Un concurrent RESTAURÉ (dette n°1) voir `ConcurrentsRestaures.evincer()`. */
-  #evincerConcurrent(sessionId: string, worktree: string): void {
-    if (this.#registre.parSession(sessionId) !== null) {
-      this.tuerSansPreavis(sessionId);
-      return;
-    }
-    this.#concurrentsRestaures.evincer(sessionId, worktree, this.#terminerConcurrentRestaure);
+    arbitrerFencingWorktree(
+      {
+        registre: this.#registre,
+        concurrentsRestaures: this.#concurrentsRestaures,
+        tuerSansPreavis: (sessionId) => this.tuerSansPreavis(sessionId),
+        terminerConcurrentRestaure: this.#terminerConcurrentRestaure,
+      },
+      demande,
+      log,
+    );
   }
 
   /**
@@ -364,6 +322,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     try {
       for await (const message of handle.query) {
         this.#notifierFlux(missionId, message);
+        this.#antiBoucle.accumuler(missionId, message);
         if (message.type === 'rate_limit_event') {
           this.#surveillerQuota(missionId, handle.sessionId, message.rate_limit_info);
           continue;
@@ -374,13 +333,18 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
           continue;
         }
         if (message.type !== 'result') continue;
-        this.#registre.marquerMort(handle.sessionId);
+        // ☠ H-68 : `marquerMort` est retardé jusqu'ici — un `couper` doit trouver le worker
+        // encore `vivant` pour que `arreter()` (appelé PAR le câblage anti-boucle) produise un
+        // effet réel (`entree.fermer()` + `query.close()`), pas un no-op sur un mort déjà marqué.
+        const actionAntiBoucle = await this.#antiBoucle.evaluerEtAppliquer(missionId, message, (id) => this.arreter(id));
+        if (actionAntiBoucle !== 'couper') this.#registre.marquerMort(handle.sessionId);
         const decision = deciderRelance(handle.sessionId, message.terminal_reason, {
           compteur: this.#compteurRelances,
         });
         log.info({ action: decision.action, motif: decision.motif }, 'terminaison observée, politique de relance appliquée');
         this.#notifierDecision(missionId, decision);
-        if (decision.action === 'relancer') {
+        // ☠ H-68 : `couper`/`escalader` priment sur `deciderRelance`, jamais l'inverse (log déjà émis par `#antiBoucle`).
+        if (decision.action === 'relancer' && actionAntiBoucle !== 'couper' && actionAntiBoucle !== 'escalader') {
           this.#planifier(decision.delaiMs, () => {
             this.relancer(missionId, handle.sessionId).catch((erreur: unknown) => {
               log.error({ err: erreur }, 'relance automatique en échec');

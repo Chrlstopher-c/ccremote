@@ -57,6 +57,8 @@ function demarrerWorkerFactice(): DemarrerWorkerFn {
         effectiveModel: 'sonnet',
         failures: [],
       },
+      pid: null,
+      pidStarttime: null,
       abortController: new AbortController(),
       query: fakeQuery(),
     };

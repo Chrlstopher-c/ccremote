@@ -42,6 +42,13 @@ export {
 export { extraireDemandesEnAttente } from './reponse-reinitialize.ts';
 
 export {
+  CablageAntiBoucle,
+  type ConfigAntiBoucle,
+  type DependancesCablageAntiBoucle,
+  type ObservateurAntiBoucle,
+} from './anti-boucle-workers.ts';
+
+export {
   arbitrerFencing,
   type DecisionFencing,
   type DetenteurEpoch,
