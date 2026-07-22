@@ -111,6 +111,9 @@ async function hRenderTeamTree(missionsMaybe) {
 }
 
 function hAccGaugeMini(a) {
+  // Un compte sans relevé de quota est normal (jamais interrogé encore) :
+  // on affiche 0, on ne plante pas.
+  a = { five_hour: { util: 0, resetLabel: '—' }, seven_day: { util: 0, resetLabel: '—' }, ...a };
   const fiveColor = a.five_hour.util >= 90 ? 'var(--err)' : a.five_hour.util >= 65 ? 'var(--warn)' : 'var(--ok)';
   const sevenColor = a.seven_day.util >= 90 ? 'var(--err)' : a.seven_day.util >= 65 ? 'var(--warn)' : 'var(--ok)';
   return `<div class="mg-acc">
@@ -125,20 +128,35 @@ async function hRenderMiniGauges() {
   const el = document.getElementById('hMiniGauges');
   if (!el) return;
   const res = await HarnessAPI.getAccounts();
-  const accounts = res.data;
-  if (!accounts) { el.innerHTML = `<div class="mgh">Quotas — PC absent</div>`; return; }
-  el.innerHTML = `<div class="mgh">Quotas — par compte (H-72)</div>${hAccGaugeMini(accounts[1])}${hAccGaugeMini(accounts[2])}`;
+  // ☠ Le serveur réel rend une LISTE d'identifiants texte (compte-a…), pas un
+  // objet indexé 1/2 comme la maquette. Indexer en dur produisait un `undefined`
+  // et une page blanche — un écran vide ne dit RIEN, alors que « aucun compte
+  // enregistré » dit exactement quoi faire.
+  const accounts = hListeComptes(res);
+  if (accounts === null) { el.innerHTML = `<div class="mgh">Quotas — PC absent</div>`; return; }
+  if (accounts.length === 0) { el.innerHTML = `<div class="mgh">Quotas</div><div class="mg-reset">Aucun compte enregistré dans le registre.</div>`; return; }
+  el.innerHTML = `<div class="mgh">Quotas — par compte (H-72)</div>${accounts.map(hAccGaugeMini).join('')}`;
+}
+
+/**
+ * Normalise la réponse `getAccounts()` en tableau.
+ * `null` = PC absent (état normal, H-75) · `[]` = aucun compte connu.
+ * Tolère l'ancienne forme objet indexée pour ne pas casser si un écran de
+ * démonstration la fournit encore.
+ */
+function hListeComptes(res) {
+  if (!res || !res.data) return null;
+  const d = res.data;
+  return Array.isArray(d) ? d : Object.values(d).filter(Boolean);
 }
 async function hRenderQuotaStrip() {
   const el = document.getElementById('hQuotaStripParc');
   if (!el) return;
-  const res = await HarnessAPI.getAccounts();
-  const accounts = res.data;
-  if (!accounts) { el.innerHTML = `<span style="color:var(--ink-3);">PC absent — quotas indisponibles</span>`; return; }
-  const a1 = accounts[1], a2 = accounts[2];
+  const accounts = hListeComptes(await HarnessAPI.getAccounts());
+  if (accounts === null) { el.innerHTML = `<span style="color:var(--ink-3);">PC absent — quotas indisponibles</span>`; return; }
+  if (accounts.length === 0) { el.innerHTML = `<span style="color:var(--ink-3);">Aucun compte enregistré</span>`; return; }
   const v = (a, w) => (a[w].util >= 90 ? `<b class="warnv">${a[w].util}%</b>` : `<b>${a[w].util}%</b>`);
-  el.innerHTML = `<button>#1 5h ${v(a1, 'five_hour')} · 7j ${v(a1, 'seven_day')}${a1.isUsingOverage ? ' <b class="warnv">· crédits</b>' : ''}</button>
-    <button>#2 5h ${v(a2, 'five_hour')} · 7j ${v(a2, 'seven_day')}${a2.isUsingOverage ? ' <b class="warnv">· crédits</b>' : ''}</button>
+  el.innerHTML = `${accounts.map((a) => `<button>${a.label} 5h ${v(a, 'five_hour')} · 7j ${v(a, 'seven_day')}${a.isUsingOverage ? ' <b class="warnv">· crédits</b>' : ''}</button>`).join('')}
     <span style="color:var(--ink-3);">— fenêtres non synchronisées, tap pour le détail</span>`;
 }
 

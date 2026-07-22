@@ -39,9 +39,15 @@ CCREMOTE_PI_REGISTRE_DB=$REMOTE_DIR/registre.db
 CCREMOTE_PI_REPERTOIRE_PROJETS=/home/pi/projets
 CCREMOTE_PI_CWD_ORCHESTRATEUR=$REMOTE_DIR
 CCREMOTE_LIEN_SECRET=$CCREMOTE_LIEN_SECRET
-# Le tunnel Cloudflare relaie vers ces ports en local — jamais exposés au LAN.
-CCREMOTE_LIEN_HOST=127.0.0.1
+# ☠ Le LIEN écoute sur le LAN : le PC est une autre machine du réseau local.
+# Protégé par le secret partagé (comparaison à temps constant, refus 4401).
+# Le remettre en 127.0.0.1 déconnecterait le PC en silence à chaque déploiement
+# — c'est exactement ce qui est arrivé le 22/07/2026.
+CCREMOTE_LIEN_HOST=${CCREMOTE_LIEN_HOST:-0.0.0.0}
 CCREMOTE_LIEN_PORT=8721
+# ☠ L'API web reste STRICTEMENT en loopback : elle n'a aucune authentification
+# propre, c'est pi-web qui la lui apporte. Le serveur refuse d'ailleurs de
+# démarrer sur une interface publique.
 CCREMOTE_API_WEB_PORT=8722
 # ☠ Session orchestrateur maître : opt-in. Exige des credentials Claude valides
 # sur le Pi (un \`/login\` humain) et consomme du quota en continu. Le parc, les

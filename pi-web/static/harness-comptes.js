@@ -1,6 +1,7 @@
 // ============ HARNESS — vue Comptes & quotas ============
 
 function hAccountBlock(a, missionsForAccount) {
+  if (!a) return '';
   const isActive = a.status === 'allowed';
   const rows = [];
   if (a.five_hour) rows.push(['five_hour (session actuelle)', a.five_hour, true]);
@@ -26,21 +27,31 @@ function hAccountBlock(a, missionsForAccount) {
       ${missionsForAccount.length ? missionsForAccount.map((m) => `<span class="chip" style="${isActive ? '' : 'background:var(--err-soft);color:var(--err);'}">${m.project}${m.landing && m.landing.active ? ' (atterrit)' : ''}</span>`).join('') : '<span class="chip">aucune</span>'}
     </div>
     <div class="mono" style="font-size:9.5px;color:var(--ink-3);margin-top:9px;">consommé sur la fenêtre courante : ${hMoney(a.costWindow)} · poussé par rate_limit_event</div>
-    <div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" onclick="hToggleSaturation(${a.id})">${isActive ? 'Simuler une saturation (démo)' : 'Simuler un reset (démo)'}</button></div>
+    <!-- ☠ Bouton de simulation retiré le 22/07/2026 : il mutait l'état de
+         DÉMONSTRATION, que cette vue n'affiche plus. Le laisser aurait produit
+         un bouton qui plante, ou pire, qui semble agir sur un vrai compte. -->
   </div>`;
 }
 
 async function hRenderComptes() {
-  const accRes = await HarnessAPI.getAccounts();
-  const accounts = accRes.data;
-  if (!accounts) { document.getElementById('hComptesBody').innerHTML = hPcAbsentBanner('les comptes'); return; }
+  const el = document.getElementById('hComptesBody');
+  // ☠ Liste d'identifiants texte côté serveur réel, pas un objet indexé 1/2.
+  const accounts = hListeComptes(await HarnessAPI.getAccounts());
+  if (accounts === null) { el.innerHTML = hPcAbsentBanner('les comptes'); return; }
   const missionsRes = await HarnessAPI.getMissions();
   const missions = missionsRes.data || [];
   const byAcc = (id) => missions.filter((m) => m.account === id && ['running', 'requires_action', 'idle', 'paused'].includes(m.state));
 
-  document.getElementById('hComptesBody').innerHTML = `
-    ${hAccountBlock(accounts[1], byAcc(1))}
-    ${hAccountBlock(accounts[2], byAcc(2))}
+  // Un écran blanc ne dit rien ; celui-ci dit quoi faire.
+  const blocs = accounts.length === 0
+    ? `<div class="card" style="padding:14px;"><div class="sec-title">Aucun compte enregistré</div>
+       <div style="font-size:12px;color:var(--ink-3);line-height:1.55;">
+         Le registre du control plane ne contient encore aucun compte Claude. Les quotas
+         apparaîtront dès qu'une mission en aura utilisé un.</div></div>`
+    : accounts.map((a) => hAccountBlock(a, byAcc(a.id))).join('');
+
+  el.innerHTML = `
+    ${blocs}
     <div class="card" style="padding:14px;margin-top:6px;">
       <div class="sec-title">Garde-fous</div>
       <div class="kv">
