@@ -29,9 +29,10 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 
 ---
 
-## État au 2026-07-22
+## État au 2026-07-22 — MVP en clôture
 
-**Lot 0 livré.** Commit `5c2f65f` poussé sur `origin/master`. **93 tests verts, typecheck propre.**
+**Lots 0 à 5 livrés.** Dernier commit `2d81183`. **698 tests verts, typecheck propre.**
+Il reste **M-50** (en vol au moment de la compaction) et **M-53** (qui seule clôt le MVP).
 
 | Mission | Dossier | État |
 |---|---|---|
@@ -50,19 +51,35 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 | M-31 adaptateur `SessionStore` | `control-plane/session-store/` | livré · **vérifié sur vrai SDK** |
 | M-41 session orchestrateur | `control-plane/orchestrateur/processus/` | livré · A.1/A.3.2/A.4.2 · dette `surFermetureImprevue` (H-60) branchée sur alarme réelle · **corrigé 2026-07-22 sur banc réel** (`acceptation/orchestrateur-reel.ts`) : `demarrerOrchestrateur()` n'attend plus jamais `init` (interblocage structurel, le SDK ne l'émet qu'après un 1er message utilisateur) et ne consomme plus lui-même `query` (double-lecteur) — `poignee.ingererMessage()` délègue ça au vrai lecteur |
 | M-13 canal de contrôle + superviseur de workers | `superviseur/` | livré 2026-07-22 · `CanalControle` (D.3, idempotence par `opId` mécanique, jamais par convention) + `SuperviseurWorkers` implémentant réellement `InventairePc`/`ReinitialisateurSession` (M-30) et `RepertoireCibles`/`ArreteurMission`/`RelanceurMission` (A.2) · `deciderRelance()` (dette M-34) câblé dans l'unique lecteur du `Query` d'un worker · `workers/` étendu d'un mode `resume` (`composeWorkerOptions`, `startWorker`) pour la relance · `⚠ HYP à vérifier sur banc réel` : le type public `SDKControlInitializeResponse` ne porte pas `pending_permission_requests` — lecture défensive en attendant confirmation, voir `superviseur/reponse-reinitialize.ts` · 40 tests ajoutés, aucun test existant cassé |
+| M-11 fencing par epoch | `superviseur/fencing-epoch.ts` | livré · clé = **le worktree**, égalité d'epoch rejetée explicitement, worker évincé réellement aborté |
+| M-40 outils MCP de contrôle | `control-plane/orchestrateur/mcp-controle/` | livré · 12 outils · non-blocage **prouvé** (port mort ⇒ main rendue < 500 ms) · `arret_urgence` **absent** (H-57 > spec) |
+| M-42 discipline de contexte | `discipline-contexte/` | livré · n'utilise **pas** `percentage` (échelle non documentée) · seuil pathologique : < 15 min entre 2 auto, ou ≥ 3 en 60 min |
+| M-51 budgets | `budgets/` | livré · classification sur les **vraies constantes SDK** · plafond de parc **incapable par le type** de tuer une mission |
+| M-52 arrêt d'urgence | `arret-urgence/` + `superviseur/arret-urgence-sequence.ts` | livré · chemin **ne traversant jamais** `control-plane/orchestrateur/` (vérifié par grep des imports) · aucun chemin vers `liberer()` |
+| M-50 client temps réel | ? | `⚠` **EN VOL à la compaction — vérifier sur disque** |
+| M-53 validation des 5 propriétés | — | **à lancer** · seule mission autorisée à déclarer le harness terminé |
 | Maquette UI v2 | `../design-v2/` | **validée par Chris le 2026-07-22** |
+| Maquette UI v3 | `../design-v3/` | livrée · H-70/H-71/H-72 · `⚠` **jamais regardée par Chris** |
 
 **Bancs d'essai réels** (`acceptation/`, hors `bun test` volontairement — ils ouvrent de vraies
 sessions) : `m02-flux-entree.ts` · `plancher-moteur-reel.ts` · `multi-comptes-reel.ts` ·
-`session-store-reel.ts`. **H-69 lève la parcimonie** : un banc réel est le moyen normal de lever un
-doute. Chacun de ceux-ci a trouvé ce que le raisonnement seul avait manqué.
+`session-store-reel.ts` · `orchestrateur-reel.ts` · `worker-reel.ts` · `worktree-git-reel.ts` ·
+`observabilite-sousagents-reel.ts` · `observabilite-5-sousagents-reel.ts`.
+
+**H-69 lève la parcimonie** : un banc réel est le moyen **normal** de lever un doute, pas un luxe.
+`☠` **Chacun de ces neuf bancs a trouvé un défaut que les tests unitaires ne voyaient pas** — dont
+deux qui rendaient un composant strictement inutilisable (interblocage au démarrage de
+l'orchestrateur) et un bug de **perte de données** (suppression de worktree portant du travail non
+commité). C'est le principal enseignement de la journée : sur ce projet, le vert des tests unitaires
+ne prouve pas grand-chose.
 
 **Faits mesurés sur le `SessionStore` réel** : le SDK appelle `append` par lots (~480-530 ms
 d'intervalle), la `projectKey` est le **cwd sanitisé** (`-mnt-projects-ccremote-harness`), et sur une
 session courte **seul `append` est sollicité** — `load`/`delete`/`listSubkeys` restent non exercés.
 
-**Lot 0 complet. 180 tests verts.** Maquette v2 validée : `index.html` (1717 l., autonome, navigable
-et simulant les événements). Sa DA cream/serif/orange est actée — la reprendre, ne pas la réinventer.
+**Maquettes** : `design-v2/` **validée par Chris**, DA cream/serif/orange actée — la reprendre, ne
+jamais la réinventer. `design-v3/` (2179 l.) étend la v2 avec H-70/H-71/H-72 — **à faire valider par
+Chris**, jamais regardée par lui.
 
 `⚠` La v1 de cette maquette avait été rejetée : « plus une vitrine qu'autre chose », rien de
 cliquable. Voir **H-65** : pour ce produit, une maquette statique ne prouve rien — l'essentiel est le
@@ -90,13 +107,13 @@ injecteur.
 ```bash
 cd /mnt/projects/ccremote/harness
 bun run typecheck     # doit être silencieux
-bun test              # doit afficher 93 pass, 0 fail (ou plus)
+bun test              # doit afficher 698 pass, 0 fail (ou plus)
 git log --oneline -3
 ```
 
-`⚠` Deux agents tournaient au moment de la coupure de contexte (tests+README de M-04, et
-`COMPARAISON.md`). **Vérifier sur disque ce qui a réellement abouti avant de relancer quoi que ce
-soit** — ne pas refaire à l'aveugle. Un plan en mémoire ne prouve pas qu'il n'a pas déjà été exécuté.
+`⚠` **M-50 tournait au moment de la compaction.** Vérifier sur disque ce qui a abouti avant de
+relancer quoi que ce soit — ne pas refaire à l'aveugle. Un plan en mémoire ne prouve pas qu'il n'a
+pas déjà été exécuté.
 
 ---
 
@@ -120,66 +137,71 @@ après coup.
 ---
 
 ## ▶ ACTION SUIVANTE — à faire en premier à la reprise
+*Écrit le 2026-07-22, juste avant une compaction de conversation.*
 
-**Lancer la vague 2.** Rien n'est en cours, aucun agent ne tourne, l'arbre de travail est propre.
+### 1. VÉRIFIER D'ABORD : un agent tournait au moment de la compaction
 
-Lancer **M-10** et **M-20** en priorité (chemin critique + garde-fou minimal), en subagents
-`model="sonnet"`, périmètres disjoints. Puis M-21, M-22, M-31, M-34 si le parallélisme le permet.
+**M-50 (client temps réel) était EN VOL.** Avant toute chose :
 
-Brief type qui a fonctionné au Lot 0, à reproduire :
-- socle imposé : `01`, `02`, `03`, **`16`** (celui-ci fait autorité) + **un seul** fichier de branche
-  + `15-grille-revue.md` + `rules/code-standards.md`
-- interdiction explicite de lancer un test E2E ou une session Claude Code réelle — **le subagent
-  produit, le parent valide**
-- « une `⚠ HYP` constatée fausse ⇒ remonter, ne pas improviser »
-- « tout `☠ CASSE` de ta branche a un test associé »
-- rappel de ne pas casser les tests existants (compte de référence à jour ci-dessus)
-- `☠` **en parallélisme, interdire `git stash` / `git checkout` / `git reset`** : d'autres agents
-  écrivent en même temps, ces commandes leur retirent leurs fichiers sous les pieds. Pour vérifier si
-  un échec préexiste, lire la version commitée via `git show HEAD:<chemin>`, sans toucher au disque.
-- `☠` **préciser que le typecheck peut être rouge à cause d'un autre agent** : vérifier le chemin du
-  fichier fautif avant de conclure quoi que ce soit sur son propre travail.
+```bash
+cd /mnt/projects/ccremote/harness
+git status --short          # M-50 écrit-il ? (dossier neuf sous harness/)
+bun run typecheck && bun test
+git log --oneline -3
+```
 
-Correspondance mission → fichier de branche : voir le tableau de `../Upgrade/12-graphe-dependances.md`.
+Base de référence au moment de la compaction : **698 tests verts**, dernier commit `2d81183`.
+`☠` **Ne rien refaire à l'aveugle** — vérifier sur disque ce qui a abouti. Un plan en mémoire ne
+prouve pas qu'il n'a pas déjà été exécuté.
+
+Si M-50 a livré : relire son code (pas son rapport) sur **deux points qui décident de sa qualité** —
+(1) la divergence flux/store est-elle réellement **visible**, jamais lissée ? (2) le high-water mark
+évite-t-il le rejeu complet ?
+
+### 2. PUIS : lancer M-53, qui clôt le MVP
+
+**M-53 est la seule mission autorisée à déclarer le harness terminé.** Périmètre : les cinq
+propriétés de `03-couche-1.md` — non-blocage, isolation, reprise, modularité, bornage. Un test par
+propriété.
+
+`⚠` Lui passer **le registre des dettes** (`../TODO.md`) : une propriété « isolation » validée sur un
+`RegistreWorkers` **en mémoire** ne vaut que tant que le superviseur PC ne redémarre pas. Ça doit
+figurer dans sa validation, pas être découvert après.
+
+### 3. ENSUITE : la dette n°1, priorité explicite de Chris
+
+**Persistance du registre de workers côté PC.** Voir `../TODO.md`, section « REGISTRE DES DETTES ».
+C'est la seule dette restante capable de **détruire du travail en silence**.
+
+### 4. APRÈS le MVP : H-70, H-71, H-72 (décidées, spécifiées, non implémentées)
+Atterrissage avant saturation de quota · choix modèle/raisonnement dans le fil · jauges 5 h/7 j par
+compte et navigation par sous-agent. Spécification complète dans `../Upgrade/16-decisions-operateur.md`.
+Maquette correspondante déjà produite : `../design-v3/index.html` (à faire valider par Chris).
 
 ---
 
-## Prochaine étape : Vague 2
+## Brief type pour un subagent — celui qui a fonctionné toute la journée
 
-Dépend du Lot 0. Missions parallélisables : **M-10** (tunnel, chemin critique), **M-20** (plancher de
-déni), **M-21** (machine à états des demandes), **M-22** (arbitrage délégué + audit), **M-31**
-(adaptateur SessionStore), **M-34** (relance et classification).
+- socle imposé : `01`, `02`, `03`, **`16`** (fait autorité) + **un seul** fichier de branche
+  + `15-grille-revue.md` + `rules/code-standards.md`
+- ☠ **jamais le paquet complet** — c'est ce qui évite l'explosion de contexte et le hors-périmètre
+- interdiction explicite de lancer un test E2E ou une session Claude Code réelle — **le subagent
+  produit, le parent valide** (les bancs `acceptation/` sont le travail du parent)
+- « une `⚠ HYP` constatée fausse ⇒ remonter, ne pas improviser »
+- « tout `☠ CASSE` de ta branche a un test associé »
+- rappel du compte de tests à ne pas casser
+- `☠` **en parallélisme, interdire `git stash` / `git checkout` / `git reset`** : ces commandes
+  retirent aux autres agents leurs fichiers sous les pieds. Pour vérifier si un échec préexiste,
+  lire la version commitée via `git show HEAD:<chemin>`, sans toucher au disque.
+- `☠` **prévenir qu'un typecheck rouge peut venir d'un autre agent** : vérifier le chemin du fichier
+  fautif avant de conclure sur son propre travail
+- `☠` **aucun interrupteur de simulation de panne dans un module de production** — un interrupteur
+  capable de produire la panne est lui-même la panne
+- **lancer en `model="sonnet"`** (demande de Chris, coût)
+- **côté parent** : commit **sélectif** tant qu'un agent tourne (`git add <chemins>`), jamais
+  `git add -A` — sinon on emporte son travail en vol dans un commit qui n'en parle pas
 
-Si le parallélisme doit être limité : prioriser **M-10** (chemin critique) et **M-20** (garde-fou
-minimal avant toute exécution non surveillée).
-
-`⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51.** Développer sans plancher de déni
-ni budget est acceptable ; laisser tourner une nuit sans eux ne l'est pas.
-
-### Point de synchronisation de la vague 1 — ✅ PASSÉ le 2026-07-22
-
-Script rejouable : `acceptation/m02-flux-entree.ts` (hors `bun test` **volontairement** : il ouvre une
-vraie session). `SILENCE_S=20` pour répéter le protocole à blanc, `MODE=default` pour exercer
-`canUseTool`.
-
-Résultat réel, 10 minutes de silence (09:51 → 10:01) : tour 2 reçu après le silence · hook
-`PreToolUse` appelé · générateur resté `ouvert` · aucun `Stream closed` · `surFermetureImprevue`
-jamais déclenché. **La panne #1 ne se produit pas** sur le transport du SDK 0.3.217.
-
-`⚠` Le critère d'origine « `canUseTool` appelé » était **inatteignable en mode production** : voir la
-ligne correspondante du tableau des pièges. Il n'est exigé que sous `MODE=default`.
-
-Protocole d'origine, conservé pour mémoire :
-
-1. Instancier `GenerateurEntree` avec un `surFermetureImprevue` qui **échoue bruyamment**.
-2. `query({ prompt: generateur.flux, options: { canUseTool, hooks: { PreToolUse } } })`.
-3. Un tour trivial, puis **10 minutes réelles de silence** (pas de temps simulé — le but est
-   d'exercer le SDK et le transport).
-4. Envoyer une instruction déclenchant une permission.
-5. Attendu : `canUseTool` appelé · hook `PreToolUse` appelé · `etat === 'ouvert'` · **aucun
-   `Error: Stream closed` sur stderr** · `surFermetureImprevue` jamais déclenché.
-6. `☠` Rester en `permissionMode` ≠ `bypassPermissions` — sinon `canUseTool` n'est jamais appelé et
-   le test est vert pour la mauvaise raison.
+Correspondance mission → fichier de branche : tableau de `../Upgrade/12-graphe-dependances.md`.
 
 ---
 
