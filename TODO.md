@@ -50,22 +50,34 @@
 
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
 
+### ⚠ À trancher par Chris — les crédits payants sont actifs sur les deux comptes
+Mesuré le 2026-07-22 : `extra_usage.is_enabled = true` sur `compte-a` **et** `compte-b`. Au-delà du
+quota d'abonnement, la consommation bascule sur des crédits facturés en euros — **11,83 €** et
+**10,63 €** déjà consommés ce mois, sur 70 €/mois chacun.
+
+Ça nuance H-58 (« on n'est pas sur l'API, pas besoin de limite en dollars ») : un parc autonome
+**peut dépenser de l'argent réel** sans jamais toucher à l'API. Trois options :
+- [ ] désactiver `extra_usage` sur les comptes (le parc s'arrête net au quota, zéro dépense)
+- [ ] le laisser actif et afficher les euros consommés dans la jauge H-63 (visibilité, pas blocage)
+- [ ] le laisser actif sans rien afficher (statu quo — le risque n'est pas visible)
+
+`☠` Ne pas confondre avec H-68 : ceci n'est **pas** un détecteur de boucle, c'est une dépense réelle.
+Les deux sujets restent distincts.
+
 ### Action de Chris requise — rotation multi-comptes à moitié en place
 Conception retenue : **un `CLAUDE_CONFIG_DIR` persistant par compte** sous `~/.claude-comptes/`,
 authentifié une fois et laissé se rafraîchir. Ne jamais recopier un snapshot au moment de la bascule
 (les refresh tokens tournent : un snapshot copié se périme seul et en silence — constaté le 22/07 sur
 les deux anciens `.credentials_account*.json`).
 
-- [x] `compte-a` en place et vérifié (banc d'essai 5/5 dessus, dossier autonome)
-- [ ] **`compte-b` : `/login` interactif à faire par Chris** — seule action non automatisable :
-      ```bash
-      CLAUDE_CONFIG_DIR=/home/trinity/.claude-comptes/compte-b claude   # puis /login
-      ```
-      `☠` Tant que ce n'est pas fait, la rotation n'a qu'un compte et ne rote rien.
+- [x] `compte-a` (`compte-a@exemple.fr`) et `compte-b` (`compte-b@exemple.fr`) en place,
+      **vérifiés en parallèle le 2026-07-22** : deux sessions simultanées, identités distinctes lues
+      via `accountInfo()`, quotas lus par compte, aucun fichier d'identifiants écrasé par l'autre.
+      Banc rejouable : `harness/acceptation/multi-comptes-reel.ts`.
 - [ ] À confirmer à la première bascule réelle : que le rafraîchissement du jeton s'écrit bien
       **dans** le dossier isolé (non forçable, ne s'observe qu'à l'expiration).
-- [ ] Purger les deux snapshots périmés `~/.claude/.credentials_account{1,2}.json` une fois les deux
-      dossiers en place — ils ne servent plus qu'à induire en erreur.
+- [ ] Purger les deux snapshots périmés `~/.claude/.credentials_account{1,2}.json` — ils ne servent
+      plus qu'à induire en erreur (garder jusqu'à la première bascule réussie, par prudence).
 
 ### Design v2 — arbitrages à trancher par Chris (source : `design-v2/COMPARAISON.md`)
 - [ ] **Parler à une mission en cours** — trou le plus concret. Chris avait posé l'exigence

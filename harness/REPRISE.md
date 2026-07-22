@@ -235,8 +235,27 @@ Tant que `compte-b` n'est pas authentifié, **la rotation n'a qu'un seul compte*
 `⚠` Non vérifié : que le rafraîchissement automatique du jeton s'écrive bien **dans** le dossier
 isolé. Ça ne s'observe qu'à l'expiration, non forçable. À confirmer à la première bascule réelle.
 
-**Quotas** : `rate_limit_event` (poussé, temps réel) et
-`usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` (tiré, donne le **pourcentage 0-100**
-par fenêtre, ⚠ ALPHA → isoler derrière une couche d'adaptation). `accountInfo()` confirme sous quel
-compte tourne un worker. Ne **pas** s'appuyer sur le message `init` : ses champs de quota sont
-revenus `null` en test.
+**Quotas et identité — vérifiés en réel le 2026-07-22**, deux comptes en parallèle
+(`acceptation/multi-comptes-reel.ts`, banc rejouable) :
+
+- `accountInfo()` → `{ email, organization, subscriptionType, apiProvider }`. **L'e-mail identifie le
+  compte de façon fiable** : `compte-a` = `compte-a@exemple.fr`, `compte-b` = `compte-b@exemple.fr`.
+  C'est la source d'identité pour la rotation — ne pas se fier au nom du dossier.
+- `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` → `utilization` **bien présent**
+  (0-100) par fenêtre `five_hour` / `seven_day`, plus `resets_at`. ⚠ ALPHA → isoler derrière une
+  couche d'adaptation.
+- ☠ **Ces méthodes doivent être appelées PENDANT que la session vit.** Après le message `result`, le
+  transport est fermé et tout appel échoue en `ProcessTransport is not ready for writing`. Piège
+  réellement payé.
+- ☠ **Les fenêtres 5 h ne sont PAS synchronisées entre comptes** (mesuré : reset 15:00 vs 13:29). Un
+  compte saturé n'implique donc rien sur l'autre — c'est ce qui rend la rotation utile. Corollaire
+  pour H-63 : la jauge doit être **par compte**, avec son propre `resets_at`.
+- `limit_dollars` / `used_dollars` / `remaining_dollars` sont **`null`** sur abonnement : la seule
+  mesure exploitable est le **pourcentage**, jamais un montant. Confirme H-58/H-68.
+
+`⚠` **`extra_usage` est ACTIF sur les deux comptes** : au-delà du quota d'abonnement, la
+consommation bascule sur des crédits payants en euros (mesuré : 11,83 € et 10,63 € sur 70 €/mois).
+Un parc autonome peut donc dépenser de l'argent réel **sans passer par l'API**. À arbitrer par Chris
+— voir `TODO.md`.
+
+Ne **pas** s'appuyer sur le message `init` : ses champs de quota sont revenus `null` en test.
