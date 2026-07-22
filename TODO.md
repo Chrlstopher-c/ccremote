@@ -5,14 +5,58 @@
 
 **Contexte complet : `harness/REPRISE.md`.**
 
-### 🔴 DETTE N°1 — à traiter dès le MVP clos (décision de Chris, 2026-07-22)
-- [ ] **Persistance du registre de workers côté PC.** Aujourd'hui `RegistreWorkers` (M-13) vit **en
-      mémoire**. Si le **superviseur PC** redémarre — et pas seulement le Pi — il perd la trace de
-      tous les workers vivants. `☠` **Aucun fencing ne peut y remédier** : M-11 arbitre les epochs
-      entre candidats connus, il ne peut rien pour des process dont plus personne ne sait qu'ils
-      existent. Des workers continueraient d'écrire dans des worktrees que le harness croit libres —
-      exactement la corruption silencieuse que tout le reste sert à empêcher.
-      **Priorité explicite de Chris : avant toutes les autres dettes.**
+## 📋 REGISTRE DES DETTES — état au 2026-07-22, MVP en clôture
+
+*Classées par gravité réelle. Une dette n'est pas une tâche oubliée : c'est un endroit où le code
+passe les tests sans faire le travail. Rien de ce qui suit n'apparaît dans le compte de tests verts.*
+
+### 🔴 DETTE N°1 — corruption silencieuse possible (priorité explicite de Chris)
+- [ ] **Persistance du registre de workers côté PC.** `RegistreWorkers` (M-13) vit **en mémoire**.
+      Si le **superviseur PC** redémarre — pas seulement le Pi — il perd la trace de tous les workers
+      vivants. `☠` **Aucun fencing ne peut y remédier** : M-11 arbitre les epochs entre candidats
+      **connus**, il ne peut rien contre des process dont plus personne ne sait qu'ils existent. Ces
+      process continueraient d'écrire dans des worktrees que le harness croit libres.
+      **C'est la seule dette restante capable de détruire du travail en silence.**
+
+### 🟠 DETTE N°2 — un garde-fou qui pourrait ne pas se déclencher
+- [ ] **Fenêtre de grâce de l'arrêt d'urgence non alignée.** `GRACE_ARRET_URGENCE_MS_DEFAUT = 5000`
+      a été choisi par défaut raisonnable, **sans vérification** contre `05-arbre-B` (hors périmètre
+      de M-52). Trop court : on tue avant la fin d'une écriture. Trop long : le bouton d'urgence
+      n'est plus urgent. À trancher sur mesure, pas au jugé.
+- [ ] **Le drill d'arrêt d'urgence n'est branché sur aucun canari réel.** La machinerie de récurrence
+      et d'alerte de péremption est testée et prête (M-52), mais elle n'exerce rien en production.
+      `☠` Critère (d) de la mission : « test récurrent, pas unique » — aujourd'hui il est **zéro**.
+
+### 🟡 DETTE N°3 — hypothèses non vérifiées sur le comportement réel du SDK
+- [ ] **`pending_permission_requests` absent des types publics** (M-13). Le commentaire de
+      `reinitialize()` affirme que le SDK redélivre les demandes en attente, mais
+      `SDKControlInitializeResponse` ne déclare pas ce champ. Implémenté défensivement sur les deux
+      lectures. **À trancher au premier banc réel de reconnexion** — si la mauvaise lecture est
+      retenue, les permissions demandées pendant une coupure ne réatteignent jamais personne.
+- [ ] **Messages d'usage jamais vus en vrai** (M-51). La classification s'appuie sur les vraies
+      constantes du SDK, mais aucun message de limite réel n'a transité par
+      `SDKInformationalMessage.content` / `SDKNotificationMessage.text` sur un banc.
+- [ ] **Contexte du parent à cinq sous-agents : non mesuré** (H-72.3). Vérifié sur **un** sous-agent
+      (inchangé) ; à cinq, la lecture a échoué à cause du piège `getContextUsage()` dans la boucle.
+      À refaire avec un protocole qui lit le contexte **hors** de la boucle.
+- [ ] **Niveaux d'effort réels d'`opus-4-7` et `sonnet-4-6` inconnus** : ils répondent mais ne
+      figurent pas dans `supportedModels()`. La maquette v3 leur prête les cinq niveaux — hypothèse
+      optimiste, à mesurer avant implémentation. `☠` Un effort invalide est **silencieusement ignoré**
+      par le SDK, jamais rejeté : rien ne signalerait l'erreur.
+
+### 🟢 DETTE N°4 — qualité de code et arbitrages en attente
+- [ ] **`superviseur/superviseur-workers.ts` dépasse 530 lignes** (limite : 500). Conséquence de
+      deux missions parallèles (M-51, M-52) écrivant dans le même fichier. Extraire les méthodes
+      budgets.
+- [ ] **Trois arbitrages M-32 en attente** (voir plus bas) : sens de « commits en attente », plafond
+      de 8 motifs par projet, rejet d'un projet non-git déclarant une branche.
+- [ ] **Trois arbitrages maquette v3** (voir `design-v3/CHANGEMENTS.md`) : Sonnet 4.6 grisé ou masqué,
+      déclencheur d'atterrissage par mission, jauge dans la vue Orchestrateur.
+
+### ✅ Dettes fermées le 2026-07-22
+Ports `InventairePc`/`ReinitialisateurSession` implémentés (M-13) · `deciderRelance()` câblé (M-13) ·
+git réel exercé sur un vrai dépôt + **bug critique de perte de données corrigé** (banc worktree) ·
+fencing par epoch arbitré (M-11) · config multi-comptes réparée par liens symboliques (banc worker).
 
 ### Lot 0 — TERMINÉ (180 tests verts, typecheck propre)
 - [x] **M-01** squelette worker · **M-02** générateur d'entrée · **M-03** registre SQLite
