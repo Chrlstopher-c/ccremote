@@ -761,3 +761,50 @@ contexte — c'est ce qui l'empêche de saturer. Mais l'**opérateur**, lui, veu
 **directement à l'UI**, sans jamais transiter par le contexte de l'orchestrateur. Le chaînage se fait
 via `parent_tool_use_id` / `parent_agent_id` (déjà prévu en M-50). `☠` Ne jamais « faire remonter au
 maître pour qu'il affiche » — ce serait la panne #17.
+
+### H-72.1 · Précision de Chris (2026-07-22) — observabilité ≠ transmission de contexte
+
+Clarification apportée par Chris, qui **renforce** H-45 au lieu de l'assouplir. À lire avant toute
+implémentation de M-50.
+
+**Le cloisonnement est à TROIS niveaux, pas deux :**
+
+1. l'orchestrateur maître gère les **team leaders** — il ne voit pas leur flux brut ;
+2. un team leader gère ses **sous-agents** — il ne voit **pas non plus** leur contexte : chaque
+   sous-agent lui rend un **compte-rendu clair de ce qu'il a fait**, jamais son contexte ;
+3. chaque contexte est **indépendant**. Verbatim : « il est hors de question de faire transiter ce
+   contexte-là dans d'autres agents quelconques, que ce soit un team leader, un sous-agent, ou même
+   l'orchestrateur master ».
+
+**Ce que Chris veut est d'une autre nature : de la VISIBILITÉ, pour lui, dans l'UI.** Aucun octet
+supplémentaire n'entre dans le contexte d'un modèle. L'interface est un **observateur externe**, en
+lecture seule, branché **à la source** — jamais un canal de transmission entre agents.
+
+**Le besoin, dans ses termes** : dans la vue d'une équipe, on voit le feed du lead (ce qu'il a fait,
+ce qu'il a invoqué, ses outils). Mais si **cinq sous-agents travaillent en parallèle, ce feed est
+vide** — les cinq bossent de leur côté et rien ne remonte tant qu'ils n'ont pas fini. L'opérateur est
+alors aveugle au moment précis où il y a le plus d'activité.
+
+⇒ **Les sous-agents actifs doivent être cliquables**, et un clic ouvre une vue montrant **en temps
+réel la ligne de travail de ce sous-agent** : ses messages du début à la fin, ce qu'il fait à
+l'instant, y compris quand le lead lui renvoie un message ou le relance.
+
+**Référence explicite de Chris** : « comme là maintenant — tu as deux sous-agents qui tournent, je
+peux cliquer sur l'un et voir en temps réel ce qu'il est en train de faire. C'est exactement cette
+visibilité, mais dans notre interface. » C'est-à-dire : reproduire ce que Claude Code offre déjà,
+dans l'app.
+
+`☠` **Conséquence d'architecture** : les données d'observation vont de **la source (le PC) vers
+l'UI**, par le canal d'observation (E.2). Elles ne passent **jamais** par le contexte d'un modèle —
+ni celui du lead, ni celui du maître. Reconstruire l'arbre via `parent_tool_use_id` /
+`parent_agent_id`.
+
+`⚠` **Question technique à MESURER avant de concevoir M-50** : `forwardSubagentText` et
+`agentProgressSummaries` (options SDK, interdites sur l'orchestrateur par M-41) font-elles entrer
+l'activité des sous-agents dans **le flux lu par le programme** seulement, ou aussi dans **le contexte
+du modèle parent** ? Les deux sont des choses différentes et la distinction décide de tout :
+- si elles n'affectent que le **flux SDK**, ce sont exactement le bon outil pour alimenter l'UI ;
+- si elles affectent le **contexte du lead**, elles violent la règle ci-dessus et il faut lire les
+  transcripts à la source (JSONL du `CLAUDE_CONFIG_DIR`, ou `SessionStore`).
+
+Ne pas trancher au raisonnement : **c'est un banc réel**.

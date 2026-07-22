@@ -214,6 +214,16 @@ les deux anciens `.credentials_account*.json`).
       sous-agents **cliquables** pour voir leur travail en temps réel.
       `☠` Le flux détaillé va de la source **directement à l'UI** — jamais par le contexte de
       l'orchestrateur (H-45, panne #17). Chaînage par `parent_tool_use_id` / `parent_agent_id`.
+- [ ] **H-72.1 — cloisonnement à TROIS niveaux** (précision de Chris, 2026-07-22). Un sous-agent ne
+      transmet **pas son contexte** à son lead : il lui rend un **compte-rendu**. L'UI est un
+      **observateur externe** en lecture seule — de l'observabilité, pas de la transmission.
+      Besoin concret : quand 5 sous-agents travaillent, le feed du lead est **vide** ; l'opérateur est
+      aveugle au pic d'activité. D'où le clic vers la ligne de travail de chaque sous-agent.
+      `⚠` **À MESURER avant de concevoir M-50** : `forwardSubagentText` / `agentProgressSummaries`
+      alimentent-elles seulement le **flux lu par le programme**, ou aussi le **contexte du modèle
+      parent** ? Si c'est le flux seul ⇒ c'est l'outil idéal pour l'UI. Si c'est le contexte ⇒ elles
+      violent la règle, et il faut lire les transcripts à la source (JSONL / `SessionStore`).
+      Ne pas trancher au raisonnement : banc réel.
 
 ### Features actées, à implémenter — MAIS PAS PRIORITAIRES
 *Décision explicite de Chris (2026-07-22) : « il va évidemment falloir les mettre en place, mais pour
