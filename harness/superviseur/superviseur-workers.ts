@@ -192,19 +192,13 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * can_use_tool ... requests ... and the SDK redelivers them to canUseTool »). Le
    * champ existe bien sur les types de trame internes (`ControlResponse`,
    * `ControlErrorResponse`) mais pas sur le type de retour exposé. Deux lectures
-   * possibles, non tranchées par la seule lecture de `sdk.d.ts` :
-   *   (a) le SDK réinjecte lui-même les demandes dans `canUseTool` sans jamais les
-   *       exposer à l'appelant — la redélivrance est alors DÉJÀ garantie sans
-   *       action de ce module, et `demandesEnAttente` est structurellement vide ;
-   *   (b) l'objet réellement résolu porte le champ à l'exécution malgré un type
-   *       public plus étroit (les deux déclarations `ControlResponse` internes le
-   *       portent). Lecture DÉFENSIVE ci-dessous (`extraireDemandesEnAttente`,
-   *       `unknown` + narrowing) : si le champ est présent au runtime, il est
-   *       exploité ; s'il est absent, aucune exception, liste vide. Ne PAS
-   *       supposer que la redélivrance manuelle via `RedelivranceBusPermissions`
-   *       est le seul mécanisme de secours — (a) reste la lecture la plus
-   *       probable du commentaire SDK. À confirmer sur banc réel (hors périmètre
-   *       de cette mission : interdiction de session Claude Code réelle ici).
+   * `☠` **HYP TRANCHÉE le 2026-07-22 (H-73)** sur le code du SDK : c'est la lecture
+   * (a). Le SDK **consomme** lui-même les demandes en attente pour les **rejouer par
+   * `canUseTool`** ; il ne les remonte jamais par la valeur de retour. Donc
+   * `demandesEnAttente` est **structurellement toujours vide** et ne doit jamais se
+   * lire « aucune demande en attente » : elle ne mesure rien. Ce qui garantit
+   * réellement la redélivrance est la présence de `canUseTool` dans les options du
+   * worker (H-73.1) — sans lui, la demande rejouée est perdue en silence.
    */
   async reinitialiser(sessionId: string): Promise<ResultatReinitialisation> {
     const enregistrement = this.#registre.parSession(sessionId);
@@ -214,6 +208,13 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     }
     const brut = await enregistrement.handle.query.reinitialize();
     const demandesEnAttente = extraireDemandesEnAttente(brut);
+    if (demandesEnAttente.length > 0) {
+      // Contredirait H-73 : le SDK est censé les avoir consommées lui-même.
+      superviseurLogger.warn(
+        { sessionId, demandesEnAttente: demandesEnAttente.length },
+        'reinitialize() a remonté des demandes en attente — contredit H-73, à investiguer',
+      );
+    }
     missionLogger(enregistrement.missionId).info(
       { sessionId, demandesEnAttente: demandesEnAttente.length },
       'reinitialize() appelé (D.2.4)',
