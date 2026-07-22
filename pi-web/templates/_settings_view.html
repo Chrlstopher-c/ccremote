@@ -1,0 +1,99 @@
+    <!-- ============ VIEW: SETTINGS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="settings">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div>
+          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Paramètres</h1>
+          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Configuration de l'agent (préférences stockées sur ce navigateur)</div>
+        </div>
+      </header>
+      <div class="max-w-2xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">PC distant</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-[13px]">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
+              <span style="color: var(--ink-3);">Hôte</span><span id="setHost" class="mono">—</span>
+            </div>
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
+              <span style="color: var(--ink-3);">MAC (Wake-on-LAN)</span><span id="setMac" class="mono">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">Agent IA</h3>
+          <div class="space-y-3.5">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[13px] font-medium" style="color: var(--ink);">Confirmation des actions sensibles</div>
+                <div class="text-[11.5px]" style="color: var(--ink-3);">Demander confirmation avant de tuer une session ou éveiller le PC</div>
+              </div>
+              <div class="switch on" id="setting-confirm"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[13px] font-medium" style="color: var(--ink);">Afficher la réflexion du modèle</div>
+                <div class="text-[11.5px]" style="color: var(--ink-3);">Déplie le raisonnement renvoyé par le modèle</div>
+              </div>
+              <div class="switch" id="setting-think"></div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[13px] font-medium" style="color: var(--ink);">Mode verbeux</div>
+                <div class="text-[11.5px]" style="color: var(--ink-3);">Déplier les paramètres et résultats des tool calls</div>
+              </div>
+              <div class="switch" id="setting-verbose"></div>
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-wider" style="color: var(--ink-3);">Modèle</label>
+              <select id="modelSelect" class="mt-1 w-full rounded-lg px-3 py-2 text-[13px] outline-none" style="background: var(--bg); border: 1px solid var(--line); color: var(--ink);"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Utilisation</h3>
+          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Contexte de la conversation active et quotas de l'API Cerebras.</p>
+
+          <div class="mb-5">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[12px] font-medium" style="color: var(--ink-2);">Contexte de la conversation</span>
+              <span id="ctxUsageLabel" class="text-[11.5px] mono" style="color: var(--ink-3);">—</span>
+            </div>
+            <div class="usage-track"><div id="ctxUsageBar" class="usage-fill" style="width: 0%;"></div></div>
+          </div>
+
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-[12px] font-medium" style="color: var(--ink-2);">Quotas API Cerebras — total combiné</span>
+            <span id="quotaKeyCount" class="text-[10.5px] mono px-1.5 py-0.5 rounded" style="background: var(--bg-2); color: var(--ink-2);"></span>
+          </div>
+          <div id="quotaGrid" class="space-y-2.5"></div>
+          <div class="text-right mt-2 mb-4">
+            <span id="quotaUpdatedAt" class="text-[10.5px]" style="color: var(--ink-3);"></span>
+          </div>
+
+          <div class="text-[12px] font-medium mb-2" style="color: var(--ink-2);">Détail par clé</div>
+          <div id="quotaByKey" class="space-y-2"></div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Compte Claude Code</h3>
+          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Bascule le compte utilisé par Claude Code sur le PC. Les sessions tmux en cours sont redémarrées.</p>
+          <div id="claudeAccounts" class="space-y-2"></div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Harness — démonstration</h3>
+          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Le back-end du harness n'existe pas encore : les vues Orchestrateur/Parc/Escalades/Comptes affichent des données de démonstration (voir <code class="mono">CONTRAT-API-HARNESS.md</code>). Ce bouton simule la seule variable qui compte réellement en production (H-75).</p>
+          <button id="hSimPcToggle" class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium">Simuler une absence de PC</button>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--err-soft); background: var(--card);">
+          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--err);">Zone sensible</h3>
+          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Efface la conversation, l'historique et les préférences stockés localement sur ce navigateur. N'affecte pas le PC distant.</p>
+          <button id="resetBtn" class="btn-danger rounded-lg px-4 py-2 text-[12.5px] font-medium">Réinitialiser ccremote</button>
+        </div>
+      </div>
+    </div>

@@ -104,6 +104,8 @@
   .md th, .md td { border: 1px solid var(--line); padding: 4px 8px; }
   .md th { background: var(--bg-2); font-weight: 500; }
   .md hr { border: none; border-top: 1px solid var(--line); margin: 0.8em 0; }
+
+{% include "_harness_styles.html" %}
 </style>
 </head>
 <body class="min-h-screen">
@@ -159,7 +161,36 @@
       </button>
     </nav>
 
-    <div class="px-3 mt-4 flex-1 overflow-y-auto min-h-0">
+    <!-- ====== HARNESS : orchestrateur + équipes ====== -->
+    <div class="text-[10px] uppercase tracking-wider px-3 pt-4 pb-1" style="color: var(--ink-3);">Harness</div>
+    <nav class="px-3 space-y-0.5">
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="harness-orchestrateur" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Orchestrateur
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="harness-parc" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        Parc <span id="hNavCountParc" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--bg-3); color: var(--ink-3);">0</span>
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="harness-escalades" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        Escalades <span id="hNavCountEsc" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--bg-3); color: var(--ink-3);">0</span>
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="harness-comptes" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Comptes &amp; quotas
+      </button>
+    </nav>
+    <div class="text-[10px] uppercase tracking-wider px-3 pt-3 pb-1" style="color: var(--ink-3);">Équipes actives</div>
+    <div class="team-tree" id="hTeamTree"></div>
+    <div class="mini-gauges" id="hMiniGauges"></div>
+    <div class="px-3 pb-2 flex items-center gap-2">
+      <span id="hLinkDot" class="dot-live" style="width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;"></span>
+      <span id="hLinkText" class="text-[11px]" style="color: var(--ink-2);">PC en ligne</span>
+      <span id="hLinkWire" class="mono text-[9.5px]" style="color: var(--ink-3); margin-left:auto;">lien harness</span>
+    </div>
+
+    <div class="px-3 mt-2 flex-1 overflow-y-auto min-h-0">
       <div class="text-[10px] uppercase tracking-wider px-2 py-1" style="color: var(--ink-3);">Conversations</div>
       <div id="convList" class="space-y-0.5"></div>
     </div>
@@ -298,80 +329,7 @@
       <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 py-6 space-y-3" id="sessionsList"></div>
     </div>
 
-    <!-- ============ VIEW: PC STATUS ============ -->
-    <div class="view flex-1 flex-col overflow-y-auto" data-view="pc">
-      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
-        <div class="flex items-center gap-3 min-w-0">
-          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-          </button>
-          <div class="min-w-0">
-            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du PC</h1>
-            <div id="pcSubHeader" class="text-[11px] mt-1" style="color: var(--ink-3);">—</div>
-          </div>
-        </div>
-        <button id="refreshPc" class="btn-ghost rounded-lg px-3 py-2 text-[12px] flex items-center gap-1.5 shrink-0">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          <span class="hidden sm:inline">Actualiser</span>
-        </button>
-      </header>
-      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">CPU</div>
-            <div class="flex items-end gap-1.5"><span id="pcCpuVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">%</span></div>
-          </div>
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Mémoire</div>
-            <div class="flex items-end gap-1.5"><span id="pcRamVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
-            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcRamBar" class="h-full rounded-full" style="background: var(--accent); width: 0%; transition: width 0.5s;"></div></div>
-          </div>
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Temp. CPU</div>
-            <div class="flex items-end gap-1.5"><span id="pcTempVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">°C</span></div>
-          </div>
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Disque</div>
-            <div class="flex items-end gap-1.5"><span id="pcDiskVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
-            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcDiskBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div></div>
-          </div>
-        </div>
-
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">GPU</h3>
-            <span id="pcGpuTemp" class="text-[11px] mono" style="color: var(--ink-3);">—</span>
-          </div>
-          <div class="grid grid-cols-2 gap-6">
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Utilisation</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuUtil" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">%</span></div>
-            </div>
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Mémoire</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuMem" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">Réseau</h3>
-          </div>
-          <div class="grid grid-cols-2 gap-6">
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Envoi</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="netUp" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
-            </div>
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Réception</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="netDown" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
+{% include "_pcstatus_view.html" %}
     <!-- ============ VIEW: HISTORY ============ -->
     <div class="view flex-1 flex-col overflow-y-auto" data-view="history">
       <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
@@ -391,100 +349,9 @@
       </div>
     </div>
 
-    <!-- ============ VIEW: SETTINGS ============ -->
-    <div class="view flex-1 flex-col overflow-y-auto" data-view="settings">
-      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
-        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-        <div>
-          <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Paramètres</h1>
-          <div class="hidden sm:block text-[11px] mt-1" style="color: var(--ink-3);">Configuration de l'agent (préférences stockées sur ce navigateur)</div>
-        </div>
-      </header>
-      <div class="max-w-2xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">PC distant</h3>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 text-[13px]">
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
-              <span style="color: var(--ink-3);">Hôte</span><span id="setHost" class="mono">—</span>
-            </div>
-            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5 sm:gap-2">
-              <span style="color: var(--ink-3);">MAC (Wake-on-LAN)</span><span id="setMac" class="mono">—</span>
-            </div>
-          </div>
-        </div>
+{% include "_settings_view.html" %}
 
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <h3 class="serif text-[15px] font-medium mb-4" style="color: var(--ink);">Agent IA</h3>
-          <div class="space-y-3.5">
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-[13px] font-medium" style="color: var(--ink);">Confirmation des actions sensibles</div>
-                <div class="text-[11.5px]" style="color: var(--ink-3);">Demander confirmation avant de tuer une session ou éveiller le PC</div>
-              </div>
-              <div class="switch on" id="setting-confirm"></div>
-            </div>
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-[13px] font-medium" style="color: var(--ink);">Afficher la réflexion du modèle</div>
-                <div class="text-[11.5px]" style="color: var(--ink-3);">Déplie le raisonnement renvoyé par le modèle</div>
-              </div>
-              <div class="switch" id="setting-think"></div>
-            </div>
-            <div class="flex items-center justify-between">
-              <div>
-                <div class="text-[13px] font-medium" style="color: var(--ink);">Mode verbeux</div>
-                <div class="text-[11.5px]" style="color: var(--ink-3);">Déplier les paramètres et résultats des tool calls</div>
-              </div>
-              <div class="switch" id="setting-verbose"></div>
-            </div>
-            <div>
-              <label class="text-[11px] uppercase tracking-wider" style="color: var(--ink-3);">Modèle</label>
-              <select id="modelSelect" class="mt-1 w-full rounded-lg px-3 py-2 text-[13px] outline-none" style="background: var(--bg); border: 1px solid var(--line); color: var(--ink);"></select>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Utilisation</h3>
-          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Contexte de la conversation active et quotas de l'API Cerebras.</p>
-
-          <div class="mb-5">
-            <div class="flex items-center justify-between mb-1.5">
-              <span class="text-[12px] font-medium" style="color: var(--ink-2);">Contexte de la conversation</span>
-              <span id="ctxUsageLabel" class="text-[11.5px] mono" style="color: var(--ink-3);">—</span>
-            </div>
-            <div class="usage-track"><div id="ctxUsageBar" class="usage-fill" style="width: 0%;"></div></div>
-          </div>
-
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-[12px] font-medium" style="color: var(--ink-2);">Quotas API Cerebras — total combiné</span>
-            <span id="quotaKeyCount" class="text-[10.5px] mono px-1.5 py-0.5 rounded" style="background: var(--bg-2); color: var(--ink-2);"></span>
-          </div>
-          <div id="quotaGrid" class="space-y-2.5"></div>
-          <div class="text-right mt-2 mb-4">
-            <span id="quotaUpdatedAt" class="text-[10.5px]" style="color: var(--ink-3);"></span>
-          </div>
-
-          <div class="text-[12px] font-medium mb-2" style="color: var(--ink-2);">Détail par clé</div>
-          <div id="quotaByKey" class="space-y-2"></div>
-        </div>
-
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--ink);">Compte Claude Code</h3>
-          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Bascule le compte utilisé par Claude Code sur le PC. Les sessions tmux en cours sont redémarrées.</p>
-          <div id="claudeAccounts" class="space-y-2"></div>
-        </div>
-
-        <div class="rounded-xl border p-5" style="border-color: var(--err-soft); background: var(--card);">
-          <h3 class="serif text-[15px] font-medium mb-1" style="color: var(--err);">Zone sensible</h3>
-          <p class="text-[12px] mb-4" style="color: var(--ink-3);">Efface la conversation, l'historique et les préférences stockés localement sur ce navigateur. N'affecte pas le PC distant.</p>
-          <button id="resetBtn" class="btn-danger rounded-lg px-4 py-2 text-[12.5px] font-medium">Réinitialiser ccremote</button>
-        </div>
-      </div>
-    </div>
-
+{% include "_harness_views.html" %}
   </main>
 
   <!-- ====== RIGHT PANEL ====== -->
@@ -572,6 +439,7 @@
   </div>
 </div>
 
+{% include "_harness_modals.html" %}
 <!-- Toast container -->
 <div id="toasts" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
 
@@ -582,5 +450,17 @@
 <script src="/static/pcview.js"></script>
 <script src="/static/usage.js"></script>
 <script src="/static/settings.js"></script>
+
+<!-- ====== HARNESS (orchestrateur + équipes) — voir CONTRAT-API-HARNESS.md ====== -->
+<script src="/static/harness-mock-data.js"></script>
+<script src="/static/harness-api.js"></script>
+<script src="/static/harness-state.js"></script>
+<script src="/static/harness-parc.js"></script>
+<script src="/static/harness-mission.js"></script>
+<script src="/static/harness-agent.js"></script>
+<script src="/static/harness-escalades.js"></script>
+<script src="/static/harness-comptes.js"></script>
+<script src="/static/harness-orchestrateur.js"></script>
+<script src="/static/harness-safety.js"></script>
 </body>
 </html>

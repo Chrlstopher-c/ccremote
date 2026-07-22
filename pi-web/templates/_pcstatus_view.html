@@ -1,0 +1,74 @@
+    <!-- ============ VIEW: PC STATUS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="pc">
+      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5 shrink-0" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du PC</h1>
+            <div id="pcSubHeader" class="text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+          </div>
+        </div>
+        <button id="refreshPc" class="btn-ghost rounded-lg px-3 py-2 text-[12px] flex items-center gap-1.5 shrink-0">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          <span class="hidden sm:inline">Actualiser</span>
+        </button>
+      </header>
+      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">CPU</div>
+            <div class="flex items-end gap-1.5"><span id="pcCpuVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">%</span></div>
+          </div>
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Mémoire</div>
+            <div class="flex items-end gap-1.5"><span id="pcRamVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
+            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcRamBar" class="h-full rounded-full" style="background: var(--accent); width: 0%; transition: width 0.5s;"></div></div>
+          </div>
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Temp. CPU</div>
+            <div class="flex items-end gap-1.5"><span id="pcTempVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">°C</span></div>
+          </div>
+          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Disque</div>
+            <div class="flex items-end gap-1.5"><span id="pcDiskVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
+            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcDiskBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div></div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">GPU</h3>
+            <span id="pcGpuTemp" class="text-[11px] mono" style="color: var(--ink-3);">—</span>
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Utilisation</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuUtil" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">%</span></div>
+            </div>
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Mémoire</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuMem" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">Réseau</h3>
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Envoi</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="netUp" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
+            </div>
+            <div>
+              <div class="text-[11px]" style="color: var(--ink-3);">Réception</div>
+              <div class="flex items-baseline gap-1.5 mt-1"><span id="netDown" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+

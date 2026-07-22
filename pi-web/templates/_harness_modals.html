@@ -1,0 +1,94 @@
+<!-- ====== MODALE HARNESS : mandat (H-61 — propose, n'exécute rien) ====== -->
+<div id="modalHMandat" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="modal-in rounded-2xl border w-full max-w-md mx-4 overflow-hidden" style="border-color: var(--line); background: var(--card); max-height: 90vh; overflow-y: auto;">
+    <div class="px-6 pt-5 pb-4 border-b" style="border-color: var(--line);">
+      <h3 class="serif text-[17px] font-medium" style="color: var(--ink);">Composer un mandat</h3>
+      <p class="text-[11.5px] mt-1" style="color: var(--ink-3);">L'orchestrateur propose — la création de l'équipe attend ton autorisation explicite (H-61).</p>
+    </div>
+    <div class="px-6 py-5">
+      <div class="field">
+        <label>Projet</label>
+        <select id="hFProjet">
+          <option value="stockiop-ops">stockiop-ops</option>
+          <option value="homelab-vm-manager">homelab-vm-manager</option>
+          <option value="lattice">lattice</option>
+          <option value="aegis">aegis</option>
+          <option value="nullnode">nullnode</option>
+          <option value="design-lab">design-lab</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>But</label>
+        <div class="input-wrap rounded-lg border px-3 py-2" style="border-color: var(--line-2);"><textarea id="hFBut" rows="2" class="w-full bg-transparent text-[13px] outline-none resize-none" placeholder="Ce que l'équipe doit accomplir."></textarea></div>
+      </div>
+      <div class="field" id="hFCritereField">
+        <label>Critère d'arrêt <span style="font-weight:400;color:var(--ink-3);">— doit être testable</span></label>
+        <div class="input-wrap rounded-lg border px-3 py-2" style="border-color: var(--line-2);"><textarea id="hFCritere" rows="2" class="w-full bg-transparent text-[13px] outline-none resize-none" placeholder="Ex. : un export CSV téléchargé contient les mêmes totaux que la vue analytique."></textarea></div>
+        <div class="field-error" id="hFCritereError"></div>
+      </div>
+      <div class="field">
+        <label>Périmètre</label>
+        <div class="input-wrap rounded-lg border px-3 py-2" style="border-color: var(--line-2);"><textarea id="hFPerimetre" rows="1" class="w-full bg-transparent text-[13px] outline-none resize-none" placeholder="Fichiers/dossiers concernés, ce qui est hors périmètre."></textarea></div>
+      </div>
+      <div class="field">
+        <label>Budget prévisionnel <span style="font-weight:400;color:var(--ink-3);">— indicatif, pas un plafond (H-68)</span></label>
+        <input type="number" id="hFBudget" value="12" min="1" step="1">
+      </div>
+    </div>
+    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
+      <button id="hBtnSubmitMandate" class="btn-accent rounded-lg px-4 py-2 text-[12.5px] font-medium">Proposer à l'orchestrateur</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODALE HARNESS : pause globale (H-57) ====== -->
+<div id="modalHPause" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden" style="border-color: var(--line); background: var(--card);">
+    <div class="px-6 pt-5 pb-4">
+      <h3 id="hPauseTitle" class="serif text-[16px] font-medium mb-2" style="color: var(--ink);">Mettre tout le parc en pause</h3>
+      <p id="hPauseDesc" class="text-[12.5px] leading-relaxed" style="color: var(--ink-2);"></p>
+      <div class="mt-3 p-3 rounded-lg text-[11.5px] leading-relaxed" style="background: var(--warn-soft); color: #8A6A12;">
+        <strong>Ce que la pause ne fait pas</strong> — les processus lancés en arrière-plan par les agents (serveurs de dev, builds, watchers) continuent de tourner. Les arrêter relève du superviseur, pas de ce bouton.
+      </div>
+    </div>
+    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
+      <button id="hBtnConfirmPause" class="btn-primary rounded-lg px-4 py-2 text-[12.5px] font-medium">Mettre en pause</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODALE HARNESS : arrêt d'urgence (H-57 — geste armé, pas un clic) ====== -->
+<div id="modalHStop" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden" style="border-color: var(--err); background: var(--card);">
+    <div class="px-6 pt-5 pb-4">
+      <h3 class="serif text-[16px] font-medium mb-2" style="color: var(--err);">Arrêt d'urgence</h3>
+      <p id="hStopDesc" class="text-[12.5px] leading-relaxed" style="color: var(--ink-2);">Pause globale, puis fermeture des sessions actives. Le contexte est préservé sur disque mais devra être rechargé.</p>
+      <div class="text-[11.5px] mt-2" style="color: var(--ink-3);">Aucun travail non commité n'est détruit : les worktrees restent intacts.</div>
+      <div class="arm-track" id="hArmTrack">
+        <div class="arm-fill" id="hArmFill"></div>
+        <div class="arm-label" id="hArmLabel">Maintenir 1,5 s pour armer</div>
+      </div>
+    </div>
+    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ====== MODALE HARNESS : refus d'escalade (motif réinjecté à l'agent) ====== -->
+<div id="modalHDeny" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
+  <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden" style="border-color: var(--line); background: var(--card);">
+    <div class="px-6 pt-5 pb-4">
+      <h3 class="serif text-[16px] font-medium mb-2" style="color: var(--ink);">Refuser la demande</h3>
+      <p class="text-[12.5px] mb-3" style="color: var(--ink-2);">Le motif est réinjecté à l'agent : c'est ce qui lui permet de repartir sur une autre voie plutôt que de rester bloqué.</p>
+      <div class="input-wrap rounded-lg border px-3 py-2" style="border-color: var(--line-2);"><textarea id="hDenyReason" rows="3" class="w-full bg-transparent text-[13px] outline-none resize-none" placeholder="Passe par l'instance de recette, jamais sur la base du Pi."></textarea></div>
+    </div>
+    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
+      <button id="hBtnConfirmDeny" class="btn-primary rounded-lg px-4 py-2 text-[12.5px] font-medium">Refuser</button>
+    </div>
+  </div>
+</div>
+

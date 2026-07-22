@@ -45,8 +45,18 @@ function switchView(view) {
   if (view === 'pc') renderPcView();
   if (view === 'history') renderHistory();
   if (view === 'settings') { renderClaudeAccounts(); refreshQuotaUsage(); refreshContextUsage(); }
+  // ---- harness (orchestrateur + équipes) — voir static/harness-*.js ----
+  if (view === 'harness-parc') hRenderParc();
+  if (view === 'harness-escalades') hRenderEscalades();
+  if (view === 'harness-comptes') hRenderComptes();
+  if (view === 'harness-orchestrateur') { hRenderGauges(); hRenderModelSelector(); }
+  const active = document.querySelector('.view.active');
+  if (active) active.scrollTop = 0;
   closeSidebar();
 }
+
+// Router unique réutilisé par tout le harness — pas de logique de navigation dupliquée.
+function hGoto(view) { switchView(view); }
 
 // ============ MOBILE SIDEBAR ============
 function openSidebar() {

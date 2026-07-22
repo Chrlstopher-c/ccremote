@@ -1,0 +1,140 @@
+    <!-- ============ VIEW: HARNESS — PARC ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-parc">
+      <header class="flex items-center justify-between gap-2 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <div class="flex items-center gap-3 min-w-0">
+          <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5" aria-label="Menu">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div class="min-w-0">
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">Parc</h1>
+            <div class="text-[11px] mt-1" id="hParcSub" style="color: var(--ink-3);">— missions · 1 mission active par projet (H-56)</div>
+          </div>
+        </div>
+        <button id="hBtnNewMission" class="btn-accent rounded-lg px-2.5 lg:px-3.5 py-2 text-[12.5px] font-medium flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="hidden sm:inline">Nouvelle mission</span>
+        </button>
+      </header>
+      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 pt-4">
+        <div class="quota-strip" id="hQuotaStripParc" onclick="hGoto('harness-comptes')"></div>
+      </div>
+      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 pb-6" id="hParcBody"></div>
+      <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 harness-safety-bar"></div>
+    </div>
+
+    <!-- ============ VIEW: HARNESS — DÉTAIL MISSION ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-mission">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="p-1.5 -ml-1.5 rounded-md hover:bg-black/5" data-view="harness-parc">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="min-w-0 flex-1">
+          <h1 id="hMissionTitle" class="serif text-[17px] font-medium leading-none" style="color: var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</h1>
+          <div id="hMissionSub" class="mono text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+        </div>
+        <span id="hMissionBadge" class="badge">—</span>
+      </header>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6" id="hMissionBody"></div>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 harness-safety-bar"></div>
+    </div>
+
+    <!-- ============ VIEW: HARNESS — SOUS-AGENT (H-72.3) ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-agent">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="p-1.5 -ml-1.5 rounded-md hover:bg-black/5" onclick="hBackFromAgent()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <div class="min-w-0 flex-1">
+          <h1 id="hAgentTitle" class="serif text-[17px] font-medium leading-none" style="color: var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</h1>
+          <div id="hAgentSub" class="mono text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+        </div>
+        <span id="hAgentBadge" class="badge">—</span>
+      </header>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6" id="hAgentBody"></div>
+    </div>
+
+    <!-- ============ VIEW: HARNESS — ESCALADES ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-escalades">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] font-medium leading-none" style="color: var(--ink);">Escalades</h1>
+          <div id="hEscSub" class="text-[11px] mt-1" style="color: var(--ink-3);">— demandes en attente · les demandes n'expirent jamais</div>
+        </div>
+      </header>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6">
+        <div class="card" style="padding:11px 13px;margin-bottom:14px;background:var(--bg-2);">
+          <div style="font-size:11.5px;line-height:1.5;color:var(--ink-2);">
+            Le lead arbitre seul tout ce qu'il peut (H-40). Ce qui arrive ici a franchi le <strong>plancher de déni</strong>.
+            Le reste — y compris les autorisations résolues seules par le lead — se lit dans le fil de chaque mission (H-64).
+          </div>
+        </div>
+        <div id="hEscList"></div>
+      </div>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 harness-safety-bar"></div>
+    </div>
+
+    <!-- ============ VIEW: HARNESS — COMPTES & QUOTAS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-comptes">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] font-medium leading-none" style="color: var(--ink);">Comptes &amp; quotas</h1>
+          <div class="text-[11px] mt-1" style="color: var(--ink-3);">2 comptes Claude Code isolés par CLAUDE_CONFIG_DIR · fenêtres non synchronisées</div>
+        </div>
+      </header>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6" id="hComptesBody"></div>
+    </div>
+
+    <!-- ============ VIEW: HARNESS — ORCHESTRATEUR ============ -->
+    <div class="view flex-1 flex-col min-h-0" data-view="harness-orchestrateur">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b" style="border-color: var(--line);">
+        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] font-medium leading-none" style="color: var(--ink);">Orchestrateur</h1>
+          <div class="text-[11px] mt-1" style="color: var(--ink-3);">Session Agent SDK · MCP de contrôle du parc</div>
+        </div>
+      </header>
+      <div class="px-4 lg:px-7 pt-3" id="hLinkBannerWrap">
+        <div class="harness-linkbanner" id="hLinkBanner">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 19.36"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+          <span>PC absent — H-75 : un état normal, pas une erreur. Les jauges ci-dessous datent du dernier contact.</span>
+        </div>
+        <div class="gauge-strip" id="hGaugeStrip"></div>
+      </div>
+      <div class="flex-1 overflow-y-auto px-4 lg:px-7" id="hChatScroll">
+        <div class="py-4 flex flex-col gap-4" id="hChatBody"></div>
+      </div>
+      <div class="border-t px-4 lg:px-7 py-3" style="border-color: var(--line);">
+        <div class="model-row">
+          <div class="msel"><select id="hSelModel"></select></div>
+          <div class="msel"><select id="hSelEffort"></select></div>
+        </div>
+        <div class="model-row" style="align-items:center;">
+          <label class="msel" style="display:flex;gap:5px;align-items:center;font-size:10.5px;color:var(--ink-3);flex:0;white-space:nowrap;">
+            <input type="checkbox" id="hChkFastMode" style="margin:0;"> mode rapide
+          </label>
+          <label class="msel" style="display:flex;gap:5px;align-items:center;font-size:10.5px;color:var(--ink-3);flex:0;white-space:nowrap;">
+            <input type="checkbox" id="hChkUltracode" style="margin:0;"> ultracode
+          </label>
+        </div>
+        <div class="model-hint" id="hModelHint"></div>
+        <div class="input-wrap rounded-2xl border px-4 py-3" style="border-color: var(--line-2); background: var(--card);">
+          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe…" class="w-full bg-transparent text-[14px] leading-relaxed resize-none outline-none" style="color: var(--ink);"></textarea>
+          <div class="flex items-center justify-end mt-2">
+            <button id="hBtnOrchSend" class="btn-primary rounded-lg p-2">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--ink-3);text-align:center;margin-top:7px;">Les boutons de sûreté ne passent pas par l'orchestrateur (H-57).</div>
+      </div>
+      <div class="px-4 lg:px-7 harness-safety-bar"></div>
+    </div>
+
