@@ -273,6 +273,28 @@ pilotage) fonctionne sans elle : les coupler ferait tomber le produit entier sur
 ce qui évite un aller-retour par un service externe. Conséquence à connaître — **le pilotage hors du
 réseau local n'est pas prouvé**, la voie tunnel n'a jamais été exercée.
 
+### ☠ CE QUI EST ENCORE DE LA DÉMONSTRATION À L'ÉCRAN (2026-07-23)
+
+Question posée par Chris, réponse mesurée dans `pi-web/static/harness-api.js` :
+
+| Écran | Réel ou démo |
+|---|---|
+| Parc, escalades, comptes/quotas | **RÉEL** (registre du control plane) |
+| Écritures : instruction, pause, reprise, fin, verdict d'escalade | **RÉEL** (jusqu'au superviseur) |
+| **Conversation orchestrateur** (message + réponse) | **DÉMO** |
+| **Jauges de l'orchestrateur** : « contexte 23 % », « fin de fenêtre 17:00 », « 13,25 $ » | **DÉMO** |
+| Vues Mission / Agent : `subagents`, `feed`, `inspection` | **DÉMO** (vivent sur le PC) |
+| `getModels` (liste des modèles et niveaux d'effort) | **DÉMO** |
+
+La réponse « Reçu (claude-sonnet-5 · medium). Si ça implique de dispatcher une équipe… » est une
+**chaîne codée en dur** dans `sendOrchestratorMessage`. Le fil disparaît au rafraîchissement parce
+qu'il ne vit qu'en mémoire du navigateur : ce n'est pas un bug à corriger, c'est la démo qui se
+comporte comme une démo.
+
+`⚠` **Les chiffres de quota affichés dans la vue Orchestrateur sont donc faux.** Les VRAIS quotas
+sont ceux de la vue Comptes, servis par le registre — à 0 % tant qu'aucune session ne les a
+mesurés (l'API d'usage du SDK exige une session vivante).
+
 ### ACTION SUIVANTE
 
 1. **Le chemin d'ÉCRITURE** — instruction, pause/reprise, arrêt d'urgence, résolution d'escalade.

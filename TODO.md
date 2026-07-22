@@ -16,6 +16,11 @@
    `⚠` Reste : `arret_urgence` n'a pas de méthode sur `ClientSuperviseurPc` ⇒ la route répond 501.
 4. **Remonter `subagents` / `feed` / `inspection` du PC vers le Pi** — les vues Mission et Agent
    restent en démo faute de source. C'est le prochain vrai manque.
+4ter. **Vue Orchestrateur entièrement en démo** — conversation ET jauges. `☠` Les chiffres affichés
+   (« contexte 23 % », « fin de fenêtre 17:00 », « 13,25 $ ») sont codés en dur : ils MENTENT.
+   Les vrais quotas sont dans la vue Comptes. À câbler avec la session orchestrateur (4bis), ou à
+   marquer visiblement « démonstration » à l'écran en attendant — un chiffre faux non signalé est
+   pire qu'un chiffre absent.
 4bis. **Session orchestrateur sur le Pi** — code prêt, activée par
    `CCREMOTE_PI_ORCHESTRATEUR=1`. Bloquée sur une action humaine : les credentials Claude du Pi
    datent du 2 juillet et les refresh tokens tournent, il faut un `/login` sur la machine.
