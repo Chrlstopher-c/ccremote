@@ -49,9 +49,21 @@
       Le `PONG` est généré par la **couche transport**, jamais par le processus Claude Code : c'est
       ce qui rend « agent lent » et « tunnel mort » structurellement discernables. Seuil 3 tics de
       silence total (~45 s), reprise par le même chemin que les coupures signalées.
-- [ ] M-22 arbitrage délégué + trace d'audit (c'est cette trace qui valide ou invalide H-40).
-      `☠` **Brancher l'audit sur `PreToolUse`, jamais sur `canUseTool`** — mesuré le 2026-07-22 :
-      en `auto`, `canUseTool` n'est pas appelé, la trace serait vide en silence.
+- [x] **M-22** arbitrage délégué + trace d'audit — livré 2026-07-22,
+      `harness/control-plane/audit-permissions/`. Audit branché sur `PreToolUse` (exhaustivité
+      vérifiée : 100 % des tentatives vues en `auto`), **jamais** sur `canUseTool`.
+- [x] **M-22 — validé et corrigé par banc réel** (`harness/acceptation/audit-permissions-reel.ts`).
+      Le banc a infirmé une hypothèse : `SDKPermissionDeniedMessage` **n'est jamais émis** sur un
+      refus par règle scopée en `auto`, et le hook `PermissionDenied` ne se déclenche pas non plus.
+      Le collecteur comptait alors `refusees: 0` alors qu'un refus avait eu lieu. Corrigé : le
+      signal réel est le **`tool_result` avec `is_error: true`**, apparié par `tool_use_id`.
+      Après correctif : `{tentativesVues:3, autorisees:2, refusees:1, nonResolues:0}`.
+
+`⚠` **Limite de ce que H-40 peut garantir**, à retenir avant de s'appuyer dessus : sur le chemin
+réel (refus par règle scopée), la trace affirme **quoi** a été refusé et **avec quel texte**, mais
+**pas par quel mécanisme** (`auteur: 'inconnu'`). Les autorisations, elles, ne sont jamais affirmées
+par le SDK — seulement inférées (`classifieur_probable`). Une tentative sans `PostToolUse` ni
+`tool_result` de refus reste `indetermine` et n'est **jamais** requalifiée en refus.
 - [x] **M-31** adaptateur `SessionStore` — livré 2026-07-22, `harness/control-plane/session-store/`.
       Miroir best-effort, mais la divergence est **détectable** : table `session_defaillance`
       indépendante du flux SDK (un consommateur qui n'écoute pas `mirror_error` le raterait sinon)
@@ -61,7 +73,16 @@
       **cwd sanitisé** (`-mnt-projects-ccremote-harness`), 10 entrées relues, `divergent: false`,
       aucun `mirror_error`. `⚠` Seul `append` a été observé sur une session courte : `load`,
       `delete`, `listSubkeys` restent non exercés par le SDK réel (à revoir sur une reprise).
-- [ ] M-34 relance et classification des `TerminalReason`
+- [x] **M-34** relance et classification — livré 2026-07-22, `harness/relance/`. Mapping pris dans
+      `05-arbre-B § B.3.2` (pas dans `01`, qui n'en donne qu'une énumération partielle) et croisé
+      avec `sdk.d.ts`. Seul le groupe `transitoire` est relançable ; structurel ⇒ `echec_definitif`
+      **immédiat, sans consommer de tentative** ; `budget_exhausted` jamais relancé.
+      `⚠` **Trouvaille : la table de la spec ne couvre que 16 des 19 `TerminalReason` du SDK.**
+      `image_error`, `tool_deferred`, `tool_deferred_unavailable` sont classées `non_couverte` —
+      journalisées telles quelles, jamais relancées, toujours remontées. Aucun groupe inventé.
+- [ ] **M-34 — pas encore branché** : `deciderRelance()` est écrit et testé en isolation, mais
+      n'est câblé sur aucun `SDKResultMessage.terminal_reason` réel. La relance ne fonctionne donc
+      **pas** de bout en bout — le câblage revient à M-30 (réconciliation / cycle de vie).
 
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
 

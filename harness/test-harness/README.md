@@ -87,6 +87,8 @@ Injecteurs hors grille numérotée, couverts également :
 | 19 | `env` sans `...process.env` | `workers/options-composition.test.ts` |
 | 20 | Plancher validé sur l'alias | `workers/model-floor.test.ts` |
 | 30 | États SDK et harness fusionnés | `control-plane/registre/registre.test.ts` |
+| 12 | Échec **structurel** relancé automatiquement | `relance/politique-relance.test.ts` |
+| 13 | `budget_exhausted` relancé automatiquement | `relance/politique-relance.test.ts` |
 | 37 | `TeamCreate` / `TeamDelete` / `team_name` supprimés | `workers/removed-apis.test.ts` |
 | 38 | `unstable_v2_*` supprimée | `workers/removed-apis.test.ts` |
 
@@ -101,7 +103,6 @@ sous test, pas le harness.
 | 3 | `reinitialize()` absent du rattachement | La séquence de rattachement elle-même (faits `reinitialize_appele`, `permission_orpheline` prévus) | M-30 |
 | 10 | Association worktree enregistrée après le spawn | Le modèle projets ↔ worktree ↔ équipe | M-32 |
 | 11 | Orphelin ignoré à la réconciliation | La réconciliation (faits `orphelin_adopte` / `orphelin_ignore` prévus) | M-30 |
-| 12 / 13 | Échec structurel et `budget_exhausted` relancés | La politique de relance et sa taxonomie d'échecs | M-34, M-51 |
 | 15 | `CLAUDE_CODE_RETRY_WATCHDOG=1` sans budget | Le composant budgets | M-51 |
 | 16 | Avertissement d'usage traité comme erreur | Le classifieur de préfixes d'usage (E.4.3) | M-51 |
 | 17 | Flux brut routé vers l'orchestrateur | Le routage A ↔ E ; testable ensuite via `DiffusionFactice` | M-41/42 |
@@ -127,7 +128,7 @@ de l'outillage statique ou d'une nuit de fonctionnement réel. **C'est le vrai r
 | 35 | Validation court-circuitée pour un projet auto-créé | Panne de process : c'est l'absence d'appel au validateur qui est le défaut. Détectable par revue ou lint, pas par injection. |
 | 36 | Intégration déclenchée avec une mission encore active | Dépend de l'ordonnancement réel des missions ; le harness ne modélise pas l'ordonnanceur. |
 
-**Résumé** : 8 pannes injectables ici, 7 couvertes ailleurs, 14 en attente de leur composant,
+**Résumé** : 8 pannes injectables ici, 9 couvertes ailleurs, 12 en attente de leur composant,
 9 structurellement hors de portée. Les 9 de la catégorie C sont celles qui atteindront la
 production sans qu'aucun test ne les arrête.
 

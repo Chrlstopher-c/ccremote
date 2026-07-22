@@ -44,7 +44,14 @@ export type TypeFait =
   | 'lot_abandonne'
   | 'mirror_error'
   | 'suppression_no_op'
-  | 'subkeys_absentes';
+  | 'subkeys_absentes'
+  // relance et classification (M-34, B.3.2/B.3.3)
+  | 'relance_decidee'
+  | 'relance_refusee_borne'
+  | 'relance_refusee_structurel'
+  | 'relance_refusee_quota'
+  | 'raison_terminaison_non_couverte'
+  | 'plafond_relance_atteint';
 
 export interface Fait {
   readonly a: number;
