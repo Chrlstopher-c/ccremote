@@ -1,0 +1,2187 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ccremote v3 — parc de missions</title>
+<style>
+/* ================================================================
+   TOKENS — repris tels quels de la v2 (DA validée, ne pas toucher)
+   ================================================================ */
+:root {
+  --bg: #FAF9F5; --bg-2: #F0EEE6; --bg-3: #E9E6DB;
+  --card: #FFFFFF; --ink: #1F1E1D; --ink-2: #4A4845; --ink-3: #86827B;
+  --line: #E5E1D8; --line-2: #D8D3C6;
+  --accent: #D97757; --accent-2: #C15F3C; --accent-soft: #F4E4DC;
+  --ok: #5E8C61; --ok-soft: #E3EDE3;
+  --warn: #C99A2E; --warn-soft: #F5EACF;
+  --err: #B5524A; --err-soft: #E8C9C6;
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --serif: 'Source Serif 4', 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+* { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; }
+body { min-height: 100dvh; overscroll-behavior-y: none; }
+.app-shell { height: 100dvh; display: flex; overflow: hidden; position: relative; }
+.serif { font-family: var(--serif); }
+.mono { font-family: var(--mono); }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: none; padding: 0; }
+button:disabled { cursor: not-allowed; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
+
+/* ================================================================
+   PRIMITIVES
+   ================================================================ */
+.btn-primary { background: var(--ink); color: var(--bg); transition: all .2s ease; }
+.btn-primary:hover { background: #2C2A28; }
+.btn-accent { background: var(--accent); color: #fff; transition: all .2s ease; }
+.btn-accent:hover { background: var(--accent-2); box-shadow: 0 4px 12px rgba(217,119,87,.25); }
+.btn-ghost { background: transparent; color: var(--ink-2); border: 1px solid var(--line); transition: all .2s ease; }
+.btn-ghost:hover { background: var(--card); color: var(--ink); border-color: var(--line-2); }
+.btn { border-radius: 10px; padding: 8px 14px; font-size: 12.5px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.btn-sm { border-radius: 9px; padding: 6px 11px; font-size: 11.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.btn[disabled], .btn-sm[disabled] { opacity: .4; filter: grayscale(.4); pointer-events: none; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 9999px; font-size: 10.5px; font-weight: 500; white-space: nowrap; }
+.usage-track { height: 6px; border-radius: 999px; background: var(--bg-2); overflow: hidden; }
+.usage-fill { height: 100%; border-radius: 999px; background: var(--ok); transition: width .3s ease, background .3s ease; }
+.divider-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-3); display: inline-block; }
+.switch { position: relative; width: 36px; height: 20px; border-radius: 9999px; background: var(--line-2); cursor: pointer; transition: background .2s; flex: 0 0 auto; }
+.switch::after { content:''; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+.switch.on { background: var(--accent); }
+.switch.on::after { transform: translateX(16px); }
+.lift { transition: all .25s ease; }
+.lift:active { transform: scale(.995); }
+@keyframes blink-soft { 0%,100%{opacity:1} 50%{opacity:.35} }
+.dot-live { animation: blink-soft 2s infinite; }
+@keyframes ripple { 0%{transform:scale(.8);opacity:.75} 100%{transform:scale(2.6);opacity:0} }
+.ripple { animation: ripple 1.6s ease-out infinite; }
+@keyframes msgIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.msg-in { animation: msgIn .35s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes spin { to { transform: rotate(360deg) } }
+.spin { animation: spin 1.2s linear infinite; }
+.modal-backdrop { backdrop-filter: blur(4px); background: rgba(31,30,29,.28); }
+@keyframes modalIn { from{opacity:0;transform:scale(.96) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+.modal-in { animation: modalIn .3s cubic-bezier(.2,.8,.2,1) both; }
+.skeleton { background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 37%, var(--bg-2) 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+@keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:0 0} }
+.empty-state { text-align: center; padding: 34px 16px; color: var(--ink-3); }
+.empty-state svg { margin-bottom: 10px; opacity: .5; }
+.empty-state .t { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: 4px; }
+.empty-state .s { font-size: 11.5px; line-height: 1.5; max-width: 320px; margin: 0 auto; }
+.error-state { padding: 11px 13px; border-radius: 10px; background: var(--err-soft); color: var(--err); font-size: 11.5px; line-height: 1.5; display: flex; gap: 8px; align-items: flex-start; }
+.error-state svg { flex: 0 0 auto; margin-top: 1px; }
+
+/* ================================================================
+   SIDEBAR
+   ================================================================ */
+#sidebar {
+  width: 264px; flex: 0 0 auto; display: flex; flex-direction: column;
+  border-right: 1px solid var(--line); background: var(--bg-2); transition: transform .2s ease;
+  overflow-y: auto;
+}
+@media (max-width: 1023px) {
+  #sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); width: 82vw; max-width: 300px; }
+  #sidebar.open { transform: translateX(0); }
+}
+#sidebarOverlay { position: fixed; inset: 0; z-index: 30; background: rgba(31,30,29,.35); display: none; }
+#sidebarOverlay.show { display: block; }
+.brand { padding: 18px 20px 14px; display: flex; align-items: center; justify-content: space-between; flex: 0 0 auto; }
+.brand-mark { width: 28px; height: 28px; border-radius: 7px; background: var(--ink); display: flex; align-items: center; justify-content: center; }
+.nav { padding: 0 12px; display: flex; flex-direction: column; gap: 2px; flex: 0 0 auto; }
+.nav-item { position: relative; width: 100%; text-align: left; padding: 7px 10px; border-radius: 8px; font-size: 13px; display: flex; align-items: center; gap: 10px; color: var(--ink-2); transition: all .2s ease; }
+.nav-item:hover { background: rgba(31,30,29,.04); }
+.nav-item.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(31,30,29,.04), 0 0 0 1px var(--line); }
+.nav-item.active::before { content:''; position:absolute; left:-8px; top:50%; transform:translateY(-50%); width:3px; height:16px; background: var(--accent); border-radius: 0 3px 3px 0; }
+.nav-count { margin-left: auto; font-size: 10px; padding: 1px 6px; border-radius: 9999px; background: var(--bg-3); color: var(--ink-3); }
+.nav-count.alert { background: var(--accent); color: #fff; }
+.nav-sep { height: 1px; background: var(--line); margin: 10px 4px; }
+.nav-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); padding: 10px 10px 4px; }
+
+/* arbre d'équipes — H-67 */
+.team-tree { padding: 0 12px 4px; display:flex; flex-direction:column; gap:1px; }
+.team-node { position:relative; display:flex; align-items:center; gap:7px; width:100%; text-align:left; padding:6px 9px 6px 24px; border-radius:8px; font-size:11.5px; color:var(--ink-2); transition: all .15s ease; }
+.team-node:hover { background: rgba(31,30,29,.05); }
+.team-node.active { background: var(--card); color:var(--ink); box-shadow:0 0 0 1px var(--line); }
+.team-node::before { content:''; position:absolute; left:12px; top:-2px; bottom:50%; width:8px; border-left:1px solid var(--line-2); border-bottom:1px solid var(--line-2); border-radius:0 0 0 5px; }
+.team-dot { width:6px; height:6px; border-radius:50%; flex:0 0 auto; }
+.team-node .tname { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.team-node .tmeta { font-family:var(--mono); font-size:9px; color:var(--ink-3); flex:0 0 auto; }
+.team-tree-empty { padding: 4px 10px 8px 24px; font-size:10.5px; color:var(--ink-3); }
+
+/* jauges de quota permanentes en sidebar — H-72.1 */
+.mini-gauges { margin: 4px 12px 12px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); }
+.mini-gauges .mgh { font-size: 9.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 8px; }
+.mg-acc { margin-bottom: 9px; }
+.mg-acc:last-child { margin-bottom: 0; }
+.mg-acc .mgl { font-size: 10.5px; font-weight: 600; color: var(--ink-2); margin-bottom: 5px; display:flex; align-items:center; gap:5px; }
+.mg-row { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
+.mg-row:last-child { margin-bottom: 0; }
+.mg-row .lbl { width: 30px; flex: 0 0 auto; font-size: 8.5px; color: var(--ink-3); font-family: var(--mono); text-transform:uppercase; }
+.mg-row .usage-track { flex: 1; height: 5px; }
+.mg-row .pct { width: 32px; flex: 0 0 auto; font-size: 9.5px; font-family: var(--mono); text-align: right; color: var(--ink-2); }
+.mg-reset { font-size: 8.5px; color: var(--ink-3); font-family: var(--mono); margin-top: 3px; }
+
+.link-card { margin: 12px; padding: 13px; border-radius: 13px; border: 1px solid var(--line); background: var(--card); flex: 0 0 auto; }
+.link-chain { display: flex; align-items: center; gap: 7px; margin-top: 9px; }
+.link-node { flex: 1; text-align: center; padding: 6px 4px; border-radius: 8px; background: var(--bg-2); font-size: 10.5px; font-family: var(--mono); color: var(--ink-2); }
+.link-wire { flex: 0 0 34px; height: 2px; border-radius: 2px; background: var(--ok); position: relative; }
+.link-wire.down { background: var(--err-soft); }
+.link-wire.down::after { content:'✕'; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); font-size:11px; color: var(--err); background: var(--card); padding: 0 2px; }
+
+/* ================================================================
+   MAIN + VUES
+   ================================================================ */
+main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+.view { display: none; flex: 1; min-height: 0; flex-direction: column; overflow-y: auto; }
+.view.active { display: flex; }
+.vhead {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--bg);
+  position: sticky; top: 0; z-index: 10;
+}
+.vhead h1 { font-family: var(--serif); font-size: 17px; font-weight: 500; margin: 0; line-height: 1.1; }
+.vhead .sub { font-size: 11px; color: var(--ink-3); margin-top: 3px; }
+.hamburger { padding: 6px; margin-left: -6px; border-radius: 8px; flex: 0 0 auto; }
+.hamburger:hover { background: rgba(0,0,0,.05); }
+@media (min-width: 1024px) { .hamburger { display: none; } .vhead { padding: 12px 26px; } .vhead h1 { font-size: 19px; } }
+.vbody { padding: 14px 16px 90px; max-width: 940px; width: 100%; margin: 0 auto; }
+@media (min-width: 1024px) { .vbody { padding: 22px 26px 40px; } }
+.sec-title { font-family: var(--serif); font-size: 14px; font-weight: 500; margin: 0 0 9px; display: flex; align-items: center; gap: 8px; }
+.muted { color: var(--ink-3); }
+.hide-sm { display: none; }
+@media (min-width: 640px) { .hide-sm { display: inline; } }
+
+/* bandeau quota compact — H-72.1, permanence hors tiroir */
+.quota-strip { display: flex; gap: 14px; overflow-x: auto; padding: 7px 16px; font-family: var(--mono); font-size: 10.5px;
+  color: var(--ink-2); background: var(--bg-2); border-bottom: 1px solid var(--line); white-space: nowrap; -webkit-overflow-scrolling:touch; }
+.quota-strip::-webkit-scrollbar { height: 0; }
+@media (min-width: 1024px) { .quota-strip { padding: 7px 26px; } }
+.quota-strip button { display:inline-flex; gap:6px; align-items:baseline; color:inherit; }
+.quota-strip b { color: var(--ink); font-weight: 600; }
+.quota-strip .warnv { color: var(--err); font-weight: 700; }
+
+/* ================================================================
+   BARRE DE SÛRETÉ
+   ================================================================ */
+.safety-bar {
+  position: sticky; bottom: 0; z-index: 25;
+  display: flex; align-items: stretch; gap: 10px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line); background: rgba(250,249,245,.94); backdrop-filter: blur(8px);
+}
+@media (min-width: 1024px) { .safety-bar { padding: 10px 26px; } }
+#btnPause, .btnPause {
+  flex: 1 1 auto; border-radius: 12px; padding: 12px 16px;
+  background: var(--ink); color: var(--bg);
+  font-size: 13.5px; font-weight: 600; letter-spacing: .01em;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: all .2s ease;
+}
+.btnPause:hover { background: #2C2A28; }
+.btnPause.engaged { background: var(--warn-soft); color: #8A6A12; box-shadow: inset 0 0 0 1px var(--warn); }
+.safety-gap { flex: 0 0 6px; border-left: 1px dashed var(--line-2); }
+.btnStop {
+  flex: 0 0 auto; width: 54px; border-radius: 12px;
+  border: 1.5px solid var(--err); color: var(--err);
+  background: repeating-linear-gradient(-45deg, transparent 0 5px, rgba(181,82,74,.10) 5px 10px);
+  display: flex; align-items: center; justify-content: center;
+  transition: all .2s ease;
+}
+.btnStop:hover { background: var(--err); color: #fff; }
+.btnStop:hover svg { stroke: #fff; }
+.safety-bar.link-down .btnPause,
+.safety-bar.link-down .btnStop { opacity: .45; pointer-events: none; filter: grayscale(.5); }
+.safety-bar.link-down { position: relative; }
+.safety-bar.link-down::before {
+  content: 'Lien Pi↔PC coupé — les boutons de sûreté n’atteignent pas les workers';
+  position: absolute; left: 0; right: 0; top: -25px; padding: 4px 16px;
+  font-size: 10.5px; color: var(--err); background: var(--err-soft); text-align: center;
+}
+
+/* ================================================================
+   VUE PARC
+   ================================================================ */
+.parc-strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 14px; -webkit-overflow-scrolling: touch; }
+.parc-strip::-webkit-scrollbar { height: 0; }
+.stat { flex: 1 0 auto; min-width: 96px; border: 1px solid var(--line); background: var(--card); border-radius: 12px; padding: 10px 12px; }
+.stat .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.stat .v { font-family: var(--serif); font-size: 22px; font-weight: 500; line-height: 1.1; margin-top: 3px; }
+.stat.alert { border-color: var(--accent); background: var(--accent-soft); }
+.stat.alert .v { color: var(--accent-2); }
+.stat.land { border-color: var(--warn); background: var(--warn-soft); }
+.stat.land .v { color: #8A6A12; }
+
+.mcard { display: block; width: 100%; text-align: left; padding: 13px 14px; margin-bottom: 9px; position: relative; overflow: hidden; }
+.mcard .row1 { display: flex; align-items: flex-start; gap: 9px; }
+.mcard .title { font-size: 13.5px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+.mcard .proj { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 3px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mcard .last { font-size: 11.5px; color: var(--ink-2); margin-top: 9px; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mcard .foot { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); font-size: 10.5px; color: var(--ink-3); font-family: var(--mono); flex-wrap: wrap; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; margin-top: 4px; position: relative; }
+
+.mcard.act {
+  border-color: var(--accent); border-left-width: 4px; border-left-color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-soft) 0%, var(--card) 58%);
+  box-shadow: 0 3px 14px rgba(217,119,87,.16);
+}
+.mcard.act .title { color: var(--accent-2); }
+.act-strip { display: flex; align-items: center; gap: 7px; margin: -13px -14px 11px; padding: 6px 14px; background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.mcard.dead { opacity: .92; border-left: 4px solid var(--err); }
+.mcard.done { opacity: .62; }
+.mcard.paused { border-left: 4px solid var(--warn); }
+.mcard.new::after { content:'nouvelle'; position:absolute; top:10px; right:10px; font-size:9.5px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ok); background:var(--ok-soft); padding:2px 7px; border-radius:9999px; }
+
+/* atterrissage — H-70 */
+.mcard.landing { border-color: var(--warn); border-left-width: 4px; border-left-color: var(--warn); box-shadow: 0 3px 14px rgba(201,154,46,.18); }
+.mcard.landing .title { color: #8A6A12; }
+.land-strip { display: flex; align-items: center; gap: 7px; margin: -13px -14px 11px; padding: 6px 14px; background: var(--warn); color: #fff; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.land-banner { border-color: var(--warn); background: var(--warn-soft); padding: 13px 14px; margin-bottom: 16px; }
+
+/* ================================================================
+   DÉTAIL MISSION
+   ================================================================ */
+.kv { display: grid; grid-template-columns: 1fr; gap: 0; }
+@media (min-width: 560px) { .kv { grid-template-columns: 1fr 1fr; column-gap: 26px; } }
+.kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.kv .k { color: var(--ink-3); }
+.kv .v { font-family: var(--mono); font-size: 11.5px; text-align: right; word-break: break-all; }
+
+/* équipe / sous-agents — H-72.2 / H-72.3 */
+.lead-card { border: 1px solid var(--line); background: var(--bg-2); border-radius: 12px; padding: 11px 12px; margin-bottom: 10px; }
+.lead-card .lh { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.lead-card .ln { font-size: 12.5px; font-weight: 600; display:flex; align-items:center; gap:7px; }
+.lead-card .la { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.5; }
+.subagents-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.subagents-row::-webkit-scrollbar { height: 0; }
+.subagent-card { flex: 0 0 auto; min-width: 154px; max-width: 190px; text-align: left; border: 1px solid var(--line); background: var(--card);
+  border-radius: 12px; padding: 10px 11px; transition: all .2s ease; }
+.subagent-card:hover, .subagent-card:active { border-color: var(--line-2); box-shadow: 0 2px 10px rgba(0,0,0,.07); transform: translateY(-1px); }
+.subagent-card .san { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.subagent-card .sar { font-size: 9.5px; color: var(--ink-3); margin-top: 2px; font-family: var(--mono); text-transform: uppercase; letter-spacing: .03em; }
+.subagent-card .saa { font-size: 11px; color: var(--ink-2); margin-top: 7px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sa-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+
+/* Fil de mission */
+.feed-filter { display: flex; gap: 6px; margin-bottom: 10px; }
+.fchip { padding: 5px 11px; border-radius: 9999px; font-size: 11px; font-weight: 500; border: 1px solid var(--line); color: var(--ink-2); background: var(--card); transition: all .15s ease; }
+.fchip.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.feed-scroll { max-height: 46vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); padding: 4px 0; position: relative; }
+@media (min-width: 1024px) { .feed-scroll { max-height: 52vh; } }
+.fitem { display: flex; gap: 9px; padding: 7px 12px; font-size: 12px; line-height: 1.45; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.fitem:last-child { border-bottom: none; }
+.fitem .ts { font-family: var(--mono); font-size: 9.5px; color: var(--ink-3); flex: 0 0 auto; margin-top: 2px; white-space: nowrap; }
+.fitem .body { min-width: 0; flex: 1; }
+.fitem .tool-tag { font-family: var(--mono); font-size: 10px; padding: 1px 7px; border-radius: 6px; display: inline-block; margin-right: 5px; }
+.fitem.activity .tool-tag { background: var(--bg-3); color: var(--ink-2); }
+.fitem.permission.auto .tool-tag { background: var(--ok-soft); color: var(--ok); }
+.fitem.permission.pending .tool-tag { background: var(--accent); color: #fff; }
+.fitem.permission.pending { background: var(--accent-soft); }
+.fitem.system .tool-tag { background: var(--warn-soft); color: #8A6A12; }
+.fitem.instruction .tool-tag { background: var(--ink); color: var(--bg); }
+.feed-jump { position: sticky; bottom: 6px; margin: 0 auto; width: fit-content; font-size: 10.5px; background: var(--ink); color: var(--bg); padding: 5px 12px; border-radius: 9999px; display: none; box-shadow: 0 4px 10px rgba(0,0,0,.15); }
+.feed-jump.show { display: block; }
+.instr-row { display: flex; gap: 8px; margin-top: 10px; }
+.instr-row .input-wrap { flex: 1; padding: 7px 11px; }
+.instr-row textarea { font-size: 12.5px; }
+
+/* ================================================================
+   ESCALADES
+   ================================================================ */
+.esc { padding: 13px 14px; margin-bottom: 10px; border-left: 4px solid var(--accent); }
+.esc .h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.esc .age { font-family: var(--mono); font-size: 11px; color: var(--accent-2); font-weight: 600; }
+.esc .age.old { color: var(--err); }
+.esc .tool { font-family: var(--mono); font-size: 12px; background: var(--ink); color: var(--bg); border-radius: 7px; padding: 3px 8px; display: inline-block; margin-top: 8px; }
+.esc .phrase { font-size: 13px; line-height: 1.5; margin-top: 9px; }
+.esc .why { font-size: 11.5px; color: var(--ink-2); background: var(--bg-2); border-radius: 9px; padding: 8px 10px; margin-top: 9px; line-height: 1.5; }
+.esc .path { font-family: var(--mono); font-size: 11px; color: var(--err); background: var(--err-soft); border-radius: 6px; padding: 3px 7px; display: inline-block; margin-top: 7px; word-break: break-all; }
+.esc .acts { display: flex; gap: 8px; margin-top: 12px; }
+.esc .acts .btn { flex: 1; }
+.esc.resolved { opacity: .5; }
+.esc .verdict { margin-top: 10px; font-size: 11.5px; font-weight: 600; }
+
+/* ================================================================
+   QUOTAS COMPTES
+   ================================================================ */
+.acc { padding: 14px; margin-bottom: 10px; }
+.acc.active { border-color: var(--line-2); box-shadow: inset 3px 0 0 var(--ok); }
+.acc.saturated { box-shadow: inset 3px 0 0 var(--err); }
+.qrow { margin-top: 10px; }
+.qrow .qh { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; font-family: var(--mono); font-size: 11px; }
+.qmiss { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line); }
+.chip { font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 7px; background: var(--bg-2); color: var(--ink-2); }
+
+/* ================================================================
+   CHAT ORCHESTRATEUR
+   ================================================================ */
+.gauge-strip { display: grid; grid-template-columns: 1fr; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--bg-2); }
+@media (min-width: 640px) { .gauge-strip { grid-template-columns: repeat(3,1fr); } }
+@media (min-width: 1024px) { .gauge-strip { padding: 12px 26px; } }
+.gauge { background: var(--card); border: 1px solid var(--line); border-radius: 11px; padding: 9px 11px; }
+.gauge .gh { display: flex; align-items: baseline; justify-content: space-between; font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
+.gauge .gv { font-family: var(--serif); font-size: 16px; margin-top: 3px; }
+.gauge .gs { font-size: 10px; color: var(--ink-3); margin-top: 2px; font-family: var(--mono); }
+.gauge .compact-btn { font-size: 10px; color: var(--accent-2); font-weight: 500; margin-top: 6px; }
+.bubble-u { background: var(--ink); color: var(--bg); border-radius: 14px 14px 4px 14px; padding: 10px 13px; font-size: 13.5px; line-height: 1.5; max-width: 84%; margin-left: auto; }
+.bubble-a { font-size: 13.5px; line-height: 1.6; color: var(--ink); max-width: 100%; }
+.bubble-a .tool { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 11px; font-family: var(--mono); font-size: 11px; color: var(--ink-2); margin: 8px 0; }
+.composer { border-top: 1px solid var(--line); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--bg); }
+.input-wrap { border: 1px solid var(--line-2); background: var(--card); border-radius: 16px; padding: 10px 13px; }
+.input-wrap:focus-within { border-color: var(--ink-3); }
+.input-wrap textarea { width: 100%; border: none; outline: none; background: transparent; resize: none; font-size: 14px; line-height: 1.5; }
+
+/* sélecteur modèle / raisonnement — H-71 */
+.model-row { display: flex; gap: 6px; margin-bottom: 8px; }
+.msel { flex: 1; min-width: 0; }
+.msel select { width: 100%; border: 1px solid var(--line-2); background: var(--card); border-radius: 9px; padding: 6px 8px; font-size: 11px; font-family: var(--mono); }
+.msel select:disabled { opacity: .5; }
+.model-hint { font-size: 10px; color: var(--ink-3); line-height: 1.45; margin-bottom: 8px; }
+.model-hint strong { color: var(--warn); }
+
+/* Carte de mandat / approbation */
+.mandate-card { border: 1px solid var(--line-2); border-radius: 13px; overflow: hidden; margin: 8px 0; background: var(--card); }
+.mandate-card .mh2 { padding: 10px 13px; background: var(--bg-2); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); font-weight: 600; }
+.mandate-card .mb { padding: 12px 13px; }
+.mandate-card .mrow { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12px; }
+.mandate-card .mrow:last-child { border-bottom: none; }
+.mandate-card .mrow .k { flex: 0 0 92px; color: var(--ink-3); font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; padding-top: 1px; }
+.mandate-card .mrow .v { flex: 1; line-height: 1.45; }
+.mandate-card .macts { display: flex; gap: 8px; padding: 12px 13px; background: var(--bg-2); }
+.mandate-card .macts .btn { flex: 1; }
+.mandate-card.resolved .macts { display: none; }
+.mandate-card .verdict-stamp { padding: 10px 13px; font-size: 11.5px; font-weight: 600; }
+
+/* ================================================================
+   MODALES / TOASTS
+   ================================================================ */
+.modal { position: fixed; inset: 0; z-index: 60; display: none; align-items: center; justify-content: center; padding: 16px; overflow-y: auto; }
+.modal.show { display: flex; }
+.modal-box { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; margin: auto; }
+.modal-box .mh { padding: 18px 20px 14px; }
+.modal-box .mf { padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); background: var(--bg); display: flex; gap: 8px; justify-content: flex-end; }
+.arm-track { margin-top: 14px; height: 46px; border-radius: 12px; background: var(--err-soft); position: relative; overflow: hidden; user-select: none; }
+.arm-fill { position: absolute; inset: 0; width: 0%; background: var(--err); transition: width .08s linear; }
+.arm-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600; color: var(--err); }
+.arm-track.armed .arm-label { color: #fff; }
+#toasts { position: fixed; left: 16px; right: 16px; bottom: 86px; z-index: 70; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { background: var(--ink); color: var(--bg); font-size: 12.5px; padding: 9px 14px; border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.18); max-width: 90vw; text-align: center; }
+@media (min-width: 1024px) { #toasts { left: auto; right: 24px; bottom: 24px; align-items: flex-end; } }
+
+.linkbanner { display: none; align-items: center; gap: 8px; padding: 7px 16px; background: var(--err-soft); color: var(--err); font-size: 11.5px; }
+.linkbanner.show { display: flex; }
+
+/* formulaire mandat */
+.field { margin-bottom: 13px; }
+.field label { font-size: 11px; font-weight: 600; color: var(--ink-2); display: block; margin-bottom: 5px; }
+.field .hint { font-size: 10.5px; color: var(--ink-3); margin-top: 4px; line-height: 1.4; }
+.field select, .field input[type=number] { width: 100%; border: 1px solid var(--line-2); background: var(--card); border-radius: 9px; padding: 8px 10px; font-size: 13px; }
+.field .input-wrap textarea { font-size: 13px; }
+.field-error { display: none; font-size: 11px; color: var(--err); margin-top: 6px; background: var(--err-soft); border-radius: 8px; padding: 7px 9px; line-height: 1.45; }
+.field-error.show { display: block; }
+.field.has-error .input-wrap { border-color: var(--err); }
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <div id="sidebarOverlay"></div>
+
+  <!-- ==================== SIDEBAR ==================== -->
+  <aside id="sidebar">
+    <div class="brand">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="brand-mark">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FAF9F5" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="2.5"/></svg>
+        </div>
+        <div>
+          <div class="serif" style="font-size:15px;font-weight:500;line-height:1;">ccremote</div>
+          <div class="mono" style="font-size:9.5px;color:var(--ink-3);margin-top:3px;">parc de missions · v3</div>
+        </div>
+      </div>
+      <button id="sidebarClose" style="padding:6px;border-radius:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#86827B" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav">
+      <button class="nav-item active" data-goto="parc">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        Parc <span class="nav-count" id="navCountParc">0</span>
+      </button>
+      <button class="nav-item" data-goto="escalades">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+        Escalades <span class="nav-count alert" id="navCountEsc">0</span>
+      </button>
+      <button class="nav-item" data-goto="comptes">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Comptes &amp; quotas
+      </button>
+      <div class="nav-sep"></div>
+      <button class="nav-item" data-goto="orchestrateur">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Orchestrateur
+      </button>
+    </nav>
+
+    <!-- arbre H-67 : orchestrateur → équipes actives, cliquables -->
+    <div class="nav-label">Équipes actives</div>
+    <div class="team-tree" id="teamTree"></div>
+
+    <div style="flex:1"></div>
+
+    <!-- jauges de quota permanentes, par compte — H-72.1 -->
+    <div class="mini-gauges" id="miniGauges"></div>
+
+    <button class="nav-item" data-goto="parametres" style="margin:0 12px 6px;width:calc(100% - 24px);">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Paramètres
+    </button>
+
+    <div class="link-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span id="linkDot" class="dot-live" style="width:8px;height:8px;border-radius:50%;background:var(--ok);display:inline-block;"></span>
+          <span id="linkText" style="font-size:12px;font-weight:500;">Lien établi</span>
+        </div>
+        <button id="linkToggle" class="mono" style="font-size:9.5px;color:var(--accent-2);">simuler coupure</button>
+      </div>
+      <div class="link-chain">
+        <div class="link-node">PI</div>
+        <div id="linkWire" class="link-wire"></div>
+        <div class="link-node">PC</div>
+      </div>
+      <div id="linkMeta" class="mono" style="font-size:9.5px;color:var(--ink-3);margin-top:8px;">seq 148 203 · dernier battement 1,2 s</div>
+    </div>
+  </aside>
+
+  <!-- ==================== MAIN ==================== -->
+  <main>
+    <div id="linkBanner" class="linkbanner">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 19.36"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      <span>Lien Pi↔PC coupé depuis 00:14 — les états affichés datent de la dernière séquence reçue.</span>
+    </div>
+
+    <!-- ================= VUE : PARC ================= -->
+    <section class="view active" data-view="parc">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger sidebarToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1>Parc</h1>
+            <div class="sub" id="parcSub">— missions · 1 mission active par projet (H-56)</div>
+          </div>
+        </div>
+        <button class="btn btn-accent" id="btnNewMission" style="flex:0 0 auto;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          <span class="hide-sm">Nouvelle mission</span>
+        </button>
+      </header>
+      <div class="quota-strip" id="quotaStripParc" onclick="goto('comptes')"></div>
+      <div class="vbody" id="parcBody"></div>
+      <div class="safety-bar" id="safetyBar1"></div>
+    </section>
+
+    <!-- ================= VUE : DÉTAIL MISSION ================= -->
+    <section class="view" data-view="mission">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger" data-goto="parc" style="display:block;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1 id="missionTitle" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</h1>
+            <div class="sub mono" id="missionSub">—</div>
+          </div>
+        </div>
+        <span class="badge" id="missionBadge" style="flex:0 0 auto;">—</span>
+      </header>
+      <div class="vbody" id="missionBody"></div>
+      <div class="safety-bar" id="safetyBar2"></div>
+    </section>
+
+    <!-- ================= VUE : SOUS-AGENT — H-72.3 ================= -->
+    <section class="view" data-view="agent">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger" onclick="backFromAgent()" style="display:block;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1 id="agentTitle" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">—</h1>
+            <div class="sub mono" id="agentSub">—</div>
+          </div>
+        </div>
+        <span class="badge" id="agentBadge" style="flex:0 0 auto;">—</span>
+      </header>
+      <div class="vbody" id="agentBody"></div>
+      <div class="safety-bar" id="safetyBar7"></div>
+    </section>
+
+    <!-- ================= VUE : ESCALADES ================= -->
+    <section class="view" data-view="escalades">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger sidebarToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1>Escalades</h1>
+            <div class="sub" id="escSub">— demandes en attente · les demandes n'expirent jamais</div>
+          </div>
+        </div>
+      </header>
+      <div class="vbody">
+        <div class="card" style="padding:11px 13px;margin-bottom:14px;background:var(--bg-2);border-color:var(--line);">
+          <div style="font-size:11.5px;line-height:1.5;color:var(--ink-2);">
+            Le lead arbitre seul tout ce qu'il peut (H-40). Ce qui arrive ici a franchi le <strong>plancher de déni</strong> :
+            destruction hors worktree, réécriture d'historique git partagé, écrasement de secrets, désinstallation d'outillage
+            système. Tout le reste — y compris les autorisations que le lead a résolues seul — se lit dans le fil de chaque
+            mission, pas ici (H-64).
+          </div>
+        </div>
+        <div id="escList"></div>
+      </div>
+      <div class="safety-bar" id="safetyBar3"></div>
+    </section>
+
+    <!-- ================= VUE : COMPTES & QUOTAS ================= -->
+    <section class="view" data-view="comptes">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger sidebarToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1>Comptes &amp; quotas</h1>
+            <div class="sub">2 comptes Claude Code isolés par CLAUDE_CONFIG_DIR · fenêtres non synchronisées</div>
+          </div>
+        </div>
+      </header>
+      <div class="vbody" id="comptesBody"></div>
+      <div class="safety-bar" id="safetyBar4"></div>
+    </section>
+
+    <!-- ================= VUE : ORCHESTRATEUR ================= -->
+    <section class="view" data-view="orchestrateur">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger sidebarToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1>Orchestrateur</h1>
+            <div class="sub">Session Agent SDK · MCP de contrôle du parc</div>
+          </div>
+        </div>
+      </header>
+
+      <div class="gauge-strip" id="gaugeStrip"></div>
+
+      <div style="flex:1;overflow-y:auto;" id="chatScroll">
+        <div class="vbody" style="padding-bottom:20px;display:flex;flex-direction:column;gap:16px;" id="chatBody">
+          <div class="bubble-u">Où on en est sur stockiop et lattice ?</div>
+          <div class="bubble-a">
+            <p style="margin:0 0 8px;">Deux missions actives, une bloquée.</p>
+            <div class="tool">parc_etat() → 8 missions · 2 requires_action</div>
+            <p style="margin:8px 0 0;"><strong>stockiop-ops</strong> attend ton arbitrage depuis 6 min sur une migration SQL hors worktree. <strong>lattice</strong> tourne : le sous-agent <em>bench</em> mesure 47 fps avant culling, le lead n'a pas encore engagé le quadtree.</p>
+            <p style="margin:8px 0 0;">Le compte #2 est saturé jusqu'à 15:00 — j'ai basculé les prochains dispatchs sur le #1.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="composer">
+        <div class="model-row">
+          <div class="msel"><select id="selModel"></select></div>
+          <div class="msel"><select id="selEffort"></select></div>
+        </div>
+        <div class="model-hint" id="modelHint"></div>
+        <div class="input-wrap">
+          <textarea id="orchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe…"></textarea>
+          <div style="display:flex;align-items:center;justify-content:flex-end;margin-top:8px;">
+            <button class="btn-primary" id="btnOrchSend" style="border-radius:9px;padding:7px 9px;display:flex;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--ink-3);text-align:center;margin-top:7px;">
+          Les boutons de sûreté ne passent pas par l'orchestrateur — ils restent joignables même s'il boucle.
+        </div>
+      </div>
+      <div class="safety-bar" id="safetyBar5"></div>
+    </section>
+
+    <!-- ================= VUE : PARAMÈTRES ================= -->
+    <section class="view" data-view="parametres">
+      <header class="vhead">
+        <div style="display:flex;align-items:center;gap:11px;min-width:0;">
+          <button class="hamburger sidebarToggle">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div style="min-width:0;">
+            <h1>Paramètres</h1>
+            <div class="sub">Harness, notifications, projets</div>
+          </div>
+        </div>
+      </header>
+
+      <div class="vbody">
+        <div class="card" style="padding:14px;margin-bottom:14px;border-color:var(--warn);">
+          <div class="sec-title">Notifications
+            <span class="badge" style="background:var(--warn-soft);color:#8A6A12;">à vérifier</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);">
+            <div>
+              <div style="font-size:12.5px;font-weight:500;">Web Push (VAPID)</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">Abonnement enregistré · dernier accusé il y a 3 h</div>
+            </div>
+            <span class="badge" style="background:var(--ok-soft);color:var(--ok);">actif</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);">
+            <div>
+              <div style="font-size:12.5px;font-weight:500;">PWA installée sur l'écran d'accueil</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">iOS n'envoie rien depuis Safari — l'app doit être sur le bureau</div>
+            </div>
+            <span class="badge" style="background:var(--ok-soft);color:var(--ok);">détectée</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);">
+            <div>
+              <div style="font-size:12.5px;font-weight:500;">Permission navigateur</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">Révocable par iOS sans prévenir</div>
+            </div>
+            <span class="badge" style="background:var(--ok-soft);color:var(--ok);">granted</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;">
+            <div>
+              <div style="font-size:12.5px;font-weight:500;">Filet Discord (escalades seulement)</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">DM natif, téléphone verrouillé, sans contrainte PWA</div>
+            </div>
+            <div class="switch on" id="discordSwitch"></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="btn btn-ghost" style="flex:1;" onclick="toast('Notification de test envoyée sur les deux canaux')">Envoyer un test</button>
+          </div>
+          <div style="font-size:11px;color:var(--ink-3);line-height:1.55;margin-top:10px;">
+            Une PWA désinstallée coupe les notifications <strong>en silence</strong>. Cet écran affiche l'état réel de l'abonnement, il ne le suppose pas — et un test hebdomadaire est le seul moyen de le prouver.
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;margin-bottom:14px;">
+          <div class="sec-title">Projets du parc</div>
+          <div id="projList" style="display:flex;flex-direction:column;"></div>
+          <button class="btn btn-ghost" style="width:100%;margin-top:12px;" onclick="toast('Nouveau projet ajouté — n\'affecte aucun autre composant (F)')">Ajouter un projet</button>
+        </div>
+
+        <div class="card" style="padding:14px;margin-bottom:14px;">
+          <div class="sec-title">Sûreté</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);">
+            <div>
+              <div style="font-size:12.5px;font-weight:500;">Dernier test des boutons de sûreté</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">il y a 34 jours — un bouton non déclenché depuis des mois a de bonnes chances d'être cassé</div>
+            </div>
+            <span class="badge" style="background:var(--warn-soft);color:#8A6A12;">périmé</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;">
+            <div>
+              <div style="font-size:12.5px;font-weight:500;">Réconciliation registre ↔ PC</div>
+              <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">0 fantôme · 0 orphelin · il y a 4 min</div>
+            </div>
+            <span class="badge" style="background:var(--ok-soft);color:var(--ok);">saine</span>
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px;border-color:var(--err-soft);">
+          <div class="sec-title" style="color:var(--err);">Recours de dernier ressort</div>
+          <p style="font-size:12px;line-height:1.55;margin:0;color:var(--ink-2);">
+            Si le lien Pi↔PC est coupé, aucun bouton d'ici n'atteint les workers. Procédure manuelle sur le PC :
+          </p>
+          <div class="mono" style="font-size:11px;background:var(--ink);color:#E8E4D8;border-radius:9px;padding:10px 12px;margin-top:9px;overflow-x:auto;white-space:nowrap;">systemctl --user stop ccremote-superviseur</div>
+          <p style="font-size:11px;line-height:1.5;margin:9px 0 0;color:var(--ink-3);">
+            Volontairement non automatisé : un déclenchement sur micro-coupure réseau détruirait du travail légitime.
+          </p>
+        </div>
+      </div>
+      <div class="safety-bar" id="safetyBar6"></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ==================== MODALE : NOUVELLE MISSION (mandat) ==================== -->
+<div class="modal modal-backdrop" id="modalMandat">
+  <div class="modal-box modal-in" style="max-width:480px;">
+    <div class="mh">
+      <h3 class="serif" style="font-size:16px;font-weight:500;margin:0 0 4px;">Composer un mandat</h3>
+      <p style="font-size:11.5px;color:var(--ink-3);margin:0 0 14px;">L'orchestrateur propose — la création de l'équipe attend ton autorisation explicite (H-61).</p>
+
+      <div class="field">
+        <label>Projet</label>
+        <select id="fProjet">
+          <option value="stockiop-ops">stockiop-ops</option>
+          <option value="homelab-vm-manager">homelab-vm-manager</option>
+          <option value="lattice">lattice</option>
+          <option value="aegis">aegis</option>
+          <option value="nullnode">nullnode</option>
+          <option value="design-lab">design-lab</option>
+          <option value="gtav-mods">gtav-mods</option>
+          <option value="flux">flux</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>But</label>
+        <div class="input-wrap"><textarea id="fBut" rows="2" placeholder="Ce que l'équipe doit accomplir.">Ajouter un export CSV des transferts inter-dépôts sur les 30 derniers jours.</textarea></div>
+      </div>
+      <div class="field" id="fCritereField">
+        <label>Critère d'arrêt <span style="font-weight:400;color:var(--ink-3);">— doit être testable</span></label>
+        <div class="input-wrap"><textarea id="fCritere" rows="2" placeholder="Ex. : un export CSV téléchargé contient les mêmes totaux que la vue analytique, sur 3 dépôts.">L'export CSV téléchargé contient les mêmes totaux que la vue analytique, vérifié sur 3 dépôts, tests E2E passants.</textarea></div>
+        <div class="field-error" id="fCritereError"></div>
+      </div>
+      <div class="field">
+        <label>Périmètre</label>
+        <div class="input-wrap"><textarea id="fPerimetre" rows="1" placeholder="Fichiers/dossiers concernés, ce qui est hors périmètre.">src/exports/, src/analytics/ — pas de migration DB.</textarea></div>
+      </div>
+      <div class="field">
+        <label>Budget prévisionnel <span style="font-weight:400;color:var(--ink-3);">— indicatif, pas un plafond</span></label>
+        <input type="number" id="fBudget" value="12" min="1" step="1">
+        <div class="hint">Sur abonnement, le dollar ne borne rien (H-68) : c'est un ordre de grandeur communiqué au juge d'inspection, pas une limite qui arrête la mission.</div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" data-close>Annuler</button>
+      <button class="btn btn-accent" id="btnSubmitMandate">Proposer à l'orchestrateur</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODALE : PAUSE ==================== -->
+<div class="modal modal-backdrop" id="modalPause">
+  <div class="modal-box modal-in">
+    <div class="mh">
+      <div style="display:flex;gap:12px;">
+        <div style="flex:0 0 auto;width:40px;height:40px;border-radius:12px;background:var(--bg-2);display:flex;align-items:center;justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1F1E1D" stroke-width="2" stroke-linecap="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+        </div>
+        <div>
+          <h3 class="serif" style="font-size:16px;font-weight:500;margin:0 0 5px;" id="pauseTitle">Mettre tout le parc en pause</h3>
+          <p style="font-size:12.5px;line-height:1.55;margin:0;color:var(--ink-2);" id="pauseDesc">Les missions en cours seront interrompues sur leur tour en cours. <strong>Les sessions restent vivantes, le contexte est intégralement préservé.</strong> Reprise instantanée.</p>
+        </div>
+      </div>
+      <div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:var(--warn-soft);font-size:11.5px;line-height:1.55;color:#8A6A12;">
+        <strong>Ce que la pause ne fait pas</strong> — les processus lancés par les agents en arrière-plan (serveurs de dev, builds, watchers) continuent de tourner. Les arrêter relève du superviseur, pas de ce bouton.
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" data-close>Annuler</button>
+      <button class="btn btn-primary" id="btnConfirmPause">Mettre en pause</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODALE : ARRÊT D'URGENCE ==================== -->
+<div class="modal modal-backdrop" id="modalStop">
+  <div class="modal-box modal-in" style="border-color:var(--err);">
+    <div class="mh">
+      <div style="display:flex;gap:12px;">
+        <div style="flex:0 0 auto;width:40px;height:40px;border-radius:12px;background:var(--err-soft);display:flex;align-items:center;justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5524A" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div>
+          <h3 class="serif" style="font-size:16px;font-weight:500;margin:0 0 5px;color:var(--err);">Arrêt d'urgence</h3>
+          <p style="font-size:12.5px;line-height:1.55;margin:0;color:var(--ink-2);" id="stopDesc">Pause globale, puis <strong>fermeture des sessions actives</strong>. Le contexte est préservé sur disque mais devra être rechargé — reprise par <code>resume</code> ou redispatch, pas instantanée.</p>
+        </div>
+      </div>
+      <div style="margin-top:12px;font-size:11.5px;color:var(--ink-3);line-height:1.5;">Aucun travail non commité n'est détruit : les worktrees restent intacts.</div>
+      <div class="arm-track" id="armTrack">
+        <div class="arm-fill" id="armFill"></div>
+        <div class="arm-label" id="armLabel">Maintenir 1,5 s pour armer</div>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" data-close>Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== MODALE : REFUS D'ESCALADE ==================== -->
+<div class="modal modal-backdrop" id="modalDeny">
+  <div class="modal-box modal-in">
+    <div class="mh">
+      <h3 class="serif" style="font-size:16px;font-weight:500;margin:0 0 5px;">Refuser la demande</h3>
+      <p style="font-size:12.5px;margin:0 0 12px;color:var(--ink-2);">Le motif est réinjecté à l'agent : c'est ce qui lui permet de repartir sur une autre voie plutôt que de rester bloqué.</p>
+      <div class="input-wrap"><textarea id="denyReason" rows="3" placeholder="Passe par l'instance de recette, jamais sur la base du Pi."></textarea></div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-ghost" data-close>Annuler</button>
+      <button class="btn btn-primary" id="btnConfirmDeny">Refuser</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+'use strict';
+
+/* ================================================================
+   MODÈLE DE DONNÉES — fictif, en mémoire, comportement réel
+   ================================================================ */
+const PROJECTS = ['stockiop-ops','homelab-vm-manager','lattice','aegis','nullnode','design-lab','gtav-mods','flux'];
+
+/* ---- H-71 : modèles éligibles au rôle d'orchestrateur, niveaux d'effort par modèle ---- */
+// ☠ Ces listes NE SONT PAS des constantes de produit : en vrai, elles viennent de
+// `supportedModels()[].supportedEffortLevels` (H-71). Valeurs ci-dessous = ce qui a été
+// MESURÉ en session réelle le 2026-07-22, pour que la maquette ne mente pas.
+//   opus / sonnet / fable  → low, medium, high, xhigh, max  (les 5)
+//   haiku                  → AUCUN (ni effort ni thinking adaptatif) ⇒ absent d'ici
+// ⚠ `claude-opus-4-7` et `claude-sonnet-4-6` répondent mais ne figurent PAS dans
+// `supportedModels()` : leurs niveaux réels sont donc INCONNUS — à mesurer avant
+// d'implémenter, ne pas recopier les valeurs optimistes ci-dessous.
+const MODELS = [
+  { id:'claude-opus-4-8',  label:'Opus 4.8 (défaut)', effort:['low','medium','high','xhigh','max'], enabled:true },
+  { id:'claude-sonnet-5',  label:'Sonnet 5',           effort:['low','medium','high','xhigh','max'], enabled:true },
+  { id:'claude-fable-5',   label:'Fable 5',            effort:['low','medium','high','xhigh','max'], enabled:true },
+  { id:'claude-opus-4-7',  label:'Opus 4.7',           effort:['low','medium','high','xhigh','max'], enabled:true },
+  { id:'claude-sonnet-4-6',label:'Sonnet 4.6 — déconseillé', effort:[],                               enabled:false }
+];
+const EFFORT_LABEL = { low:'low', medium:'medium', high:'high', xhigh:'xhigh', max:'max' };
+
+const state = {
+  linkUp: true,
+  paused: false,
+  selectedMissionId: null,
+  selectedAgentId: null,
+  feedFilter: 'tout',
+  nextEventId: 1,
+  denyTargetId: null,
+  orchModel: { model:'claude-opus-4-8', effort:'high' },
+  accounts: {
+    1: { id:1, label:'Compte #1', email:'compte-a@exemple.fr', status:'allowed',
+      five_hour:{util:38, resetLabel:'17:00 · dans 2 h 12'}, seven_day:{util:54, resetLabel:'26/07 à 09:00'},
+      seven_day_opus:{util:71, resetLabel:'26/07 à 09:00'}, costWindow: 3.40 },
+    2: { id:2, label:'Compte #2', email:'chris@echo-agency…', status:'rejected',
+      five_hour:{util:100, resetLabel:'15:00 · dans 0 h 24'}, seven_day:{util:38, resetLabel:'28/07 à 03:00'},
+      seven_day_sonnet:{util:46, resetLabel:'27/07 à 21:00'}, costWindow: 9.85 }
+  },
+  nextAccount: 1,
+  missions: [],
+  escalades: [],
+  proposals: []
+};
+
+function uid(prefix){ return prefix + (state.nextEventId++); }
+function nowStr(){ const d = new Date(); return d.toTimeString().slice(0,8); }
+function toastMoney(v){ return v.toFixed(2).replace('.', ',') + ' $'; }
+
+/* ---- H-68 : le dollar est un déclencheur d'inspection, jamais un plafond ---- */
+const INSPECTION_THRESHOLDS = [12,30,50,70,100,120,150,170,200];
+function nextThreshold(cost){ return INSPECTION_THRESHOLDS.find(t => t > cost) ?? null; }
+function newInspection(verdict, atLabel){ return { lastVerdict: verdict||null, lastAt: atLabel||null }; }
+function verdictBadge(v){
+  if (!v) return `<span class="badge" style="background:var(--bg-2);color:var(--ink-3);">pas encore inspectée</span>`;
+  const map = { progres:['var(--ok-soft)','var(--ok)','progrès'], incertain:['var(--warn-soft)','#8A6A12','incertain'], boucle:['var(--err-soft)','var(--err)','boucle'] };
+  const [bg,fg,label] = map[v];
+  return `<span class="badge" style="background:${bg};color:${fg};">${label}</span>`;
+}
+function runInspection(missionId){
+  const m = state.missions.find(x=>x.id===missionId);
+  if (!m || !state.linkUp || ['echec','terminee'].includes(m.state)) return;
+  let verdict;
+  if (m.ctx >= 80) verdict = Math.random() < 0.45 ? 'boucle' : (Math.random() < 0.5 ? 'incertain' : 'progres');
+  else verdict = Math.random() < 0.82 ? 'progres' : 'incertain';
+
+  m.inspection = newInspection(verdict, 'à l\'instant');
+  const nt = nextThreshold(m.cost);
+  m.feed.push({ ts: nowStr(), type:'system', tool:'inspection',
+    text: `Inspection à ${toastMoney(m.cost)} — verdict ${verdict}${verdict==='boucle' ? ' : mission arrêtée par le juge, worktree conservé.' : nt!==null ? `, ne coupe pas. Prochain point à ${toastMoney(nt)}.` : '.'}` });
+
+  if (verdict === 'boucle') { m.state = 'echec'; }
+  renderParc();
+  renderMissionDetail(missionId);
+  toast(verdict==='boucle' ? 'Juge d\'inspection : boucle — mission arrêtée' : `Juge d'inspection : ${verdict}`);
+}
+
+function seedMission(m){ state.missions.push(m); }
+
+seedMission({
+  id:'m1', title:'Corriger la désynchronisation multi-dépôts', project:'stockiop-ops', worktree:'wt/fix-multidepot',
+  branch:'fix/multidepot-stock', account:1, state:'requires_action', ctx:61, cost:3.10, inspection:newInspection(null,null),
+  team:'lead + 2 sous-agents', model:'claude-opus-4-8', epoch:4, retries:'1 / 3', sessionId:'ses_8f31c2…a04',
+  mandate:{ but:"Rétablir la cohérence de product_stock entre création produit, import CSV et transferts inter-dépôts. Livrer avec tests E2E Playwright passants sur l'instance de recette.",
+    critere:"Un transfert inter-dépôts réussit sur un produit créé par chacun des trois chemins." },
+  blockedSince:'6 min', escaladeId:'esc1',
+  subagents:[
+    { id:'a1', name:'db-migration', role:'sous-agent', status:'actif',
+      action:"Confirme que le chemin CSV n'écrit jamais product_stock — prépare le correctif de schéma.",
+      feed:[
+        {ts:'—', type:'system', tool:'invocation', text:"Invoqué par le lead pour tracer les écritures product_stock sur les trois chemins."},
+        {ts:'—', type:'activity', tool:'', text:"Confirmé : le chemin CSV n'écrit jamais product_stock."},
+        {ts:'—', type:'permission', auto:true, tool:'Grep', text:'Recherche des écritures product_stock — autorisée (auto)'}
+      ] },
+    { id:'a2', name:'e2e-recette', role:'sous-agent', status:'attente',
+      action:"En attente que le correctif de schéma soit posé pour rejouer les tests E2E sur l'instance de recette.",
+      feed:[
+        {ts:'—', type:'system', tool:'invocation', text:'Invoqué par le lead, en attente du correctif de schéma.'}
+      ] }
+  ],
+  feed:[
+    {t:-58,type:'system',tool:'session',text:'Session démarrée · compte #1 · claude-opus-4-8'},
+    {t:-52,type:'permission',auto:true,tool:'Read',text:'Lecture de schema.sql — autorisée (auto)'},
+    {t:-49,type:'activity',tool:'',text:'Lead : "Je reproduis le bug sur les trois chemins de création avant de toucher au schéma."'},
+    {t:-40,type:'permission',auto:true,tool:'Grep',text:'Recherche des écritures product_stock — autorisée (auto)'},
+    {t:-31,type:'permission',auto:true,tool:'Bash',text:'psql -f inspect_stock.sql (lecture seule) — autorisée (auto)'},
+    {t:-25,type:'system',tool:'compaction',text:'Compaction (PostCompact) — contexte ramené à 34 %'},
+    {t:-19,type:'activity',tool:'',text:'Sous-agent db-migration : "Le chemin CSV n\'écrit jamais product_stock, confirmé."'},
+    {t:-14,type:'system',tool:'mirror_error',text:'Lot de transcript abandonné — retenté automatiquement'},
+    {t:-6,type:'permission',auto:false,pending:true,tool:'Bash',
+      text:'Appliquer une migration SQL qui réécrit product_stock directement sur la base du Pi.',
+      why:"decisionReason: commande d'écriture sur un chemin hors du worktree de la mission (plancher de déni C.1.3).",
+      path:'/home/pi/stockiop-ops/data/stockiop.db'}
+  ]
+});
+
+seedMission({
+  id:'m2', title:'Migrer le daemon vers TLS mutuel', project:'homelab-vm-manager', worktree:'wt/mtls',
+  branch:'feat/mtls', account:2, state:'requires_action', ctx:34, cost:1.80, inspection:newInspection(null,null),
+  team:'lead + 1 sous-agent', model:'claude-opus-4-8', epoch:1, retries:'0 / 3', sessionId:'ses_2c90a1…f17',
+  mandate:{ but:"Faire tourner le daemon de license-server derrière mTLS entre le Pi et les clients enrôlés.",
+    critere:"Une requête client sans certificat client valide est rejetée par le daemon (401), une requête avec certificat valide passe." },
+  blockedSince:'41 min', escaladeId:'esc2',
+  subagents:[
+    { id:'a1', name:'deploy', role:'sous-agent', status:'actif',
+      action:'Certificats client/serveur générés (openssl) — attend le feu vert du lead pour toucher au service systemd.',
+      feed:[
+        {ts:'—', type:'system', tool:'invocation', text:'Invoqué par le lead pour préparer les certificats mTLS.'},
+        {ts:'—', type:'activity', tool:'', text:'Génération des certificats client/serveur via openssl, terminée.'}
+      ] }
+  ],
+  feed:[
+    {t:-70,type:'system',tool:'session',text:'Session démarrée · compte #2 · claude-opus-4-8'},
+    {t:-63,type:'permission',auto:true,tool:'Read',text:'Lecture hvm-daemon.service — autorisée (auto)'},
+    {t:-55,type:'activity',tool:'',text:'Sous-agent deploy : "Génération des certificats client/serveur via openssl, terminée."'},
+    {t:-41,type:'permission',auto:false,pending:true,tool:'Write',
+      text:"Remplacer l'unité systemd du daemon pour y injecter les chemins de certificats mTLS.",
+      why:"Écriture dans /etc/systemd : modification d'outillage système, hors worktree.",
+      path:'/etc/systemd/system/hvm-daemon.service'}
+  ]
+});
+
+seedMission({
+  id:'m3', title:'Graphe canvas — tenir 60 fps à 2 000 nœuds', project:'lattice', worktree:'wt/graph-perf',
+  branch:'perf/graph-quadtree', account:1, state:'running', ctx:48, cost:4.40, inspection:newInspection('progres','il y a 9 min'),
+  team:'lead + 3 sous-agents', model:'claude-opus-4-8', epoch:2, retries:'0 / 3', sessionId:'ses_a410f2…9c3',
+  mandate:{ but:"Le graphe canvas doit tenir 60 fps avec 2 000 nœuds affichés simultanément, y compris pendant un drag.",
+    critere:"Le sous-agent bench mesure ≥ 58 fps moyen sur un scénario de 2 000 nœuds + drag continu de 10 s, culling quadtree actif." },
+  subagents:[
+    { id:'a1', name:'bench', role:'sous-agent', status:'actif',
+      action:'Mesure 47 fps avant culling — relance le banc d\'essai dès que le quadtree du lead est engagé.',
+      feed:[
+        {ts:'—', type:'activity', tool:'', text:'47 fps mesurés avant culling, quadtree pas encore engagé.'},
+        {ts:'—', type:'permission', auto:true, tool:'Bash', text:'bun run bench:graph — autorisée (auto)'}
+      ] },
+    { id:'a2', name:'renderer', role:'sous-agent', status:'actif',
+      action:'Implémente le culling quadtree dans src/graph/renderer.ts, à la demande du lead.',
+      feed:[
+        {ts:'—', type:'permission', auto:true, tool:'Edit', text:'Edit sur src/graph/renderer.ts — autorisée (auto)'},
+        {ts:'—', type:'activity', tool:'', text:'Structure du quadtree posée, intégration au renderer en cours.'}
+      ] },
+    { id:'a3', name:'e2e-recette', role:'sous-agent', status:'attente',
+      action:"En attente que le bench confirme 58 fps pour rejouer les tests E2E de non-régression.",
+      feed:[
+        {ts:'—', type:'system', tool:'invocation', text:'Invoqué par le lead, en attente du seuil de performance.'}
+      ] }
+  ],
+  feed:[
+    {t:-30,type:'system',tool:'session',text:'Session démarrée · compte #1 · claude-opus-4-8'},
+    {t:-24,type:'permission',auto:true,tool:'Read',text:'Lecture du renderer canvas — autorisée (auto)'},
+    {t:-18,type:'activity',tool:'',text:'Sous-agent bench : "47 fps mesurés avant culling, quadtree pas encore engagé."'},
+    {t:-9,type:'permission',auto:true,tool:'Edit',text:'Edit sur src/graph/renderer.ts — autorisée (auto)'},
+    {t:-3,type:'activity',tool:'',text:'Lead : "J\'engage le culling quadtree, nouveau bench dans la foulée."'}
+  ]
+});
+
+seedMission({
+  id:'m4', title:'Scanner YARA incrémental sur inotify', project:'aegis', worktree:'wt/yara-inc',
+  branch:'feat/yara-incremental', account:2, state:'running', ctx:88, cost:7.20, inspection:newInspection('incertain','il y a 3 min'),
+  team:'lead + 2 sous-agents', model:'claude-opus-4-8', epoch:3, retries:'0 / 3', sessionId:'ses_77e1b0…d22',
+  mandate:{ but:"Ne rescanner que les fichiers modifiés (inotify) plutôt qu'un scan YARA complet à chaque cycle.",
+    critere:"Un scan incrémental sur 200 fichiers modifiés dure < 2 s, contre un scan complet mesuré à 34 s sur le même corpus." },
+  subagents:[
+    { id:'a1', name:'watcher', role:'sous-agent', status:'actif',
+      action:'Watcher inotify stable — teste la couverture sur suppressions/renommages en rafale.',
+      feed:[
+        {ts:'—', type:'permission', auto:true, tool:'Bash', text:'cargo test watcher:: — autorisée (auto)'},
+        {ts:'—', type:'activity', tool:'', text:'Watcher stable sur créations/modifications, tests en cours sur renommages.'}
+      ] },
+    { id:'a2', name:'yara-scan', role:'sous-agent', status:'actif',
+      action:'Intègre le scan incrémental à partir des chemins remontés par le watcher.',
+      feed:[
+        {ts:'—', type:'system', tool:'compaction', text:'Compaction #2 — le mandat couvre peut-être trop de surface'},
+        {ts:'—', type:'activity', tool:'', text:'Intégration du scan incrémental en cours, watcher branché.'}
+      ] }
+  ],
+  feed:[
+    {t:-90,type:'system',tool:'session',text:'Session démarrée · compte #2 · claude-opus-4-8'},
+    {t:-70,type:'permission',auto:true,tool:'Read',text:'Lecture du watcher inotify — autorisée (auto)'},
+    {t:-52,type:'system',tool:'compaction',text:'Compaction #1 (PostCompact)'},
+    {t:-30,type:'permission',auto:true,tool:'Bash',text:'cargo test watcher:: — autorisée (auto)'},
+    {t:-11,type:'system',tool:'compaction',text:'Compaction #2 — le mandat couvre peut-être trop de surface'},
+    {t:-4,type:'activity',tool:'',text:'Lead : "Watcher stable, je passe à l\'intégration du scan incrémental."'}
+  ]
+});
+
+seedMission({
+  id:'m5', title:'Chiffrer la seed par PIN', project:'nullnode', worktree:'wt/seed-pin', account:1,
+  state:'paused', ctx:22, cost:1.10, inspection:newInspection(null,null), team:'lead seul', model:'claude-opus-4-8', epoch:1,
+  retries:'0 / 3', sessionId:'ses_c02e91…b45', pausedAgo:'3 h',
+  mandate:{ but:"Chiffrer la seed NULLNODE au repos avec un PIN utilisateur (libsodium pwhash).",
+    critere:"Une seed chiffrée ne se déchiffre qu'avec le bon PIN ; 5 essais faux déclenchent un throttle exponentiel." },
+  feed:[
+    {t:-200,type:'system',tool:'session',text:'Session démarrée · compte #1 · claude-opus-4-8'},
+    {t:-190,type:'permission',auto:true,tool:'Read',text:'Lecture du module de stockage seed — autorisée (auto)'},
+    {t:-180,type:'system',tool:'pause',text:'Mise en pause opérateur — session retenue, contexte préservé'}
+  ]
+});
+
+seedMission({
+  id:'m6', title:'Audit des dépendances non épinglées', project:'design-lab', worktree:'wt/deps-audit', account:1,
+  state:'idle', ctx:12, cost:0.80, inspection:newInspection(null,null), team:'lead seul', model:'claude-opus-4-8', epoch:1,
+  retries:'0 / 3', sessionId:'ses_5b1e02…7a1', idleAgo:'22 min',
+  mandate:{ but:"Lister toutes les dépendances non épinglées à une version exacte et proposer un correctif.",
+    critere:"package.json et requirements.txt n'ont plus aucune dépendance en version flottante (^, ~, latest)." },
+  feed:[
+    {t:-40,type:'system',tool:'session',text:'Session démarrée · compte #1 · claude-opus-4-8'},
+    {t:-33,type:'permission',auto:true,tool:'Bash',text:'bun pm ls — autorisée (auto)'},
+    {t:-22,type:'activity',tool:'',text:'Lead : "Tour terminé, en attente d\'instruction — 4 dépendances flottantes identifiées."'}
+  ]
+});
+
+seedMission({
+  id:'m7', title:'Réécrire le writer RPF en Rust', project:'gtav-mods', worktree:'wt/rpf-writer', account:2,
+  state:'echec', ctx:100, cost:46.20, inspection:newInspection('boucle','il y a 1 h'), team:'lead + 1 sous-agent', model:'claude-opus-4-8',
+  epoch:5, retries:'3 / 3',
+  mandate:{ but:"Réécrire le writer RPF v7 en Rust pour remplacer l'outil C# actuel.",
+    critere:"Un fichier .rpf généré par l'outil Rust est byte-identique à celui produit par l'outil C# de référence." },
+  feed:[
+    {t:-500,type:'system',tool:'session',text:'Session démarrée · compte #2 · claude-opus-4-8'},
+    {t:-300,type:'system',tool:'retry',text:'Relance 1/3 — error_max_turns'},
+    {t:-180,type:'system',tool:'retry',text:'Relance 2/3 — error_max_turns'},
+    {t:-60,type:'system',tool:'inspection',text:'Inspection à 30 $ — verdict incertain, ne coupe pas'},
+    {t:-20,type:'system',tool:'retry',text:'Relance 3/3 — error_max_turns'},
+    {t:-5,type:'system',tool:'inspection',text:'Inspection à 50 $ — verdict boucle : aucun progrès observable entre les trois relances. Mission arrêtée par le juge, worktree conservé.'}
+  ]
+});
+
+seedMission({
+  id:'m8', title:'Dock + palette de commandes', project:'flux', worktree:'wt/dock-palette', account:1,
+  state:'terminee', ctx:40, cost:5.90, inspection:newInspection('progres','il y a 55 min'), team:'lead + 2 sous-agents', model:'claude-opus-4-8',
+  epoch:2, retries:'0 / 3', doneAgo:'1 h',
+  mandate:{ but:"Ajouter un dock d'accès rapide et une palette de commandes (Cmd+K) à FLUX.",
+    critere:"Les tests E2E Playwright du dock et de la palette passent sur l'instance de recette, sans régression sur la nav existante." },
+  feed:[
+    {t:-100,type:'system',tool:'session',text:'Session démarrée · compte #1 · claude-opus-4-8'},
+    {t:-40,type:'activity',tool:'',text:'Lead : "E2E Playwright passants sur dock + palette, critère d\'arrêt atteint."'},
+    {t:-5,type:'system',tool:'done',text:'Mission terminée — critère d\'arrêt atteint, worktree libérable'}
+  ]
+});
+
+state.escalades = [
+  { id:'esc1', missionId:'m1', title:'Désync multi-dépôts', sub:"stockiop-ops · wt/fix-multidepot · agent db-migration",
+    age:'6 min', old:false, tool:'Bash',
+    phrase:'Appliquer une migration SQL qui réécrit product_stock directement sur la base de production hébergée sur le Pi.',
+    why:"decisionReason: commande d'écriture sur un chemin hors du worktree de la mission (plancher de déni C.1.3).",
+    path:'/home/pi/stockiop-ops/data/stockiop.db', suggestions:['rediriger vers l\'instance de recette','dry-run d\'abord'] },
+  { id:'esc2', missionId:'m2', title:'Migration TLS mutuel', sub:"homelab-vm-manager · wt/mtls · agent deploy",
+    age:'41 min · rappelé', old:true, tool:'Write',
+    phrase:"Remplacer l'unité systemd du daemon pour y injecter les chemins de certificats mTLS.",
+    why:"Écriture dans /etc/systemd : modification d'outillage système, hors worktree.",
+    path:'/etc/systemd/system/hvm-daemon.service', suggestions:[] }
+];
+
+/* ================================================================
+   HELPERS D'AFFICHAGE
+   ================================================================ */
+const STATE_LABEL = { requires_action:'requires_action', running:'running', idle:'idle', paused:'en_pause', echec:'echec_definitif', terminee:'terminee' };
+const STATE_BADGE = {
+  requires_action:'background:var(--accent);color:#fff;', running:'background:var(--ok-soft);color:var(--ok);',
+  idle:'background:var(--bg-2);color:var(--ink-3);', paused:'background:var(--warn-soft);color:#8A6A12;',
+  echec:'background:var(--err-soft);color:var(--err);', terminee:'background:var(--bg-2);color:var(--ink-3);'
+};
+
+function missionCounts(){
+  const c = { requires_action:0, running:0, idle:0, paused:0, echec:0, terminee:0, landing:0 };
+  state.missions.forEach(m => { c[m.state]++; if (m.landing && m.landing.active) c.landing++; });
+  return c;
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+
+/* ================================================================
+   H-70 — ATTERRISSAGE AVANT SATURATION DE QUOTA
+   ================================================================ */
+function startLanding(m, accId){
+  if (!m || (m.landing && m.landing.active) || ['echec','terminee'].includes(m.state)) return;
+  const acc = state.accounts[accId];
+  m.landing = { active:true, sinceLabel:'à l\'instant', account:accId, resetLabel: acc.five_hour.resetLabel, step:0 };
+  m.feed.push({ ts: nowStr(), type:'system', tool:'atterrissage',
+    text: `Fenêtre du compte #${accId} proche de la saturation (${acc.five_hour.util} % · reset ${acc.five_hour.resetLabel}) — la mission consigne son état et clôture proprement plutôt que d'être coupée net (H-70).` });
+  renderParc();
+  if (state.selectedMissionId === m.id) renderMissionDetail(m.id);
+  toast(`${m.project} — atterrissage engagé (compte #${accId} proche saturation)`);
+
+  const t1 = setTimeout(() => {
+    if (!m.landing || !m.landing.active) return;
+    m.landing.step = 1;
+    m.feed.push({ ts: nowStr(), type:'system', tool:'consignation',
+      text: 'Consignation en cours — état du projet écrit dans STATE.md et mémoire sémantique, worktree conservé intact.' });
+    renderParc();
+    if (state.selectedMissionId === m.id) renderMissionDetail(m.id);
+  }, 3200);
+
+  const t2 = setTimeout(() => {
+    if (!m.landing || !m.landing.active) return;
+    m.landing.active = false;
+    m.landing.done = true;
+    m.state = 'idle';
+    m.idleAgo = 'à l\'instant';
+    m.feed.push({ ts: nowStr(), type:'system', tool:'atterri',
+      text: `Atterrissage terminé — mission mise en repos, relance automatique après reset de la fenêtre à ${acc.five_hour.resetLabel}.` });
+    renderParc();
+    if (state.selectedMissionId === m.id) renderMissionDetail(m.id);
+    toast(`${m.project} — atterrie proprement, relance après reset`);
+  }, 6200);
+
+  m._landingTimers = [t1, t2];
+}
+
+/* déclenchement manuel, pour tester le comportement sans dépendre de la vue Comptes */
+function simulateLanding(missionId){
+  const m = state.missions.find(x=>x.id===missionId);
+  if (!m) return;
+  startLanding(m, m.account);
+}
+
+/* ================================================================
+   RENDU — PARC
+   ================================================================ */
+function mcardTemplate(m){
+  const isLanding = m.landing && m.landing.active;
+  const isAct = m.state === 'requires_action' && !isLanding;
+  const cls = ['card','mcard','lift','msg-in'];
+  if (isLanding) cls.push('landing');
+  else if (isAct) cls.push('act');
+  else if (m.state==='echec') cls.push('dead');
+  else if (m.state==='terminee') cls.push('done'); else if (m.state==='paused') cls.push('paused');
+  if (m.freshlyDispatched) cls.push('new');
+
+  const dotColor = isLanding ? 'var(--warn)' : isAct ? 'var(--accent)' : m.state==='running' ? 'var(--ok)' : m.state==='paused' ? 'var(--warn)'
+    : m.state==='echec' ? 'var(--err)' : m.state==='terminee' ? 'var(--ok)' : 'var(--ink-3)';
+  const dotLive = (m.state==='running' || isLanding) ? 'dot-live' : '';
+
+  let actStrip = '';
+  if (isLanding) {
+    actStrip = `<div class="land-strip"><span class="ripple" style="width:6px;height:6px;border-radius:50%;background:#fff;"></span>atterrissage · compte #${m.landing.account} proche saturation</div>`;
+  } else if (isAct) {
+    actStrip = `<div class="act-strip"><span class="ripple" style="width:6px;height:6px;border-radius:50%;background:#fff;"></span>requires_action · bloquée depuis ${m.blockedSince}</div>`;
+  }
+  const last = m.feed[m.feed.length-1];
+  const lastText = last ? (last.text.length>140? last.text.slice(0,140)+'…' : last.text) : '';
+
+  let footExtra;
+  if (isLanding) footExtra = `<span>ctx ${m.ctx} %</span><span class="divider-dot"></span><span>consignation en cours</span><span class="divider-dot"></span><span>reset ${m.landing.resetLabel}</span>`;
+  else if (isAct) footExtra = `<span>ctx ${m.ctx} %</span><span class="divider-dot"></span><span>${toastMoney(m.cost)} consommés</span><span class="divider-dot"></span><span>${m.team}</span>`;
+  else if (m.state==='running') footExtra = `<span>ctx ${m.ctx} %</span><span class="divider-dot"></span><span>${toastMoney(m.cost)} consommés</span><span class="divider-dot"></span><span>${m.team}</span>`;
+  else if (m.state==='paused') footExtra = `<span>ctx ${m.ctx} %</span><span class="divider-dot"></span><span>pausée il y a ${m.pausedAgo}</span>`;
+  else if (m.state==='idle') footExtra = `<span>ctx ${m.ctx} %</span><span class="divider-dot"></span><span>dernier tour il y a ${m.idleAgo}</span>${m.landing && m.landing.done ? `<span class="divider-dot"></span><span style="color:#8A6A12;">atterrie — relance après reset</span>` : ''}`;
+  else if (m.state==='echec') footExtra = `<span>${toastMoney(m.cost)} — arrêtée par le juge : boucle détectée</span>`;
+  else footExtra = `<span>${toastMoney(m.cost)}</span><span class="divider-dot"></span><span>terminée il y a ${m.doneAgo}</span>`;
+
+  return `<button class="${cls.join(' ')}" onclick="openMission('${m.id}')">
+    ${actStrip}
+    <div class="row1">
+      <span class="sdot ${dotLive}" style="background:${dotColor};"></span>
+      <div style="min-width:0;flex:1;">
+        <div class="title">${escapeHtml(m.title)}</div>
+        <div class="proj"><span>${m.project}</span><span class="divider-dot"></span><span>${m.worktree}</span><span class="divider-dot"></span><span>compte #${m.account}</span></div>
+      </div>
+      ${(!isAct && !isLanding) ? `<span class="badge" style="${STATE_BADGE[m.state]}">${STATE_LABEL[m.state]}</span>` : ''}
+    </div>
+    <div class="last">${escapeHtml(lastText)}</div>
+    <div class="foot">${footExtra}</div>
+  </button>`;
+}
+
+function renderParc(){
+  const c = missionCounts();
+  const total = state.missions.length;
+  document.getElementById('parcSub').textContent = `${total} missions · ${new Set(state.missions.map(m=>m.project)).size} projets · 1 mission active par projet (H-56)`;
+  document.getElementById('navCountParc').textContent = total;
+  document.getElementById('navCountEsc').textContent = state.escalades.length;
+  document.getElementById('navCountEsc').classList.toggle('alert', state.escalades.length > 0);
+
+  const actMissions = state.missions.filter(m => m.state==='requires_action' && !(m.landing && m.landing.active));
+  const landingMissions = state.missions.filter(m => m.landing && m.landing.active);
+  const runMissions = state.missions.filter(m => m.state==='running' && !(m.landing && m.landing.active));
+  const restMissions = state.missions.filter(m => ['paused','idle','echec','terminee'].includes(m.state) && !(m.landing && m.landing.active));
+
+  let html = `<div class="parc-strip">
+    <div class="stat ${c.requires_action>0?'alert':''}"><div class="k">Requires action</div><div class="v">${c.requires_action}</div></div>
+    <div class="stat"><div class="k">Running</div><div class="v" style="color:var(--ok);">${c.running}</div></div>
+    <div class="stat ${c.landing>0?'land':''}"><div class="k">Atterrissage</div><div class="v">${c.landing}</div></div>
+    <div class="stat"><div class="k">Idle</div><div class="v">${c.idle}</div></div>
+    <div class="stat"><div class="k">En pause</div><div class="v" style="color:var(--warn);">${c.paused}</div></div>
+    <div class="stat"><div class="k">Échec déf.</div><div class="v" style="color:var(--err);">${c.echec}</div></div>
+  </div>`;
+
+  if (landingMissions.length) {
+    html += `<div class="sec-title">En atterrissage — quota proche saturation <span class="badge" style="background:var(--warn);color:#fff;">${landingMissions.length}</span></div>`;
+    html += landingMissions.map(mcardTemplate).join('');
+  }
+
+  if (actMissions.length) {
+    html += `<div class="sec-title" style="margin-top:22px;">Demande votre arbitrage <span class="badge" style="background:var(--accent);color:#fff;">${actMissions.length}</span></div>`;
+    html += actMissions.map(mcardTemplate).join('');
+  } else if (!landingMissions.length) {
+    html += `<div class="empty-state card" style="margin-bottom:16px;">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="t">Rien n'attend ton arbitrage</div>
+      <div class="s">Le lead de chaque équipe arbitre seul tant que ça reste dans son plancher de permissions.</div>
+    </div>`;
+  }
+
+  html += `<div class="sec-title" style="margin-top:22px;">En cours</div>`;
+  html += runMissions.length ? runMissions.map(mcardTemplate).join('') :
+    `<div class="empty-state card"><div class="t">Aucune mission en cours</div><div class="s">Dispatch une nouvelle mission depuis « Nouvelle mission ».</div></div>`;
+
+  html += `<div class="sec-title" style="margin-top:22px;">Au repos et arrêtées</div>`;
+  html += restMissions.length ? restMissions.map(mcardTemplate).join('') :
+    `<div class="empty-state card"><div class="t">Rien au repos</div></div>`;
+
+  document.getElementById('parcBody').innerHTML = html;
+  renderTeamTree();
+  renderQuotaStrip();
+}
+
+/* ================================================================
+   ARBRE D'ÉQUIPES — sidebar, H-67 / H-72.2
+   ================================================================ */
+function renderTeamTree(){
+  const el = document.getElementById('teamTree');
+  if (!el) return;
+  const teams = state.missions.filter(m => ['running','requires_action'].includes(m.state));
+  if (!teams.length) { el.innerHTML = `<div class="team-tree-empty">Aucune équipe active</div>`; return; }
+  el.innerHTML = teams.map(m => {
+    const isLanding = m.landing && m.landing.active;
+    const color = isLanding ? 'var(--warn)' : m.state==='requires_action' ? 'var(--accent)' : 'var(--ok)';
+    const active = state.selectedMissionId === m.id && document.querySelector('.view.active')?.dataset.view !== 'parc';
+    return `<button class="team-node ${active?'active':''}" onclick="goToMission('${m.id}')">
+      <span class="team-dot" style="background:${color};"></span>
+      <span class="tname">${escapeHtml(m.project)}</span>
+      <span class="tmeta">${isLanding?'atterrit':m.state==='requires_action'?'bloquée':'ok'}</span>
+    </button>`;
+  }).join('');
+}
+
+/* ================================================================
+   JAUGES PERMANENTES — H-72.1
+   ================================================================ */
+function accGaugeMini(a){
+  const fiveColor = a.five_hour.util>=90?'var(--err)':a.five_hour.util>=65?'var(--warn)':'var(--ok)';
+  const sevenColor = a.seven_day.util>=90?'var(--err)':a.seven_day.util>=65?'var(--warn)':'var(--ok)';
+  return `<div class="mg-acc">
+    <div class="mgl">${a.label}<span class="badge" style="${a.status==='allowed'?'background:var(--ok-soft);color:var(--ok);':'background:var(--err-soft);color:var(--err);'}">${a.status}</span></div>
+    <div class="mg-row"><span class="lbl">5h</span><div class="usage-track"><div class="usage-fill" style="width:${a.five_hour.util}%;background:${fiveColor};"></div></div><span class="pct">${a.five_hour.util}%</span></div>
+    <div class="mg-reset">reset ${a.five_hour.resetLabel}</div>
+    <div class="mg-row" style="margin-top:6px;"><span class="lbl">7j</span><div class="usage-track"><div class="usage-fill" style="width:${a.seven_day.util}%;background:${sevenColor};"></div></div><span class="pct">${a.seven_day.util}%</span></div>
+    <div class="mg-reset">reset ${a.seven_day.resetLabel}</div>
+  </div>`;
+}
+function renderMiniGauges(){
+  const el = document.getElementById('miniGauges');
+  if (!el) return;
+  el.innerHTML = `<div class="mgh">Quotas — par compte (H-72)</div>${accGaugeMini(state.accounts[1])}${accGaugeMini(state.accounts[2])}`;
+}
+function renderQuotaStrip(){
+  const el = document.getElementById('quotaStripParc');
+  if (!el) return;
+  const a1 = state.accounts[1], a2 = state.accounts[2];
+  const v = (a,w) => a[w].util>=90 ? `<b class="warnv">${a[w].util}%</b>` : `<b>${a[w].util}%</b>`;
+  el.innerHTML = `<button>#1 5h ${v(a1,'five_hour')} · 7j ${v(a1,'seven_day')}</button>
+    <button>#2 5h ${v(a2,'five_hour')} · 7j ${v(a2,'seven_day')}</button>
+    <span style="color:var(--ink-3);">— fenêtres non synchronisées, tap pour le détail</span>`;
+}
+
+/* ================================================================
+   RENDU — DÉTAIL MISSION
+   ================================================================ */
+function feedItemTemplate(ev){
+  let cls = 'fitem ' + ev.type;
+  if (ev.type==='permission') cls += ev.pending ? ' pending' : (ev.resolved==='refuse' ? ' pending' : ' auto');
+  const tagLabel = ev.type==='permission' ? (ev.pending ? (ev.tool+' · en attente') : ev.resolved ? (ev.tool+' · '+ev.resolved) : (ev.tool+' · auto'))
+    : ev.type==='instruction' ? 'instruction opérateur' : ev.type==='system' ? (ev.tool||'système') : (ev.tool || 'activité');
+  return `<div class="${cls}">
+    <span class="ts">${ev.ts||''}</span>
+    <div class="body"><span class="tool-tag">${escapeHtml(tagLabel)}</span>${escapeHtml(ev.text)}
+      ${ev.path? `<div class="mono" style="font-size:10px;color:var(--err);margin-top:3px;">${escapeHtml(ev.path)}</div>`:''}
+    </div>
+  </div>`;
+}
+
+function filteredFeed(m){
+  if (state.feedFilter === 'activite') return m.feed.filter(e => e.type==='activity' || e.type==='system' || e.type==='instruction');
+  if (state.feedFilter === 'autorisations') return m.feed.filter(e => e.type==='permission');
+  return m.feed;
+}
+
+function renderFeedOnly(){
+  const m = state.missions.find(x=>x.id===state.selectedMissionId);
+  if (!m) return;
+  const scroll = document.getElementById('feedScroll');
+  if (!scroll) return;
+  const wasNearBottom = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60;
+  scroll.innerHTML = filteredFeed(m).map(feedItemTemplate).join('') || `<div class="empty-state"><div class="s">Aucun évènement pour ce filtre.</div></div>`;
+  if (wasNearBottom) scroll.scrollTop = scroll.scrollHeight;
+}
+
+function openMission(id){
+  state.selectedMissionId = id;
+  state.feedFilter = 'tout';
+  goto('mission');
+  document.getElementById('missionBody').innerHTML = `
+    <div class="skeleton" style="height:70px;margin-bottom:14px;"></div>
+    <div class="skeleton" style="height:120px;margin-bottom:14px;"></div>
+    <div class="skeleton" style="height:220px;"></div>`;
+  document.getElementById('missionTitle').textContent = '…';
+  document.getElementById('missionSub').textContent = '…';
+  setTimeout(() => renderMissionDetail(id), 260);
+}
+
+/* navigation instantanée (arbre sidebar, retour depuis un sous-agent) — pas de skeleton */
+function goToMission(id){
+  state.selectedMissionId = id;
+  state.feedFilter = 'tout';
+  goto('mission');
+  renderMissionDetail(id);
+}
+
+function teamSectionTemplate(m){
+  if (!m.subagents || !m.subagents.length) {
+    return `<div class="card" style="padding:14px;margin-bottom:14px;">
+      <div class="sec-title">Équipe</div>
+      <div class="lead-card" style="margin-bottom:0;">
+        <div class="lh"><div class="ln"><span class="sdot" style="background:var(--ok);width:7px;height:7px;"></span>Team leader</div><span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${m.team||'lead seul'}</span></div>
+        <div class="la">${escapeHtml((m.feed[m.feed.length-1]||{}).text || '')}</div>
+      </div>
+    </div>`;
+  }
+  const last = m.feed.filter(e=>e.type==='activity').slice(-1)[0];
+  const cards = m.subagents.map(a => {
+    const color = a.status==='actif' ? 'var(--ok)' : a.status==='attente' ? 'var(--warn)' : 'var(--ink-3)';
+    return `<button class="subagent-card lift" onclick="openAgent('${m.id}','${a.id}')">
+      <div class="san"><span class="sa-dot ${a.status==='actif'?'dot-live':''}" style="background:${color};"></span>${escapeHtml(a.name)}</div>
+      <div class="sar">${a.status}</div>
+      <div class="saa">${escapeHtml(a.action)}</div>
+    </button>`;
+  }).join('');
+  return `<div class="card" style="padding:14px;margin-bottom:14px;">
+    <div class="sec-title">Équipe — une décomposition navigable (H-72)</div>
+    <div class="lead-card">
+      <div class="lh"><div class="ln"><span class="sdot dot-live" style="background:var(--ok);width:7px;height:7px;"></span>Team leader</div><span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${m.team}</span></div>
+      <div class="la">${last ? escapeHtml(last.text) : "Coordonne l'équipe, aucune action récente journalisée."}</div>
+    </div>
+    <div style="font-size:10.5px;color:var(--ink-3);margin-bottom:8px;">Sous-agents actifs — clique pour voir son travail en temps réel</div>
+    <div class="subagents-row">${cards}</div>
+  </div>`;
+}
+
+function renderMissionDetail(id){
+  const m = state.missions.find(x=>x.id===id);
+  if (!m) { document.getElementById('missionBody').innerHTML = `<div class="empty-state"><div class="t">Mission introuvable</div></div>`; return; }
+
+  document.getElementById('missionTitle').textContent = m.title;
+  document.getElementById('missionSub').textContent = `${m.project} · ${m.id.toUpperCase()}`;
+  const isLanding = m.landing && m.landing.active;
+  document.getElementById('missionBadge').style.cssText = isLanding ? 'background:var(--warn);color:#fff;' : STATE_BADGE[m.state];
+  document.getElementById('missionBadge').textContent = isLanding ? 'atterrissage' : STATE_LABEL[m.state];
+
+  let bandeau = '';
+  if (isLanding) {
+    const stepText = m.landing.step >= 1
+      ? 'Consignation en cours — état écrit dans STATE.md et mémoire sémantique.'
+      : 'Atterrissage engagé — la mission va consigner son état avant que le quota ne coupe net.';
+    bandeau = `<div class="card msg-in land-banner">
+      <div style="font-size:12px;font-weight:600;color:#8A6A12;text-transform:uppercase;letter-spacing:.04em;">Atterrissage en cours (H-70)</div>
+      <div style="font-size:13px;line-height:1.5;margin-top:7px;">${stepText}</div>
+      <div style="font-size:11px;color:var(--ink-3);margin-top:8px;">Cause : fenêtre du compte #${m.landing.account} proche de la saturation (reset ${m.landing.resetLabel}). Relance automatique après le reset.</div>
+    </div>`;
+  } else if (m.state === 'requires_action') {
+    const esc = state.escalades.find(e => e.missionId === m.id);
+    bandeau = `<div class="card msg-in" style="border-color:var(--accent);background:var(--accent-soft);padding:13px 14px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--accent-2);text-transform:uppercase;letter-spacing:.04em;">Bloquée depuis ${m.blockedSince}</div>
+      <div style="font-size:13px;line-height:1.5;margin-top:7px;">${esc? escapeHtml(esc.phrase): 'Une permission attend ton arbitrage.'}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button class="btn btn-accent" style="flex:1;" onclick="goto('escalades')">Arbitrer</button>
+      </div>
+    </div>`;
+  } else if (!state.linkUp) {
+    bandeau = `<div class="error-state" style="margin-bottom:16px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 19.36"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+      <span>Lien coupé — cet état date de la dernière séquence reçue, à confirmer au rétablissement.</span>
+    </div>`;
+  } else if (m.landing && m.landing.done) {
+    bandeau = `<div class="card msg-in" style="border-color:var(--line-2);background:var(--bg-2);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--ink-2);line-height:1.5;">
+      Atterrie proprement le tour précédent — état consigné, relance automatique après reset de la fenêtre (${m.landing.resetLabel}).
+    </div>`;
+  }
+
+  const canAct = state.linkUp && !['echec','terminee'].includes(m.state);
+  const disabledAttr = canAct ? '' : 'disabled';
+  const canLand = state.linkUp && ['running','requires_action'].includes(m.state) && !isLanding;
+
+  document.getElementById('missionBody').innerHTML = `
+    ${bandeau}
+    <div class="card" style="padding:14px;margin-bottom:14px;">
+      <div class="sec-title">Mandat</div>
+      <p style="font-size:13px;line-height:1.55;margin:0 0 10px;">${escapeHtml(m.mandate.but)}</p>
+      <div style="font-size:11.5px;color:var(--ink-3);"><strong style="color:var(--ink-2);">Critère d'arrêt</strong> — ${escapeHtml(m.mandate.critere)}</div>
+    </div>
+
+    ${teamSectionTemplate(m)}
+
+    <div class="card" style="padding:14px;margin-bottom:14px;">
+      <div class="sec-title">Identité et bornes</div>
+      <div class="kv">
+        <div><span class="k">Projet</span><span class="v">${m.project}</span></div>
+        <div><span class="k">Worktree</span><span class="v">~/${m.worktree}</span></div>
+        <div><span class="k">Branche</span><span class="v">${m.branch||'—'}</span></div>
+        <div><span class="k">sessionId</span><span class="v">${m.sessionId||'—'}</span></div>
+        <div><span class="k">Compte Claude Code</span><span class="v">compte #${m.account}</span></div>
+        <div><span class="k">Modèle résolu</span><span class="v">${m.model}</span></div>
+        <div><span class="k">Epoch</span><span class="v">${m.epoch}</span></div>
+        <div><span class="k">Relances</span><span class="v">${m.retries}</span></div>
+      </div>
+      <div style="margin-top:11px;">
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;">
+          <span class="muted">Usage de contexte</span>
+          <span class="mono">${m.ctx} %</span>
+        </div>
+        <div class="usage-track"><div class="usage-fill" style="width:${m.ctx}%;background:${m.ctx>=75?'var(--err)':m.ctx>=50?'var(--warn)':'var(--ok)'};"></div></div>
+      </div>
+      ${canLand ? `<div style="margin-top:11px;"><button class="btn btn-ghost btn-sm" onclick="simulateLanding('${m.id}')">Simuler un atterrissage (quota proche saturation)</button></div>` : ''}
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:14px;">
+      <div class="sec-title">Consommation &amp; inspection
+        <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${toastMoney(m.cost)} consommés</span>
+      </div>
+      <p style="font-size:11px;color:var(--ink-3);line-height:1.5;margin:0 0 11px;">
+        Sur abonnement, le dollar ne borne rien (H-68) — c'est un déclencheur d'inspection, jamais un plafond.
+      </p>
+      <div class="kv" style="grid-template-columns: 1fr !important;">
+        <div><span class="k">Prochain point d'inspection</span><span class="v">${nextThreshold(m.cost)!==null ? toastMoney(nextThreshold(m.cost)) : '— mission arrêtée'}</span></div>
+        <div><span class="k">Dernière inspection</span><span class="v">${m.inspection.lastVerdict ? escapeHtml(m.inspection.lastAt) : 'aucune encore'}</span></div>
+      </div>
+      <div style="margin-top:11px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        ${verdictBadge(m.inspection.lastVerdict)}
+        <button class="btn btn-ghost btn-sm" onclick="runInspection('${m.id}')" ${(state.linkUp && !['echec','terminee'].includes(m.state)) ? '' : 'disabled'}>Lancer une inspection maintenant</button>
+      </div>
+      <div style="font-size:10px;color:var(--ink-3);margin-top:9px;line-height:1.5;">
+        Juge Haiku : <strong>progrès</strong> (nominal) · <strong>incertain</strong> (ne coupe jamais) · <strong>boucle</strong> (seul verdict qui arrête la mission).
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:14px;">
+      <div class="sec-title">Fil de la mission
+        <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${m.feed.length} évènements</span>
+      </div>
+      <div class="feed-filter">
+        <button class="fchip ${state.feedFilter==='tout'?'active':''}" onclick="setFeedFilter('tout')">Tout</button>
+        <button class="fchip ${state.feedFilter==='activite'?'active':''}" onclick="setFeedFilter('activite')">Activité</button>
+        <button class="fchip ${state.feedFilter==='autorisations'?'active':''}" onclick="setFeedFilter('autorisations')">Autorisations</button>
+      </div>
+      <div class="feed-scroll" id="feedScroll">${filteredFeed(m).map(feedItemTemplate).join('') || '<div class="empty-state"><div class="s">Aucun évènement pour ce filtre.</div></div>'}</div>
+      <div style="font-size:10px;color:var(--ink-3);margin-top:8px;line-height:1.5;">
+        Toutes les autorisations d'outils sont journalisées ici, y compris celles résolues seules par le lead (H-64) — c'est la trace d'audit, le volume est voulu.
+      </div>
+
+      <div class="instr-row">
+        <div class="input-wrap"><textarea id="instrInput_${m.id}" rows="1" placeholder="Parler à cette mission — une instruction, pas une interruption du tour en cours." ${disabledAttr}></textarea></div>
+        <button class="btn btn-primary" onclick="sendInstruction('${m.id}')" ${disabledAttr}>Envoyer</button>
+      </div>
+      ${!state.linkUp ? `<div class="hint" style="color:var(--err);margin-top:6px;">Lien coupé — le message n'atteindrait pas le worker.</div>` : ''}
+    </div>
+
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-ghost" style="flex:1;" onclick="pauseOneMission('${m.id}')" ${disabledAttr}>${m.state==='paused'?'Reprendre':'Mettre en pause'}</button>
+      <button class="btn btn-ghost" style="flex:1;color:var(--err);border-color:var(--err-soft);" onclick="terminateMission('${m.id}')" ${disabledAttr}>Terminer</button>
+    </div>
+  `;
+
+  ensureFeedTimer(m);
+  const scroll = document.getElementById('feedScroll');
+  if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  renderTeamTree();
+}
+
+function setFeedFilter(f){ state.feedFilter = f; renderMissionDetail(state.selectedMissionId); }
+
+function sendInstruction(missionId){
+  const m = state.missions.find(x=>x.id===missionId);
+  if (!m || !state.linkUp) return;
+  const el = document.getElementById('instrInput_'+missionId);
+  const text = (el.value||'').trim();
+  if (!text) return;
+  m.feed.push({ ts: nowStr(), type:'instruction', tool:'opérateur', text: text });
+  m.feed.push({ ts: nowStr(), type:'system', tool:'accusé', text: "Reçue — prise en compte au prochain point de contrôle de l'agent, ne l'interrompt pas." });
+  el.value = '';
+  renderMissionDetail(missionId);
+  toast('Instruction transmise à la mission');
+}
+
+/* Simulation d'un fil qui avance réellement, pour les missions en cours ouvertes */
+const FEED_TIMERS = {};
+const FAKE_ACTIVITY = [
+  {type:'permission',auto:true,tool:'Read',text:'Lecture de fichier — autorisée (auto)'},
+  {type:'permission',auto:true,tool:'Grep',text:'Recherche dans le code — autorisée (auto)'},
+  {type:'permission',auto:true,tool:'Edit',text:'Modification de fichier — autorisée (auto)'},
+  {type:'activity',tool:'',text:'Sous-agent : tour terminé, résultat intégré.'},
+  {type:'permission',auto:true,tool:'Bash',text:'Commande de test exécutée — autorisée (auto)'}
+];
+function ensureFeedTimer(m){
+  Object.keys(FEED_TIMERS).forEach(k => { clearInterval(FEED_TIMERS[k]); delete FEED_TIMERS[k]; });
+  if (m.state !== 'running') return;
+  FEED_TIMERS[m.id] = setInterval(() => {
+    if (state.selectedMissionId !== m.id) return;
+    const pick = FAKE_ACTIVITY[Math.floor(Math.random()*FAKE_ACTIVITY.length)];
+    m.feed.push(Object.assign({ ts: nowStr() }, pick));
+    renderFeedOnly();
+  }, 5000);
+}
+
+/* ================================================================
+   VUE SOUS-AGENT — H-72.3 : même niveau de détail que le lead
+   ================================================================ */
+const AGENT_FEED_TIMERS = {};
+const FAKE_AGENT_ACTIVITY = [
+  {type:'activity',tool:'',text:'Tour terminé, résultat intégré au travail en cours.'},
+  {type:'permission',auto:true,tool:'Read',text:'Lecture de fichier — autorisée (auto)'},
+  {type:'permission',auto:true,tool:'Edit',text:'Modification de fichier — autorisée (auto)'},
+  {type:'permission',auto:true,tool:'Bash',text:'Commande de vérification exécutée — autorisée (auto)'}
+];
+function openAgent(missionId, agentId){
+  state.selectedMissionId = missionId;
+  state.selectedAgentId = agentId;
+  goto('agent');
+  renderAgentDetail(missionId, agentId);
+}
+function backFromAgent(){
+  const mid = state.selectedMissionId;
+  goto('mission');
+  if (mid) renderMissionDetail(mid);
+}
+function ensureAgentFeedTimer(m, a){
+  Object.keys(AGENT_FEED_TIMERS).forEach(k => { clearInterval(AGENT_FEED_TIMERS[k]); delete AGENT_FEED_TIMERS[k]; });
+  if (m.state !== 'running' || a.status !== 'actif') return;
+  AGENT_FEED_TIMERS[a.id] = setInterval(() => {
+    if (state.selectedAgentId !== a.id) return;
+    const pick = FAKE_AGENT_ACTIVITY[Math.floor(Math.random()*FAKE_AGENT_ACTIVITY.length)];
+    a.feed.push(Object.assign({ ts: nowStr() }, pick));
+    const scroll = document.getElementById('agentFeedScroll');
+    if (scroll) { scroll.innerHTML = a.feed.map(feedItemTemplate).join(''); scroll.scrollTop = scroll.scrollHeight; }
+  }, 4500);
+}
+function renderAgentDetail(missionId, agentId){
+  const m = state.missions.find(x=>x.id===missionId);
+  const a = m && m.subagents ? m.subagents.find(x=>x.id===agentId) : null;
+  if (!m || !a) { document.getElementById('agentBody').innerHTML = `<div class="empty-state"><div class="t">Sous-agent introuvable</div></div>`; return; }
+
+  document.getElementById('agentTitle').textContent = a.name;
+  document.getElementById('agentSub').textContent = `${m.project} · sous-agent de ${m.id.toUpperCase()}`;
+  const color = a.status==='actif' ? 'background:var(--ok-soft);color:var(--ok);' : a.status==='attente' ? 'background:var(--warn-soft);color:#8A6A12;' : 'background:var(--bg-2);color:var(--ink-3);';
+  document.getElementById('agentBadge').style.cssText = color;
+  document.getElementById('agentBadge').textContent = a.status;
+
+  document.getElementById('agentBody').innerHTML = `
+    <div class="card" style="padding:14px;margin-bottom:14px;background:var(--bg-2);">
+      <div style="font-size:11px;color:var(--ink-3);">Invoqué par le team leader de <strong style="color:var(--ink-2);">${escapeHtml(m.title)}</strong> — même niveau de détail que le lead (H-72).</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:9px;" onclick="goToMission('${m.id}')">← Retour à l'équipe</button>
+    </div>
+
+    <div class="card" style="padding:14px;margin-bottom:14px;">
+      <div class="sec-title">Ce qu'il fait, où il en est</div>
+      <p style="font-size:13px;line-height:1.55;margin:0;">${escapeHtml(a.action)}</p>
+      <div class="kv" style="margin-top:11px;">
+        <div><span class="k">Rôle</span><span class="v">${a.role}</span></div>
+        <div><span class="k">Rattaché à</span><span class="v mono">${m.project} · ${m.id}</span></div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:14px;">
+      <div class="sec-title">Travail en temps réel
+        <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${a.feed.length} évènements</span>
+      </div>
+      <div class="feed-scroll" id="agentFeedScroll">${a.feed.map(feedItemTemplate).join('') || '<div class="empty-state"><div class="s">Aucun évènement encore.</div></div>'}</div>
+      <div style="font-size:10px;color:var(--ink-3);margin-top:8px;line-height:1.5;">
+        Flux directement depuis la source vers cette vue — il ne transite jamais par le contexte de l'orchestrateur maître (H-45, H-72).
+      </div>
+    </div>
+  `;
+  ensureAgentFeedTimer(m, a);
+  const scroll = document.getElementById('agentFeedScroll');
+  if (scroll) scroll.scrollTop = scroll.scrollHeight;
+}
+
+/* ================================================================
+   ESCALADES
+   ================================================================ */
+function renderEscalades(){
+  document.getElementById('escSub').textContent = `${state.escalades.length} demande${state.escalades.length>1?'s':''} en attente · les demandes n'expirent jamais`;
+  if (!state.escalades.length) {
+    document.getElementById('escList').innerHTML = `<div class="empty-state card">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 6L9 17l-5-5"/></svg>
+      <div class="t">Aucune escalade en attente</div>
+      <div class="s">Le lead arbitre seul tout ce qui reste sous le plancher de déni.</div>
+    </div>`;
+    return;
+  }
+  document.getElementById('escList').innerHTML = state.escalades.map(e => `
+    <div class="card esc msg-in">
+      <div class="h">
+        <div style="min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${escapeHtml(e.title)}</div>
+          <div class="mono" style="font-size:10.5px;color:var(--ink-3);margin-top:3px;">${escapeHtml(e.sub)}</div>
+        </div>
+        <span class="age ${e.old?'old':''}">${escapeHtml(e.age)}</span>
+      </div>
+      <div class="tool">${escapeHtml(e.tool)}</div>
+      <div class="phrase">${escapeHtml(e.phrase)}</div>
+      <div class="why"><strong>Raison de déclenchement</strong> — ${escapeHtml(e.why)}</div>
+      ${e.path? `<div class="path">${escapeHtml(e.path)}</div>` : ''}
+      ${e.suggestions && e.suggestions.length ? `<div style="margin-top:9px;font-size:11.5px;color:var(--ink-3);">Suggestions du SDK : ${e.suggestions.map(s=>`<span class="chip">${escapeHtml(s)}</span>`).join(' ')}</div>` : ''}
+      <div class="acts">
+        <button class="btn btn-accent" onclick="approveEscalade('${e.id}')" ${state.linkUp?'':'disabled'}>Autoriser</button>
+        <button class="btn btn-ghost" style="color:var(--err);border-color:var(--err-soft);" onclick="openDenyModal('${e.id}')" ${state.linkUp?'':'disabled'}>Refuser…</button>
+      </div>
+      ${!state.linkUp ? `<div class="hint" style="color:var(--err);margin-top:8px;">Lien coupé — le verdict n'atteindrait pas le worker.</div>` : ''}
+    </div>
+  `).join('');
+}
+
+function resolveEscalade(escId, verdict, reason){
+  const idx = state.escalades.findIndex(e => e.id === escId);
+  if (idx === -1) return;
+  const e = state.escalades[idx];
+  const m = state.missions.find(x => x.id === e.missionId);
+  state.escalades.splice(idx, 1);
+
+  if (m) {
+    const pendingItem = m.feed.find(f => f.type==='permission' && f.pending);
+    if (pendingItem) { pendingItem.pending = false; pendingItem.resolved = verdict==='autorise' ? 'autorisée (opérateur)' : 'refusée (opérateur)'; }
+    m.feed.push({ ts: nowStr(), type:'system', tool:'verdict',
+      text: verdict==='autorise' ? 'Verdict opérateur : autorisé — réinjecté via requestId, la mission reprend.'
+                                  : `Verdict opérateur : refusé — motif réinjecté : "${reason}"` });
+    if (!state.escalades.some(x => x.missionId === m.id)) {
+      m.state = 'running'; m.blockedSince = null;
+    }
+  }
+  renderParc(); renderEscalades();
+  if (state.selectedMissionId === (m&&m.id)) renderMissionDetail(m.id);
+  toast(verdict==='autorise' ? 'Autorisé — verdict réinjecté via requestId' : 'Refus transmis avec motif');
+}
+
+function approveEscalade(id){ if (!state.linkUp) return; resolveEscalade(id, 'autorise'); }
+function openDenyModal(id){ if (!state.linkUp) return; state.denyTargetId = id; document.getElementById('denyReason').value=''; openModal('modalDeny'); }
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btnConfirmDeny').addEventListener('click', () => {
+    const reason = document.getElementById('denyReason').value.trim() || 'Refusé sans motif détaillé.';
+    closeModal('modalDeny');
+    if (state.denyTargetId) resolveEscalade(state.denyTargetId, 'refuse', reason);
+    state.denyTargetId = null;
+  });
+});
+
+/* ================================================================
+   MISSION : pause / terminer individuels
+   ================================================================ */
+function pauseOneMission(id){
+  const m = state.missions.find(x=>x.id===id);
+  if (!m || !state.linkUp) return;
+  if (m.state === 'paused') {
+    m.state = 'running'; m.pausedAgo = null;
+    m.feed.push({ ts: nowStr(), type:'system', tool:'reprise', text:'Mission reprise par l\'opérateur — session vivante, contexte intact.' });
+    toast('Mission reprise');
+  } else if (['running','requires_action','idle'].includes(m.state)) {
+    m.state = 'paused'; m.pausedAgo = 'quelques secondes';
+    m.feed.push({ ts: nowStr(), type:'system', tool:'pause', text:'Mise en pause opérateur — session retenue, contexte préservé.' });
+    toast('Mission mise en pause — session vivante');
+  }
+  renderParc(); renderMissionDetail(id);
+}
+function terminateMission(id){
+  const m = state.missions.find(x=>x.id===id);
+  if (!m || !state.linkUp) return;
+  m.state = 'terminee'; m.doneAgo = 'à l\'instant';
+  m.feed.push({ ts: nowStr(), type:'system', tool:'fin', text:'Mission terminée par l\'opérateur.' });
+  renderParc(); renderMissionDetail(id);
+  toast('Mission terminée — worktree conservé');
+}
+
+/* ================================================================
+   COMPTES & QUOTAS
+   ================================================================ */
+function accountBlock(a){
+  const isActive = a.status === 'allowed';
+  const missionsHere = state.missions.filter(m => m.account === a.id && ['running','requires_action','idle','paused'].includes(m.state));
+  const rows = [];
+  if (a.five_hour) rows.push(['five_hour (session actuelle)', a.five_hour, true]);
+  if (a.seven_day) rows.push(['seven_day (semaine)', a.seven_day, false]);
+  if (a.seven_day_opus) rows.push(['seven_day_opus', a.seven_day_opus, false]);
+  if (a.seven_day_sonnet) rows.push(['seven_day_sonnet', a.seven_day_sonnet, false]);
+
+  const qrows = rows.map(([name, w, activeWin]) => `
+    <div class="qrow">
+      <div class="qh"><span style="color:var(--ink-3);">${name}${activeWin?' <span class="badge" style="background:var(--ink);color:var(--bg);margin-left:4px;">fenêtre active</span>':''}</span><span>${w.util} %</span></div>
+      <div class="usage-track"><div class="usage-fill" style="width:${w.util}%;background:${w.util>=90?'var(--err)':w.util>=65?'var(--warn)':'var(--ok)'};"></div></div>
+      <div class="mono" style="font-size:10px;color:${w.util>=90?'var(--err)':'var(--ink-3)'};margin-top:4px;">${w.util>=90?'saturé · ':''}reset ${w.resetLabel}</div>
+    </div>`).join('');
+
+  const rotationNote = !isActive ? `<div style="margin-top:11px;padding:9px 11px;border-radius:10px;background:var(--warn-soft);font-size:11.5px;color:#8A6A12;line-height:1.5;">
+      Rotation : les <strong>prochaines</strong> missions partent sur ${state.nextAccount===a.id?'cet autre compte, en cours de bascule':'le compte #'+state.nextAccount}. Les missions déjà lancées <strong>atterrissent proprement</strong> (H-70) plutôt que d'être coupées net — voir le Parc.
+    </div>` : '';
+
+  return `<div class="card acc ${isActive?'active':'saturated'}">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+      <div style="min-width:0;">
+        <div style="font-size:13.5px;font-weight:600;">${a.label}</div>
+        <div class="mono" style="font-size:10.5px;color:var(--ink-3);margin-top:3px;">${a.email} · Max · oauth</div>
+      </div>
+      <span class="badge" style="${isActive?'background:var(--ok-soft);color:var(--ok);':'background:var(--err-soft);color:var(--err);'}">${a.status}</span>
+    </div>
+    ${qrows}
+    ${rotationNote}
+    <div class="qmiss">
+      <span style="font-size:10.5px;color:var(--ink-3);align-self:center;">missions :</span>
+      ${missionsHere.length ? missionsHere.map(m=>`<span class="chip" style="${isActive?'':'background:var(--err-soft);color:var(--err);'}">${m.project}${m.landing&&m.landing.active?' (atterrit)':''}</span>`).join('') : '<span class="chip">aucune</span>'}
+    </div>
+    <div class="mono" style="font-size:9.5px;color:var(--ink-3);margin-top:9px;">consommé sur la fenêtre courante : ${toastMoney(a.costWindow)} · poussé par rate_limit_event</div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="toggleSaturation(${a.id})">${isActive ? 'Simuler une saturation' : 'Simuler un reset'}</button>
+    </div>
+  </div>`;
+}
+
+function toggleSaturation(accId){
+  const a = state.accounts[accId];
+  if (a.status === 'allowed') {
+    a.status = 'rejected';
+    if (a.five_hour) a.five_hour.util = 100;
+    state.nextAccount = accId === 1 ? 2 : 1;
+    toast(`Compte #${accId} saturé — les prochaines missions basculent sur le compte #${state.nextAccount}`);
+    /* H-70 : les missions en cours sur ce compte atterrissent, elles ne sont pas coupées net */
+    state.missions.filter(m => m.account === accId && ['running','requires_action'].includes(m.state))
+      .forEach(m => startLanding(m, accId));
+  } else {
+    a.status = 'allowed';
+    if (a.five_hour) a.five_hour.util = 12;
+    toast(`Compte #${accId} réinitialisé (reset de fenêtre) — de nouveau disponible`);
+  }
+  renderComptes();
+  renderParc();
+  renderMiniGauges();
+  renderQuotaStrip();
+}
+
+function renderComptes(){
+  const a1 = state.accounts[1], a2 = state.accounts[2];
+  document.getElementById('comptesBody').innerHTML = `
+    ${accountBlock(a1)}
+    ${accountBlock(a2)}
+    <div class="card" style="padding:14px;margin-top:6px;">
+      <div class="sec-title">Garde-fous</div>
+      <div class="kv">
+        <div><span class="k">Paliers d'inspection</span><span class="v mono" style="text-align:right;">12 → 30 → 50 → 70 → 100 → 120 → 150 → 170 → 200 $</span></div>
+        <div><span class="k">Juge d'inspection</span><span class="v">Haiku — progrès / incertain / boucle</span></div>
+        <div><span class="k">Seuil d'atterrissage</span><span class="v">80-85 % de la fenêtre 5h (H-70)</span></div>
+        <div><span class="k">Plafond de parc</span><span class="v">désactivé</span></div>
+        <div><span class="k">RETRY_WATCHDOG</span><span class="v" style="color:var(--warn);">actif</span></div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-3);line-height:1.55;margin-top:10px;">
+        H-68 : sur abonnement, le dollar ne borne aucune dépense réelle — il déclenche une inspection, il n'arrête rien tant que le juge répond « progrès » ou « incertain ». Le vrai bornage du parc reste le rate limit par compte ci-dessus, et une mission proche de la saturation atterrit (H-70) au lieu d'être coupée.
+      </div>
+    </div>`;
+  renderMiniGauges();
+  renderQuotaStrip();
+}
+
+/* ================================================================
+   ORCHESTRATEUR — jauges + sélecteur modèle/raisonnement + mandat
+   ================================================================ */
+let orchCtx = 23;
+function renderGauges(){
+  const totalCost = state.accounts[1].costWindow + state.accounts[2].costWindow;
+  document.getElementById('gaugeStrip').innerHTML = `
+    <div class="gauge">
+      <div class="gh"><span>Contexte utilisé</span></div>
+      <div class="gv">${orchCtx} %</div>
+      <div class="usage-track" style="margin-top:6px;"><div class="usage-fill" style="width:${orchCtx}%;background:${orchCtx>=75?'var(--err)':orchCtx>=50?'var(--warn)':'var(--ok)'};"></div></div>
+      <button class="compact-btn" onclick="compactContext()">Compacter maintenant</button>
+    </div>
+    <div class="gauge">
+      <div class="gh"><span>Fin de fenêtre (five_hour)</span></div>
+      <div class="gv">17:00</div>
+      <div class="gs">dans 2 h 12 · compte #1</div>
+    </div>
+    <div class="gauge">
+      <div class="gh"><span>$ consommés — fenêtre courante</span></div>
+      <div class="gv">${toastMoney(totalCost)}</div>
+      <div class="gs">agrégé par compte, partagé par toutes les missions du compte (H-63)</div>
+    </div>`;
+  renderMiniGauges();
+  renderQuotaStrip();
+}
+function compactContext(){
+  orchCtx = Math.max(4, Math.round(orchCtx * 0.28));
+  renderGauges();
+  toast('Compaction manuelle effectuée — contexte ramené à ' + orchCtx + ' %');
+}
+
+/* ---- H-71 : sélection modèle + raisonnement, niveaux recalculés par modèle ---- */
+function renderModelSelector(){
+  const selModel = document.getElementById('selModel');
+  const selEffort = document.getElementById('selEffort');
+  selModel.innerHTML = MODELS.map(mo =>
+    `<option value="${mo.id}" ${mo.enabled?'':'disabled'} ${mo.id===state.orchModel.model?'selected':''}>${mo.label}</option>`
+  ).join('');
+  refreshEffortOptions();
+  updateModelHint();
+}
+function refreshEffortOptions(){
+  const selEffort = document.getElementById('selEffort');
+  const mo = MODELS.find(x => x.id === state.orchModel.model) || MODELS[0];
+  if (!mo.effort.length) {
+    selEffort.innerHTML = `<option value="">— pas de raisonnement réglable —</option>`;
+    selEffort.disabled = true;
+    return;
+  }
+  selEffort.disabled = false;
+  if (!mo.effort.includes(state.orchModel.effort)) state.orchModel.effort = mo.effort.includes('high') ? 'high' : mo.effort[0];
+  selEffort.innerHTML = mo.effort.map(e => `<option value="${e}" ${e===state.orchModel.effort?'selected':''}>${EFFORT_LABEL[e]}</option>`).join('');
+}
+function updateModelHint(){
+  const mo = MODELS.find(x => x.id === state.orchModel.model) || MODELS[0];
+  const hint = document.getElementById('modelHint');
+  if (!mo.enabled) {
+    hint.innerHTML = `<strong>Déconseillé par Chris pour ce rôle</strong> — jugé insuffisant (H-71), affiché pour transparence mais non sélectionnable. Sélection retombée sur ${MODELS[0].label}.`;
+  } else if (!mo.effort.length) {
+    hint.textContent = `${mo.label} ne supporte ni effort ni raisonnement adaptatif — niveaux masqués, pas figés à zéro.`;
+  } else {
+    hint.textContent = `Niveaux de raisonnement recalculés pour ${mo.label} : ${mo.effort.map(e=>EFFORT_LABEL[e]).join(' · ')}. Change à chaud (setModel/setMaxThinkingTokens), sans redémarrer la session.`;
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const selModel = document.getElementById('selModel');
+  const selEffort = document.getElementById('selEffort');
+  selModel.addEventListener('change', () => {
+    const mo = MODELS.find(x => x.id === selModel.value);
+    if (!mo || !mo.enabled) { selModel.value = state.orchModel.model; return; }
+    state.orchModel.model = mo.id;
+    refreshEffortOptions();
+    updateModelHint();
+    toast(`Orchestrateur → ${mo.label}`);
+  });
+  selEffort.addEventListener('change', () => {
+    state.orchModel.effort = selEffort.value;
+    updateModelHint();
+    toast(`Raisonnement → ${EFFORT_LABEL[selEffort.value]}`);
+  });
+  document.getElementById('btnOrchSend').addEventListener('click', sendOrchMessage);
+  document.getElementById('orchInput').addEventListener('keydown', e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendOrchMessage(); } });
+  renderModelSelector();
+});
+function sendOrchMessage(){
+  const el = document.getElementById('orchInput');
+  const text = (el.value||'').trim();
+  if (!text) return;
+  const chat = document.getElementById('chatBody');
+  const u = document.createElement('div'); u.className='bubble-u'; u.textContent = text; chat.appendChild(u);
+  el.value = '';
+  const mo = MODELS.find(x => x.id === state.orchModel.model) || MODELS[0];
+  const a = document.createElement('div'); a.className='bubble-a msg-in';
+  a.innerHTML = `<p style="margin:0;">Reçu (${mo.label}${mo.effort.length?' · raisonnement '+EFFORT_LABEL[state.orchModel.effort]:''}). Je ne bloque pas dessus : si ça implique de dispatcher une équipe, je te soumettrai le mandat pour autorisation — je ne lance jamais seul (H-61).</p>`;
+  chat.appendChild(a);
+  document.getElementById('chatScroll').scrollTop = document.getElementById('chatScroll').scrollHeight;
+}
+
+/* ---- Proposition de mandat, dans le chat ---- */
+function isTestable(txt){
+  if (!txt) return false;
+  const t = txt.trim();
+  if (t.length < 20) return false;
+  return /(réussit|réussissent|passent|passe|atteint|observ|mesur|zéro|détecte|confirmé|sans erreur|tests? e2e|au moins|identique|contient les mêmes|rejeté|accepté|\d)/i.test(t);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btnNewMission').addEventListener('click', () => {
+    if (!state.linkUp) { toast('Lien coupé — impossible de dispatcher tant que le contrôle n\'atteint pas le Pi'); return; }
+    document.getElementById('fCritereField').classList.remove('has-error');
+    document.getElementById('fCritereError').classList.remove('show');
+    openModal('modalMandat');
+  });
+  document.getElementById('btnSubmitMandate').addEventListener('click', submitMandate);
+});
+
+function submitMandate(){
+  const projet = document.getElementById('fProjet').value;
+  const but = document.getElementById('fBut').value.trim();
+  const critere = document.getElementById('fCritere').value.trim();
+  const perimetre = document.getElementById('fPerimetre').value.trim();
+  const budget = parseFloat(document.getElementById('fBudget').value) || 12;
+
+  if (!isTestable(critere)) {
+    document.getElementById('fCritereField').classList.add('has-error');
+    const err = document.getElementById('fCritereError');
+    err.textContent = "Refusé au dispatch — critère d'arrêt non testable. Formule un état vérifiable (ex. « X réussit », « le test mesure Y ≥ Z »), pas une intention.";
+    err.classList.add('show');
+    return;
+  }
+  document.getElementById('fCritereField').classList.remove('has-error');
+  document.getElementById('fCritereError').classList.remove('show');
+
+  closeModal('modalMandat');
+  const proposalId = uid('prop');
+  const proposal = { id: proposalId, projet, but, critere, perimetre, budget, status:'pending' };
+  state.proposals.push(proposal);
+  goto('orchestrateur');
+  appendProposalToChat(proposal);
+  toast('Mandat transmis — en attente de ton autorisation');
+}
+
+function appendProposalToChat(p){
+  const chat = document.getElementById('chatBody');
+  const u = document.createElement('div'); u.className='bubble-u'; u.textContent = `Lance une mission sur ${p.projet}.`; chat.appendChild(u);
+  const a = document.createElement('div'); a.className='bubble-a msg-in';
+  a.innerHTML = `<p style="margin:0 0 4px;">Je ne crée rien seul (H-61). Voici le mandat proposé — ton autorisation dispatche l'équipe.</p>
+    <div class="mandate-card" id="mandate_${p.id}">
+      <div class="mh2">Proposition de mandat</div>
+      <div class="mb">
+        <div class="mrow"><div class="k">Projet</div><div class="v mono">${escapeHtml(p.projet)}</div></div>
+        <div class="mrow"><div class="k">But</div><div class="v">${escapeHtml(p.but)}</div></div>
+        <div class="mrow"><div class="k">Critère d'arrêt</div><div class="v">${escapeHtml(p.critere)}</div></div>
+        <div class="mrow"><div class="k">Périmètre</div><div class="v mono">${escapeHtml(p.perimetre||'—')}</div></div>
+        <div class="mrow"><div class="k">Budget</div><div class="v mono">${toastMoney(p.budget)} (indicatif — voir paliers d'inspection)</div></div>
+      </div>
+      <div class="macts">
+        <button class="btn btn-accent" onclick="approveProposal('${p.id}')">Autoriser</button>
+        <button class="btn btn-ghost" style="color:var(--err);border-color:var(--err-soft);" onclick="rejectProposal('${p.id}')">Refuser</button>
+      </div>
+    </div>`;
+  chat.appendChild(a);
+  document.getElementById('chatScroll').scrollTop = document.getElementById('chatScroll').scrollHeight;
+}
+
+function stampProposal(id, label, color){
+  const card = document.getElementById('mandate_'+id);
+  if (!card) return;
+  card.classList.add('resolved');
+  const stamp = document.createElement('div');
+  stamp.className = 'verdict-stamp'; stamp.style.color = color;
+  stamp.textContent = label + ' à ' + nowStr();
+  card.appendChild(stamp);
+}
+
+function approveProposal(id){
+  const p = state.proposals.find(x=>x.id===id);
+  if (!p || p.status !== 'pending') return;
+  p.status = 'approved';
+  stampProposal(id, 'Autorisée', 'var(--ok)');
+  const account = state.accounts[state.nextAccount].status === 'allowed' ? state.nextAccount : (state.nextAccount===1?2:1);
+  const missionId = uid('m');
+  seedMission({
+    id: missionId, title: p.but.length>60? p.but.slice(0,60)+'…': p.but, project: p.projet, worktree:'wt/'+missionId,
+    branch:'auto/'+missionId, account, state:'running', ctx:2, cost:0, inspection:newInspection(null,null),
+    team:'lead — équipe en constitution', model:'claude-opus-4-8', epoch:1, retries:'0 / 3',
+    sessionId:'ses_'+missionId+'…new', freshlyDispatched:true,
+    mandate:{ but:p.but, critere:p.critere },
+    feed:[{ ts: nowStr(), type:'system', tool:'dispatch', text:'Mission autorisée par l\'opérateur — équipe en cours de constitution sur compte #'+account+'.' }]
+  });
+  renderParc();
+  toast('Mission dispatchée — visible dans le Parc');
+}
+function rejectProposal(id){
+  const p = state.proposals.find(x=>x.id===id);
+  if (!p || p.status !== 'pending') return;
+  p.status = 'refused';
+  stampProposal(id, 'Refusée — aucune équipe créée', 'var(--err)');
+  toast('Proposition refusée');
+}
+
+/* ================================================================
+   PARAMÈTRES — liste des projets, dérivée du parc
+   ================================================================ */
+function renderProjets(){
+  const byProject = {};
+  state.missions.forEach(m => { (byProject[m.project] = byProject[m.project]||[]).push(m); });
+  document.getElementById('projList').innerHTML = PROJECTS.map(p => {
+    const ms = byProject[p] || [];
+    const active = ms.find(m => ['running','requires_action'].includes(m.state));
+    const paused = ms.find(m => m.state==='paused');
+    let badge = '<span class="badge" style="background:var(--bg-2);color:var(--ink-3);">aucune mission</span>';
+    if (active) badge = '<span class="badge" style="background:var(--bg-2);color:var(--ink-3);">1 mission active</span>';
+    else if (paused) badge = '<span class="badge" style="background:var(--warn-soft);color:#8A6A12;">1 en pause</span>';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px;">
+      <span class="mono">${p}</span>${badge}
+    </div>`;
+  }).join('');
+}
+
+/* ================================================================
+   NAVIGATION
+   ================================================================ */
+const SAFETY_HTML = `
+  <button class="btnPause">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+    <span class="pauseLabel">PAUSE GLOBALE</span>
+  </button>
+  <div class="safety-gap"></div>
+  <button class="btnStop" title="Arrêt d'urgence">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#B5524A" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+  </button>`;
+document.querySelectorAll('.safety-bar').forEach(b => { b.innerHTML = SAFETY_HTML; });
+
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebarOverlay');
+function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('show'); }
+function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('show'); }
+document.querySelectorAll('.sidebarToggle').forEach(b => b.addEventListener('click', openSidebar));
+document.getElementById('sidebarClose').addEventListener('click', closeSidebar);
+overlay.addEventListener('click', closeSidebar);
+
+function goto(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.dataset.view === view));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.goto === view));
+  closeSidebar();
+  if (view === 'parc') renderParc();
+  if (view === 'escalades') renderEscalades();
+  if (view === 'comptes') renderComptes();
+  if (view === 'orchestrateur') renderGauges();
+  if (view === 'parametres') renderProjets();
+  renderTeamTree();
+  const active = document.querySelector('.view.active');
+  if (active) active.scrollTop = 0;
+}
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-goto]');
+  if (t) goto(t.dataset.goto);
+});
+
+/* ---------- modales génériques ---------- */
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('.modal').classList.remove('show')));
+document.querySelectorAll('.modal').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); }));
+
+document.addEventListener('click', e => {
+  if (e.target.closest('.btnPause')) {
+    if (!state.linkUp) { toast('Lien coupé — la pause n\'atteindrait pas les workers'); return; }
+    document.getElementById('pauseTitle').textContent = state.paused ? 'Reprendre le parc' : 'Mettre tout le parc en pause';
+    document.getElementById('pauseDesc').innerHTML = state.paused
+      ? 'Les files d\'entrée retenues seront relâchées et les missions reprendront leur tour.'
+      : `${missionCounts().running + missionCounts().requires_action} mission(s) active(s) seront interrompues sur leur tour en cours. <strong>Les sessions restent vivantes, le contexte est intégralement préservé.</strong> Reprise instantanée.`;
+    openModal('modalPause');
+  }
+  if (e.target.closest('.btnStop')) {
+    if (!state.linkUp) { toast('Lien coupé — l\'arrêt n\'atteindrait pas les workers'); return; }
+    const n = state.missions.filter(m => ['running','requires_action','idle'].includes(m.state)).length;
+    document.getElementById('stopDesc').innerHTML = `Pause globale, puis <strong>fermeture des ${n} session(s) active(s)</strong>. Le contexte est préservé sur disque mais devra être rechargé — reprise par <code>resume</code> ou redispatch, pas instantanée.`;
+    resetArm(); openModal('modalStop');
+  }
+});
+document.getElementById('btnConfirmPause').addEventListener('click', doPause);
+function doPause() {
+  closeModal('modalPause');
+  state.paused = !state.paused;
+  document.querySelectorAll('.btnPause').forEach(b => b.classList.toggle('engaged', state.paused));
+  document.querySelectorAll('.pauseLabel').forEach(l => l.textContent = state.paused ? 'REPRENDRE LE PARC' : 'PAUSE GLOBALE');
+  if (state.paused) {
+    state.missions.forEach(m => { if (['running','requires_action'].includes(m.state)) m._pausedByGlobal = m.state; });
+    toast('Parc en pause — sessions vivantes, contexte intégralement préservé');
+  } else {
+    toast('Parc repris — files relâchées');
+  }
+}
+
+/* ---------- arrêt d'urgence : geste armé (maintien) ---------- */
+const armTrack = document.getElementById('armTrack');
+const armFill = document.getElementById('armFill');
+const armLabel = document.getElementById('armLabel');
+let armTimer = null, armStart = 0;
+function resetArm() { armFill.style.width = '0%'; armTrack.classList.remove('armed'); armLabel.textContent = 'Maintenir 1,5 s pour armer'; }
+function armDown() {
+  armStart = Date.now();
+  armTimer = setInterval(() => {
+    const p = Math.min(1, (Date.now() - armStart) / 1500);
+    armFill.style.width = (p * 100) + '%';
+    if (p > .5) armTrack.classList.add('armed');
+    if (p >= 1) { clearInterval(armTimer); armTimer = null; fireStop(); }
+  }, 30);
+}
+function armUp() { if (armTimer) { clearInterval(armTimer); armTimer = null; resetArm(); } }
+function fireStop() {
+  armLabel.textContent = 'ARRÊT DÉCLENCHÉ';
+  setTimeout(() => {
+    closeModal('modalStop');
+    const n = state.missions.filter(m => ['running','requires_action','idle'].includes(m.state)).length;
+    state.missions.forEach(m => { if (['running','requires_action','idle'].includes(m.state)) m.state = 'paused'; });
+    renderParc();
+    toast(`Arrêt d'urgence — ${n} session(s) fermée(s), worktrees intacts`);
+    resetArm();
+  }, 500);
+}
+['pointerdown'].forEach(ev => armTrack.addEventListener(ev, e => { e.preventDefault(); armDown(); }));
+['pointerup','pointerleave','pointercancel'].forEach(ev => armTrack.addEventListener(ev, armUp));
+
+/* ---------- lien Pi↔PC ---------- */
+document.getElementById('linkToggle').addEventListener('click', () => {
+  state.linkUp = !state.linkUp;
+  document.getElementById('linkDot').style.background = state.linkUp ? 'var(--ok)' : 'var(--err)';
+  document.getElementById('linkDot').classList.toggle('dot-live', state.linkUp);
+  document.getElementById('linkText').textContent = state.linkUp ? 'Lien établi' : 'Lien coupé';
+  document.getElementById('linkText').style.color = state.linkUp ? '' : 'var(--err)';
+  document.getElementById('linkWire').classList.toggle('down', !state.linkUp);
+  document.getElementById('linkMeta').textContent = state.linkUp ? 'seq 148 203 · dernier battement 1,2 s' : 'gelé à seq 148 203 · retente dans 4 s';
+  document.getElementById('linkToggle').textContent = state.linkUp ? 'simuler coupure' : 'rétablir';
+  document.getElementById('linkBanner').classList.toggle('show', !state.linkUp);
+  document.querySelectorAll('.safety-bar').forEach(b => b.classList.toggle('link-down', !state.linkUp));
+  const activeView = document.querySelector('.view.active').dataset.view;
+  if (activeView === 'mission' && state.selectedMissionId) renderMissionDetail(state.selectedMissionId);
+  if (activeView === 'escalades') renderEscalades();
+  toast(state.linkUp ? 'Lien Pi↔PC rétabli' : 'Lien Pi↔PC coupé — sûreté et dispatch indisponibles');
+});
+
+/* ---------- toasts ---------- */
+function toast(msg) {
+  const el = document.createElement('div');
+  el.className = 'toast msg-in';
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+/* ---------- rendu initial ---------- */
+renderParc();
+renderEscalades();
+renderComptes();
+renderGauges();
+renderProjets();
+renderMiniGauges();
+renderQuotaStrip();
+renderTeamTree();
+</script>
+</body>
+</html>

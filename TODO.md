@@ -5,6 +5,15 @@
 
 **Contexte complet : `harness/REPRISE.md`.**
 
+### 🔴 DETTE N°1 — à traiter dès le MVP clos (décision de Chris, 2026-07-22)
+- [ ] **Persistance du registre de workers côté PC.** Aujourd'hui `RegistreWorkers` (M-13) vit **en
+      mémoire**. Si le **superviseur PC** redémarre — et pas seulement le Pi — il perd la trace de
+      tous les workers vivants. `☠` **Aucun fencing ne peut y remédier** : M-11 arbitre les epochs
+      entre candidats connus, il ne peut rien pour des process dont plus personne ne sait qu'ils
+      existent. Des workers continueraient d'écrire dans des worktrees que le harness croit libres —
+      exactement la corruption silencieuse que tout le reste sert à empêcher.
+      **Priorité explicite de Chris : avant toutes les autres dettes.**
+
 ### Lot 0 — TERMINÉ (180 tests verts, typecheck propre)
 - [x] **M-01** squelette worker · **M-02** générateur d'entrée · **M-03** registre SQLite
 - [x] **M-04** harnais de pannes — 87 tests, README avec table de couverture, défaut de fencing
