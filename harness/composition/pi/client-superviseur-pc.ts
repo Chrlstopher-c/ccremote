@@ -142,4 +142,22 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
   async relancer(missionId: string, sessionId: string): Promise<void> {
     await this.#appeler({ type: 'relancer_worker', missionId, sessionId });
   }
+
+  // -- Pilotage d'une mission vivante (A.2.2) ---------------------------------
+  // `☠` Ces trois ordres traversent le MÊME lien que le reste (H-75). Ils ne
+  // passent jamais par l'orchestrateur : l'opérateur pilote directement, même
+  // si la session maître est saturée ou absente.
+
+  async envoyerInstruction(missionId: string, texte: string): Promise<{ readonly detail: string }> {
+    const reponse = await this.#appeler({ type: 'envoyer_instruction', missionId, texte });
+    return { detail: reponse.detail ?? '' };
+  }
+
+  async mettreEnPause(missionId: string): Promise<void> {
+    await this.#appeler({ type: 'pause_worker', missionId });
+  }
+
+  async reprendre(missionId: string): Promise<void> {
+    await this.#appeler({ type: 'reprendre_worker', missionId });
+  }
 }

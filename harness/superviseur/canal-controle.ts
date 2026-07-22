@@ -46,7 +46,25 @@ export interface PortSuperviseurControle {
    * de méthode absente. `SuperviseurWorkers` réel l'implémente toujours.
    */
   arretUrgence?(graceMs?: number): Promise<RapportArretUrgence>;
+  /**
+   * Pilotage d'une mission vivante (instruction, pause, reprise). Optionnel au
+   * même titre qu'`arretUrgence` et pour la même raison : une doublure de test
+   * qui ne l'implémente pas fait REFUSER l'opération, jamais planter sur un
+   * appel de méthode absente.
+   */
+  readonly pilotage?: {
+    envoyerInstruction(missionId: string, texte: string): Promise<{ readonly retenue: boolean }>;
+    mettreEnPause(missionId: string): Promise<{ readonly enPause: true }>;
+    reprendre(missionId: string): Promise<{ readonly enAttenteTransmis: number }>;
+  };
 }
+
+/** Refus explicite plutôt qu'un plantage sur méthode absente (même règle qu'`arretUrgence`). */
+const REFUS_PILOTAGE = {
+  ok: false as const,
+  effet: 'refuse' as const,
+  detail: 'pilotage non câblé sur ce superviseur',
+};
 
 export type OperationControle =
   | { readonly type: 'inventaire' }
@@ -61,7 +79,16 @@ export type OperationControle =
    * l'orchestrateur (aucune dépendance de ce fichier vers
    * `control-plane/orchestrateur/`, vérifiable statiquement).
    */
-  | { readonly type: 'arret_urgence'; readonly graceMs?: number };
+  | { readonly type: 'arret_urgence'; readonly graceMs?: number }
+  /**
+   * A.2.2 — les trois ordres adressés à une mission VIVANTE. `☠` Ils passent
+   * tous par `ControleurPause` côté superviseur : une instruction envoyée
+   * pendant une pause est retenue, pas injectée dans un agent qu'on croit
+   * arrêté (voir `superviseur/pilotage-workers.ts`).
+   */
+  | { readonly type: 'envoyer_instruction'; readonly missionId: string; readonly texte: string }
+  | { readonly type: 'pause_worker'; readonly missionId: string }
+  | { readonly type: 'reprendre_worker'; readonly missionId: string };
 
 /** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
 type OperationMutative = Exclude<OperationControle, { readonly type: 'inventaire' }>;
@@ -160,6 +187,29 @@ export class CanalControle {
             detail: `arrêt d'urgence appliqué à ${rapport.missions.length} mission(s)`,
             rapportArretUrgence: rapport,
           };
+        }
+        case 'envoyer_instruction': {
+          if (this.#superviseur.pilotage === undefined) return REFUS_PILOTAGE;
+          const { retenue } = await this.#superviseur.pilotage.envoyerInstruction(operation.missionId, operation.texte);
+          return {
+            ok: true,
+            effet: 'applique',
+            // `☠` Dire QUE le message a été retenu, pas seulement qu'il est
+            // parti : l'opérateur doit savoir que son agent en pause ne l'a pas
+            // encore lu, sans quoi il attend une réaction qui ne viendra qu'à
+            // la reprise.
+            detail: retenue ? 'instruction retenue — mission en pause, transmise à la reprise' : 'instruction transmise',
+          };
+        }
+        case 'pause_worker': {
+          if (this.#superviseur.pilotage === undefined) return REFUS_PILOTAGE;
+          await this.#superviseur.pilotage.mettreEnPause(operation.missionId);
+          return { ok: true, effet: 'applique', detail: `mission en pause : ${operation.missionId}` };
+        }
+        case 'reprendre_worker': {
+          if (this.#superviseur.pilotage === undefined) return REFUS_PILOTAGE;
+          const { enAttenteTransmis } = await this.#superviseur.pilotage.reprendre(operation.missionId);
+          return { ok: true, effet: 'applique', detail: `mission reprise, ${enAttenteTransmis} message(s) retenu(s) transmis` };
         }
         default: {
           const exhaustif: never = operation;

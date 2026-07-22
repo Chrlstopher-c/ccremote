@@ -169,3 +169,144 @@ describe('API web — refus de configuration dangereuse', () => {
     ).toThrow(/authentification/);
   });
 });
+
+describe('API web — écritures (les ordres de l’opérateur)', () => {
+  async function poster(chemin: string, corps: unknown): Promise<{ statut: number; corps: Record<string, unknown> }> {
+    const s = serveur ?? demarrer();
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness${chemin}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(corps),
+    });
+    return { statut: rep.status, corps: (await rep.json()) as Record<string, unknown> };
+  }
+
+  test('☠ sans lien vers le PC ⇒ 501, JAMAIS 200 : un ordre qui ne part pas ne doit pas être cru transmis', async () => {
+    escalades.recevoir({ requestId: 'r1', idWorker: 'm1', outil: 'Bash' });
+    escalades.escalader('r1');
+    // `demarrer()` ne fournit pas `pc` — c'est exactement le déploiement sans PC.
+    const { statut } = await poster('/escalades/r1/resolve', { verdict: 'autorise' });
+    expect(statut).toBe(501);
+  });
+
+  test('un verdict « autorise » atteint réellement la machine à états', async () => {
+    escalades.recevoir({ requestId: 'r2', idWorker: 'm1', outil: 'Bash' });
+    escalades.escalader('r2');
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: { arreter: async () => {} },
+    });
+    const { statut } = await poster('/escalades/r2/resolve', { verdict: 'autorise' });
+    expect(statut).toBe(200);
+    expect(escalades.demande('r2')?.etat).toBe('repondue');
+  });
+
+  test('☠ un refus SANS motif est rejeté — le motif est réinjecté à l’agent, pas journalisé', async () => {
+    escalades.recevoir({ requestId: 'r3', idWorker: 'm1', outil: 'Bash' });
+    escalades.escalader('r3');
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: { arreter: async () => {} },
+    });
+    const sansMotif = await poster('/escalades/r3/resolve', { verdict: 'refuse' });
+    expect(sansMotif.statut).toBe(400);
+    // La demande doit être restée INTACTE : un rejet de forme ne consomme rien.
+    expect(escalades.demande('r3')?.etat).toBe('en_attente');
+  });
+
+  test('☠ résoudre deux fois ⇒ 409, jamais un second « c’est fait » silencieux', async () => {
+    escalades.recevoir({ requestId: 'r4', idWorker: 'm1', outil: 'Bash' });
+    escalades.escalader('r4');
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: { arreter: async () => {} },
+    });
+    expect((await poster('/escalades/r4/resolve', { verdict: 'autorise' })).statut).toBe(200);
+    expect((await poster('/escalades/r4/resolve', { verdict: 'autorise' })).statut).toBe(409);
+  });
+
+  test('terminer une mission transmet réellement l’ordre au PC', async () => {
+    const arretes: string[] = [];
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: { arreter: async (id) => { arretes.push(id); } },
+    });
+    const { statut } = await poster('/missions/m1/terminate', {});
+    expect(statut).toBe(200);
+    expect(arretes).toEqual(['m1']);
+  });
+
+  test('☠ arrêt d’urgence non câblé ⇒ 501 explicite, jamais un succès rassurant', async () => {
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: { arreter: async () => {} },
+    });
+    const { statut } = await poster('/safety/emergency-stop', {});
+    expect(statut).toBe(501);
+  });
+});
+
+describe('API web — pilotage d’une mission vivante (A.2.2)', () => {
+  function serveurAvecPilotage(journal: string[]): ServeurApiWeb {
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: {
+        arreter: async () => {},
+        envoyerInstruction: async (id, texte) => {
+          journal.push(`instruction:${id}:${texte}`);
+          return { detail: 'instruction retenue — mission en pause, transmise à la reprise' };
+        },
+        mettreEnPause: async (id) => { journal.push(`pause:${id}`); },
+        reprendre: async (id) => { journal.push(`resume:${id}`); },
+      },
+    });
+    return serveur;
+  }
+
+  async function poster(chemin: string, corps: unknown): Promise<{ statut: number; corps: Record<string, unknown> }> {
+    const s = serveur!;
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness${chemin}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corps),
+    });
+    return { statut: rep.status, corps: (await rep.json()) as Record<string, unknown> };
+  }
+
+  test('une instruction atteint réellement le PC, avec son texte', async () => {
+    const journal: string[] = [];
+    serveurAvecPilotage(journal);
+    const { statut } = await poster('/missions/m1/instruction', { text: 'change de branche' });
+    expect(statut).toBe(200);
+    expect(journal).toEqual(['instruction:m1:change de branche']);
+  });
+
+  test('☠ le fait que l’instruction ait été RETENUE remonte jusqu’à l’interface', async () => {
+    serveurAvecPilotage([]);
+    const { corps } = await poster('/missions/m1/instruction', { text: 'coucou' });
+    // Sans ça, l'opérateur attend une réaction d'un agent en pause qui ne lira
+    // le message qu'à la reprise.
+    expect(String(corps['effet'])).toContain('retenue');
+  });
+
+  test('une instruction vide est refusée avant d’atteindre le PC', async () => {
+    const journal: string[] = [];
+    serveurAvecPilotage(journal);
+    expect((await poster('/missions/m1/instruction', { text: '   ' })).statut).toBe(400);
+    expect(journal).toEqual([]);
+  });
+
+  test('pause et reprise atteignent le PC, chacune sur sa route', async () => {
+    const journal: string[] = [];
+    serveurAvecPilotage(journal);
+    expect((await poster('/missions/m1/pause', {})).statut).toBe(200);
+    expect((await poster('/missions/m1/resume', {})).statut).toBe(200);
+    expect(journal).toEqual(['pause:m1', 'resume:m1']);
+  });
+
+  test('☠ pilotage absent du port ⇒ 501, jamais un succès poli', async () => {
+    serveur = demarrerServeurApiWeb({
+      port: 0, registre, escalades, pcEnLigne: () => true, maintenant: () => MAINTENANT,
+      pc: { arreter: async () => {} },
+    });
+    expect((await poster('/missions/m1/pause', {})).statut).toBe(501);
+  });
+});

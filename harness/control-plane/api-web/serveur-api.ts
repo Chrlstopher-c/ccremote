@@ -26,6 +26,7 @@ import { enveloppe, ErreurApi, introuvable } from './enveloppe.ts';
 import { versMissionApi } from './vue-missions.ts';
 import { versEscaladeApi } from './vue-escalades.ts';
 import { versAccountApi } from './vue-comptes.ts';
+import { traiterEcriture, type OrdresVersPc } from './ecritures.ts';
 import { apiWebLogger } from './logger.ts';
 
 const log = apiWebLogger;
@@ -38,6 +39,11 @@ export interface DependancesApiWeb {
   readonly escalades: MachineEtatsDemandes;
   /** Le lien réel vers le PC — source unique de `pcOnline` (H-75). */
   readonly pcEnLigne: () => boolean;
+  /**
+   * Ordres vers le PC. Absent ⇒ les routes d'écriture répondent 501 plutôt que
+   * d'accepter un ordre qui ne partirait nulle part.
+   */
+  readonly pc?: OrdresVersPc;
   readonly maintenant?: () => number;
   readonly plafondRelances?: number;
 }
@@ -101,6 +107,27 @@ function router(chemin: string, deps: DependancesApiWeb): unknown {
   throw new ErreurApi(404, `route inconnue : ${chemin}`);
 }
 
+/**
+ * Routage en écriture. `☠` Sans port vers le PC, on répond 501 — jamais 200 :
+ * accepter un ordre qui ne part nulle part est le pire des deux, parce que
+ * l'opérateur croit sa mission arrêtée et n'y revient pas.
+ */
+async function routerEcriture(chemin: string, req: Request, deps: DependancesApiWeb): Promise<unknown> {
+  if (deps.pc === undefined) {
+    throw new ErreurApi(501, "aucun lien vers le PC sur ce déploiement — l'ordre n'a pas été transmis");
+  }
+  let corps: Record<string, unknown> = {};
+  try {
+    const brut: unknown = await req.json();
+    if (brut !== null && typeof brut === 'object') corps = brut as Record<string, unknown>;
+  } catch {
+    // Corps vide ou illisible : accepté, la plupart des ordres n'en ont pas.
+  }
+  const resultat = await traiterEcriture(chemin, corps, { escalades: deps.escalades, pc: deps.pc });
+  if (resultat === null) throw new ErreurApi(404, `route d'écriture inconnue : ${chemin}`);
+  return resultat;
+}
+
 export function demarrerServeurApiWeb(options: OptionsServeurApiWeb): ServeurApiWeb {
   const hostname = options.hostname ?? '127.0.0.1';
   if (HOTES_PUBLICS.has(hostname)) {
@@ -116,9 +143,10 @@ export function demarrerServeurApiWeb(options: OptionsServeurApiWeb): ServeurApi
   const server: Server<never> = Bun.serve<never>({
     port: options.port,
     hostname,
-    fetch(req): Response {
+    async fetch(req): Promise<Response> {
       const chemin = new URL(req.url).pathname.replace(/^\/api\/harness/, '');
       try {
+        if (req.method === 'POST') return json(await routerEcriture(chemin, req, options));
         return json(router(chemin, options));
       } catch (erreur) {
         if (erreur instanceof ErreurApi) return json({ error: erreur.message }, erreur.statut);

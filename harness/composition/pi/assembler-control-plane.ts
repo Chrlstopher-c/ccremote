@@ -133,6 +133,16 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     registre,
     escalades: machineEtatsDemandes,
     pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
+    // `☠` Les ordres partent par le MÊME lien que le reste (H-75, un seul
+    // lien). `arretUrgence` n'est pas exposé par `ClientSuperviseurPc` : le
+    // chemin G.4 passe par le canal de contrôle et n'a pas encore de méthode
+    // ici — l'omettre fait répondre 501, jamais un faux succès.
+    pc: {
+      arreter: (missionId) => clientSuperviseurPc.arreter(missionId),
+      envoyerInstruction: (missionId, texte) => clientSuperviseurPc.envoyerInstruction(missionId, texte),
+      mettreEnPause: (missionId) => clientSuperviseurPc.mettreEnPause(missionId),
+      reprendre: (missionId) => clientSuperviseurPc.reprendre(missionId),
+    },
   });
 
   const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);

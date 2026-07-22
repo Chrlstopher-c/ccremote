@@ -11,6 +11,11 @@ ssh "$TARGET" "mkdir -p $REMOTE_DIR/templates $REMOTE_DIR/agent $REMOTE_DIR/stat
 scp /mnt/projects/ccremote/pi-web/app.py          "$TARGET:$REMOTE_DIR/"
 scp /mnt/projects/ccremote/pi-web/config.py        "$TARGET:$REMOTE_DIR/"
 scp /mnt/projects/ccremote/pi-web/pc_client.py      "$TARGET:$REMOTE_DIR/"
+# ☠ Toute nouvelle dépendance importée par app.py DOIT être ajoutée ici. Cette
+# liste est explicite, donc silencieusement incomplète : un module oublié fait
+# planter l'app à l'import, en boucle sous `Restart=always`. Déjà failli
+# arriver avec harness_proxy.py.
+scp /mnt/projects/ccremote/pi-web/harness_proxy.py "$TARGET:$REMOTE_DIR/"
 scp /mnt/projects/ccremote/pi-web/requirements.txt "$TARGET:$REMOTE_DIR/"
 scp /mnt/projects/ccremote/pi-web/templates/*.html "$TARGET:$REMOTE_DIR/templates/"
 scp /mnt/projects/ccremote/pi-web/agent/*.py       "$TARGET:$REMOTE_DIR/agent/"

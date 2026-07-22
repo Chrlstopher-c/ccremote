@@ -13,9 +13,12 @@
 //   RÉEL   — getMissions, getMission, getEscalades, getAccounts, getLinkStatus
 //            servis par le control plane (Bun) via /api/harness/*, relayé par
 //            pi-web qui porte l'authentification.
-//   DÉMO   — tout le reste (écritures, orchestrateur, simulateurs). Le chemin
-//            d'écriture traverse le lien vers le PC et n'existe pas encore ;
-//            une écriture à moitié câblée ferait croire l'ordre passé.
+//   RÉEL   — écritures : resolveEscalade, terminateMission, pauseMission,
+//            resumeMission, sendMissionInstruction, emergencyStop. Elles
+//            traversent le lien vers le PC. Un échec renvoie { erreur } et DOIT
+//            être affiché : un ordre non transmis cru transmis est le pire cas.
+//   DÉMO   — orchestrateur (conversation, mandats, jauges) et simulateurs. La
+//            session maître n'est pas encore déployée sur le Pi.
 //
 // `☠` Les champs `subagents`, `feed`, `inspection` et `landing` reviennent
 // VIDES du serveur réel : ils vivent sur le PC et ne sont pas encore remontés.
@@ -45,6 +48,24 @@ const HarnessAPI = (() => {
       return corps;
     } catch (e) {
       return { pcOnline: false, stale: true, data: null, erreur: `Contact impossible avec le Pi : ${e.message}` };
+    }
+  }
+
+  // ☠ Écriture réelle. Contrairement à une lecture, un échec ici doit être VU :
+  // l'opérateur croirait sinon sa mission arrêtée ou son agent débloqué. On ne
+  // renvoie jamais un succès par défaut.
+  async function ecrireReel(chemin, corps) {
+    try {
+      const rep = await fetch(`/api/harness${chemin}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(corps || {}),
+      });
+      const data = await rep.json();
+      if (!rep.ok) return { ok: false, erreur: data.message || data.error || `HTTP ${rep.status}` };
+      return { ok: true, effet: data.effet };
+    } catch (e) {
+      return { ok: false, erreur: `Ordre non transmis : ${e.message}` };
     }
   }
 
@@ -153,46 +174,8 @@ const HarnessAPI = (() => {
       });
     },
 
-    async sendMissionInstruction(missionId, text) {
-      return withPc(() => {
-        const m = findMission(missionId);
-        if (!m) return null;
-        const ts = new Date().toTimeString().slice(0, 8);
-        m.feed.push({ ts, type: 'instruction', tool: 'opérateur', text });
-        m.feed.push({ ts, type: 'system', tool: 'accusé', text: "Reçue — mise en file, prise en compte au prochain tour de l'agent (H-67), ne l'interrompt pas." });
-        return { queued: true };
-      });
-    },
 
-    async pauseMission(id) {
-      return withPc(() => {
-        const m = findMission(id);
-        if (!m) return null;
-        m.state = 'paused'; m.pausedAgo = 'quelques secondes';
-        m.feed.push({ ts: new Date().toTimeString().slice(0, 8), type: 'system', tool: 'pause', text: 'Mise en pause opérateur — session retenue, contexte préservé.' });
-        return m;
-      });
-    },
 
-    async resumeMission(id) {
-      return withPc(() => {
-        const m = findMission(id);
-        if (!m) return null;
-        m.state = 'running'; m.pausedAgo = null;
-        m.feed.push({ ts: new Date().toTimeString().slice(0, 8), type: 'system', tool: 'reprise', text: 'Mission reprise par l\'opérateur — session vivante, contexte intact.' });
-        return m;
-      });
-    },
-
-    async terminateMission(id) {
-      return withPc(() => {
-        const m = findMission(id);
-        if (!m) return null;
-        m.state = 'terminee'; m.doneAgo = 'à l\'instant';
-        m.feed.push({ ts: new Date().toTimeString().slice(0, 8), type: 'system', tool: 'fin', text: 'Mission terminée par l\'opérateur.' });
-        return m;
-      });
-    },
 
     async runInspection(id) {
       return withPc(() => {
@@ -217,29 +200,47 @@ const HarnessAPI = (() => {
       });
     },
     async resumeGlobal() { return withPc(() => ({ paused: false })); },
-    async emergencyStop() {
-      return withPc(() => {
-        let n = 0;
-        db.missions.forEach((m) => { if (['running', 'requires_action', 'idle'].includes(m.state)) { m.state = 'paused'; n++; } });
-        return { stopped: n };
-      });
+
+    /* ---- ÉCRITURES RÉELLES ---- */
+
+    // ☠ Le motif d'un refus est RÉINJECTÉ à l'agent via son requestId — c'est ce
+    // qui lui permet de repartir sur une autre voie. Le serveur refuse un
+    // « refuse » sans motif ; on ne contourne pas ici.
+    async resolveEscalade(escId, verdict, reason) {
+      const r = await ecrireReel(`/escalades/${encodeURIComponent(escId)}/resolve`, { verdict, reason });
+      if (!r.ok) return { erreur: r.erreur };
+      // Retrait local de la file : le serveur fait autorité, on reflète.
+      const idx = db.escalades.findIndex((e) => e.id === escId);
+      if (idx !== -1) db.escalades.splice(idx, 1);
+      return { ok: true };
     },
 
-    async resolveEscalade(escId, verdict, reason) {
-      return withPc(() => {
-        const idx = db.escalades.findIndex((e) => e.id === escId);
-        if (idx === -1) return null;
-        const [e] = db.escalades.splice(idx, 1);
-        const m = findMission(e.missionId);
-        if (m) {
-          const pending = m.feed.find((f) => f.type === 'permission' && f.pending);
-          if (pending) { pending.pending = false; pending.resolved = verdict === 'autorise' ? 'autorisée (opérateur)' : 'refusée (opérateur)'; }
-          m.feed.push({ ts: new Date().toTimeString().slice(0, 8), type: 'system', tool: 'verdict',
-            text: verdict === 'autorise' ? 'Verdict opérateur : autorisé — réinjecté via requestId, la mission reprend.' : `Verdict opérateur : refusé — motif réinjecté : "${reason}"` });
-          if (!db.escalades.some((x) => x.missionId === m.id)) { m.state = 'running'; m.blockedSince = null; }
-        }
-        return { mission: m };
-      });
+    async terminateMission(id) {
+      const r = await ecrireReel(`/missions/${encodeURIComponent(id)}/terminate`, {});
+      return r.ok ? { ok: true } : { erreur: r.erreur };
+    },
+
+    // ☠ `effet` dit si l'instruction a été RETENUE (mission en pause) plutôt que
+    // transmise. L'afficher n'est pas cosmétique : sinon l'opérateur attend une
+    // réaction de l'agent qui ne viendra qu'à la reprise.
+    async sendMissionInstruction(missionId, text) {
+      const r = await ecrireReel(`/missions/${encodeURIComponent(missionId)}/instruction`, { text });
+      return r.ok ? { ok: true, effet: r.effet } : { erreur: r.erreur };
+    },
+
+    async pauseMission(id) {
+      const r = await ecrireReel(`/missions/${encodeURIComponent(id)}/pause`, {});
+      return r.ok ? { ok: true, effet: r.effet } : { erreur: r.erreur };
+    },
+
+    async resumeMission(id) {
+      const r = await ecrireReel(`/missions/${encodeURIComponent(id)}/resume`, {});
+      return r.ok ? { ok: true, effet: r.effet } : { erreur: r.erreur };
+    },
+
+    async emergencyStop() {
+      const r = await ecrireReel('/safety/emergency-stop', {});
+      return r.ok ? { ok: true } : { erreur: r.erreur };
     },
 
     /* ---- démo uniquement : simulateurs pour rendre la maquette navigable (H-65) ---- */

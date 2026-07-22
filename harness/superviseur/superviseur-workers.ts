@@ -46,6 +46,7 @@ import type {
 import { GenerateurEntree } from '../control-plane/orchestrateur/entree/index.ts';
 import type { StartWorkerDeps, WorkerHandle } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
+import { creerPilotage, type Pilotage } from './pilotage-workers.ts';
 import { surveillerMessageUsage, surveillerQuota } from './budgets-workers.ts';
 import { ConcurrentsRestaures } from './fencing-restauration.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
@@ -87,6 +88,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #observateurUsage: ObservateurUsage | undefined;
   readonly #observateurFlux: ObservateurFlux | undefined;
   readonly #demarrerWorker: DemarrerWorkerFn;
+  readonly #pilotage: Pilotage;
   readonly #startWorkerDeps: StartWorkerDeps;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
   readonly #attendreGrace: (delaiMs: number) => Promise<void>;
@@ -102,6 +104,22 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     this.#observateurUsage = deps.observateurUsage;
     this.#observateurFlux = deps.observateurFlux;
     this.#demarrerWorker = deps.demarrerWorker ?? startWorkerReel;
+    this.#pilotage = creerPilotage((missionId) => {
+      const e = this.#registre.parMission(missionId);
+      if (e === null) return null;
+      return {
+        cible: {
+          sessionId: e.sessionId,
+          vivant: e.vivant,
+          entree: { envoyerMessage: (m) => e.entree.envoyerMessage(m) },
+          source: { interrupt: () => e.handle.query.interrupt() },
+          capacites: e.handle.capabilities,
+        },
+        // L'enregistrement lui-même sert de clé : un worker relancé est un
+        // nouvel objet, donc un nouvel état de pause — ce qui est correct.
+        cle: e,
+      };
+    });
     this.#startWorkerDeps = deps.startWorkerDeps ?? {};
     this.#planifier = deps.planifier ?? ((delaiMs, tache) => void setTimeout(tache, delaiMs));
     this.#attendreGrace = deps.attendreGrace ?? ((delaiMs) => new Promise((resolve) => setTimeout(resolve, delaiMs)));
@@ -235,6 +253,17 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       envoyerMessage: (message) => entree.envoyerMessage(message),
       interrupt: () => handle.query.interrupt(),
     };
+  }
+
+  // -- Pilotage d'une mission vivante (instruction, pause, reprise) -----------
+
+  /**
+   * `☠` Premier appelant réel de `ControleurPause` — il existait, testé, branché
+   * sur aucun worker. Le pilotage vit dans `pilotage-workers.ts` : ce fichier
+   * frôle déjà la limite de 500 lignes.
+   */
+  get pilotage(): Pilotage {
+    return this.#pilotage;
   }
 
   // -- ArreteurMission (A.2.2, fin de vie) ------------------------------------
