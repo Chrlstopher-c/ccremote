@@ -211,6 +211,45 @@ dans les décisions avant qu'on découvre qu'elle ment. Les libellés d'ancienne
 Vérifié **en réel**, pas déclaré : registre semé sur disque, les trois cas exercés bout en bout par
 `curl` à travers `pi-web` (200 avec données, 303 sans session, 502 harness éteint).
 
+
+### Ce que le banc à deux machines a trouvé (2026-07-22)
+
+Premier essai du lien hors boucle locale. Il a trouvé **deux défauts en quelques minutes**, que 923
+tests unitaires ne pouvaient pas voir — ils ne vivent que face à un vrai `WebSocket`.
+
+**1. Le backoff ne montait jamais.** `new WebSocket(url)` ne rejette **jamais** : le constructeur
+rend la main avant que la connexion aboutisse. Un connecteur `Promise.resolve(new WebSocket(...))`
+réussissait donc toujours, serveur éteint compris — et un succès remet le compteur de tentatives à
+zéro. Mesuré, Pi éteint : **~2 tentatives par seconde indéfiniment**, au lieu d'une toutes les 10 s.
+Corollaire plus grave que le martèlement : `etat()` passait par `'ouvert'` à chaque essai raté, et
+`etat()` est la source de `pcOnline` — **l'interface aurait affirmé « PC en ligne » par
+intermittence toute la nuit**.
+
+**2. Le correctif du n°1 a cassé le refus d'authentification.** Le serveur ferme en 4401 dans son
+propre handler `open` : côté client, le `close` peut donc précéder l'`open`. N'attendre que `open`
+faisait disparaître la taxonomie terminale — secret refusé = coupure transitoire retentée sans fin,
+sans jamais nommer sa cause. Puis, en corrigeant ça, `error` **et** `close` planifiaient chacun une
+reconnexion : **211 tentatives en 60 s au lieu de 9**.
+
+`☠` **L'enseignement, plus transférable que les deux correctifs** : une correction peut aggraver le
+défaut qu'elle vise, et le vert ne le dira pas. Chaque étape a été remesurée sur les vraies machines
+— c'est la seule chose qui l'a montré.
+
+**Les cinq cas, code final, un seul client :**
+
+| Cas | Résultat |
+|---|---|
+| Connexion nominale | `ouvert`, 0 supersede |
+| Pi éteint | **9 tentatives / 60 s** (contre ~120 avant) |
+| Pi revenu | reconnexion seule, aucune intervention |
+| PC éteint | le Pi le voit en **< 5 s**, `pcOnline` = `false` |
+| Mauvais secret | sortie **78**, **0** reconnexion |
+
+`⚠` **Découvert au passage, non corrigé** : deux clients PC simultanés produisent une **tempête
+d'évictions** — chacun chasse l'autre en boucle (**1268 supersedes** observés). La v1 suppose un
+seul PC, mais un process resté vivant après un redémarrage de service suffirait à la déclencher.
+Le `supersede` n'a aucun amortissement. À traiter avant tout déploiement durable.
+
 ### ACTION SUIVANTE
 
 1. **Le chemin d'ÉCRITURE** — instruction, pause/reprise, arrêt d'urgence, résolution d'escalade.
@@ -219,8 +258,12 @@ Vérifié **en réel**, pas déclaré : registre semé sur disque, les trois cas
    passé. Chacune veut son banc d'assemblage avant d'être exposée.
 2. **Remonter `subagents` / `feed` / `inspection` du PC vers le Pi** — c'est ce qui rendrait les
    vues Mission et Agent réelles ; elles sont encore en démo.
-3. **Exercer le lien pour de vrai** : vrai réseau, vrai redémarrage du PC. Rien de tout ça n'a
-   encore tourné entre deux machines — seulement en boucle locale.
+3. ~~Exercer le lien pour de vrai~~ — **FAIT le 2026-07-22** entre ce PC et le vrai Raspberry Pi
+   (`acceptation/lien-deux-machines-{pi,pc}.ts`). Deux défauts trouvés et corrigés, cinq cas
+   vérifiés. Voir la section « Ce que le banc à deux machines a trouvé » plus bas.
+   `⚠` Reste non éprouvé : le passage par **Cloudflare Tunnel** (le banc était en LAN direct) et un
+   vrai **redémarrage machine** (les process ont été tués, la machine n'a pas rebooté — donc le
+   `boot_id` n'a jamais changé pendant le banc).
 4. Dettes restantes : voir `../TODO.md` (fenêtre de grâce n°2a, `reponse-reinitialize.ts` code mort,
    M-51 à recâbler sur `rate_limit_event`).
 

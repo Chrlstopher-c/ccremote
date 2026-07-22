@@ -37,7 +37,9 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/pi/verificateur-session-sdk.ts` — `VerificateurSessionExistante` réel via `getSessionInfo` du SDK
 - `composition/pc/assembler-superviseur.ts` — racine de composition du PC (persistance+boot_id, anti-boucle, lien vers le Pi)
 - `composition/pc/bin-pc.ts` — point d'entrée exécutable du process PC (`bun run start:pc`), conçu pour `systemd --user` (voir `composition/deploiement/`)
-- `composition/pc/client-lien-pi.ts` — H-75 : le PC INITIE (seul point d'entrée réseau sortant), reconnexion infinie backoff+gigue (`horloge-avec-gigue.ts`)
+- `composition/pc/client-lien-pi.ts` — H-75 : le PC INITIE (seul point d'entrée réseau sortant), reconnexion infinie backoff+gigue ; le connecteur ne résout que sur `open` RÉEL, sans quoi le backoff ne monte jamais (défaut mesuré au banc à deux machines)
+- `composition/pc/client-lien-pi.test.ts` — verrouille les 2 défauts du banc à deux machines : backoff qui ne monte pas, refus d'authentification dégradé en coupure transitoire
+- `acceptation/lien-deux-machines-pi.ts` / `-pc.ts` — banc RÉEL à deux machines (aucune session Claude Code, aucun quota consommé) : lancer le premier sur le Pi, le second sur le PC
 - `composition/pc/horloge-avec-gigue.ts` — injecte de la gigue par tentative dans le backoff de `LienWebSocket` via le seam `HorlogeTransport` (limite mesurée : `backoffMs` est un tableau fixe, pas de gigue possible autrement)
 - `composition/pc/canal-controle-recepteur.ts` — reçoit les `controle_requete` du Pi sur le lien unique, les fait traverser `CanalControle`, répond (remplace `serveur-controle.ts`, supprimé)
 - `composition/pc/port-bus-permissions-distant.ts` — `PortBusPermissions` réel pour le déploiement à DEUX machines (H-73.1), complète `bus-permissions/port-colocalise.ts`
