@@ -20,10 +20,12 @@ export type TypeFait =
   | 'inventaire_demande'
   | 'fantome_marque'
   | 'orphelin_adopte'
+  | 'orphelin_tue'
   | 'orphelin_ignore'
   | 'epoch_incremente'
   | 'reinitialize_appele'
   | 'permission_orpheline'
+  | 'divergence_pc_gagne'
   // permissions
   | 'permission_recue'
   | 'permission_redelivree'

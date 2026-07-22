@@ -42,6 +42,11 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 | M-10 tunnel WebSocket + ping/pong | `transport/` | livré — voir `transport/DECISION-TRANSPORT.md` |
 | M-20 plancher de déni | `plancher-deni/` | livré · **moteur réel vérifié** |
 | M-21 machine à états des demandes | `control-plane/bus-permissions/` | livré |
+| M-22 audit des permissions | `control-plane/audit-permissions/` | livré · **corrigé par banc réel** |
+| M-34 relance et classification | `relance/` | livré · ⚠ **non câblé** |
+| M-30 réconciliation | `control-plane/reconciliation/` | livré · ⚠ ports non implémentés |
+| M-32 modèle de projets | `projets/` | livré · ⚠ git réel jamais exercé |
+| M-33 pause et reprise | `pause/` | livré |
 | M-31 adaptateur `SessionStore` | `control-plane/session-store/` | livré · **vérifié sur vrai SDK** |
 | Maquette UI v2 | `../design-v2/` | **validée par Chris le 2026-07-22** |
 
@@ -201,6 +206,7 @@ Protocole d'origine, conservé pour mémoire :
 | Plancher Sonnet validé sur l'alias | `'inherit'` ne garantit rien — valider sur le **modèle résolu** |
 | `res.changes` de bun:sqlite comme compteur métier | compte **aussi** les lignes supprimées en cascade (bug réel corrigé le 2026-07-22) |
 | Fencing qui ne rejette que les epochs **strictement inférieurs** | deux workers de même epoch coexistent sans trace — la panne #2 **avec** le fencing activé. Traiter l'égalité explicitement (bug réel corrigé) |
+| Un interrupteur de simulation de panne dans un module de production | **l'interrupteur est la panne.** Vécu le 2026-07-22 : M-30 avait ajouté `simulerPanneOrphelinIgnore` pour tester la panne #11 — retiré. Un invariant se teste sur le **seul chemin qui existe**, pas en codant un chemin qui le viole |
 | `git stash` dans un subagent pendant que d'autres agents écrivent | **retire leurs fichiers sous leurs pieds** : l'écriture suivante part d'un état incohérent, ou le travail disparaît. Vécu le 2026-07-22 (rattrapé de justesse, stash bien restauré). ⇒ **interdire explicitement `git stash`/`checkout`/`reset` dans tout brief lancé en parallèle** ; pour isoler un doute, lire le fichier commité via `git show HEAD:<chemin>` |
 | Attribuer à sa propre mission un typecheck rouge en parallélisme | les erreurs viennent souvent du dossier d'un **autre** agent en vol. Vérifier le chemin du fichier fautif avant de conclure |
 | Attendre un `SDKPermissionDeniedMessage` pour tracer un refus | **mesuré le 2026-07-22 : il n'est JAMAIS émis** sur un refus par `disallowedTools` en `auto`. Le seul signal réel est le **`tool_result` avec `is_error: true`** portant le texte du refus, dans un message `user`. Un audit qui n'écoute que le message `system` compte 0 refus alors qu'il y en a eu |

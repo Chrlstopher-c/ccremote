@@ -118,6 +118,45 @@ les deux anciens `.credentials_account*.json`).
 - [ ] Purger les deux snapshots périmés `~/.claude/.credentials_account{1,2}.json` — ils ne servent
       plus qu'à induire en erreur (garder jusqu'à la première bascule réussie, par prudence).
 
+### Lot 3 — livré 2026-07-22 (461 tests verts)
+- [x] **M-30** réconciliation — `harness/control-plane/reconciliation/`. « Le PC gagne » garanti
+      **mécaniquement** : l'état ne suit que le booléen `vivant` rapporté par le PC, aucun chemin ne
+      laisse survivre une conviction du Pi qui le contredit. `reinitialize()` appelé sur toute
+      mission confirmée vivante (`demarrage`/`reconnexion`, jamais `periodique`).
+      `⚠` Correction du parent : un flag `simulerPanneOrphelinIgnore` avait été introduit dans le
+      module de production pour tester la panne #11. Retiré — **un interrupteur capable de produire
+      la panne est la panne**. L'invariant se teste sur le seul chemin qui existe.
+- [x] **M-32** modèle de projets — `harness/projets/`. Déclaration = un fichier JSON déposé, aucun
+      cache, donc F.4.1 vrai mécaniquement. `☠` Point (d) : `supprimer()` a **un seul site d'appel**,
+      dans la branche `!sale`, et un échec de la vérification git suppose le **pire cas sûr** (sale,
+      donc pas de suppression) — « un faux positif retarde une libération, un faux négatif détruit
+      du travail ».
+- [x] **M-33** pause et reprise — `harness/pause/`. La garantie « ni perdue ni dupliquée » ne dépend
+      **d'aucune information tirée du reçu** : elle tient à ce que le contrôleur ne touche jamais aux
+      messages déjà transmis et ne retransmette jamais les siens. Le mode dégradé est traité comme
+      **chemin nominal** (`capabilities` revient vide en réel), et une capacité annoncée mais dont
+      `interrupt()` résout `undefined` bascule aussi en dégradé — on ne fait pas confiance à un
+      drapeau qui ment.
+
+### ⚠ Arbitrages M-32 en attente de Chris (l'agent les signale, ils ne sont pas tranchés)
+- [ ] **« commits en attente » (F.2.3)** interprété comme « commits sur la branche dédiée non
+      intégrés dans la branche parente ». Autre lecture possible : « non poussés vers un remote ».
+      Le choix actuel est le plus conservateur. À confirmer.
+- [ ] **Plafond de 8 motifs de déni supplémentaires par projet** — chiffre inventé par l'agent,
+      aucun imposé par `09-arbre-F`. À valider ou changer.
+- [ ] **Projet non-git fixant `brancheDefaut` : rejeté, pas ignoré** — plus strict que ce que le
+      texte impose. Choix assumé dans l'esprit « signaler explicitement » de F.1.3.
+
+### Dettes ouvertes du lot 3
+- [ ] **Ports non implémentés** : `InventairePc` et `ReinitialisateurSession` (M-30) sont des
+      contrats sans implémentation réelle — la réconciliation ne tourne donc **pas** de bout en bout.
+- [ ] **`InterrogateurGitReel` / `GestionnaireWorktreeGitReel` jamais exercés sur un vrai dépôt**
+      (M-32) : seuls les constructeurs de commande sont testés. `☠` C'est le code qui supprime des
+      worktrees — un banc d'acceptation dédié s'impose **avant** toute exécution non surveillée.
+- [ ] **`deciderRelance()` toujours non câblé** : M-30 a argumenté (à raison) que la réconciliation
+      n'observe jamais de `terminal_reason`. Le point de câblage est le gestionnaire du flux live,
+      côté superviseur de workers — pas encore construit.
+
 ### Design v2 — arbitrages à trancher par Chris (source : `design-v2/COMPARAISON.md`)
 - [ ] **Parler à une mission en cours** — trou le plus concret. Chris avait posé l'exigence
       explicitement (« on pourra en discussion en même temps »), et l'outil `envoyer_a_equipe` existe
