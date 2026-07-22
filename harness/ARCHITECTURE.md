@@ -87,9 +87,11 @@ d'être branché (H-74).
 - **A.1.2, identité de session Pi** — `composition/pi/verificateur-session-sdk.ts` fournit le
   premier `VerificateurSessionExistante` réel (`getSessionInfo` du SDK, jusqu'ici jamais appelé
   hors doublure).
-- **D.3, canal de contrôle réseau** — `composition/pc/serveur-controle.ts` (serveur WS) et
-  `composition/pi/client-superviseur-pc.ts` (client) sont la première liaison réseau réelle de
-  `CanalControle`, qui n'existait jusqu'ici que dans ses propres tests.
+- **D.3, canal de contrôle réseau — INVERSÉ (H-75, 2026-07-22)** — le Pi héberge désormais le lien
+  unique (`composition/pi/serveur-lien-pc.ts`), le PC initie (`composition/pc/client-lien-pi.ts`).
+  `composition/pi/client-superviseur-pc.ts` (Pi) et `composition/pc/canal-controle-recepteur.ts`
+  (PC, remplace `serveur-controle.ts` supprimé) multiplexent `controle_requete`/`controle_reponse`
+  sur ce lien (`composition/lien-pc-pi/protocole.ts`).
 
 ### Ce qui ne s'assemble PAS — documenté, pas contourné
 
@@ -100,16 +102,14 @@ d'être branché (H-74).
    ajouter trois exports à `workers/index.ts` — hors zone de cette mission (écriture interdite hors
    `composition/`), signalé ici pour action.
 
-2. **Le port `PortBusPermissions` (H-73.1) n'a pas de wiring cross-machine possible avec l'existant.**
-   Le contrat attend un rappel exécuté DANS le worker (PC), atteignant `MachineEtatsDemandes` (Pi)
-   de façon quasi synchrone (5 s, `workers/can-use-tool.ts`). Le seul canal de contrôle qui existe
-   (D.3, `superviseur/canal-controle.ts`) est **Pi-initié uniquement** (« le PC n'initie jamais »,
-   D.3.2) — l'inverse de ce qu'il faudrait ici. Le canal d'observation (E.2) est PC-initié mais
-   strictement descendant (aucune opération de retour de verdict). **Fermer cet écart pour de vrai
-   exige un nouveau canal bidirectionnel initié par le PC — une décision d'architecture, pas un
-   câblage.** `composition/bus-permissions/port-colocalise.ts` fournit la version qui fonctionne
-   quand Pi et PC sont colocalisés dans le même process (mode développement), et documente cette
-   limite en tête de fichier plutôt que de la travestir en solution complète.
+2. **`PortBusPermissions` (H-73.1) cross-machine — RÉSOLU par H-75 (2026-07-22).** L'inversion du
+   lien (Pi héberge, PC initie, `LienWebSocket` symétrique et bidirectionnel une fois établi) ouvre
+   exactement le canal qui manquait ici. `composition/pc/port-bus-permissions-distant.ts` (PC) et
+   `composition/pi/permission-verdict-distant.ts` (Pi) multiplexent `permission_demande`/
+   `permission_verdict` sur le MÊME lien que D.3, corrélés par id (`lien-pc-pi/correlateur.ts`).
+   `composition/bus-permissions/port-colocalise.ts` reste valide et inchangée pour le mode
+   « tout-en-un » colocalisé — les deux implémentations coexistent, un site de dispatch choisit
+   laquelle fournir à `construireWorkerSpec` selon le déploiement.
 
 3. **`RepertoireCibles` (parler à une équipe en cours) et `DefinisseurBudget` (`definir_budget`)
    n'ont aucune implémentation réseau possible avec les contrats existants.** Le premier exigerait un

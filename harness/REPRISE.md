@@ -29,7 +29,14 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 
 ---
 
-## État au 2026-07-22 — MVP en clôture
+## État au 2026-07-22 (soir) — MVP fonctionnellement incomplet, chantier réorienté
+
+`⚠` **Le harness n'est PAS exécutable de bout en bout** en déploiement Pi/PC séparé — c'est le
+verdict de la mission d'assemblage, pas une prudence de rédaction. Le mode colocalisé s'assemble.
+La priorité n°1 donnée par Chris est désormais la communication PC↔Pi réelle (voir « ACTION
+SUIVANTE » plus bas et **H-75**).
+
+## État détaillé — clôture du MVP
 
 **Lots 0 à 5 livrés.** Dernier commit `2d81183`. **698 tests verts, typecheck propre.**
 Il reste **M-50** (en vol au moment de la compaction) et **M-53** (qui seule clôt le MVP).
@@ -137,6 +144,51 @@ après coup.
 ---
 
 ## ▶ ACTION SUIVANTE — à faire en premier à la reprise
+*Réécrit le 2026-07-22 au soir. Ce qui précède décrivait la clôture du MVP ; le chantier a changé
+d'objectif depuis, sur décision de Chris.*
+
+### Objectif courant, dans cet ordre — priorités données par Chris
+
+1. **Rendre la communication PC↔Pi réellement fonctionnelle** (priorité n°1).
+2. **Câbler concrètement l'interface** — elle est fusionnée dans `pi-web/` mais ses données sont
+   encore des mocks.
+3. Poursuivre le reste des dettes.
+
+### L'architecture est tranchée : lire H-75 avant de toucher au transport
+
+`Upgrade/16-decisions-operateur.md`, **H-75**. En résumé : **le Pi héberge, le PC est client**, un
+seul lien, `server/server.py` en `127.0.0.1` appelé localement par le harness. Objectif
+d'exploitation, mot de Chris : *« j'éteins le PC, je vais me coucher, je le relance le lendemain :
+tout doit se reconnecter parfaitement tout seul. »*
+
+`☠` **Le piège qui casse ce scénario** est corrigé mais mérite d'être connu : `(pid, starttime)` ne
+survit pas à un redémarrage (`starttime` compte depuis le boot). Sans `boot_id`, le harness croirait
+un worker mort encore vivant — worktree bloqué chaque nuit — ou signalerait un process étranger.
+
+### État de l'interface
+
+Les vues du harness sont **réellement intégrées** à `pi-web/` (routeur, modules, template servis par
+la vraie app FastAPI) — ce n'est pas une maquette posée à côté. Mais **toutes les données du bloc
+harness sont mockées**. Le contrat des 27 endpoints est écrit :
+**`pi-web/CONTRAT-API-HARNESS.md`**, et il fait foi des deux côtés. Tout accès passe par
+`pi-web/static/harness-api.js` — point unique de branchement.
+
+`⚠` Ce qui reste réel et fonctionnel dans l'app : statut PC, réveil, extinction, sessions tmux,
+agent conversationnel, login. **Ne pas toucher à la logique du bouton d'extinction** — irréversible,
+et déjà noté comme non re-testé en réel.
+
+### Ce qui ne s'assemble pas encore
+
+Le harness **n'est pas exécutable de bout en bout** en déploiement Pi/PC séparé ; le mode colocalisé,
+lui, s'assemble. Détail dans `harness/ARCHITECTURE.md` et `TODO.md`.
+
+### Puis : les dettes restantes
+Voir `../TODO.md`, registre en tête de fichier.
+
+---
+
+## Historique — clôture du MVP (2026-07-22, journée)
+
 *Écrit le 2026-07-22, juste avant une compaction de conversation.*
 
 ### 1. VÉRIFIER D'ABORD : un agent tournait au moment de la compaction

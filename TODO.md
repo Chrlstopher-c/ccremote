@@ -5,18 +5,34 @@
 
 **Contexte complet : `harness/REPRISE.md`.**
 
-## 📋 REGISTRE DES DETTES — état au 2026-07-22, MVP en clôture
+## 🎯 OBJECTIF COURANT (priorités données par Chris, 2026-07-22 au soir)
+
+1. **Communication PC↔Pi réellement fonctionnelle** — priorité n°1. Architecture tranchée : **H-75**
+   (le Pi héberge, le PC est client, un seul lien, reconnexion automatique après une nuit d'arrêt).
+2. **Câblage concret de l'interface** — elle est intégrée à `pi-web/` (routeur, modules, vraie app
+   FastAPI), mais **toutes les données du bloc harness sont des mocks**. Contrat des 27 endpoints :
+   `pi-web/CONTRAT-API-HARNESS.md`, il fait foi des deux côtés. Point de branchement unique :
+   `pi-web/static/harness-api.js`.
+3. Puis le reste des dettes ci-dessous.
+
+`⚠` **Le harness n'est pas exécutable de bout en bout** en déploiement Pi/PC séparé (verdict de la
+mission d'assemblage). Le mode colocalisé, lui, s'assemble.
+
+## 📋 REGISTRE DES DETTES — état au 2026-07-22
 
 *Classées par gravité réelle. Une dette n'est pas une tâche oubliée : c'est un endroit où le code
 passe les tests sans faire le travail. Rien de ce qui suit n'apparaît dans le compte de tests verts.*
 
-### 🔴 DETTE N°1 — corruption silencieuse possible (priorité explicite de Chris)
-- [ ] **Persistance du registre de workers côté PC.** `RegistreWorkers` (M-13) vit **en mémoire**.
-      Si le **superviseur PC** redémarre — pas seulement le Pi — il perd la trace de tous les workers
-      vivants. `☠` **Aucun fencing ne peut y remédier** : M-11 arbitre les epochs entre candidats
-      **connus**, il ne peut rien contre des process dont plus personne ne sait qu'ils existent. Ces
-      process continueraient d'écrire dans des worktrees que le harness croit libres.
-      **C'est la seule dette restante capable de détruire du travail en silence.**
+### ✅ DETTE N°1 — FERMÉE le 2026-07-22 (était la priorité explicite de Chris)
+- [x] ~~Persistance du registre de workers côté PC~~ — le registre survit au redémarrage du
+      superviseur (SQLite local, frontière A↔B respectée), chaque worker restauré est revalidé, et
+      les concurrents restaurés participent au fencing.
+      `☠` **Trois pièges payés pour la fermer, à ne pas réintroduire** :
+      (1) le **pid seul ne prouve rien** (recyclage noyau) — c'est le couple `(pid, starttime)` ;
+      (2) ce couple **ne survit pas à un redémarrage** (`starttime` compte depuis le boot) — d'où
+      `boot_id`, voir **H-75** ; (3) le mécanisme était branché sur un `pid` que `WorkerHandle`
+      n'exposait pas : correct, et inerte. Biais non négociable conservé : `indetermine` ne libère
+      **jamais** un worktree.
 
 ### 🟠 DETTE N°2 — un garde-fou qui pourrait ne pas se déclencher
 - [ ] **Fenêtre de grâce de l'arrêt d'urgence non alignée.** `GRACE_ARRET_URGENCE_MS_DEFAUT = 5000`
@@ -72,16 +88,28 @@ passe les tests sans faire le travail. Rien de ce qui suit n'apparaît dans le c
       c'est le cas **nominal**, et elle peut valoir 100 %. Le contexte du parent à cinq sous-agents
       reste, lui, non mesuré — `getContextUsage()` n'est pas lisible après `result`.
 
-### 🟢 DETTE N°4 — qualité de code et arbitrages en attente
-- [ ] **`superviseur/superviseur-workers.ts` dépasse 530 lignes** (limite : 500). Conséquence de
-      deux missions parallèles (M-51, M-52) écrivant dans le même fichier. Extraire les méthodes
-      budgets.
-- [ ] **Trois arbitrages M-32 en attente** (voir plus bas) : sens de « commits en attente », plafond
-      de 8 motifs par projet, rejet d'un projet non-git déclarant une branche.
-- [ ] **Trois arbitrages maquette v3** (voir `design-v3/CHANGEMENTS.md`) : Sonnet 4.6 grisé ou masqué,
-      déclencheur d'atterrissage par mission, jauge dans la vue Orchestrateur.
+### 🟢 DETTE N°4 — qualité de code et arbitrages
+- [x] ~~`superviseur/superviseur-workers.ts` dépasse 500 lignes~~ — **FERMÉE** : extractions
+      successives (`budgets-workers.ts`, `fencing-restauration.ts`, `fencing-arbitrage-workers.ts`,
+      `anti-boucle-workers.ts`, `superviseur-workers-types.ts`), fichier revenu sous la limite.
+      `⚠` `superviseur/superviseur-workers.test.ts` dépasse toujours 500 lignes (fichier de test).
+- [x] ~~Trois arbitrages M-32~~ — **TRANCHÉS le 2026-07-22**, détail plus bas. Dont un plafond qui
+      **marchait à l'envers** : il rejetait les configurations *plus* restrictives.
+- [ ] **Arbitrages maquette v3 restants** : Sonnet 4.6 grisé ou masqué ; jauge dans la vue
+      Orchestrateur. `☠` **Le déclencheur d'atterrissage par mission contredit H-70** — la décision
+      appartient au **superviseur**, jamais au lead seul, parce que la fenêtre de quota est partagée
+      par compte : trois leads qui atterrissent ensemble la saturent pendant l'atterrissage. Conservé
+      pour l'instant afin de rendre la maquette testable, **à retirer quand le comportement devient
+      réel**.
 
-### ✅ Dettes fermées le 2026-07-22
+### ✅ Dettes fermées le 2026-07-22 (suite)
+**Cinq garde-fous étaient branchés sur rien** — tous corrigés, motif consigné en **H-74** : plafond
+de parc jamais appelé · `canUseTool` jamais fourni (cassait la reprise) · juge anti-boucle H-68
+jamais câblé · identité de process jamais capturée · hooks d'audit M-22 raccordés à aucun worker.
+`☠` Sixième forme du même défaut, trouvée par un test rouge : la `WorkerSpec` est persistée en JSON,
+donc **ses ports disparaissent au redémarrage** — une spec restaurée relancerait un worker sans audit
+ni arbitrage. Le type le dit désormais (`WorkerSpecPersistee`).
+
 Ports `InventairePc`/`ReinitialisateurSession` implémentés (M-13) · `deciderRelance()` câblé (M-13) ·
 git réel exercé sur un vrai dépôt + **bug critique de perte de données corrigé** (banc worktree) ·
 fencing par epoch arbitré (M-11) · config multi-comptes réparée par liens symboliques (banc worker).

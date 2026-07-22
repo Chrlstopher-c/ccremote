@@ -21,8 +21,12 @@ async function main(): Promise<void> {
   const repertoireProjets = envObligatoire('CCREMOTE_PI_REPERTOIRE_PROJETS');
   const cwdOrchestrateur = envOptionnel('CCREMOTE_PI_CWD_ORCHESTRATEUR', process.cwd());
   const configDirOrchestrateur = process.env['CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR'];
-  const hostPc = envObligatoire('CCREMOTE_PC_CONTROLE_HOST');
-  const portPc = envNombreOptionnel('CCREMOTE_PC_CONTROLE_PORT', 8721);
+  // H-75 : le Pi héberge le lien Pi↔PC (inversion — plus de dial-out vers le PC).
+  const portLienPc = envNombreOptionnel('CCREMOTE_LIEN_PORT', 8721);
+  const hostnameLienPc = envOptionnel('CCREMOTE_LIEN_HOST', '127.0.0.1');
+  // `☠` Jamais de valeur par défaut : un secret de lien manquant doit arrêter le
+  // démarrage bruyamment (H-74, point 2), jamais retomber sur une constante.
+  const secretLienPc = envObligatoire('CCREMOTE_LIEN_SECRET');
   const seuilUtilisationPctPlafondParc = envSeuilPctOptionnel('CCREMOTE_PLAFOND_PARC_SEUIL_PCT');
 
   const assemble = await assemblerControlPlanePi({
@@ -32,12 +36,15 @@ async function main(): Promise<void> {
     repertoireProjets,
     cwdOrchestrateur,
     configDirOrchestrateur,
-    urlSuperviseurPc: `ws://${hostPc}:${String(portPc)}`,
+    portLienPc,
+    hostnameLienPc,
+    secretLienPc,
     seuilUtilisationPctPlafondParc,
   });
 
   const arreterProprement = (signal: string): void => {
     log.info({ signal }, 'arrêt du process Pi demandé');
+    assemble.serveurLien.arreter();
     assemble.orchestrateur.fermer();
     process.exit(0);
   };

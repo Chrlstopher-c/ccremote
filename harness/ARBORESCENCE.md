@@ -9,17 +9,28 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/logger.ts` — journal pino du domaine composition
 - `composition/env.ts` — lecture stricte des variables d'environnement (obligatoire/optionnel/nombre/pourcentage)
 - `composition/assemblage.test.ts` — test d'assemblage H-74/M-53 : garde-fous branchés sur le produit réel
-- `composition/pi/assembler-control-plane.ts` — racine de composition du Pi (registre, bus, mcp-controle, orchestrateur)
+- `composition/assemblage-lien-pc-pi.test.ts` — test d'assemblage H-75 : multiplexage contrôle/permissions sur le lien unique, reconnexion, réconciliation sur rattachement (aucun socket réel)
+- `composition/lien-pc-pi/protocole.ts` — enveloppes multiplexées (`controle_requete/reponse`, `permission_demande/verdict`) sur l'unique lien Pi↔PC (H-75)
+- `composition/lien-pc-pi/secret.ts` — authentification du lien (secret partagé, comparaison à temps constant, jamais journalisé)
+- `composition/lien-pc-pi/correlateur.ts` — corrélation requête/réponse par id, partagée par les deux sens de multiplexage
+- `composition/pi/assembler-control-plane.ts` — racine de composition du Pi (registre, bus, mcp-controle, orchestrateur, lien Pi↔PC)
 - `composition/pi/bin-pi.ts` — point d'entrée exécutable du process Pi (`bun run start:pi`)
-- `composition/pi/client-superviseur-pc.ts` — client réseau réel du canal D.3 (InventairePc/ReinitialisateurSession/ArreteurMission/RelanceurMission)
+- `composition/pi/serveur-lien-pc.ts` — H-75 : le Pi HÉBERGE le lien unique (Bun.serve WS, authentification, `LienWebSocket` symétrique en mode « attend la prochaine connexion »)
+- `composition/pi/client-superviseur-pc.ts` — `InventairePc`/`ReinitialisateurSession`/`ArreteurMission`/`RelanceurMission` réels, multiplexés sur le lien unique (D.3, inversé H-75)
+- `composition/pi/permission-verdict-distant.ts` — reçoit les `permission_demande` du PC, interroge la vraie `MachineEtatsDemandes`, pousse le verdict (H-73.1 fermé pour de vrai en déploiement 2 machines)
+- `composition/pi/reconciliation-sur-rattachement.ts` — câble `reconcilier(..., 'reconnexion')` sur CHAQUE rattachement du PC (epoch incrémenté à l'adoption d'orphelins, D.2.3/D.2.4)
 - `composition/pi/port-utilisation-parc.ts` — `LecteurUtilisationParc` réel, backé par `Registre.comptes` (G.1.3)
 - `composition/pi/ports-non-cables.ts` — `RepertoireCibles`/`DefinisseurBudget` : refus explicites, aucune implémentation réseau n'existe (voir rapport)
 - `composition/pi/verificateur-session-sdk.ts` — `VerificateurSessionExistante` réel via `getSessionInfo` du SDK
-- `composition/pc/assembler-superviseur.ts` — racine de composition du PC (persistance, anti-boucle, canal de contrôle)
-- `composition/pc/bin-pc.ts` — point d'entrée exécutable du process PC (`bun run start:pc`)
+- `composition/pc/assembler-superviseur.ts` — racine de composition du PC (persistance+boot_id, anti-boucle, lien vers le Pi)
+- `composition/pc/bin-pc.ts` — point d'entrée exécutable du process PC (`bun run start:pc`), conçu pour `systemd --user` (voir `composition/deploiement/`)
+- `composition/pc/client-lien-pi.ts` — H-75 : le PC INITIE (seul point d'entrée réseau sortant), reconnexion infinie backoff+gigue (`horloge-avec-gigue.ts`)
+- `composition/pc/horloge-avec-gigue.ts` — injecte de la gigue par tentative dans le backoff de `LienWebSocket` via le seam `HorlogeTransport` (limite mesurée : `backoffMs` est un tableau fixe, pas de gigue possible autrement)
+- `composition/pc/canal-controle-recepteur.ts` — reçoit les `controle_requete` du Pi sur le lien unique, les fait traverser `CanalControle`, répond (remplace `serveur-controle.ts`, supprimé)
+- `composition/pc/port-bus-permissions-distant.ts` — `PortBusPermissions` réel pour le déploiement à DEUX machines (H-73.1), complète `bus-permissions/port-colocalise.ts`
 - `composition/pc/construire-worker-spec.ts` — construit un `WorkerSpec` qui n'omet jamais `portBusPermissions`
-- `composition/pc/serveur-controle.ts` — liaison WebSocket réelle du canal de contrôle D.3, côté PC
 - `composition/bus-permissions/port-colocalise.ts` — `PortBusPermissions` réel pour déploiement colocalisé (limite documentée en tête de fichier)
+- `composition/deploiement/ccremote-pc.service` — unité `systemd --user` du process PC, `Restart=always` (H-75)
 
 ## `control-plane/` — branche Pi (autorité unique)
 

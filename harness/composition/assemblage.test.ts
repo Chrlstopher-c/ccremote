@@ -118,10 +118,15 @@ describe('assemblage — bus de permissions vers canUseTool (H-73.1)', () => {
 describe('assemblage — persistance et restauration du registre PC (dette n°1, H-74)', () => {
   test("un worker écrit par une instance précédente survit à un redémarrage du superviseur (composition réelle)", () => {
     const cheminRegistrePersistance = join(dossierTemporaire('ccremote-assemblage-'), 'registre-pc.sqlite');
-    const port = 18_734 + Math.floor(Math.random() * 1000);
+    // H-75 : le PC dial-out vers le Pi, plus de port d'écoute local à réserver.
+    // Aucune vraie connexion n'est requise par ce test (seule la restauration
+    // du registre est exercée) — port injoignable volontaire, `arreter()` coupe
+    // toute tentative de reconnexion avant qu'elle n'aboutisse.
+    const urlPi = 'ws://127.0.0.1:1';
+    const secretLienPi = 'secret-test';
 
     // « Instance précédente » : démarre, puis s'arrête (le process meurt sans se désenregistrer).
-    const premiere = assemblerSuperviseurPc({ cheminRegistrePersistance, port });
+    const premiere = assemblerSuperviseurPc({ cheminRegistrePersistance, urlPi, secretLienPi });
     premiere.arreter();
 
     // Simule un enregistrement laissé vivant par le process précédent, disparu du process courant.
@@ -143,8 +148,7 @@ describe('assemblage — persistance et restauration du registre PC (dette n°1,
 
     // « Nouvelle instance » : SANS ce câblage de composition (avant cette mission), ce
     // fantôme aurait été invisible — le registre en mémoire serait reparti vide.
-    const port2 = port + 1;
-    const deuxieme = assemblerSuperviseurPc({ cheminRegistrePersistance, port: port2 });
+    const deuxieme = assemblerSuperviseurPc({ cheminRegistrePersistance, urlPi, secretLienPi });
     try {
       const inventaire = deuxieme.superviseur.inventaire();
       expect(inventaire.some((w) => w.sessionId === 'session-fantome' && w.vivant)).toBe(true);

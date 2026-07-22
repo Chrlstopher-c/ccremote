@@ -1,0 +1,38 @@
+# Unité systemd --user du process PC (H-75).
+#
+# Installation (sur le PC) :
+#   mkdir -p ~/.config/systemd/user
+#   cp ccremote-pc.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now ccremote-pc.service
+#   loginctl enable-linger <utilisateur>   # démarre le service SANS session graphique ouverte
+#
+# `☠` Ne PAS ajouter de commande d'arrêt qui fait `pkill`/`kill` par motif
+# générique (`bun`, `node`…) — incident réel déjà payé sur ce parc, un motif
+# générique a tué un service tiers sans rapport. `systemctl --user stop`
+# envoie SIGTERM au PID exact qu'il connaît lui-même ; `bin-pc.ts` gère
+# SIGTERM proprement (voir le handler `arreterProprement`) — rien d'autre à
+# ajouter ici.
+#
+# Le secret et l'URL du Pi vivent dans un fichier `.env` chargé par
+# `EnvironmentFile=`, jamais dans cette unité versionnée (jamais de secret en
+# clair dans un fichier suivi par git).
+
+[Unit]
+Description=ccremote — process PC (harness Bun, H-75 : client du lien Pi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/ccremote/pc.env
+ExecStart=/usr/bin/env bun run %h/ccremote/harness/composition/pc/bin-pc.ts
+Restart=always
+RestartSec=10
+# Backoff de reconnexion applicatif déjà géré par `client-lien-pi.ts` (gigue
+# comprise) — `RestartSec` ne couvre que le redémarrage du PROCESS après une
+# fermeture terminale (ex. secret invalide), jamais la reconnexion réseau
+# elle-même.
+
+[Install]
+WantedBy=default.target

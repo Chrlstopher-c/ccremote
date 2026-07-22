@@ -16,6 +16,15 @@
  *  - bus de permissions (M-21) partagé entre la réconciliation et le serveur
  *    MCP de contrôle — une seule instance, jamais deux machines à états qui
  *    divergeraient silencieusement.
+ *
+ * `☠ H-75` — le Pi HÉBERGE désormais le lien (`serveur-lien-pc.ts`), le PC
+ * INITIE (`composition/pc/client-lien-pi.ts`). `ClientSuperviseurPc` et
+ * `permission-verdict-distant.ts` partagent la MÊME instance de
+ * `LienWebSocket` (`serveurLien.lien`) — jamais deux liens, conformément au
+ * mandat (« un seul lien, décidé par l'opérateur »). La réconciliation
+ * `'reconnexion'` (epoch incrémenté à chaque rattachement, D.2.3) est câblée
+ * sur CHAQUE connexion PC acceptée, pas seulement au démarrage du Pi — voir
+ * `reconciliation-sur-rattachement.ts`.
  */
 
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
@@ -30,6 +39,9 @@ import {
 import type { DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
+import { cablerPermissionVerdictDistant } from './permission-verdict-distant.ts';
+import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
+import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
 import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
@@ -42,8 +54,11 @@ export interface OptionsAssemblageControlPlanePi {
   readonly cheminIncidentsOrchestrateur: string;
   readonly repertoireProjets: string;
   readonly cwdOrchestrateur: string;
-  /** `ws://host:port` du canal de contrôle D.3 exposé par `bin-pc.ts`. */
-  readonly urlSuperviseurPc: string;
+  /** Port d'écoute du lien Pi↔PC (H-75 — le Pi héberge). */
+  readonly portLienPc: number;
+  readonly hostnameLienPc?: string;
+  /** Secret partagé, lu depuis l'environnement par l'appelant — jamais codé en dur. */
+  readonly secretLienPc: string;
   readonly configDirOrchestrateur?: string;
   readonly seuilUtilisationPctPlafondParc?: number;
 }
@@ -52,6 +67,7 @@ export interface ControlPlanePiAssemble {
   readonly registre: Registre;
   readonly machineEtatsDemandes: MachineEtatsDemandes;
   readonly clientSuperviseurPc: ClientSuperviseurPc;
+  readonly serveurLien: ServeurLienPc;
   readonly orchestrateur: PoigneeOrchestrateur;
 }
 
@@ -76,7 +92,22 @@ function construireDependancesReconciliation(client: ClientSuperviseurPc, machin
 export async function assemblerControlPlanePi(options: OptionsAssemblageControlPlanePi): Promise<ControlPlanePiAssemble> {
   const registre = ouvrirRegistre({ chemin: options.cheminRegistreDb });
   const machineEtatsDemandes = new MachineEtatsDemandes();
-  const clientSuperviseurPc = new ClientSuperviseurPc({ url: options.urlSuperviseurPc });
+
+  // `☠` Le déclencheur de réconciliation est câblé APRÈS `dependancesReconciliation`
+  // (qui a besoin de `clientSuperviseurPc`), mais `demarrerServeurLienPc` doit
+  // recevoir le callback AVANT qu'une connexion n'arrive. Indirection par
+  // référence mutable : `serveurLien.lien` existe dès la construction, seule
+  // l'affectation du déclencheur est différée de quelques lignes.
+  let declencheurReconciliation: (() => void) | null = null;
+  const serveurLien = demarrerServeurLienPc({
+    port: options.portLienPc,
+    hostname: options.hostnameLienPc,
+    secret: options.secretLienPc,
+    surConnexionAcceptee: () => declencheurReconciliation?.(),
+  });
+
+  const clientSuperviseurPc = new ClientSuperviseurPc(serveurLien.lien);
+  cablerPermissionVerdictDistant(machineEtatsDemandes, serveurLien.lien);
 
   const serveurControle = creerServeurMcpControle({
     registre,
@@ -90,12 +121,15 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
   });
 
+  const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
+  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
+
   const orchestrateur = await demarrerOrchestrateur({
     stockageIdentite: new StockageIdentiteFichier(options.cheminIdentiteOrchestrateur),
     verificateurSessionExistante: creerVerificateurSessionSdk(options.cwdOrchestrateur),
     serveurControle,
     registre,
-    reconciliation: construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes),
+    reconciliation: dependancesReconciliation,
     incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
     cwd: options.cwdOrchestrateur,
     configDir: options.configDirOrchestrateur,
@@ -103,5 +137,5 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
 
   log.info({ sessionId: orchestrateur.sessionId }, 'control plane Pi assemblé et session orchestrateur établie');
 
-  return { registre, machineEtatsDemandes, clientSuperviseurPc, orchestrateur };
+  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, orchestrateur };
 }
