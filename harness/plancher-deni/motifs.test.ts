@@ -300,6 +300,8 @@ describe('intégration — câblage réel dans WorkerSpec / Options (workers/, M
       sessionId: '11111111-2222-3333-4444-555555555555',
       cwd: '/tmp/worktree-alpha',
       mandate: 'Tu es team leader.',
+      // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+      portAuditPermissions: () => ({}),
       deniedToolPatterns: PLANCHER_DENI_SDK,
       maxBudgetUsd: 200,
       ...overrides,

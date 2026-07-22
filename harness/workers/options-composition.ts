@@ -2,13 +2,22 @@
  * Responsabilité : composer les `Options` d'un worker (B.1.3).
  *
  * Le harness ne fixe que le **structurel** : ce qu'il fixe écrase la config du
- * poste (H-44). Tout le reste — style de sortie, hooks locaux, serveurs MCP du
- * projet, skills, plugins, thinking, effort — appartient au PC et n'apparaît pas
- * ici.
+ * poste (H-44). Tout le reste — style de sortie, serveurs MCP du projet,
+ * skills, plugins, thinking, effort — appartient au PC et n'apparaît pas ici.
+ *
+ * `options.hooks` (programmatique, JS, ce fichier) est **structurel** et
+ * distinct des hooks locaux du poste (commandes shell dans `settings.json`,
+ * H-44) : les deux mécanismes sont de forme différente dans le SDK et
+ * coexistent (⚠ HYP — non exécuté en réel, déduit des types : deux champs
+ * disjoints, `Options.hooks` en callbacks JS d'un côté, `hooks` de
+ * `SettingsFileSchema` en commandes shell de l'autre — à revalider sur un banc
+ * si un jour l'un semble supprimer l'autre). Ici, il porte exclusivement
+ * l'audit de permissions (C.5, M-22, H-74) — jamais une customisation projet.
  */
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import { assertRetryWatchdogCoherent } from '../budgets/index.ts';
+import { buildAuditHooks } from './audit-hooks.ts';
 import { buildCanUseTool } from './can-use-tool.ts';
 import { DEFAULT_SETTING_SOURCES } from './preflight-config.ts';
 import { sessionLogger } from './logger.ts';
@@ -98,6 +107,12 @@ export function composeWorkerOptions(
     // H-73.1 : fourni quel que soit permissionMode — pas un arbitre (le classifieur
     // tranche seul en 'auto', H-64), seul récepteur de redélivrance après coupure.
     canUseTool: buildCanUseTool(spec),
+    // H-74 (5e occurrence) : le port d'audit était construit mais jamais branché
+    // ici — angle mort total sur PreToolUse en permissionMode 'auto' (C.1.1, H-64).
+    // Obligatoire dans le type (WorkerSpec.portAuditPermissions), enveloppé par
+    // buildAuditHooks pour qu'une panne de l'audit ne bloque ni ne fasse échouer
+    // le tour (propriété n°1 du harness).
+    hooks: buildAuditHooks(spec),
     ...(spec.sessionStore !== undefined ? { sessionStore: spec.sessionStore } : {}),
     ...(spec.spawnProcess !== undefined ? { spawnClaudeCodeProcess: spec.spawnProcess } : {}),
   };
@@ -125,6 +140,13 @@ export function assertOptionsInvariants(options: Options): void {
     throw new OptionsCompositionError(
       'systemPrompt doit être en forme preset claude_code : sans lui, le CLAUDE.md du poste ' +
         "n'est pas chargé même avec les bons settingSources (H-44).",
+    );
+  }
+  if (options.hooks === undefined) {
+    throw new OptionsCompositionError(
+      "hooks est absent : l'audit des permissions (C.5, M-22) ne serait jamais branché sur ce " +
+        "worker — 5e occurrence mesurée de H-74. buildAuditHooks() doit toujours rendre un objet, " +
+        'même vide sur panne du port ; un `undefined` ici est un défaut de composition, pas un état normal.',
     );
   }
 }

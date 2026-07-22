@@ -73,6 +73,7 @@ describe('assemblage — bus de permissions vers canUseTool (H-73.1)', () => {
     const spec = construireWorkerSpec(
       { sessionId: 'req-1-session', cwd: '/tmp', mandate: 'test', deniedToolPatterns: [], maxBudgetUsd: 1 },
       port,
+      () => ({}),
     );
     const canUseTool = buildCanUseTool(spec);
 
@@ -87,6 +88,7 @@ describe('assemblage — bus de permissions vers canUseTool (H-73.1)', () => {
     const spec = construireWorkerSpec(
       { sessionId: 'req-2-session', cwd: '/tmp', mandate: 'test', deniedToolPatterns: [], maxBudgetUsd: 1 },
       port,
+      () => ({}),
     );
     const canUseTool = buildCanUseTool(spec);
 
@@ -104,6 +106,7 @@ describe('assemblage — bus de permissions vers canUseTool (H-73.1)', () => {
       mandate: 'test',
       deniedToolPatterns: [],
       maxBudgetUsd: 1,
+      portAuditPermissions: () => ({}),
     };
     const canUseTool = buildCanUseTool(spec);
     const resultat = await canUseTool('Bash', {}, { requestId: 'req-3', toolUseID: 'tu-3', decisionReason: undefined, blockedPath: undefined, agentID: undefined } as never);
@@ -131,7 +134,10 @@ describe('assemblage — persistance et restauration du registre PC (dette n°1,
       pid: 999_999_999,
       pidStarttime: null,
       vivant: true,
-      spec: { sessionId: 'session-fantome', cwd: '/tmp/worktree-fantome', mandate: '', deniedToolPatterns: [], maxBudgetUsd: 1 },
+      spec: {
+        sessionId: 'session-fantome', cwd: '/tmp/worktree-fantome', mandate: '',
+        deniedToolPatterns: [], maxBudgetUsd: 1, portAuditPermissions: () => ({}),
+      },
     });
     persistance.fermer();
 

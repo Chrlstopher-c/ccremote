@@ -17,6 +17,7 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { GenerateurEntree } from '../control-plane/orchestrateur/entree/index.ts';
 import type { WorkerHandle, WorkerSpec } from '../workers/index.ts';
+import type { WorkerSpecPersistee } from './persistance-registre.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 
 export type { FileEntreeCiblee } from '../pause/index.ts';
@@ -106,7 +107,15 @@ export interface LigneRegistrePersistee {
   readonly pid: number | null;
   readonly pidStarttime: string | null;
   readonly vivant: boolean;
-  readonly spec: WorkerSpec;
+  /**
+   * `☠` **Pas un `WorkerSpec` complet** : les ports (`portAuditPermissions`,
+   * `portBusPermissions`, `sessionStore`, `spawnProcess`, `onStderr`) sont des
+   * fonctions, effacées sans bruit par la sérialisation JSON. Relancer un worker
+   * depuis cette spec sans réinjecter les ports donnerait un worker **sans audit
+   * ni arbitrage de permissions** — des garde-fous éteints par le simple fait
+   * d'un redémarrage (H-74). Les ports sont réinjectés par la composition.
+   */
+  readonly spec: WorkerSpecPersistee;
   readonly majA: number;
 }
 
@@ -123,7 +132,14 @@ export interface ConcurrentRestaure {
   readonly epoch: number;
   readonly pid: number | null;
   readonly pidStarttime: string | null;
-  readonly spec: WorkerSpec;
+  /**
+   * `☠` Spec **relue du disque**, donc amputée de ses ports (voir
+   * `LigneRegistrePersistee.spec`). C'est cohérent avec ce qu'est un concurrent
+   * restauré : un process que cette instance **ne pilote pas**. Si un jour on
+   * voulait le relancer, il faudrait réinjecter les ports par la composition —
+   * jamais réutiliser cette spec telle quelle.
+   */
+  readonly spec: WorkerSpecPersistee;
   readonly etat: EtatRevalidationProcess;
   /** `☠` Biais asymétrique non négociable : `indetermine` ⇒ `true` (jamais de libération dans le doute). */
   vivant: boolean;

@@ -30,6 +30,7 @@ function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     mandate: 'Tu es team leader. Critère d’arrêt : les tests E2E passent.',
     deniedToolPatterns: ['Bash(rm -rf /*)'],
     maxBudgetUsd: 25,
+    portAuditPermissions: () => ({}),
     ...overrides,
   };
 }
@@ -103,9 +104,88 @@ describe('composeWorkerOptions', () => {
 
   test('ne fixe rien qui appartient au PC', () => {
     const { options } = composeWorkerOptions(spec(), MODEL);
-    for (const key of ['hooks', 'mcpServers', 'agents', 'plugins', 'thinking', 'effort', 'allowedTools']) {
+    // `hooks` est délibérément retiré de cette liste (H-74, 5e occurrence
+    // mesurée le même jour) : ce n'est PAS une customisation du poste (celle-là
+    // vit dans les fichiers de settings, sdk.d.ts ~L5117, un mécanisme distinct
+    // à base de commandes shell) mais le câblage structurel de l'audit de
+    // permissions du harness lui-même (C.5, M-22) — voir le test dédié plus bas.
+    for (const key of ['mcpServers', 'agents', 'plugins', 'thinking', 'effort', 'allowedTools']) {
       expect(options).not.toHaveProperty(key);
     }
+  });
+
+  test('☠ H-74 (5e occurrence) : hooks porte l’audit de permissions branché sur le port injecté', () => {
+    const tentativesVues: string[] = [];
+    const { options } = composeWorkerOptions(
+      spec({
+        portAuditPermissions: () => ({
+          PreToolUse: [
+            {
+              hooks: [
+                async (input) => {
+                  if (input.hook_event_name === 'PreToolUse') tentativesVues.push(input.tool_name);
+                  return {};
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+      MODEL,
+    );
+    expect(options.hooks).toBeDefined();
+    const preToolUse = options.hooks?.PreToolUse;
+    expect(preToolUse).toHaveLength(1);
+    expect(preToolUse?.[0]?.hooks).toHaveLength(1);
+  });
+
+  test('☠ H-74 : portAuditPermissions() qui lève ne bloque ni ne fait échouer la composition', () => {
+    expect(() =>
+      composeWorkerOptions(
+        spec({
+          portAuditPermissions: () => {
+            throw new Error('collecteur indisponible');
+          },
+        }),
+        MODEL,
+      ),
+    ).not.toThrow();
+  });
+
+  test('☠ un hook d’audit qui lève à l’exécution ne bloque ni ne fait échouer le tour (propriété n°1)', async () => {
+    const { options } = composeWorkerOptions(
+      spec({
+        portAuditPermissions: () => ({
+          PreToolUse: [
+            {
+              hooks: [
+                async () => {
+                  throw new Error('collecteur en panne au milieu du tour');
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+      MODEL,
+    );
+    const callback = options.hooks?.PreToolUse?.[0]?.hooks[0];
+    expect(callback).toBeDefined();
+    const resultat = await callback?.(
+      {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Bash',
+        tool_input: { command: 'ls' },
+        tool_use_id: 'tool-use-1',
+        session_id: '11111111-2222-3333-4444-555555555555',
+        transcript_path: '/tmp/transcript.jsonl',
+        cwd: '/tmp/worktree-alpha',
+      } as Parameters<NonNullable<typeof callback>>[0],
+      'tool-use-1',
+      { signal: new AbortController().signal },
+    );
+    // Jamais de deny, jamais d'exception propagée : observation vide sur panne.
+    expect(resultat).toEqual({});
   });
 
   test('n’active le point d’extension distant que s’il est fourni (B.2.1)', () => {

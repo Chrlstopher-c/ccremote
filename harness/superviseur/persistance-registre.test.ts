@@ -12,6 +12,8 @@ function specFactice(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     sessionId: 's1',
     cwd: '/tmp/worktree-alpha',
     mandate: 'team leader',
+    // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+    portAuditPermissions: () => ({}),
     deniedToolPatterns: [],
     maxBudgetUsd: 25,
     ...overrides,
@@ -43,7 +45,14 @@ describe('PersistanceRegistreSqlite', () => {
       pidStarttime: '987654',
       vivant: true,
     });
-    expect(lignes[0]?.spec).toEqual(specFactice());
+    // ☠ La spec relue N'EST PAS la spec écrite : les ports sont des fonctions, que
+    // JSON.stringify efface sans rien signaler. C'est un fait de conception, pas un
+    // détail de test — relancer un worker depuis cette spec sans réinjecter les ports
+    // donnerait un worker sans audit ni arbitrage de permissions (H-74).
+    const { portAuditPermissions, ...donneesSeules } = specFactice();
+    expect(typeof portAuditPermissions).toBe('function');
+    expect(lignes[0]?.spec).toEqual(donneesSeules);
+    expect(lignes[0]?.spec).not.toHaveProperty('portAuditPermissions');
   });
 
   test('sauvegarder deux fois la même sessionId met à jour la ligne (ON CONFLICT), jamais de doublon', () => {

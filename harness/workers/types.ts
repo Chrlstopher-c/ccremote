@@ -5,6 +5,8 @@
  */
 
 import type {
+  HookCallbackMatcher,
+  HookEvent,
   Options,
   Query,
   SDKUserMessage,
@@ -95,7 +97,32 @@ export interface WorkerSpec {
   readonly onStderr?: (data: string) => void;
   /** Port de redélivrance vers le bus de permissions (H-73.1). Absent ⇒ refus par défaut. */
   readonly portBusPermissions?: PortBusPermissions;
+  /**
+   * Port vers le collecteur d'audit des permissions (C.5, M-22) — usine appelée
+   * une fois à la composition (`workers/audit-hooks.ts`), qui rend les hooks
+   * `Options.hooks` d'un collecteur dédié à ce worker. **Obligatoire** (H-74) :
+   * c'est la 5e occurrence du même défaut mesurée le 2026-07-22
+   * (`composeWorkerOptions` ne fixait jamais `options.hooks`) — un garde-fou
+   * d'audit dont le câblage est optionnel s'éteint en silence et donne un faux
+   * sentiment de couverture. Sans lui, `PreToolUse` — seule source exhaustive
+   * en `permissionMode: 'auto'` (C.1.1, H-64) — n'est jamais branché, et
+   * l'audit ne voit ni les appels auto-approuvés ni rien du tout : angle mort
+   * total, pas partiel.
+   */
+  readonly portAuditPermissions: PortAuditPermissions;
 }
+
+/**
+ * Usine construisant les entrées `Options.hooks` d'un worker, liées à un
+ * collecteur d'audit dédié (`control-plane/audit-permissions`, M-22).
+ * `workers/` ne dépend pas de `control-plane/` en dur (H-73.1 point 3,
+ * code-standards.md) : l'appelant construit le collecteur et ses hooks via
+ * `creerHooksAuditPermissions`, et n'injecte ici que la forme SDK publique.
+ * Invoquée une fois par worker à la composition (`options-composition.ts`) —
+ * jamais partagée entre workers, pour ne pas mélanger l'état d'audit de deux
+ * missions distinctes.
+ */
+export type PortAuditPermissions = () => Partial<Record<HookEvent, HookCallbackMatcher[]>>;
 
 /**
  * Ce que porte une demande atteignant `canUseTool` (H-73.1) : redélivrance après

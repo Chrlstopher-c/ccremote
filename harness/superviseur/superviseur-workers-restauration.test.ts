@@ -35,6 +35,8 @@ function specFactice(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     sessionId: 'sess-intrus',
     cwd: '/worktrees/alpha',
     mandate: 'team leader',
+    // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+    portAuditPermissions: () => ({}),
     deniedToolPatterns: [],
     maxBudgetUsd: 25,
     ...overrides,

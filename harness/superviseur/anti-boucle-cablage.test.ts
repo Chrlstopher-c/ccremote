@@ -26,6 +26,8 @@ function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     sessionId: '11111111-2222-3333-4444-555555555555',
     cwd: '/tmp/worktree-anti-boucle',
     mandate: 'team leader',
+    // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+    portAuditPermissions: () => ({}),
     deniedToolPatterns: ['Bash(rm -rf /*)'],
     maxBudgetUsd: 999,
     ...overrides,

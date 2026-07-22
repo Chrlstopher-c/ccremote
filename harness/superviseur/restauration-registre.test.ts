@@ -12,7 +12,11 @@ import { restaurerRegistre } from './restauration-registre.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
 function specFactice(): WorkerSpec {
-  return { sessionId: 'sess-legitime', cwd: '/worktrees/alpha', mandate: 'lead', deniedToolPatterns: [], maxBudgetUsd: 25 };
+  // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+  return {
+    sessionId: 'sess-legitime', cwd: '/worktrees/alpha', mandate: 'lead',
+    deniedToolPatterns: [], maxBudgetUsd: 25, portAuditPermissions: () => ({}),
+  };
 }
 
 describe('restaurerRegistre — trois issues, biais asymétrique non négociable', () => {

@@ -5,6 +5,7 @@
 
 export type {
   ModelTier,
+  PortAuditPermissions,
   PreflightFailure,
   PreflightFailureCode,
   PreflightReport,
@@ -45,6 +46,8 @@ export type { ComposedWorkerOptions, ModeIdentiteSession } from './options-compo
 
 export { WorkerStartError, hasCapability, readCapabilities, startWorker } from './start-worker.ts';
 export type { StartWorkerDeps } from './start-worker.ts';
+
+export { buildAuditHooks } from './audit-hooks.ts';
 
 export { creerSpawnerLocal, lireStarttimeAuSpawn } from './process-spawner.ts';
 export type { IdentiteProcessSpawn } from './process-spawner.ts';

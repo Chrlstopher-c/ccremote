@@ -57,6 +57,27 @@ export interface EnregistrementAPersister {
   readonly spec: WorkerSpec;
 }
 
+
+/**
+ * `☠` Ce qui SURVIT réellement à la persistance. `WorkerSpec` porte des **ports**
+ * — `portAuditPermissions`, `portBusPermissions`, `sessionStore`, `spawnProcess`,
+ * `onStderr` — qui sont des **fonctions** : `JSON.stringify` les efface sans rien
+ * signaler. Une spec relue depuis le disque n'a donc plus aucun de ses garde-fous.
+ *
+ * Le type le dit désormais explicitement, au lieu de laisser croire à un
+ * `WorkerSpec` complet : relancer un worker depuis une spec restaurée **sans
+ * réinjecter les ports** produirait un worker sans audit et sans arbitrage de
+ * permissions — une extinction silencieuse de garde-fous (H-74), par le seul
+ * fait d'un redémarrage.
+ *
+ * ⇒ La restauration rend des **données**. Les ports sont réinjectés par la
+ * composition (`composition/pc/`), jamais relus du disque.
+ */
+export type WorkerSpecPersistee = Omit<
+  WorkerSpec,
+  'portAuditPermissions' | 'portBusPermissions' | 'sessionStore' | 'spawnProcess' | 'onStderr'
+>;
+
 /** Port injecté dans `RegistreWorkers` (optionnel, défaut `null` — voir B.1.4). */
 export interface PersistanceRegistre {
   sauvegarder(enregistrement: EnregistrementAPersister): void;
@@ -147,7 +168,8 @@ export class PersistanceRegistreSqlite implements PersistanceRegistre {
       pid: ligne.pid,
       pidStarttime: ligne.pid_starttime,
       vivant: ligne.vivant === 1,
-      spec: JSON.parse(ligne.spec_json) as WorkerSpec,
+      // ☠ Jamais `as WorkerSpec` : les ports ont été effacés par la sérialisation.
+      spec: JSON.parse(ligne.spec_json) as WorkerSpecPersistee,
       majA: ligne.maj_a,
     }));
   }

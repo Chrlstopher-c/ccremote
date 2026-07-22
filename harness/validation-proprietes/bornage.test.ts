@@ -46,6 +46,8 @@ function specMinimal(surcharge: Partial<WorkerSpec> = {}): WorkerSpec {
     sessionId: 'sess-1',
     cwd: '/wt/alpha',
     mandate: 'test bornage',
+    // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+    portAuditPermissions: () => ({}),
     deniedToolPatterns: [],
     maxBudgetUsd: 40,
     ...surcharge,

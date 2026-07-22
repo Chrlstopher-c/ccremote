@@ -16,7 +16,7 @@
 import type { WorkerSpec } from '../../workers/index.ts';
 // `☠` Voir `composition/bus-permissions/port-colocalise.ts` : `PortBusPermissions`
 // n'est pas exporté par `workers/index.ts`, import direct depuis `types.ts`.
-import type { PortBusPermissions } from '../../workers/types.ts';
+import type { PortAuditPermissions, PortBusPermissions } from '../../workers/types.ts';
 
 export interface ParametresWorkerSpec {
   readonly sessionId: string;
@@ -33,6 +33,10 @@ export interface ParametresWorkerSpec {
 export function construireWorkerSpec(
   parametres: ParametresWorkerSpec,
   portBusPermissions: PortBusPermissions,
+  portAuditPermissions: PortAuditPermissions,
 ): WorkerSpec {
-  return { ...parametres, portBusPermissions };
+  // ☠ Les deux ports sont des paramètres OBLIGATOIRES, jamais des champs
+  // optionnels de `parametres` (H-74) : un worker assemblé sans audit ni bus de
+  // permissions passerait tous les tests en ne protégeant rien.
+  return { ...parametres, portBusPermissions, portAuditPermissions };
 }

@@ -364,6 +364,18 @@ l'instant ce n'est pas le plus important. C'est ultra important de les garder en
       (fix déployé, heuristique non observée sur un vrai cycle prod)
 
 ## Backlog
+- [ ] **Démarrer le PC depuis la conversation avec l'orchestrateur master** (demandé par Chris,
+      2026-07-22). L'agent doit en être **capable**, mais **toujours demander et faire confirmer par
+      l'utilisateur** — jamais de réveil automatique.
+      Le moyen existe déjà : Wake-on-LAN, `PC_MAC` dans `client/config.py`, utilisé par
+      `client/ccremote.py`. Il s'agit donc d'exposer un outil de contrôle à l'orchestrateur, pas
+      d'inventer un mécanisme.
+      `☠` Trois points à ne pas rater à l'implémentation : (1) la confirmation humaine est un
+      **arbitrage**, il passe par le bus de permissions (M-21) et son escalade (H-61), jamais par une
+      question posée dans le fil ; (2) réveiller le PC est une action **sortante et physique** — elle
+      relève du seuil de confirmation obligatoire, au même titre qu'une extinction ; (3) le réveil
+      n'a de sens qu'articulé avec la reconnexion automatique (le PC réveillé doit se rattacher
+      seul) — donc à faire **après** que la reprise automatique soit prouvée, pas avant.
 - [ ] Reasoning par round de tool-calling en streaming (actuellement fusionné en un seul bloc
       pour tout l'échange, simplification assumée)
 - [ ] Décider si `zai-glm-4.7`/`gpt-oss-120b`/`gemma-4-31b` ont vraiment les tailles de contexte
