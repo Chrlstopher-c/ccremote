@@ -5,12 +5,12 @@
 
 **Contexte complet : `harness/REPRISE.md`.**
 
-### En cours (lancés le 2026-07-22, à vérifier sur disque avant de relancer)
-- [ ] **M-04** — tests unitaires + `README.md` des interfaces dans `harness/test-harness/`
-      (contrats et doublures déjà écrits ; il manque les tests, or le critère d'acceptation est
-      « chaque panne est déclenchable de façon reproductible »)
-- [ ] **`design-v2/COMPARAISON.md`** — le livrable décisionnel attendu par Chris
-      (la maquette `index.html` est déjà livrée)
+### Lot 0 — TERMINÉ (180 tests verts, typecheck propre)
+- [x] **M-01** squelette worker · **M-02** générateur d'entrée · **M-03** registre SQLite
+- [x] **M-04** harnais de pannes — 87 tests, README avec table de couverture, défaut de fencing
+      corrigé (le rejet ne portait que sur les epochs strictement inférieurs : deux workers de même
+      epoch coexistaient sans trace, soit la panne #2 **avec** le fencing activé)
+- [x] **`design-v2/`** — maquette + `COMPARAISON.md`
 
 ### Point de synchronisation vague 1 — à valider par le parent, pas par un subagent
 - [ ] **Test d'acceptation réel de M-02** : session ouverte, **10 minutes réelles** de silence, puis

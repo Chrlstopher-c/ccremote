@@ -38,8 +38,27 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 | M-01 squelette worker | `workers/` | livré |
 | M-02 générateur d'entrée | `control-plane/orchestrateur/entree/` | livré |
 | M-03 registre SQLite | `control-plane/registre/` | livré |
-| M-04 harnais de pannes | `test-harness/` | contrats + doublures livrés ; **tests et README en cours** |
-| Maquette UI v2 | `../design-v2/` | `index.html` livré ; **`COMPARAISON.md` en cours** |
+| M-04 harnais de pannes | `test-harness/` | livré — voir `test-harness/README.md` |
+| Maquette UI v2 | `../design-v2/` | livré — voir `../design-v2/COMPARAISON.md` |
+
+**Lot 0 complet. 180 tests verts.**
+
+### Ce que le harnais de pannes ne pourra jamais tester
+
+Table de couverture complète dans `test-harness/README.md`. Le point à retenir : **9 pannes de la
+grille sont structurellement hors de portée d'un test automatisé** — c'est le risque résiduel réel du
+projet, à traiter par revue humaine et non par CI.
+
+Les trois qui comptent le plus : **#6** conflit sémantique à l'intégration (le code compile, aucun
+signal mécanique n'existe — hors périmètre v1 par H-56, mais reviendra avec le parallélisme) ·
+**#9** worktree supprimé avec du travail non commité (exige un vrai dépôt git et un vrai `rm`, que le
+harnais s'interdit) · **#26** `applyFlagSettings()` dont l'appel réussit sans effet (seul le vrai SDK
+peut le montrer).
+
+14 autres pannes sont **en attente de leur composant** : le vocabulaire de faits existe déjà
+(`reinitialize_appele`, `orphelin_ignore`…), c'est le code sous test qui manque. Elles deviendront
+testables au fil des vagues — vérifier le README à chaque mission plutôt que de réinventer un
+injecteur.
 
 ### Vérifier l'état réel avant de reprendre
 
