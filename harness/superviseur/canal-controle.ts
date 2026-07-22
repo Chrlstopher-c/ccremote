@@ -1,0 +1,153 @@
+/**
+ * Responsabilité : canal de contrôle Pi→PC (branche D, section D.3 — mission M-13).
+ *
+ * Distinct du canal principal (D.1, `transport/`) : ce qui transite ici ne concerne
+ * pas le contenu d'une session (spawn/arrêt d'un worker, inventaire, stderr, santé
+ * du PC — D.3.1). Aucun octet de conversation ne passe par ce module.
+ *
+ * Contrat imposé par D.3.2, tenu MÉCANIQUEMENT ici, pas par convention :
+ *  - requête/réponse, idempotent par identifiant d'opération fourni par le Pi ;
+ *  - toute opération MUTATIVE portant un `opId` déjà vu retourne le résultat
+ *    mémorisé SANS RÉ-EXÉCUTER l'opération sous-jacente — `#executer` n'est
+ *    physiquement pas atteint sur un rejeu, voir `traiter()` ;
+ *  - `inventaire` (lecture seule) ne passe jamais par le cache : rejouer une
+ *    lecture ne produit aucun effet à dédupliquer, et la fraîcheur prime.
+ *
+ * ☠ « Le PC n'initie jamais » (D.3.2, hors canal d'observation E.2) : `traiter()`
+ * est la SEULE méthode publique de cette classe. Elle ne fait que RÉAGIR à un
+ * appel entrant — ce module ne détient aucune référence vers un client sortant,
+ * aucune méthode d'ici ne peut donc, même par erreur future, ouvrir une connexion
+ * vers le Pi de sa propre initiative. C'est la preuve mécanique de l'invariant,
+ * pas une discipline d'écriture à vérifier en revue.
+ */
+
+import type { DemandeEnAttenteReinitialisation, DescripteurWorkerPc } from '../control-plane/reconciliation/types.ts';
+import { superviseurLogger as journal } from './logger.ts';
+import type { DemandeDemarrage } from './types.ts';
+
+/**
+ * Sous-ensemble de `SuperviseurWorkers` réellement utilisé ici — un port, pas la
+ * classe concrète (même esprit que `StartWorkerDeps`, `RepertoireCibles`…) :
+ * `SuperviseurWorkers` le satisfait structurellement, une doublure de test aussi,
+ * sans dépendre de ses champs privés.
+ */
+export interface PortSuperviseurControle {
+  inventaire(): readonly DescripteurWorkerPc[];
+  demarrer(demande: DemandeDemarrage): Promise<{ readonly sessionId: string }>;
+  arreter(missionId: string): Promise<void>;
+  tuerSansPreavis(sessionId: string): void | Promise<void>;
+  relancer(missionId: string, sessionId: string): Promise<void>;
+  reinitialiser(
+    sessionId: string,
+  ): Promise<{ readonly demandesEnAttente: readonly DemandeEnAttenteReinitialisation[] }>;
+}
+
+export type OperationControle =
+  | { readonly type: 'inventaire' }
+  | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrage }
+  | { readonly type: 'arreter_worker'; readonly missionId: string }
+  | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
+  | { readonly type: 'relancer_worker'; readonly missionId: string; readonly sessionId: string }
+  | { readonly type: 'reinitialiser'; readonly sessionId: string };
+
+/** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
+type OperationMutative = Exclude<OperationControle, { readonly type: 'inventaire' }>;
+
+export interface RequeteControle {
+  /** Fourni par le Pi. Ignoré pour `inventaire` (lecture seule, jamais mutative). */
+  readonly opId: string;
+  readonly operation: OperationControle;
+}
+
+export type EffetControle = 'applique' | 'rejoue' | 'refuse';
+
+export interface ReponseControle {
+  readonly ok: boolean;
+  readonly effet: EffetControle;
+  readonly detail?: string;
+  readonly inventaire?: readonly DescripteurWorkerPc[];
+  readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
+}
+
+const TAILLE_MAX_CACHE_DEFAUT = 1000;
+
+export interface OptionsCanalControle {
+  /** Borne mémoire du cache d'idempotence — un opId très ancien est purgé (FIFO). */
+  readonly tailleMaxCache?: number;
+}
+
+export class CanalControle {
+  readonly #superviseur: PortSuperviseurControle;
+  readonly #tailleMaxCache: number;
+  /** Cache d'idempotence : opId ⇒ réponse d'une mutation RÉUSSIE (D.3.2). */
+  readonly #traitees = new Map<string, ReponseControle>();
+
+  constructor(superviseur: PortSuperviseurControle, options: OptionsCanalControle = {}) {
+    this.#superviseur = superviseur;
+    this.#tailleMaxCache = options.tailleMaxCache ?? TAILLE_MAX_CACHE_DEFAUT;
+  }
+
+  /**
+   * Point d'entrée unique (voir l'en-tête). Un `opId` déjà présent dans le
+   * cache renvoie la réponse mémorisée SANS appeler `#executer` — c'est la
+   * garantie mécanique d'idempotence, pas une vérification a posteriori.
+   */
+  async traiter(requete: RequeteControle): Promise<ReponseControle> {
+    if (requete.operation.type === 'inventaire') {
+      return { ok: true, effet: 'applique', inventaire: this.#superviseur.inventaire() };
+    }
+
+    const dejaTraitee = this.#traitees.get(requete.opId);
+    if (dejaTraitee !== undefined) {
+      journal.info(
+        { opId: requete.opId, type: requete.operation.type },
+        'rejeu détecté — réponse mémorisée retournée, AUCUNE ré-exécution (D.3.2)',
+      );
+      return { ...dejaTraitee, effet: 'rejoue' };
+    }
+
+    const reponse = await this.#executer(requete.operation);
+    // Seule une mutation RÉUSSIE est mémorisée : un refus/échec transitoire
+    // reste rejouable avec un effet réel, pas figé dans un refus définitif.
+    if (reponse.ok) this.#memoriser(requete.opId, reponse);
+    return reponse;
+  }
+
+  async #executer(operation: OperationMutative): Promise<ReponseControle> {
+    try {
+      switch (operation.type) {
+        case 'demarrer_worker': {
+          const handle = await this.#superviseur.demarrer(operation.demande);
+          return { ok: true, effet: 'applique', detail: `worker démarré : ${handle.sessionId}` };
+        }
+        case 'arreter_worker':
+          await this.#superviseur.arreter(operation.missionId);
+          return { ok: true, effet: 'applique', detail: `mission arrêtée : ${operation.missionId}` };
+        case 'tuer_sans_preavis':
+          this.#superviseur.tuerSansPreavis(operation.sessionId);
+          return { ok: true, effet: 'applique', detail: `worker tué sans préavis : ${operation.sessionId}` };
+        case 'relancer_worker':
+          await this.#superviseur.relancer(operation.missionId, operation.sessionId);
+          return { ok: true, effet: 'applique', detail: `worker relancé : ${operation.sessionId}` };
+        case 'reinitialiser': {
+          const resultat = await this.#superviseur.reinitialiser(operation.sessionId);
+          return { ok: true, effet: 'applique', demandesEnAttente: resultat.demandesEnAttente };
+        }
+        default: {
+          const exhaustif: never = operation;
+          throw new Error(`opération de contrôle non gérée : ${String(exhaustif)}`);
+        }
+      }
+    } catch (erreur) {
+      journal.error({ err: erreur, type: operation.type }, 'opération de contrôle en échec');
+      return { ok: false, effet: 'refuse', detail: erreur instanceof Error ? erreur.message : String(erreur) };
+    }
+  }
+
+  #memoriser(opId: string, reponse: ReponseControle): void {
+    this.#traitees.set(opId, reponse);
+    if (this.#traitees.size <= this.#tailleMaxCache) return;
+    const plusAncien = this.#traitees.keys().next().value;
+    if (plusAncien !== undefined) this.#traitees.delete(plusAncien);
+  }
+}

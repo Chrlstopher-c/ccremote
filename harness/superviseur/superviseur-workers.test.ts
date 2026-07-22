@@ -1,0 +1,324 @@
+/**
+ * Superviseur de workers (branche B, D.3 — mission M-13).
+ *
+ * Protège : les ports (`InventairePc`, `ReinitialisateurSession`, `RepertoireCibles`,
+ * `ArreteurMission`, `RelanceurMission`) sont implémentés à la lettre des formes
+ * déjà publiques ; l'idempotence NATURELLE (rejouer une méthode sur un worker déjà
+ * dans l'état visé ne produit aucun effet double) ; le câblage de `deciderRelance()`
+ * sur un vrai `SDKResultMessage` observé (☠ dette M-34).
+ *
+ * Aucun spawn réel : `demarrerWorker` est injecté (règle du dépôt, jamais de
+ * session Claude Code réelle en unitaire).
+ */
+
+import { describe, expect, test } from 'bun:test';
+import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { CompteurRelances } from '../relance/compteur-relances.ts';
+import type { DecisionRelance } from '../relance/types.ts';
+import type { WorkerCapabilities, WorkerHandle, WorkerSpec } from '../workers/index.ts';
+import { SuperviseurError, SuperviseurWorkers, type DemarrerWorkerFn } from './superviseur-workers.ts';
+import type { DemandeDemarrage } from './types.ts';
+
+function capacites(overrides: Partial<WorkerCapabilities> = {}): WorkerCapabilities {
+  return { advertised: [], claudeCodeVersion: '2.1.217', tools: ['Bash'], model: 'claude-sonnet-4-6', sessionId: 's', ...overrides };
+}
+
+/** Double de `Query` : un générateur des messages fournis + méthodes de contrôle espionnables. */
+function fakeQuery(
+  messages: readonly SDKMessage[],
+  overrides: {
+    interrupt?: () => Promise<{ still_queued: string[] } | undefined>;
+    close?: () => void;
+    reinitialize?: () => Promise<unknown>;
+  } = {},
+): Query {
+  async function* flux(): AsyncGenerator<SDKMessage, void> {
+    for (const message of messages) yield message;
+  }
+  const iterateur = flux();
+  return Object.assign(iterateur, {
+    interrupt: overrides.interrupt ?? (async () => ({ still_queued: [] })),
+    close: overrides.close ?? ((): void => {}),
+    reinitialize: overrides.reinitialize ?? (async () => ({ commands: [], agents: [], models: [] })),
+  }) as unknown as Query;
+}
+
+function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
+  return {
+    sessionId: '11111111-2222-3333-4444-555555555555',
+    cwd: '/tmp/worktree-alpha',
+    mandate: 'team leader',
+    deniedToolPatterns: ['Bash(rm -rf /*)'],
+    maxBudgetUsd: 25,
+    ...overrides,
+  };
+}
+
+/** Construit un `demarrerWorker` factice qui rend un handle autour de la Query fournie. */
+function demarrerWorkerFactice(
+  fabriqueQuery: (spec: WorkerSpec) => Query,
+  appels: WorkerSpec[] = [],
+): DemarrerWorkerFn {
+  return (async (workerSpec: WorkerSpec) => {
+    appels.push(workerSpec);
+    const handle: WorkerHandle = {
+      sessionId: workerSpec.sessionId,
+      cwd: workerSpec.cwd,
+      capabilities: capacites({ sessionId: workerSpec.sessionId }),
+      model: { requested: 'sonnet', resolved: 'claude-sonnet-4-6', tier: 'sonnet', viaInheritance: false },
+      preflight: {
+        ok: true,
+        cwd: workerSpec.cwd,
+        loadedSources: ['user', 'project', 'local'],
+        machineClaudeMdPath: null,
+        projectClaudeMdPaths: [],
+        effectiveModel: 'sonnet',
+        failures: [],
+      },
+      abortController: new AbortController(),
+      query: fabriqueQuery(workerSpec),
+    };
+    return handle;
+  }) as unknown as DemarrerWorkerFn;
+}
+
+function demande(overrides: Partial<DemandeDemarrage> = {}): DemandeDemarrage {
+  return { missionId: 'mission-1', epoch: 1, spec: spec(), promptInitial: 'go', ...overrides };
+}
+
+async function laisserPasserLesMicrotaches(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+
+describe('demarrer + InventairePc', () => {
+  test('enregistre le worker et le rend visible dans inventaire()', async () => {
+    const appels: WorkerSpec[] = [];
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([]), appels),
+    });
+    const handle = await superviseur.demarrer(demande());
+    expect(handle.sessionId).toBe(spec().sessionId);
+    expect(superviseur.inventaire()).toEqual([
+      { sessionId: spec().sessionId, worktree: '/tmp/worktree-alpha', epoch: 1, vivant: true },
+    ]);
+  });
+});
+
+describe('RepertoireCibles.cible', () => {
+  test('rend null pour une mission inconnue', () => {
+    const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances() });
+    expect(superviseur.cible('inconnue')).toBeNull();
+  });
+
+  test('envoyerMessage et interrupt délèguent au worker réel', async () => {
+    let interromptAppele = false;
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([], { interrupt: async () => ((interromptAppele = true), { still_queued: [] }) }),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    const cible = superviseur.cible('mission-1');
+    expect(cible).not.toBeNull();
+    await cible?.envoyerMessage({
+      type: 'user',
+      message: { role: 'user', content: 'texte' },
+      parent_tool_use_id: null,
+      uuid: 'u1',
+      session_id: spec().sessionId,
+    } as never);
+    await cible?.interrupt();
+    expect(interromptAppele).toBe(true);
+  });
+});
+
+describe('tuerSansPreavis (idempotence naturelle)', () => {
+  test('abort le contrôleur précis du worker, jamais un signal générique', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([])),
+    });
+    const handle = await superviseur.demarrer(demande());
+    expect(handle.abortController.signal.aborted).toBe(false);
+    superviseur.tuerSansPreavis(spec().sessionId);
+    expect(handle.abortController.signal.aborted).toBe(true);
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test('rejouer sur un worker déjà mort ne relève aucune exception (idempotent)', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([])),
+    });
+    await superviseur.demarrer(demande());
+    superviseur.tuerSansPreavis(spec().sessionId);
+    expect(() => superviseur.tuerSansPreavis(spec().sessionId)).not.toThrow();
+  });
+
+  test('sur une session inconnue : no-op silencieux', () => {
+    const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances() });
+    expect(() => superviseur.tuerSansPreavis('inconnue')).not.toThrow();
+  });
+});
+
+describe('ArreteurMission.arreter (idempotence naturelle)', () => {
+  test('ferme le flux d’entrée et query.close(), une seule fois même rejouée', async () => {
+    let fermetures = 0;
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([], { close: () => { fermetures += 1; } })),
+    });
+    await superviseur.demarrer(demande());
+    await superviseur.arreter('mission-1');
+    await superviseur.arreter('mission-1'); // rejeu : aucun effet double
+    expect(fermetures).toBe(1);
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test('mission inconnue : no-op', async () => {
+    const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances() });
+    await expect(superviseur.arreter('inconnue')).resolves.toBeUndefined();
+  });
+});
+
+describe('ReinitialisateurSession.reinitialiser (D.2.4, panne #3)', () => {
+  test('worker vivant : appelle réellement query.reinitialize()', async () => {
+    let appele = false;
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([], {
+          reinitialize: async () => {
+            appele = true;
+            return {
+              pending_permission_requests: [
+                { request_id: 'req-1', request: { subtype: 'can_use_tool', tool_name: 'Bash' } },
+              ],
+            };
+          },
+        }),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    const resultat = await superviseur.reinitialiser(spec().sessionId);
+    expect(appele).toBe(true);
+    expect(resultat.demandesEnAttente).toEqual([{ requestId: 'req-1', outil: 'Bash' }]);
+  });
+
+  test('worker mort ou inconnu : liste vide, jamais d’appel réel', async () => {
+    const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances() });
+    const resultat = await superviseur.reinitialiser('inconnue');
+    expect(resultat).toEqual({ demandesEnAttente: [] });
+  });
+});
+
+describe('RelanceurMission.relancer (B.3.3, resume)', () => {
+  test('session jamais démarrée ici : refuse explicitement (pas un silence)', async () => {
+    const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances() });
+    await expect(superviseur.relancer('mission-1', 'inconnue')).rejects.toThrow(SuperviseurError);
+  });
+
+  test('déjà vivant : idempotent, aucun second spawn', async () => {
+    const appels: WorkerSpec[] = [];
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([]), appels),
+    });
+    await superviseur.demarrer(demande());
+    await superviseur.relancer('mission-1', spec().sessionId);
+    expect(appels.length).toBe(1); // le seul spawn est celui de demarrer()
+  });
+
+  test('mort : relance avec `resume`, même WorkerSpec', async () => {
+    const options: Array<{ resume?: boolean } | undefined> = [];
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: (async (
+        workerSpec: WorkerSpec,
+        prompt: unknown,
+        deps: { resume?: boolean } | undefined,
+      ) => {
+        options.push(deps);
+        return demarrerWorkerFactice(() => fakeQuery([]))(workerSpec, prompt as never, deps as never);
+      }) as unknown as DemarrerWorkerFn,
+    });
+    await superviseur.demarrer(demande());
+    superviseur.tuerSansPreavis(spec().sessionId);
+    await superviseur.relancer('mission-1', spec().sessionId);
+    expect(options[1]?.resume).toBe(true);
+    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
+  });
+});
+
+describe('câblage de deciderRelance() sur un SDKResultMessage réel', () => {
+  function resultMessage(terminal_reason: string): SDKMessage {
+    return {
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 1,
+      duration_api_ms: 1,
+      is_error: false,
+      num_turns: 1,
+      result: 'ok',
+      stop_reason: null,
+      total_cost_usd: 0.01,
+      usage: {} as never,
+      modelUsage: {},
+      permission_denials: [],
+      terminal_reason: terminal_reason as never,
+      uuid: '11111111-2222-3333-4444-555555555555',
+      session_id: spec().sessionId,
+    } as unknown as SDKMessage;
+  }
+
+  test('échec transitoire (api_error) : relance automatiquement via resume', async () => {
+    const appels: WorkerSpec[] = [];
+    const decisions: DecisionRelance[] = [];
+    let nombreDeSpawns = 0;
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurRelance: { surDecision: (_missionId, decision) => decisions.push(decision) },
+      planifier: (_delaiMs, tache) => tache(), // synchrone en test : pas d’attente de backoff réelle
+      demarrerWorker: demarrerWorkerFactice(() => {
+        nombreDeSpawns += 1;
+        return nombreDeSpawns === 1 ? fakeQuery([resultMessage('api_error')]) : fakeQuery([]);
+      }, appels),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(decisions.map((d) => d.action)).toEqual(['relancer']);
+    // le premier spawn a produit le `result`, la relance automatique en a déclenché un second
+    expect(appels.length).toBe(2);
+    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
+  });
+
+  test('borne atteinte (budget_exhausted) : remonte, ne relance JAMAIS automatiquement', async () => {
+    const appels: WorkerSpec[] = [];
+    const decisions: DecisionRelance[] = [];
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurRelance: { surDecision: (_missionId, decision) => decisions.push(decision) },
+      planifier: (_delaiMs, tache) => tache(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([resultMessage('budget_exhausted')]), appels),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(decisions.map((d) => d.action)).toEqual(['remonter']);
+    expect(appels.length).toBe(1); // aucun second spawn
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test('fin normale (completed) : rien, le worker reste marqué mort (process terminé)', async () => {
+    const decisions: DecisionRelance[] = [];
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      observateurRelance: { surDecision: (_missionId, decision) => decisions.push(decision) },
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([resultMessage('completed')])),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(decisions.map((d) => d.action)).toEqual(['rien']);
+  });
+});

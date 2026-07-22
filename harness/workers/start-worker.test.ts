@@ -159,6 +159,17 @@ describe('ordre de la séquence B.1.2', () => {
     expect(seen?.env?.['CLAUDE_CONFIG_DIR']).toBe('/opt/comptes/c2');
     expect(seen?.sessionId).toBe(SESSION_ID);
   });
+
+  test('☠ `deps.resume` compose en `resume`, jamais `sessionId` (relance, B.3.3)', async () => {
+    let seen: Options | undefined;
+    const query: QueryFn = (params) => {
+      seen = params.options;
+      return fakeQuery([initMessage()]);
+    };
+    await startWorker(spec(), 'go', { preflight: async () => okPreflight(), query, resume: true });
+    expect(seen?.resume).toBe(SESSION_ID);
+    expect(seen?.sessionId).toBeUndefined();
+  });
 });
 
 describe('flux', () => {

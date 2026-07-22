@@ -41,7 +41,7 @@ export {
   buildWorkerEnv,
   composeWorkerOptions,
 } from './options-composition.ts';
-export type { ComposedWorkerOptions } from './options-composition.ts';
+export type { ComposedWorkerOptions, ModeIdentiteSession } from './options-composition.ts';
 
 export { WorkerStartError, hasCapability, readCapabilities, startWorker } from './start-worker.ts';
 export type { StartWorkerDeps } from './start-worker.ts';

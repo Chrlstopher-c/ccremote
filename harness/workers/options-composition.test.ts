@@ -106,6 +106,27 @@ describe('composeWorkerOptions', () => {
   });
 });
 
+describe('mode reprise (B.3.3, relance)', () => {
+  test('☠ `resume` remplace `sessionId`, jamais les deux (exclusivité SDK)', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL, 'reprise');
+    expect(options.resume).toBe('11111111-2222-3333-4444-555555555555');
+    expect(options.sessionId).toBeUndefined();
+  });
+
+  test('le mode par défaut reste `nouvelle` — aucune régression sur les appelants existants', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.sessionId).toBe('11111111-2222-3333-4444-555555555555');
+    expect(options.resume).toBeUndefined();
+  });
+
+  test('le reste du structurel (plancher, denylist, budget) est inchangé en reprise', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL, 'reprise');
+    expect(options.disallowedTools).toEqual(['Bash(rm -rf /*)']);
+    expect(options.maxBudgetUsd).toBe(25);
+    expect(options.settingSources).toEqual(['user', 'project', 'local']);
+  });
+});
+
 describe('assertOptionsInvariants', () => {
   const base = (): Options => composeWorkerOptions(spec(), MODEL).options;
 
