@@ -48,6 +48,30 @@
 - [ ] Règles de notification C.4.4 (groupement, seuil de rappel, silence sur ce que le lead a résolu
       seul) ni réglables ni visibles — le filet Discord est un simple interrupteur.
 
+### Features actées, à implémenter — MAIS PAS PRIORITAIRES
+*Décision explicite de Chris (2026-07-22) : « il va évidemment falloir les mettre en place, mais pour
+l'instant ce n'est pas le plus important. C'est ultra important de les garder en doc et en mémoire. »*
+*⇒ Consignées, pas planifiées. Ne pas les laisser s'insérer dans la vague 2.*
+
+- [ ] **H-61 — autorisation humaine au dispatch.** `creer_equipe` ne crée rien : retourne
+      `effet: 'differe'` + une proposition de mandat que l'opérateur autorise d'un clic. C'est le
+      dernier garde-fou humain du système (H-40 + H-41 délèguent tout le reste au lead).
+- [ ] **H-66 — attribution de l'émetteur.** Préfixe structurel `orchestrateur` / `operateur` sur tout
+      message entrant dans une session d'équipe, + champ au registre et au transcript. `☠` Un lead ne
+      doit **jamais** attribuer à Chris une instruction venue de l'orchestrateur.
+- [ ] **H-52 complété** — le system prompt du lead doit lui apprendre : il est une équipe parmi
+      d'autres · ses instructions viennent normalement de l'orchestrateur · l'opérateur peut lui
+      parler directement, et c'est identifié.
+- [ ] **H-67 — sidebar arborescente** (chat principal + sessions d'équipes en sous-niveau) et
+      **messages en file** façon Claude Code : écrire à une équipe occupée ne l'interrompt pas.
+- [ ] **H-63 — jauge dollars par fenêtre de rate limit**, agrégée **par compte** (la fenêtre est
+      partagée par toutes les missions d'un même compte). `☠` Remise à zéro sur `resetsAt`
+      uniquement, jamais au redémarrage d'un process.
+- [ ] **H-62 — orchestrateur maître** : autocompaction autonome + bouton de compaction manuelle
+      disponible sans être nécessaire.
+- [ ] **H-64 — permissions dans le fil** de la mission (avec filtre), pas dans une vue dédiée. La
+      vue escalade ne garde que ce que le classifieur a refusé.
+
 ### À répercuter
 - [ ] **M-41** doit brancher `surFermetureImprevue` du générateur d'entrée sur une **alarme réelle**
       (H-60). Sans ça, l'instrumentation existe mais ne sert à rien.

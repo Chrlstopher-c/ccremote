@@ -75,6 +75,25 @@ soit** — ne pas refaire à l'aveugle. Un plan en mémoire ne prouve pas qu'il 
 
 ---
 
+## Priorités — à respecter
+
+**La priorité reste la chaîne technique : vague 2, puis la suite du graphe de dépendances.**
+
+Les décisions **H-61 à H-67** (autorisation au dispatch, attribution de l'émetteur, sidebar
+arborescente, messages en file, jauges, orchestrateur autonome, permissions dans le fil) sont
+**actées et documentées, mais explicitement non prioritaires** — décision de l'opérateur du
+2026-07-22. Elles sont dans `TODO.md` sous « Features actées, à implémenter — MAIS PAS PRIORITAIRES ».
+
+`⚠` Ne pas les laisser s'insérer dans la vague 2 parce qu'elles sont fraîches et intéressantes. Elles
+touchent surtout A (orchestrateur) et l'UI, qui viennent aux lots 4 et 5. Les traiter maintenant
+reviendrait à construire la surface avant le transport.
+
+**Exception** : H-66 (attribution de l'émetteur) a une conséquence sur le **schéma du registre** —
+prévoir le champ émetteur quand M-31/M-30 toucheront au stockage des messages, plutôt que de migrer
+après coup.
+
+---
+
 ## Prochaine étape : Vague 2
 
 Dépend du Lot 0. Missions parallélisables : **M-10** (tunnel, chemin critique), **M-20** (plancher de

@@ -354,7 +354,135 @@ une alarme réelle, pas l'ignorer. Sans ça, l'instrumentation existe mais ne se
 
 ---
 
-## H-55 `[OUVERTE]` — Conteneurisation des team leaders (G.3)
+## H-61 `[TRANCHÉE]` `[I]` — Le goulot humain est au DISPATCH, pas aux permissions d'outils
+
+**Précision majeure de l'opérateur (2026-07-22), qui ne contredit pas H-40 mais en déplace le point
+d'application.** Les deux règles cohabitent et il faut les tenir ensemble :
+
+| Niveau | Qui décide | Règle |
+|---|---|---|
+| **Créer une équipe / dispatcher une mission** | **L'humain, explicitement** | H-61 — l'orchestrateur maître **ne peut jamais** lancer une équipe de sa propre initiative. Il propose, l'opérateur clique. |
+| Permissions d'outils **à l'intérieur** d'une mission | Le lead (`permissionMode: 'auto'`) | H-40 — inchangé. L'opérateur n'arbitre pas les invites d'outils. |
+
+Formulation opérateur : « à partir du moment où l'orchestrateur master crée une team, ou envoie un
+team leader le faire, ça doit nous demander une autorisation. Il ne faut pas qu'il puisse le faire
+automatiquement sans qu'on clique dessus. »
+
+**Pourquoi c'est cohérent et non contradictoire** : une mission est coûteuse, longue et modifie du
+code ; une invite d'outil est fréquente et locale. Mettre l'humain sur la seconde le noie et le rend
+inutile sur la première. **Un seul point de contrôle humain, placé là où la décision est
+structurante.**
+
+`☠ CASSE` — un orchestrateur qui dispatche seul retire le dernier point de contrôle humain du
+système. Avec H-40 (le lead arbitre ses propres outils) et H-41 (le lead peut tout faire), le
+dispatch **est** le garde-fou. Une mission d'implémentation qui rend le dispatch automatique
+« pour fluidifier » doit être refusée.
+
+**Conséquence sur A.2.2** : l'outil `creer_equipe` ne crée rien directement. Il retourne
+`effet: 'differe'` avec une **proposition de mandat** que l'UI présente à l'approbation. La création
+effective part du clic de l'opérateur, pas du tour de l'orchestrateur.
+
+`⊣ HORS-PÉRIMÈTRE — futur` : les sessions planifiées (« toutes les nuits, vérifier tel projet »)
+exigeront une autorisation pré-accordée par récurrence. Explicitement écarté du périmètre actuel par
+l'opérateur. **Ne pas concevoir pour ça maintenant**, mais ne pas non plus rendre l'approbation
+impossible à automatiser plus tard : le point d'approbation doit être une **fonction identifiable**,
+pas du code fondu dans un gestionnaire de clic.
+
+---
+
+## H-62 `[TRANCHÉE]` `[I]` — L'orchestrateur maître : ce qu'il doit être
+
+Formulation opérateur : « c'est notre bras droit, il doit être absolument irréprochable. »
+
+C'est **la** conversation dans l'app — celle avec qui Chris parle. Exigences :
+
+- **Modèle Opus par défaut** (confirme H-23).
+- **Autonome sur son propre contexte.** Autocompaction en cas de surcharge, réflexe de garder
+  l'essentiel, de prendre des notes. L'opérateur **ne doit pas avoir besoin** de compacter à la main.
+- **Mais le bouton de compaction manuelle existe quand même** — « on doit pouvoir », pas « on doit
+  devoir ». Disponible sans être nécessaire.
+- Jamais bloquant (invariant de `03` inchangé), jamais de flux brut dans son contexte (H-45).
+
+**Prise de notes** : le réflexe de consigner ce qui doit survivre à une compaction est une exigence
+de comportement, à porter dans son prompt système — pas une fonctionnalité à coder. Le support existe
+déjà (registre, lots, mandats).
+
+---
+
+## H-63 `[TRANCHÉE]` `[R]` — Trois jauges temps réel, dont une nouvelle
+
+L'UI doit afficher en permanence, pour la session de l'orchestrateur maître :
+
+1. **Contexte utilisé** — via `getContextUsage()` (E.4.1). Mesuré, jamais estimé.
+2. **Fin de la fenêtre de rate limit** — `resetsAt` de `rate_limit_info` (H-54).
+3. **Dollars consommés dans la fenêtre de rate limit courante** — `[NOUVEAU]`.
+
+Le troisième point est une demande explicite de l'opérateur, et son raisonnement est juste :
+
+> « la fenêtre est partagée par toutes les instances à partir du moment où elles fonctionnent sur le
+> même compte. Si j'ai 400 $ pour une fenêtre de 5 h et qu'on est sur un modèle Sonnet, c'est possible
+> qu'on soit à la limite dans pas longtemps. Je pourrai, en fonction de ces informations, gérer la
+> suite. »
+
+**Ce que ça impose** : le coût doit être agrégé **par compte et par fenêtre de rate limit**, pas par
+mission. Toutes les missions tournant sur un même compte partagent le même plafond — une jauge par
+mission ne dit rien du risque réel de saturation.
+
+Source : `total_cost_usd` / `modelUsage` des `SDKResultMessage`, sommés sur toutes les missions du
+compte depuis le début de la fenêtre courante, la fenêtre étant délimitée par `resetsAt`.
+
+`⚠` `total_cost_usd` est une **estimation côté client** (E.4.2). C'est un instrument de pilotage, pas
+une facture. L'afficher comme tel — un ordre de grandeur qui aide à décider, pas un montant exact.
+
+`☠` Remise à zéro de l'agrégat au franchissement de `resetsAt`, **jamais** au redémarrage d'un
+process. Une jauge qui repart de zéro parce qu'un service a redémarré ment sur la consommation réelle
+de la fenêtre — c'est exactement le bug déjà vécu sur les quotas Cerebras (snapshot vidé au restart).
+
+---
+
+## H-64 `[CORRECTION UI]` `[I]` — Les permissions se lisent dans le fil de la mission
+
+**Défaut constaté par l'opérateur sur la maquette v2** : elle présentait une **file d'escalade** comme
+surface principale d'arbitrage. C'est en contradiction avec H-40 — l'opérateur n'arbitre pas les
+permissions d'outils, le lead le fait.
+
+Formulation opérateur : « c'est le leader qui gère et c'est en aucun cas l'utilisateur. C'est toujours
+bien de logger absolument toutes les autorisations qui ont été faites, même si ça peut spammer à
+force, mais il faudrait plutôt les logger quand on affiche la discussion en question et qu'on voit
+correctement ce qui se passe en temps réel. »
+
+**Modèle retenu** :
+
+| Surface | Contenu | Nature |
+|---|---|---|
+| **Fil de la mission** | **toutes** les autorisations, y compris auto-résolues par le lead, en flux temps réel, au milieu de l'activité | observation — c'est le chemin normal |
+| **Vue escalade** | uniquement ce que le classifieur a **refusé** et qui remonte vraiment | action — rare, doit rester rare |
+
+`☠` Le volume assumé (« ça peut spammer ») est **voulu** : c'est la trace d'audit de C.5.2, celle qui
+répond à « le classifieur a-t-il autorisé quelque chose que je n'aurais pas autorisé ». La déplacer
+hors du fil la rendrait invisible en pratique. Prévoir un **filtre** dans le fil, pas une vue séparée.
+
+Source technique : hook `PreToolUse` pour l'exhaustivité (C.1.1) — `canUseTool` ne voit que l'étage
+d'invite et donnerait une fausse impression de couverture.
+
+---
+
+## H-65 `[EXIGENCE DE LIVRABLE]` — Une maquette se navigue, sinon elle ne prouve rien
+
+**Retour direct de l'opérateur sur la v1 de la maquette** : direction artistique jugée juste et
+fidèle, mais « je ne peux interagir avec rien », « je ne peux pas cliquer sur les discussions », le
+bouton de coupure du lien Pi « ne fait rien du tout ». Verdict : « c'est plus une vitrine qu'autre
+chose ».
+
+**Règle pour tout livrable de maquette sur ce projet** : une maquette statique ne permet pas de juger
+un produit dont l'essentiel est le **comportement dans le temps** — flux temps réel, transitions
+d'état, coupure de lien, arrivée d'une demande d'approbation.
+
+Exigence : navigation réelle entre les vues, ouverture d'une mission et de son fil, simulation
+déclenchable des événements qui comptent (perte du lien, mission qui passe en `requires_action`,
+autorisation loggée en direct, saturation de quota). Données fictives, **comportement réel**.
+
+Ce n'est pas une demande de production : c'est ce qui distingue une maquette évaluable d'une image.
 
 Pas demandée par défaut. L'opérateur n'exclut pas l'option si le risque le justifie plus tard.
 **Confirme la posture déjà actée en G.3** : évaluer le coût de friction sur cas réel avant d'adopter,
@@ -370,3 +498,83 @@ Plusieurs semaines d'usage quotidien (dev, modding GTA, autres) sans casse : cha
 un risque réel, l'agent s'est abstenu et a demandé plutôt que d'agir. Fondement explicite de H-41 (le
 lead peut tout faire, plancher limité à l'irréversible) — la confiance porte sur le jugement exercé
 dans le system prompt, pas sur une supervision de règles étendue.
+
+---
+
+## H-66 `[TRANCHÉE]` `[I]` — Attribution de l'émetteur : un lead sait toujours qui lui parle
+
+**La décision la plus importante de cette série, parce qu'elle porte sur la véracité de ce que
+croient les agents.**
+
+### L'interdit
+
+`☠ CASSE` Formulation opérateur : « c'est hors de question de voir dans des transcripts ou dans des
+chats "alors Chris m'a demandé de faire ça", alors qu'en fait ce n'est pas moi du tout et je ne
+savais même pas que la session existait. »
+
+Un lead qui attribue à l'opérateur une instruction venue de l'orchestrateur **corrompt le transcript**
+— et le transcript est la trace d'audit. Le défaut est silencieux par nature : rien ne plante, le
+travail avance, et une décision que **personne d'humain n'a prise** se retrouve justifiée par
+« l'utilisateur l'a demandé ». Tout raisonnement bâti dessus est faux, y compris celui d'un autre
+agent qui relira le transcript plus tard.
+
+### La règle
+
+**Tout message entrant dans une session d'équipe porte son émetteur, explicitement et de façon non
+ambiguë.** Deux origines, jamais confondues :
+
+| Émetteur | Nature | Ce que le lead doit en faire |
+|---|---|---|
+| `orchestrateur` | dispatch, relance, instruction, arrêt — le chemin **normal** | l'autorité qui l'a mandaté |
+| `operateur` (Chris) | intervention **directe** de l'humain, hors chaîne | prime sur l'orchestrateur ; c'est la voix de l'opérateur lui-même |
+
+Véhicule : un préfixe **structurel** dans le message — pas une convention de rédaction, le modèle
+doit le voir dans tous les cas — plus le champ correspondant dans le registre et le transcript.
+
+`⚠` Ne jamais laisser un agent **déduire** l'émetteur du ton ou du contenu. C'est exactement le genre
+d'inférence qui produit l'erreur qu'on cherche à interdire.
+
+### Ce que le mandat doit dire au lead (complète H-52)
+
+Le system prompt du lead l'informe de trois faits sur sa propre situation :
+
+1. Il est **une équipe parmi d'autres**, parfois en parallèle, toutes dirigées par le même
+   orchestrateur maître.
+2. Ses instructions viennent **normalement de l'orchestrateur**, pas de l'humain.
+3. L'**opérateur peut lui parler directement**, et ces messages-là sont identifiés comme tels.
+
+Sans le point 1, un lead peut se croire seul et raisonner faux sur l'état du dépôt. Sans les points 2
+et 3, il ne peut pas pondérer une instruction contradictoire.
+
+---
+
+## H-67 `[TRANCHÉE]` `[R]` — Sidebar arborescente et messages en file
+
+### Arborescence
+
+La sidebar présente le **chat principal** (l'orchestrateur maître) et, **en sous-niveau**, les
+sessions d'équipes qu'il pilote actuellement. L'arborescence rend visible ce qui est autrement
+abstrait : ces sessions **existent parce que** l'orchestrateur les a dispatchées.
+
+Cliquer sur une équipe ouvre son fil (H-64) et permet de lui **écrire directement** (message marqué
+`operateur`, H-66).
+
+`⚠ HYP` — arborescence à **deux niveaux**. Les sous-agents d'une équipe apparaissent dans son **fil**
+(arbre d'exécution, E.2.2), pas dans la sidebar : ils sont nombreux, éphémères, et les y remonter
+noierait la navigation.
+
+### Messages en file — comportement calqué sur Claude Code
+
+Formulation opérateur : « faire un peu comme Claude Code le permet — lancer une tâche et derrière
+renvoyer un message, et dès que l'agent est disponible, il lit le message et il répond. »
+
+Écrire à une équipe occupée **ne l'interrompt pas**. Le message est mis en file et lu au tour suivant.
+Déjà supporté : le générateur d'entrée persistant (M-02) est précisément la pièce qui le permet.
+
+`☠` Ne **pas** confondre avec `interrupt()` (B.4). Écrire = mettre en file. Interrompre = un geste
+distinct et explicite. Une UI qui interrompt sur simple envoi de message rend impossible le cas
+d'usage demandé.
+
+`⚠` L'UI doit montrer qu'un message est **en attente de lecture** plutôt que délivré — sinon
+l'opérateur croit l'équipe sourde et le renvoie. Les messages en file survivent à une interruption
+(`still_queued`, B.4) : ne pas les rejouer au redémarrage, ça produirait un tour dupliqué.
