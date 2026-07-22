@@ -48,6 +48,7 @@ interventions hors périmètre — le défaut même que ce harness existe pour �
 | M-32 modèle de projets | `projets/` | livré · ⚠ git réel jamais exercé |
 | M-33 pause et reprise | `pause/` | livré |
 | M-31 adaptateur `SessionStore` | `control-plane/session-store/` | livré · **vérifié sur vrai SDK** |
+| M-41 session orchestrateur | `control-plane/orchestrateur/processus/` | livré · A.1/A.3.2/A.4.2 · dette `surFermetureImprevue` (H-60) branchée sur alarme réelle |
 | Maquette UI v2 | `../design-v2/` | **validée par Chris le 2026-07-22** |
 
 **Bancs d'essai réels** (`acceptation/`, hors `bun test` volontairement — ils ouvrent de vraies
