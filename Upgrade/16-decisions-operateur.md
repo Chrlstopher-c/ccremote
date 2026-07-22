@@ -1069,3 +1069,78 @@ d'urgence, anti-boucle) :
    Seul un **test d'assemblage** qui construit le produit tel qu'il tourne réellement, et vérifie que
    chaque garde-fou est effectivement branché, l'attrape. C'est le prolongement direct de M-53 : les
    cinq propriétés se valident sur l'assemblage, jamais sur les unités.
+
+---
+
+## H-75 `[TRANCHÉE PAR CHRIS 2026-07-22]` · Lien unique PC↔Pi, initié par le PC, reconnexion automatique
+
+Objectif posé par l'opérateur, mot pour mot : *« j'éteins le PC, je vais me coucher, je le relance le
+lendemain : tout doit se reconnecter parfaitement tout seul. »*
+
+### Le sens de connexion s'inverse — et ça débloque le bus de permissions
+
+**Le Pi héberge. Le PC est client.** Jusqu'ici le lien était Pi→PC (`server/server.py` écoutait sur
+`8765`), ce qui rendait impossible le rappel PC→Pi qu'exige H-73.1 pour arbitrer une permission :
+c'était le blocage relevé par la mission d'assemblage. Une fois la connexion **initiée par le PC**,
+la socket WebSocket est bidirectionnelle et les deux sens circulent dessus — le blocage disparaît
+sans canal supplémentaire.
+
+Trois conséquences favorables, obtenues gratuitement :
+- **Le PC n'expose plus rien.** `server/server.py` passe en `127.0.0.1` : surface réseau réduite à zéro
+  côté machine de travail.
+- **Le NAT cesse d'être un problème.** C'est la partie volatile (le PC) qui va vers la partie stable
+  (le Pi, déjà exposé par Cloudflare Tunnel) — le sens naturel.
+- **Le Pi n'a plus à savoir quand le PC revient.** Il attend ; le PC se rattache. C'est exactement la
+  propriété demandée.
+
+### Un seul lien, décidé par l'opérateur
+
+Le harness (Bun) devient **le seul point d'entrée réseau du PC**. `server.py` n'est pas réécrit — il
+reste tel quel, éprouvé, et le harness l'appelle **en local**. Une connexion, une reconnexion, un
+service à superviser, **une seule réponse** à « le PC est-il là ? ».
+
+`☠` Écarté explicitement : garder deux liens. Deux mécanismes de reprise produisent un état ambigu —
+un lien revenu, l'autre non — c'est-à-dire la désynchronisation silencieuse que ce projet passe son
+temps à traquer. Écarté aussi : tout réécrire en TypeScript, qui obligerait à retester l'extinction
+du PC, action irréversible et déjà notée comme non revalidée.
+
+### `☠ CASSE` — le piège de la reprise après extinction : `(pid, starttime)` ne suffit plus
+
+La dette n°1 identifie un process par le couple `(pid, starttime)`, parce que les PID sont recyclés.
+**Après un redémarrage, cette protection tombe** : `starttime` est compté en ticks *depuis le boot*.
+Une machine qui redémarre réattribue les petits PID dans le même ordre, aux mêmes instants relatifs —
+un process quelconque du nouveau boot peut donc porter **le même pid ET le même starttime** qu'un
+worker de la veille. La revalidation le déclarerait `vivant_confirme`. Le harness croirait un worker
+mort encore vivant, et bloquerait son worktree indéfiniment ; pire, s'il tentait de l'évincer, il
+enverrait un signal à un process **sans aucun rapport**.
+
+⇒ **Il faut persister l'identité du boot** avec chaque enregistrement :
+`/proc/sys/kernel/random/boot_id` (vérifié disponible sur cette machine), ou à défaut `btime` de
+`/proc/stat`. Règle, dans cet ordre :
+
+1. `boot_id` **différent** de celui enregistré ⇒ **tous** les process d'avant sont morts, sans
+   exception et sans avoir à lire `/proc`. C'est net, et c'est le cas nominal du « j'éteins, je me
+   couche, je relance ».
+2. `boot_id` **identique** ⇒ la revalidation `(pid, starttime)` reprend son sens habituel.
+3. `boot_id` **illisible** ⇒ `indetermine`, jamais `mort_confirme` : le biais asymétrique de la dette
+   n°1 continue de s'appliquer — dans le doute, on ne libère pas.
+
+`⚠` C'est le seul point de cette décision qui, mal traité, **détruit du travail en silence** — soit en
+tuant un process étranger, soit en bloquant définitivement des worktrees après chaque nuit.
+
+### Ce que « se reconnecter parfaitement tout seul » exige, concrètement
+
+- **Démarrage automatique du PC** : service `systemd --user` avec `Restart=always`. `☠` Jamais de
+  `pkill` par motif générique pour l'arrêter (`bun`, `node`…) — incident réel déjà payé sur ce parc :
+  un motif générique a tué un service tiers. Cibler le PID du service, jamais un nom de binaire.
+- **Reconnexion infinie**, backoff exponentiel plafonné **avec gigue** — sans gigue, un PC et un Pi
+  qui redémarrent ensemble se resynchronisent sur le même rythme et se retapent dessus.
+- **Epoch incrémenté à chaque rattachement** : c'est ce qui permet au fencing (M-11) de distinguer la
+  nouvelle instance de l'ancienne et d'évincer proprement. Un rattachement au même epoch doit être
+  refusé, comme n'importe quel candidat concurrent.
+- **Le Pi tolère une absence longue** : plusieurs heures sans PC n'est pas une erreur, c'est la nuit.
+  Aucune alarme, aucune purge de mission — juste un état « PC absent » affiché.
+- **Rien de mutant ne s'exécute au rattachement.** Le retour du PC restaure un **état lisible**
+  (registre, worktrees, missions connues) ; relancer une mission reste une décision, jamais un effet
+  de bord de la reconnexion. Une mission relancée toute seule au réveil est exactement ce qu'on ne
+  veut pas d'un système laissé sans surveillance la nuit.

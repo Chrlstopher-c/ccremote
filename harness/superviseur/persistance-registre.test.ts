@@ -3,7 +3,11 @@
  * fichier réel dans les tests unitaires.
  */
 
+import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { WorkerSpec } from '../workers/index.ts';
 import { PersistanceRegistreSqlite } from './persistance-registre.ts';
 
@@ -30,6 +34,7 @@ describe('PersistanceRegistreSqlite', () => {
       epoch: 3,
       pid: 4242,
       pidStarttime: '987654',
+      bootId: 'boot-abc',
       vivant: true,
       spec: specFactice(),
     });
@@ -43,6 +48,7 @@ describe('PersistanceRegistreSqlite', () => {
       epoch: 3,
       pid: 4242,
       pidStarttime: '987654',
+      bootId: 'boot-abc',
       vivant: true,
     });
     // ☠ La spec relue N'EST PAS la spec écrite : les ports sont des fonctions, que
@@ -59,24 +65,27 @@ describe('PersistanceRegistreSqlite', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 1,
-      pid: null, pidStarttime: null, vivant: true, spec: specFactice(),
+      pid: null, pidStarttime: null, bootId: 'boot-abc', vivant: true, spec: specFactice(),
     });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 2,
-      pid: 100, pidStarttime: '1', vivant: true, spec: specFactice(),
+      pid: 100, pidStarttime: '1', bootId: 'boot-def', vivant: true, spec: specFactice(),
     });
 
     const lignes = persistance.tous();
     expect(lignes).toHaveLength(1);
     expect(lignes[0]?.epoch).toBe(2);
     expect(lignes[0]?.pid).toBe(100);
+    // ☠ ON CONFLICT doit aussi mettre à jour boot_id — sinon un rattachement
+    // après un vrai redémarrage laisserait l'ANCIEN boot_id en base (H-75).
+    expect(lignes[0]?.bootId).toBe('boot-def');
   });
 
   test('marquerMort bascule vivant à false sans retirer la ligne', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 1,
-      pid: 100, pidStarttime: '1', vivant: true, spec: specFactice(),
+      pid: 100, pidStarttime: '1', bootId: 'boot-abc', vivant: true, spec: specFactice(),
     });
     persistance.marquerMort('s1');
 
@@ -95,10 +104,81 @@ describe('PersistanceRegistreSqlite', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 1,
-      pid: null, pidStarttime: null, vivant: true, spec: specFactice(),
+      pid: null, pidStarttime: null, bootId: 'boot-abc', vivant: true, spec: specFactice(),
     });
     const [ligne] = persistance.tous();
     expect(ligne?.pid).toBeNull();
     expect(ligne?.pidStarttime).toBeNull();
+  });
+
+  test('bootId null est persisté et relu tel quel (H-75 : ligne sans identité de boot connue)', () => {
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    persistance.sauvegarder({
+      sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 1,
+      pid: 100, pidStarttime: '1', bootId: null, vivant: true, spec: specFactice(),
+    });
+    const [ligne] = persistance.tous();
+    expect(ligne?.bootId).toBeNull();
+  });
+
+  test('H-75 : une base écrite AVANT la colonne boot_id migre sans corrompre ni perdre de lignes', () => {
+    const dossier = mkdtempSync(join(tmpdir(), 'ccremote-registre-migration-'));
+    const chemin = join(dossier, 'registre.sqlite');
+
+    // Simule le schéma version 1 (avant H-75) : pas de colonne boot_id, pas de
+    // migration appliquée ni tracée — exactement ce qu'un fichier réel écrit
+    // par l'ancien code contient déjà.
+    const dbAncienne = new Database(chemin, { create: true });
+    dbAncienne.run(`
+      CREATE TABLE worker_registre (
+        session_id     TEXT PRIMARY KEY,
+        mission_id     TEXT NOT NULL,
+        worktree       TEXT NOT NULL,
+        epoch          INTEGER NOT NULL,
+        pid            INTEGER,
+        pid_starttime  TEXT,
+        vivant         INTEGER NOT NULL CHECK (vivant IN (0, 1)),
+        spec_json      TEXT NOT NULL,
+        maj_a          INTEGER NOT NULL
+      ) STRICT;
+    `);
+    dbAncienne.run('PRAGMA user_version = 1');
+    dbAncienne
+      .query(
+        `INSERT INTO worker_registre
+           (session_id, mission_id, worktree, epoch, pid, pid_starttime, vivant, spec_json, maj_a)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run('s-pre-migration', 'm-pre-migration', '/tmp/pre-migration', 1, 4242, '987654', 1, '{}', 1000);
+    dbAncienne.close(false);
+
+    // Rouvre avec le code ACTUEL : la migration doit s'appliquer sans perdre la ligne.
+    const persistance = new PersistanceRegistreSqlite({ chemin });
+    const lignes = persistance.tous();
+
+    expect(lignes).toHaveLength(1);
+    expect(lignes[0]).toMatchObject({
+      sessionId: 's-pre-migration',
+      missionId: 'm-pre-migration',
+      worktree: '/tmp/pre-migration',
+      epoch: 1,
+      pid: 4242,
+      pidStarttime: '987654',
+      vivant: true,
+    });
+    // ☠ Le point critique de H-75 : boot_id ABSENT sur une ligne pré-migration
+    // doit rester lisible comme `null`, jamais provoquer d'erreur ni de valeur
+    // par défaut trompeuse (ex. chaîne vide confondue avec un vrai boot_id).
+    expect(lignes[0]?.bootId).toBeNull();
+
+    // Une nouvelle écriture après migration porte bien boot_id.
+    persistance.sauvegarder({
+      sessionId: 's-post-migration', missionId: 'm-post-migration', worktree: '/tmp/post-migration',
+      epoch: 1, pid: null, pidStarttime: null, bootId: 'boot-nouveau', vivant: true, spec: specFactice(),
+    });
+    const ligneNouvelle = persistance.tous().find((l) => l.sessionId === 's-post-migration');
+    expect(ligneNouvelle?.bootId).toBe('boot-nouveau');
+
+    persistance.fermer();
   });
 });

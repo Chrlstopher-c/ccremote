@@ -22,9 +22,12 @@ import type { WorkerSpec } from '../workers/index.ts';
 import { superviseurLogger } from './logger.ts';
 import type { LigneRegistrePersistee } from './types.ts';
 
-const VERSION_SCHEMA = 1;
-
-const SCHEMA = `
+/**
+ * Version 1 — schéma initial (pid/starttime uniquement). Version 2 (H-75)
+ * ajoute `boot_id` par `ALTER TABLE`, jamais par recréation de table : un
+ * fichier écrit par la version 1 doit migrer SANS perdre une seule ligne.
+ */
+const MIGRATION_1_SQL = `
 CREATE TABLE IF NOT EXISTS worker_registre (
   session_id     TEXT PRIMARY KEY,
   mission_id     TEXT NOT NULL,
@@ -40,6 +43,44 @@ CREATE TABLE IF NOT EXISTS worker_registre (
 CREATE INDEX IF NOT EXISTS idx_worker_registre_worktree ON worker_registre(worktree) WHERE vivant = 1;
 `;
 
+/**
+ * Migration 2 (H-75) : `boot_id` — identité du boot Linux au moment de
+ * l'écriture (`identite-boot.ts`), posée par `RegistreWorkers` à chaque
+ * enregistrement. `ADD COLUMN` nullable, sans défaut : une ligne écrite AVANT
+ * cette migration se relit avec `boot_id = NULL`. C'est volontaire — voir
+ * `tous()` et le commentaire sur `LigneRegistrePersistee.bootId` (`types.ts`) :
+ * `restauration-registre.ts` traite ce NULL comme « illisible » ⇒
+ * `indetermine`, jamais `mort_confirme` (biais asymétrique de la dette n°1).
+ */
+const MIGRATION_2_SQL = `ALTER TABLE worker_registre ADD COLUMN boot_id TEXT;`;
+
+/** Autorité de version : `PRAGMA user_version`, jamais une table à part (même motif que `control-plane/registre/migrations.ts`, non importé). */
+function versionSchema(db: Database): number {
+  const ligne = db.query<{ user_version: number }, []>('PRAGMA user_version').get();
+  return ligne?.user_version ?? 0;
+}
+
+/**
+ * Applique les migrations manquantes, dans l'ordre, chacune dans sa propre
+ * transaction. `☠` Ne recrée jamais `worker_registre` : toute évolution future
+ * de ce schéma doit passer par `ALTER TABLE`/nouvelle colonne, jamais un
+ * `DROP`/`CREATE`, pour ne jamais perdre une ligne déjà écrite.
+ */
+function migrer(db: Database): void {
+  if (versionSchema(db) < 1) {
+    db.transaction(() => {
+      db.run(MIGRATION_1_SQL);
+      db.run('PRAGMA user_version = 1');
+    })();
+  }
+  if (versionSchema(db) < 2) {
+    db.transaction(() => {
+      db.run(MIGRATION_2_SQL);
+      db.run('PRAGMA user_version = 2');
+    })();
+  }
+}
+
 export interface OptionsPersistanceRegistre {
   /** Chemin du fichier SQLite. `:memory:` accepté (tests). Jamais codé en dur (mission). */
   readonly chemin: string;
@@ -53,6 +94,13 @@ export interface EnregistrementAPersister {
   readonly epoch: number;
   readonly pid: number | null;
   readonly pidStarttime: string | null;
+  /**
+   * Identité du boot Linux au moment de l'écriture (H-75) — `null` si
+   * `identite-boot.ts` n'a rien pu lire. Optionnel (et non `undefined` traité
+   * comme `null`) pour ne pas casser un appelant hors `superviseur/` qui
+   * n'aurait pas encore ce champ — voir `sauvegarder()`.
+   */
+  readonly bootId?: string | null;
   readonly vivant: boolean;
   readonly spec: WorkerSpec;
 }
@@ -98,6 +146,8 @@ interface LigneBrute {
   readonly epoch: number;
   readonly pid: number | null;
   readonly pid_starttime: string | null;
+  /** `NULL` pour toute ligne écrite avant la migration 2 (H-75) — voir `MIGRATION_2_SQL`. */
+  readonly boot_id: string | null;
   readonly vivant: number;
   readonly spec_json: string;
   readonly maj_a: number;
@@ -112,8 +162,7 @@ export class PersistanceRegistreSqlite implements PersistanceRegistre {
     this.#db = new Database(options.chemin, { create: true });
     this.#db.run('PRAGMA journal_mode = WAL');
     this.#db.run('PRAGMA busy_timeout = 5000');
-    this.#db.run(`PRAGMA user_version = ${VERSION_SCHEMA}`);
-    this.#db.run(SCHEMA);
+    migrer(this.#db);
   }
 
   /** Écriture à chaque `enregistrer`/`remplacer` de `RegistreWorkers` (résolution de la mission). */
@@ -122,12 +171,12 @@ export class PersistanceRegistreSqlite implements PersistanceRegistre {
       this.#db
         .query(
           `INSERT INTO worker_registre
-             (session_id, mission_id, worktree, epoch, pid, pid_starttime, vivant, spec_json, maj_a)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             (session_id, mission_id, worktree, epoch, pid, pid_starttime, boot_id, vivant, spec_json, maj_a)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(session_id) DO UPDATE SET
              mission_id = excluded.mission_id, worktree = excluded.worktree, epoch = excluded.epoch,
-             pid = excluded.pid, pid_starttime = excluded.pid_starttime, vivant = excluded.vivant,
-             spec_json = excluded.spec_json, maj_a = excluded.maj_a`,
+             pid = excluded.pid, pid_starttime = excluded.pid_starttime, boot_id = excluded.boot_id,
+             vivant = excluded.vivant, spec_json = excluded.spec_json, maj_a = excluded.maj_a`,
         )
         .run(
           enregistrement.sessionId,
@@ -136,6 +185,7 @@ export class PersistanceRegistreSqlite implements PersistanceRegistre {
           enregistrement.epoch,
           enregistrement.pid,
           enregistrement.pidStarttime,
+          enregistrement.bootId ?? null,
           enregistrement.vivant ? 1 : 0,
           JSON.stringify(enregistrement.spec),
           Date.now(),
@@ -167,6 +217,7 @@ export class PersistanceRegistreSqlite implements PersistanceRegistre {
       epoch: ligne.epoch,
       pid: ligne.pid,
       pidStarttime: ligne.pid_starttime,
+      bootId: ligne.boot_id,
       vivant: ligne.vivant === 1,
       // ☠ Jamais `as WorkerSpec` : les ports ont été effacés par la sérialisation.
       spec: JSON.parse(ligne.spec_json) as WorkerSpecPersistee,

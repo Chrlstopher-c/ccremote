@@ -20,8 +20,14 @@
  * additif. Quand présent, chaque `enregistrer`/`marquerMort`/`remplacer` écrit
  * aussi sur disque ; c'est `restaurerRegistre()` (`restauration-registre.ts`) qui
  * relit cette image au démarrage, jamais ce module directement.
+ *
+ * **`bootId`** (H-75) : lu UNE FOIS à la construction (le boot ne change pas
+ * pendant la vie de ce process) et posé sur chaque écriture — c'est ce qui
+ * permet à `restaurerRegistre()` de trancher `mort_confirme` sans lire `/proc`
+ * dès qu'une machine a redémarré entre-temps.
  */
 
+import { lireBootIdProc, type LecteurBootId } from './identite-boot.ts';
 import type { PersistanceRegistre } from './persistance-registre.ts';
 import type { EnregistrementWorker } from './types.ts';
 
@@ -29,9 +35,11 @@ export class RegistreWorkers {
   readonly #parSession = new Map<string, EnregistrementWorker>();
   readonly #sessionParMission = new Map<string, string>();
   readonly #persistance: PersistanceRegistre | null;
+  readonly #bootId: string | null;
 
-  constructor(persistance: PersistanceRegistre | null = null) {
+  constructor(persistance: PersistanceRegistre | null = null, lireBootId: LecteurBootId = lireBootIdProc) {
     this.#persistance = persistance;
+    this.#bootId = lireBootId();
   }
 
   enregistrer(enregistrement: EnregistrementWorker): void {
@@ -87,6 +95,7 @@ export class RegistreWorkers {
       epoch: enregistrement.epoch,
       pid: enregistrement.pid ?? null,
       pidStarttime: enregistrement.pidStarttime ?? null,
+      bootId: this.#bootId,
       vivant: enregistrement.vivant,
       spec: enregistrement.spec,
     });

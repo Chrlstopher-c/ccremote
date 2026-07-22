@@ -20,51 +20,60 @@ function specFactice(): WorkerSpec {
 }
 
 describe('restaurerRegistre — trois issues, biais asymétrique non négociable', () => {
-  test('vivant_confirme : pid présent, starttime identique ⇒ reste vivant', () => {
+  test('vivant_confirme : même boot, pid présent, starttime identique ⇒ reste vivant (comportement actuel préservé)', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
-      pid: 4242, pidStarttime: '987654', vivant: true, spec: specFactice(),
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-actuel', vivant: true, spec: specFactice(),
     });
 
-    const restaures = restaurerRegistre(persistance, { lireStarttime: () => '987654' });
+    const restaures = restaurerRegistre(persistance, {
+      lireStarttime: () => '987654',
+      lireBootId: () => 'boot-actuel',
+    });
 
     expect(restaures).toHaveLength(1);
     expect(restaures[0]).toMatchObject({ sessionId: 's1', etat: 'vivant_confirme', vivant: true });
   });
 
-  test('mort_confirme : pid absent du système ⇒ vivant devient false, le worktree se libère', () => {
+  test('mort_confirme : même boot, pid absent du système ⇒ vivant devient false, le worktree se libère', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
-      pid: 4242, pidStarttime: '987654', vivant: true, spec: specFactice(),
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-actuel', vivant: true, spec: specFactice(),
     });
 
-    const restaures = restaurerRegistre(persistance, { lireStarttime: () => null });
+    const restaures = restaurerRegistre(persistance, {
+      lireStarttime: () => null,
+      lireBootId: () => 'boot-actuel',
+    });
 
     expect(restaures[0]).toMatchObject({ etat: 'mort_confirme', vivant: false });
   });
 
-  test('☠ mort_confirme : pid recyclé (existe mais starttime différent) ⇒ jamais confondu avec vivant', () => {
+  test('☠ mort_confirme : même boot, pid recyclé (existe mais starttime différent) ⇒ jamais confondu avec vivant', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
-      pid: 4242, pidStarttime: '987654', vivant: true, spec: specFactice(),
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-actuel', vivant: true, spec: specFactice(),
     });
 
-    const restaures = restaurerRegistre(persistance, { lireStarttime: () => '000000' });
+    const restaures = restaurerRegistre(persistance, {
+      lireStarttime: () => '000000',
+      lireBootId: () => 'boot-actuel',
+    });
 
     expect(restaures[0]).toMatchObject({ etat: 'mort_confirme', vivant: false });
   });
 
-  test('☠ indetermine (pid jamais capturé) ⇒ vivant reste true — NE LIBÈRE JAMAIS le worktree dans le doute', () => {
+  test('☠ indetermine (pid jamais capturé, même boot) ⇒ vivant reste true — NE LIBÈRE JAMAIS le worktree dans le doute', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
-      pid: null, pidStarttime: null, vivant: true, spec: specFactice(),
+      pid: null, pidStarttime: null, bootId: 'boot-actuel', vivant: true, spec: specFactice(),
     });
 
-    const restaures = restaurerRegistre(persistance);
+    const restaures = restaurerRegistre(persistance, { lireBootId: () => 'boot-actuel' });
 
     expect(restaures[0]).toMatchObject({ etat: 'indetermine', vivant: true });
   });
@@ -73,7 +82,7 @@ describe('restaurerRegistre — trois issues, biais asymétrique non négociable
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
       sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
-      pid: 4242, pidStarttime: '987654', vivant: false, spec: specFactice(),
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-actuel', vivant: false, spec: specFactice(),
     });
 
     let appele = false;
@@ -89,6 +98,49 @@ describe('restaurerRegistre — trois issues, biais asymétrique non négociable
   });
 });
 
+describe('H-75 — identité du boot, AVANT toute lecture de /proc', () => {
+  test('boot différent ⇒ mort_confirme IMMÉDIAT, et AUCUNE lecture de /proc (prouvé par un lecteur qui échoue si appelé)', () => {
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    persistance.sauvegarder({
+      sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-hier', vivant: true, spec: specFactice(),
+    });
+
+    const restaures = restaurerRegistre(persistance, {
+      lireBootId: () => 'boot-aujourdhui',
+      lireStarttime: () => {
+        throw new Error('lireStarttime NE DOIT JAMAIS être appelé quand le boot a changé (H-75)');
+      },
+    });
+
+    expect(restaures[0]).toMatchObject({ etat: 'mort_confirme', vivant: false });
+  });
+
+  test('boot_id absent de l’enregistrement (ligne écrite avant la migration) ⇒ indetermine, JAMAIS mort_confirme', () => {
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    persistance.sauvegarder({
+      sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
+      pid: 4242, pidStarttime: '987654', bootId: null, vivant: true, spec: specFactice(),
+    });
+
+    const restaures = restaurerRegistre(persistance, { lireBootId: () => 'boot-aujourdhui' });
+
+    expect(restaures[0]).toMatchObject({ etat: 'indetermine', vivant: true });
+  });
+
+  test('boot_id courant illisible ⇒ indetermine, JAMAIS mort_confirme (même si l’enregistrement porte un boot_id)', () => {
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    persistance.sauvegarder({
+      sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-hier', vivant: true, spec: specFactice(),
+    });
+
+    const restaures = restaurerRegistre(persistance, { lireBootId: () => null });
+
+    expect(restaures[0]).toMatchObject({ etat: 'indetermine', vivant: true });
+  });
+});
+
 describe('Fermeture du scénario M-53 (isolation.test.ts) — la panne est corrigée', () => {
   test('AVANT (référence, comportement documenté) : registre vide après "redémarrage" ⇒ acceptation silencieuse', () => {
     const concurrentsApresRedemarrageSansPersistance: readonly DetenteurEpoch[] = [];
@@ -101,12 +153,16 @@ describe('Fermeture du scénario M-53 (isolation.test.ts) — la panne est corri
     // Avant "redémarrage" : sess-legitime détient le worktree "alpha" à l'epoch 3, persisté.
     persistance.sauvegarder({
       sessionId: 'sess-legitime', missionId: 'mission-alpha', worktree: '/worktrees/alpha', epoch: 3,
-      pid: 4242, pidStarttime: '987654', vivant: true, spec: specFactice(),
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-actuel', vivant: true, spec: specFactice(),
     });
 
-    // "Redémarrage du superviseur PC" : RegistreWorkers en mémoire repart vide, mais
-    // restaurerRegistre() relit la persistance et revalide le pid (confirmé vivant).
-    const concurrentsRestaures = restaurerRegistre(persistance, { lireStarttime: () => '987654' });
+    // "Redémarrage du superviseur PC" (même boot machine) : RegistreWorkers en
+    // mémoire repart vide, mais restaurerRegistre() relit la persistance et
+    // revalide le pid (confirmé vivant).
+    const concurrentsRestaures = restaurerRegistre(persistance, {
+      lireStarttime: () => '987654',
+      lireBootId: () => 'boot-actuel',
+    });
     expect(concurrentsRestaures[0]).toMatchObject({ etat: 'vivant_confirme', vivant: true });
 
     // Un candidat intrus au MÊME epoch se présente (voir #arbitrerFencingWorktree :

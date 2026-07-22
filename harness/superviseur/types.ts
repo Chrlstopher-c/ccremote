@@ -106,6 +106,13 @@ export interface LigneRegistrePersistee {
   readonly epoch: number;
   readonly pid: number | null;
   readonly pidStarttime: string | null;
+  /**
+   * Identité du boot Linux au moment de l'écriture (H-75, dette n°1 après un
+   * redémarrage de la machine). `null` pour toute ligne écrite avant cette
+   * évolution (migration 2, `persistance-registre.ts`) — à traiter comme
+   * « illisible » ⇒ `indetermine`, jamais comme un boot différent.
+   */
+  readonly bootId: string | null;
   readonly vivant: boolean;
   /**
    * `☠` **Pas un `WorkerSpec` complet** : les ports (`portAuditPermissions`,

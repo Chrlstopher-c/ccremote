@@ -90,6 +90,7 @@ describe('restaurer() câblé sur le fencing — fermeture de M-53', () => {
       pid: process.pid,
       pidStarttime: null, // volontairement absent ⇒ indetermine (voir revalidation-process.ts) : couvre le
       // biais asymétrique, pas seulement le cas vivant_confirme (test suivant, avec un vrai starttime).
+      bootId: null, // pas de lireBootId injectable via SuperviseurWorkers (H-75) : null ⇒ indetermine, peu importe le vrai boot courant.
       vivant: true,
       spec: specFactice({ sessionId: 'sess-legitime' }),
     });
@@ -120,6 +121,7 @@ describe('restaurer() câblé sur le fencing — fermeture de M-53', () => {
       epoch: 3,
       pid: process.pid, // pid réellement vivant, pour que la revalidation à l'éviction confirme "vivant_confirme"
       pidStarttime: starttimeReel,
+      bootId: null, // pas de lireBootId injectable via SuperviseurWorkers (H-75) ; `evincer()` revalide pid/starttime lui-même, indépendamment de l'état de restauration.
       vivant: true,
       spec: specFactice({ sessionId: 'sess-legitime' }),
     });
@@ -156,6 +158,7 @@ describe('restaurer() câblé sur le fencing — fermeture de M-53', () => {
       epoch: 3,
       pid: null,
       pidStarttime: null,
+      bootId: null,
       vivant: true,
       spec: specFactice({ sessionId: 'sess-legitime' }),
     });
@@ -183,6 +186,7 @@ describe('restaurer() câblé sur le fencing — fermeture de M-53', () => {
       epoch: 3,
       pid: null,
       pidStarttime: null,
+      bootId: null,
       vivant: true,
       spec: specFactice({ sessionId: 'sess-legitime-beta', cwd: '/worktrees/beta' }),
     });
