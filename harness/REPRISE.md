@@ -295,43 +295,23 @@ comporte comme une démo.
 sont ceux de la vue Comptes, servis par le registre — à 0 % tant qu'aucune session ne les a
 mesurés (l'API d'usage du SDK exige une session vivante).
 
-### ☠ À FAIRE EN PREMIER — le PC reçoit les requêtes de contrôle mais n'y répond pas
+### ✅ RÉSOLU — le lien de contrôle Pi↔PC fonctionne de bout en bout (2026-07-23)
 
-**Symptôme** : chaque réconciliation sur rattachement échoue sur
-`ErreurDelaiCorrelateur` après 10 s. Le parc reste donc vide même PC connecté, et tout ordre
-(arrêter, instruction, pause) échouerait de la même façon.
+Deux bugs de transport trouvés par sonde entre les vraies machines, corrigés et vérifiés en prod :
 
-**Ce qui est DÉJÀ corrigé** (commit `97481a4`) : le Pi émettait avant d'avoir branché sa socket,
-et `#envoyer` abandonnait la trame en silence. Corrigé et **mesuré** : la requête arrive maintenant
-côté PC.
+1. `97481a4` — le Pi émettait ses requêtes AVANT d'avoir branché sa socket
+   (`surConnexionAcceptee` appelé trop tôt) ; `#envoyer` abandonnait la trame en silence. Corrigé :
+   rattachement signalé après ouverture réelle + `#envoyer` journalise tout abandon.
+2. `a455900` — `CanalDonnees.#seqAttendu` persistait sur le Pi entre les reconnexions, alors que
+   chaque PC neuf redémarre sa séquence à 0 ⇒ toute trame post-premier-échange jetée comme doublon
+   (`seq 0 < seqAttendu`). Corrigé : `reinitialiserReceptionSiPairNeuf()` au rattachement, en
+   `perte_silencieuse` seulement (le canal D.1 strict garde son rejeu).
 
-**Ce qui reste** : le PC reçoit et ne répond pas.
+Vérifié : réconciliation exécutée, zéro `ErreurDelaiCorrelateur`, sur deux cycles de reconnexion.
 
-**Fait décisif, à ne pas re-mesurer** — une sonde branchée sur `lien.versPi().surOctets()` avec le
-vrai `creerClientLienPi` reçoit bien la requête :
-
-```
-[versPi] 163 octets : {"kind":"controle_requete","id":"…","requete":{"opId":"…","operation":{"type":"inventaire"}}}
-```
-
-Donc **le transport fonctionne**. Le défaut est entre la réception des octets et la réponse, côté
-`composition/pc/canal-controle-recepteur.ts` — dont le code paraît correct à la lecture
-(`surEnveloppe(lien.versPi(), …)`, réponse via `envoyerEnveloppe(lien.versPi(), …)`).
-
-**Piste n°1, la plus probable** : `surEnveloppe` (`lien-pc-pi/protocole.ts`) n'a JAMAIS été revu —
-il fait partie du code livré par l'agent interrompu. La sonde s'abonnait directement à
-`surOctets`, pas via `surEnveloppe` : c'est exactement la différence entre ce qui marche et ce qui
-ne marche pas. **Commencer par là**, et par un test qui fait passer une enveloppe réelle à travers
-`surEnveloppe` + `envoyerEnveloppe` en aller-retour.
-
-**Piste n°2** : le journal du PC ne montre AUCUNE ligne de contrôle — ni traitement, ni « enveloppe
-illisible ». Or le rappel d'erreur de `surEnveloppe` journalise ce dernier cas. Un silence complet
-suggère que le rappel n'est jamais invoqué, donc que l'abonnement lui-même ne reçoit rien —
-alors que la sonde, elle, recevait. Comparer les deux chemins ligne à ligne.
-
-Reproduction : `systemctl --user stop ccremote-pc` puis, depuis `harness/`,
-`URL="ws://pi.exemple:8721/" SEC="$(cat ~/.ccremote-lien-secret)" bun <sonde>` — la sonde est à
-réécrire (elle vivait dans le scratchpad), 10 lignes : `creerClientLienPi` + `versPi().surOctets()`.
+`☠ ENSEIGNEMENT` — le modèle client/serveur de H-75 (pair reconnecté = instance neuve) casse
+l'hypothèse de connexion continue du transport symétrique hérité de D.1. Tout état de séquence
+côté serveur doit se réinitialiser à chaque rattachement.
 
 ### ACTION SUIVANTE
 
