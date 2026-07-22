@@ -327,6 +327,33 @@ pour ce que le lead a résolu seul**, sinon H-40 ne sert à rien.
 
 ---
 
+## H-60 `[CORRECTION DE SPEC]` `[I]` — A.1.3 ne couvrait qu'un sens sur deux
+
+**Remontée par l'agent M-02 en cours d'exécution (2026-07-22), retenue comme correction.**
+
+A.1.3 formule le risque uniquement côté **producteur** : « le générateur d'entrée doit rester ouvert,
+ne pas le fermer pendant que Claude travaille ». C'est incomplet.
+
+Le SDK est le **consommateur** du flux. Si sa boucle interne fait un `break` ou propage une exception,
+il appelle `return()` / `throw()` sur l'itérateur — **et le flux meurt sans que le harness ait rien
+fait de mal.** Le symptôme est identique (`canUseTool` et les hooks cessent d'être appelés, le reste
+continue), mais la cause est hors de portée de la règle telle qu'elle était écrite. Aucune ligne du
+paquet ne couvrait ce sens.
+
+**Conséquence retenue** : ne pas se contenter de « ne pas fermer ». L'itérateur est implémenté à la
+main (`next`/`return`/`throw`) plutôt qu'en `async function*`, précisément pour **intercepter** la
+fermeture venue du consommateur. Trois états distincts : `ouvert` / `ferme` (explicite, légitime) /
+`ferme_implicitement` (subie, anormale).
+
+`☠` **On ne peut pas empêcher un consommateur de partir. On peut refuser que ça reste muet.** Une
+fermeture non sollicitée déclenche un log `error` et un rappel `surFermetureImprevue`. C'est ce qui
+transforme la panne #1 de la grille — silencieuse par nature — en panne bruyante.
+
+**À répercuter** : la mission M-41 (session orchestrateur) doit brancher `surFermetureImprevue` sur
+une alarme réelle, pas l'ignorer. Sans ça, l'instrumentation existe mais ne sert à rien.
+
+---
+
 ## H-55 `[OUVERTE]` — Conteneurisation des team leaders (G.3)
 
 Pas demandée par défaut. L'opérateur n'exclut pas l'option si le risque le justifie plus tard.

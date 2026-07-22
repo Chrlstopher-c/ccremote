@@ -1,0 +1,21 @@
+{
+  "name": "ccremote-harness",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Harness d'orchestration Claude Code — Pi control plane, workers PC",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.217",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  }
+}

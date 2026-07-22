@@ -1,0 +1,130 @@
+/**
+ * Protège les pannes #18 (settingSources vide) et #19 (env sans process.env),
+ * et vérifie la table B.1.3 : rien de plus que le structurel.
+ */
+
+import { describe, expect, test } from 'bun:test';
+import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import {
+  AGENT_TEAMS_ENV,
+  CONFIG_DIR_ENV,
+  OptionsCompositionError,
+  assertOptionsInvariants,
+  buildWorkerEnv,
+  composeWorkerOptions,
+} from './options-composition.ts';
+import type { ResolvedModel, WorkerSpec } from './types.ts';
+
+const MODEL: ResolvedModel = {
+  requested: 'sonnet',
+  resolved: 'claude-sonnet-4-6',
+  tier: 'sonnet',
+  viaInheritance: false,
+};
+
+function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
+  return {
+    sessionId: '11111111-2222-3333-4444-555555555555',
+    cwd: '/tmp/worktree-alpha',
+    mandate: 'Tu es team leader. Critère d’arrêt : les tests E2E passent.',
+    deniedToolPatterns: ['Bash(rm -rf /*)'],
+    maxBudgetUsd: 25,
+    ...overrides,
+  };
+}
+
+describe('env', () => {
+  test('☠ préserve PATH — env remplace, il ne fusionne pas', () => {
+    const env = buildWorkerEnv(spec());
+    expect(env['PATH']).toBe(process.env['PATH']);
+    expect(env['PATH']).toBeDefined();
+  });
+
+  test('pose CLAUDE_CONFIG_DIR sans perdre le reste de l’environnement (H-53)', () => {
+    const env = buildWorkerEnv(spec({ configDir: '/opt/comptes/compte2' }));
+    expect(env[CONFIG_DIR_ENV]).toBe('/opt/comptes/compte2');
+    expect(env['PATH']).toBe(process.env['PATH']);
+    expect(env['HOME']).toBe(process.env['HOME']);
+  });
+
+  test('Agent Teams reste hors ligne tant qu’une équipe ne le demande pas (H-14)', () => {
+    expect(buildWorkerEnv(spec())[AGENT_TEAMS_ENV]).toBeUndefined();
+    expect(buildWorkerEnv(spec({ agentTeams: true }))[AGENT_TEAMS_ENV]).toBe('1');
+  });
+
+  test('le structurel gagne sur extraEnv', () => {
+    const env = buildWorkerEnv(spec({ configDir: '/a', extraEnv: { [CONFIG_DIR_ENV]: '/b', FOO: 'bar' } }));
+    expect(env[CONFIG_DIR_ENV]).toBe('/a');
+    expect(env['FOO']).toBe('bar');
+  });
+});
+
+describe('composeWorkerOptions', () => {
+  test('fixe exactement le structurel de B.1.3', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.sessionId).toBe('11111111-2222-3333-4444-555555555555');
+    expect(options.cwd).toBe('/tmp/worktree-alpha');
+    expect(options.permissionMode).toBe('auto');
+    expect(options.disallowedTools).toEqual(['Bash(rm -rf /*)']);
+    expect(options.maxBudgetUsd).toBe(25);
+    expect(options.model).toBe('claude-sonnet-4-6');
+    expect(options.includePartialMessages).toBe(true);
+    expect(options.forwardSubagentText).toBe(true);
+    expect(options.agentProgressSummaries).toBe(true);
+    expect(options.abortController).toBeInstanceOf(AbortController);
+    expect(typeof options.stderr).toBe('function');
+  });
+
+  test('☠ settingSources contient les trois tiers et n’est jamais vide', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.settingSources).toEqual(['user', 'project', 'local']);
+  });
+
+  test('systemPrompt en forme preset avec le mandat en append (H-44, H-52)', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.systemPrompt).toEqual({
+      type: 'preset',
+      preset: 'claude_code',
+      append: 'Tu es team leader. Critère d’arrêt : les tests E2E passent.',
+    });
+  });
+
+  test('ne fixe rien qui appartient au PC', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    for (const key of ['hooks', 'mcpServers', 'agents', 'plugins', 'thinking', 'effort', 'allowedTools']) {
+      expect(options).not.toHaveProperty(key);
+    }
+  });
+
+  test('n’active le point d’extension distant que s’il est fourni (B.2.1)', () => {
+    expect(composeWorkerOptions(spec(), MODEL).options.spawnClaudeCodeProcess).toBeUndefined();
+  });
+
+  test('l’abortController rendu est celui posé dans les options (B.2.2)', () => {
+    const { options, abortController } = composeWorkerOptions(spec(), MODEL);
+    expect(options.abortController).toBe(abortController);
+  });
+});
+
+describe('assertOptionsInvariants', () => {
+  const base = (): Options => composeWorkerOptions(spec(), MODEL).options;
+
+  test('rejette settingSources vide', () => {
+    expect(() => assertOptionsInvariants({ ...base(), settingSources: [] })).toThrow(OptionsCompositionError);
+    expect(() => assertOptionsInvariants({ ...base(), settingSources: undefined })).toThrow(
+      OptionsCompositionError,
+    );
+  });
+
+  test('rejette un env sans PATH', () => {
+    expect(() => assertOptionsInvariants({ ...base(), env: { CLAUDE_CONFIG_DIR: '/x' } })).toThrow(
+      OptionsCompositionError,
+    );
+  });
+
+  test('rejette un systemPrompt qui n’est pas en forme preset', () => {
+    expect(() => assertOptionsInvariants({ ...base(), systemPrompt: 'mandat brut' })).toThrow(
+      OptionsCompositionError,
+    );
+  });
+});
