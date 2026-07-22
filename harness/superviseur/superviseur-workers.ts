@@ -66,6 +66,7 @@ import {
 import type {
   DemandeDemarrage,
   EnregistrementWorker,
+  ObservateurFlux,
   ObservateurRelance,
   RapportArretUrgence,
   ResultatArretUnitaireUrgence,
@@ -101,6 +102,12 @@ export interface DependancesSuperviseur {
    * classifiés (G.1.4). Même contrat que `observateurRelance` — aucune connexion ouverte.
    */
   readonly observateurUsage?: ObservateurUsage;
+  /**
+   * Client d'observabilité temps réel (E.2, mission M-50) — best-effort
+   * (H-15), jamais bloquant. Reçoit CHAQUE message déjà lu par l'unique
+   * consommateur ci-dessous, avant toute autre interprétation.
+   */
+  readonly observateurFlux?: ObservateurFlux;
   /** Injectable pour les tests : jamais de spawn réel en unitaire (règle du dépôt). */
   readonly demarrerWorker?: DemarrerWorkerFn;
   readonly startWorkerDeps?: StartWorkerDeps;
@@ -123,6 +130,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #compteurRelances: CompteurRelances;
   readonly #observateurRelance: ObservateurRelance | undefined;
   readonly #observateurUsage: ObservateurUsage | undefined;
+  readonly #observateurFlux: ObservateurFlux | undefined;
   readonly #demarrerWorker: DemarrerWorkerFn;
   readonly #startWorkerDeps: StartWorkerDeps;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
@@ -132,6 +140,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     this.#compteurRelances = deps.compteurRelances;
     this.#observateurRelance = deps.observateurRelance;
     this.#observateurUsage = deps.observateurUsage;
+    this.#observateurFlux = deps.observateurFlux;
     this.#demarrerWorker = deps.demarrerWorker ?? startWorkerReel;
     this.#startWorkerDeps = deps.startWorkerDeps ?? {};
     this.#planifier = deps.planifier ?? ((delaiMs, tache) => void setTimeout(tache, delaiMs));
@@ -358,6 +367,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     const log = missionLogger(missionId);
     try {
       for await (const message of handle.query) {
+        this.#notifierFlux(missionId, message);
         if (message.type === 'rate_limit_event') {
           this.#surveillerQuota(missionId, handle.sessionId, message.rate_limit_info);
           continue;
@@ -400,6 +410,20 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       this.#observateurRelance?.surDecision(missionId, decision);
     } catch (erreur) {
       missionLogger(missionId).error({ err: erreur }, "l'observateur de relance a levé — ignoré, jamais bloquant");
+    }
+  }
+
+  /**
+   * Relaie CHAQUE message vu par l'unique consommateur au client
+   * d'observabilité (E.2, mission M-50) — avant toute autre interprétation,
+   * jamais entrelacé avec un appel de contrôle (piège mesuré H-72.3).
+   * Best-effort, jamais bloquant, jamais interrompt la boucle de surveillance.
+   */
+  #notifierFlux(missionId: string, message: Parameters<ObservateurFlux['ingererMessageFlux']>[1]): void {
+    try {
+      this.#observateurFlux?.ingererMessageFlux(missionId, message);
+    } catch (erreur) {
+      missionLogger(missionId).error({ err: erreur }, "l'observateur de flux a levé — ignoré, jamais bloquant");
     }
   }
 

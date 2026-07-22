@@ -8,6 +8,7 @@ export type {
   DemandeDemarrage,
   EnregistrementWorker,
   EtapeArretUrgence,
+  ObservateurFlux,
   ObservateurRelance,
   ObservateurUsage,
   RapportArretUrgence,

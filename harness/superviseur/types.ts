@@ -14,6 +14,7 @@
  * decision qui a besoin du registre passe par un port injecté, jamais un import direct.
  */
 
+import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { GenerateurEntree } from '../control-plane/orchestrateur/entree/index.ts';
 import type { WorkerHandle, WorkerSpec } from '../workers/index.ts';
 import type { DecisionRelance } from '../relance/types.ts';
@@ -42,6 +43,23 @@ export interface DemandeDemarrage {
  */
 export interface ObservateurRelance {
   surDecision(missionId: string, decision: DecisionRelance): void;
+}
+
+/**
+ * Port du client d'observabilité temps réel (E.2, mission M-50) — même motif
+ * que `ObservateurRelance`/`ObservateurUsage` : best-effort (H-15), aucune
+ * connexion ouverte, un simple callback vers un consommateur déjà en mémoire.
+ * Implémenté par `RegistreObservationParc` (`control-plane/observabilite/`),
+ * jamais réimporté ici pour garder ce module ignorant du registre du Pi
+ * (frontière A↔B, `03-couche-1.md`).
+ *
+ * `☠` N'appelle JAMAIS `getContextUsage()` ni aucun appel de contrôle depuis
+ * l'intérieur de `ingererMessageFlux` — piège mesuré H-72.3 : entrelacé avec
+ * la lecture du flux, ça fait perdre les messages des sous-agents. Ce port ne
+ * reçoit que des messages déjà lus par l'unique consommateur du `Query`.
+ */
+export interface ObservateurFlux {
+  ingererMessageFlux(missionId: string, message: SDKMessage): void;
 }
 
 /** Enregistrement interne d'un worker vivant ou récemment mort (survit à la mort pour permettre la relance). */
