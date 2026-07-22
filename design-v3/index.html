@@ -602,6 +602,14 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; background:
           <div class="msel"><select id="selModel"></select></div>
           <div class="msel"><select id="selEffort"></select></div>
         </div>
+        <div class="model-row" id="modelToggles" style="align-items:center;">
+          <label class="msel" style="display:flex;gap:5px;align-items:center;font-size:10.5px;color:var(--ink-3);flex:0;white-space:nowrap;">
+            <input type="checkbox" id="chkFastMode" style="margin:0;"> mode rapide
+          </label>
+          <label class="msel" style="display:flex;gap:5px;align-items:center;font-size:10.5px;color:var(--ink-3);flex:0;white-space:nowrap;">
+            <input type="checkbox" id="chkUltracode" style="margin:0;"> ultracode
+          </label>
+        </div>
         <div class="model-hint" id="modelHint"></div>
         <div class="input-wrap">
           <textarea id="orchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe…"></textarea>
@@ -834,23 +842,30 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; background:
    ================================================================ */
 const PROJECTS = ['stockiop-ops','homelab-vm-manager','lattice','aegis','nullnode','design-lab','gtav-mods','flux'];
 
-/* ---- H-71 : modèles éligibles au rôle d'orchestrateur, niveaux d'effort par modèle ---- */
+/* ---- H-71 / H-71.1 : modèles éligibles au rôle d'orchestrateur, niveaux d'effort par modèle ---- */
 // ☠ Ces listes NE SONT PAS des constantes de produit : en vrai, elles viennent de
-// `supportedModels()[].supportedEffortLevels` (H-71). Valeurs ci-dessous = ce qui a été
-// MESURÉ en session réelle le 2026-07-22, pour que la maquette ne mente pas.
-//   opus / sonnet / fable  → low, medium, high, xhigh, max  (les 5)
-//   haiku                  → AUCUN (ni effort ni thinking adaptatif) ⇒ absent d'ici
-// ⚠ `claude-opus-4-7` et `claude-sonnet-4-6` répondent mais ne figurent PAS dans
-// `supportedModels()` : leurs niveaux réels sont donc INCONNUS — à mesurer avant
-// d'implémenter, ne pas recopier les valeurs optimistes ci-dessous.
+// `supportedModels()[].supportedEffortLevels` (H-71) — identité par `value`, jamais `model`.
+// MESURÉ en session réelle le 2026-07-22 (`acceptation/modeles-effort-reel.ts`, H-71.1) :
+//   opus-4-8 / sonnet-5 / fable-5  → low, medium, high, xhigh, max (les 5) + pensée adaptative
+//   opus-4-8 seul                 → déclare aussi supportsFastMode
+//   haiku                         → AUCUN (ni effort ni thinking adaptatif) ⇒ absent d'ici
+// ☠ `claude-opus-4-7` RÉPOND mais est ABSENT de `supportedModels()` : un niveau d'effort qui
+// lui est prêté est silencieusement ignoré par le SDK (jamais rejeté), l'UI mentirait sur ce
+// qui tourne réellement. ⇒ retiré du sélecteur (H-71.1), pas grisé comme sonnet-4-6 : ce n'est
+// pas une préférence de Chris, c'est un fait mécanique.
 const MODELS = [
-  { id:'claude-opus-4-8',  label:'Opus 4.8 (défaut)', effort:['low','medium','high','xhigh','max'], enabled:true },
-  { id:'claude-sonnet-5',  label:'Sonnet 5',           effort:['low','medium','high','xhigh','max'], enabled:true },
-  { id:'claude-fable-5',   label:'Fable 5',            effort:['low','medium','high','xhigh','max'], enabled:true },
-  { id:'claude-opus-4-7',  label:'Opus 4.7',           effort:['low','medium','high','xhigh','max'], enabled:true },
-  { id:'claude-sonnet-4-6',label:'Sonnet 4.6 — déconseillé', effort:[],                               enabled:false }
+  { id:'claude-opus-4-8',  label:'Opus 4.8 (défaut)', effort:['low','medium','high','xhigh','max'], enabled:true, fastMode:true },
+  { id:'claude-sonnet-5',  label:'Sonnet 5',           effort:['low','medium','high','xhigh','max'], enabled:true, fastMode:false },
+  { id:'claude-fable-5',   label:'Fable 5',            effort:['low','medium','high','xhigh','max'], enabled:true, fastMode:false },
+  { id:'claude-sonnet-4-6',label:'Sonnet 4.6 — déconseillé', effort:[],                               enabled:false, fastMode:false }
 ];
 const EFFORT_LABEL = { low:'low', medium:'medium', high:'high', xhigh:'xhigh', max:'max' };
+/* ---- H-71.1 : le mode « ultra » = ultracode (Settings SDK), PAS un 6e niveau d'effort ----
+   xhigh + orchestration de workflows permanente. Portée SESSION (jamais persisté), exige les
+   workflows activés ET un modèle capable de xhigh (opus-4-8 / sonnet-5 / fable-5, eux seuls). */
+function supportsUltracode(modelId){
+  return ['claude-opus-4-8','claude-sonnet-5','claude-fable-5'].includes(modelId);
+}
 
 const state = {
   linkUp: true,
@@ -860,12 +875,12 @@ const state = {
   feedFilter: 'tout',
   nextEventId: 1,
   denyTargetId: null,
-  orchModel: { model:'claude-opus-4-8', effort:'high' },
+  orchModel: { model:'claude-opus-4-8', effort:'high', fastMode:false, ultracode:false, workflowsEnabled:false },
   accounts: {
-    1: { id:1, label:'Compte #1', email:'compte-a@exemple.fr', status:'allowed',
+    1: { id:1, label:'Compte #1', email:'compte-a@exemple.fr', status:'allowed', isUsingOverage:false,
       five_hour:{util:38, resetLabel:'17:00 · dans 2 h 12'}, seven_day:{util:54, resetLabel:'26/07 à 09:00'},
       seven_day_opus:{util:71, resetLabel:'26/07 à 09:00'}, costWindow: 3.40 },
-    2: { id:2, label:'Compte #2', email:'chris@echo-agency…', status:'rejected',
+    2: { id:2, label:'Compte #2', email:'chris@echo-agency…', status:'rejected', isUsingOverage:true,
       five_hour:{util:100, resetLabel:'15:00 · dans 0 h 24'}, seven_day:{util:38, resetLabel:'28/07 à 03:00'},
       seven_day_sonnet:{util:46, resetLabel:'27/07 à 21:00'}, costWindow: 9.85 }
   },
@@ -1295,7 +1310,7 @@ function accGaugeMini(a){
   const fiveColor = a.five_hour.util>=90?'var(--err)':a.five_hour.util>=65?'var(--warn)':'var(--ok)';
   const sevenColor = a.seven_day.util>=90?'var(--err)':a.seven_day.util>=65?'var(--warn)':'var(--ok)';
   return `<div class="mg-acc">
-    <div class="mgl">${a.label}<span class="badge" style="${a.status==='allowed'?'background:var(--ok-soft);color:var(--ok);':'background:var(--err-soft);color:var(--err);'}">${a.status}</span></div>
+    <div class="mgl">${a.label}<span class="badge" style="${a.status==='allowed'?'background:var(--ok-soft);color:var(--ok);':'background:var(--err-soft);color:var(--err);'}">${a.status}</span>${a.isUsingOverage?'<span class="badge" style="background:var(--warn-soft);color:#8A6A12;margin-left:4px;" title="H-63.1 : rejected ne coupe pas la session, elle continue sur les crédits — état réel, sinon silencieux">dépassement (crédits)</span>':''}</div>
     <div class="mg-row"><span class="lbl">5h</span><div class="usage-track"><div class="usage-fill" style="width:${a.five_hour.util}%;background:${fiveColor};"></div></div><span class="pct">${a.five_hour.util}%</span></div>
     <div class="mg-reset">reset ${a.five_hour.resetLabel}</div>
     <div class="mg-row" style="margin-top:6px;"><span class="lbl">7j</span><div class="usage-track"><div class="usage-fill" style="width:${a.seven_day.util}%;background:${sevenColor};"></div></div><span class="pct">${a.seven_day.util}%</span></div>
@@ -1312,8 +1327,8 @@ function renderQuotaStrip(){
   if (!el) return;
   const a1 = state.accounts[1], a2 = state.accounts[2];
   const v = (a,w) => a[w].util>=90 ? `<b class="warnv">${a[w].util}%</b>` : `<b>${a[w].util}%</b>`;
-  el.innerHTML = `<button>#1 5h ${v(a1,'five_hour')} · 7j ${v(a1,'seven_day')}</button>
-    <button>#2 5h ${v(a2,'five_hour')} · 7j ${v(a2,'seven_day')}</button>
+  el.innerHTML = `<button>#1 5h ${v(a1,'five_hour')} · 7j ${v(a1,'seven_day')}${a1.isUsingOverage?' <b class="warnv">· crédits</b>':''}</button>
+    <button>#2 5h ${v(a2,'five_hour')} · 7j ${v(a2,'seven_day')}${a2.isUsingOverage?' <b class="warnv">· crédits</b>':''}</button>
     <span style="color:var(--ink-3);">— fenêtres non synchronisées, tap pour le détail</span>`;
 }
 
@@ -1763,6 +1778,9 @@ function accountBlock(a){
       </div>
       <span class="badge" style="${isActive?'background:var(--ok-soft);color:var(--ok);':'background:var(--err-soft);color:var(--err);'}">${a.status}</span>
     </div>
+    ${a.isUsingOverage ? `<div style="margin-top:9px;padding:9px 11px;border-radius:10px;background:var(--warn-soft);font-size:11px;color:#8A6A12;line-height:1.5;">
+      <strong>En dépassement — sur les crédits (extra_usage, H-69).</strong> Le quota d'abonnement a rejeté (<span class="mono">status: rejected</span>) mais la session continue, silencieusement (<span class="mono">isUsingOverage: true</span>, H-63.1). Sans ce bandeau, rien ne le signale.
+    </div>` : ''}
     ${qrows}
     ${rotationNote}
     <div class="qmiss">
@@ -1780,14 +1798,16 @@ function toggleSaturation(accId){
   const a = state.accounts[accId];
   if (a.status === 'allowed') {
     a.status = 'rejected';
+    a.isUsingOverage = true; /* H-63.1 : rejected ne coupe pas la session, elle continue sur extra_usage — silencieux sans ce badge */
     if (a.five_hour) a.five_hour.util = 100;
     state.nextAccount = accId === 1 ? 2 : 1;
-    toast(`Compte #${accId} saturé — les prochaines missions basculent sur le compte #${state.nextAccount}`);
+    toast(`Compte #${accId} rejeté sur le quota d'abonnement — bascule silencieuse sur les crédits (extra_usage, H-69), prochaines missions sur le compte #${state.nextAccount}`);
     /* H-70 : les missions en cours sur ce compte atterrissent, elles ne sont pas coupées net */
     state.missions.filter(m => m.account === accId && ['running','requires_action'].includes(m.state))
       .forEach(m => startLanding(m, accId));
   } else {
     a.status = 'allowed';
+    a.isUsingOverage = false;
     if (a.five_hour) a.five_hour.util = 12;
     toast(`Compte #${accId} réinitialisé (reset de fenêtre) — de nouveau disponible`);
   }
@@ -1859,6 +1879,7 @@ function renderModelSelector(){
     `<option value="${mo.id}" ${mo.enabled?'':'disabled'} ${mo.id===state.orchModel.model?'selected':''}>${mo.label}</option>`
   ).join('');
   refreshEffortOptions();
+  refreshModelToggles();
   updateModelHint();
 }
 function refreshEffortOptions(){
@@ -1873,6 +1894,18 @@ function refreshEffortOptions(){
   if (!mo.effort.includes(state.orchModel.effort)) state.orchModel.effort = mo.effort.includes('high') ? 'high' : mo.effort[0];
   selEffort.innerHTML = mo.effort.map(e => `<option value="${e}" ${e===state.orchModel.effort?'selected':''}>${EFFORT_LABEL[e]}</option>`).join('');
 }
+/* ---- H-71.1 : mode rapide (supportsFastMode, opus-4-8 SEUL) + ultracode (xhigh-capables) ---- */
+function refreshModelToggles(){
+  const mo = MODELS.find(x => x.id === state.orchModel.model) || MODELS[0];
+  const chkFast = document.getElementById('chkFastMode');
+  const chkUltra = document.getElementById('chkUltracode');
+  if (!mo.fastMode) { state.orchModel.fastMode = false; }
+  chkFast.checked = state.orchModel.fastMode;
+  chkFast.disabled = !mo.fastMode;
+  if (!supportsUltracode(mo.id)) { state.orchModel.ultracode = false; state.orchModel.workflowsEnabled = false; }
+  chkUltra.checked = state.orchModel.ultracode;
+  chkUltra.disabled = !supportsUltracode(mo.id);
+}
 function updateModelHint(){
   const mo = MODELS.find(x => x.id === state.orchModel.model) || MODELS[0];
   const hint = document.getElementById('modelHint');
@@ -1880,6 +1913,10 @@ function updateModelHint(){
     hint.innerHTML = `<strong>Déconseillé par Chris pour ce rôle</strong> — jugé insuffisant (H-71), affiché pour transparence mais non sélectionnable. Sélection retombée sur ${MODELS[0].label}.`;
   } else if (!mo.effort.length) {
     hint.textContent = `${mo.label} ne supporte ni effort ni raisonnement adaptatif — niveaux masqués, pas figés à zéro.`;
+  } else if (state.orchModel.ultracode) {
+    hint.innerHTML = `<strong>ultracode actif</strong> — xhigh + orchestration de workflows permanente. Portée <strong>session</strong> seulement (jamais persisté, retombe au rechargement) ; exige les workflows activés et un modèle xhigh (${mo.label} l'est). Ce n'est pas un 6ᵉ niveau d'effort — le sélecteur de raisonnement reste indépendant.`;
+  } else if (state.orchModel.fastMode) {
+    hint.textContent = `Mode rapide actif sur ${mo.label} — seul ce modèle le déclare (supportsFastMode).`;
   } else {
     hint.textContent = `Niveaux de raisonnement recalculés pour ${mo.label} : ${mo.effort.map(e=>EFFORT_LABEL[e]).join(' · ')}. Change à chaud (setModel/setMaxThinkingTokens), sans redémarrer la session.`;
   }
@@ -1887,11 +1924,14 @@ function updateModelHint(){
 document.addEventListener('DOMContentLoaded', () => {
   const selModel = document.getElementById('selModel');
   const selEffort = document.getElementById('selEffort');
+  const chkFast = document.getElementById('chkFastMode');
+  const chkUltra = document.getElementById('chkUltracode');
   selModel.addEventListener('change', () => {
     const mo = MODELS.find(x => x.id === selModel.value);
     if (!mo || !mo.enabled) { selModel.value = state.orchModel.model; return; }
     state.orchModel.model = mo.id;
     refreshEffortOptions();
+    refreshModelToggles();
     updateModelHint();
     toast(`Orchestrateur → ${mo.label}`);
   });
@@ -1899,6 +1939,17 @@ document.addEventListener('DOMContentLoaded', () => {
     state.orchModel.effort = selEffort.value;
     updateModelHint();
     toast(`Raisonnement → ${EFFORT_LABEL[selEffort.value]}`);
+  });
+  chkFast.addEventListener('change', () => {
+    state.orchModel.fastMode = chkFast.checked;
+    updateModelHint();
+    toast(chkFast.checked ? 'Mode rapide activé' : 'Mode rapide désactivé');
+  });
+  chkUltra.addEventListener('change', () => {
+    state.orchModel.ultracode = chkUltra.checked;
+    state.orchModel.workflowsEnabled = chkUltra.checked;
+    updateModelHint();
+    toast(chkUltra.checked ? 'ultracode activé — session en cours seulement' : 'ultracode désactivé');
   });
   document.getElementById('btnOrchSend').addEventListener('click', sendOrchMessage);
   document.getElementById('orchInput').addEventListener('keydown', e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendOrchMessage(); } });
@@ -1913,7 +1964,9 @@ function sendOrchMessage(){
   el.value = '';
   const mo = MODELS.find(x => x.id === state.orchModel.model) || MODELS[0];
   const a = document.createElement('div'); a.className='bubble-a msg-in';
-  a.innerHTML = `<p style="margin:0;">Reçu (${mo.label}${mo.effort.length?' · raisonnement '+EFFORT_LABEL[state.orchModel.effort]:''}). Je ne bloque pas dessus : si ça implique de dispatcher une équipe, je te soumettrai le mandat pour autorisation — je ne lance jamais seul (H-61).</p>`;
+  const tagBits = [mo.label, mo.effort.length?'raisonnement '+EFFORT_LABEL[state.orchModel.effort]:null,
+    state.orchModel.fastMode?'mode rapide':null, state.orchModel.ultracode?'ultracode':null].filter(Boolean).join(' · ');
+  a.innerHTML = `<p style="margin:0;">Reçu (${tagBits}). Je ne bloque pas dessus : si ça implique de dispatcher une équipe, je te soumettrai le mandat pour autorisation — je ne lance jamais seul (H-61).</p>`;
   chat.appendChild(a);
   document.getElementById('chatScroll').scrollTop = document.getElementById('chatScroll').scrollHeight;
 }

@@ -109,3 +109,52 @@ avant tout code réel, exactement comme H-71 l'exige déjà.
   niveau du compte est légitime (tension 4) ?
 - Faut-il remonter une jauge de compte directement dans la vue Orchestrateur malgré la saturation
   visuelle (tension 1), ou les trois couches actuelles suffisent-elles à l'usage réel ?
+
+---
+
+## 2026-07-22, suite — correction sur mesure réelle (H-71.1, H-63.1)
+
+Un banc réel (`harness/acceptation/modeles-effort-reel.ts`) a mesuré ce que `supportedModels()`
+déclare vraiment. La v3 initiale **anticipait** — elle prêtait cinq niveaux d'effort à
+`claude-opus-4-7` sans preuve. La mesure la contredit : corrections apportées sur la mesure, pas
+sur une préférence.
+
+**1. `claude-opus-4-7` retiré du sélecteur `MODELS[]`.** Il répond mais est absent de
+`supportedModels()` : un niveau d'effort qui lui est prêté est **silencieusement ignoré** par le
+SDK, jamais rejeté — l'UI aurait affiché « max » pendant que le modèle tourne sur autre chose, sans
+aucun signal. `☠` Traitement différent de Sonnet 4.6 : Sonnet 4.6 reste **grisé, visible** (choix de
+transparence, H-71, accessible mais déconseillé par préférence de Chris) ; Opus 4.7 est **retiré
+purement** (fait mécanique, pas une préférence — rien à afficher honnêtement pour lui).
+
+**2. Mode rapide (`supportsFastMode`) représenté** — case à cocher dans le composer, activable
+**seulement** quand `claude-opus-4-8` est sélectionné (seul modèle qui le déclare). Se désactive et
+se décoche automatiquement sur tout autre modèle (`refreshModelToggles()`).
+
+**3. `ultracode` ajouté comme mode À PART, jamais comme 6ᵉ niveau d'effort.** Case à cocher séparée
+de raisonnement, activable uniquement sur les trois modèles capables de `xhigh`
+(`claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5` — `supportsUltracode()`). Le hint explicite
+les trois contraintes mesurées (H-71.1) : portée **session** (retombe au rechargement, jamais
+persisté — cohérent puisque `state` vit en mémoire JS), exige les workflows activés (simulé :
+cocher `ultracode` active `workflowsEnabled` en interne, pas de toggle séparé pour ne pas
+surcharger la maquette d'un concept non modélisé ailleurs), exige un modèle `xhigh`-capable.
+
+**4. État `isUsingOverage` (H-63.1) rendu visible, aux trois couches de jauges.** Avant : `status:
+'rejected'` déclenchait l'atterrissage sans qu'aucune UI ne dise que la session **continue en
+réalité sur les crédits** (`extra_usage`, H-69) — exactement l'état « silencieux » que H-72 demande
+de rendre visible. Ajouté : champ `isUsingOverage` par compte, badge « dépassement (crédits) » dans
+les mini-jauges sidebar, indicateur `· crédits` dans le `quota-strip`, bandeau explicatif complet
+dans la vue Comptes (`accountBlock`). `toggleSaturation()` le pose à `true` en même temps que
+`status: 'rejected'`, cohérent avec la mesure réelle de l'événement `rate_limit_event`
+(`status:"rejected", isUsingOverage:true` simultanés, H-63.1).
+
+### Ce qui reste en attente d'un arbitrage humain (inchangé, + ajouts)
+
+- Les listes `effort` de Fable 5 sont correctes (mesure H-71.1 confirme les 5 niveaux pour les
+  trois modèles xhigh), mais seul Sonnet 5 a des **chiffres de tokens** mesurés (714/107/141) — les
+  ordres de grandeur pour Opus 4.8 et Fable 5 restent une hypothèse d'affichage, pas une mesure.
+- L'échelle entière d'`effort` (le champ accepte aussi un entier, H-71) n'est pas explorée : la
+  maquette ne l'expose toujours pas, à dessein.
+- `ultracode` simulé ici active `workflowsEnabled` sans qu'un concept de « workflows » existe
+  ailleurs dans la maquette — à concevoir séparément si Chris veut une vraie surface pour ça.
+- Le déclenchement de `isUsingOverage` reste couplé au bouton de simulation de saturation existant ;
+  en réel, il vient de l'événement `rate_limit_event` poussé, pas d'une bascule manuelle.
