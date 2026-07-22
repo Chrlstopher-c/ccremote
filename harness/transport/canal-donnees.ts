@@ -41,6 +41,28 @@ export class CanalDonnees implements Tuyau {
     this.#abonnes.push(abonne);
   }
 
+  /**
+   * `☠ TROUVÉ EN PRODUCTION (2026-07-23)` — remet l'attente de réception à zéro
+   * quand le PAIR est une instance neuve qui a redémarré ses séquences d'envoi.
+   *
+   * Le modèle client/serveur de H-75 reconnecte le PC comme un pair FRAIS
+   * (send-seq repart de 0), alors que le Pi, lui, est un process long qui garde
+   * son `#seqAttendu` d'une connexion à l'autre. Après le premier échange, le
+   * Pi attendait seq N ; le PC frais envoyait seq 0 ; `recevoir` classait ça en
+   * doublon (`seq < seqAttendu`) et le JETAIT EN SILENCE. Chaque requête de
+   * contrôle expirait alors sur un `ErreurDelaiCorrelateur` de 10 s.
+   *
+   * `☠` N'AGIT QUE en `perte_silencieuse`. En `strict` (canal D.1 d'un worker),
+   * la reprise repose sur le rejeu des non-acquittés avec leurs séquences
+   * d'origine : y remettre la réception à zéro casserait le « zéro octet perdu
+   * ni dupliqué ». Ici, la déduplication est assurée au niveau applicatif
+   * (`opId` du corrélateur), donc ce filet de séquence est superflu — et nuisible.
+   */
+  reinitialiserReceptionSiPairNeuf(): void {
+    if (this.deps.modeIntegrite !== 'perte_silencieuse') return;
+    this.#seqAttendu = 0;
+  }
+
   octetsEmis(): number {
     return this.#emis;
   }

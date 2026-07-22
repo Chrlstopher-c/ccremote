@@ -229,6 +229,14 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
       this.#etat = 'ouvert';
       this.#tentative = 0;
       this.#rattachements += 1;
+      // `☠` Le pair reconnecté est une instance NEUVE (H-75 : le PC redémarre
+      // ses séquences d'envoi à 0). Sans ce reset, le `#seqAttendu` conservé du
+      // rattachement précédent fait jeter en silence chaque première trame du
+      // nouveau pair (`seq 0 < seqAttendu`). Sans effet en mode `strict`, où le
+      // rejeu des non-acquittés impose de préserver les séquences — voir
+      // `CanalDonnees.reinitialiserReceptionSiPairNeuf`.
+      this.#stdin.reinitialiserReceptionSiPairNeuf();
+      this.#stdout.reinitialiserReceptionSiPairNeuf();
       this.#stdin.rejouerNonAcquitte();
       if (this.#killEnAttente !== null) this.#envoyer(TAG.KILL, 0, encoderTexte(this.#killEnAttente));
       this.#pingsManques = 0;

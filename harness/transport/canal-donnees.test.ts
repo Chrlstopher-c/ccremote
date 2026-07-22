@@ -94,3 +94,34 @@ describe('CanalDonnees — ordre et intégrité (D.1.3)', () => {
     expect(emetteur.octetsEmis()).toBe(3);
   });
 });
+
+describe('CanalDonnees — pair neuf après reconnexion (H-75)', () => {
+  test('☠ perte_silencieuse : après reset, une trame seq 0 d’un pair neuf est LIVRÉE, pas jetée comme doublon', () => {
+    const recus: string[] = [];
+    const canal = new CanalDonnees({ nom: 'test', modeIntegrite: 'perte_silencieuse', envoyer: () => {} });
+    canal.surOctets((o) => recus.push(new TextDecoder().decode(o)));
+
+    // Premier pair : seq 0 puis 1 livrés, seqAttendu monte à 2.
+    canal.recevoir(0, new TextEncoder().encode('a'));
+    canal.recevoir(1, new TextEncoder().encode('b'));
+    expect(recus).toEqual(['a', 'b']);
+
+    // Sans reset, la trame seq 0 du pair NEUF serait jetée (0 < 2). C'est
+    // exactement le bug de production : chaque requête de contrôle expirait.
+    canal.reinitialiserReceptionSiPairNeuf();
+    canal.recevoir(0, new TextEncoder().encode('c'));
+    expect(recus).toEqual(['a', 'b', 'c']);
+  });
+
+  test('☠ strict : le reset est INERTE — le rejeu impose de préserver les séquences (zéro octet dupliqué)', () => {
+    const recus: string[] = [];
+    const canal = new CanalDonnees({ nom: 'test', modeIntegrite: 'strict', envoyer: () => {} });
+    canal.surOctets((o) => recus.push(new TextDecoder().decode(o)));
+
+    canal.recevoir(0, new TextEncoder().encode('a'));
+    canal.reinitialiserReceptionSiPairNeuf(); // ne doit RIEN faire en strict
+    // seq 0 rejoué doit rester un doublon ignoré, pas une redélivrance.
+    canal.recevoir(0, new TextEncoder().encode('a-dup'));
+    expect(recus).toEqual(['a']);
+  });
+});
