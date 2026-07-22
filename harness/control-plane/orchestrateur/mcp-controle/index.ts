@@ -32,7 +32,7 @@
  * ─────────────────────────────────────────────────────────────────────────
  */
 
-export { creerServeurMcpControle, construireOutilsControle, protege } from './serveur.ts';
+export { creerServeurMcpControle, construireOutilsControle, protege, UTILISATION_PARC_DESACTIVEE } from './serveur.ts';
 export type { DependancesServeurControle } from './serveur.ts';
 
 export { applique, accepte, refuse, differe, echecInattendu } from './contrat.ts';

@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { Options, Query, SDKMessage, SDKSystemMessage, WarmQuery } from '@anthropic-ai/claude-agent-sdk';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
-import { creerServeurMcpControle, type DependancesServeurControle } from '../mcp-controle/index.ts';
+import { creerServeurMcpControle, UTILISATION_PARC_DESACTIVEE, type DependancesServeurControle } from '../mcp-controle/index.ts';
 import type { DependancesReconciliation, DescripteurWorkerPc, InventairePc, ReinitialisateurSession, ResultatReinitialisation } from '../../reconciliation/index.ts';
 import { demarrerOrchestrateur, DemarrageOrchestrateurError } from './demarrage.ts';
 import { JournalIncidentsMemoire } from './incidents.ts';
@@ -92,6 +92,9 @@ beforeEach(() => {
   depsServeur = {
     registre,
     repertoireProjets: '/tmp/demarrage-test-inexistant',
+    // Désactivation explicite du plafond de parc (H-74), jamais une omission.
+    utilisationParc: UTILISATION_PARC_DESACTIVEE,
+    configPlafondParc: {},
     escalades: { enAttente: () => [], repondre: () => true },
     cibles: { cible: () => null },
     arreteur: { arreter: async () => {} },

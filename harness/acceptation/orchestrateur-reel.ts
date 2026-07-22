@@ -19,7 +19,7 @@
  */
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ouvrirRegistre } from '../control-plane/registre/index.ts'
-import { creerServeurMcpControle } from '../control-plane/orchestrateur/mcp-controle/index.ts'
+import { creerServeurMcpControle, UTILISATION_PARC_DESACTIVEE } from '../control-plane/orchestrateur/mcp-controle/index.ts'
 import {
   demarrerOrchestrateur,
   JournalIncidentsMemoire,
@@ -50,6 +50,10 @@ const portMort = {
 const serveurControle = creerServeurMcpControle({
   registre,
   repertoireProjets: `${RACINE}/projets`,
+  // Plafond de parc désactivé EXPLICITEMENT (H-74) : ce banc n'a pas de source
+  // d'utilisation réelle — l'omettre serait un oubli, le dire est un choix.
+  utilisationParc: UTILISATION_PARC_DESACTIVEE,
+  configPlafondParc: {},
   escalades: { enAttente: () => [], repondre: () => false },
   cibles: portMort,
   arreteur: portMort,

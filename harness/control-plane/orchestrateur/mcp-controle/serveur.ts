@@ -55,17 +55,25 @@ export interface DependancesServeurControle {
   readonly budget: DefinisseurBudget;
   /**
    * G.1.3 — plafond de parc, consommé par `creer_equipe` (voir `outils-cycle-vie.ts`).
-   * Optionnels : absent ⇒ aucun compte connu / plafond désactivé, comportement
-   * strictement identique à avant ce câblage (H-58 : « désactivé par défaut »).
-   * Optionnalité délibérée pour ne pas casser les assembleurs de dépendances déjà
-   * écrits ailleurs dans le dépôt (hors périmètre de cette mission) au moment où
-   * ils adoptent une vraie source d'utilisation.
+   *
+   * `☠` **Obligatoires, jamais optionnels (H-74).** L'optionalité était le défaut
+   * lui-même : un plafond dont la source d'utilisation peut manquer se désactive en
+   * silence, passe tous ses tests et ne borne rien. Cette dépendance-ci figure
+   * nommément dans H-74 comme la deuxième des cinq occurrences trouvées le
+   * 2026-07-22. Un assembleur qui ne peut pas fournir de vraie source doit passer
+   * `UTILISATION_PARC_DESACTIVEE` **explicitement** — la désactivation reste
+   * possible, mais elle devient un choix écrit, jamais un oubli.
    */
-  readonly utilisationParc?: LecteurUtilisationParc;
-  readonly configPlafondParc?: ConfigPlafondParc;
+  readonly utilisationParc: LecteurUtilisationParc;
+  readonly configPlafondParc: ConfigPlafondParc;
 }
 
-const UTILISATION_PARC_DESACTIVEE: LecteurUtilisationParc = { comptesConnus: () => [], releves: () => [] };
+/**
+ * Désactivation **explicite** du plafond de parc (H-58 « désactivé par défaut »).
+ * Exporté pour qu'un assembleur sans source d'utilisation réelle le dise dans son
+ * code plutôt que d'omettre un champ — voir `DependancesServeurControle`.
+ */
+export const UTILISATION_PARC_DESACTIVEE: LecteurUtilisationParc = { comptesConnus: () => [], releves: () => [] };
 
 /** Convertit le contrat uniforme (A.2.3) en `CallToolResult` MCP. Jamais `isError`. */
 function rendre(retour: ContratRetour): CallToolResult {
@@ -135,8 +143,8 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             objectif,
             critereArret,
             perimetre,
-            deps.utilisationParc ?? UTILISATION_PARC_DESACTIVEE,
-            deps.configPlafondParc ?? {},
+            deps.utilisationParc,
+            deps.configPlafondParc,
           ),
         ),
     ),

@@ -6,7 +6,7 @@
  */
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
-import { creerServeurMcpControle, type DependancesServeurControle } from '../mcp-controle/index.ts';
+import { creerServeurMcpControle, UTILISATION_PARC_DESACTIVEE, type DependancesServeurControle } from '../mcp-controle/index.ts';
 import {
   assertInvariantsOrchestrateur,
   composerOptionsOrchestrateur,
@@ -24,6 +24,9 @@ beforeEach(() => {
   depsServeur = {
     registre,
     repertoireProjets: '/tmp/options-orchestrateur-test-inexistant',
+    // Désactivation explicite du plafond de parc (H-74), jamais une omission.
+    utilisationParc: UTILISATION_PARC_DESACTIVEE,
+    configPlafondParc: {},
     escalades: { enAttente: () => [], repondre: () => true },
     cibles: { cible: () => null },
     arreteur: { arreter: async () => {} },

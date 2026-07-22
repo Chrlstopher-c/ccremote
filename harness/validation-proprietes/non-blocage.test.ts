@@ -18,7 +18,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ouvrirRegistre, type Registre } from '../control-plane/registre/index.ts';
-import { construireOutilsControle, type DependancesServeurControle } from '../control-plane/orchestrateur/mcp-controle/serveur.ts';
+import { construireOutilsControle, UTILISATION_PARC_DESACTIVEE, type DependancesServeurControle } from '../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import { PLAFOND_PORT_MS_DEFAUT } from '../control-plane/orchestrateur/mcp-controle/plafond.ts';
 import type { ContratRetour } from '../control-plane/orchestrateur/mcp-controle/types.ts';
 
@@ -57,6 +57,9 @@ beforeEach(() => {
   deps = {
     registre,
     repertoireProjets: '/tmp/mcp-controle-projets-inexistant',
+    // Désactivation explicite du plafond de parc (H-74), jamais une omission.
+    utilisationParc: UTILISATION_PARC_DESACTIVEE,
+    configPlafondParc: {},
     escalades: { enAttente: () => [], repondre: () => true },
     // Port mort : jamais résolu — c'est le cas visé (worker éteint, lien coupé).
     cibles: { cible: () => ({ envoyerMessage: () => jamais(), interrupt: () => jamais() }) },
