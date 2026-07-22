@@ -25,7 +25,7 @@ import { randomUUID } from 'node:crypto';
 import type { Conversation, EvenementConversation, Registre } from '../registre/index.ts';
 import type { StockageIdentite } from './processus/index.ts';
 import type { PoigneeOrchestrateur } from './processus/index.ts';
-import { CollecteurConversation } from './collecteur-conversation.ts';
+import { CollecteurConversation, type BlocPartiel } from './collecteur-conversation.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'gestionnaire-conversations' });
@@ -69,6 +69,8 @@ export interface DetailConversation {
   readonly genere: boolean;
   readonly active: boolean;
   readonly contextePct: number | null;
+  /** Bloc en cours de frappe (streaming token par token), ou `null`. */
+  readonly partiel: BlocPartiel | null;
 }
 
 export interface ResumeEvenements {
@@ -77,6 +79,7 @@ export interface ResumeEvenements {
   readonly genere: boolean;
   readonly active: boolean;
   readonly contextePct: number | null;
+  readonly partiel: BlocPartiel | null;
 }
 
 export interface EntreeListeConversation {
@@ -139,6 +142,7 @@ export class GestionnaireConversations {
       genere: this.#genere(id),
       active: this.#sessions.has(id),
       contextePct: this.#contextePct(id),
+      partiel: this.#partiel(id),
     };
   }
 
@@ -153,6 +157,7 @@ export class GestionnaireConversations {
       genere: this.#genere(id),
       active: this.#sessions.has(id),
       contextePct: this.#contextePct(id),
+      partiel: this.#partiel(id),
     };
   }
 
@@ -202,6 +207,10 @@ export class GestionnaireConversations {
 
   #genere(id: string): boolean {
     return this.#sessions.get(id)?.collecteur.genere ?? false;
+  }
+
+  #partiel(id: string): BlocPartiel | null {
+    return this.#sessions.get(id)?.collecteur.partiel ?? null;
   }
 
   #contextePct(id: string): number | null {

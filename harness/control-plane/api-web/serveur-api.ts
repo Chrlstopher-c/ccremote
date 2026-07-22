@@ -103,6 +103,8 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
       generating: resume.genere,
       active: resume.active,
       contextPct: resume.contextePct,
+      // `☠` Le bloc en cours de frappe — c'est LUI qui fait le streaming visible.
+      partial: resume.partiel,
     });
   }
 
@@ -118,6 +120,7 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
       generating: d.genere,
       active: d.active,
       contextPct: d.contextePct,
+      partial: d.partiel,
     });
   }
 

@@ -23,8 +23,15 @@ fi
 
 echo "→ Envoi des sources du harness"
 ssh $SSH_OPTS "$TARGET" "mkdir -p $REMOTE_DIR"
+# ☠ PERTE DE DONNÉES RÉELLE (2026-07-23) : `--exclude '*.db'` ne couvre PAS
+# `registre.db-wal` ni `registre.db-shm`. Le registre est en mode WAL — les
+# écritures récentes vivent dans le `-wal` (535 Ko observés contre 4 Ko pour le
+# `.db` lui-même). `--delete` les effaçait donc à CHAQUE déploiement : une
+# conversation créée puis un redéploiement, et elle avait disparu. Le motif doit
+# couvrir les fichiers annexes de SQLite, pas seulement l'extension nue.
 rsync -az --delete \
-  --exclude node_modules --exclude '*.db' --exclude '.env' --exclude 'logs' \
+  --exclude node_modules --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
+  --exclude '.env' --exclude 'logs' \
   -e "ssh $SSH_OPTS" \
   /mnt/projects/ccremote/harness/ "$TARGET:$REMOTE_DIR/"
 

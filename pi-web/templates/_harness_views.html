@@ -111,29 +111,28 @@
       <div class="flex-1 overflow-y-auto px-4 lg:px-7" id="hChatScroll">
         <div class="py-4 flex flex-col gap-4" id="hChatBody"></div>
       </div>
-      <div class="border-t px-4 lg:px-7 py-3" style="border-color: var(--line);">
-        <div class="model-row">
-          <div class="msel"><select id="hSelModel"></select></div>
-          <div class="msel"><select id="hSelEffort"></select></div>
-        </div>
-        <div class="model-row" style="align-items:center;">
-          <label class="msel" style="display:flex;gap:5px;align-items:center;font-size:10.5px;color:var(--ink-3);flex:0;white-space:nowrap;">
-            <input type="checkbox" id="hChkFastMode" style="margin:0;"> mode rapide
-          </label>
-          <label class="msel" style="display:flex;gap:5px;align-items:center;font-size:10.5px;color:var(--ink-3);flex:0;white-space:nowrap;">
-            <input type="checkbox" id="hChkUltracode" style="margin:0;"> ultracode
-          </label>
-        </div>
-        <div class="model-hint" id="hModelHint"></div>
-        <div class="input-wrap rounded-2xl border px-4 py-3" style="border-color: var(--line-2); background: var(--card);">
-          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe…" class="w-full bg-transparent text-[14px] leading-relaxed resize-none outline-none" style="color: var(--ink);"></textarea>
-          <div class="flex items-center justify-end mt-2">
-            <button id="hBtnOrchSend" class="btn-primary rounded-lg p-2">
+      <div class="orch-composer">
+        <div class="composer-shell">
+          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe…"></textarea>
+          <div class="composer-foot">
+            <div class="composer-settings">
+              <label class="pill-select" title="Modèle de l'orchestrateur">
+                <select id="hSelModel"></select>
+                <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </label>
+              <label class="pill-select" title="Niveau de raisonnement">
+                <select id="hSelEffort"></select>
+                <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </label>
+              <label class="pill-toggle" title="Mode rapide"><input type="checkbox" id="hChkFastMode"><span>rapide</span></label>
+              <label class="pill-toggle" title="ultracode"><input type="checkbox" id="hChkUltracode"><span>ultracode</span></label>
+            </div>
+            <button id="hBtnOrchSend" class="composer-send" title="Envoyer">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
         </div>
-        <div style="font-size:10px;color:var(--ink-3);text-align:center;margin-top:7px;">Les boutons de sûreté ne passent pas par l'orchestrateur (H-57).</div>
+        <div class="composer-hint" id="hModelHint"></div>
       </div>
       <div class="px-4 lg:px-7 harness-safety-bar"></div>
     </div>

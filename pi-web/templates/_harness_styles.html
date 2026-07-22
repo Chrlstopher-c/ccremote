@@ -161,24 +161,63 @@
   .conv-new { flex: 0 0 auto; border: 1px dashed var(--line-2); border-radius: 999px; background: none; color: var(--accent-2); font-size: 12px; font-weight: 600; padding: 5px 11px; cursor: pointer; }
 
   /* ---- streaming : réflexion repliable, puce d'outil, curseur vivant ---- */
-  .orch-think { margin: 4px 0 8px; border-left: 2px solid var(--line-2); background: var(--bg-2); border-radius: 0 8px 8px 0; }
-  .orch-think > summary { list-style: none; cursor: pointer; padding: 6px 10px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
+  .orch-think { margin: 2px 0 10px; border: 1px solid var(--line); background: var(--bg-2); border-radius: 11px; overflow: hidden; }
+  .orch-think > summary { list-style: none; cursor: pointer; padding: 8px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; display: flex; align-items: center; gap: 7px; user-select: none; }
   .orch-think > summary::-webkit-details-marker { display: none; }
-  .orch-think > summary::before { content: '▸ '; }
-  .orch-think[open] > summary::before { content: '▾ '; }
-  .orch-think .think-body { padding: 2px 12px 10px; font-size: 12px; line-height: 1.55; color: var(--ink-3); white-space: pre-wrap; font-style: italic; }
-  .orch-tool { display: inline-flex; align-items: center; gap: 6px; margin: 3px 0; padding: 3px 9px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; font-size: 10.5px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
-  .orch-tool code { color: var(--accent-2); }
-  .orch-err { margin: 4px 0; padding: 7px 10px; background: var(--err-soft); color: var(--err); border-radius: 8px; font-size: 12px; }
-  .orch-cursor { display: inline-block; width: 7px; height: 14px; background: var(--accent-2); margin-left: 2px; vertical-align: text-bottom; animation: orchBlink 1s steps(2) infinite; }
+  .orch-think > summary::after { content: ''; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); margin-left: auto; transition: transform .18s ease; }
+  .orch-think[open] > summary::after { transform: rotate(45deg); }
+  .orch-think > summary:hover { color: var(--ink-2); }
+  .orch-think .think-body { padding: 0 13px 11px; font-size: 12.5px; line-height: 1.62; color: var(--ink-2); white-space: pre-wrap; border-top: 1px solid var(--line); padding-top: 10px; }
+  .orch-think.live > summary { color: var(--accent-2); }
+
+  .orch-tool { display: inline-flex; align-items: center; gap: 7px; margin: 3px 6px 3px 0; padding: 4px 11px; background: var(--card); border: 1px solid var(--line-2); border-radius: 999px; font-size: 10.5px; color: var(--ink-2); font-family: 'JetBrains Mono', monospace; }
+  .orch-tool::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--accent-2); flex: 0 0 auto; }
+  .orch-err { margin: 5px 0; padding: 9px 12px; background: var(--err-soft); color: var(--err); border-radius: 10px; font-size: 12.5px; line-height: 1.5; }
+  .orch-cursor { display: inline-block; width: 2px; height: 15px; background: var(--accent-2); margin-left: 3px; vertical-align: text-bottom; animation: orchBlink 1.05s steps(2) infinite; }
   @keyframes orchBlink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
-  .conv-empty { text-align: center; color: var(--ink-3); font-size: 12.5px; padding: 40px 20px; line-height: 1.6; }
-  .model-row { display: flex; gap: 6px; margin-bottom: 8px; }
-  .msel { flex: 1; min-width: 0; }
-  .msel select { width: 100%; border: 1px solid var(--line-2); background: var(--card); border-radius: 9px; padding: 6px 8px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
-  .msel select:disabled { opacity: .5; }
-  .model-hint { font-size: 10px; color: var(--ink-3); line-height: 1.45; margin-bottom: 8px; }
-  .model-hint strong { color: var(--warn); }
+
+  /* pastille « il travaille » avant le premier token */
+  .orch-typing { display: inline-flex; align-items: center; gap: 4px; padding: 3px 0; }
+  .orch-typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); display: block; animation: orchDot 1.15s ease-in-out infinite; }
+  .orch-typing i:nth-child(2) { animation-delay: .16s; }
+  .orch-typing i:nth-child(3) { animation-delay: .32s; }
+  @keyframes orchDot { 0%,60%,100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+  .conv-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 52px 20px; line-height: 1.65; }
+  .conv-empty .ce-t { font-family: 'Source Serif 4', serif; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
+  /* ---- zone de composition : réglages intégrés, plus de selects bruts ---- */
+  .orch-composer { border-top: 1px solid var(--line); padding: 12px 16px 14px; }
+  @media (min-width: 1024px) { .orch-composer { padding: 12px 28px 16px; } }
+  .composer-shell { border: 1px solid var(--line-2); background: var(--card); border-radius: 16px; padding: 12px 14px 10px; transition: border-color .18s ease, box-shadow .18s ease; }
+  .composer-shell:focus-within { border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-soft, rgba(199,106,60,.10)); }
+  .composer-shell textarea { width: 100%; background: transparent; border: none; outline: none; resize: none; color: var(--ink); font-size: 14px; line-height: 1.6; max-height: 180px; }
+  .composer-shell textarea::placeholder { color: var(--ink-3); }
+  .composer-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .composer-settings { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .composer-settings::-webkit-scrollbar { display: none; }
+
+  /* pilule de sélection — remplace le <select> brut pleine largeur */
+  .pill-select { position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; border: 1px solid var(--line-2); background: var(--bg-2); border-radius: 999px; padding: 0 20px 0 10px; height: 26px; transition: border-color .15s ease, background .15s ease; }
+  .pill-select:hover { border-color: var(--ink-3); }
+  .pill-select select { appearance: none; -webkit-appearance: none; background: none; border: none; outline: none; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-2); padding: 0; max-width: 165px; text-overflow: ellipsis; cursor: pointer; }
+  .pill-select .chev { position: absolute; right: 7px; color: var(--ink-3); pointer-events: none; }
+  .pill-select:has(select:disabled) { opacity: .45; }
+
+  /* bascule compacte — remplace la case à cocher qui se chevauchait */
+  .pill-toggle { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; height: 26px; padding: 0 11px; border: 1px solid var(--line-2); background: var(--bg-2); border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: var(--ink-3); cursor: pointer; white-space: nowrap; transition: all .15s ease; user-select: none; }
+  .pill-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+  .pill-toggle::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); transition: background .15s ease; }
+  .pill-toggle:hover { border-color: var(--ink-3); }
+  .pill-toggle:has(input:checked) { border-color: var(--accent-2); background: var(--card); color: var(--ink); }
+  .pill-toggle:has(input:checked)::before { background: var(--accent-2); }
+  .pill-toggle:has(input:disabled) { opacity: .4; cursor: not-allowed; }
+
+  .composer-send { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 10px; background: var(--ink); color: var(--bg); display: inline-flex; align-items: center; justify-content: center; transition: background .18s ease, transform .12s ease; }
+  .composer-send:hover { background: #2C2A28; }
+  .composer-send:active { transform: scale(.94); }
+  .composer-send[disabled] { opacity: .35; pointer-events: none; }
+  .composer-hint { font-size: 10.5px; color: var(--ink-3); line-height: 1.45; margin-top: 8px; padding: 0 2px; }
+  .composer-hint strong { color: var(--warn); }
   .mandate-card { border: 1px solid var(--line-2); border-radius: 13px; overflow: hidden; margin: 8px 0; background: var(--card); }
   .mandate-card .mh2 { padding: 10px 13px; background: var(--bg-2); font-size: 11px; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
   .mandate-card .mb { padding: 12px 13px; }

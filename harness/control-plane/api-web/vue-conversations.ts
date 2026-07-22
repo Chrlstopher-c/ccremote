@@ -31,12 +31,19 @@ export interface DetailConversationApi extends ConversationApi {
   readonly generating: boolean;
 }
 
+/** Bloc en cours de frappe — sert le streaming token par token côté interface. */
+export interface PartielApi {
+  readonly type: TypeEvenementConversation;
+  readonly contenu: string;
+}
+
 export interface EvenementsApi {
   readonly events: readonly EvenementApi[];
   readonly cursor: number;
   readonly generating: boolean;
   readonly active: boolean;
   readonly contextPct: number | null;
+  readonly partial: PartielApi | null;
 }
 
 /** Port des conversations, vu de l'API. Implémenté par `GestionnaireConversations`. */
@@ -60,6 +67,7 @@ export interface PortConversations {
     readonly genere: boolean;
     readonly active: boolean;
     readonly contextePct: number | null;
+    readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
   evenementsDepuis(id: string, depuis: number): {
     readonly evenements: readonly EvenementConversation[];
@@ -67,6 +75,7 @@ export interface PortConversations {
     readonly genere: boolean;
     readonly active: boolean;
     readonly contextePct: number | null;
+    readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
   envoyer(id: string, texte: string): Promise<void>;
 }

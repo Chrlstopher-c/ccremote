@@ -9,9 +9,12 @@ let hModelsCache = [];
 
 // État de la vue conversation. Un seul fil ouvert à la fois ; le polling ne tourne
 // que pendant une génération.
-const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [] };
+// ☠ `barreSig` : la barre n'est réécrite que si son contenu change RÉELLEMENT.
+// Réécrire innerHTML à chaque sondage faisait re-jouer les animations d'entrée —
+// c'est ce qui donnait l'impression que tout clignotait pendant l'auto-refresh.
+const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [], barreSig: '', partielEl: null };
 const HORCH_KEY = 'ccremote.orch.conv';
-const HORCH_POLL_MS = 600;
+const HORCH_POLL_MS = 400;
 
 // ---- cycle de vie de la vue -------------------------------------------------
 async function hInitOrchestrateur() {
@@ -41,11 +44,17 @@ function hRenderConvBar(list, erreur) {
   if (!bar) return;
   if (erreur) {
     bar.innerHTML = `<span style="font-size:11px;color:var(--err);">${escapeHtml(erreur)}</span>`;
+    hOrch.barreSig = 'err:' + erreur;
     return;
   }
+  // ☠ Signature de l'état affiché : sans ce garde, chaque sondage réécrivait la
+  // barre à l'identique et faisait clignoter les pastilles.
+  const sig = JSON.stringify([hOrch.convId, list.map((c) => [c.id, c.titre, c.active, c.contextPct])]);
+  if (sig === hOrch.barreSig) return;
+  hOrch.barreSig = sig;
   const chips = list.map((c) => {
     const active = c.id === hOrch.convId;
-    const ctx = (typeof c.contextPct === 'number') ? ` · ${c.contextPct}%` : '';
+    const ctx = (typeof c.contextPct === 'number') ? ` · contexte ${c.contextPct} %` : '';
     return `<div class="conv-chip ${active ? 'active' : ''}" onclick="hOpenConversation('${c.id}')" title="${escapeHtml(c.titre)}${ctx}">
       ${c.active ? '<span class="dot"></span>' : ''}
       <span class="lbl">${escapeHtml(c.titre)}</span>
@@ -75,7 +84,7 @@ async function hArchiveConversation(id) {
 // ---- ouverture + rendu complet d'un fil ------------------------------------
 async function hOpenConversation(id) {
   hStopPoll();
-  hOrch.convId = id; hOrch.cursor = 0; hOrch.cur = null;
+  hOrch.convId = id; hOrch.cursor = 0; hOrch.cur = null; hOrch.partielEl = null;
   localStorage.setItem(HORCH_KEY, id);
   hRenderConvBar(hOrch.list);
   const chat = document.getElementById('hChatBody');
@@ -88,44 +97,129 @@ async function hOpenConversation(id) {
   hOrch.cursor = d.cursor || 0;
   hOrch.generating = !!d.generating;
   if (!d.events || d.events.length === 0) {
-    chat.innerHTML = `<div class="conv-empty">Nouvelle conversation.<br>Écris à l'orchestrateur — sa session démarre au premier message.</div>`;
+    chat.innerHTML = `<div class="conv-empty"><div class="ce-t">Nouvelle conversation</div>Écris à l'orchestrateur — sa session démarre au premier message.</div>`;
   }
+  hRenderPartiel(d.partial || null);
+  hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
   hScrollChat();
   if (hOrch.generating) hStartPoll();
 }
 
 // ---- rendu incrémental d'un événement (le cœur du streaming) ---------------
+// ☠ Aucun nœud n'est jamais recréé ni réécrit : chaque événement est posé une
+// fois, identifié par son `seq`. C'est ce qui supprime le clignotement — et ce
+// qui permet au bloc partiel de grandir en place, token après token.
 function hEnsureAssistant(chat) {
-  if (hOrch.cur) return hOrch.cur;
+  if (hOrch.cur && hOrch.cur.isConnected) return hOrch.cur;
   const a = document.createElement('div'); a.className = 'bubble-a';
   chat.appendChild(a); hOrch.cur = a; return a;
 }
 function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
 
+/** Construit le nœud d'un bloc. `live` = bloc encore en cours de frappe. */
+function hBlocNode(type, contenu, live) {
+  if (type === 'texte') {
+    const p = document.createElement('p');
+    // ☠ Nœud texte créé explicitement : `textContent = ''` n'en crée aucun, et la
+    // mise à jour en place viserait alors le curseur au lieu du texte.
+    p.appendChild(document.createTextNode(contenu));
+    if (live) {
+      const c = document.createElement('span'); c.className = 'orch-cursor';
+      p.appendChild(c);
+    }
+    return p;
+  }
+  if (type === 'reflexion') {
+    const d = document.createElement('details');
+    d.className = 'orch-think' + (live ? ' live' : '');
+    if (live) d.open = true; // on voit l'orchestrateur réfléchir, puis ça se replie
+    const s = document.createElement('summary'); s.textContent = live ? 'Réflexion en cours…' : 'Réflexion';
+    const b = document.createElement('div'); b.className = 'think-body'; b.textContent = contenu;
+    d.append(s, b);
+    return d;
+  }
+  if (type === 'outil') {
+    const t = document.createElement('div'); t.className = 'orch-tool';
+    t.textContent = hToolLabel(contenu);
+    return t;
+  }
+  if (type === 'erreur') {
+    const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
+    return e;
+  }
+  return null;
+}
+
 function hAppendEvent(ev) {
   const chat = document.getElementById('hChatBody');
   const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
+  // Garde d'idempotence : un événement déjà posé n'est jamais reposé.
+  if (ev.seq !== undefined && chat.querySelector(`[data-seq="${ev.seq}"]`)) return;
+
   if (ev.type === 'operateur') {
+    // ☠ La bulle a pu être posée en optimiste à l'envoi : on l'ADOPTE (on lui
+    // donne son `seq`) au lieu d'en créer une seconde identique juste en dessous.
+    const optimiste = [...chat.querySelectorAll('.bubble-u[data-optimiste]')]
+      .find((n) => n.textContent === ev.contenu);
+    if (optimiste) {
+      delete optimiste.dataset.optimiste;
+      if (ev.seq !== undefined) optimiste.dataset.seq = ev.seq;
+      hOrch.cur = null; return;
+    }
     const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = ev.contenu;
+    if (ev.seq !== undefined) u.dataset.seq = ev.seq;
     chat.appendChild(u); hOrch.cur = null; return;
   }
-  const grp = hEnsureAssistant(chat);
-  if (ev.type === 'texte') {
-    const p = document.createElement('p'); p.textContent = ev.contenu; grp.appendChild(p);
-  } else if (ev.type === 'reflexion') {
-    const d = document.createElement('details'); d.className = 'orch-think';
-    const s = document.createElement('summary'); s.textContent = 'Réflexion';
-    const b = document.createElement('div'); b.className = 'think-body'; b.textContent = ev.contenu;
-    d.appendChild(s); d.appendChild(b); grp.appendChild(d);
-  } else if (ev.type === 'outil') {
-    const t = document.createElement('div'); t.className = 'orch-tool';
-    const code = document.createElement('code'); code.textContent = hToolLabel(ev.contenu);
-    t.append('→ ', code); grp.appendChild(t);
-  } else if (ev.type === 'erreur') {
-    const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = ev.contenu; grp.appendChild(e);
-  } else if (ev.type === 'resultat') {
-    hOrch.cur = null; // le tour est fini : le prochain bloc ouvrira un nouveau groupe
+  if (ev.type === 'resultat') { hOrch.cur = null; return; } // fin de tour : le prochain bloc ouvre un groupe
+
+  const noeud = hBlocNode(ev.type, ev.contenu, false);
+  if (!noeud) return;
+  if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
+  hEnsureAssistant(chat).appendChild(noeud);
+}
+
+/**
+ * Reflète le bloc en cours de frappe. Mis à jour EN PLACE tant qu'il est du même
+ * type : c'est ce qui donne le texte qui s'écrit, sans reconstruire le DOM.
+ */
+function hRenderPartiel(partiel) {
+  const chat = document.getElementById('hChatBody');
+  // ☠ Mesuré sur Opus : le bloc de réflexion s'ouvre jusqu'à ~8 s AVANT de porter
+  // le moindre texte (souvent aucun — la réflexion peut rester masquée). Afficher
+  // un bloc « Réflexion » vide pendant ce temps donnerait un cadre creux : on
+  // laisse la pastille d'activité jusqu'au premier caractère réel.
+  if (!partiel || !partiel.contenu) { hClearPartiel(); return; }
+  const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
+
+  if (hOrch.partielEl && hOrch.partielEl.isConnected && hOrch.partielEl.dataset.ptype === partiel.type) {
+    if (partiel.type === 'reflexion') hOrch.partielEl.querySelector('.think-body').textContent = partiel.contenu;
+    else {
+      hOrch.partielEl.firstChild.nodeValue = partiel.contenu; // le curseur reste en place
+    }
+    return;
   }
+  hClearPartiel();
+  const noeud = hBlocNode(partiel.type, partiel.contenu, true);
+  if (!noeud) return;
+  noeud.dataset.ptype = partiel.type;
+  hEnsureAssistant(chat).appendChild(noeud);
+  hOrch.partielEl = noeud;
+}
+
+function hClearPartiel() {
+  if (hOrch.partielEl && hOrch.partielEl.isConnected) hOrch.partielEl.remove();
+  hOrch.partielEl = null;
+}
+
+/** Pastille « il travaille » : entre l'envoi et le premier token. */
+function hShowTyping(actif) {
+  const chat = document.getElementById('hChatBody');
+  const existant = chat.querySelector('.orch-typing');
+  if (!actif) { if (existant) existant.remove(); return; }
+  if (existant || hOrch.partielEl) return;
+  const t = document.createElement('div'); t.className = 'orch-typing';
+  t.innerHTML = '<i></i><i></i><i></i>';
+  hEnsureAssistant(chat).appendChild(t);
 }
 
 // ---- polling de génération --------------------------------------------------
@@ -138,11 +232,28 @@ async function hPollNow() {
   if (id !== hOrch.convId) return; // changement de fil pendant l'attente
   if (r.erreur) { hStopPoll(); return; } // silencieux : un prochain envoi relancera
   const d = r.data || {};
+  const auBas = hEstEnBas();
+  // ☠ Ordre imposé : retirer le bloc en cours AVANT de poser les blocs finalisés,
+  // sinon un bloc terminé s'insérerait derrière le texte encore en train de
+  // s'écrire et le fil se lirait à l'envers.
+  if (d.events && d.events.length) hClearPartiel();
   (d.events || []).forEach((ev) => { hAppendEvent(ev); hOrch.cursor = ev.seq; });
   hOrch.generating = !!d.generating;
-  if (d.events && d.events.length) hScrollChat();
+  hRenderPartiel(d.partial || null);
+  hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
+  if (auBas) hScrollChat();
   if (hOrch.generating) hOrch.timer = setTimeout(hPollNow, HORCH_POLL_MS);
-  else { hStopPoll(); hLoadConvList(); } // fin de tour : rafraîchit titres/ordre/contexte
+  else {
+    hStopPoll(); hShowTyping(false); hOrch.cur = null;
+    hLoadConvList(); // fin de tour : titres/ordre/contexte à jour
+  }
+}
+
+/** Ne recolle en bas que si l'opérateur y était déjà — sinon on lui vole sa lecture. */
+function hEstEnBas() {
+  const s = document.getElementById('hChatScroll');
+  if (!s) return true;
+  return s.scrollHeight - s.scrollTop - s.clientHeight < 80;
 }
 
 function hScrollChat() {
@@ -152,14 +263,30 @@ function hScrollChat() {
 // ---- envoi ------------------------------------------------------------------
 async function hSendOrchMessage() {
   const el = document.getElementById('hOrchInput');
+  const btn = document.getElementById('hBtnOrchSend');
   const text = (el.value || '').trim();
-  if (!text) return;
+  if (!text || hOrch.generating) return;
   if (!hOrch.convId) { await hNewConversation(); if (!hOrch.convId) return; }
   el.value = ''; el.style.height = 'auto';
+  // Affichage optimiste : le message part à l'écran tout de suite. Il portera son
+  // `seq` au prochain sondage, la garde d'idempotence évitera le doublon.
+  const chat = document.getElementById('hChatBody');
+  const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
+  const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = text;
+  u.dataset.optimiste = '1';
+  chat.appendChild(u); hOrch.cur = null;
+  hOrch.generating = true; btn.disabled = true;
+  hShowTyping(true);
+  hScrollChat();
+
   const r = await HarnessAPI.sendConversationMessage(hOrch.convId, text);
+  btn.disabled = false;
   // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.
-  if (!r.ok) { hAppendEvent({ type: 'erreur', contenu: r.erreur || 'Message non transmis' }); hScrollChat(); return; }
-  hOrch.generating = true;
+  if (!r.ok) {
+    hOrch.generating = false; hShowTyping(false);
+    hAppendEvent({ type: 'erreur', contenu: r.erreur || 'Message non transmis' });
+    hScrollChat(); return;
+  }
   hStartPoll();
 }
 
@@ -284,7 +411,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hChkFastMode').addEventListener('change', (e) => { HarnessState.orchModel.fastMode = e.target.checked; hUpdateModelHint(); });
   document.getElementById('hChkUltracode').addEventListener('change', (e) => { HarnessState.orchModel.ultracode = e.target.checked; hUpdateModelHint(); });
   document.getElementById('hBtnOrchSend').addEventListener('click', hSendOrchMessage);
-  document.getElementById('hOrchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); hSendOrchMessage(); } });
+  const zone = document.getElementById('hOrchInput');
+  zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); hSendOrchMessage(); } });
+  // Le champ grandit avec le texte, jusqu'au plafond fixé en CSS (max-height).
+  zone.addEventListener('input', () => { zone.style.height = 'auto'; zone.style.height = zone.scrollHeight + 'px'; });
   document.getElementById('hBtnNewMission').addEventListener('click', () => {
     if (!HarnessAPI._isPcOnline()) { showToast('PC absent — impossible de dispatcher pour l\'instant', 'warn'); return; }
     document.getElementById('hFCritereField').classList.remove('has-error');
