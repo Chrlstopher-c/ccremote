@@ -69,6 +69,10 @@ class LienFactice implements Lien, CanalControleProcessus {
     return 0;
   }
 
+  coupuresSilencieusesDetectees(): number {
+    return 0;
+  }
+
   fermer(): void {
     this.#ferme = true;
   }

@@ -198,3 +198,163 @@ describe('LienWebSocket — canal principal réel (D.1.2, D.1.3)', () => {
     expect(websockets[1]!.envoyes.map((t) => decoderTrame(t).seq)).toEqual([1]);
   });
 });
+
+describe('LienWebSocket — vivacité applicative, dette de M-10 comblée (H-69)', () => {
+  test('reçoit un PING (rôle du pair) : répond PONG immédiatement, sans passer par un agent', async () => {
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ connecter: async () => ws });
+    await lien.connecter();
+
+    ws.simulerMessage(encoderTrame(TAG.PING, 0, new Uint8Array(0)));
+
+    const pong = ws.envoyes.map(decoderTrame).find((t) => t.tag === TAG.PONG);
+    expect(pong).toBeDefined();
+  });
+
+  test('lien idle : un tic de vivacité sonde le pair par PING, coût = une trame', async () => {
+    const horloge = creerHorlogeManuelle();
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ horloge, connecter: async () => ws, intervalePingMs: 5000, pingsManquesAvantMort: 3 });
+    await lien.connecter();
+
+    horloge.declencherToutes(); // un seul tic de vivacité en attente
+
+    const pings = ws.envoyes.map(decoderTrame).filter((t) => t.tag === TAG.PING);
+    expect(pings).toHaveLength(1);
+  });
+
+  test("mission active : tant qu'un trafic circule à chaque tic, aucun PING n'est jamais nécessaire", async () => {
+    const horloge = creerHorlogeManuelle();
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ horloge, connecter: async () => ws, intervalePingMs: 5000, pingsManquesAvantMort: 3 });
+    await lien.connecter();
+
+    // Le tic envoie tout de même une sonde (coût fixe, négligeable) — mais ce
+    // qui compte pour la mission est qu'un flux réel (ici l'ACK que le pair
+    // renvoie pour chaque écriture, comme en production) maintienne le
+    // compteur de tics manqués à zéro et ne déclenche donc jamais de coupure.
+    for (let i = 0; i < 5; i++) {
+      lien.versPc().ecrire(enc(`tour-${i}`));
+      ws.simulerMessage(encoderTrame(TAG.ACK, 0, encoderTexte(String(i))));
+      horloge.declencherToutes();
+    }
+
+    expect(lien.etat()).toBe('ouvert');
+    expect(lien.coupuresSilencieusesDetectees()).toBe(0);
+  });
+
+  test('agent qui réfléchit longtemps sans rien émettre : jamais confondu avec un tunnel mort tant que le pair répond', async () => {
+    const horloge = creerHorlogeManuelle();
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ horloge, connecter: async () => ws, intervalePingMs: 5000, pingsManquesAvantMort: 3 });
+    await lien.connecter();
+
+    // 10 tics consécutifs sans la moindre donnée applicative (aucun tour de
+    // l'agent, aucun octet stdout) — mais le pair répond systématiquement au
+    // ping, preuve que le lien est réellement vivant. Bien au-delà du seuil
+    // de 3, le lien ne doit jamais être déclaré mort.
+    for (let i = 0; i < 10; i++) {
+      horloge.declencherToutes();
+      const dernierPing = ws.envoyes.map(decoderTrame).filter((t) => t.tag === TAG.PING).at(-1);
+      expect(dernierPing).toBeDefined();
+      ws.simulerMessage(encoderTrame(TAG.PONG, dernierPing!.seq, new Uint8Array(0)));
+    }
+
+    expect(lien.etat()).toBe('ouvert');
+    expect(lien.coupuresSilencieusesDetectees()).toBe(0);
+  });
+
+  test('un seul ping perdu ne déclenche rien : le compteur revient à zéro dès la moindre activité', async () => {
+    const horloge = creerHorlogeManuelle();
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ horloge, connecter: async () => ws, intervalePingMs: 5000, pingsManquesAvantMort: 3 });
+    await lien.connecter();
+
+    horloge.declencherToutes(); // tic 1 : rien ne répond — un « manqué »
+    horloge.declencherToutes(); // tic 2 : toujours rien — deux « manqués », sous le seuil de 3
+
+    // Un octet arrive enfin (STDOUT distant, ou tout autre tag) : preuve de vie.
+    ws.simulerMessage(encoderTrame(TAG.STDOUT, 0, enc('x')));
+
+    horloge.declencherToutes(); // tic 3 : ne compte pas comme un 3ème manqué
+    horloge.declencherToutes(); // tic 4
+    horloge.declencherToutes(); // tic 5 — jamais 3 manqués *consécutifs*
+
+    expect(lien.etat()).toBe('ouvert');
+    expect(lien.coupuresSilencieusesDetectees()).toBe(0);
+  });
+
+  test(
+    "coupure silencieuse (ni close ni error, le socket reste 'ouvert') : détectée au seuil, " +
+      'même chemin de reprise (backoff, rattachement, rejeu) qu\'une coupure signalée',
+    async () => {
+      const horloge = creerHorlogeManuelle();
+      const websockets: FakeWebSocket[] = [];
+      const lien = new LienWebSocket({
+        horloge,
+        connecter: async () => {
+          const ws = new FakeWebSocket();
+          websockets.push(ws);
+          return ws;
+        },
+        intervalePingMs: 5000,
+        pingsManquesAvantMort: 3,
+      });
+      await lien.connecter();
+
+      lien.versPc().ecrire(enc('a')); // jamais acquittée : doit survivre à la reprise
+
+      // Le pair ne répond plus jamais — silence total, mais `readyState` reste
+      // « ouvert » : ni `close` ni `error` ne se déclenchent (c'est la panne
+      // par définition indiscernable d'un agent qui réfléchit).
+      horloge.declencherToutes(); // tic 1 : manqué
+      expect(lien.etat()).toBe('ouvert');
+      horloge.declencherToutes(); // tic 2 : manqué
+      expect(lien.etat()).toBe('ouvert');
+      expect(lien.coupuresSilencieusesDetectees()).toBe(0);
+
+      horloge.declencherToutes(); // tic 3 : seuil atteint, coupure déclarée
+
+      expect(lien.etat()).toBe('coupe_transitoire');
+      expect(lien.coupuresSilencieusesDetectees()).toBe(1);
+      // D.2.1 : le transitoire — signalé ou silencieux — n'est jamais remonté.
+      expect(lien.remonteesTransitoires()).toBe(0);
+
+      // Chemin de reprise partagé : le backoff planifié se déclenche comme
+      // pour n'importe quelle coupure transitoire.
+      horloge.declencherToutes();
+      await Promise.resolve();
+
+      expect(lien.etat()).toBe('ouvert');
+      expect(lien.rattachements()).toBe(2); // connexion initiale + un rattachement
+      // Rejeu du non-acquitté sur la nouvelle connexion, comme D.2.2 l'exige.
+      expect(websockets[1]!.envoyes.map((t) => decoderTrame(t).seq)).toContain(0);
+    },
+  );
+
+  test('seuil configurable : pingsManquesAvantMort=1 détecte dès le premier silence', async () => {
+    const horloge = creerHorlogeManuelle();
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ horloge, connecter: async () => ws, intervalePingMs: 1000, pingsManquesAvantMort: 1 });
+    await lien.connecter();
+
+    horloge.declencherToutes();
+
+    expect(lien.etat()).toBe('coupe_transitoire');
+    expect(lien.coupuresSilencieusesDetectees()).toBe(1);
+  });
+
+  test('intervalePingMs <= 0 : opt-out explicite, aucun ping envoyé, aucune fausse détection', async () => {
+    const horloge = creerHorlogeManuelle();
+    const ws = new FakeWebSocket();
+    const lien = new LienWebSocket({ horloge, connecter: async () => ws, intervalePingMs: 0 });
+    await lien.connecter();
+
+    // Rien n'est planifié : déclencher l'horloge ne fait rien, le lien reste sain.
+    horloge.declencherToutes();
+
+    expect(ws.envoyes.map(decoderTrame).some((t) => t.tag === TAG.PING)).toBe(false);
+    expect(lien.etat()).toBe('ouvert');
+    expect(lien.coupuresSilencieusesDetectees()).toBe(0);
+  });
+});

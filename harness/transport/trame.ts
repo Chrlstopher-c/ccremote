@@ -4,9 +4,11 @@
  *
  * `☠` Le tag distingue les voies logiques (STDIN/STDOUT = canal principal,
  * H-12 : payload jamais interprété ; STDERR/KILL/EXIT = voie de contrôle,
- * B.2.3 ; ACK = accusé de réception du canal principal, D.2.2 local). Le
- * multiplexage sur une seule connexion physique est un détail d'implémentation
- * — il ne mélange jamais les octets du canal principal avec autre chose.
+ * B.2.3 ; ACK = accusé de réception du canal principal, D.2.2 local ;
+ * PING/PONG = vivacité applicative du lien lui-même, dette de M-10 comblée —
+ * voir DECISION-TRANSPORT.md). Le multiplexage sur une seule connexion
+ * physique est un détail d'implémentation — il ne mélange jamais les octets
+ * du canal principal avec autre chose.
  */
 
 /** Longueur de l'en-tête : 1 octet de tag + 4 octets de séquence + 4 octets de longueur. */
@@ -20,6 +22,10 @@ export const TAG = {
   KILL: 0x05,
   EXIT: 0x06,
   ERREUR_SPAWN: 0x07,
+  /** Sonde de vivacité — envoyée par l'un ou l'autre bout, jamais par l'agent. */
+  PING: 0x08,
+  /** Réponse au PING, générée par la couche transport du pair, immédiate. */
+  PONG: 0x09,
 } as const;
 
 export type TagTrame = (typeof TAG)[keyof typeof TAG];

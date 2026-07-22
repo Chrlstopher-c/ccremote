@@ -114,6 +114,11 @@ Brief type qui a fonctionné au Lot 0, à reproduire :
 - « une `⚠ HYP` constatée fausse ⇒ remonter, ne pas improviser »
 - « tout `☠ CASSE` de ta branche a un test associé »
 - rappel de ne pas casser les tests existants (compte de référence à jour ci-dessus)
+- `☠` **en parallélisme, interdire `git stash` / `git checkout` / `git reset`** : d'autres agents
+  écrivent en même temps, ces commandes leur retirent leurs fichiers sous les pieds. Pour vérifier si
+  un échec préexiste, lire la version commitée via `git show HEAD:<chemin>`, sans toucher au disque.
+- `☠` **préciser que le typecheck peut être rouge à cause d'un autre agent** : vérifier le chemin du
+  fichier fautif avant de conclure quoi que ce soit sur son propre travail.
 
 Correspondance mission → fichier de branche : voir le tableau de `../Upgrade/12-graphe-dependances.md`.
 
@@ -183,6 +188,8 @@ Protocole d'origine, conservé pour mémoire :
 | Plancher Sonnet validé sur l'alias | `'inherit'` ne garantit rien — valider sur le **modèle résolu** |
 | `res.changes` de bun:sqlite comme compteur métier | compte **aussi** les lignes supprimées en cascade (bug réel corrigé le 2026-07-22) |
 | Fencing qui ne rejette que les epochs **strictement inférieurs** | deux workers de même epoch coexistent sans trace — la panne #2 **avec** le fencing activé. Traiter l'égalité explicitement (bug réel corrigé) |
+| `git stash` dans un subagent pendant que d'autres agents écrivent | **retire leurs fichiers sous leurs pieds** : l'écriture suivante part d'un état incohérent, ou le travail disparaît. Vécu le 2026-07-22 (rattrapé de justesse, stash bien restauré). ⇒ **interdire explicitement `git stash`/`checkout`/`reset` dans tout brief lancé en parallèle** ; pour isoler un doute, lire le fichier commité via `git show HEAD:<chemin>` |
+| Attribuer à sa propre mission un typecheck rouge en parallélisme | les erreurs viennent souvent du dossier d'un **autre** agent en vol. Vérifier le chemin du fichier fautif avant de conclure |
 | Compter sur `canUseTool` pour l'audit ou le garde-fou | **mesuré le 2026-07-22 : en `permissionMode: 'auto'`, il n'est JAMAIS appelé** — pas même sur `rm -rf`. Le classifieur tranche seul. Ce n'est pas un défaut de câblage (prouvé : en `default` il est appelé, **après** le hook). ⇒ l'audit passe par `PreToolUse`, et le plancher de déni est le seul garde-fou mécanique restant |
 | `maxBudgetUsd` présenté comme l'anti-boucle | **faux** — un montant mesure du volume, pas une boucle. Voir **H-68** : paliers d'inspection + juge Haiku. `12 $ ≈ 6 min de Sonnet 5` |
 | API V2 du SDK (`unstable_v2_*`, `send()`/`stream()`) | **supprimée** en SDK 0.3.142, encore recommandée par des articles récents |

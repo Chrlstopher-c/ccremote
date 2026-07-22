@@ -11,6 +11,21 @@
  * backoff, et le canal de données rejoue ce qui n'a pas été acquitté. Seule
  * une fermeture dont le code appartient à la taxonomie (401/403/404/4090/
  * 4091/4092) est terminale et remonte.
+ *
+ * **Vivacité applicative (dette de M-10, H-69)** — un lien peut mourir sans
+ * jamais déclencher `close` ni `error` : le socket paraît vivant, plus rien ne
+ * transite. Rendu bruyant par un ping/pong applicatif : tant que le lien est
+ * `ouvert`, un tic de vivacité sonde le pair (`TAG.PING`) à chaque intervalle
+ * où aucun octet n'a été reçu depuis le tic précédent. Le pair — qui exécute
+ * la même classe, symétriquement — répond `TAG.PONG` **dans `#distribuer`**,
+ * jamais via l'agent qu'il transporte : c'est cette indépendance qui distingue
+ * un agent réellement lent (le transport répond, l'agent se tait) d'un tunnel
+ * mort (rien ne répond, ni l'agent ni le transport). Au-delà de
+ * `pingsManquesAvantMort` tics consécutifs sans le moindre octet reçu, la
+ * coupure est déclarée silencieuse et traitée par **exactement** le même
+ * chemin de reprise qu'une coupure signalée (`#entrerCoupeTransitoire` :
+ * même backoff, même compteur de rattachements, même rejeu du non-acquitté).
+ * Aucun second mécanisme de reprise n'est inventé.
  */
 
 import { CanalDonnees } from './canal-donnees.ts';
@@ -62,11 +77,34 @@ const RAISONS: Readonly<Record<CodeFermeture, string>> = {
 
 const BACKOFF_DEFAUT: readonly number[] = [500, 1000, 2000, 5000, 10_000];
 
+/**
+ * Cadence du sondage de vivacité. 15 s : assez court pour rester sous les
+ * délais usuels de coupure des NAT/routeurs Wi-Fi sur une coupure idle
+ * (souvent 30-60 s), assez long pour ne rien ajouter de mesurable au trafic
+ * d'une mission active.
+ */
+const INTERVALE_PING_MS_DEFAUT = 15_000;
+
+/**
+ * Tics consécutifs sans le moindre octet reçu avant de déclarer la coupure
+ * silencieuse. 3 : un unique ping perdu (congestion passagère) ne déclenche
+ * rien — le compteur revient à zéro dès qu'un seul octet, de n'importe quel
+ * tag, est reçu. Il faut un silence total sur trois intervalles pleins
+ * (~45 s par défaut) pour conclure à la mort du lien. Un faux positif détruit
+ * une mission valide (exigence de la mission) ; ce seuil est délibérément
+ * généreux plutôt que réactif.
+ */
+const PINGS_MANQUES_AVANT_MORT_DEFAUT = 3;
+
 export interface OptionsLienWebSocket {
   readonly connecter: ConnecteurWebSocket;
   readonly horloge?: HorlogeTransport;
   readonly backoffMs?: readonly number[];
   readonly modeIntegrite?: ModeIntegrite;
+  /** Cadence du ping de vivacité, ms. `<= 0` désactive le mécanisme (opt-out explicite). */
+  readonly intervalePingMs?: number;
+  /** Tics consécutifs sans octet reçu avant de déclarer une coupure silencieuse. */
+  readonly pingsManquesAvantMort?: number;
 }
 
 export class LienWebSocket implements Lien, CanalControleProcessus {
@@ -77,6 +115,10 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
   #tentative = 0;
   #annulerReconnexion: (() => void) | null = null;
   #killEnAttente: string | null = null;
+  #annulerVivacite: (() => void) | null = null;
+  #activiteDepuisTick = false;
+  #pingsManques = 0;
+  #coupuresSilencieuses = 0;
   readonly #stdin: CanalDonnees;
   readonly #stdout: CanalDonnees;
   readonly #abonnesFermeture: Array<(f: FermetureTerminale) => void> = [];
@@ -85,11 +127,16 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
   readonly #abonnesErreurSpawn: Array<(message: string) => void> = [];
   readonly #horloge: HorlogeTransport;
   readonly #backoff: readonly number[];
+  readonly #intervalePingMs: number;
+  readonly #pingsManquesAvantMort: number;
   readonly #log = transportLogger.child({ composant: 'lien-websocket' });
 
   constructor(private readonly options: OptionsLienWebSocket) {
     this.#horloge = options.horloge ?? HORLOGE_REELLE;
     this.#backoff = options.backoffMs ?? BACKOFF_DEFAUT;
+    this.#intervalePingMs = options.intervalePingMs ?? INTERVALE_PING_MS_DEFAUT;
+    // Plancher à 1 : un seuil nul ou négatif déclarerait le lien mort au premier tic.
+    this.#pingsManquesAvantMort = Math.max(1, options.pingsManquesAvantMort ?? PINGS_MANQUES_AVANT_MORT_DEFAUT);
     const mode = options.modeIntegrite ?? 'strict';
     this.#stdin = new CanalDonnees({ nom: 'pi->pc', modeIntegrite: mode, envoyer: (s, p) => this.#envoyer(TAG.STDIN, s, p) });
     this.#stdout = new CanalDonnees({ nom: 'pc->pi', modeIntegrite: mode, envoyer: (s, p) => this.#envoyer(TAG.STDOUT, s, p) });
@@ -136,6 +183,10 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
     return this.#rattachements;
   }
 
+  coupuresSilencieusesDetectees(): number {
+    return this.#coupuresSilencieuses;
+  }
+
   /** Relaie le signal au processus distant (B.2.2). Best-effort si le lien est coupé. */
   envoyerKill(signal: string): void {
     this.#killEnAttente = signal;
@@ -146,6 +197,7 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
   fermer(): void {
     this.#annulerReconnexion?.();
     this.#annulerReconnexion = null;
+    this.#arreterVivacite();
     this.#ws?.close(1000, 'fermeture volontaire');
     this.#etat = 'ferme_terminal';
   }
@@ -159,6 +211,9 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
       this.#rattachements += 1;
       this.#stdin.rejouerNonAcquitte();
       if (this.#killEnAttente !== null) this.#envoyer(TAG.KILL, 0, encoderTexte(this.#killEnAttente));
+      this.#pingsManques = 0;
+      this.#activiteDepuisTick = false;
+      this.#demarrerVivacite();
     } catch (erreur) {
       this.#log.warn({ err: erreur }, 'connexion échouée, nouvelle tentative planifiée');
       this.#planifierReconnexion();
@@ -180,6 +235,9 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
       this.#log.error({ err: erreur }, 'trame illisible — intégrité potentiellement rompue');
       throw erreur;
     }
+    // N'importe quel tag prouve que le lien transporte encore des octets dans
+    // les deux sens — c'est la preuve de vie consommée par le tic de vivacité.
+    this.#activiteDepuisTick = true;
     this.#distribuer(trame.tag, trame.seq, trame.payload);
   }
 
@@ -203,6 +261,15 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
       case TAG.ERREUR_SPAWN:
         for (const a of this.#abonnesErreurSpawn) a(decoderTexte(payload));
         return;
+      case TAG.PING:
+        // Réponse générée ici, dans la couche transport — jamais par l'agent
+        // qu'elle transporte. C'est cette indépendance qui rend un agent lent
+        // discernable d'un tunnel mort (voir le doc de tête de fichier).
+        this.#envoyer(TAG.PONG, 0, new Uint8Array(0));
+        return;
+      case TAG.PONG:
+        // Rien à faire de plus : `#surMessage` a déjà enregistré la preuve de vie.
+        return;
       default:
         this.#log.warn({ tag }, 'tag de trame inconnu, ignoré');
     }
@@ -214,6 +281,7 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
   }
 
   #surFermetureWs(code: number, reason: string): void {
+    this.#arreterVivacite();
     const terminal = CODES_WS_VERS_TAXONOMIE[code];
     if (terminal !== undefined) {
       this.#etat = 'ferme_terminal';
@@ -227,9 +295,18 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
       for (const a of this.#abonnesFermeture) a(fermeture);
       return;
     }
-    // Transitoire : absorbé en silence (D.2.1). `remonteesTransitoires` reste à 0.
+    this.#entrerCoupeTransitoire(`fermeture ws code=${code} reason=${reason}`);
+  }
+
+  /**
+   * Chemin de reprise partagé (☠ exigence de la mission) — signalé (`close`
+   * WS non terminal) ou silencieux (vivacité expirée) y entrent identiquement.
+   * `remonteesTransitoires` reste volontairement à 0 dans les deux cas :
+   * D.2.1 veut que le transitoire soit absorbé, jamais remonté à l'appelant.
+   */
+  #entrerCoupeTransitoire(motif: string): void {
     this.#etat = 'coupe_transitoire';
-    this.#log.debug({ code, reason }, 'coupure transitoire — reconnexion en interne, rien ne remonte');
+    this.#log.debug({ motif }, 'coupure transitoire — reconnexion en interne, rien ne remonte');
     this.#planifierReconnexion();
   }
 
@@ -240,5 +317,56 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
     this.#annulerReconnexion = this.#horloge.planifier(delai, () => {
       void this.#tenterConnexion();
     });
+  }
+
+  #demarrerVivacite(): void {
+    if (this.#intervalePingMs <= 0) return; // désactivé explicitement (opt-out)
+    this.#annulerVivacite = this.#horloge.planifier(this.#intervalePingMs, () => this.#tickVivacite());
+  }
+
+  #arreterVivacite(): void {
+    this.#annulerVivacite?.();
+    this.#annulerVivacite = null;
+  }
+
+  /**
+   * Un tic par intervalle, tant que le lien est `ouvert`. Sonde le pair par
+   * PING inconditionnellement (coût : une trame vide par intervalle, jamais
+   * plus) ; ne compte un tic « manqué » que si strictement aucun octet, de
+   * quelque tag que ce soit, n'a été reçu depuis le tic précédent — un agent
+   * qui ne produit rien mais dont le pair continue de répondre au ping n'est
+   * **jamais** compté comme manqué (protection contre le faux positif exigée
+   * par la mission).
+   */
+  #tickVivacite(): void {
+    if (this.#etat !== 'ouvert') return;
+    if (this.#activiteDepuisTick) {
+      this.#pingsManques = 0;
+    } else {
+      this.#pingsManques += 1;
+      if (this.#pingsManques >= this.#pingsManquesAvantMort) {
+        this.#declencherCoupureSilencieuse();
+        return; // la reconnexion est déjà planifiée par le chemin partagé
+      }
+    }
+    this.#activiteDepuisTick = false;
+    this.#envoyer(TAG.PING, 0, new Uint8Array(0));
+    this.#demarrerVivacite();
+  }
+
+  /**
+   * Ni `close` ni `error` : le socket paraît vivant, plus rien ne transite.
+   * Traité par le chemin de reprise partagé — pas de second mécanisme.
+   */
+  #declencherCoupureSilencieuse(): void {
+    if (this.#etat !== 'ouvert') return;
+    this.#coupuresSilencieuses += 1;
+    this.#arreterVivacite();
+    this.#log.error(
+      { pingsManques: this.#pingsManques, seuil: this.#pingsManquesAvantMort },
+      'coupure silencieuse détectée (ping/pong sans réponse au-delà du seuil) — rendue bruyante, ' +
+        'traitée comme une coupure transitoire',
+    );
+    this.#entrerCoupeTransitoire('vivacité — silence ping/pong au-delà du seuil');
   }
 }

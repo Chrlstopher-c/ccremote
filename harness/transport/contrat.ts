@@ -58,6 +58,12 @@ export interface Lien {
   remonteesTransitoires(): number;
   /** Nombre de rattachements à froid effectués depuis la création. */
   rattachements(): number;
+  /**
+   * Coupures silencieuses (ni `close` ni `error`, le socket paraît vivant)
+   * détectées par le ping/pong applicatif — dette de M-10 comblée. Chacune
+   * a déjà emprunté le même chemin de reprise qu'une coupure signalée.
+   */
+  coupuresSilencieusesDetectees(): number;
   /** Fermeture volontaire, terminale, jamais reconnectée. */
   fermer(): void;
 }

@@ -71,7 +71,55 @@ dépôt, pas une mesure empirique. Voir « Ce qui reste à vérifier en réel »
   lui-même — le transport Pi↔PC est filaire/LAN par H-03).
 - Comportement du binaire `Bun.serve({ websocket })` sous charge réelle (nombre de workers simultanés,
   H-31 encore ouverte).
-- Détection de coupure silencieuse (ni `close` ni `error`, juste plus rien) : nécessite un ping/pong
-  applicatif avec délai d'expiration, **non implémenté dans ce lot** — `⚠ HYP` à vérifier : sans lui,
-  une coupure qui ne déclenche aucun événement WS reste indétectée jusqu'à la prochaine écriture
-  avortée. À couvrir en même temps que le canal d'observation (branche E) si le risque se confirme.
+
+## Détection de coupure silencieuse — dette comblée (M-10, H-69)
+
+**Mécanisme retenu** : ping/pong applicatif intégré à `LienWebSocket` (tags `TAG.PING`/`TAG.PONG` de
+`trame.ts`), pas un module séparé. Tant que le lien est `ouvert`, un tic de vivacité sonde le pair à
+chaque intervalle (`intervalePingMs`, défaut 15 s) ; le pair — qui exécute la même classe,
+symétriquement, des deux côtés du tunnel — répond `PONG` **dans `#distribuer`**, avant même d'atteindre
+le SDK ou l'agent qu'il transporte.
+
+**Comment un agent lent se distingue d'un tunnel mort** — c'est le cœur du problème, pas un détail :
+la réponse au ping est générée par la couche transport elle-même, jamais par le processus Claude Code.
+Un agent qui réfléchit dix minutes sans émettre le moindre octet de stdout laisse le transport
+répondre au ping en quelques millisecondes, exactement comme un lien inactif mais sain. Seul un lien
+réellement mort — où même la couche transport ne répond plus, parce que le socket ne délivre plus rien
+dans aucun sens — laisse le ping sans réponse. `#activiteDepuisTick` est mis à vrai par **n'importe
+quel** tag reçu (STDOUT, ACK, PONG…), pas seulement PONG : tout octet qui arrive prouve la vie du lien.
+
+**Seuil retenu et sa justification** : `pingsManquesAvantMort = 3` (défaut). Un unique ping sans
+réponse ne déclenche rien — le compteur revient à zéro dès le moindre octet reçu, de n'importe quel
+tag. Il faut un silence total sur **trois intervalles consécutifs pleins** (~45 s par défaut) pour
+conclure à la mort du lien. Argument : un faux positif détruirait une mission valide (exigence
+explicite de la mission) — le biais est donc délibérément du côté de la patience, jamais de la
+réactivité. `intervalePingMs = 15 s` reste sous les délais usuels de coupure idle des NAT/routeurs
+Wi-Fi (souvent 30-60 s), ce qui a un bénéfice secondaire : le ping garde aussi la table de routage NAT
+ouverte.
+
+**Même chemin de reprise, pas un second mécanisme** — `#declencherCoupureSilencieuse()` appelle
+`#entrerCoupeTransitoire()`, la même fonction privée que la fermeture WS non-terminale. Backoff,
+compteur de rattachements, rejeu du non-acquitté (`CanalDonnees.rejouerNonAcquitte`) : identiques,
+byte pour byte, à une coupure signalée. `remonteesTransitoires()` reste à 0 dans les deux cas (D.2.1 :
+le transitoire — signalé ou silencieux — n'est jamais remonté à l'appelant).
+
+**Coût en messages** : négligeable. Une seule trame vide (`TAILLE_ENTETE` = 9 octets, payload nul) par
+intervalle **et par direction inactive** — pendant une mission active, chaque tic ne fait qu'ajouter
+une trame de 9 octets à un flux déjà en cours ; pendant un silence complet, c'est le seul trafic sur
+le fil.
+
+**Injectable** : `intervalePingMs` et `pingsManquesAvantMort` sont des options du constructeur de
+`LienWebSocket`, jamais des constantes — les tests ne dépendent d'aucun délai réel, uniquement de
+l'horloge manuelle déjà en place pour le backoff. `intervalePingMs <= 0` désactive le mécanisme
+(opt-out explicite, pas un défaut).
+
+**Testé, `test-harness` non concerné** : 8 tests en mémoire dans `lien-websocket.test.ts` contre le
+`WebSocketLike` factice existant — réponse automatique au PING, sonde à l'idle, coût nul sous trafic
+réel, protection contre le faux positif (agent lent + pair qui répond ⇒ jamais mort), tolérance à un
+ping isolé perdu, détection au seuil avec chemin de reprise partagé vérifié bout en bout (backoff,
+rattachement, rejeu), seuil configurable, opt-out. Aucun test n'ouvre de socket réelle ni n'importe
+`test-harness/` (règle 1 de son README).
+
+**Ce qui reste à vérifier en réel** (hors périmètre, comme le reste de ce document) : le seuil de 45 s
+est un raisonnement sur les délais NAT/Wi-Fi usuels, pas une mesure sur le LAN réel de l'opérateur — à
+confirmer au premier banc d'essai réel, aux côtés de la latence de reconnexion.
