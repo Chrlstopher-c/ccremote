@@ -54,11 +54,28 @@ function buildStderrSink(spec: WorkerSpec): (data: string) => void {
   };
 }
 
-/** Compose les options structurelles. Le modèle reçu est déjà résolu (H-43). */
-export function composeWorkerOptions(spec: WorkerSpec, model: ResolvedModel): ComposedWorkerOptions {
+/** Mode d'identité de session transmis au SDK — `sessionId` (neuf) ou `resume` (relance, M-13/B.3.3). */
+export type ModeIdentiteSession = 'nouvelle' | 'reprise';
+
+/**
+ * Compose les options structurelles. Le modèle reçu est déjà résolu (H-43).
+ *
+ * `mode: 'reprise'` sert la relance (B.3.3, `RelanceurMission`) : le SDK est
+ * exclusif entre `sessionId` et `resume` (sdk.d.ts, `Options.sessionId` —
+ * « Cannot be used with continue or resume unless forkSession »). La relance
+ * v1 ne fork jamais (`DecisionRelance.forkSession === false`), donc les deux
+ * champs ne coexistent jamais ici.
+ */
+export function composeWorkerOptions(
+  spec: WorkerSpec,
+  model: ResolvedModel,
+  mode: ModeIdentiteSession = 'nouvelle',
+): ComposedWorkerOptions {
   const abortController = new AbortController();
+  const identiteSession: Pick<Options, 'sessionId' | 'resume'> =
+    mode === 'reprise' ? { resume: spec.sessionId } : { sessionId: spec.sessionId };
   const options: Options = {
-    sessionId: spec.sessionId,
+    ...identiteSession,
     cwd: spec.cwd,
     permissionMode: 'auto',
     disallowedTools: [...spec.deniedToolPatterns],

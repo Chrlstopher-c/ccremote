@@ -37,6 +37,12 @@ export interface StartWorkerDeps {
   /** Étape 2, déléguée à F.2. Absente ⇒ étape signalée comme non vérifiée. */
   readonly verifyWorktree?: (cwd: string) => Promise<void>;
   readonly initTimeoutMs?: number;
+  /**
+   * `true` ⇒ compose les options en mode reprise (`resume: spec.sessionId`)
+   * plutôt qu'en spawn neuf (`sessionId: spec.sessionId`). Sert la relance
+   * (B.3.3, superviseur/) : même séquence de démarrage, identité différente.
+   */
+  readonly resume?: boolean;
 }
 
 function isInitMessage(message: SDKMessage): message is SDKSystemMessage {
@@ -121,7 +127,7 @@ export async function startWorker(
   const preflight = await preflightStage(spec, deps);
   await worktreeStage(spec, deps);
   const model = resolveModelWithFloor(spec.model, preflight.effectiveModel);
-  const { options, abortController } = composeWorkerOptions(spec, model);
+  const { options, abortController } = composeWorkerOptions(spec, model, deps.resume === true ? 'reprise' : 'nouvelle');
 
   let stream: Query;
   try {

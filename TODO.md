@@ -150,9 +150,13 @@ les deux anciens `.credentials_account*.json`).
 ### Dettes ouvertes du lot 3
 - [ ] **Ports non implémentés** : `InventairePc` et `ReinitialisateurSession` (M-30) sont des
       contrats sans implémentation réelle — la réconciliation ne tourne donc **pas** de bout en bout.
-- [ ] **`InterrogateurGitReel` / `GestionnaireWorktreeGitReel` jamais exercés sur un vrai dépôt**
-      (M-32) : seuls les constructeurs de commande sont testés. `☠` C'est le code qui supprime des
-      worktrees — un banc d'acceptation dédié s'impose **avant** toute exécution non surveillée.
+- [x] **`InterrogateurGitReel` / `GestionnaireWorktreeGitReel` exercés sur un vrai dépôt** —
+      `harness/acceptation/worktree-git-reel.ts`, 4/4 sur des dépôts jetables créés par le banc.
+      `☠` **Bug critique trouvé et corrigé** : `executer()` n'ayant jamais levé (il avale l'échec de
+      `git` et rend `stdout: ''`), le « pire cas sûr » posé dans le `catch` de `aTravailNonCommite`
+      était **du code mort**. Un git en échec devenait indiscernable d'un worktree propre ⇒
+      suppression. Seul `git worktree remove` (qui refuse un `.git` manquant) a évité la perte de
+      données. Corrigé : le **code de sortie** est vérifié, pas seulement l'exception.
 - [ ] **`deciderRelance()` toujours non câblé** : M-30 a argumenté (à raison) que la réconciliation
       n'observe jamais de `terminal_reason`. Le point de câblage est le gestionnaire du flux live,
       côté superviseur de workers — pas encore construit.

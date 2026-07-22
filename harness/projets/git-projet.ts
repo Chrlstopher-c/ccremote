@@ -117,18 +117,36 @@ export class InterrogateurGitReel implements InterrogateurGit {
     }
   }
 
+  /**
+   * `☠ CASSE` (panne #9) — le pire cas sûr doit couvrir **le code de sortie**, pas
+   * seulement une exception. `executer()` n'ayant jamais levé (il **avale** l'échec et
+   * rend `stdout: ''`), s'en remettre au seul `catch` rendait un git en échec
+   * indiscernable d'un worktree propre : `stdout` vide ⇒ « rien à sauver » ⇒
+   * suppression. Bug réel constaté le 2026-07-22 par `acceptation/worktree-git-reel.ts`,
+   * sur un worktree dont le lien `.git` avait disparu.
+   *
+   * Règle : toute vérification qui n'aboutit pas **franchement** vaut « sale ». Un faux
+   * positif retarde une libération ; un faux négatif détruit du travail.
+   */
   async aTravailNonCommite(worktreePath: string, brancheParent: string, brancheDediee: string): Promise<boolean> {
     try {
       const porcelain = construireCommandeStatutPorcelain(worktreePath);
       const statut = await executer(porcelain.cmd, porcelain.args);
+      if (statut.code !== 0) {
+        projetsLogger.error({ worktreePath, code: statut.code }, 'statut git en échec — worktree présumé SALE');
+        return true;
+      }
       if (statut.stdout.trim().length > 0) return true;
+
       const enAttente = construireCommandeCommitsEnAttente(worktreePath, brancheParent, brancheDediee);
       const commits = await executer(enAttente.cmd, enAttente.args);
+      if (commits.code !== 0) {
+        projetsLogger.error({ worktreePath, code: commits.code }, 'comparaison de branches en échec — worktree présumé SALE');
+        return true;
+      }
       return commits.stdout.trim().length > 0;
     } catch (error) {
       projetsLogger.error({ err: error, worktreePath }, 'aTravailNonCommite a levé');
-      // ☠ En cas d'échec de la vérification, on suppose le pire cas sûr : sale.
-      // Un faux positif retarde une libération ; un faux négatif détruit du travail.
       return true;
     }
   }
