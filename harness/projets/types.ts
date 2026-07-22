@@ -44,8 +44,7 @@ export type CodeEchecValidationProjet =
   | 'modele_defaut_invalide'
   | 'motif_deni_supplementaire_invalide'
   | 'motif_deni_supplementaire_non_scope'
-  | 'motif_deni_supplementaire_id_duplique'
-  | 'motif_deni_supplementaire_trop_nombreux';
+  | 'motif_deni_supplementaire_id_duplique';
 
 export interface EchecValidationProjet {
   readonly code: CodeEchecValidationProjet;

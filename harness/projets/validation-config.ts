@@ -19,18 +19,32 @@ import {
   resolveModel,
 } from '../workers/index.ts';
 import {
+  MAX_MOTIFS_PLANCHER,
   MotifNonScopeError,
   assertIdsUniques,
   assertMotifsScopes,
   formatterRegleSdk,
 } from '../plancher-deni/index.ts';
 import type { MotifDeni, OutilCible } from '../plancher-deni/index.ts';
+import { projetsLogger } from './logger.ts';
 import type { InterrogateurGit } from './git-projet.ts';
 import type { ConfigProjet, ConfigProjetBrute, EchecValidationProjet } from './types.ts';
 
-/** `⚠ HYP` — pas de chiffre imposé par `09-arbre-F` pour le plancher supplémentaire par
- * projet ; retenu volontairement inférieur au plafond global de 16 (plancher-deni). */
-export const MAX_MOTIFS_SUPPLEMENTAIRES_PROJET = 8;
+/**
+ * Seuil d'**alerte**, jamais de rejet (arbitrage rendu le 2026-07-22, dette n°4).
+ *
+ * La valeur précédente — 8, rejetante — était un chiffre inventé, et surtout à
+ * l'envers : les motifs supplémentaires d'un projet **renforcent** le plancher de
+ * déni. Rejeter au-delà d'un seuil, c'est faire échouer le chargement d'un projet
+ * parce qu'il est **trop prudent**. Le rejet reste réservé aux configurations qui
+ * affaiblissent le plancher ou qui se contredisent (motif non scopé, projet
+ * non-git déclarant une branche), jamais à celles qui sur-restreignent.
+ *
+ * Le seuil est aligné sur `MAX_MOTIFS_PLANCHER` plutôt que fixé arbitrairement :
+ * un projet qui ajoute à lui seul plus de motifs que le plancher global entier
+ * signale une configuration aberrante — ce qui mérite d'être **dit**, pas bloqué.
+ */
+export const SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET = MAX_MOTIFS_PLANCHER;
 
 const RE_ID_PROJET = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const OUTILS_CIBLES: readonly OutilCible[] = ['Bash', 'Write', 'Edit'];
@@ -180,16 +194,12 @@ function verifierFormeMotifs(valeur: unknown): ResultatMotifs | null {
       ],
     };
   }
-  if (valeur.length > MAX_MOTIFS_SUPPLEMENTAIRES_PROJET) {
-    return {
-      motifs: [],
-      echecs: [
-        echec(
-          'motif_deni_supplementaire_trop_nombreux',
-          `${valeur.length} motifs > plafond ${MAX_MOTIFS_SUPPLEMENTAIRES_PROJET} (⚠ HYP, voir en-tête du module).`,
-        ),
-      ],
-    };
+  if (valeur.length > SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET) {
+    // Alerte, jamais rejet : une config plus restrictive n'est pas une config invalide.
+    projetsLogger.warn(
+      { motifs: valeur.length, seuil: SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET },
+      'projet déclarant plus de motifs de déni que le plancher global entier — configuration probablement aberrante',
+    );
   }
   return null;
 }

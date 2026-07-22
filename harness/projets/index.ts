@@ -17,7 +17,7 @@ export type {
 } from './types.ts';
 
 export {
-  MAX_MOTIFS_SUPPLEMENTAIRES_PROJET,
+  SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET,
   validerConfigProjet,
 } from './validation-config.ts';
 export type { DependancesValidation, ResultatValidationProjet } from './validation-config.ts';

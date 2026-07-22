@@ -219,14 +219,20 @@ les deux anciens `.credentials_account*.json`).
       `interrupt()` résout `undefined` bascule aussi en dégradé — on ne fait pas confiance à un
       drapeau qui ment.
 
-### ⚠ Arbitrages M-32 en attente de Chris (l'agent les signale, ils ne sont pas tranchés)
-- [ ] **« commits en attente » (F.2.3)** interprété comme « commits sur la branche dédiée non
-      intégrés dans la branche parente ». Autre lecture possible : « non poussés vers un remote ».
-      Le choix actuel est le plus conservateur. À confirmer.
-- [ ] **Plafond de 8 motifs de déni supplémentaires par projet** — chiffre inventé par l'agent,
-      aucun imposé par `09-arbre-F`. À valider ou changer.
-- [ ] **Projet non-git fixant `brancheDefaut` : rejeté, pas ignoré** — plus strict que ce que le
-      texte impose. Choix assumé dans l'esprit « signaler explicitement » de F.1.3.
+### ✅ Arbitrages M-32 — TRANCHÉS le 2026-07-22 (choix d'implémentation, rendus par le parent)
+- [x] **« commits en attente » (F.2.3) = non intégrés dans la branche parente** — **confirmé**.
+      La lecture « non poussés vers un remote » est écartée : le harness travaille en worktrees
+      locaux, un remote peut ne pas exister, et le coût d'erreur est asymétrique — se tromper ici
+      revient à supprimer un worktree portant du travail. C'est exactement le bug de perte de
+      données déjà payé sur ce module. La lecture la plus conservatrice est la bonne.
+- [x] **Plafond de 8 motifs supplémentaires : supprimé, remplacé par un seuil d'alerte** aligné sur
+      `MAX_MOTIFS_PLANCHER`. Le chiffre était inventé, et surtout **à l'envers** : des motifs
+      supplémentaires **renforcent** le plancher de déni. Rejeter au-delà d'un seuil faisait échouer
+      le chargement d'un projet parce qu'il était **trop prudent**. Le rejet reste réservé aux
+      configs qui affaiblissent le plancher ou se contredisent, jamais à celles qui sur-restreignent.
+- [x] **Projet non-git fixant `brancheDefaut` : rejet maintenu** — une configuration qui se
+      contredit doit être refusée, pas silencieusement ignorée. Même principe que **H-74** : une
+      extinction silencieuse est toujours pire qu'un échec visible.
 
 ### Bancs réels passés par le parent — 2026-07-22
 - [x] **`acceptation/worker-reel.ts`** — `startWorker` (M-01) exercé contre le vrai SDK pour la

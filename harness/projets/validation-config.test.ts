@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { MAX_MOTIFS_SUPPLEMENTAIRES_PROJET, validerConfigProjet } from './validation-config.ts';
+import { SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET, validerConfigProjet } from './validation-config.ts';
 import { InterrogateurGitFactice } from './git-projet-factice.ts';
 import type { ConfigProjetBrute } from './types.ts';
 
@@ -182,8 +182,11 @@ describe('validerConfigProjet — panne #21, motifs de déni supplémentaires sc
     expect(echecs[0]?.code).toBe('motif_deni_supplementaire_id_duplique');
   });
 
-  test(`rejette au-delà de ${MAX_MOTIFS_SUPPLEMENTAIRES_PROJET} motifs supplémentaires`, async () => {
-    const motifs = Array.from({ length: MAX_MOTIFS_SUPPLEMENTAIRES_PROJET + 1 }, (_, i) => ({
+  // Arbitrage 2026-07-22 : au-delà du seuil, ALERTE et non rejet. Une config plus
+  // restrictive n'est pas une config invalide — la rejeter ferait échouer le
+  // chargement d'un projet parce qu'il est trop prudent.
+  test(`accepte au-delà de ${SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET} motifs supplémentaires — alerte, jamais rejet`, async () => {
+    const motifs = Array.from({ length: SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET + 1 }, (_, i) => ({
       id: `m${i}`,
       outil: 'Bash' as const,
       contenuRegle: `*x${i}*`,
@@ -191,8 +194,9 @@ describe('validerConfigProjet — panne #21, motifs de déni supplémentaires sc
       nonQuotidien: 'y',
     }));
     const { config, echecs } = await validerConfigProjet(configValide({ deniedToolPatternsSupplementaires: motifs }), 'x.json', deps);
-    expect(config).toBeNull();
-    expect(echecs[0]?.code).toBe('motif_deni_supplementaire_trop_nombreux');
+    expect(echecs).toEqual([]);
+    expect(config).not.toBeNull();
+    expect(config?.deniedToolPatternsSupplementaires).toHaveLength(SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET + 1);
   });
 });
 
