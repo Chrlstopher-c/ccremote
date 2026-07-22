@@ -69,7 +69,7 @@ function router(chemin: string, deps: DependancesApiWeb): unknown {
   const plafond = deps.plafondRelances ?? PLAFOND_RELANCES_DEFAUT;
 
   if (chemin === '/missions') {
-    const missions = deps.registre.missions.listerRecentes().map((m) => versMissionApi(m, plafond));
+    const missions = deps.registre.missions.listerRecentes().map((m) => versMissionApi(m, plafond, maintenant));
     return enveloppe(pcOnline, missions);
   }
 
@@ -79,7 +79,7 @@ function router(chemin: string, deps: DependancesApiWeb): unknown {
     // `☠` Une mission inconnue avec le PC EN LIGNE est un vrai 404 ; le PC
     // absent ne doit jamais transformer « inconnue » en « peut-être plus tard ».
     if (trouvee === null) throw introuvable('mission');
-    return enveloppe(pcOnline, versMissionApi(trouvee, plafond));
+    return enveloppe(pcOnline, versMissionApi(trouvee, plafond, maintenant));
   }
 
   if (chemin === '/escalades') {

@@ -17,6 +17,7 @@
  */
 
 import type { EtatHarness, Mission } from '../registre/index.ts';
+import { ageLisible } from './duree.ts';
 
 /** États d'affichage du contrat — vocabulaire de l'interface, pas du domaine. */
 export type EtatMissionApi = 'requires_action' | 'running' | 'idle' | 'paused' | 'echec' | 'terminee';
@@ -37,6 +38,14 @@ export interface MissionApi {
   readonly retries: string;
   readonly sessionId: string | null;
   readonly mandate: { readonly but: string; readonly critere: string };
+  readonly inspection: { readonly lastVerdict: null; readonly lastAt: null };
+  /** Libellés d'ancienneté — dérivés de la VRAIE date de transition, pas inventés. */
+  readonly blockedSince: string | null;
+  readonly pausedAgo: string | null;
+  readonly idleAgo: string | null;
+  readonly doneAgo: string | null;
+  readonly freshlyDispatched: boolean;
+  readonly ultracode: boolean;
   readonly subagents: readonly never[];
   readonly feed: readonly never[];
   readonly landing: null;
@@ -70,15 +79,32 @@ function pourcentageContexte(mission: Mission): number {
   return Math.min(100, Math.round((utilises / max) * 100));
 }
 
-export function versMissionApi(mission: Mission, plafondRelances: number): MissionApi {
+/**
+ * Un seul libellé d'ancienneté est renseigné à la fois : celui qui correspond à
+ * l'état courant. `etatHarnessMajA` est la date de la dernière transition —
+ * donc, par construction, depuis quand la mission est dans cet état.
+ */
+function anciennete(etat: EtatMissionApi, majA: number, maintenant: number): Pick<MissionApi, 'blockedSince' | 'pausedAgo' | 'idleAgo' | 'doneAgo'> {
+  const age = ageLisible(majA, maintenant);
   return {
+    blockedSince: etat === 'requires_action' ? age : null,
+    pausedAgo: etat === 'paused' ? age : null,
+    idleAgo: etat === 'idle' ? age : null,
+    doneAgo: etat === 'terminee' || etat === 'echec' ? age : null,
+  };
+}
+
+export function versMissionApi(mission: Mission, plafondRelances: number, maintenant: number = Date.now()): MissionApi {
+  const state = ETATS[mission.etatHarness];
+  return {
+    ...anciennete(state, mission.etatHarnessMajA, maintenant),
     id: mission.id,
     title: mission.nom,
     project: mission.projet,
     worktree: mission.worktree ?? '',
     branch: mission.branche ?? '',
     account: mission.compteId,
-    state: ETATS[mission.etatHarness],
+    state,
     ctx: pourcentageContexte(mission),
     cost: mission.budgetConsommeUsd,
     // Aucune source réelle côté Pi tant que l'observabilité des sous-agents
@@ -90,6 +116,12 @@ export function versMissionApi(mission: Mission, plafondRelances: number): Missi
     retries: `${mission.compteurRelances} / ${plafondRelances}`,
     sessionId: mission.sessionId,
     mandate: { but: mission.mandat ?? '', critere: mission.critereArret ?? '' },
+    // Les verdicts du juge H-68 sont rendus côté PC et ne sont pas encore
+    // remontés au registre : `null` plutôt qu'un « progrès » réconfortant et faux.
+    inspection: { lastVerdict: null, lastAt: null },
+    // Transitoires d'interface, sans source côté serveur — jamais devinés.
+    freshlyDispatched: false,
+    ultracode: false,
     subagents: [],
     feed: [],
     landing: null,

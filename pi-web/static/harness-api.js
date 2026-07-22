@@ -5,17 +5,48 @@
 // par ici. C'est le point unique à réécrire quand le back-end du harness
 // existera (voir CONTRAT-API-HARNESS.md pour le contrat exact attendu).
 //
-// Aujourd'hui : renvoie des données de démonstration (HarnessMock), avec une
-// latence simulée et un état "PC absent" activable depuis Paramètres, pour que
-// le comportement dans le temps soit observable (H-65) sans qu'aucune ligne
-// n'appelle jamais un serveur réel.
+// État au 22/07/2026 — LA MOITIÉ EST RÉELLE, l'autre est encore de la démo.
+// Ce mélange est explicite et lisible plus bas (LECTURES_REELLES) : un
+// basculement silencieux ferait croire à des données vraies là où il n'y en a
+// pas, ce qui est la pire des deux situations.
+//
+//   RÉEL   — getMissions, getMission, getEscalades, getAccounts, getLinkStatus
+//            servis par le control plane (Bun) via /api/harness/*, relayé par
+//            pi-web qui porte l'authentification.
+//   DÉMO   — tout le reste (écritures, orchestrateur, simulateurs). Le chemin
+//            d'écriture traverse le lien vers le PC et n'existe pas encore ;
+//            une écriture à moitié câblée ferait croire l'ordre passé.
+//
+// `☠` Les champs `subagents`, `feed`, `inspection` et `landing` reviennent
+// VIDES du serveur réel : ils vivent sur le PC et ne sont pas encore remontés.
+// Les vues doivent les traiter comme absents, jamais compter dessus.
 
 const HarnessAPI = (() => {
   const db = HarnessMock;
-  let pcOnline = true; // ☠ démo uniquement — en réel, vient du lien Pi↔PC (server.py)
+  let pcOnline = true; // ☠ démo uniquement — le réel vient du lien Pi↔PC
   let orchCtx = 23; // ☠ démo uniquement — en réel, getContextUsage() du SDK (mesuré, jamais estimé)
 
   function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  // ---- Accès réel au control plane -------------------------------------
+  // ☠ Trois issues distinctes, jamais confondues (H-75) :
+  //   { pcOnline: true  } données fraîches
+  //   { pcOnline: false } PC éteint — normal, surtout la nuit
+  //   { erreur: '…' }     le control plane lui-même ne répond pas — une panne
+  // Écraser la troisième en deuxième ferait chercher un problème sur le PC
+  // pendant que le serveur est mort sur le Pi.
+  async function lireReel(chemin) {
+    try {
+      const rep = await fetch(`/api/harness${chemin}`, { headers: { accept: 'application/json' } });
+      const corps = await rep.json();
+      if (!rep.ok) {
+        return { pcOnline: false, stale: true, data: null, erreur: corps.message || corps.error || `HTTP ${rep.status}` };
+      }
+      return corps;
+    } catch (e) {
+      return { pcOnline: false, stale: true, data: null, erreur: `Contact impossible avec le Pi : ${e.message}` };
+    }
+  }
 
   function pcAbsentPayload() {
     // H-75 : une absence de PC est un état normal à afficher, jamais une erreur.
@@ -39,22 +70,27 @@ const HarnessAPI = (() => {
     _setPcOnline(v) { pcOnline = v; },
     _isPcOnline() { return pcOnline; },
 
+    /* ================= LECTURES RÉELLES (control plane) ================= */
+
     async getLinkStatus() {
-      await delay(80);
-      return pcOnline
-        ? { up: true, lastSeq: 148203, lastHeartbeatAgo: '1,2 s' }
-        : { up: false, lastSeq: 148203, lastHeartbeatAgo: null, downSince: '00:14' };
+      const rep = await lireReel('/health');
+      if (rep.erreur) return { up: false, erreur: rep.erreur };
+      // `up` = le lien vers le PC, pas la santé du serveur : les deux sont
+      // distincts et l'interface doit pouvoir dire lequel manque.
+      return { up: rep.pcOnline === true || rep.ok === true ? !!rep.pcOnline : false };
     },
 
-    async getMissions() { return withPc(() => db.missions.map((m) => ({ ...m }))); },
+    async getMissions() { return lireReel('/missions'); },
 
-    async getMission(id) { return withPc(() => findMission(id)); },
+    async getMission(id) { return lireReel(`/missions/${encodeURIComponent(id)}`); },
 
+    async getEscalades() { return lireReel('/escalades'); },
+
+    async getAccounts() { return lireReel('/accounts'); },
+
+    /* ================= ENCORE EN DÉMO ==================================== */
+    // ☠ Le serveur ne remonte pas encore les sous-agents (ils vivent sur le PC).
     async getAgent(missionId, agentId) { return withPc(() => findAgent(missionId, agentId)); },
-
-    async getEscalades() { return withPc(() => db.escalades.map((e) => ({ ...e }))); },
-
-    async getAccounts() { return withPc(() => JSON.parse(JSON.stringify(db.accounts))); },
 
     async getModels() {
       // ☠ En réel : `supportedModels()[].supportedEffortLevels`, jamais une constante figée.

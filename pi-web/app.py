@@ -23,6 +23,7 @@ from agent.client import (
 )
 from agent.context import estimate_messages_tokens
 from config import AGENT_MODEL, PC_HOST, PC_MAC, UI_PASSWORD
+from harness_proxy import build_router as build_harness_router
 from pc_client import send_magic_packet, ws_cmd
 
 
@@ -174,6 +175,11 @@ async def api_claude_accounts(_: str = Depends(check_session)):
 @app.post("/api/claude-accounts/switch")
 async def api_claude_accounts_switch(body: dict = Body(...), _: str = Depends(check_session)):
     return await ws_cmd({"cmd": "switch_claude_account", "account": body.get("account", "")}, timeout=20)
+
+
+# Relais vers le control plane du harness. Monté APRÈS `check_session` :
+# toutes ses routes en héritent, aucune n'est joignable sans session.
+app.include_router(build_harness_router(check_session))
 
 
 if __name__ == "__main__":
