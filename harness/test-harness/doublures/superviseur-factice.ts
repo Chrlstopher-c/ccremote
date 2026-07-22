@@ -110,16 +110,25 @@ export class SuperviseurFactice implements SuperviseurWorkers {
       });
       return;
     }
-    for (const perime of concurrents.filter((w) => w.epoch < nouveau.epoch)) {
-      perime.vivant = false;
-      perime.exitCode = 1;
-      perime.signalCode = null;
-      this.journal.enregistrer('worker_rejete_epoch_perime', {
-        id: perime.id,
-        epochPerime: perime.epoch,
-        epochCourant: nouveau.epoch,
-      });
+    const epochCourant = Math.max(nouveau.epoch, ...concurrents.map((w) => w.epoch));
+    for (const perime of [...concurrents, nouveau].filter((w) => w.epoch < epochCourant)) {
+      this.#rejeter(perime, epochCourant);
     }
+    // Égalité d'epoch : le fencing ne tranche pas, deux workers coexisteraient.
+    if (concurrents.some((w) => w.vivant && w.epoch === nouveau.epoch)) {
+      this.#rejeter(nouveau, epochCourant);
+    }
+  }
+
+  #rejeter(worker: EtatWorker, epochCourant: number): void {
+    worker.vivant = false;
+    worker.exitCode = 1;
+    worker.signalCode = null;
+    this.journal.enregistrer('worker_rejete_epoch_perime', {
+      id: worker.id,
+      epochPerime: worker.epoch,
+      epochCourant,
+    });
   }
 
   #figer(etat: EtatWorker): DescripteurWorker {

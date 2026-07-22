@@ -1,7 +1,33 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-07-06 (soir)*
+*Dernière mise à jour : 2026-07-22*
 
-## Résumé de l'état actuel
+## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
+
+**Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
+harness — REPRISE.md est plus précis et tenu à jour.
+
+Upgrade majeure : piloter des projets depuis l'app vers le PC. Un orchestrateur maître (session
+Agent SDK sur le Pi) avec qui Chris discute, qui dispatche des missions Claude Code sur le PC,
+observables et pilotables à distance depuis mobile.
+
+- **Spécification** : `Upgrade/`, 17 fichiers. `16-decisions-operateur.md` **fait autorité** sur tout
+  le reste (décisions de Chris + faits vérifiés contre le SDK).
+- **Code** : `harness/`, TypeScript + Bun, SDK `@anthropic-ai/claude-agent-sdk` **épinglé 0.3.217**.
+- **Maquette UI v2** : `design-v2/` — maquette de comparaison avec l'app actuelle, pas une refonte.
+- **État** : Lot 0 livré (commit `5c2f65f`), **93 tests verts, typecheck propre**. Prochaine étape :
+  vague 2 (M-10 tunnel, M-20 plancher de déni en priorité).
+
+Décisions structurantes à connaître : v1 = **une seule mission active par projet** (H-56) · **deux**
+boutons de sûreté distincts, pause globale ≠ arrêt d'urgence (H-57) · plafond en dollars désactivé,
+le vrai bornage est le rate limit du compte (H-58) · notifications Web Push PWA + Discord en filet
+(H-59) · **multi-comptes Claude Code par `CLAUDE_CONFIG_DIR`, vérifié en exécution réelle** (H-53).
+
+L'app v1 décrite ci-dessous **reste en production et fonctionne** — le harness est un ajout, pas un
+remplacement.
+
+---
+
+## Résumé de l'état actuel (app v1, en production)
 
 ccremote est un panneau de contrôle personnel : un serveur websocket tourne sur le PC principal
 (TrinityArch, `pc.exemple:8765`) et expose tmux (sessions Claude Code) + métriques système ;

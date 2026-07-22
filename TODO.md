@@ -1,10 +1,62 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-07-06 (soir)*
+*Dernière mise à jour : 2026-07-22*
 
-## En cours
-_(rien d'actif à l'instant T)_
+## ⚡ Harness d'orchestration — chantier actif
 
-## À faire (priorité)
+**Contexte complet : `harness/REPRISE.md`.**
+
+### En cours (lancés le 2026-07-22, à vérifier sur disque avant de relancer)
+- [ ] **M-04** — tests unitaires + `README.md` des interfaces dans `harness/test-harness/`
+      (contrats et doublures déjà écrits ; il manque les tests, or le critère d'acceptation est
+      « chaque panne est déclenchable de façon reproductible »)
+- [ ] **`design-v2/COMPARAISON.md`** — le livrable décisionnel attendu par Chris
+      (la maquette `index.html` est déjà livrée)
+
+### Point de synchronisation vague 1 — à valider par le parent, pas par un subagent
+- [ ] **Test d'acceptation réel de M-02** : session ouverte, **10 minutes réelles** de silence, puis
+      action nécessitant une permission ⇒ `canUseTool` appelé, aucun `Error: Stream closed`.
+      Protocole détaillé dans `harness/REPRISE.md`. `☠` Ne pas être en `bypassPermissions`, sinon le
+      test est vert pour la mauvaise raison.
+
+### Vague 2 (dépend du Lot 0)
+- [ ] **M-10** tunnel Pi↔PC — chemin critique. Décision déléguée : SSH / WebSocket / TCP, à mesurer
+      et documenter. Piste : WebSocket, pour réutiliser l'infra ccremote existante (`server.py:8765`)
+- [ ] **M-20** plancher de déni — garde-fou minimal, **avant toute exécution non surveillée**
+- [ ] M-21 machine à états des demandes de permission
+- [ ] M-22 arbitrage délégué + trace d'audit (c'est cette trace qui valide ou invalide H-40)
+- [ ] M-31 adaptateur `SessionStore`
+- [ ] M-34 relance et classification des `TerminalReason`
+
+`⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
+
+### Design v2 — arbitrages à trancher par Chris (source : `design-v2/COMPARAISON.md`)
+- [ ] **Parler à une mission en cours** — trou le plus concret. Chris avait posé l'exigence
+      explicitement (« on pourra en discussion en même temps »), et l'outil `envoyer_a_equipe` existe
+      bien en A.2.2 — mais **la maquette ne l'expose nulle part**. Corriger un lead qui dérive sans
+      arrêter la mission n'a donc aucun chemin dans l'UI. Trou de maquette, pas de spec.
+- [ ] **Composer un mandat** — le bouton « Nouvelle mission » n'ouvre rien. Or le mandat (but /
+      critère d'arrêt testable / périmètre + obligations H-52) est la pièce centrale du système.
+      Rien dans l'UI ne le compose ni ne l'affiche.
+- [ ] **Barre de sûreté absente de la vue Orchestrateur et de Paramètres** (présente sur 4 vues / 6)
+      — or H-57 exige que le bouton reste joignable partout. Coût : hauteur du composer sur mobile.
+- [ ] **Wake-on-LAN retiré sans remplaçant** — la v2 sait afficher « lien coupé » mais n'offre plus
+      le geste qui corrige. Trois options : réveil dans la carte lien · réveil auto au dispatch · PC
+      allumé en permanence (choix implicite actuel de la maquette).
+- [ ] **Métriques machine supprimées** — alors que H-57 acte que les processus enfants survivent à la
+      pause et s'accumulent. La v2 retire le seul endroit où ça se serait vu. Compromis proposé : une
+      ligne de charge dans la carte lien.
+- [ ] Règles de notification C.4.4 (groupement, seuil de rappel, silence sur ce que le lead a résolu
+      seul) ni réglables ni visibles — le filet Discord est un simple interrupteur.
+
+### À répercuter
+- [ ] **M-41** doit brancher `surFermetureImprevue` du générateur d'entrée sur une **alarme réelle**
+      (H-60). Sans ça, l'instrumentation existe mais ne sert à rien.
+- [ ] Manifeste PWA + service worker pour Web Push (H-59) — absents de la SPA actuelle. Chris devra
+      ajouter l'app à son écran d'accueil iOS une fois.
+
+---
+
+## App v1 (production) — à faire (priorité)
 - [ ] Confirmer depuis l'app que le bouton extinction PC fonctionne réellement (fix polkit déployé,
       non re-testé en réel — irréversible, à valider par Chris)
 - [ ] Confirmer que les quotas repassent bien à zéro après une fenêtre pleine sans nouvel appel
