@@ -9,6 +9,7 @@
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
 import { assertRetryWatchdogCoherent } from '../budgets/index.ts';
+import { buildCanUseTool } from './can-use-tool.ts';
 import { DEFAULT_SETTING_SOURCES } from './preflight-config.ts';
 import { sessionLogger } from './logger.ts';
 import type { ResolvedModel, WorkerSpec } from './types.ts';
@@ -94,6 +95,9 @@ export function composeWorkerOptions(
     abortController,
     env: buildWorkerEnv(spec),
     stderr: buildStderrSink(spec),
+    // H-73.1 : fourni quel que soit permissionMode — pas un arbitre (le classifieur
+    // tranche seul en 'auto', H-64), seul récepteur de redélivrance après coupure.
+    canUseTool: buildCanUseTool(spec),
     ...(spec.sessionStore !== undefined ? { sessionStore: spec.sessionStore } : {}),
     ...(spec.spawnProcess !== undefined ? { spawnClaudeCodeProcess: spec.spawnProcess } : {}),
   };

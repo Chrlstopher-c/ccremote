@@ -116,6 +116,17 @@ describe('composeWorkerOptions', () => {
     const { options, abortController } = composeWorkerOptions(spec(), MODEL);
     expect(options.abortController).toBe(abortController);
   });
+
+  test('☠ H-73.1 preuve (a) : canUseTool est toujours fourni, y compris en permissionMode "auto"', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.permissionMode).toBe('auto');
+    expect(typeof options.canUseTool).toBe('function');
+  });
+
+  test('H-73.1 : canUseTool reste fourni en mode reprise également', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL, 'reprise');
+    expect(typeof options.canUseTool).toBe('function');
+  });
 });
 
 describe('mode reprise (B.3.3, relance)', () => {
