@@ -192,6 +192,29 @@ les deux anciens `.credentials_account*.json`).
 - [ ] Règles de notification C.4.4 (groupement, seuil de rappel, silence sur ce que le lead a résolu
       seul) ni réglables ni visibles — le filet Discord est un simple interrupteur.
 
+### H-70 / H-71 / H-72 — actées le 2026-07-22, à faire APRÈS le MVP
+*Décision de Chris : « dès qu'on a le MVP, on s'attaquera directement à l'ajout de tout ça ».*
+*Spécification complète dans `Upgrade/16-decisions-operateur.md`.*
+
+- [ ] **H-70 — atterrissage propre avant saturation de quota.** Au seuil (80-85 %, à caler sur une
+      mesure du coût réel d'un atterrissage), le lead consigne son état en doc + mémoire sémantique
+      et clôture ; la mission est relancée après réinitialisation de la fenêtre.
+      `☠` Décision prise par le **superviseur**, jamais par le lead isolément : la fenêtre est
+      partagée par compte, et trois leads qui atterrissent ensemble saturent le quota pendant
+      l'atterrissage.
+- [ ] **H-71 — choix du modèle et du raisonnement dans le fil de l'orchestrateur.**
+      Modèles éligibles : `claude-opus-4-8`, `claude-sonnet-5`, `claude-fable-5`, `claude-opus-4-7`
+      (tous vérifiés accessibles). `claude-sonnet-4-6` accessible mais jugé insuffisant pour ce rôle.
+      `☠` **Haiku exclu** — il ne supporte ni `effort` ni `thinking` adaptatif, fait technique
+      concordant avec la décision.
+      `⚠` Les niveaux d'effort proposés viennent de `supportedModels()[].supportedEffortLevels`,
+      jamais d'une constante en dur. `setModel()` permet le changement **à chaud**.
+- [ ] **H-72 — jauges de quota + navigation par agent.** Fenêtre 5 h **et** 7 jours, en pourcentage,
+      avec `resets_at`, **par compte**. Une discussion par équipe (lead, messages, actions), et les
+      sous-agents **cliquables** pour voir leur travail en temps réel.
+      `☠` Le flux détaillé va de la source **directement à l'UI** — jamais par le contexte de
+      l'orchestrateur (H-45, panne #17). Chaînage par `parent_tool_use_id` / `parent_agent_id`.
+
 ### Features actées, à implémenter — MAIS PAS PRIORITAIRES
 *Décision explicite de Chris (2026-07-22) : « il va évidemment falloir les mettre en place, mais pour
 l'instant ce n'est pas le plus important. C'est ultra important de les garder en doc et en mémoire. »*

@@ -666,3 +666,98 @@ Un parc mieux financé qui tourne sans garde-fou casse exactement autant.
 
 `⚠` À faire : afficher les crédits consommés dans la jauge H-63 — visibilité, jamais blocage. Des
 crédits offerts restent finis, et un parc autonome les consomme sans le dire.
+
+---
+
+## H-70 · Atterrissage propre avant saturation de quota
+
+**Décision de Chris (2026-07-22)** : quand la fenêtre de quota approche de la saturation, un team
+leader ne doit pas se faire couper net. Il **consigne son état** (documentation du projet + mémoire
+sémantique), **clôture proprement**, et la mission est **relancée plus tard**, après réinitialisation
+de la fenêtre.
+
+**Pourquoi c'est structurant** : sans ça, le rate limit coupe au milieu d'un raisonnement. Le lead
+perd son contexte de travail, et à la reprise il repart à l'aveugle sur un travail à moitié fait —
+le pire état possible, pire qu'un échec franc.
+
+**Deux points de conception, mesurés :**
+
+`☠` **La fenêtre est partagée PAR COMPTE.** Trois workers sur `compte-a` puisent dans la même
+fenêtre 5 h. Un atterrissage « chacun dans son coin » est faux : si les trois franchissent le seuil
+ensemble, ils écrivent tous leur bilan simultanément — ce qui consomme encore du quota et peut le
+saturer **pendant** l'atterrissage. La décision appartient au **superviseur**, seul à voir
+l'ensemble ; jamais au lead isolément.
+
+`⚠` **Le seuil doit financer l'atterrissage lui-même.** Écrire son état coûte des tokens. À 90 % il
+peut ne plus rester assez. Ordre de grandeur retenu : **80-85 %**, mais à caler sur une **mesure** du
+coût d'un atterrissage type, pas au jugé.
+
+**Source de vérité** : `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` →
+`rate_limits.five_hour.utilization` et `.seven_day.utilization` (0-100), plus `resets_at`. `☠` Les
+champs `*_dollars` sont **`null`** sur abonnement : raisonner en **pourcentage**, jamais en montant.
+
+---
+
+## H-71 · Choix du modèle et du raisonnement, depuis l'app
+
+**Décision de Chris (2026-07-22)** : dans la conversation avec l'orchestrateur maître, l'opérateur
+choisit **le modèle** auquel il s'adresse **et** son **mode de raisonnement**, parmi ceux que ce
+modèle supporte réellement.
+
+**Modèles éligibles au rôle d'orchestrateur** (vérifiés accessibles en session réelle le 2026-07-22) :
+
+| Identifiant | Statut pour ce rôle |
+|---|---|
+| `claude-opus-4-8` (alias `opus`) | défaut actuel (H-62) |
+| `claude-sonnet-5` (alias `sonnet`) | éligible |
+| `claude-fable-5` | éligible |
+| `claude-opus-4-7` | éligible — **vérifié accessible** |
+| `claude-sonnet-4-6` | accessible, mais **jugé insuffisant** pour ce rôle par Chris |
+
+`☠` **Haiku est exclu du rôle d'orchestrateur** — décision explicite : il ne peut pas porter cette
+responsabilité. Fait technique concordant : `supportedModels()` le donne **sans `supportsEffort` ni
+`supportsAdaptiveThinking`**. Il reste utilisable ailleurs (juge anti-boucle H-68).
+
+**Raisonnement** : `effort` ∈ `low | medium | high | xhigh | max` (ou un entier), et `thinking` ∈
+`{type:'adaptive', display?}` | `{type:'enabled', budgetTokens?}` | `{type:'disabled'}`.
+Effet **mesuré** sur une même énigme en Sonnet 5 : `effort: max` → 714 tokens de sortie ·
+`effort: low` → 107 · `thinking: disabled` → 141. Le levier est réel.
+
+`⚠` **L'UI ne doit proposer que les niveaux réellement supportés** par le modèle sélectionné : la
+liste vient de `supportedModels()[].supportedEffortLevels`, jamais d'une constante en dur.
+
+`⚠` **`setModel()` et `setMaxThinkingTokens()` existent** — le changement peut se faire **à chaud**,
+sans redémarrer la session.
+
+`☠` **Piège mesuré** : un identifiant de modèle inexistant **n'échoue pas au démarrage**. Le message
+`init` le reflète tel quel, puis le premier tour rend `subtype: "success"` **avec** `is_error: true`,
+`api_error_status: 404`, `terminal_reason: "api_error"`. ⇒ valider le modèle **contre
+`supportedModels()`** avant de l'offrir, et lire `is_error`, **jamais** `subtype`.
+
+---
+
+## H-72 · Observabilité : jauges de quota et navigation par agent
+
+**Décision de Chris (2026-07-22)**. Trois ajouts à l'interface, à faire **après le MVP** du harness.
+
+**1. Jauges de quota, visibles en permanence** : pourcentage de la **fenêtre de 5 h** (« session
+actuelle ») **et** de la **fenêtre 7 jours** (« semaine »), avec l'heure de réinitialisation.
+`☠` **Par compte** — les fenêtres ne sont pas synchronisées entre comptes (mesuré : 41 % / reset
+20:00 sur l'un, valeurs différentes sur l'autre au même instant).
+
+**2. Une discussion par équipe** : en ouvrant la conversation d'une équipe, on voit **le team leader,
+ses messages, et les actions qu'il exécute**.
+
+**3. Navigation jusqu'à l'agent** : dans une équipe, les **sous-agents actifs** sont cliquables. En
+cliquant sur l'un d'eux, on voit **ce qu'il fait, où il en est, et son travail en temps réel** — le
+même niveau de détail que le lead.
+
+**L'intention, dans les mots de Chris** : « une décomposition de comment fonctionne Claude Code, mais
+navigable depuis une interface ».
+
+`⚠` **Tension à arbitrer avec H-45** : l'orchestrateur ne doit recevoir **aucun flux brut** dans son
+contexte — c'est ce qui l'empêche de saturer. Mais l'**opérateur**, lui, veut voir ce flux brut.
+⇒ Ces deux exigences ne s'opposent pas **à condition** que le flux détaillé aille de la source
+**directement à l'UI**, sans jamais transiter par le contexte de l'orchestrateur. Le chaînage se fait
+via `parent_tool_use_id` / `parent_agent_id` (déjà prévu en M-50). `☠` Ne jamais « faire remonter au
+maître pour qu'il affiche » — ce serait la panne #17.
