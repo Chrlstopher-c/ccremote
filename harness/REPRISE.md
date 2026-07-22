@@ -237,6 +237,17 @@ Le mécanisme historique de ccremote (écraser `.credentials.json` + relancer le
 `☠` Le `CLAUDE_CONFIG_DIR` d'un worker reçoit **aussi les transcripts JSONL locaux**, qui sont la
 source de vérité (H.3.1). Ne pas le pointer vers `/tmp` sans mesurer l'impact sur la rétention.
 
+`☠` **Isoler le compte isole AUSSI toute la config.** Constaté le 2026-07-22 : un dossier de compte
+fraîchement authentifié n'a ni `CLAUDE.md`, ni `settings.json`, ni `skills/`, ni serveurs MCP. Un
+worker lancé dessus perdait donc les standards de code **et** Playwright/CodeIndex — alors que H-52
+exige qu'un lead fasse ses tests E2E avec les MCP. Le pré-vol de M-01 l'a détecté et a refusé de
+spawner (`machine_claude_md_missing`) : le garde-fou B.1.2 a fonctionné.
+
+⇒ Correctif appliqué : **liens symboliques** de `~/.claude/{CLAUDE.md,settings.json,rules,skills,
+commands,plugins}` vers chaque `~/.claude-comptes/<compte>/`. On isole ce qui est propre au compte
+(credentials, sessions, transcripts), on partage ce qui est commun (config, outils). À refaire pour
+tout nouveau compte ajouté.
+
 `☠` **La rotation par snapshot de credentials ne marche pas.** Vérifié le 2026-07-22 : les deux
 snapshots (`~/.claude/.credentials_account1.json` du 11/07, `_account2.json` du 19/07) échouent tous
 les deux en `Failed to authenticate: OAuth session expired and could not be refreshed`. Les refresh

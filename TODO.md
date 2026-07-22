@@ -147,6 +147,18 @@ les deux anciens `.credentials_account*.json`).
 - [ ] **Projet non-git fixant `brancheDefaut` : rejeté, pas ignoré** — plus strict que ce que le
       texte impose. Choix assumé dans l'esprit « signaler explicitement » de F.1.3.
 
+### Bancs réels passés par le parent — 2026-07-22
+- [x] **`acceptation/worker-reel.ts`** — `startWorker` (M-01) exercé contre le vrai SDK pour la
+      première fois : worker démarré, mandat mené à terme (`RESULTAT.md` = `TERMINE`), **plancher de
+      déni réellement appliqué** (sonde refusée), capacités lues depuis `init`, `SessionStore`
+      alimenté. Valide M-01 + M-20 + M-31 ensemble, en conditions réelles.
+      `☠` **Découverte** : isoler le compte via `CLAUDE_CONFIG_DIR` isole **aussi toute la config** —
+      pas de `CLAUDE.md`, pas de `settings.json`, pas de `skills/`, **pas de serveurs MCP**. Le
+      worker perdait Playwright/CodeIndex, que H-52 lui demande d'utiliser pour ses tests E2E.
+      Le pré-vol de M-01 l'a détecté et a refusé de spawner — le garde-fou a joué son rôle.
+      Corrigé par liens symboliques (voir `harness/REPRISE.md`, section multi-comptes).
+      `⚠` **À refaire pour tout nouveau compte ajouté** — sinon ses workers repartiront nus.
+
 ### Dettes ouvertes du lot 3
 - [ ] **Ports non implémentés** : `InventairePc` et `ReinitialisateurSession` (M-30) sont des
       contrats sans implémentation réelle — la réconciliation ne tourne donc **pas** de bout en bout.
