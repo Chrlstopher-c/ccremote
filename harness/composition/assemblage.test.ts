@@ -32,6 +32,9 @@ import { creerLecteurUtilisationParc } from './pi/port-utilisation-parc.ts';
 import { creerPortBusPermissionsColocalise } from './bus-permissions/port-colocalise.ts';
 import { construireWorkerSpec } from './pc/construire-worker-spec.ts';
 import { assemblerSuperviseurPc } from './pc/assembler-superviseur.ts';
+import { demarrerServeurLienPc } from './pi/serveur-lien-pc.ts';
+import { demarrerServeurApiWeb } from '../control-plane/api-web/index.ts';
+import { entetesAuth } from './lien-pc-pi/secret.ts';
 
 function dossierTemporaire(prefixe: string): string {
   return mkdtempSync(join(tmpdir(), prefixe));
@@ -183,5 +186,53 @@ describe('assemblage — juge anti-boucle (H-68) : forme du port réellement fou
     // port à `SuperviseurWorkers` — vérifié par lecture de code (première mention
     // en production du port, TODO.md). Le VERDICT réel du juge (appel Haiku)
     // exige un vrai réseau : hors mandat de ce test, voir le rapport de mission.
+  });
+});
+
+describe('assemblage — l’interface sait que le PC est éteint (H-75)', () => {
+  /**
+   * `☠` Le défaut que ce bloc ferme : `pcOnline` branché sur un drapeau tenu à
+   * la main plutôt que sur le lien réel. Ce serait invisible en test unitaire
+   * (le drapeau y est injecté) et se manifesterait comme une interface affirmant
+   * « PC en ligne » toute la nuit, avec des données figées présentées comme
+   * fraîches — pire qu'une erreur, parce qu'on la croit.
+   *
+   * On assemble ici les DEUX serveurs exactement comme `assembler-control-plane.ts`
+   * les assemble, et on fait varier la seule chose qui doit compter : la présence
+   * d'un vrai client connecté.
+   */
+  test('pcOnline suit l’état RÉEL du lien, pas un drapeau — vérifié en connectant un vrai client', async () => {
+    const registre = ouvrirRegistre({ chemin: ':memory:' });
+    const escalades = new MachineEtatsDemandes();
+    const secret = 'secret-assemblage-suffisamment-long';
+
+    const serveurLien = demarrerServeurLienPc({ port: 0, hostname: '127.0.0.1', secret });
+    // Exactement l'expression de `assembler-control-plane.ts` — si elle change
+    // là-bas sans changer ici, ce test cesse de prouver quoi que ce soit :
+    // c'est pourquoi il construit les deux serveurs plutôt que d'en simuler un.
+    const api = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      escalades,
+      pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
+    });
+
+    const etat = async (): Promise<boolean> => {
+      const rep = await fetch(`http://127.0.0.1:${api.port}/api/harness/health`);
+      return ((await rep.json()) as { pcOnline: boolean }).pcOnline;
+    };
+
+    expect(await etat()).toBe(false); // PC éteint : le régime nominal de la nuit
+
+    const pc = new WebSocket(`ws://127.0.0.1:${serveurLien.port}/`, { headers: entetesAuth(secret) } as never);
+    await new Promise<void>((r) => pc.addEventListener('open', () => r()));
+    await new Promise<void>((r) => setTimeout(r, 100));
+
+    expect(await etat()).toBe(true); // le PC est revenu, sans qu'on ait rien déclaré
+
+    pc.close();
+    api.arreter();
+    serveurLien.arreter();
+    registre.fermer();
   });
 });

@@ -27,6 +27,9 @@ async function main(): Promise<void> {
   // `☠` Jamais de valeur par défaut : un secret de lien manquant doit arrêter le
   // démarrage bruyamment (H-74, point 2), jamais retomber sur une constante.
   const secretLienPc = envObligatoire('CCREMOTE_LIEN_SECRET');
+  // API web servie à `pi-web` (Flask), qui la relaie sous `/api/harness/...`.
+  // Toujours en local : ce serveur n'a pas d'authentification propre.
+  const portApiWeb = envNombreOptionnel('CCREMOTE_API_WEB_PORT', 8722);
   const seuilUtilisationPctPlafondParc = envSeuilPctOptionnel('CCREMOTE_PLAFOND_PARC_SEUIL_PCT');
 
   const assemble = await assemblerControlPlanePi({
@@ -39,11 +42,13 @@ async function main(): Promise<void> {
     portLienPc,
     hostnameLienPc,
     secretLienPc,
+    portApiWeb,
     seuilUtilisationPctPlafondParc,
   });
 
   const arreterProprement = (signal: string): void => {
     log.info({ signal }, 'arrêt du process Pi demandé');
+    assemble.serveurApiWeb.arreter();
     assemble.serveurLien.arreter();
     assemble.orchestrateur.fermer();
     process.exit(0);

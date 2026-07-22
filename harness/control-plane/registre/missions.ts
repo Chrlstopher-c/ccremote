@@ -113,6 +113,32 @@ export class DepotMissions {
     });
   }
 
+  /**
+   * Parc complet, tous états — la vue « parc » de l'interface (contrat API,
+   * `GET /api/harness/missions`).
+   *
+   * `☠` Bornée explicitement, contrairement à `listerActives()` : ce SELECT
+   * porte sur l'historique entier, qui ne cesse de croître. Sans limite, la
+   * page du parc ralentirait proportionnellement à l'âge du déploiement — le
+   * genre de dégradation qu'on ne voit jamais en développement et toujours en
+   * production. Les plus récemment actives d'abord, ce sont celles qu'on
+   * regarde.
+   */
+  public listerRecentes(limite = 200): readonly Mission[] {
+    return executer(
+      'missions.listerRecentes',
+      () => {
+        const lignes = this.db
+          .query<LigneMission, [number]>(
+            'SELECT * FROM mission ORDER BY etat_harness_maj_a DESC LIMIT ?',
+          )
+          .all(limite);
+        return lignes.map(versMission);
+      },
+      { limite },
+    );
+  }
+
   public listerParLot(lotId: string): readonly Mission[] {
     return executer(
       'missions.listerParLot',

@@ -27,6 +27,7 @@
  * `reconciliation-sur-rattachement.ts`.
  */
 
+import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
 import { MachineEtatsDemandes } from '../../control-plane/bus-permissions/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
@@ -59,6 +60,8 @@ export interface OptionsAssemblageControlPlanePi {
   readonly hostnameLienPc?: string;
   /** Secret partagé, lu depuis l'environnement par l'appelant — jamais codé en dur. */
   readonly secretLienPc: string;
+  /** Port de l'API web servie à `pi-web` — toujours sur `127.0.0.1`. */
+  readonly portApiWeb: number;
   readonly configDirOrchestrateur?: string;
   readonly seuilUtilisationPctPlafondParc?: number;
 }
@@ -68,6 +71,7 @@ export interface ControlPlanePiAssemble {
   readonly machineEtatsDemandes: MachineEtatsDemandes;
   readonly clientSuperviseurPc: ClientSuperviseurPc;
   readonly serveurLien: ServeurLienPc;
+  readonly serveurApiWeb: ServeurApiWeb;
   readonly orchestrateur: PoigneeOrchestrateur;
 }
 
@@ -121,6 +125,16 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
   });
 
+  // `☠` `pcEnLigne` est branché sur l'ÉTAT RÉEL du lien, jamais sur un drapeau
+  // tenu à la main : c'est ce qui fait que l'interface dit « PC éteint » parce
+  // qu'il l'est, et non parce qu'un booléen a été oublié quelque part.
+  const serveurApiWeb = demarrerServeurApiWeb({
+    port: options.portApiWeb,
+    registre,
+    escalades: machineEtatsDemandes,
+    pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
+  });
+
   const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
   declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
 
@@ -137,5 +151,5 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
 
   log.info({ sessionId: orchestrateur.sessionId }, 'control plane Pi assemblé et session orchestrateur établie');
 
-  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, orchestrateur };
+  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur };
 }
