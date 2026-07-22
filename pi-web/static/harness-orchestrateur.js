@@ -1,33 +1,169 @@
-// ============ HARNESS — vue Orchestrateur (chat + modèle/raisonnement + mandat) ============
-// H-61 : l'orchestrateur ne crée jamais une équipe seul. Il propose un mandat,
-// l'opérateur clique — c'est le seul point de contrôle humain requis (H-61).
+// ============ HARNESS — vue Orchestrateur (multi-conversations + streaming) ============
+// Chaque conversation est une session Agent SDK indépendante (type ChatGPT,
+// décidé le 23/07). La persistance vit côté serveur : un rechargement dur relit
+// le fil, rien n'est perdu. Le « streaming » = sondage de /events?since=curseur ;
+// chaque bloc SDK (réflexion, outil, texte) arrive comme un événement distinct.
+// H-61 : l'orchestrateur ne crée jamais une équipe seul — il propose un mandat.
 
 let hModelsCache = [];
 
-async function hRenderGauges() {
-  // getOrchestratorGauges renvoie { contextPct, active, erreur? } au niveau racine.
-  const g = await HarnessAPI.getOrchestratorGauges() || {};
-  if (g.erreur) { document.getElementById('hGaugeStrip').innerHTML = hPcAbsentBanner('les jauges de l\'orchestrateur'); return; }
-  // ☠ contextPct null = session inactive ou pas encore de mesure : « — », jamais un faux %.
-  const ctxTxt = (typeof g.contextPct === 'number') ? g.contextPct + ' %' : '—';
-  const ctxW = (typeof g.contextPct === 'number') ? g.contextPct : 0;
-  document.getElementById('hGaugeStrip').innerHTML = `
-    <div class="gauge">
-      <div class="gh"><span>Contexte utilisé</span></div>
-      <div class="gv">${ctxTxt}</div>
-      <div class="usage-track" style="margin-top:6px;"><div class="usage-fill" style="width:${ctxW}%;background:${ctxW >= 75 ? 'var(--err)' : ctxW >= 50 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
-      <button class="compact-btn" onclick="hCompactContext()">Compacter maintenant</button>
-    </div>
-    <div class="gauge"><div class="gh"><span>Fin de fenêtre (five_hour)</span></div><div class="gv">—</div><div class="gs">${g.active ? 'non mesuré — voir Comptes & quotas' : 'session orchestrateur inactive'}</div></div>
-    <div class="gauge"><div class="gh"><span>$ consommés — fenêtre courante</span></div><div class="gv">${hMoney(g.costWindow)}</div><div class="gs">agrégé par compte (H-63)</div></div>`;
-  hRenderMiniGauges(); hRenderQuotaStrip();
-}
-async function hCompactContext() {
-  // ☠ La compaction déclenchée à distance n'est pas encore câblée sur la vraie
-  // session : on ne prétend pas l'avoir faite. Honnête plutôt que faux succès.
-  showToast('Compaction à distance non encore disponible — à câbler.', 'warn');
+// État de la vue conversation. Un seul fil ouvert à la fois ; le polling ne tourne
+// que pendant une génération.
+const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [] };
+const HORCH_KEY = 'ccremote.orch.conv';
+const HORCH_POLL_MS = 600;
+
+// ---- cycle de vie de la vue -------------------------------------------------
+async function hInitOrchestrateur() {
+  await hRenderModelSelector();
+  await hLoadConvList();
+  const saved = localStorage.getItem(HORCH_KEY);
+  const cible = (hOrch.list.find((c) => c.id === saved) ? saved : (hOrch.list[0] && hOrch.list[0].id)) || null;
+  if (cible) await hOpenConversation(cible);
+  else await hNewConversation();
 }
 
+// ☠ Compat : core.js appelait hRenderGauges. On garde le nom mais il route
+// désormais vers l'init multi-conversations (les jauges globales ont disparu au
+// profit du contexte par fil).
+function hRenderGauges() { hInitOrchestrateur(); }
+
+// ---- liste des conversations ------------------------------------------------
+async function hLoadConvList() {
+  const r = await HarnessAPI.getConversations();
+  if (r.erreur) { hRenderConvBar([], r.erreur); return; }
+  hOrch.list = r.data || [];
+  hRenderConvBar(hOrch.list);
+}
+
+function hRenderConvBar(list, erreur) {
+  const bar = document.getElementById('hConvBar');
+  if (!bar) return;
+  if (erreur) {
+    bar.innerHTML = `<span style="font-size:11px;color:var(--err);">${escapeHtml(erreur)}</span>`;
+    return;
+  }
+  const chips = list.map((c) => {
+    const active = c.id === hOrch.convId;
+    const ctx = (typeof c.contextPct === 'number') ? ` · ${c.contextPct}%` : '';
+    return `<div class="conv-chip ${active ? 'active' : ''}" onclick="hOpenConversation('${c.id}')" title="${escapeHtml(c.titre)}${ctx}">
+      ${c.active ? '<span class="dot"></span>' : ''}
+      <span class="lbl">${escapeHtml(c.titre)}</span>
+      ${active ? `<span class="x" onclick="event.stopPropagation();hArchiveConversation('${c.id}')">×</span>` : ''}
+    </div>`;
+  }).join('');
+  bar.innerHTML = chips + `<button class="conv-new" onclick="hNewConversation()">+ Nouveau</button>`;
+}
+
+async function hNewConversation() {
+  const r = await HarnessAPI.createConversation();
+  if (!r.ok || !r.conversation) { showToast(r.erreur || 'Création impossible', 'warn'); return; }
+  await hLoadConvList();
+  await hOpenConversation(r.conversation.id);
+  const el = document.getElementById('hOrchInput'); if (el) el.focus();
+}
+
+async function hArchiveConversation(id) {
+  const r = await HarnessAPI.archiveConversation(id);
+  if (!r.ok) { showToast(r.erreur || 'Archivage impossible', 'warn'); return; }
+  if (hOrch.convId === id) { hStopPoll(); hOrch.convId = null; }
+  await hLoadConvList();
+  const suivant = hOrch.list[0] && hOrch.list[0].id;
+  if (suivant) await hOpenConversation(suivant); else await hNewConversation();
+}
+
+// ---- ouverture + rendu complet d'un fil ------------------------------------
+async function hOpenConversation(id) {
+  hStopPoll();
+  hOrch.convId = id; hOrch.cursor = 0; hOrch.cur = null;
+  localStorage.setItem(HORCH_KEY, id);
+  hRenderConvBar(hOrch.list);
+  const chat = document.getElementById('hChatBody');
+  chat.innerHTML = '';
+  const r = await HarnessAPI.getConversation(id);
+  if (id !== hOrch.convId) return; // l'utilisateur a changé de fil pendant l'attente
+  if (r.erreur) { chat.innerHTML = `<div class="conv-empty">${escapeHtml(r.erreur)}</div>`; return; }
+  const d = r.data || {};
+  (d.events || []).forEach(hAppendEvent);
+  hOrch.cursor = d.cursor || 0;
+  hOrch.generating = !!d.generating;
+  if (!d.events || d.events.length === 0) {
+    chat.innerHTML = `<div class="conv-empty">Nouvelle conversation.<br>Écris à l'orchestrateur — sa session démarre au premier message.</div>`;
+  }
+  hScrollChat();
+  if (hOrch.generating) hStartPoll();
+}
+
+// ---- rendu incrémental d'un événement (le cœur du streaming) ---------------
+function hEnsureAssistant(chat) {
+  if (hOrch.cur) return hOrch.cur;
+  const a = document.createElement('div'); a.className = 'bubble-a';
+  chat.appendChild(a); hOrch.cur = a; return a;
+}
+function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
+
+function hAppendEvent(ev) {
+  const chat = document.getElementById('hChatBody');
+  const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
+  if (ev.type === 'operateur') {
+    const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = ev.contenu;
+    chat.appendChild(u); hOrch.cur = null; return;
+  }
+  const grp = hEnsureAssistant(chat);
+  if (ev.type === 'texte') {
+    const p = document.createElement('p'); p.textContent = ev.contenu; grp.appendChild(p);
+  } else if (ev.type === 'reflexion') {
+    const d = document.createElement('details'); d.className = 'orch-think';
+    const s = document.createElement('summary'); s.textContent = 'Réflexion';
+    const b = document.createElement('div'); b.className = 'think-body'; b.textContent = ev.contenu;
+    d.appendChild(s); d.appendChild(b); grp.appendChild(d);
+  } else if (ev.type === 'outil') {
+    const t = document.createElement('div'); t.className = 'orch-tool';
+    const code = document.createElement('code'); code.textContent = hToolLabel(ev.contenu);
+    t.append('→ ', code); grp.appendChild(t);
+  } else if (ev.type === 'erreur') {
+    const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = ev.contenu; grp.appendChild(e);
+  } else if (ev.type === 'resultat') {
+    hOrch.cur = null; // le tour est fini : le prochain bloc ouvrira un nouveau groupe
+  }
+}
+
+// ---- polling de génération --------------------------------------------------
+function hStartPoll() { hStopPoll(); hPollNow(); }
+function hStopPoll() { if (hOrch.timer) { clearTimeout(hOrch.timer); hOrch.timer = null; } }
+
+async function hPollNow() {
+  const id = hOrch.convId; if (!id) return;
+  const r = await HarnessAPI.getConversationEvents(id, hOrch.cursor);
+  if (id !== hOrch.convId) return; // changement de fil pendant l'attente
+  if (r.erreur) { hStopPoll(); return; } // silencieux : un prochain envoi relancera
+  const d = r.data || {};
+  (d.events || []).forEach((ev) => { hAppendEvent(ev); hOrch.cursor = ev.seq; });
+  hOrch.generating = !!d.generating;
+  if (d.events && d.events.length) hScrollChat();
+  if (hOrch.generating) hOrch.timer = setTimeout(hPollNow, HORCH_POLL_MS);
+  else { hStopPoll(); hLoadConvList(); } // fin de tour : rafraîchit titres/ordre/contexte
+}
+
+function hScrollChat() {
+  const s = document.getElementById('hChatScroll'); if (s) s.scrollTop = s.scrollHeight;
+}
+
+// ---- envoi ------------------------------------------------------------------
+async function hSendOrchMessage() {
+  const el = document.getElementById('hOrchInput');
+  const text = (el.value || '').trim();
+  if (!text) return;
+  if (!hOrch.convId) { await hNewConversation(); if (!hOrch.convId) return; }
+  el.value = ''; el.style.height = 'auto';
+  const r = await HarnessAPI.sendConversationMessage(hOrch.convId, text);
+  // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.
+  if (!r.ok) { hAppendEvent({ type: 'erreur', contenu: r.erreur || 'Message non transmis' }); hScrollChat(); return; }
+  hOrch.generating = true;
+  hStartPoll();
+}
+
+// ============ Sélecteur de modèle / raisonnement (inchangé) ============
 async function hRenderModelSelector() {
   hModelsCache = (await HarnessAPI.getModels());
   const selModel = document.getElementById('hSelModel');
@@ -65,28 +201,7 @@ function hUpdateModelHint() {
   else hint.textContent = `Niveaux de raisonnement pour ${mo.label} : ${mo.effort.map((e) => HARNESS_EFFORT_LABEL[e]).join(' · ')}. Change à chaud, sans redémarrer la session.`;
 }
 
-async function hSendOrchMessage() {
-  const el = document.getElementById('hOrchInput');
-  const text = (el.value || '').trim();
-  if (!text) return;
-  const chat = document.getElementById('hChatBody');
-  const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = text; chat.appendChild(u);
-  el.value = '';
-  // Bulle d'attente : l'orchestrateur peut mettre plusieurs secondes à répondre.
-  const a = document.createElement('div'); a.className = 'bubble-a msg-in';
-  a.innerHTML = `<p style="margin:0;color:var(--ink-3);">…</p>`;
-  chat.appendChild(a);
-  document.getElementById('hChatScroll').scrollTop = document.getElementById('hChatScroll').scrollHeight;
-  const res = await HarnessAPI.sendOrchestratorMessage(text, HarnessState.orchModel);
-  // ☠ Un échec est AFFICHÉ (session inactive, timeout), jamais avalé : sinon
-  // l'opérateur croit que son message est passé.
-  const contenu = res.erreur
-    ? `<span style="color:var(--err);">${escapeHtml(res.erreur)}</span>`
-    : escapeHtml(res.reply || '(réponse vide)');
-  a.innerHTML = `<p style="margin:0;">${contenu}</p>`;
-  document.getElementById('hChatScroll').scrollTop = document.getElementById('hChatScroll').scrollHeight;
-}
-
+// ============ Mandat (H-61) — encore mock, DOM du fil courant ============
 function hIsTestable(txt) {
   if (!txt) return false;
   const t = txt.trim();
@@ -116,8 +231,9 @@ async function hSubmitMandate() {
 }
 function hAppendProposalToChat(p) {
   const chat = document.getElementById('hChatBody');
+  const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
   const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = `Lance une mission sur ${p.projet}.`; chat.appendChild(u);
-  const a = document.createElement('div'); a.className = 'bubble-a msg-in';
+  const a = document.createElement('div'); a.className = 'bubble-a';
   a.innerHTML = `<p style="margin:0 0 4px;">Je ne crée rien seul (H-61). Voici le mandat proposé — ton autorisation dispatche l'équipe.</p>
     <div class="mandate-card" id="hMandate_${p.id}">
       <div class="mh2">Proposition de mandat</div>
@@ -133,7 +249,7 @@ function hAppendProposalToChat(p) {
       </div>
     </div>`;
   chat.appendChild(a);
-  document.getElementById('hChatScroll').scrollTop = document.getElementById('hChatScroll').scrollHeight;
+  hScrollChat();
 }
 function hStampProposal(id, label, color) {
   const card = document.getElementById('hMandate_' + id);

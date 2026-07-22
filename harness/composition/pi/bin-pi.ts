@@ -33,11 +33,9 @@ async function main(): Promise<void> {
   // tributaire d'un `/login` sur le Pi.
   const avecOrchestrateur = process.env['CCREMOTE_PI_ORCHESTRATEUR'] === '1';
   const cheminRegistreDb = envObligatoire('CCREMOTE_PI_REGISTRE_DB');
-  // Exigés seulement si la session maître est demandée : sans elle, imposer ces
-  // chemins ferait échouer un démarrage parfaitement valide.
-  const cheminIdentiteOrchestrateur = avecOrchestrateur
-    ? envObligatoire('CCREMOTE_PI_IDENTITE_ORCHESTRATEUR')
-    : envOptionnel('CCREMOTE_PI_IDENTITE_ORCHESTRATEUR', '/tmp/ccremote-identite-inutilisee');
+  // `☠` L'identité SDK n'est plus un fichier unique : chaque conversation porte
+  // son propre `session_id` en base (migration 2). Plus de
+  // CCREMOTE_PI_IDENTITE_ORCHESTRATEUR à exiger.
   const cheminIncidentsOrchestrateur = avecOrchestrateur
     ? envObligatoire('CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR')
     : envOptionnel('CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR', '/tmp/ccremote-incidents-inutilises');
@@ -60,7 +58,6 @@ async function main(): Promise<void> {
 
   const assemble = await assemblerControlPlanePi({
     cheminRegistreDb,
-    cheminIdentiteOrchestrateur,
     cheminIncidentsOrchestrateur,
     repertoireProjets,
     cwdOrchestrateur,
@@ -78,32 +75,19 @@ async function main(): Promise<void> {
     log.info({ signal }, 'arrêt du process Pi demandé');
     assemble.serveurApiWeb.arreter();
     assemble.serveurLien.arreter();
-    assemble.orchestrateur?.fermer();
+    assemble.gestionnaireConversations?.fermerTout();
     process.exit(0);
   };
   process.on('SIGINT', () => arreterProprement('SIGINT'));
   process.on('SIGTERM', () => arreterProprement('SIGTERM'));
 
-  // Unique lecteur du flux (voir `demarrage.ts` : `demarrerOrchestrateur` ne
-  // consomme jamais `query` lui-même). Ici, en attendant une vraie UI/API
-  // (hors périmètre de cette mission), on se contente d'alimenter la
-  // discipline de contexte — aucune décision n'est prise sur le contenu.
-  const orchestrateur = assemble.orchestrateur;
-  if (orchestrateur === null) {
-    log.info({}, 'control plane en service — parc, escalades et pilotage actifs, vue conversation inactive');
-    // Rien à consommer : les serveurs (lien + API) tiennent le process vivant.
-    return;
-  }
-
-  // `☠` Lecteur UNIQUE du flux. Chaque message va à DEUX consommateurs : la
-  // discipline de contexte (`ingererMessage`) ET le collecteur de conversation
-  // (`conversation.ingerer`), qui assemble la réponse rendue à l'API. Un second
-  // `for await` ailleurs volerait des messages à celui-ci.
-  const conversation = assemble.conversation;
-  for await (const message of orchestrateur.query) {
-    orchestrateur.ingererMessage(message);
-    conversation?.ingerer(message);
-  }
+  // `☠` Plus de lecteur global : le gestionnaire de conversations possède UNE
+  // boucle de lecture par session, démarrée à la demande. Les serveurs (lien +
+  // API) tiennent le process vivant. Rien à consommer ici.
+  log.info(
+    { avecOrchestrateur },
+    'control plane Pi en service — parc, escalades et pilotage actifs ; conversations à la demande',
+  );
 }
 
 main().catch((erreur: unknown) => {

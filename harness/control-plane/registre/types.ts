@@ -182,6 +182,39 @@ export interface Capacite {
   readonly observeA: number;
 }
 
+export type StatutConversation = 'active' | 'archivee';
+
+/**
+ * Un fil de discussion avec l'orchestrateur. `sessionId` est l'identité SDK
+ * fixée (reprise après redémarrage) — `null` tant que la session n'a jamais
+ * tourné.
+ */
+export interface Conversation {
+  readonly id: string;
+  readonly titre: string;
+  readonly sessionId: string | null;
+  readonly statut: StatutConversation;
+  readonly creeA: number;
+  readonly majA: number;
+}
+
+export type TypeEvenementConversation =
+  | 'operateur'
+  | 'reflexion'
+  | 'texte'
+  | 'outil'
+  | 'resultat'
+  | 'erreur';
+
+/** Un bloc du fil, dans l'ordre d'arrivée. `seq` est le curseur de streaming. */
+export interface EvenementConversation {
+  readonly seq: number;
+  readonly conversationId: string;
+  readonly type: TypeEvenementConversation;
+  readonly contenu: string;
+  readonly creeA: number;
+}
+
 /** Vue « où en est ce que j'ai demandé hier soir ? » (F2.0.1). */
 export interface AvancementLot {
   readonly lot: Lot;

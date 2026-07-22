@@ -49,7 +49,7 @@ function switchView(view) {
   if (view === 'harness-parc') hRenderParc();
   if (view === 'harness-escalades') hRenderEscalades();
   if (view === 'harness-comptes') hRenderComptes();
-  if (view === 'harness-orchestrateur') { hRenderGauges(); hRenderModelSelector(); }
+  if (view === 'harness-orchestrateur') hInitOrchestrateur();
   const active = document.querySelector('.view.active');
   if (active) active.scrollTop = 0;
   closeSidebar();

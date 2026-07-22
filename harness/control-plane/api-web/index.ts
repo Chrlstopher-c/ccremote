@@ -16,3 +16,10 @@ export type { MissionApi, EtatMissionApi } from './vue-missions.ts';
 export type { OrdresVersPc } from './ecritures.ts';
 export type { EscaladeApi } from './vue-escalades.ts';
 export type { AccountApi, FenetreApi } from './vue-comptes.ts';
+export type {
+  ConversationApi,
+  DetailConversationApi,
+  EvenementApi,
+  EvenementsApi,
+  PortConversations,
+} from './vue-conversations.ts';

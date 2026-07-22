@@ -34,11 +34,13 @@ import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-c
 import {
   demarrerOrchestrateur,
   JournalIncidentsFichier,
-  StockageIdentiteFichier,
-  type PoigneeOrchestrateur,
+  type StockageIdentite,
 } from '../../control-plane/orchestrateur/processus/index.ts';
 import type { DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
-import { ConversationOperateur } from '../../control-plane/orchestrateur/conversation-operateur.ts';
+import {
+  GestionnaireConversations,
+  type ConstruireSessionConversation,
+} from '../../control-plane/orchestrateur/gestionnaire-conversations.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
 import { cablerPermissionVerdictDistant } from './permission-verdict-distant.ts';
@@ -52,7 +54,11 @@ const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' })
 
 export interface OptionsAssemblageControlPlanePi {
   readonly cheminRegistreDb: string;
-  readonly cheminIdentiteOrchestrateur: string;
+  /**
+   * `☠` L'identité SDW n'est plus un fichier unique : chaque conversation porte
+   * son propre `session_id` en base (migration 2). Ce chemin n'est donc plus
+   * requis pour l'orchestrateur multi-sessions.
+   */
   readonly cheminIncidentsOrchestrateur: string;
   readonly repertoireProjets: string;
   readonly cwdOrchestrateur: string;
@@ -84,14 +90,12 @@ export interface ControlPlanePiAssemble {
   readonly clientSuperviseurPc: ClientSuperviseurPc;
   readonly serveurLien: ServeurLienPc;
   readonly serveurApiWeb: ServeurApiWeb;
-  /** `null` quand `avecOrchestrateur` est faux — voir cette option. */
-  readonly orchestrateur: PoigneeOrchestrateur | null;
   /**
-   * Collecteur de la conversation orchestrateur. `null` si la session maître
-   * est inactive. `☠` DOIT être nourri par le lecteur unique de
-   * `orchestrateur.query` (voir `bin-pi.ts`) — sinon aucune réponse ne remonte.
+   * Gestionnaire des conversations orchestrateur (multi-sessions, type ChatGPT).
+   * `null` quand `avecOrchestrateur` est faux. `☠` Possède ses propres boucles de
+   * lecture (une par session) — `bin-pi.ts` n'a plus de lecteur global à tenir.
    */
-  readonly conversation: ConversationOperateur | null;
+  readonly gestionnaireConversations: GestionnaireConversations | null;
 }
 
 function construireDependancesReconciliation(client: ClientSuperviseurPc, machine: MachineEtatsDemandes): DependancesReconciliation {
@@ -156,12 +160,36 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
   });
 
-  // `☠` La conversation et la sentinelle n'existent qu'APRÈS le démarrage de
-  // l'orchestrateur (plus bas), mais le serveur API est construit AVANT.
-  // Références mutables, remplies une fois la session établie — même motif que
-  // le déclencheur de réconciliation ci-dessus.
-  let conversation: ConversationOperateur | null = null;
-  let contexteRatio: (() => number | null) | undefined;
+  // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :
+  // elle ne dépend que du client PC et de la machine d'escalades (tous deux déjà
+  // construits), et elle doit être prête si une connexion PC arrive.
+  const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
+  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
+
+  // `☠` Multi-sessions (type ChatGPT) : le gestionnaire construit une session par
+  // conversation À LA DEMANDE. Aucune session au boot — le quota ne brûle que
+  // quand l'opérateur écrit. La réconciliation du parc, elle, vit sur le
+  // rattachement du PC (ci-dessus), indépendante de ces sessions.
+  let gestionnaireConversations: GestionnaireConversations | null = null;
+  if (options.avecOrchestrateur === true) {
+    const construireSession: ConstruireSessionConversation = (stockageIdentite: StockageIdentite) =>
+      demarrerOrchestrateur({
+        stockageIdentite,
+        verificateurSessionExistante: creerVerificateurSessionSdk(options.cwdOrchestrateur),
+        serveurControle,
+        registre,
+        reconciliation: dependancesReconciliation,
+        incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
+        cwd: options.cwdOrchestrateur,
+        configDir: options.configDirOrchestrateur,
+      });
+    gestionnaireConversations = new GestionnaireConversations(registre, construireSession);
+  } else {
+    log.warn(
+      {},
+      'control plane assemblé SANS orchestrateur (avecOrchestrateur absent) — parc, escalades et pilotage opérationnels ; conversations désactivées (501)',
+    );
+  }
 
   // `☠` `pcEnLigne` est branché sur l'ÉTAT RÉEL du lien, jamais sur un drapeau
   // tenu à la main : c'est ce qui fait que l'interface dit « PC éteint » parce
@@ -181,41 +209,10 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       mettreEnPause: (missionId) => clientSuperviseurPc.mettreEnPause(missionId),
       reprendre: (missionId) => clientSuperviseurPc.reprendre(missionId),
     },
-    // Indirection : `conversation` est encore `null` ici, remplie plus bas.
-    orchestrateur: { envoyer: (texte) => {
-      if (conversation === null) throw new Error('session orchestrateur non encore établie');
-      return conversation.envoyer(texte);
-    } },
-    orchestrateurContexteRatio: options.avecOrchestrateur === true ? () => contexteRatio?.() ?? null : undefined,
+    conversations: gestionnaireConversations ?? undefined,
   });
 
-  const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
-  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
+  log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
 
-  if (options.avecOrchestrateur !== true) {
-    log.warn(
-      {},
-      'control plane assemblé SANS session orchestrateur (avecOrchestrateur absent) — parc, escalades et pilotage restent pleinement opérationnels ; seule la vue conversation est inactive',
-    );
-    return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur: null, conversation: null };
-  }
-
-  const orchestrateur = await demarrerOrchestrateur({
-    stockageIdentite: new StockageIdentiteFichier(options.cheminIdentiteOrchestrateur),
-    verificateurSessionExistante: creerVerificateurSessionSdk(options.cwdOrchestrateur),
-    serveurControle,
-    registre,
-    reconciliation: dependancesReconciliation,
-    incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
-    cwd: options.cwdOrchestrateur,
-    configDir: options.configDirOrchestrateur,
-  });
-
-  // Remplit les références mutables que le serveur API a déjà capturées.
-  conversation = new ConversationOperateur(orchestrateur.entree);
-  contexteRatio = () => orchestrateur.sentinelle.resume().derniereMesure?.ratio ?? null;
-
-  log.info({ sessionId: orchestrateur.sessionId }, 'control plane Pi assemblé et session orchestrateur établie');
-
-  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur, conversation };
+  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, gestionnaireConversations };
 }

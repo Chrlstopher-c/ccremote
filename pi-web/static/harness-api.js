@@ -63,7 +63,9 @@ const HarnessAPI = (() => {
       });
       const data = await rep.json();
       if (!rep.ok) return { ok: false, erreur: data.message || data.error || `HTTP ${rep.status}` };
-      return { ok: true, effet: data.effet, reply: data.reply };
+      // Laisse passer tout le corps (effet, reply, conversation…) — certaines
+      // écritures renvoient plus qu'un simple accusé.
+      return { ok: true, ...data };
     } catch (e) {
       return { ok: false, erreur: `Ordre non transmis : ${e.message}` };
     }
@@ -108,6 +110,27 @@ const HarnessAPI = (() => {
     async getEscalades() { return lireReel('/escalades'); },
 
     async getAccounts() { return lireReel('/accounts'); },
+
+    /* ---- Conversations orchestrateur (multi-fils, streaming) — RÉEL ---- */
+    // ☠ La persistance vit côté serveur : un rechargement dur relit le fil ici,
+    // rien n'est perdu. Le streaming = sondage de /events?since=curseur.
+    async getConversations() { return lireReel('/orchestrator/conversations'); },
+    async getConversation(id) { return lireReel(`/orchestrator/conversations/${encodeURIComponent(id)}`); },
+    async getConversationEvents(id, since) {
+      return lireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/events?since=${since | 0}`);
+    },
+    async createConversation(titre) { return ecrireReel('/orchestrator/conversations', titre ? { titre } : {}); },
+    async sendConversationMessage(id, text) {
+      // ☠ NON bloquant : le serveur enfile puis rend la main, la réponse arrive
+      // en streaming via getConversationEvents. On ne fabrique jamais de réponse.
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/message`, { text });
+    },
+    async renameConversation(id, titre) {
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/rename`, { titre });
+    },
+    async archiveConversation(id) {
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/archive`, {});
+    },
 
     /* ================= ENCORE EN DÉMO ==================================== */
     // ☠ Le serveur ne remonte pas encore les sous-agents (ils vivent sur le PC).

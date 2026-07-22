@@ -143,8 +143,48 @@ CREATE TABLE migration_appliquee (
 ) STRICT;
 `;
 
+/**
+ * Migration 2 — conversations de l'orchestrateur (multi-session, type ChatGPT).
+ *
+ * Chaque conversation est une session Agent SDK indépendante (contexte isolé,
+ * `session_id` pour la reprise après redémarrage du Pi). Le journal d'événements
+ * porte la conversation ET sert de substrat au streaming : l'UI interroge par
+ * `seq` croissant (`WHERE conversation_id=? AND seq>?`) et n'a jamais à recevoir
+ * deux fois le même bloc. `seq` est un AUTOINCREMENT global — un curseur
+ * monotone unique, valable comme point de reprise même après un rechargement dur
+ * de la page (la persistance vit ici, pas dans le DOM).
+ *
+ * `type` distingue ce qu'un bloc SDK contient réellement : `reflexion` (thinking),
+ * `texte` (réponse), `outil` (un tool_use, le « commentaire pendant la
+ * génération »), `resultat` (fin de tour), `erreur`. Les fusionner ferait perdre
+ * la distinction que l'UI doit rendre (bloc de réflexion repliable ≠ réponse).
+ */
+const MIGRATION_2 = `
+CREATE TABLE conversation (
+  id         TEXT PRIMARY KEY,
+  titre      TEXT NOT NULL,
+  session_id TEXT,
+  statut     TEXT NOT NULL DEFAULT 'active' CHECK (statut IN ('active', 'archivee')),
+  cree_a     INTEGER NOT NULL,
+  maj_a      INTEGER NOT NULL
+) STRICT;
+
+CREATE INDEX idx_conversation_maj ON conversation(statut, maj_a DESC);
+
+CREATE TABLE conversation_evenement (
+  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL CHECK (type IN ('operateur', 'reflexion', 'texte', 'outil', 'resultat', 'erreur')),
+  contenu         TEXT NOT NULL,
+  cree_a          INTEGER NOT NULL
+) STRICT;
+
+CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
+  { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

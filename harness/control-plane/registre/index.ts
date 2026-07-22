@@ -10,6 +10,7 @@ import type { Database } from 'bun:sqlite';
 import { fermerBase, ouvrirBase, type OptionsConnexion } from './connexion.ts';
 import { DepotCapacites } from './capacites.ts';
 import { DepotComptes } from './comptes.ts';
+import { DepotConversations } from './conversations.ts';
 import { DepotEtats } from './etats.ts';
 import { DepotLots } from './lots.ts';
 import { DepotMissions } from './missions.ts';
@@ -21,20 +22,26 @@ export type {
   AvancementLot,
   Capacite,
   Compte,
+  Conversation,
   CreationCompte,
   CreationLot,
   CreationMission,
   EtatHarness,
   EtatSdk,
+  EvenementConversation,
   Lot,
   Mission,
   OrigineTransition,
   Quota,
   RelevéQuota,
+  StatutConversation,
   StatutQuota,
   Transition,
+  TypeEvenementConversation,
   TypeFenetreQuota,
 } from './types.ts';
+export { DepotConversations } from './conversations.ts';
+export type { AjoutEvenement, CreationConversation } from './conversations.ts';
 export { ETATS_HARNESS_ACTIFS, ETATS_HARNESS_TERMINAUX } from './types.ts';
 export { CAPACITES_SURVEILLEES } from './capacites.ts';
 export { ErreurRegistre } from './journal.ts';
@@ -53,6 +60,7 @@ export class Registre {
   public readonly etats: DepotEtats;
   public readonly comptes: DepotComptes;
   public readonly capacites: DepotCapacites;
+  public readonly conversations: DepotConversations;
 
   private readonly db: Database;
 
@@ -63,6 +71,7 @@ export class Registre {
     this.etats = new DepotEtats(db);
     this.comptes = new DepotComptes(db);
     this.capacites = new DepotCapacites(db);
+    this.conversations = new DepotConversations(db);
   }
 
   public get version(): number {
