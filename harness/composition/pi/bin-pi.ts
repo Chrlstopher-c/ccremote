@@ -79,8 +79,14 @@ async function main(): Promise<void> {
     return;
   }
 
+  // `☠` Lecteur UNIQUE du flux. Chaque message va à DEUX consommateurs : la
+  // discipline de contexte (`ingererMessage`) ET le collecteur de conversation
+  // (`conversation.ingerer`), qui assemble la réponse rendue à l'API. Un second
+  // `for await` ailleurs volerait des messages à celui-ci.
+  const conversation = assemble.conversation;
   for await (const message of orchestrateur.query) {
     orchestrateur.ingererMessage(message);
+    conversation?.ingerer(message);
   }
 }
 

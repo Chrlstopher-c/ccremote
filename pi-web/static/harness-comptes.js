@@ -26,7 +26,7 @@ function hAccountBlock(a, missionsForAccount) {
       <span style="font-size:10.5px;color:var(--ink-3);align-self:center;">missions :</span>
       ${missionsForAccount.length ? missionsForAccount.map((m) => `<span class="chip" style="${isActive ? '' : 'background:var(--err-soft);color:var(--err);'}">${m.project}${m.landing && m.landing.active ? ' (atterrit)' : ''}</span>`).join('') : '<span class="chip">aucune</span>'}
     </div>
-    <div class="mono" style="font-size:9.5px;color:var(--ink-3);margin-top:9px;">consommé sur la fenêtre courante : ${hMoney(a.costWindow)} · poussé par rate_limit_event</div>
+    <div class="mono" style="font-size:9.5px;color:var(--ink-3);margin-top:9px;">consommé sur la fenêtre courante : ${hMoney(a.costWindow)}${typeof a.costWindow === 'number' ? ' · poussé par rate_limit_event' : ' · non mesuré (aucune session active)'}</div>
     <!-- ☠ Bouton de simulation retiré le 22/07/2026 : il mutait l'état de
          DÉMONSTRATION, que cette vue n'affiche plus. Le laisser aurait produit
          un bouton qui plante, ou pire, qui semble agir sur un vrai compte. -->

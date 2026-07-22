@@ -38,6 +38,7 @@ import {
   type PoigneeOrchestrateur,
 } from '../../control-plane/orchestrateur/processus/index.ts';
 import type { DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
+import { ConversationOperateur } from '../../control-plane/orchestrateur/conversation-operateur.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
 import { cablerPermissionVerdictDistant } from './permission-verdict-distant.ts';
@@ -83,6 +84,12 @@ export interface ControlPlanePiAssemble {
   readonly serveurApiWeb: ServeurApiWeb;
   /** `null` quand `avecOrchestrateur` est faux — voir cette option. */
   readonly orchestrateur: PoigneeOrchestrateur | null;
+  /**
+   * Collecteur de la conversation orchestrateur. `null` si la session maître
+   * est inactive. `☠` DOIT être nourri par le lecteur unique de
+   * `orchestrateur.query` (voir `bin-pi.ts`) — sinon aucune réponse ne remonte.
+   */
+  readonly conversation: ConversationOperateur | null;
 }
 
 function construireDependancesReconciliation(client: ClientSuperviseurPc, machine: MachineEtatsDemandes): DependancesReconciliation {
@@ -135,6 +142,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
   });
 
+  // `☠` La conversation et la sentinelle n'existent qu'APRÈS le démarrage de
+  // l'orchestrateur (plus bas), mais le serveur API est construit AVANT.
+  // Références mutables, remplies une fois la session établie — même motif que
+  // le déclencheur de réconciliation ci-dessus.
+  let conversation: ConversationOperateur | null = null;
+  let contexteRatio: (() => number | null) | undefined;
+
   // `☠` `pcEnLigne` est branché sur l'ÉTAT RÉEL du lien, jamais sur un drapeau
   // tenu à la main : c'est ce qui fait que l'interface dit « PC éteint » parce
   // qu'il l'est, et non parce qu'un booléen a été oublié quelque part.
@@ -153,6 +167,12 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       mettreEnPause: (missionId) => clientSuperviseurPc.mettreEnPause(missionId),
       reprendre: (missionId) => clientSuperviseurPc.reprendre(missionId),
     },
+    // Indirection : `conversation` est encore `null` ici, remplie plus bas.
+    orchestrateur: { envoyer: (texte) => {
+      if (conversation === null) throw new Error('session orchestrateur non encore établie');
+      return conversation.envoyer(texte);
+    } },
+    orchestrateurContexteRatio: options.avecOrchestrateur === true ? () => contexteRatio?.() ?? null : undefined,
   });
 
   const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
@@ -163,7 +183,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       {},
       'control plane assemblé SANS session orchestrateur (avecOrchestrateur absent) — parc, escalades et pilotage restent pleinement opérationnels ; seule la vue conversation est inactive',
     );
-    return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur: null };
+    return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur: null, conversation: null };
   }
 
   const orchestrateur = await demarrerOrchestrateur({
@@ -177,7 +197,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     configDir: options.configDirOrchestrateur,
   });
 
+  // Remplit les références mutables que le serveur API a déjà capturées.
+  conversation = new ConversationOperateur(orchestrateur.entree);
+  contexteRatio = () => orchestrateur.sentinelle.resume().derniereMesure?.ratio ?? null;
+
   log.info({ sessionId: orchestrateur.sessionId }, 'control plane Pi assemblé et session orchestrateur établie');
 
-  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur };
+  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, orchestrateur, conversation };
 }

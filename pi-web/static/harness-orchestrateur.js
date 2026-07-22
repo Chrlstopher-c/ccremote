@@ -6,17 +6,21 @@ let hModelsCache = [];
 
 async function hRenderGauges() {
   const res = await HarnessAPI.getOrchestratorGauges();
+  const g = res || {};
+  // ☠ contextPct null = session inactive ou pas encore de mesure : « — », jamais un faux %.
+  const ctxTxt = (typeof g.contextPct === 'number') ? g.contextPct + ' %' : '—';
+  const ctxW = (typeof g.contextPct === 'number') ? g.contextPct : 0;
   const g = res.data;
   if (!g) { document.getElementById('hGaugeStrip').innerHTML = hPcAbsentBanner('les jauges de l\'orchestrateur'); return; }
   document.getElementById('hGaugeStrip').innerHTML = `
     <div class="gauge">
       <div class="gh"><span>Contexte utilisé</span></div>
-      <div class="gv">${g.contextPct} %</div>
-      <div class="usage-track" style="margin-top:6px;"><div class="usage-fill" style="width:${g.contextPct}%;background:${g.contextPct >= 75 ? 'var(--err)' : g.contextPct >= 50 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
+      <div class="gv">${ctxTxt}</div>
+      <div class="usage-track" style="margin-top:6px;"><div class="usage-fill" style="width:${ctxW}%;background:${ctxW >= 75 ? 'var(--err)' : ctxW >= 50 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
       <button class="compact-btn" onclick="hCompactContext()">Compacter maintenant</button>
     </div>
-    <div class="gauge"><div class="gh"><span>Fin de fenêtre (five_hour)</span></div><div class="gv">${g.windowResetLabel.split(' · ')[0]}</div><div class="gs">${g.windowResetLabel}</div></div>
-    <div class="gauge"><div class="gh"><span>$ consommés — fenêtre courante</span></div><div class="gv">${hMoney(g.costWindow)}</div><div class="gs">agrégé par compte, partagé par toutes les missions du compte (H-63)</div></div>`;
+    <div class="gauge"><div class="gh"><span>Fin de fenêtre (five_hour)</span></div><div class="gv">—</div><div class="gs">${g.active ? 'non mesuré — voir Comptes & quotas' : 'session orchestrateur inactive'}</div></div>
+    <div class="gauge"><div class="gh"><span>$ consommés — fenêtre courante</span></div><div class="gv">${hMoney(g.costWindow)}</div><div class="gs">agrégé par compte (H-63)</div></div>`;
   hRenderMiniGauges(); hRenderQuotaStrip();
 }
 async function hCompactContext() {
@@ -69,10 +73,18 @@ async function hSendOrchMessage() {
   const chat = document.getElementById('hChatBody');
   const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = text; chat.appendChild(u);
   el.value = '';
-  const res = await HarnessAPI.sendOrchestratorMessage(text, HarnessState.orchModel);
+  // Bulle d'attente : l'orchestrateur peut mettre plusieurs secondes à répondre.
   const a = document.createElement('div'); a.className = 'bubble-a msg-in';
-  a.innerHTML = `<p style="margin:0;">${escapeHtml(res.data ? res.data.reply : "PC absent — l'orchestrateur ne peut pas répondre pour l'instant, c'est un état normal (H-75).")}</p>`;
+  a.innerHTML = `<p style="margin:0;color:var(--ink-3);">…</p>`;
   chat.appendChild(a);
+  document.getElementById('hChatScroll').scrollTop = document.getElementById('hChatScroll').scrollHeight;
+  const res = await HarnessAPI.sendOrchestratorMessage(text, HarnessState.orchModel);
+  // ☠ Un échec est AFFICHÉ (session inactive, timeout), jamais avalé : sinon
+  // l'opérateur croit que son message est passé.
+  const contenu = res.erreur
+    ? `<span style="color:var(--err);">${escapeHtml(res.erreur)}</span>`
+    : escapeHtml(res.reply || '(réponse vide)');
+  a.innerHTML = `<p style="margin:0;">${contenu}</p>`;
   document.getElementById('hChatScroll').scrollTop = document.getElementById('hChatScroll').scrollHeight;
 }
 

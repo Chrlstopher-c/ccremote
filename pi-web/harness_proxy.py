@@ -35,23 +35,44 @@ def build_router(check_session) -> APIRouter:
     """`check_session` est injectée pour éviter d'importer `app.py` (cycle)."""
     router = APIRouter()
 
+    # ☠ Timeout LONG pour les écritures : la conversation orchestrateur peut
+    # mettre plusieurs dizaines de secondes à répondre (le modèle réfléchit).
+    # Les lectures, elles, gardent le timeout court : le harness répond en ms.
+    TIMEOUT_ECRITURE_S = 130.0
+
+    async def _relayer_injoignable(url: str, erreur: Exception) -> JSONResponse:
+        logger.error(f"harness injoignable sur {url} : {erreur}")
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "harness_injoignable",
+                # Formulé pour être affichable tel quel : ce message doit empêcher
+                # de croire à un simple PC éteint.
+                "message": "Le control plane du harness ne répond pas sur le Pi — ce n'est pas un PC éteint.",
+            },
+        )
+
     @router.get("/api/harness/{chemin:path}")
-    async def relayer(chemin: str, request: Request, _: str = Depends(check_session)):
+    async def relayer_lecture(chemin: str, request: Request, _: str = Depends(check_session)):
         url = f"{HARNESS_API_URL}/api/harness/{chemin}"
         try:
             async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
                 reponse = await client.get(url, params=dict(request.query_params))
         except httpx.RequestError as erreur:
-            logger.error(f"harness injoignable sur {url} : {erreur}")
-            return JSONResponse(
-                status_code=502,
-                content={
-                    "error": "harness_injoignable",
-                    # Formulé pour être affichable tel quel : c'est ce message
-                    # qui doit empêcher de croire à un simple PC éteint.
-                    "message": "Le control plane du harness ne répond pas sur le Pi — ce n'est pas un PC éteint.",
-                },
-            )
+            return await _relayer_injoignable(url, erreur)
+        return JSONResponse(status_code=reponse.status_code, content=reponse.json())
+
+    @router.post("/api/harness/{chemin:path}")
+    async def relayer_ecriture(chemin: str, request: Request, _: str = Depends(check_session)):
+        url = f"{HARNESS_API_URL}/api/harness/{chemin}"
+        corps = await request.body()
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT_ECRITURE_S) as client:
+                reponse = await client.post(
+                    url, content=corps, headers={"content-type": "application/json"}
+                )
+        except httpx.RequestError as erreur:
+            return await _relayer_injoignable(url, erreur)
         return JSONResponse(status_code=reponse.status_code, content=reponse.json())
 
     return router

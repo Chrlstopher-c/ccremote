@@ -30,9 +30,15 @@ export interface OrdresVersPc {
   arretUrgence?(graceMs?: number): Promise<unknown>;
 }
 
+/** Conversation avec la session orchestrateur maître (peut être absente : opt-in). */
+export interface OrchestrateurConversation {
+  envoyer(texte: string): Promise<string>;
+}
+
 export interface DependancesEcritures {
   readonly escalades: MachineEtatsDemandes;
   readonly pc: OrdresVersPc;
+  readonly orchestrateur?: OrchestrateurConversation;
 }
 
 function verdictDepuis(corps: Record<string, unknown>): Verdict {
@@ -52,6 +58,8 @@ function verdictDepuis(corps: Record<string, unknown>): Verdict {
 export interface ResultatEcriture {
   readonly ok: true;
   readonly effet: string;
+  /** Renseigné pour un aller-retour de conversation orchestrateur. */
+  readonly reply?: string;
 }
 
 /**
@@ -100,6 +108,19 @@ export async function traiterEcriture(
     if (deps.pc.reprendre === undefined) throw new ErreurApi(501, 'pilotage non câblé sur ce déploiement');
     await deps.pc.reprendre(missionId);
     return { ok: true, effet: 'mission reprise — messages retenus transmis' };
+  }
+
+  if (chemin === '/orchestrator/message') {
+    // `☠` L'orchestrateur est opt-in : sans session maître sur le Pi, on répond
+    // 501 explicite, jamais une réponse fabriquée. L'ancienne UI simulait ici
+    // une réponse codée en dur — c'est précisément ce qu'on remplace.
+    if (deps.orchestrateur === undefined) {
+      throw new ErreurApi(501, 'session orchestrateur non active sur ce déploiement (CCREMOTE_PI_ORCHESTRATEUR=1)');
+    }
+    const texte = corps['text'];
+    if (typeof texte !== 'string' || texte.trim().length === 0) throw requeteInvalide('message vide');
+    const reply = await deps.orchestrateur.envoyer(texte);
+    return { ok: true, effet: 'répondu', reply };
   }
 
   if (chemin === '/safety/emergency-stop') {

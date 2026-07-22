@@ -26,7 +26,7 @@ import { enveloppe, ErreurApi, introuvable } from './enveloppe.ts';
 import { versMissionApi } from './vue-missions.ts';
 import { versEscaladeApi } from './vue-escalades.ts';
 import { versAccountApi } from './vue-comptes.ts';
-import { traiterEcriture, type OrdresVersPc } from './ecritures.ts';
+import { traiterEcriture, type OrdresVersPc, type OrchestrateurConversation } from './ecritures.ts';
 import { apiWebLogger } from './logger.ts';
 
 const log = apiWebLogger;
@@ -44,6 +44,10 @@ export interface DependancesApiWeb {
    * d'accepter un ordre qui ne partirait nulle part.
    */
   readonly pc?: OrdresVersPc;
+  /** Conversation avec la session orchestrateur maître (opt-in). */
+  readonly orchestrateur?: OrchestrateurConversation;
+  /** Contexte réel de l'orchestrateur (ratio 0-1), lu de la sentinelle. Absent = orchestrateur inactif. */
+  readonly orchestrateurContexteRatio?: () => number | null;
   readonly maintenant?: () => number;
   readonly plafondRelances?: number;
 }
@@ -100,6 +104,17 @@ function router(chemin: string, deps: DependancesApiWeb): unknown {
     return enveloppe(pcOnline, comptes);
   }
 
+  if (chemin === '/orchestrator/gauges') {
+    // `☠` Le contexte vient de la VRAIE sentinelle. `null` (orchestrateur
+    // inactif ou pas encore de mesure) ⇒ `contextPct: null`, jamais un chiffre
+    // inventé — l'ancienne UI affichait « 23 % » codé en dur, ce qui mentait.
+    const ratio = deps.orchestrateurContexteRatio?.() ?? null;
+    return enveloppe(pcOnline, {
+      contextPct: ratio === null ? null : Math.round(ratio * 100),
+      active: deps.orchestrateurContexteRatio !== undefined,
+    });
+  }
+
   if (chemin === '/health') {
     return { ok: true, pcOnline };
   }
@@ -123,7 +138,11 @@ async function routerEcriture(chemin: string, req: Request, deps: DependancesApi
   } catch {
     // Corps vide ou illisible : accepté, la plupart des ordres n'en ont pas.
   }
-  const resultat = await traiterEcriture(chemin, corps, { escalades: deps.escalades, pc: deps.pc });
+  const resultat = await traiterEcriture(chemin, corps, {
+    escalades: deps.escalades,
+    pc: deps.pc,
+    orchestrateur: deps.orchestrateur,
+  });
   if (resultat === null) throw new ErreurApi(404, `route d'écriture inconnue : ${chemin}`);
   return resultat;
 }

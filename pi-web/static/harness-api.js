@@ -63,7 +63,7 @@ const HarnessAPI = (() => {
       });
       const data = await rep.json();
       if (!rep.ok) return { ok: false, erreur: data.message || data.error || `HTTP ${rep.status}` };
-      return { ok: true, effet: data.effet };
+      return { ok: true, effet: data.effet, reply: data.reply };
     } catch (e) {
       return { ok: false, erreur: `Ordre non transmis : ${e.message}` };
     }
@@ -119,22 +119,27 @@ const HarnessAPI = (() => {
       return db.models.map((m) => ({ ...m }));
     },
 
+    // ☠ RÉEL : le contexte vient de la sentinelle de la session orchestrateur.
+    // contextPct null = session inactive ou pas encore de mesure — l'UI doit
+    // afficher « — », jamais un pourcentage inventé.
     async getOrchestratorGauges() {
-      return withPc(() => ({
-        contextPct: orchCtx,
-        windowResetLabel: '17:00 · dans 2 h 12 · compte #1',
-        costWindow: db.accounts[1].costWindow + db.accounts[2].costWindow,
-      }));
+      const r = await lireReel('/orchestrator/gauges');
+      if (r.erreur) return { contextPct: null, active: false, erreur: r.erreur };
+      const d = r.data || {};
+      return { contextPct: d.contextPct ?? null, active: !!d.active, windowResetLabel: null, costWindow: null };
     },
 
     async compactOrchestratorContext() {
       return withPc(() => { orchCtx = Math.max(4, Math.round(orchCtx * 0.28)); return { contextPct: orchCtx }; });
     },
 
+    // ☠ RÉEL : le message part vers la session orchestrateur sur le Pi et
+    // attend SA réponse. Un échec (501 session inactive, timeout) renvoie
+    // { erreur } — jamais une réponse fabriquée comme le faisait la démo.
     async sendOrchestratorMessage(text, options) {
-      return withPc(() => ({
-        reply: `Reçu (${options.model}${options.effort ? ' · ' + options.effort : ''}). Si ça implique de dispatcher une équipe, je te soumettrai le mandat pour autorisation — je ne lance jamais seul (H-61).`,
-      }));
+      const r = await ecrireReel('/orchestrator/message', { text, model: options?.model, effort: options?.effort });
+      if (!r.ok) return { erreur: r.erreur };
+      return { reply: r.reply ?? r.effet };
     },
 
     async proposeMandate(fields) {

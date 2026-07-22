@@ -20,7 +20,10 @@ const HARNESS_STATE_BADGE = {
 const HARNESS_EFFORT_LABEL = { low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' };
 const HARNESS_INSPECTION_THRESHOLDS = [12, 30, 50, 70, 100, 120, 150, 170, 200];
 
-function hMoney(v) { return v.toFixed(2).replace('.', ',') + ' $'; }
+// ☠ Tolère l'absence : `costWindow` vient de rate_limit_event, une donnée que
+// la chaîne de quotas ne remonte pas encore. Un montant absent s'affiche « — »,
+// jamais un faux 0,00 $ qui laisserait croire à une dépense mesurée.
+function hMoney(v) { return (typeof v === 'number' && isFinite(v)) ? v.toFixed(2).replace('.', ',') + ' $' : '—'; }
 function hNextThreshold(cost) { return HARNESS_INSPECTION_THRESHOLDS.find((t) => t > cost) ?? null; }
 function hSupportsUltracode(models, modelId) {
   const m = models.find((x) => x.id === modelId);
