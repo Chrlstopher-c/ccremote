@@ -1001,3 +1001,41 @@ raisonnement : `sdk.d.ts` pour les types, `sdk.mjs` pour l'implémentation réel
   tolerate the same `request_id` also arriving as a live or replayed `control_request` frame and
   render it once. » La dédup par `request_id` que M-53 a testée sur la réconciliation n'est donc pas
   une précaution : c'est une exigence du protocole.
+
+### H-73.1 `[MESURÉ 2026-07-22]` — `canUseTool` doit être fourni **même en mode `auto`**, sinon la reprise perd les demandes
+
+Suite de H-73, tranché sur le corps réel de `processControlRequest` (`sdk.mjs`) :
+
+```js
+if (e.request.subtype === "can_use_tool") {
+  if (!this.canUseTool) throw Error("canUseTool callback is not provided.");
+  …
+}
+```
+
+Et le rejeu des demandes en attente y mène directement :
+`processPendingPermissionRequests` → `handleControlRequest` → `processControlRequest`.
+
+`☠ CASSE` **Vérifié par grep : aucun site de production du harness ne fournit `canUseTool`** — il
+n'existe aujourd'hui que dans des commentaires et des bancs. Conséquence, sur le chemin exact de la
+reprise après coupure : le rejeu **lève**, le SDK renvoie une `control_response` d'erreur, et la
+demande est **perdue** — l'outil finit refusé sans que l'opérateur ait jamais rien vu.
+
+**Le piège est contre-intuitif, et c'est ce qui le rend dangereux** : H-64 a mesuré qu'en
+`permissionMode: 'auto'`, `canUseTool` n'est **jamais** appelé en régime normal. On en déduit
+naturellement qu'il est inutile dans ce mode — et c'est faux : il reste **l'unique canal de
+redélivrance** après une reconnexion. Un rappel jamais appelé pendant des heures, dont l'absence ne
+se paie qu'au moment précis d'une coupure.
+
+⇒ **Décision** : fournir `canUseTool` dans les options de tous les workers, quel que soit le
+`permissionMode`. Non pas comme arbitre — le classifieur tranche seul en `auto`, H-64 tient — mais
+comme **récepteur de redélivrance**, routant vers la machine à états du bus de permissions (M-21).
+
+`⚠` La propriété « reprise » validée par M-53 porte sur le bus de permissions et la réconciliation.
+Elle **ne couvre pas ce chemin-ci**, puisque le chemin réel du SDK ne passe pas par le bus tant que
+`canUseTool` est absent. À revalider une fois le rappel fourni.
+
+`✓` **Déduplication native, à ne pas réimplémenter** : `handleControlRequest` ignore lui-même une
+livraison en double d'une requête déjà en vol (`cancelControllers`, log « Duplicate delivery of
+in-flight request … skipping »). La dédup applicative reste nécessaire pour les requêtes **déjà
+résolues**, pas pour celles en vol.
