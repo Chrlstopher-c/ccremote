@@ -9,10 +9,11 @@
  * voir ce fichier pour la limite mesurée sur `backoffMs` (tableau fixe, pas
  * de gigue possible autrement sans modifier `transport/`, hors zone).
  *
- * `☠` Le secret (H-75, point 2) est lu depuis l'environnement UNE FOIS ici,
- * jamais journalisé — `urlAvecSecret`/`urlSansSecret` (`lien-pc-pi/secret.ts`)
- * séparent strictement l'URL de connexion (porte le secret) de l'URL
- * journalisée (ne le porte jamais).
+ * `☠` Le secret (H-75, point 2) est lu depuis l'environnement UNE FOIS ici et
+ * ne quitte jamais l'en-tête `Authorization` — il n'entre à aucun moment dans
+ * l'URL, donc à aucun moment dans les access logs de Cloudflare Tunnel (voir
+ * `lien-pc-pi/secret.ts`, défaut trouvé en relecture). L'URL reste
+ * journalisable telle quelle ; `urlSansSecret` la nettoie par précaution.
  *
  * `☠ TROUVÉ EN ASSEMBLANT` — `modeIntegrite: 'perte_silencieuse'`, comme côté
  * Pi (`composition/pi/serveur-lien-pc.ts`, même en-tête pour le détail) :
@@ -25,7 +26,7 @@
 import { LienWebSocket } from '../../transport/lien-websocket.ts';
 import type { FermetureTerminale } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
-import { urlAvecSecret, urlSansSecret } from '../lien-pc-pi/secret.ts';
+import { entetesAuth, urlSansSecret } from '../lien-pc-pi/secret.ts';
 import { creerHorlogeAvecGigue } from './horloge-avec-gigue.ts';
 
 const log = compositionLogger.child({ composant: 'client-lien-pi' });
@@ -39,11 +40,14 @@ export interface OptionsClientLienPi {
 }
 
 export function creerClientLienPi(options: OptionsClientLienPi): LienWebSocket {
-  const urlSecrete = urlAvecSecret(options.urlPi, options.secret);
   const urlJournalisable = urlSansSecret(options.urlPi);
+  const entetes = entetesAuth(options.secret);
 
   const lien = new LienWebSocket({
-    connecter: () => Promise.resolve(new WebSocket(urlSecrete)),
+    // `☠` Les en-têtes sont recomposés à CHAQUE tentative, pas capturés une
+    // fois : le connecteur est rappelé à chaque reconnexion (H-75 — « tout
+    // doit se reconnecter tout seul le lendemain »).
+    connecter: () => Promise.resolve(new WebSocket(options.urlPi, { headers: entetes }) as unknown as WebSocket),
     horloge: creerHorlogeAvecGigue(),
     modeIntegrite: 'perte_silencieuse',
   });

@@ -28,11 +28,24 @@ Type=simple
 EnvironmentFile=%h/.config/ccremote/pc.env
 ExecStart=/usr/bin/env bun run %h/ccremote/harness/composition/pc/bin-pc.ts
 Restart=always
-RestartSec=10
-# Backoff de reconnexion applicatif déjà géré par `client-lien-pi.ts` (gigue
-# comprise) — `RestartSec` ne couvre que le redémarrage du PROCESS après une
-# fermeture terminale (ex. secret invalide), jamais la reconnexion réseau
-# elle-même.
+# `☠` 60 s, pas 10. Le transport traite un refus d'authentification (4401)
+# comme TERMINAL — précisément pour ne pas marteler le Pi avec un mauvais
+# secret. Relancer le process toutes les 10 s annulait ce garde-fou à
+# l'assemblage : le martèlement revenait par la porte de systemd. À 60 s, un
+# secret erroné coûte une tentative par minute et se répare tout seul dès que
+# la configuration est corrigée, sans intervention manuelle.
+RestartSec=60
+# Jamais de mise en échec définitive de l'unité : l'exigence est « tout se
+# reconnecte tout seul le lendemain ». Un service arrêté net obligerait à
+# ouvrir un SSH depuis un téléphone — l'erreur coûte bien plus cher dans ce
+# sens que dans l'autre.
+StartLimitIntervalSec=0
+# Backoff de reconnexion RÉSEAU déjà géré par `client-lien-pi.ts` (gigue
+# comprise) — `RestartSec` ne couvre que le redémarrage du PROCESS.
+#
+# Codes de sortie (voir `bin-pc.ts`) : 78 = configuration fausse (secret
+# absent ou refusé, variable manquante), 1 = plantage. `systemctl --user
+# status ccremote-pc` les distingue sans ouvrir le journal.
 
 [Install]
 WantedBy=default.target

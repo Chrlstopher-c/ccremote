@@ -108,6 +108,15 @@ export interface OptionsServeurLienPc {
 
 export interface ServeurLienPc {
   readonly lien: LienWebSocket;
+  /** Port réellement écouté — utile quand `options.port` vaut 0 (attribution noyau). */
+  readonly port: number;
+  /**
+   * Nombre d'évictions réelles (deux PC connectés en même temps). Doit rester à
+   * 0 en exploitation nominale, y compris après une nuit d'extinction du PC :
+   * c'est ce qui distingue une reconnexion légitime d'un vrai doublon. Exposé
+   * pour être observable côté control plane, pas seulement journalisé.
+   */
+  supersedes(): number;
   arreter(): void;
 }
 
@@ -116,10 +125,32 @@ class FileConnexionUnique {
   #enFile: AdaptateurServerWebSocket | null = null;
   #enAttente: ((ws: WebSocketLike) => void) | null = null;
   #actif: AdaptateurServerWebSocket | null = null;
+  #supersedes = 0;
+
+  get supersedes(): number {
+    return this.#supersedes;
+  }
+
+  /**
+   * `☠ TROUVÉ EN RELECTURE (2026-07-22)` — sans cet oubli explicite, `#actif`
+   * gardait éternellement la connexion de la veille. Conséquence sur LE
+   * scénario nominal (« j'éteins le PC le soir, je le rallume le lendemain,
+   * tout se reconnecte tout seul ») : chaque reconnexion légitime du matin
+   * était journalisée en `warn` comme un supersede, et fermait une socket déjà
+   * morte. Mesuré : re-fermer une socket close est un no-op en Bun, donc la
+   * reconnexion fonctionnait — mais l'alarme « deux PC connectés » se
+   * déclenchait tous les matins, ce qui la rend invisible le jour où elle est
+   * vraie. Un garde-fou qui crie tout le temps ne garde plus rien.
+   */
+  oublier(adaptateur: AdaptateurServerWebSocket): void {
+    if (this.#actif === adaptateur) this.#actif = null;
+    if (this.#enFile === adaptateur) this.#enFile = null;
+  }
 
   /** Accepte une connexion authentifiée. Évince l'actif s'il y en a un (supersede). */
   accepter(adaptateur: AdaptateurServerWebSocket): void {
     if (this.#actif !== null) {
+      this.#supersedes += 1;
       log.warn({}, 'nouvelle connexion PC authentifiée alors qu une précédente est vivante — supersede (v1, un seul PC)');
       this.#actif.close(1000, 'remplacée par une connexion plus récente');
     }
@@ -190,16 +221,30 @@ export function demarrerServeurLienPc(options: OptionsServeurLienPc): ServeurLie
         adaptateurs.get(ws)?.distribuerMessage(data);
       },
       close(ws, code, reason): void {
-        adaptateurs.get(ws)?.distribuerFermeture(code, reason);
+        const adaptateur = adaptateurs.get(ws);
+        if (adaptateur === undefined) return;
+        // Oublier AVANT de distribuer : `distribuerFermeture` réveille
+        // `LienWebSocket`, qui replanifie une reconnexion et peut rappeler
+        // `connecter()` — la file doit déjà être propre à cet instant.
+        file.oublier(adaptateur);
+        adaptateur.distribuerFermeture(code, reason);
       },
     },
   });
 
   void lien.connecter();
-  log.info({ port: options.port }, 'serveur de lien Pi↔PC démarré (H-75 — le Pi héberge, le PC initie)');
+  // Le port RÉELLEMENT écouté, jamais celui demandé : avec `port: 0` (banc),
+  // journaliser la demande ne dit rien d'où joindre le serveur. `undefined`
+  // n'arrive que sur socket UNIX — impossible ici, et si ça arrivait un jour ce
+  // serait un échec bruyant plutôt qu'un 0 trompeur (H-74, point 2).
+  const portEcoute = server.port;
+  if (portEcoute === undefined) throw new Error('serveur de lien Pi↔PC démarré sans port TCP — configuration inattendue');
+  log.info({ port: portEcoute, hostname: options.hostname }, 'serveur de lien Pi↔PC démarré (H-75 — le Pi héberge, le PC initie)');
 
   return {
     lien,
+    port: portEcoute,
+    supersedes: (): number => file.supersedes,
     arreter: (): void => {
       lien.fermer();
       server.stop(true);
