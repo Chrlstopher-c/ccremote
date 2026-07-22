@@ -13,17 +13,31 @@
  * mort reste en mémoire (jamais purgé automatiquement) : c'est ce qui permet à la
  * relance (`RelanceurMission`) de retrouver le dernier `WorkerSpec` connu après la
  * mort du process.
+ *
+ * **Persistance optionnelle** (dette n°1, TODO.md) : un port `PersistanceRegistre`
+ * peut être injecté, `null` par défaut. Tous les appels existants et les tests
+ * existants continuent de passer sans modification — c'est un ajout strictement
+ * additif. Quand présent, chaque `enregistrer`/`marquerMort`/`remplacer` écrit
+ * aussi sur disque ; c'est `restaurerRegistre()` (`restauration-registre.ts`) qui
+ * relit cette image au démarrage, jamais ce module directement.
  */
 
+import type { PersistanceRegistre } from './persistance-registre.ts';
 import type { EnregistrementWorker } from './types.ts';
 
 export class RegistreWorkers {
   readonly #parSession = new Map<string, EnregistrementWorker>();
   readonly #sessionParMission = new Map<string, string>();
+  readonly #persistance: PersistanceRegistre | null;
+
+  constructor(persistance: PersistanceRegistre | null = null) {
+    this.#persistance = persistance;
+  }
 
   enregistrer(enregistrement: EnregistrementWorker): void {
     this.#parSession.set(enregistrement.sessionId, enregistrement);
     this.#sessionParMission.set(enregistrement.missionId, enregistrement.sessionId);
+    this.#persister(enregistrement);
   }
 
   parSession(sessionId: string): EnregistrementWorker | null {
@@ -39,7 +53,9 @@ export class RegistreWorkers {
   /** Marque le worker mort. `☠` Ne retire jamais l'enregistrement (relance, historique). */
   marquerMort(sessionId: string): void {
     const enregistrement = this.#parSession.get(sessionId);
-    if (enregistrement !== undefined) enregistrement.vivant = false;
+    if (enregistrement === undefined) return;
+    enregistrement.vivant = false;
+    this.#persistance?.marquerMort(sessionId);
   }
 
   /**
@@ -56,5 +72,23 @@ export class RegistreWorkers {
   /** Vue autoritaire (B.1.4) — utilisée par `InventairePc.inventaire()`. */
   tous(): readonly EnregistrementWorker[] {
     return [...this.#parSession.values()];
+  }
+
+  /**
+   * Écrit à travers vers la persistance (best-effort, dette n°1) : une erreur ici
+   * est journalisée par `PersistanceRegistre` lui-même et n'interrompt jamais le
+   * chemin en mémoire, qui reste la source de vérité pour ce process en vie.
+   */
+  #persister(enregistrement: EnregistrementWorker): void {
+    this.#persistance?.sauvegarder({
+      sessionId: enregistrement.sessionId,
+      missionId: enregistrement.missionId,
+      worktree: enregistrement.worktree,
+      epoch: enregistrement.epoch,
+      pid: enregistrement.pid ?? null,
+      pidStarttime: enregistrement.pidStarttime ?? null,
+      vivant: enregistrement.vivant,
+      spec: enregistrement.spec,
+    });
   }
 }

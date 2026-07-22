@@ -2,43 +2,34 @@
  * Responsabilité : le superviseur de workers, côté PC (branche B, mission M-13).
  *
  * Implémentation RÉELLE des ports déclarés comme contrats ailleurs — jamais une
- * redéfinition :
- *  - `InventairePc`, `ReinitialisateurSession` (`control-plane/reconciliation/types.ts`, M-30)
- *  - `RepertoireCibles`, `ArreteurMission`, `RelanceurMission` (`mcp-controle/types.ts`, A.2)
+ * redéfinition : `InventairePc`/`ReinitialisateurSession` (`control-plane/
+ * reconciliation/types.ts`, M-30), `RepertoireCibles`/`ArreteurMission`/
+ * `RelanceurMission` (`mcp-controle/types.ts`, A.2).
  *
  * ☠ Frontière A↔B inexistante (03-couche-1.md) : ce module ne connaît rien du
  * registre SQLite du Pi. Tout ce qu'il sait vient de `DemandeDemarrage` (fourni au
  * dispatch) et de ce qu'il observe lui-même sur le `Query` du worker.
  *
- * **Câblage de `deciderRelance()` (dette M-34)** : ce module est le SEUL endroit du
- * harness qui lit les `SDKResultMessage` réels d'un worker — c'est donc ici, et
- * nulle part ailleurs, que la politique de relance s'applique (`#surveillerResultats`).
- * Un `result` ferme tout le process (mesuré : « après le message result, le transport
- * est fermé »), donc CHAQUE issue de tour est un CHOIX : relancer (resume) ou remonter.
+ * **`deciderRelance()` (dette M-34)** : seul endroit du harness qui lit les
+ * `SDKResultMessage` réels (`#surveillerResultats`) — un `result` ferme tout le
+ * process (mesuré), donc chaque issue de tour est un CHOIX : relancer ou remonter.
  *
- * **Idempotence** (D.3.1/D.3.2) : ce module fournit l'idempotence NATURELLE de
- * chaque opération (rejouer `arreter`/`relancer`/`tuerSansPreavis` sur un worker déjà
- * dans l'état visé est un no-op, vérifié par l'état du registre AVANT tout effet).
- * L'idempotence PAR IDENTIFIANT fourni par le Pi (dédup mécanique d'un rejeu exact)
- * est portée par `canal-controle.ts`, la couche au-dessus — les deux se combinent :
- * même sans dédup par opId, rejouer ces méthodes n'a jamais d'effet double.
+ * **Idempotence** (D.3.1/D.3.2) : NATURELLE ici (rejouer `arreter`/`relancer`/
+ * `tuerSansPreavis` sur un worker déjà dans l'état visé est un no-op, vérifié
+ * AVANT tout effet). L'idempotence PAR IDENTIFIANT (dédup d'un rejeu exact) est
+ * portée par `canal-controle.ts` au-dessus — les deux se combinent.
  *
- * **Fencing par epoch** (D.2.3, mission M-11, panne #2) : `demarrer()` est le SEUL
- * point d'entrée qui revendique un worktree — c'est donc le seul endroit où
- * `arbitrerFencing()` doit être consulté. Un candidat au même epoch qu'un détenteur
- * vivant, ou à un epoch inférieur, est REFUSÉ avant tout effet (aucun spawn). Un
- * candidat au epoch strictement supérieur est accepté et les détenteurs périmés
- * du MÊME worktree sont RÉELLEMENT terminés via `tuerSansPreavis` (le même chemin
- * qu'un arrêt d'urgence — abort de leur `AbortController` propre) : « périmé » ne
- * reste jamais un simple libellé dans le registre, un seul process reste en vie.
+ * **Fencing par epoch** (D.2.3, M-11, panne #2) : `demarrer()` est le SEUL point
+ * qui revendique un worktree. Même epoch ou inférieur ⇒ REFUSÉ avant tout effet.
+ * Epoch strictement supérieur ⇒ accepté, détenteurs périmés du MÊME worktree
+ * RÉELLEMENT terminés via `tuerSansPreavis` (même chemin que l'arrêt d'urgence).
  */
 
 import { arbitrerFencing, type DetenteurEpoch } from './fencing-epoch.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
-import { classifierMessageUsage, deciderActionUsage } from '../budgets/index.ts';
-import type { EvenementQuotaObserve, ObservateurUsage } from '../budgets/index.ts';
+import type { ObservateurUsage } from '../budgets/index.ts';
 import type {
   ArreteurMission,
   CibleEquipe,
@@ -54,79 +45,42 @@ import type {
 import { GenerateurEntree } from '../control-plane/orchestrateur/entree/index.ts';
 import type { StartWorkerDeps, WorkerHandle } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
+import { surveillerMessageUsage, surveillerQuota } from './budgets-workers.ts';
+import { ConcurrentsRestaures } from './fencing-restauration.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
+import type { PersistanceRegistre } from './persistance-registre.ts';
 import { RegistreWorkers } from './registre-workers.ts';
 import { extraireDemandesEnAttente } from './reponse-reinitialize.ts';
 import {
+  construireCibleArretUrgence,
   executerArretUrgenceMission,
   executerArretUrgenceParc,
-  type CibleArretUrgence,
   type DependancesArretUrgence,
 } from './arret-urgence-sequence.ts';
 import type {
   DemandeDemarrage,
-  EnregistrementWorker,
   ObservateurFlux,
   ObservateurRelance,
   RapportArretUrgence,
   ResultatArretUnitaireUrgence,
 } from './types.ts';
+import {
+  GRACE_ARRET_URGENCE_MS_DEFAUT,
+  SuperviseurError,
+  type DemarrerWorkerFn,
+  type DependancesSuperviseur,
+} from './superviseur-workers-types.ts';
 
-/**
- * Fenêtre de grâce par défaut avant le forçage (G.4.2, mission M-52). `⚠ HYP`
- * — la valeur exacte de B.1.5 (fenêtre de grâce du superviseur) n'a pas été
- * relue ici (hors du fichier de branche unique imposé à cette mission,
- * `10-arbre-G-gardefous.md`) : ce nombre est un défaut raisonnable et
- * délibérément configurable via `arretUrgence(graceMs)`, pas une valeur
- * réputée alignée sur B.1.5 sans vérification. À confirmer contre `05-arbre-B`
- * si une mission future en a besoin.
- */
-export const GRACE_ARRET_URGENCE_MS_DEFAUT = 5000;
-
-export class SuperviseurError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SuperviseurError';
-  }
-}
-
-/** Signature de `startWorker`, isolée pour l'injection en test (jamais de spawn réel en unitaire). */
-export type DemarrerWorkerFn = typeof startWorkerReel;
-
-export interface DependancesSuperviseur {
-  readonly compteurRelances: CompteurRelances;
-  /** Best-effort (H-15) : la remontée réelle vers le Pi passe par E.2, hors périmètre. */
-  readonly observateurRelance?: ObservateurRelance;
-  /**
-   * Best-effort (H-15, mission M-51) : quotas (`rate_limit_event`) et messages d'usage
-   * classifiés (G.1.4). Même contrat que `observateurRelance` — aucune connexion ouverte.
-   */
-  readonly observateurUsage?: ObservateurUsage;
-  /**
-   * Client d'observabilité temps réel (E.2, mission M-50) — best-effort
-   * (H-15), jamais bloquant. Reçoit CHAQUE message déjà lu par l'unique
-   * consommateur ci-dessous, avant toute autre interprétation.
-   */
-  readonly observateurFlux?: ObservateurFlux;
-  /** Injectable pour les tests : jamais de spawn réel en unitaire (règle du dépôt). */
-  readonly demarrerWorker?: DemarrerWorkerFn;
-  readonly startWorkerDeps?: StartWorkerDeps;
-  /** Ordonnancement du délai de backoff avant une relance. Réel = `setTimeout`, synchrone en test. */
-  readonly planifier?: (delaiMs: number, tache: () => void) => void;
-  /**
-   * Fenêtre de grâce de l'arrêt d'urgence (G.4.2, mission M-52), attendue entre
-   * la fermeture propre et le forçage. Réel = `setTimeout`, contrôlable en test
-   * (jamais une vraie attente dans un test unitaire).
-   */
-  readonly attendreGrace?: (delaiMs: number) => Promise<void>;
-}
+// Ré-exportés pour ne rien changer à l'API publique (`superviseur/index.ts` les
+// importe depuis ce fichier) — extraction structurelle uniquement (dette n°4a).
+export { GRACE_ARRET_URGENCE_MS_DEFAUT, SuperviseurError, type DemarrerWorkerFn, type DependancesSuperviseur };
 
 /**
  * Superviseur de workers du PC (B.1.4, D.3.1). Un worker vivant par mission
  * (H-56) ; un enregistrement mort survit pour permettre la relance (B.3.3).
  */
 export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession, RepertoireCibles, ArreteurMission, RelanceurMission {
-  readonly #registre = new RegistreWorkers();
+  readonly #registre: RegistreWorkers;
   readonly #compteurRelances: CompteurRelances;
   readonly #observateurRelance: ObservateurRelance | undefined;
   readonly #observateurUsage: ObservateurUsage | undefined;
@@ -135,6 +89,10 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #startWorkerDeps: StartWorkerDeps;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
   readonly #attendreGrace: (delaiMs: number) => Promise<void>;
+  readonly #persistance: PersistanceRegistre | undefined;
+  readonly #terminerConcurrentRestaure: (pid: number, signal: NodeJS.Signals) => void;
+  /** Concurrents restaurés depuis la persistance (dette n°1) — voir `fencing-restauration.ts`. */
+  readonly #concurrentsRestaures = new ConcurrentsRestaures();
 
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
@@ -145,6 +103,19 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     this.#startWorkerDeps = deps.startWorkerDeps ?? {};
     this.#planifier = deps.planifier ?? ((delaiMs, tache) => void setTimeout(tache, delaiMs));
     this.#attendreGrace = deps.attendreGrace ?? ((delaiMs) => new Promise((resolve) => setTimeout(resolve, delaiMs)));
+    this.#persistance = deps.persistance;
+    this.#terminerConcurrentRestaure = deps.terminerConcurrentRestaure ?? ((pid, signal) => void process.kill(pid, signal));
+    this.#registre = new RegistreWorkers(deps.persistance ?? null);
+  }
+
+  /**
+   * Restaure le registre depuis la persistance disque (dette n°1, TODO.md) — à
+   * appeler UNE FOIS au démarrage, avant tout `demarrer()`. No-op sans persistance.
+   * Voir `ConcurrentsRestaures.restaurer()` (`fencing-restauration.ts`).
+   */
+  restaurer(): void {
+    if (this.#persistance === undefined) return;
+    this.#concurrentsRestaures.restaurer(this.#persistance);
   }
 
   /**
@@ -181,13 +152,21 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
 
   // -- InventairePc (B.1.4 : « inventaire() fait autorité ») -----------------
 
+  /** Inclut les concurrents restaurés (dette n°1) : les taire mentirait sur ce que « le PC fait autorité » (B.1.4) signifie après un redémarrage. */
   inventaire(): readonly DescripteurWorkerPc[] {
-    return this.#registre.tous().map((e) => ({
+    const reels = this.#registre.tous().map((e) => ({
       sessionId: e.sessionId,
       worktree: e.worktree,
       epoch: e.epoch,
       vivant: e.vivant,
     }));
+    const fantomes = this.#concurrentsRestaures.tous().map((f) => ({
+      sessionId: f.sessionId,
+      worktree: f.worktree,
+      epoch: f.epoch,
+      vivant: f.vivant,
+    }));
+    return [...reels, ...fantomes];
   }
 
   /**
@@ -319,14 +298,21 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * seulement « marque périmé ») chaque détenteur dépassé via `tuerSansPreavis`,
    * qui aborte l'`AbortController` propre à CE worker — le même mécanisme que
    * l'arrêt d'urgence, pas une nouvelle voie de terminaison à auditer séparément.
+   *
+   * `☠` dette n°1 (TODO.md) — les concurrents restaurés (`ConcurrentsRestaures`)
+   * participent à L'ARBITRAGE comme les workers en mémoire : ferme M-53
+   * (`validation-proprietes/isolation.test.ts`), un candidat jusque-là accepté en
+   * silence est désormais REJETÉ ou ÉVINCÉ.
    */
   #arbitrerFencingWorktree(demande: DemandeDemarrage, log: ReturnType<typeof missionLogger>): void {
-    const concurrents: DetenteurEpoch[] = this.#registre
+    const concurrentsReels: DetenteurEpoch[] = this.#registre
       .tous()
       .filter((e) => e.vivant && e.worktree === demande.spec.cwd && e.sessionId !== demande.spec.sessionId)
       .map((e) => ({ sessionId: e.sessionId, epoch: e.epoch }));
 
-    const decision = arbitrerFencing(concurrents, { sessionId: demande.spec.sessionId, epoch: demande.epoch });
+    const concurrentsFantomes = this.#concurrentsRestaures.concurrentsSur(demande.spec.cwd, demande.spec.sessionId);
+
+    const decision = arbitrerFencing([...concurrentsReels, ...concurrentsFantomes], { sessionId: demande.spec.sessionId, epoch: demande.epoch });
 
     if (decision.type === 'rejete') {
       log.warn(
@@ -345,9 +331,18 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
           { worktree: demande.spec.cwd, sessionEvincee, nouvelEpoch: demande.epoch },
           'epoch strictement supérieur revendiqué — TERMINAISON RÉELLE du worker périmé (D.2.3)',
         );
-        this.tuerSansPreavis(sessionEvincee);
+        this.#evincerConcurrent(sessionEvincee, demande.spec.cwd);
       }
     }
+  }
+
+  /** Un worker RÉEL passe par `tuerSansPreavis`. Un concurrent RESTAURÉ (dette n°1) voir `ConcurrentsRestaures.evincer()`. */
+  #evincerConcurrent(sessionId: string, worktree: string): void {
+    if (this.#registre.parSession(sessionId) !== null) {
+      this.tuerSansPreavis(sessionId);
+      return;
+    }
+    this.#concurrentsRestaures.evincer(sessionId, worktree, this.#terminerConcurrentRestaure);
   }
 
   /**
@@ -427,63 +422,22 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     }
   }
 
-  /**
-   * Relaie un `rate_limit_event` brut (H-54/H-63, mission M-51). Best-effort,
-   * jamais bloquant : la persistance (registre du Pi) et l'agrégation par compte
-   * sont hors périmètre de ce module (frontière A↔B).
-   */
-  #surveillerQuota(
-    missionId: string,
-    sessionId: string,
-    info: { status: string; rateLimitType?: string; utilization?: number; resetsAt?: number },
-  ): void {
-    const evenement: EvenementQuotaObserve = {
-      missionId,
-      sessionId,
-      statut: info.status as EvenementQuotaObserve['statut'],
-      rateLimitType: info.rateLimitType ?? null,
-      utilisation: info.utilization ?? null,
-      resetsAt: info.resetsAt ?? null,
-    };
-    missionLogger(missionId).info({ evenement }, 'rate_limit_event observé (H-54/H-63)');
-    try {
-      this.#observateurUsage?.surQuota?.(evenement);
-    } catch (erreur) {
-      missionLogger(missionId).error({ err: erreur }, "l'observateur de quota a levé — ignoré, jamais bloquant");
-    }
+  /** Relaie un `rate_limit_event` brut (H-54/H-63, mission M-51). Voir `budgets-workers.ts` (dette n°4a). */
+  #surveillerQuota(missionId: string, sessionId: string, info: Parameters<typeof surveillerQuota>[3]): void {
+    surveillerQuota(this.#observateurUsage, missionId, sessionId, info);
   }
 
-  /**
-   * Classifie une bannière `system` (G.1.4, panne #16, mission M-51) et relaie la
-   * décision. `☠` Ne fait AUCUN effet lui-même (pas de suspension réelle des
-   * créations ici) — ce module ignore le registre (frontière A↔B) ; il ne fait
-   * que rendre le signal observable, exactement comme `#notifierDecision`.
-   */
+  /** Classifie une bannière `system` d'usage (G.1.4, mission M-51). Voir `budgets-workers.ts` (dette n°4a). */
   #surveillerMessageUsage(missionId: string, texte: string): void {
-    const classification = classifierMessageUsage(texte);
-    if (classification.categorie === 'aucune') return;
-    const decision = deciderActionUsage(classification);
-    missionLogger(missionId).info(
-      { categorie: decision.classification.categorie, suspendreCreations: decision.suspendreCreations, notifier: decision.notifier },
-      'message d’usage classifié (G.1.4)',
-    );
-    try {
-      this.#observateurUsage?.surMessageUsage?.(missionId, decision);
-    } catch (erreur) {
-      missionLogger(missionId).error({ err: erreur }, "l'observateur de message d'usage a levé — ignoré, jamais bloquant");
-    }
+    surveillerMessageUsage(this.#observateurUsage, missionId, texte);
   }
 
   // -- Arrêt d'urgence (G.4, mission M-52) -----------------------------------
-  //
-  // ☠ Ne passe jamais par l'orchestrateur (a) : accessible uniquement via
-  // `CanalControle` (D.3) → ces méthodes. La frontière A↔B inexistante
-  // (03-couche-1.md) garantit ce point mécaniquement.
-  // ☠ Ne détruit jamais de travail non commité (b) : ni ce fichier ni
-  // `arret-urgence-sequence.ts` n'importent `projets/cycle-vie-worktree.ts` —
-  // aucun chemin de code vers la suppression d'un worktree n'existe ici.
-  // La séquence elle-même (pause → fermeture → grâce → forçage, c) vit dans
-  // `arret-urgence-sequence.ts` (limite de 500 lignes de ce fichier).
+  // ☠ (a) Jamais via l'orchestrateur : accessible uniquement via `CanalControle`
+  // (D.3), frontière A↔B inexistante (03-couche-1.md). ☠ (b) Aucun worktree
+  // détruit : ni ce fichier ni `arret-urgence-sequence.ts` n'importent
+  // `projets/cycle-vie-worktree.ts`. Séquence (pause → fermeture → grâce →
+  // forçage, c) dans `arret-urgence-sequence.ts` (limite 500 lignes).
 
   /**
    * Filet de dernier recours (c) — DIFFÉRENT de `tuerSansPreavis()` : celui-ci
@@ -519,7 +473,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   ): Promise<ResultatArretUnitaireUrgence | null> {
     const enregistrement = this.#registre.parMission(missionId);
     if (enregistrement === null || !enregistrement.vivant) return null;
-    return executerArretUrgenceMission(this.#cibleArretUrgence(enregistrement), this.#depsArretUrgence(graceMs));
+    return executerArretUrgenceMission(construireCibleArretUrgence(enregistrement), this.#depsArretUrgence(graceMs));
   }
 
   /**
@@ -529,18 +483,8 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * l'appel) et ne relève jamais d'exception sur ce qui est déjà à l'arrêt.
    */
   async arretUrgence(graceMs: number = GRACE_ARRET_URGENCE_MS_DEFAUT): Promise<RapportArretUrgence> {
-    const cibles = this.#registre.tous().filter((e) => e.vivant).map((e) => this.#cibleArretUrgence(e));
+    const cibles = this.#registre.tous().filter((e) => e.vivant).map(construireCibleArretUrgence);
     return executerArretUrgenceParc(cibles, this.#depsArretUrgence(graceMs));
-  }
-
-  #cibleArretUrgence(e: EnregistrementWorker): CibleArretUrgence {
-    return {
-      missionId: e.missionId,
-      sessionId: e.sessionId,
-      interrupt: () => e.handle.query.interrupt(),
-      cible: e.entree,
-      capacites: e.handle.capabilities,
-    };
   }
 
   #depsArretUrgence(graceMs: number): DependancesArretUrgence {

@@ -1039,3 +1039,33 @@ Elle **ne couvre pas ce chemin-ci**, puisque le chemin réel du SDK ne passe pas
 livraison en double d'une requête déjà en vol (`cancelControllers`, log « Duplicate delivery of
 in-flight request … skipping »). La dédup applicative reste nécessaire pour les requêtes **déjà
 résolues**, pas pour celles en vol.
+
+---
+
+## H-74 `[TRANCHÉE 2026-07-22]` · Un garde-fou branché sur un port **optionnel** s'éteint tout seul
+
+Constat tiré de trois occurrences du **même** défaut, trouvées le même jour :
+
+| Occurrence | Symptôme |
+|---|---|
+| `deciderCreationMission` (G.1.3) | implémentée, testée, **appelée par aucun site de production** pendant des jours — configurer un seuil n'avait littéralement aucun effet |
+| `utilisationParc?` / `configPlafondParc?` | rendus **optionnels** pour ne pas casser des appelants hors zone ⇒ port non passé = plafond silencieusement désactivé |
+| `portBusPermissions?` | non câblé = **toute** demande redélivrée refusée, et la reprise reste cassée alors que le code du rappel est correct |
+
+**Le point commun** : un garde-fou dont la dépendance est optionnelle **passe tous ses tests unitaires
+et ne protège rien**. Le vert est même trompeur — il mesure la qualité du mécanisme, pas son
+existence dans le produit. C'est exactement le sens de la définition d'une dette adoptée dans
+`TODO.md` : *un endroit où le code passe les tests sans faire le travail*.
+
+**Décision, sur les garde-fous uniquement** (plafonds, planchers, arbitrages de permission, arrêt
+d'urgence, anti-boucle) :
+
+1. La dépendance d'un garde-fou est **obligatoire** dans le type. Si un appelant ne peut pas la
+   fournir, c'est l'appelant qu'on corrige — pas le type qu'on assouplit.
+2. Quand l'optionalité est réellement inévitable, l'absence doit être **bruyante** : log au niveau
+   `warn` au démarrage, nommant le garde-fou inactif. Un garde-fou qui s'éteint en silence est pire
+   que pas de garde-fou, parce qu'on compte dessus.
+3. `☠` **Un test unitaire ne peut pas fermer ce défaut** — par construction, il injecte la dépendance.
+   Seul un **test d'assemblage** qui construit le produit tel qu'il tourne réellement, et vérifie que
+   chaque garde-fou est effectivement branché, l'attrape. C'est le prolongement direct de M-53 : les
+   cinq propriétés se valident sur l'assemblage, jamais sur les unités.

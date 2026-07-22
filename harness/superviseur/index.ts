@@ -5,9 +5,12 @@
  */
 
 export type {
+  ConcurrentRestaure,
   DemandeDemarrage,
   EnregistrementWorker,
   EtapeArretUrgence,
+  EtatRevalidationProcess,
+  LigneRegistrePersistee,
   ObservateurFlux,
   ObservateurRelance,
   ObservateurUsage,
@@ -16,6 +19,17 @@ export type {
 } from './types.ts';
 
 export { RegistreWorkers } from './registre-workers.ts';
+
+export {
+  PersistanceRegistreSqlite,
+  type EnregistrementAPersister,
+  type OptionsPersistanceRegistre,
+  type PersistanceRegistre,
+} from './persistance-registre.ts';
+
+export { lireStarttimeProc, revaliderProcess, type LecteurStarttime } from './revalidation-process.ts';
+
+export { restaurerRegistre, type DependancesRestauration } from './restauration-registre.ts';
 
 export {
   GRACE_ARRET_URGENCE_MS_DEFAUT,

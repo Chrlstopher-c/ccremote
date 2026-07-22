@@ -76,6 +76,57 @@ export interface EnregistrementWorker {
    */
   readonly entree: GenerateurEntree;
   vivant: boolean;
+  /**
+   * Pid OS du process réel (persistance, dette n°1 — TODO.md). `null`/absent tant
+   * qu'aucune voie de capture n'existe : `WorkerHandle` (workers/types.ts, hors
+   * périmètre de ce dossier) n'expose actuellement AUCUN pid pour le spawn local
+   * intégré du SDK (`SpawnedProcess` ne le déclare pas non plus, cf. sdk.d.ts). Champ
+   * posé dès maintenant pour que la persistance et la revalidation soient prêtes le
+   * jour où `workers/` l'alimente (ex. via un `spawnProcess` custom, B.2.1) — à
+   * répercuter, hors périmètre de cette mission (`superviseur/` seul modifiable ici).
+   */
+  readonly pid?: number | null;
+  /** Starttime `/proc/<pid>/stat` au moment de l'enregistrement — voir `pid`. */
+  readonly pidStarttime?: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Persistance et restauration du registre (dette n°1, TODO.md).
+// ---------------------------------------------------------------------------
+
+/** Trois issues distinctes de la revalidation d'un pid restauré. Jamais deux confondues. */
+export type EtatRevalidationProcess = 'vivant_confirme' | 'mort_confirme' | 'indetermine';
+
+/** Ligne relue depuis la persistance disque (`persistance-registre.ts`). */
+export interface LigneRegistrePersistee {
+  readonly sessionId: string;
+  readonly missionId: string;
+  readonly worktree: string;
+  readonly epoch: number;
+  readonly pid: number | null;
+  readonly pidStarttime: string | null;
+  readonly vivant: boolean;
+  readonly spec: WorkerSpec;
+  readonly majA: number;
+}
+
+/**
+ * Concurrent reconstruit par `restauration-registre.ts` au démarrage. Ne possède
+ * AUCUN handle réel : le process qu'il représente, s'il existe encore, n'est pas
+ * contrôlé par cette instance du superviseur — c'est précisément le problème que
+ * la dette n°1 corrige (le fencing doit le voir, sans pouvoir prétendre le piloter).
+ */
+export interface ConcurrentRestaure {
+  readonly sessionId: string;
+  readonly missionId: string;
+  readonly worktree: string;
+  readonly epoch: number;
+  readonly pid: number | null;
+  readonly pidStarttime: string | null;
+  readonly spec: WorkerSpec;
+  readonly etat: EtatRevalidationProcess;
+  /** `☠` Biais asymétrique non négociable : `indetermine` ⇒ `true` (jamais de libération dans le doute). */
+  vivant: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@
 import { ControleurPause } from '../pause/index.ts';
 import type { FileEntreeCiblee } from '../pause/index.ts';
 import type { WorkerCapabilities } from '../workers/index.ts';
-import type { EtapeArretUrgence, RapportArretUrgence, ResultatArretUnitaireUrgence } from './types.ts';
+import type { EnregistrementWorker, EtapeArretUrgence, RapportArretUrgence, ResultatArretUnitaireUrgence } from './types.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
 
 /** Ce qu'une mission vivante expose au minimum pour être arrêtée en urgence. */
@@ -36,6 +36,17 @@ export interface CibleArretUrgence {
   readonly interrupt: () => Promise<{ still_queued: string[] } | undefined>;
   readonly cible: FileEntreeCiblee;
   readonly capacites: WorkerCapabilities;
+}
+
+/** Projette un enregistrement vivant du registre vers la forme minimale requise ci-dessus. */
+export function construireCibleArretUrgence(e: EnregistrementWorker): CibleArretUrgence {
+  return {
+    missionId: e.missionId,
+    sessionId: e.sessionId,
+    interrupt: () => e.handle.query.interrupt(),
+    cible: e.entree,
+    capacites: e.handle.capabilities,
+  };
 }
 
 /** Ports fournis par `SuperviseurWorkers` — jamais réimplémentés ici. */
