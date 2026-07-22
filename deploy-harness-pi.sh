@@ -28,6 +28,9 @@ rsync -az --delete \
   -e "ssh $SSH_OPTS" \
   /mnt/projects/ccremote/harness/ "$TARGET:$REMOTE_DIR/"
 
+echo "→ Répertoires attendus"
+ssh $SSH_OPTS "$TARGET" "mkdir -p /home/pi/projets"
+
 echo "→ Installation des dépendances (Bun)"
 ssh $SSH_OPTS "$TARGET" "cd $REMOTE_DIR && ~/.bun/bin/bun install --silent"
 
@@ -35,9 +38,17 @@ echo "→ Écriture de l'environnement (umask 077, jamais lisible par les autres
 # ☠ Le secret passe par stdin, jamais en argument de commande : les arguments
 # sont visibles dans `ps` par tout utilisateur de la machine.
 ssh $SSH_OPTS "$TARGET" "umask 077 && cat > $REMOTE_DIR/.env" <<EOF
+# ☠ Le CLI claude vit dans ~/.local/bin, qui n'est dans le PATH que d'un shell
+# de connexion — un service systemd ne l'y trouve pas. Sans cette ligne, la
+# session orchestrateur échoue au spawn avec une erreur peu parlante.
+PATH=/home/pi/.local/bin:/home/pi/.bun/bin:/usr/local/bin:/usr/bin:/bin
 CCREMOTE_PI_REGISTRE_DB=$REMOTE_DIR/registre.db
 CCREMOTE_PI_REPERTOIRE_PROJETS=/home/pi/projets
 CCREMOTE_PI_CWD_ORCHESTRATEUR=$REMOTE_DIR
+CCREMOTE_PI_IDENTITE_ORCHESTRATEUR=$REMOTE_DIR/identite-orchestrateur.json
+CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR=$REMOTE_DIR/incidents-orchestrateur.jsonl
+# Compte dédié à la session maître, connecté par un /login humain sur le Pi.
+CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR=${CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR:-/home/pi/.claude-orchestrateur}
 CCREMOTE_LIEN_SECRET=$CCREMOTE_LIEN_SECRET
 # ☠ Le LIEN écoute sur le LAN : le PC est une autre machine du réseau local.
 # Protégé par le secret partagé (comparaison à temps constant, refus 4401).
@@ -49,10 +60,10 @@ CCREMOTE_LIEN_PORT=8721
 # propre, c'est pi-web qui la lui apporte. Le serveur refuse d'ailleurs de
 # démarrer sur une interface publique.
 CCREMOTE_API_WEB_PORT=8722
-# ☠ Session orchestrateur maître : opt-in. Exige des credentials Claude valides
-# sur le Pi (un \`/login\` humain) et consomme du quota en continu. Le parc, les
-# escalades et le pilotage fonctionnent sans elle.
-# CCREMOTE_PI_ORCHESTRATEUR=1
+# ☠ Session orchestrateur maître : opt-in, car elle consomme du quota EN
+# CONTINU et exige des credentials Claude valides sur le Pi. Activer en passant
+# CCREMOTE_PI_ORCHESTRATEUR=1 au script.
+CCREMOTE_PI_ORCHESTRATEUR=${CCREMOTE_PI_ORCHESTRATEUR:-0}
 EOF
 
 echo "→ Service systemd"

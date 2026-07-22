@@ -296,7 +296,18 @@ export class LienWebSocket implements Lien, CanalControleProcessus {
   }
 
   #envoyer(tag: (typeof TAG)[keyof typeof TAG], seq: number, payload: Uint8Array): void {
-    if (this.#ws === null || this.#ws.readyState !== WS_OUVERT) return;
+    if (this.#ws === null || this.#ws.readyState !== WS_OUVERT) {
+      // `☠ TROUVÉ EN PRODUCTION (2026-07-22)` — cet abandon était TOTALEMENT
+      // silencieux. Une requête de contrôle émise juste avant que la socket ne
+      // soit branchée disparaissait sans trace ; côté appelant, le seul signe
+      // était un corrélateur qui expirait 10 s plus tard, sans indiquer que
+      // rien n'était jamais parti. Le tic de vivacité, lui, est attendu sur un
+      // lien coupé : le taire évite de noyer le journal.
+      if (tag !== TAG.PING && tag !== TAG.PONG) {
+        this.#log.warn({ tag, octets: payload.byteLength }, 'trame ABANDONNÉE — lien non ouvert au moment de l’envoi');
+      }
+      return;
+    }
     this.#ws.send(encoderTrame(tag, seq, payload));
   }
 

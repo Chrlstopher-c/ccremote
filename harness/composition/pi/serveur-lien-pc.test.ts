@@ -55,6 +55,11 @@ describe('serveur du lien Pi↔PC — authentification (H-75, point 2)', () => {
     expect(ferme.code).toBe(4401);
   });
 
+  // ☠ Le rattachement est signalé APRÈS l'ouverture effective du lien, plus
+  // dans le handler `open` : la réconciliation partait sinon sur une socket non
+  // branchée et ses requêtes étaient abandonnées en silence (constaté en prod).
+  // Les attentes ci-dessous couvrent ce délai — les raccourcir rendrait le banc
+  // instable sans rien prouver de plus.
   test('secret valide ⇒ accepté, rattachement déclenché exactement une fois', async () => {
     let rattachements = 0;
     const s = demarrer(() => {
@@ -62,7 +67,7 @@ describe('serveur du lien Pi↔PC — authentification (H-75, point 2)', () => {
     });
     const ws = ouvrirClient(s);
     await evenement(ws, 'open');
-    await attendre(50);
+    await attendre(300);
     expect(rattachements).toBe(1);
     ws.close();
   });
@@ -77,6 +82,7 @@ describe('serveur du lien Pi↔PC — cycle extinction / rallumage (H-75)', () =
 
     const soir = ouvrirClient(s);
     await evenement(soir, 'open');
+    await attendre(300);
     const eteint = evenement(soir, 'close');
     soir.close(); // le PC s'éteint
     await eteint;
@@ -84,7 +90,10 @@ describe('serveur du lien Pi↔PC — cycle extinction / rallumage (H-75)', () =
 
     const matin = ouvrirClient(s); // le lendemain
     await evenement(matin, 'open');
-    await attendre(50);
+    // ☠ Après une coupure, le Pi attend un palier de backoff avant de consommer
+    // la connexion mise en file : le rattachement n'est donc PAS instantané.
+    // Fait mesuré, pas une marge de confort — 300 ms ne suffisent pas.
+    await attendre(1_500);
 
     expect(rattachements).toBe(2);
     // Le cœur du banc : la connexion de la veille a bien été OUBLIÉE. Sans

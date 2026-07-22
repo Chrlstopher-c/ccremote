@@ -120,6 +120,23 @@ export interface ServeurLienPc {
   arreter(): void;
 }
 
+/** Marge d'attente de l'ouverture effective du lien après acceptation. */
+const ATTENTE_OUVERTURE_MS = 2_000;
+const PAS_ATTENTE_MS = 20;
+
+/**
+ * Attend que `LienWebSocket` ait RÉELLEMENT branché la socket. Bornée : plutôt
+ * renoncer bruyamment que boucler pour toujours si le lien ne s'ouvre pas.
+ */
+async function attendreLienOuvert(lien: LienWebSocket): Promise<boolean> {
+  const echeance = Date.now() + ATTENTE_OUVERTURE_MS;
+  while (Date.now() < echeance) {
+    if (lien.etat() === 'ouvert') return true;
+    await new Promise((r) => setTimeout(r, PAS_ATTENTE_MS));
+  }
+  return lien.etat() === 'ouvert';
+}
+
 /** File à un seul emplacement (v1, un seul PC) : la connexion la plus récente non encore consommée. */
 class FileConnexionUnique {
   #enFile: AdaptateurServerWebSocket | null = null;
@@ -214,8 +231,23 @@ export function demarrerServeurLienPc(options: OptionsServeurLienPc): ServeurLie
         const adaptateur = new AdaptateurServerWebSocket(ws);
         adaptateurs.set(ws, adaptateur);
         file.accepter(adaptateur);
-        options.surConnexionAcceptee?.();
         log.info({}, 'connexion PC authentifiée acceptée');
+        // `☠ TROUVÉ EN PRODUCTION (2026-07-22)` — ce rappel ne doit PAS partir
+        // ici. `file.accepter()` résout la promesse de `connecter()`, mais
+        // `LienWebSocket` ne branche réellement la socket qu'à la reprise de son
+        // `await`, donc APRÈS ce bloc synchrone. Appelé tout de suite, le
+        // déclencheur lançait la réconciliation sur un lien dont `#ws` valait
+        // encore `null` : chaque requête d'inventaire était abandonnée en
+        // silence par `#envoyer`, et le corrélateur expirait 10 s plus tard.
+        // Déterministe, à chaque rattachement — invisible en local parce que
+        // rien n'avait jamais émis de requête de contrôle en réel.
+        void attendreLienOuvert(lien).then((ouvert) => {
+          if (!ouvert) {
+            log.error({}, 'lien toujours pas ouvert après acceptation — réconciliation NON déclenchée (jamais en silence)');
+            return;
+          }
+          options.surConnexionAcceptee?.();
+        });
       },
       message(ws, data): void {
         adaptateurs.get(ws)?.distribuerMessage(data);
