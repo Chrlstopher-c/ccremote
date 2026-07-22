@@ -154,6 +154,44 @@ d'objectif depuis, sur décision de Chris.*
    encore des mocks.
 3. Poursuivre le reste des dettes.
 
+### ☠ À FAIRE EN PREMIER : revoir le lien PC↔Pi, livré par un agent interrompu
+
+Trois agents ont été **coupés en plein vol** par la limite de quota (2026-07-22 au soir). Vérifié
+immédiatement après : **aucune casse** — 904 tests verts, typecheck propre, pile de `git stash`
+vide, `pi-web` répond. Le travail rescapé est commité (`3cdf465`).
+
+**Mais un seul des trois a produit du code, et son rapport n'a jamais été rendu.** Ce qui est sur
+disque n'a donc **pas été revu** :
+
+| Agent | État |
+|---|---|
+| Inversion du lien PC↔Pi | **code livré, rapport perdu** — `composition/lien-pc-pi/`, `composition/pc/client-lien-pi.ts`, `composition/pi/serveur-lien-pc.ts`, `composition/deploiement/ccremote-pc.service`, `horloge-avec-gigue.ts`, `port-bus-permissions-distant.ts`, `permission-verdict-distant.ts`, `reconciliation-sur-rattachement.ts` · `composition/pc/serveur-controle.ts` **supprimé** (le PC n'écoute plus) |
+| API HTTP du control-plane | **rien écrit** — `control-plane/api-web/` n'existe pas |
+| Branchement de l'UI sur l'API | **rien écrit** — `pi-web/` inchangé, données toujours mockées |
+
+**Revue à faire sur le code du lien, sur ces points précis** (c'est ce que le rapport aurait dû
+établir) :
+1. l'**epoch est-il réellement incrémenté à chaque rattachement** ? Sans ça le fencing (M-11) ne
+   peut pas distinguer la nouvelle instance de l'ancienne ;
+2. le backoff a-t-il une **gigue** ? Sans elle, PC et Pi qui redémarrent ensemble se resynchronisent
+   et se martèlent ;
+3. une coupure **transitoire** ne remonte-t-elle jamais comme terminale ? (`transport/lien-websocket.ts`
+   implémente déjà cette distinction — a-t-elle été réutilisée, ou un second mécanisme réinventé ?)
+4. le secret partagé est-il bien **hors du code et hors des logs** ?
+5. **rien de mutant ne s'exécute au rattachement** : le retour du PC restaure un état lisible,
+   relancer une mission reste une décision (voir H-75).
+
+`⚠` Aucun de ces points n'a été exercé en réel : pas de vrai réseau, pas de vrai redémarrage.
+
+### Ensuite : les deux chantiers jamais commencés
+
+- **API HTTP du control-plane** (`control-plane/api-web/`, à créer). Spécification :
+  `pi-web/CONTRAT-API-HARNESS.md`, 27 endpoints. `☠` Exposer un état existant, **jamais** le recréer :
+  une donnée absente du harness se déclare absente, elle ne s'invente pas.
+- **Branchement de l'UI** : proxy `/api/harness/*` dans `pi-web/app.py` derrière `check_session`,
+  puis `static/harness-api.js` sur les vrais endpoints, en gardant un **basculement explicite** vers
+  les mocks (on doit savoir en regardant l'écran si l'on voit du réel).
+
 ### L'architecture est tranchée : lire H-75 avant de toucher au transport
 
 `Upgrade/16-decisions-operateur.md`, **H-75**. En résumé : **le Pi héberge, le PC est client**, un

@@ -18,6 +18,13 @@
 `⚠` **Le harness n'est pas exécutable de bout en bout** en déploiement Pi/PC séparé (verdict de la
 mission d'assemblage). Le mode colocalisé, lui, s'assemble.
 
+`☠` **Coupure quota du 2026-07-22 au soir — trois agents interrompus en plein vol.** Aucune casse
+(904 tests verts, typecheck propre, `git stash` vide, app debout), travail rescapé commité
+(`3cdf465`). **Mais** : le code du lien PC↔Pi est livré et **jamais revu** (rapport perdu), tandis
+que l'API HTTP et le branchement de l'UI **n'ont jamais commencé**. Points de revue précis dans
+`harness/REPRISE.md`, section « ☠ À FAIRE EN PREMIER ». Du code vert et non revu ressemble
+exactement à du code fini — sur ce projet, c'est le piège qui coûte le plus cher.
+
 ## 📋 REGISTRE DES DETTES — état au 2026-07-22
 
 *Classées par gravité réelle. Une dette n'est pas une tâche oubliée : c'est un endroit où le code
