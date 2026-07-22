@@ -196,6 +196,10 @@ export interface Conversation {
   readonly statut: StatutConversation;
   readonly creeA: number;
   readonly majA: number;
+  /** Nombre de compactions subies par ce fil (affiché à l'écran). */
+  readonly compactions: number;
+  /** Résumé réinjecté à la prochaine session après compaction. */
+  readonly resumeContexte: string | null;
 }
 
 export type TypeEvenementConversation =
@@ -204,7 +208,9 @@ export type TypeEvenementConversation =
   | 'texte'
   | 'outil'
   | 'resultat'
-  | 'erreur';
+  | 'erreur'
+  /** Marqueur laissé dans le fil à chaque compaction — contenu : le résumé retenu. */
+  | 'compaction';
 
 /** Un bloc du fil, dans l'ordre d'arrivée. `seq` est le curseur de streaming. */
 export interface EvenementConversation {

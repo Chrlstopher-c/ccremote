@@ -19,6 +19,8 @@ interface LigneConversation {
   statut: string;
   cree_a: number;
   maj_a: number;
+  compactions: number;
+  resume_contexte: string | null;
 }
 
 interface LigneEvenement {
@@ -38,6 +40,8 @@ function versConversation(l: LigneConversation): Conversation {
     statut: l.statut as Conversation['statut'],
     creeA: l.cree_a,
     majA: l.maj_a,
+    compactions: l.compactions,
+    resumeContexte: l.resume_contexte,
   };
 }
 
@@ -131,6 +135,37 @@ export class DepotConversations {
           .run(maintenant, id);
         return res.changes > 0;
       },
+      { id },
+    );
+  }
+
+  /**
+   * Enregistre une compaction : incrémente le compte, retient le résumé à
+   * réinjecter, et OUBLIE le `session_id` — la prochaine session doit repartir
+   * à froid, sinon reprendre l'ancienne rechargerait le contexte qu'on vient
+   * précisément de jeter, et la compaction n'aurait servi à rien.
+   */
+  public enregistrerCompaction(id: string, resume: string, maintenant: number = Date.now()): boolean {
+    return executer(
+      'conversations.enregistrerCompaction',
+      () =>
+        this.db.transaction(() => {
+          const res = this.db
+            .query(
+              `UPDATE conversation
+                  SET compactions = compactions + 1,
+                      resume_contexte = ?,
+                      session_id = NULL,
+                      maj_a = ?
+                WHERE id = ?`,
+            )
+            .run(resume, maintenant, id);
+          if (res.changes === 0) return false;
+          this.db
+            .query('INSERT INTO conversation_evenement (conversation_id, type, contenu, cree_a) VALUES (?, ?, ?, ?)')
+            .run(id, 'compaction', resume, maintenant);
+          return true;
+        })(),
       { id },
     );
   }

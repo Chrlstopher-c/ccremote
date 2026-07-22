@@ -103,6 +103,7 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
       generating: resume.genere,
       active: resume.active,
       contextPct: resume.contextePct,
+      compactions: resume.compactions,
       // `☠` Le bloc en cours de frappe — c'est LUI qui fait le streaming visible.
       partial: resume.partiel,
     });
@@ -120,6 +121,7 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
       generating: d.genere,
       active: d.active,
       contextPct: d.contextePct,
+      compactions: d.compactions,
       partial: d.partiel,
     });
   }
@@ -220,6 +222,15 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     // jusqu'au `result` immobiliserait le relais et Cloudflare le couperait.
     await conv.envoyer(decodeURIComponent(message[1]), texte);
     return { ok: true, effet: 'message envoyé — la réponse arrive en streaming' };
+  }
+
+  const compact = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/compact$/);
+  if (compact?.[1] !== undefined) {
+    // `☠` `compacte: false` n'est PAS une erreur (rien à compacter, tour en
+    // cours) : on rend le motif tel quel plutôt qu'un faux succès, l'interface
+    // doit pouvoir dire pourquoi il ne s'est rien passé.
+    const r = await conv.compacter(decodeURIComponent(compact[1]));
+    return { ok: true, effet: r.detail, compacted: r.compacte };
   }
 
   const rename = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/rename$/);

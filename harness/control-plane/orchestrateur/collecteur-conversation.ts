@@ -90,6 +90,10 @@ export class CollecteurConversation {
   #genere = false;
   #streameCeTour = false;
   #partiel: { type: TypeEvenementConversation; contenu: string } | null = null;
+  /** Tour interne (compaction) : rien n'est persisté, le texte est capté à part. */
+  #muet = false;
+  #capture = '';
+  #finTour: ((texte: string) => void) | null = null;
 
   constructor(
     private readonly conversationId: string,
@@ -101,15 +105,46 @@ export class CollecteurConversation {
     this.#genere = true;
     this.#streameCeTour = false;
     this.#partiel = null;
+    this.#muet = false;
+  }
+
+  /**
+   * Ouvre un tour INTERNE (compaction) : rien n'est écrit dans le fil, et la
+   * promesse rend le texte produit. `☠` Sans ce mode, la demande de résumé et sa
+   * réponse apparaîtraient dans la conversation de l'opérateur — qui verrait le
+   * harness se parler à lui-même.
+   */
+  ouvrirTourInterne(timeoutMs: number): Promise<string> {
+    this.#genere = true;
+    this.#streameCeTour = false;
+    this.#partiel = null;
+    this.#muet = true;
+    this.#capture = '';
+    return new Promise<string>((resoudre, rejeter) => {
+      const minuterie = setTimeout(() => {
+        this.#finTour = null;
+        this.#muet = false;
+        this.#genere = false;
+        rejeter(new Error(`aucune réponse au tour interne en ${timeoutMs} ms`));
+      }, timeoutMs);
+      this.#finTour = (texte: string): void => {
+        clearTimeout(minuterie);
+        resoudre(texte);
+      };
+    });
   }
 
   get genere(): boolean {
     return this.#genere;
   }
 
-  /** Le bloc en cours de frappe, ou `null`. Lu par l'API à chaque sondage. */
+  /**
+   * Le bloc en cours de frappe, ou `null`. Lu par l'API à chaque sondage.
+   * `☠` Masqué pendant un tour interne : sinon l'opérateur verrait le résumé de
+   * compaction s'écrire dans son fil, comme si le harness lui parlait.
+   */
   get partiel(): BlocPartiel | null {
-    return this.#partiel;
+    return this.#muet ? null : this.#partiel;
   }
 
   /**
@@ -191,6 +226,15 @@ export class CollecteurConversation {
     this.#finaliserPartiel();
     this.#genere = false;
     this.#streameCeTour = false;
+    if (this.#muet) {
+      const rendre = this.#finTour;
+      const texte = this.#capture;
+      this.#muet = false;
+      this.#finTour = null;
+      this.#capture = '';
+      rendre?.(texte.trim());
+      return;
+    }
     const subtype = (message as { subtype?: string }).subtype;
     if (subtype !== undefined && subtype !== 'success') {
       this.#persister('erreur', `Le tour s'est terminé sur une erreur (${subtype}).`);
@@ -200,6 +244,11 @@ export class CollecteurConversation {
   }
 
   #persister(type: TypeEvenementConversation, contenu: string): void {
+    // Tour interne : on capte le texte, on n'écrit rien dans le fil.
+    if (this.#muet) {
+      if (type === 'texte') this.#capture += contenu;
+      return;
+    }
     try {
       this.depot.ajouterEvenement({ conversationId: this.conversationId, type, contenu });
     } catch (erreur) {

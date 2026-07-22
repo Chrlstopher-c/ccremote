@@ -98,6 +98,12 @@ export function composeWorkerOptions(
     model: model.resolved,
     systemPrompt: { type: 'preset', preset: 'claude_code', append: spec.mandate },
     settingSources: [...DEFAULT_SETTING_SOURCES],
+    // `☠` L'autocompaction est POSÉE, jamais supposée. Elle dépendait jusqu'ici du
+    // défaut du CLI et des settings du poste : un `autoCompactEnabled: false` posé
+    // un jour dans un settings.json aurait laissé un lead saturer son contexte en
+    // silence, sans que rien dans ce dépôt ne le dise. Vérifié le 2026-07-23 :
+    // aucun settings du poste ni des comptes ne mentionnait la compaction.
+    settings: { autoCompactEnabled: true },
     includePartialMessages: true,
     forwardSubagentText: true,
     agentProgressSummaries: true,

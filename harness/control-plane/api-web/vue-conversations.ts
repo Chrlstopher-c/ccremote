@@ -23,6 +23,7 @@ export interface ConversationApi {
   readonly majA: number;
   readonly active: boolean;
   readonly contextPct: number | null;
+  readonly compactions: number;
 }
 
 export interface DetailConversationApi extends ConversationApi {
@@ -43,6 +44,7 @@ export interface EvenementsApi {
   readonly generating: boolean;
   readonly active: boolean;
   readonly contextPct: number | null;
+  readonly compactions: number;
   readonly partial: PartielApi | null;
 }
 
@@ -55,6 +57,7 @@ export interface PortConversations {
     readonly majA: number;
     readonly active: boolean;
     readonly contextePct: number | null;
+    readonly compactions: number;
   }[];
   creer(titre?: string): { readonly id: string; readonly titre: string; readonly creeA: number; readonly majA: number };
   renommer(id: string, titre: string): boolean;
@@ -67,6 +70,7 @@ export interface PortConversations {
     readonly genere: boolean;
     readonly active: boolean;
     readonly contextePct: number | null;
+    readonly compactions: number;
     readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
   evenementsDepuis(id: string, depuis: number): {
@@ -75,9 +79,11 @@ export interface PortConversations {
     readonly genere: boolean;
     readonly active: boolean;
     readonly contextePct: number | null;
+    readonly compactions: number;
     readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
   envoyer(id: string, texte: string): Promise<void>;
+  compacter(id: string): Promise<{ readonly compacte: boolean; readonly detail: string }>;
 }
 
 export function versEvenementApi(ev: EvenementConversation): EvenementApi {
@@ -91,6 +97,7 @@ export function versConversationApi(entree: {
   readonly majA: number;
   readonly active: boolean;
   readonly contextePct: number | null;
+  readonly compactions?: number;
 }): ConversationApi {
   return {
     id: entree.id,
@@ -99,5 +106,6 @@ export function versConversationApi(entree: {
     majA: entree.majA,
     active: entree.active,
     contextPct: entree.contextePct,
+    compactions: entree.compactions ?? 0,
   };
 }

@@ -182,9 +182,46 @@ CREATE TABLE conversation_evenement (
 CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
 `;
 
+/**
+ * Migration 3 — compaction de contexte par conversation.
+ *
+ * `☠` Mesuré sur le SDK 0.3.217 : il n'existe AUCUNE API de compaction manuelle
+ * (pas de méthode sur `Query`, pas de control request, et `/compact` envoyé dans
+ * le flux est traité comme du texte ordinaire — le modèle y répond au lieu de
+ * compacter). La compaction est donc faite PAR LE HARNESS : on demande un résumé
+ * à la session, on la ferme, et la suivante redémarre amorcée par ce résumé.
+ * D'où ces deux colonnes : le résumé à réinjecter, et le compte affiché à l'écran.
+ *
+ * `conversation_evenement` est recréée pour élargir son CHECK au type
+ * `compaction` — SQLite ne sait pas modifier une contrainte en place. Les
+ * `seq` sont préservés à l'identique : ce sont les curseurs de streaming, les
+ * réattribuer ferait rejouer tout l'historique aux interfaces ouvertes.
+ */
+const MIGRATION_3 = `
+ALTER TABLE conversation ADD COLUMN compactions INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE conversation ADD COLUMN resume_contexte TEXT;
+
+CREATE TABLE conversation_evenement_nouveau (
+  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL CHECK (type IN ('operateur', 'reflexion', 'texte', 'outil', 'resultat', 'erreur', 'compaction')),
+  contenu         TEXT NOT NULL,
+  cree_a          INTEGER NOT NULL
+) STRICT;
+
+INSERT INTO conversation_evenement_nouveau (seq, conversation_id, type, contenu, cree_a)
+  SELECT seq, conversation_id, type, contenu, cree_a FROM conversation_evenement;
+
+DROP TABLE conversation_evenement;
+ALTER TABLE conversation_evenement_nouveau RENAME TO conversation_evenement;
+
+CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
+  { version: 3, nom: 'compaction-conversations', sql: MIGRATION_3 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

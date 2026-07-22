@@ -72,13 +72,75 @@ async function hNewConversation() {
   const el = document.getElementById('hOrchInput'); if (el) el.focus();
 }
 
-async function hArchiveConversation(id) {
+/** Confirmation obligatoire : une conversation supprimée ne se retrouve pas dans l'interface. */
+function hArchiveConversation(id) {
+  const conv = hOrch.list.find((c) => c.id === id);
+  const titre = conv ? conv.titre : 'cette conversation';
+  confirmAction(
+    'Supprimer la conversation',
+    `« ${titre} » sera retirée de la liste et sa session fermée. L'historique reste en base, mais tu ne pourras plus y revenir depuis l'interface. Continuer ?`,
+    () => hArchiveConversationConfirme(id),
+    { danger: true },
+  );
+}
+
+async function hArchiveConversationConfirme(id) {
   const r = await HarnessAPI.archiveConversation(id);
-  if (!r.ok) { showToast(r.erreur || 'Archivage impossible', 'warn'); return; }
+  if (!r.ok) { showToast(r.erreur || 'Suppression impossible', 'warn'); return; }
   if (hOrch.convId === id) { hStopPoll(); hOrch.convId = null; }
+  hOrch.barreSig = ''; // force le redessin : la liste a changé
   await hLoadConvList();
   const suivant = hOrch.list[0] && hOrch.list[0].id;
   if (suivant) await hOpenConversation(suivant); else await hNewConversation();
+  showToast('Conversation supprimée', 'ok');
+}
+
+// ---- indicateurs de tête : contexte + compactions ---------------------------
+function hRenderStats(d) {
+  const el = document.getElementById('hOrchStats');
+  if (!el) return;
+  const pct = (d && typeof d.contextPct === 'number') ? d.contextPct : null;
+  const nb = (d && typeof d.compactions === 'number') ? d.compactions : 0;
+  // ☠ Pas de mesure = « — », jamais 0 % : un contexte inconnu n'est pas un contexte vide.
+  const cls = pct === null ? '' : pct >= 75 ? 'crit' : pct >= 50 ? 'warn' : '';
+  const enCours = hOrch.generating;
+  el.innerHTML = `
+    <div class="ostat ${cls}">
+      <span class="ok">Contexte</span>
+      <span class="ov">${pct === null ? '—' : pct + ' %'}</span>
+      <span class="obar"><i style="width:${pct === null ? 0 : pct}%"></i></span>
+    </div>
+    <div class="ostat">
+      <span class="ok">Compactages</span>
+      <span class="ov">${nb}</span>
+      <button onclick="hCompacterMaintenant()" ${enCours ? 'disabled' : ''} title="Compacter le contexte de ce fil">Compacter</button>
+    </div>`;
+}
+
+/**
+ * Commandes traitées localement par le harness. Rend `true` si le texte en était
+ * une (auquel cas il n'est PAS envoyé au modèle).
+ */
+function hCommandeLocale(texte) {
+  const cmd = texte.toLowerCase();
+  if (cmd === '/compact' || cmd === '/compacter') { hCompacterMaintenant(); return true; }
+  if (cmd === '/help' || cmd === '/aide') {
+    showToast('Commandes : /compact — compacte le contexte de ce fil.', 'accent');
+    return true;
+  }
+  return false;
+}
+
+/** Compaction manuelle — bouton, ou commande /compact dans le champ de saisie. */
+async function hCompacterMaintenant() {
+  if (!hOrch.convId) return;
+  showToast('Compaction en cours — résumé du fil…', 'accent');
+  const r = await HarnessAPI.compactConversation(hOrch.convId);
+  if (!r.ok) { showToast(r.erreur || 'Compaction impossible', 'warn'); return; }
+  // ☠ `compacted:false` n'est pas une erreur (rien à compacter, tour en cours) :
+  // on affiche le motif réel plutôt qu'un succès de façade.
+  showToast(r.effet || 'Compaction terminée', r.compacted ? 'ok' : 'warn');
+  if (r.compacted) await hOpenConversation(hOrch.convId);
 }
 
 // ---- ouverture + rendu complet d'un fil ------------------------------------
@@ -101,6 +163,7 @@ async function hOpenConversation(id) {
   }
   hRenderPartiel(d.partial || null);
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
+  hRenderStats(d);
   hScrollChat();
   if (hOrch.generating) hStartPoll();
 }
@@ -164,6 +227,16 @@ function hBlocNode(type, contenu, live) {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
     return e;
   }
+  if (type === 'compaction') {
+    // Marqueur visible dans le fil : l'opérateur doit savoir OÙ le contexte a été
+    // remplacé, et par quoi — le résumé est consultable, jamais caché.
+    const d = document.createElement('details');
+    d.className = 'orch-compact';
+    const s = document.createElement('summary'); s.textContent = 'Contexte compacté — voir le résumé retenu';
+    const b = document.createElement('div'); b.className = 'think-body'; b.textContent = contenu;
+    d.append(s, b);
+    return d;
+  }
   return null;
 }
 
@@ -188,6 +261,14 @@ function hAppendEvent(ev) {
     chat.appendChild(u); hOrch.cur = null; return;
   }
   if (ev.type === 'resultat') { hOrch.cur = null; return; } // fin de tour : le prochain bloc ouvre un groupe
+
+  // La compaction est une césure du fil, pas une parole de l'orchestrateur :
+  // posée au niveau de la conversation, elle referme le groupe en cours.
+  if (ev.type === 'compaction') {
+    const noeud = hBlocNode('compaction', ev.contenu, false);
+    if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
+    chat.appendChild(noeud); hOrch.cur = null; return;
+  }
 
   const noeud = hBlocNode(ev.type, ev.contenu, false);
   if (!noeud) return;
@@ -258,6 +339,7 @@ async function hPollNow() {
   hOrch.generating = !!d.generating;
   hRenderPartiel(d.partial || null);
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
+  hRenderStats(d);
   if (auBas) hScrollChat();
   if (hOrch.generating) hOrch.timer = setTimeout(hPollNow, HORCH_POLL_MS);
   else {
@@ -284,6 +366,10 @@ async function hSendOrchMessage() {
   const text = (el.value || '').trim();
   if (!text || hOrch.generating) return;
   if (!hOrch.convId) { await hNewConversation(); if (!hOrch.convId) return; }
+  // ☠ `/compact` est traité PAR LE HARNESS, jamais envoyé au modèle : mesuré, le
+  // SDK ne connaît pas les commandes slash dans le flux — le modèle y répondrait
+  // en texte (« je n'ai pas d'outil pour ça ») au lieu de compacter.
+  if (hCommandeLocale(text)) { el.value = ''; el.style.height = 'auto'; return; }
   el.value = ''; el.style.height = 'auto';
   // Affichage optimiste : le message part à l'écran tout de suite. Il portera son
   // `seq` au prochain sondage, la garde d'idempotence évitera le doublon.

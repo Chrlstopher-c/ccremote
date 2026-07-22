@@ -16,7 +16,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { Registre } from '../../registre/index.ts';
-import { echecInattendu } from './contrat.ts';
+import { differe, echecInattendu, refuse } from './contrat.ts';
 import {
   etatEquipe,
   historiqueEquipe,
@@ -66,6 +66,27 @@ export interface DependancesServeurControle {
    */
   readonly utilisationParc: LecteurUtilisationParc;
   readonly configPlafondParc: ConfigPlafondParc;
+  /**
+   * Compaction du contexte de LA session appelante (H-62). Fourni par la
+   * composition, qui capture l'identité de la conversation — un serveur de
+   * contrôle est donc construit par conversation.
+   *
+   * `☠` Absent ⇒ l'outil n'est pas exposé DU TOUT. C'est voulu : mieux vaut un
+   * outil que le modèle ne voit pas qu'un outil présent qui échouerait ou, pire,
+   * répondrait « compacté » sans rien compacter.
+   *
+   * `☠` La règle « ne compacte jamais de ta propre initiative, propose d'abord »
+   * vit dans le MANDAT (`mandat.ts`), pas ici : c'est une contrainte de conduite,
+   * PAS un verrou mécanique. Le harness ne peut pas constater qu'une demande
+   * humaine a précédé l'appel — ne jamais présenter cette règle comme mécanique.
+   */
+  readonly compacteurContexte?: CompacteurContexte;
+}
+
+/** Port de compaction du contexte de la session appelante. */
+export interface CompacteurContexte {
+  /** Arme la compaction pour la fin du tour courant (jamais pendant). */
+  demander(): { readonly arme: boolean; readonly detail: string };
 }
 
 /**
@@ -213,8 +234,33 @@ function outilsArbitrage(deps: DependancesServeurControle) {
  * de `creerServeurMcpControle` pour rester testable sans passer par le protocole
  * MCP complet — chaque définition expose directement son `handler`.
  */
+/**
+ * Outil de compaction — présent SEULEMENT si la composition a fourni un
+ * compacteur (voir `DependancesServeurControle.compacteurContexte`).
+ */
+function outilsContexte(deps: DependancesServeurControle) {
+  const compacteur = deps.compacteurContexte;
+  if (compacteur === undefined) return [];
+  return [
+    tool(
+      'compacter_mon_contexte',
+      "Compacte ton propre contexte : un résumé dense remplace l'historique, et la suite repart dessus. " +
+        "À n'utiliser QUE si l'opérateur te le demande, ou s'il a accepté ta proposition de le faire — " +
+        'jamais de ta seule initiative. La compaction prend effet à la fin de cette réponse.',
+      {},
+      async () =>
+        protege('compacter_mon_contexte', () => {
+          const r = compacteur.demander();
+          // `☠` Rien à compacter n'est pas un échec technique : on le DIT au
+          // modèle plutôt que de lui laisser croire que c'est fait.
+          return r.arme ? differe('compacter_mon_contexte', 'contexte', r.detail) : refuse('compacter_mon_contexte', r.detail);
+        }),
+    ),
+  ];
+}
+
 export function construireOutilsControle(deps: DependancesServeurControle) {
-  return [...outilsInspection(deps), ...outilsCycleVie(deps), ...outilsArbitrage(deps)];
+  return [...outilsInspection(deps), ...outilsCycleVie(deps), ...outilsArbitrage(deps), ...outilsContexte(deps)];
 }
 
 /** Assemble le serveur MCP de contrôle complet (A.2.1, A.2.2). */

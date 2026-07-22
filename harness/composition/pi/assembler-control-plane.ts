@@ -31,6 +31,8 @@ import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/a
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
 import { MachineEtatsDemandes } from '../../control-plane/bus-permissions/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
+import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
+import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import {
   demarrerOrchestrateur,
   JournalIncidentsFichier,
@@ -148,17 +150,24 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   const clientSuperviseurPc = new ClientSuperviseurPc(serveurLien.lien);
   cablerPermissionVerdictDistant(machineEtatsDemandes, serveurLien.lien);
 
-  const serveurControle = creerServeurMcpControle({
-    registre,
-    repertoireProjets: options.repertoireProjets,
-    escalades: machineEtatsDemandes,
-    cibles: CIBLES_NON_CABLEES,
-    arreteur: clientSuperviseurPc,
-    relanceur: clientSuperviseurPc,
-    budget: BUDGET_NON_CABLE,
-    utilisationParc: creerLecteurUtilisationParc(registre),
-    configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
-  });
+  /**
+   * `☠` Le serveur de contrôle est construit PAR CONVERSATION : l'outil
+   * `compacter_mon_contexte` doit savoir quelle session il compacte. Un serveur
+   * partagé ne pourrait pas le dire — il compacterait au hasard.
+   */
+  const construireServeurControle = (compacteur?: CompacteurContexte): McpServerConfig =>
+    creerServeurMcpControle({
+      registre,
+      repertoireProjets: options.repertoireProjets,
+      escalades: machineEtatsDemandes,
+      cibles: CIBLES_NON_CABLEES,
+      arreteur: clientSuperviseurPc,
+      relanceur: clientSuperviseurPc,
+      budget: BUDGET_NON_CABLE,
+      utilisationParc: creerLecteurUtilisationParc(registre),
+      configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
+      compacteurContexte: compacteur,
+    });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :
   // elle ne dépend que du client PC et de la machine d'escalades (tous deux déjà
@@ -172,11 +181,17 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // rattachement du PC (ci-dessus), indépendante de ces sessions.
   let gestionnaireConversations: GestionnaireConversations | null = null;
   if (options.avecOrchestrateur === true) {
-    const construireSession: ConstruireSessionConversation = (stockageIdentite: StockageIdentite) =>
+    // Référence différée : le gestionnaire n'existe pas encore quand on décrit
+    // comment construire ses sessions — mais il existera à l'appel.
+    let gestionnaire: GestionnaireConversations | null = null;
+    const construireSession: ConstruireSessionConversation = (stockageIdentite: StockageIdentite, conversationId: string) =>
       demarrerOrchestrateur({
         stockageIdentite,
         verificateurSessionExistante: creerVerificateurSessionSdk(options.cwdOrchestrateur),
-        serveurControle,
+        serveurControle: construireServeurControle({
+          demander: () =>
+            gestionnaire?.demanderCompaction(conversationId) ?? { arme: false, detail: 'gestionnaire indisponible' },
+        }),
         registre,
         reconciliation: dependancesReconciliation,
         incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
@@ -184,6 +199,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
         configDir: options.configDirOrchestrateur,
       });
     gestionnaireConversations = new GestionnaireConversations(registre, construireSession);
+    gestionnaire = gestionnaireConversations;
   } else {
     log.warn(
       {},

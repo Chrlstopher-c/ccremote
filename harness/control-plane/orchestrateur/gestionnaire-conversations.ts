@@ -30,6 +30,31 @@ import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'gestionnaire-conversations' });
 
+/** Un résumé peut demander une longue lecture du contexte : plafond généreux. */
+const TIMEOUT_RESUME_MS = 180_000;
+
+/**
+ * `☠` Le résumé doit préserver ce qui rend la suite POSSIBLE, pas raconter la
+ * conversation : décisions prises, état du parc, engagements en cours. Un résumé
+ * narratif ferait perdre exactement ce dont l'orchestrateur a besoin après.
+ */
+const PROMPT_RESUME =
+  'COMPACTION DEMANDÉE PAR LE HARNESS. Produis un résumé dense de cette conversation, destiné à ' +
+  'toi-même : il remplacera tout ton contexte au prochain démarrage. Conserve les décisions prises, ' +
+  "l'état du parc et des missions, les engagements en cours et les contraintes énoncées par " +
+  "l'opérateur. Omets les politesses et les formulations. Réponds UNIQUEMENT par le résumé, sans " +
+  'préambule ni commentaire.';
+
+/** Amorce injectée à la session qui suit une compaction. */
+export function amorceApresCompaction(resume: string): string {
+  return (
+    'Reprise après compaction du contexte. Voici le résumé de tout ce qui précède — ' +
+    "il remplace l'historique et fait autorité :\n\n" +
+    resume +
+    "\n\nAccuse réception en une phrase courte, puis attends l'opérateur."
+  );
+}
+
 /** Construit la session SDK d'une conversation. Fourni par la composition (captures : serveur de contrôle, réconciliation, cwd…). */
 export type ConstruireSessionConversation = (
   stockageIdentite: StockageIdentite,
@@ -69,6 +94,7 @@ export interface DetailConversation {
   readonly genere: boolean;
   readonly active: boolean;
   readonly contextePct: number | null;
+  readonly compactions: number;
   /** Bloc en cours de frappe (streaming token par token), ou `null`. */
   readonly partiel: BlocPartiel | null;
 }
@@ -79,6 +105,7 @@ export interface ResumeEvenements {
   readonly genere: boolean;
   readonly active: boolean;
   readonly contextePct: number | null;
+  readonly compactions: number;
   readonly partiel: BlocPartiel | null;
 }
 
@@ -89,6 +116,7 @@ export interface EntreeListeConversation {
   readonly majA: number;
   readonly active: boolean;
   readonly contextePct: number | null;
+  readonly compactions: number;
 }
 
 export class ConversationIntrouvableError extends Error {
@@ -101,6 +129,23 @@ export class ConversationIntrouvableError extends Error {
 export class GestionnaireConversations {
   readonly #sessions = new Map<string, SessionActive>();
   readonly #demarrages = new Map<string, Promise<SessionActive>>();
+  /**
+   * Compactions demandées par l'orchestrateur lui-même, à exécuter à la FIN du
+   * tour. `☠` Compacter pendant le tour reviendrait à fermer la session qui est
+   * précisément en train d'exécuter l'outil — on scierait la branche.
+   */
+  readonly #compactionDemandee = new Set<string>();
+
+  /**
+   * Appelé par l'outil MCP `compacter_mon_contexte`. Ne compacte pas tout de
+   * suite : arme la compaction pour la fin du tour courant.
+   */
+  demanderCompaction(id: string): { readonly arme: boolean; readonly detail: string } {
+    if (this.registre.conversations.lire(id) === null) throw new ConversationIntrouvableError(id);
+    if (!this.#sessions.has(id)) return { arme: false, detail: 'aucune session active — rien à compacter' };
+    this.#compactionDemandee.add(id);
+    return { arme: true, detail: 'compaction armée : elle s’exécutera dès la fin de cette réponse' };
+  }
 
   constructor(
     private readonly registre: Registre,
@@ -142,6 +187,7 @@ export class GestionnaireConversations {
       genere: this.#genere(id),
       active: this.#sessions.has(id),
       contextePct: this.#contextePct(id),
+      compactions: conv.compactions,
       partiel: this.#partiel(id),
     };
   }
@@ -157,6 +203,7 @@ export class GestionnaireConversations {
       genere: this.#genere(id),
       active: this.#sessions.has(id),
       contextePct: this.#contextePct(id),
+      compactions: conv.compactions,
       partiel: this.#partiel(id),
     };
   }
@@ -177,6 +224,48 @@ export class GestionnaireConversations {
     const session = await this.#assurerSession(conv);
     session.collecteur.marquerEnvoi();
     await session.poignee.entree.envoyerOperateur(propre);
+  }
+
+  /**
+   * Compacte le contexte d'un fil. `☠` Mesuré sur le SDK 0.3.217 : aucune API de
+   * compaction n'existe (ni méthode sur `Query`, ni control request ; `/compact`
+   * envoyé dans le flux est traité comme du texte — le modèle y RÉPOND). La
+   * compaction est donc faite ici : on demande un résumé à la session vivante,
+   * on la ferme, et la suivante repart à froid amorcée par ce résumé.
+   *
+   * Sans session active il n'y a rien à résumer : on ne prétend pas avoir
+   * compacté, on le dit.
+   */
+  async compacter(id: string): Promise<{ readonly compacte: boolean; readonly detail: string }> {
+    const conv = this.registre.conversations.lire(id);
+    if (conv === null) throw new ConversationIntrouvableError(id);
+    const session = this.#sessions.get(id);
+    if (session === undefined) {
+      return { compacte: false, detail: 'aucune session active sur ce fil — rien à compacter' };
+    }
+    if (session.collecteur.genere) {
+      return { compacte: false, detail: 'une réponse est en cours — attends la fin avant de compacter' };
+    }
+
+    let resume: string;
+    try {
+      const attente = session.collecteur.ouvrirTourInterne(TIMEOUT_RESUME_MS);
+      await session.poignee.entree.envoyerOperateur(PROMPT_RESUME);
+      resume = await attente;
+    } catch (erreur) {
+      log.error({ err: erreur, conversationId: id }, 'échec de la demande de résumé — contexte laissé intact');
+      return { compacte: false, detail: 'le résumé n’a pas abouti — contexte laissé intact, rien n’a été perdu' };
+    }
+    if (resume.trim().length === 0) {
+      return { compacte: false, detail: 'résumé vide — contexte laissé intact' };
+    }
+
+    // L'ordre compte : on ferme AVANT d'écrire, pour qu'aucun message tardif de
+    // l'ancienne session ne vienne se mêler au fil après la bascule.
+    this.fermer(id);
+    this.registre.conversations.enregistrerCompaction(id, resume);
+    log.info({ conversationId: id, tailleResume: resume.length }, 'contexte compacté');
+    return { compacte: true, detail: 'contexte compacté — la suite repart sur un résumé' };
   }
 
   fermer(id: string): void {
@@ -202,6 +291,7 @@ export class GestionnaireConversations {
       majA: conv.majA,
       active: this.#sessions.has(conv.id),
       contextePct: this.#contextePct(conv.id),
+      compactions: conv.compactions,
     };
   }
 
@@ -229,6 +319,7 @@ export class GestionnaireConversations {
   }
 
   async #demarrer(conversationId: string): Promise<SessionActive> {
+    const avant = this.registre.conversations.lire(conversationId);
     const stockage = new StockageIdentiteConversation(this.registre, conversationId);
     const poignee = await this.construireSession(stockage, conversationId);
     // Fixe l'identité SDK réelle (idempotent — `ecrire` a pu déjà l'écrire au froid).
@@ -237,6 +328,24 @@ export class GestionnaireConversations {
     const session: SessionActive = { poignee, collecteur };
     this.#sessions.set(conversationId, session);
     void this.#lire(conversationId, poignee, collecteur);
+
+    // `☠` Session neuve APRÈS une compaction : elle ne sait rien. On la réamorce
+    // avec le résumé, en tour interne — sinon l'opérateur verrait le harness
+    // recoller son propre contexte dans le fil.
+    const resume = avant?.resumeContexte;
+    if (avant !== null && avant.compactions > 0 && typeof resume === 'string' && resume.length > 0) {
+      try {
+        const attente = collecteur.ouvrirTourInterne(TIMEOUT_RESUME_MS);
+        await poignee.entree.envoyerOperateur(amorceApresCompaction(resume));
+        await attente;
+        log.info({ conversationId }, 'session réamorcée avec le résumé de compaction');
+      } catch (erreur) {
+        // Le fil reste utilisable : l'orchestrateur aura simplement perdu le fil
+        // de l'avant-compaction. On le dit dans les logs, on ne bloque pas.
+        log.error({ err: erreur, conversationId }, 'réamorçage après compaction en échec — session démarrée sans résumé');
+      }
+    }
+
     log.info({ conversationId, sessionId: poignee.sessionId }, 'session de conversation démarrée');
     return session;
   }
@@ -247,6 +356,13 @@ export class GestionnaireConversations {
       for await (const message of poignee.query) {
         poignee.ingererMessage(message);
         collecteur.ingerer(message);
+        // Fin de tour : c'est le seul moment sûr pour honorer une compaction que
+        // l'orchestrateur a demandée lui-même pendant sa réponse.
+        if (message.type === 'result' && this.#compactionDemandee.delete(conversationId)) {
+          void this.compacter(conversationId).catch((erreur: unknown) => {
+            log.error({ err: erreur, conversationId }, 'compaction demandée par l’orchestrateur en échec');
+          });
+        }
       }
       log.info({ conversationId }, 'flux de conversation terminé proprement');
     } catch (erreur) {

@@ -76,6 +76,9 @@ export function composerOptionsOrchestrateur(deps: DependancesOptionsOrchestrate
     toolConfig: { askUserQuestion: { previewFormat: 'html' } },
     systemPrompt: { type: 'preset', preset: 'claude_code', append: MANDAT_ORCHESTRATEUR },
     settingSources: [...SETTING_SOURCES_ORCHESTRATEUR],
+    // `☠` Posée explicitement, comme pour les workers : l'orchestrateur tourne en
+    // continu et sature son contexte plus vite que quiconque.
+    settings: { autoCompactEnabled: true },
     includePartialMessages: true,
     env: construireEnv(deps.configDir),
     hooks: deps.hooksContexte,
