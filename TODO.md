@@ -50,19 +50,22 @@
 
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
 
-### ⚠ À trancher par Chris — les crédits payants sont actifs sur les deux comptes
-Mesuré le 2026-07-22 : `extra_usage.is_enabled = true` sur `compte-a` **et** `compte-b`. Au-delà du
-quota d'abonnement, la consommation bascule sur des crédits facturés en euros — **11,83 €** et
-**10,63 €** déjà consommés ce mois, sur 70 €/mois chacun.
+### H-69 — `extra_usage` laissé actif (tranché par Chris, 2026-07-22)
+`extra_usage.is_enabled = true` sur les deux comptes. **Décision : on le laisse actif** — les crédits
+sont offerts sur le compte, donc utilisables librement pour le développement et les tests réels.
 
-Ça nuance H-58 (« on n'est pas sur l'API, pas besoin de limite en dollars ») : un parc autonome
-**peut dépenser de l'argent réel** sans jamais toucher à l'API. Trois options :
-- [ ] désactiver `extra_usage` sur les comptes (le parc s'arrête net au quota, zéro dépense)
-- [ ] le laisser actif et afficher les euros consommés dans la jauge H-63 (visibilité, pas blocage)
-- [ ] le laisser actif sans rien afficher (statu quo — le risque n'est pas visible)
+`⇒` La contrainte de parcimonie sur les **tests réels** est levée : un banc d'essai en vraie session
+est désormais le moyen normal de lever un doute, pas un luxe à rationner. C'est cohérent avec tout ce
+qui précède : chaque fois qu'on a testé en réel (M-02, moteur de règles, multi-comptes), on a trouvé
+quelque chose que le raisonnement seul avait manqué.
 
-`☠` Ne pas confondre avec H-68 : ceci n'est **pas** un détecteur de boucle, c'est une dépense réelle.
-Les deux sujets restent distincts.
+- [ ] Afficher quand même les crédits consommés dans la jauge H-63 (visibilité, **pas** blocage).
+      Des crédits offerts restent finis, et un parc autonome les consomme sans le dire.
+
+`☠` Ceci reste distinct de H-68 : une dépense n'est **pas** un détecteur de boucle. Ne pas
+ressusciter le plafond en dollars sous prétexte que le budget existe.
+`☠` Ceci n'autorise **pas** l'exécution non surveillée : les garde-fous (M-20, M-51, ping/pong) sont
+une question de sûreté, pas de budget.
 
 ### Action de Chris requise — rotation multi-comptes à moitié en place
 Conception retenue : **un `CLAUDE_CONFIG_DIR` persistant par compte** sous `~/.claude-comptes/`,

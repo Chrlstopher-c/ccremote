@@ -639,3 +639,30 @@ d'usage demandé.
 `⚠` L'UI doit montrer qu'un message est **en attente de lecture** plutôt que délivré — sinon
 l'opérateur croit l'équipe sourde et le renvoie. Les messages en file survivent à une interruption
 (`still_queued`, B.4) : ne pas les rejouer au redémarrage, ça produirait un tour dupliqué.
+
+---
+
+## H-69 · Crédits d'usage laissés actifs — la parcimonie sur les tests réels est levée
+
+**Décision de Chris (2026-07-22)** : `extra_usage` reste activé sur les deux comptes. Les crédits sont
+offerts sur le compte, donc utilisables librement pour le développement et les tests.
+
+**Contexte mesuré** (`acceptation/multi-comptes-reel.ts`) : au-delà du quota d'abonnement, la
+consommation bascule sur des crédits facturés (70 €/mois par compte). Un parc autonome peut donc
+consommer un budget réel **sans jamais passer par l'API**.
+
+**Conséquence de travail** : un banc d'essai en vraie session est le moyen **normal** de lever un
+doute, plus un luxe à rationner. Le dossier le confirme empiriquement — chaque test réel mené jusqu'ici
+a trouvé ce que le raisonnement seul avait manqué : `canUseTool` jamais appelé en `auto`, snapshots de
+credentials périmés, fenêtres de quota désynchronisées entre comptes.
+
+`☠` **Ne pas confondre avec H-68.** Une dépense mesure du volume, pas une boucle. L'existence d'un
+budget ne ressuscite pas le plafond en dollars comme détecteur — H-68 (paliers + juge Haiku) reste
+la seule réponse à l'emballement.
+
+`☠` **N'autorise pas l'exécution non surveillée.** Le plancher de déni (M-20), les budgets (M-51) et
+la détection de coupure silencieuse (ping/pong, dette de M-10) relèvent de la sûreté, pas du budget.
+Un parc mieux financé qui tourne sans garde-fou casse exactement autant.
+
+`⚠` À faire : afficher les crédits consommés dans la jauge H-63 — visibilité, jamais blocage. Des
+crédits offerts restent finis, et un parc autonome les consomme sans le dire.
