@@ -32,8 +32,15 @@
       perdu ou dupliqué — est prouvé sur doublures, pas sur socket.
 - [x] **M-20** plancher de déni — livré 2026-07-22, `harness/plancher-deni/`. 16 motifs scopés
       (plafond porté de 15 à 16 pour loger `pkill -f`, incident réel du 2026-07-08 sur le Pi).
-      `⚠` Son `simulerArbitrage` est un **modèle** de la sémantique des règles, pas le moteur réel du
-      binaire (fermé) — à confirmer sur une exécution réelle avant toute nuit non surveillée.
+- [x] **M-20 — moteur réel vérifié** (2026-07-22, `harness/acceptation/plancher-moteur-reel.ts`).
+      Les 3 formes de wildcard du plancher (`préfixe*`, `*encadrant*`, `médian* -f*`) refusent bien
+      sur le vrai binaire, et le déni n'est **pas** global : les 2 témoins s'exécutent, dont celui
+      qui prouve l'absence de faux positif sur `-f` sans espace. `simulerArbitrage` est donc un
+      modèle **fidèle**. `☠` Testé par **motifs sondes** sur des `echo` inoffensifs — jamais en
+      demandant au modèle une action dangereuse.
+      `⚠` Piège de détection payé : chercher « refus »/« denied » dans le JSON entier des messages
+      fait passer les témoins pour refusés (le résumé final du modèle cite tous les verdicts). Le
+      verdict se lit sur les blocs `tool_result` appariés à leur `tool_use`.
 - [ ] M-21 machine à états des demandes de permission
 - [ ] M-22 arbitrage délégué + trace d'audit (c'est cette trace qui valide ou invalide H-40).
       `☠` **Brancher l'audit sur `PreToolUse`, jamais sur `canUseTool`** — mesuré le 2026-07-22 :
@@ -42,6 +49,15 @@
 - [ ] M-34 relance et classification des `TerminalReason`
 
 `⚠` **Ne pas lancer d'exécution non surveillée avant M-20 et M-51** (plancher de déni + budgets).
+
+### Action de Chris requise — rotation multi-comptes bloquée
+- [ ] **Refaire un `/login` sur chaque compte, dans son propre dossier de config.** Les deux
+      snapshots (`.credentials_account1.json` 11/07, `_account2.json` 19/07) sont périmés :
+      `OAuth session expired and could not be refreshed`. Les refresh tokens tournent, donc un
+      snapshot copié se périme seul et en silence.
+      ⇒ Conception : **un `CLAUDE_CONFIG_DIR` persistant par compte**, authentifié une fois et
+      laissé se rafraîchir. Ne jamais recopier un snapshot au moment de la bascule.
+      `☠` Tant que ce n'est pas fait, la rotation multi-comptes n'est **pas** opérationnelle.
 
 ### Design v2 — arbitrages à trancher par Chris (source : `design-v2/COMPARAISON.md`)
 - [ ] **Parler à une mission en cours** — trou le plus concret. Chris avait posé l'exigence

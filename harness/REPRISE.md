@@ -207,6 +207,20 @@ Le mécanisme historique de ccremote (écraser `.credentials.json` + relancer le
 `☠` Le `CLAUDE_CONFIG_DIR` d'un worker reçoit **aussi les transcripts JSONL locaux**, qui sont la
 source de vérité (H.3.1). Ne pas le pointer vers `/tmp` sans mesurer l'impact sur la rétention.
 
+`☠` **La rotation par snapshot de credentials ne marche pas.** Vérifié le 2026-07-22 : les deux
+snapshots (`~/.claude/.credentials_account1.json` du 11/07, `_account2.json` du 19/07) échouent tous
+les deux en `Failed to authenticate: OAuth session expired and could not be refreshed`. Les refresh
+tokens **tournent** ; un fichier copié à un instant T se périme tout seul, en silence, et ne se
+découvre qu'au moment où on en a besoin.
+
+⇒ Conception à retenir : **un `CLAUDE_CONFIG_DIR` persistant par compte**, authentifié une fois
+(`/login` interactif, action de Chris) et laissé se rafraîchir tout seul. Ne jamais recopier un
+snapshot dans le dossier d'un worker au moment de la bascule.
+
+`⚠` Reste à faire : Chris doit refaire un `/login` sur les deux comptes, chacun dans son dossier
+dédié. Tant que ce n'est pas fait, **la rotation multi-comptes n'est pas opérationnelle** — seul le
+compte du poste fonctionne.
+
 **Quotas** : `rate_limit_event` (poussé, temps réel) et
 `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()` (tiré, donne le **pourcentage 0-100**
 par fenêtre, ⚠ ALPHA → isoler derrière une couche d'adaptation). `accountInfo()` confirme sous quel
