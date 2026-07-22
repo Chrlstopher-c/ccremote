@@ -84,10 +84,6 @@ export interface DependancesReconciliation {
   readonly busPermissions?: RedelivranceBusPermissions;
   readonly libererWorktree?: LibererWorktree;
   readonly compteurRelances?: RemiseAZeroRelances;
-  /**
-   * `⚠` Réservé aux tests — reproduit délibérément la panne #11 (orphelin ignoré),
-   * jamais activé par un appelant de production. Voir `reconciliation.test.ts`.
-   */
 }
 
 export interface RapportReconciliation {

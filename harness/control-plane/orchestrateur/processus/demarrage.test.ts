@@ -161,7 +161,7 @@ describe('demarrerOrchestrateur — ne bloque jamais', () => {
 });
 
 describe('demarrerOrchestrateur — réconciliation au boot (A.4.2)', () => {
-  test('☠ appelle bien reconcilier(..., "demarrage") AVANT la boucle de lecture', async () => {
+  test('☠ appelle bien reconcilier(..., "demarrage") avant de rendre la main', async () => {
     const inventaire = new InventairePcVide();
     const query = fakeQuery();
     await demarrerOrchestrateur({
@@ -198,9 +198,7 @@ describe('demarrerOrchestrateur — réconciliation au boot (A.4.2)', () => {
 });
 
 describe('demarrerOrchestrateur — échecs', () => {
-  test('flux terminé avant init ⇒ DemarrageOrchestrateurError', async () => {
-    async function* videSansInit(): AsyncGenerator<SDKMessage, void> {}
-    const queryVide = videSansInit() as unknown as Query;
+  test('pré-chauffage en échec ⇒ DemarrageOrchestrateurError', async () => {
     await expect(
       demarrerOrchestrateur({
         stockageIdentite: stockageMemoire(null),
@@ -209,8 +207,87 @@ describe('demarrerOrchestrateur — échecs', () => {
         registre,
         reconciliation: reconciliationVide(),
         incidents: new JournalIncidentsMemoire(),
-        demarrerChaud: async (): Promise<WarmQuery> => ({ query: () => queryVide, close: () => {} }) as unknown as WarmQuery,
+        demarrerChaud: async (): Promise<WarmQuery> => {
+          throw new Error('process introuvable');
+        },
       }),
     ).rejects.toBeInstanceOf(DemarrageOrchestrateurError);
+  });
+});
+
+describe('demarrerOrchestrateur — ☠ CORRIGÉ : n’attend JAMAIS init (banc réel orchestrateur-reel.ts)', () => {
+  /**
+   * Reproduit exactement le fait mesuré : le SDK n'émet `init` qu'APRÈS un
+   * premier message utilisateur. Un flux qui ne renvoie RIEN — jamais même
+   * `init` — doit quand même laisser `demarrerOrchestrateur` rendre la main.
+   * Avant le correctif, ce scénario provoquait un `DemarrageOrchestrateurError`
+   * après le délai de `tirerMessageInit` (ou pendait, selon le timeout de test).
+   */
+  function fakeQuerySansAucunMessage(): Query & { close: () => void } {
+    async function* stream(): AsyncGenerator<SDKMessage, void> {
+      await new Promise<void>(() => {}); // ne renvoie jamais RIEN, pas même init
+    }
+    const enrichi = stream() as unknown as Query & { close: () => void };
+    enrichi.close = () => {};
+    (enrichi as unknown as { getContextUsage: () => Promise<unknown> }).getContextUsage = async () => ({
+      totalTokens: 0,
+      maxTokens: 200_000,
+      model: 'claude-opus-4-8',
+    });
+    return enrichi;
+  }
+
+  test('rend la main même si le flux ne produit RIEN, jamais même init — plus d’interblocage', async () => {
+    const query = fakeQuerySansAucunMessage();
+    const debut = Date.now();
+    const poignee = await demarrerOrchestrateur({
+      stockageIdentite: stockageMemoire(null),
+      verificateurSessionExistante: VERIFICATEUR_INCONNU,
+      serveurControle: creerServeurMcpControle(depsServeur),
+      registre,
+      reconciliation: reconciliationVide(),
+      incidents: new JournalIncidentsMemoire(),
+      demarrerChaud: async (): Promise<WarmQuery> => ({ query: () => query, close: () => {} }) as unknown as WarmQuery,
+    });
+    expect(Date.now() - debut).toBeLessThan(5_000);
+    expect(poignee.sessionId).toBeTruthy();
+    expect(poignee.query).toBe(query);
+  });
+
+  test('ne consomme JAMAIS query lui-même — le premier message reste disponible pour le vrai lecteur', async () => {
+    const query = fakeQuery(); // yield initMessage() puis reste vivant
+    const poignee = await demarrerOrchestrateur({
+      stockageIdentite: stockageMemoire(null),
+      verificateurSessionExistante: VERIFICATEUR_INCONNU,
+      serveurControle: creerServeurMcpControle(depsServeur),
+      registre,
+      reconciliation: reconciliationVide(),
+      incidents: new JournalIncidentsMemoire(),
+      demarrerChaud: async (): Promise<WarmQuery> => ({ query: () => query, close: () => {} }) as unknown as WarmQuery,
+    });
+    // Si demarrerOrchestrateur avait lu le flux en interne (l'ancienne boucleMessages),
+    // ce premier next() externe ne verrait JAMAIS le message init — il aurait déjà été volé.
+    const { value, done } = await poignee.query.next();
+    expect(done).toBe(false);
+    expect((value as SDKSystemMessage).subtype).toBe('init');
+  });
+
+  test('ingererMessage() est exposé pour que le vrai lecteur alimente la discipline de contexte', async () => {
+    const query = fakeQuery();
+    const poignee = await demarrerOrchestrateur({
+      stockageIdentite: stockageMemoire(null),
+      verificateurSessionExistante: VERIFICATEUR_INCONNU,
+      serveurControle: creerServeurMcpControle(depsServeur),
+      registre,
+      reconciliation: reconciliationVide(),
+      incidents: new JournalIncidentsMemoire(),
+      demarrerChaud: async (): Promise<WarmQuery> => ({ query: () => query, close: () => {} }) as unknown as WarmQuery,
+    });
+    poignee.ingererMessage({
+      type: 'system',
+      subtype: 'compact_boundary',
+      compact_metadata: { trigger: 'manual', pre_tokens: 500, post_tokens: 100 },
+    } as unknown as SDKMessage);
+    expect(poignee.sentinelle.resume().dernierEvenementCompaction?.trigger).toBe('manual');
   });
 });
