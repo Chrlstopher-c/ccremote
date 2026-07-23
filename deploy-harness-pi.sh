@@ -21,6 +21,18 @@ if [ -z "$CCREMOTE_LIEN_SECRET" ]; then
   exit 78
 fi
 
+# ☠ RÉGRESSION RÉELLE (2026-07-23) : ce script RÉÉCRIT `.env` en entier à chaque
+# passage. Toute variable opt-in absente de l'environnement de l'appelant
+# retombait donc à sa valeur par défaut — deux déploiements de routine ont ainsi
+# ÉTEINT l'orchestrateur (`CCREMOTE_PI_ORCHESTRATEUR=1` → `0`), sans un mot :
+# l'interface répondait « route inconnue » sur une fonctionnalité qui marchait
+# cinq minutes plus tôt. Le défaut d'un réglage déjà en place est désormais SA
+# PROPRE VALEUR, relue sur le Pi — jamais la valeur d'usine.
+lire_reglage_distant() {
+  ssh $SSH_OPTS "$TARGET" "grep -E '^$1=' $REMOTE_DIR/.env 2>/dev/null | tail -1 | cut -d= -f2-" 2>/dev/null || true
+}
+ORCHESTRATEUR_ACTUEL=$(lire_reglage_distant CCREMOTE_PI_ORCHESTRATEUR)
+
 echo "→ Envoi des sources du harness"
 ssh $SSH_OPTS "$TARGET" "mkdir -p $REMOTE_DIR"
 # ☠ PERTE DE DONNÉES RÉELLE (2026-07-23) : `--exclude '*.db'` ne couvre PAS
@@ -77,7 +89,7 @@ CCREMOTE_API_WEB_PORT=8722
 # ☠ Session orchestrateur maître : opt-in, car elle consomme du quota EN
 # CONTINU et exige des credentials Claude valides sur le Pi. Activer en passant
 # CCREMOTE_PI_ORCHESTRATEUR=1 au script.
-CCREMOTE_PI_ORCHESTRATEUR=${CCREMOTE_PI_ORCHESTRATEUR:-0}
+CCREMOTE_PI_ORCHESTRATEUR=${CCREMOTE_PI_ORCHESTRATEUR:-${ORCHESTRATEUR_ACTUEL:-0}}
 EOF
 
 echo "→ Service systemd"
