@@ -185,6 +185,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
       compacteurContexte: compacteur,
       propositions,
+      explorateurProjets: { explorerProjets: (chemin) => clientSuperviseurPc.explorerProjets(chemin) },
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :

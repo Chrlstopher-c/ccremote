@@ -100,7 +100,7 @@ async function hRenderMissionDetail(id) {
       <div class="sec-title">Identité et bornes</div>
       <div class="kv">
         <div><span class="k">Projet</span><span class="v">${m.project}</span></div>
-        <div><span class="k">Worktree</span><span class="v">~/${m.worktree}</span></div>
+        <div><span class="k">Worktree</span><span class="v">${escapeHtml(m.worktree || '—')}</span></div>
         <div><span class="k">sessionId</span><span class="v">${m.sessionId || '—'}</span></div>
         <div><span class="k">Compte Claude Code</span><span class="v">compte #${m.account}</span></div>
         <div><span class="k">Modèle résolu</span><span class="v">${m.model}</span></div>

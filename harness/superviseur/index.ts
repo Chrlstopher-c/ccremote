@@ -69,3 +69,6 @@ export {
 } from './canal-controle.ts';
 
 export { missionLogger, superviseurLogger } from './logger.ts';
+
+export { explorerProjets, resoudreDansRacine } from './exploration-projets.ts';
+export type { EntreeProjet, ResultatExploration } from './exploration-projets.ts';

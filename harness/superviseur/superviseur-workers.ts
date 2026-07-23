@@ -30,6 +30,7 @@ import { arbitrerFencingWorktree } from './fencing-arbitrage-workers.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
+import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 import type { ObservateurUsage } from '../budgets/index.ts';
@@ -94,6 +95,8 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #startWorkerDeps: StartWorkerDeps;
   /** Ce que seul le PC peut observer, tenu à disposition du Pi (B.1.4). */
   readonly #telemetrie = new CollecteurTelemetrie();
+  /** Racine des projets sur le PC — borne l'exploration, jamais dépassée. */
+  readonly #racineProjets: string;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
   readonly #attendreGrace: (delaiMs: number) => Promise<void>;
   readonly #persistance: PersistanceRegistre | undefined;
@@ -104,6 +107,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
 
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
+    this.#racineProjets = deps.racineProjets ?? '/mnt/projects';
     this.#observateurRelance = deps.observateurRelance;
     this.#observateurUsage = deps.observateurUsage;
     this.#observateurFlux = deps.observateurFlux;

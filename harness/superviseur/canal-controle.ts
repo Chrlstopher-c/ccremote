@@ -30,6 +30,7 @@ import type {
   RapportArretUrgence,
   TelemetrieWorker,
 } from './types.ts';
+import type { ResultatExploration } from './exploration-projets.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
 /**
@@ -43,6 +44,8 @@ export interface PortSuperviseurControle {
   demarrer(demande: DemandeDemarrage): Promise<{ readonly sessionId: string }>;
   /** Optionnel : une doublure qui ne l'implémente pas rend une liste vide, jamais une panne. */
   telemetrie?(): Promise<readonly TelemetrieWorker[]> | readonly TelemetrieWorker[];
+  /** Absent ⇒ opération refusée : mieux qu'une arborescence vide prise pour la vérité. */
+  explorerProjets?(chemin?: string): ResultatExploration;
   arreter(missionId: string): Promise<void>;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
   relancer(missionId: string, sessionId: string): Promise<void>;
@@ -85,6 +88,8 @@ export type OperationControle =
   | { readonly type: 'inventaire' }
   /** Lecture pure : ce que seul le PC observe du flux de ses workers. */
   | { readonly type: 'telemetrie' }
+  /** Lecture pure : parcourir l'arborescence des projets, qui vit sur le PC. */
+  | { readonly type: 'explorer_projets'; readonly chemin?: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
@@ -108,7 +113,10 @@ export type OperationControle =
   | { readonly type: 'reprendre_worker'; readonly missionId: string };
 
 /** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
-type OperationMutative = Exclude<OperationControle, { readonly type: 'inventaire' } | { readonly type: 'telemetrie' }>;
+type OperationMutative = Exclude<
+  OperationControle,
+  { readonly type: 'inventaire' } | { readonly type: 'telemetrie' } | { readonly type: 'explorer_projets' }
+>;
 
 export interface RequeteControle {
   /** Fourni par le Pi. Ignoré pour `inventaire` (lecture seule, jamais mutative). */
@@ -125,6 +133,8 @@ export interface ReponseControle {
   readonly inventaire?: readonly DescripteurWorkerPc[];
   /** Présent uniquement pour `telemetrie` — lecture pure, hors cache d'idempotence. */
   readonly telemetrie?: readonly TelemetrieWorker[];
+  /** Présent uniquement pour `explorer_projets`. */
+  readonly explorationProjets?: ResultatExploration;
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
   /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
   readonly rapportArretUrgence?: RapportArretUrgence;
@@ -169,6 +179,12 @@ export class CanalControle {
     // `☠` Hors cache d'idempotence, comme `inventaire` : une lecture doit rendre
     // l'état COURANT. La servir depuis le cache figerait l'affichage sur le
     // premier relevé, ce qui est exactement le bug qu'on corrige.
+    if (requete.operation.type === 'explorer_projets') {
+      const exploration = this.#superviseur.explorerProjets?.(requete.operation.chemin);
+      if (exploration === undefined) return { ok: false, effet: 'refuse', detail: 'exploration non câblée sur ce superviseur' };
+      return { ok: true, effet: 'applique', explorationProjets: exploration };
+    }
+
     if (requete.operation.type === 'telemetrie') {
       return { ok: true, effet: 'applique', telemetrie: (await this.#superviseur.telemetrie?.()) ?? [] };
     }

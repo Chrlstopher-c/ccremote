@@ -58,6 +58,7 @@ import type {
   ReponseControle,
   TelemetrieWorker,
 } from '../../superviseur/index.ts';
+import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
 import type { Lien } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
 import { CorrelateurReponses } from '../lien-pc-pi/correlateur.ts';
@@ -139,6 +140,24 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     } catch (erreur) {
       log.debug({ err: erreur }, 'télémétrie du PC indisponible — traitée comme vide');
       return [];
+    }
+  }
+
+  /** Parcourt l'arborescence des projets du PC. PC absent ⇒ note explicite, jamais une liste vide muette. */
+  async explorerProjets(chemin?: string): Promise<ResultatExploration> {
+    try {
+      const reponse = await this.#appeler({ type: 'explorer_projets', chemin });
+      return (
+        reponse.explorationProjets ?? {
+          racine: '',
+          chemin: chemin ?? '',
+          entrees: [],
+          note: reponse.detail ?? 'exploration indisponible',
+        }
+      );
+    } catch (erreur) {
+      log.warn({ err: erreur }, 'exploration des projets impossible — PC injoignable');
+      return { racine: '', chemin: chemin ?? '', entrees: [], note: 'PC injoignable' };
     }
   }
 

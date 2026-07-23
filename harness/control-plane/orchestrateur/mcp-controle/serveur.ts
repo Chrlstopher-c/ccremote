@@ -16,7 +16,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { Registre } from '../../registre/index.ts';
-import { differe, echecInattendu, refuse } from './contrat.ts';
+import { applique, differe, echecInattendu, refuse } from './contrat.ts';
 import {
   etatEquipe,
   historiqueEquipe,
@@ -42,6 +42,7 @@ import type {
   LecteurEscalades,
   LecteurUtilisationParc,
   EnregistreurProposition,
+  ExplorateurProjets,
   RelanceurMission,
   RepertoireCibles,
 } from './types.ts';
@@ -87,6 +88,12 @@ export interface DependancesServeurControle {
    * lieu de rendre une proposition que personne ne pourrait autoriser.
    */
   readonly propositions?: EnregistreurProposition;
+  /**
+   * Exploration des projets DU PC. `☠` Sans elle, `lister_projets` lit le
+   * répertoire local du Pi et rend une liste vide : l'orchestrateur en conclut
+   * qu'aucun projet n'existe, alors qu'ils sont tous sur le PC (23/07).
+   */
+  readonly explorateurProjets?: ExplorateurProjets;
 }
 
 /** Port de compaction du contexte de la session appelante. */
@@ -251,6 +258,26 @@ function outilsArbitrage(deps: DependancesServeurControle) {
  * Outil de compaction — présent SEULEMENT si la composition a fourni un
  * compacteur (voir `DependancesServeurControle.compacteurContexte`).
  */
+function outilsExploration(deps: DependancesServeurControle) {
+  const explorateur = deps.explorateurProjets;
+  if (explorateur === undefined) return [];
+  return [
+    tool(
+      'explorer_projets',
+      "Parcourt l'arborescence des projets sur le PC de l'opérateur (/mnt/projects). " +
+        'Sans argument : la racine. Avec `chemin` : ce sous-dossier. ' +
+        "Rend pour chaque entrée son chemin ABSOLU — c'est celui à donner comme `projet` à creer_equipe.",
+      { chemin: z.string().optional() },
+      async ({ chemin }) =>
+        protege('explorer_projets', async () => {
+          const r = await explorateur.explorerProjets(chemin);
+          return applique('explorer les projets', JSON.stringify(r), r.chemin);
+        }),
+      { annotations: { readOnlyHint: true } },
+    ),
+  ];
+}
+
 function outilsContexte(deps: DependancesServeurControle) {
   const compacteur = deps.compacteurContexte;
   if (compacteur === undefined) return [];
@@ -273,7 +300,7 @@ function outilsContexte(deps: DependancesServeurControle) {
 }
 
 export function construireOutilsControle(deps: DependancesServeurControle) {
-  return [...outilsInspection(deps), ...outilsCycleVie(deps), ...outilsArbitrage(deps), ...outilsContexte(deps)];
+  return [...outilsInspection(deps), ...outilsCycleVie(deps), ...outilsArbitrage(deps), ...outilsContexte(deps), ...outilsExploration(deps)];
 }
 
 /** Assemble le serveur MCP de contrôle complet (A.2.1, A.2.2). */

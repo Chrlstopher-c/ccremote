@@ -72,6 +72,11 @@ export interface DependancesSuperviseur {
   /** Injectable pour les tests : jamais de spawn réel en unitaire (règle du dépôt). */
   readonly demarrerWorker?: DemarrerWorkerFn;
   readonly startWorkerDeps?: StartWorkerDeps;
+  /**
+   * Racine des projets sur le PC, borne de `explorerProjets`. Défaut
+   * `/mnt/projects` — l'emplacement réel des projets de l'opérateur.
+   */
+  readonly racineProjets?: string;
   /** Ordonnancement du délai de backoff avant une relance. Réel = `setTimeout`, synchrone en test. */
   readonly planifier?: (delaiMs: number, tache: () => void) => void;
   /**

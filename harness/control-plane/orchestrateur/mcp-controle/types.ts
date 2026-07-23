@@ -125,3 +125,13 @@ export interface EnregistreurProposition {
     readonly effort?: string | null;
   }): string;
 }
+
+/** Parcourt l'arborescence des projets, qui vit sur le PC (H-75). */
+export interface ExplorateurProjets {
+  explorerProjets(chemin?: string): Promise<{
+    readonly racine: string;
+    readonly chemin: string;
+    readonly entrees: readonly { readonly nom: string; readonly type: string; readonly chemin: string; readonly depotGit?: boolean }[];
+    readonly note?: string;
+  }>;
+}
