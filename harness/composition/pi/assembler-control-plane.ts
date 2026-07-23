@@ -54,6 +54,7 @@ import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts'
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
 import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
+import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
 
@@ -104,6 +105,7 @@ export interface ControlPlanePiAssemble {
    * lecture (une par session) — `bin-pi.ts` n'a plus de lecteur global à tenir.
    */
   readonly gestionnaireConversations: GestionnaireConversations | null;
+  readonly balayageTelemetrie: BalayageTelemetrie;
 }
 
 function construireDependancesReconciliation(client: ClientSuperviseurPc, machine: MachineEtatsDemandes): DependancesReconciliation {
@@ -288,7 +290,20 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     },
   });
 
+  // `☠` Sans ce balayage, l'interface affiche « (non résolu) », un coût à 0 et un
+  // contexte à 0 sur des équipes qui travaillent : le PC observe tout, mais rien
+  // ne remontait jusqu'au registre du Pi.
+  const balayageTelemetrie = demarrerBalayageTelemetrie({ registre, source: clientSuperviseurPc });
+
   log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
 
-  return { registre, machineEtatsDemandes, clientSuperviseurPc, serveurLien, serveurApiWeb, gestionnaireConversations };
+  return {
+    registre,
+    machineEtatsDemandes,
+    clientSuperviseurPc,
+    serveurLien,
+    serveurApiWeb,
+    gestionnaireConversations,
+    balayageTelemetrie,
+  };
 }

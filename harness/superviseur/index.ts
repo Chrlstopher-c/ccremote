@@ -8,6 +8,7 @@ export type {
   ConcurrentRestaure,
   DemandeDemarrage,
   DemandeDemarrageTransportable,
+  TelemetrieWorker,
   ParametresSpecTransportables,
   EnregistrementWorker,
   EtapeArretUrgence,

@@ -208,3 +208,31 @@ export interface RapportArretUrgence {
   readonly declencheA: number;
   readonly missions: readonly ResultatArretUnitaireUrgence[];
 }
+
+/**
+ * Ce que le PC observe d'un worker vivant et que le Pi ne peut pas deviner.
+ *
+ * `☠` Le PC est la SEULE autorité sur ces valeurs (B.1.4) : elles viennent du
+ * flux SDK, qui n'existe que là. Sans ce transport, l'interface affichait un
+ * coût à 0, un contexte à 0 et un fil vide sur des équipes qui travaillaient
+ * réellement — des chiffres faux valent moins que des champs absents.
+ *
+ * `☠` Cumulatif, jamais différentiel : le Pi peut manquer des relevés (réseau
+ * coupé, service redémarré). Un delta perdu fausserait le total pour toujours,
+ * alors qu'une valeur absolue se resynchronise au relevé suivant.
+ */
+export interface TelemetrieWorker {
+  readonly missionId: string;
+  readonly sessionId: string;
+  readonly vivant: boolean;
+  /** Modèle réellement résolu par le CLI, lu au message `init`. */
+  readonly modeleResolu: string | null;
+  readonly etatSdk: 'idle' | 'running' | 'requires_action' | null;
+  /** Coût cumulé en dollars depuis le démarrage. */
+  readonly coutUsd: number;
+  readonly contexteTokensUtilises: number | null;
+  readonly contexteTokensMax: number | null;
+  /** Dernier texte de l'assistant, tronqué — de quoi voir que ça avance. */
+  readonly derniereActivite: string | null;
+  readonly observeA: number;
+}

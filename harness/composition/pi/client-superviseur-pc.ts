@@ -52,7 +52,12 @@ import type {
   ResultatReinitialisation,
 } from '../../control-plane/reconciliation/index.ts';
 import type { ArreteurMission, RelanceurMission } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
-import type { DemandeDemarrageTransportable, OperationControle, ReponseControle } from '../../superviseur/index.ts';
+import type {
+  DemandeDemarrageTransportable,
+  OperationControle,
+  ReponseControle,
+  TelemetrieWorker,
+} from '../../superviseur/index.ts';
 import type { Lien } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
 import { CorrelateurReponses } from '../lien-pc-pi/correlateur.ts';
@@ -122,6 +127,17 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
       return versDescripteurs(reponse);
     } catch (erreur) {
       log.error({ err: erreur }, "inventaire() du PC injoignable — traité comme vide, jamais comme une exception qui bloque la réconciliation");
+      return [];
+    }
+  }
+
+  /** Lecture pure de ce que le PC observe. PC absent ⇒ liste vide, jamais une exception. */
+  async telemetrie(): Promise<readonly TelemetrieWorker[]> {
+    try {
+      const reponse = await this.#appeler({ type: 'telemetrie' });
+      return reponse.telemetrie ?? [];
+    } catch (erreur) {
+      log.debug({ err: erreur }, 'télémétrie du PC indisponible — traitée comme vide');
       return [];
     }
   }

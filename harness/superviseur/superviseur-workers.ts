@@ -28,6 +28,8 @@
 import { creerCablageAntiBoucle, type CablageAntiBoucle } from './anti-boucle-workers.ts';
 import { arbitrerFencingWorktree } from './fencing-arbitrage-workers.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
+import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
+import type { TelemetrieWorker } from './types.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 import type { ObservateurUsage } from '../budgets/index.ts';
@@ -90,6 +92,8 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #demarrerWorker: DemarrerWorkerFn;
   readonly #pilotage: Pilotage;
   readonly #startWorkerDeps: StartWorkerDeps;
+  /** Ce que seul le PC peut observer, tenu à disposition du Pi (B.1.4). */
+  readonly #telemetrie = new CollecteurTelemetrie();
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
   readonly #attendreGrace: (delaiMs: number) => Promise<void>;
   readonly #persistance: PersistanceRegistre | undefined;
@@ -156,6 +160,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     await entree.envoyer(demande.promptInitial);
 
     const handle = await this.#demarrerWorker(demande.spec, entree.flux, this.#startWorkerDeps);
+    this.#telemetrie.ouvrir(demande.missionId, demande.spec.sessionId);
     this.#registre.enregistrer({
       missionId: demande.missionId,
       sessionId: demande.spec.sessionId,
@@ -174,6 +179,30 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   // -- InventairePc (B.1.4 : « inventaire() fait autorité ») -----------------
 
   /** Inclut les concurrents restaurés (dette n°1) : les taire mentirait sur ce que « le PC fait autorité » (B.1.4) signifie après un redémarrage. */
+  /**
+   * Télémétrie de tous les workers connus — lecture pure, jamais mutative (D.3.2).
+   * Mesure au passage le contexte des workers VIVANTS : `getContextUsage()` échoue
+   * une fois la session close, et un échec ici ne doit jamais priver le Pi du
+   * reste du relevé.
+   */
+  async telemetrie(): Promise<readonly TelemetrieWorker[]> {
+    for (const e of this.#registre.tous()) {
+      if (!e.vivant) continue;
+      try {
+        const brut = (await e.handle.query.getContextUsage()) as unknown as {
+          totalTokens?: number;
+          maxTokens?: number;
+        };
+        if (typeof brut.totalTokens === 'number') {
+          this.#telemetrie.poserContexte(e.missionId, brut.totalTokens, brut.maxTokens ?? null);
+        }
+      } catch {
+        // Session close ou transport fermé : régime nominal, pas une panne.
+      }
+    }
+    return this.#telemetrie.tous();
+  }
+
   inventaire(): readonly DescripteurWorkerPc[] {
     const reels = this.#registre.tous().map((e) => ({
       sessionId: e.sessionId,
@@ -351,6 +380,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     try {
       for await (const message of handle.query) {
         this.#notifierFlux(missionId, message);
+        this.#telemetrie.ingerer(missionId, message);
         this.#antiBoucle.accumuler(missionId, message);
         if (message.type === 'rate_limit_event') {
           this.#surveillerQuota(missionId, handle.sessionId, message.rate_limit_info);
@@ -367,6 +397,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         // effet réel (`entree.fermer()` + `query.close()`), pas un no-op sur un mort déjà marqué.
         const actionAntiBoucle = await this.#antiBoucle.evaluerEtAppliquer(missionId, message, (id) => this.arreter(id));
         if (actionAntiBoucle !== 'couper') this.#registre.marquerMort(handle.sessionId);
+        this.#telemetrie.fermer(missionId);
         const decision = deciderRelance(handle.sessionId, message.terminal_reason, {
           compteur: this.#compteurRelances,
         });

@@ -28,6 +28,7 @@ import type {
   DemandeDemarrageTransportable,
   ParametresSpecTransportables,
   RapportArretUrgence,
+  TelemetrieWorker,
 } from './types.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
@@ -40,6 +41,8 @@ import type { WorkerSpec } from '../workers/index.ts';
 export interface PortSuperviseurControle {
   inventaire(): readonly DescripteurWorkerPc[];
   demarrer(demande: DemandeDemarrage): Promise<{ readonly sessionId: string }>;
+  /** Optionnel : une doublure qui ne l'implémente pas rend une liste vide, jamais une panne. */
+  telemetrie?(): Promise<readonly TelemetrieWorker[]> | readonly TelemetrieWorker[];
   arreter(missionId: string): Promise<void>;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
   relancer(missionId: string, sessionId: string): Promise<void>;
@@ -80,6 +83,8 @@ const REFUS_DISPATCH = {
 
 export type OperationControle =
   | { readonly type: 'inventaire' }
+  /** Lecture pure : ce que seul le PC observe du flux de ses workers. */
+  | { readonly type: 'telemetrie' }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
@@ -103,7 +108,7 @@ export type OperationControle =
   | { readonly type: 'reprendre_worker'; readonly missionId: string };
 
 /** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
-type OperationMutative = Exclude<OperationControle, { readonly type: 'inventaire' }>;
+type OperationMutative = Exclude<OperationControle, { readonly type: 'inventaire' } | { readonly type: 'telemetrie' }>;
 
 export interface RequeteControle {
   /** Fourni par le Pi. Ignoré pour `inventaire` (lecture seule, jamais mutative). */
@@ -118,6 +123,8 @@ export interface ReponseControle {
   readonly effet: EffetControle;
   readonly detail?: string;
   readonly inventaire?: readonly DescripteurWorkerPc[];
+  /** Présent uniquement pour `telemetrie` — lecture pure, hors cache d'idempotence. */
+  readonly telemetrie?: readonly TelemetrieWorker[];
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
   /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
   readonly rapportArretUrgence?: RapportArretUrgence;
@@ -157,6 +164,13 @@ export class CanalControle {
   async traiter(requete: RequeteControle): Promise<ReponseControle> {
     if (requete.operation.type === 'inventaire') {
       return { ok: true, effet: 'applique', inventaire: this.#superviseur.inventaire() };
+    }
+
+    // `☠` Hors cache d'idempotence, comme `inventaire` : une lecture doit rendre
+    // l'état COURANT. La servir depuis le cache figerait l'affichage sur le
+    // premier relevé, ce qui est exactement le bug qu'on corrige.
+    if (requete.operation.type === 'telemetrie') {
+      return { ok: true, effet: 'applique', telemetrie: (await this.#superviseur.telemetrie?.()) ?? [] };
     }
 
     const dejaTraitee = this.#traitees.get(requete.opId);
