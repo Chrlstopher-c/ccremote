@@ -146,7 +146,22 @@ describe('API web — comptes', () => {
     expect(comptes[0]?.['five_hour']).toEqual({ util: 0, resetLabel: '—' });
   });
 
-  test('☠ resetA est en SECONDES Unix — un libellé en 1970 signifierait la conversion oubliée', async () => {
+  test('☠ reset_a est en MILLISECONDES epoch — une seule unité, fixée à l’écriture', async () => {
+    semerMission();
+    registre.comptes.releverQuota({
+      compteId: 'compte-a',
+      typeFenetre: 'five_hour',
+      statut: 'allowed',
+      resetA: MAINTENANT + 3 * 3600 * 1000,
+      utilisation: 42,
+    });
+    const comptes = (await lire('/accounts')).corps['data'] as Record<string, unknown>[];
+    const cinqH = comptes[0]?.['five_hour'] as Record<string, unknown>;
+    expect(cinqH['util']).toBe(42);
+    expect(cinqH['resetLabel']).toBe('3 h 00');
+  });
+
+  test('☠ des SECONDES écrites par erreur donnent « expirée », jamais un délai plausible', async () => {
     semerMission();
     registre.comptes.releverQuota({
       compteId: 'compte-a',
@@ -156,9 +171,9 @@ describe('API web — comptes', () => {
       utilisation: 42,
     });
     const comptes = (await lire('/accounts')).corps['data'] as Record<string, unknown>[];
-    const cinqH = comptes[0]?.['five_hour'] as Record<string, unknown>;
-    expect(cinqH['util']).toBe(42);
-    expect(cinqH['resetLabel']).toBe('3 h 00');
+    // Une erreur d'unité doit rester VISIBLE. L'inverse — des millisecondes lues
+    // comme des secondes — affichait « reset dans 495278229 h » (23/07).
+    expect((comptes[0]?.['five_hour'] as Record<string, unknown>)['resetLabel']).toBe('expirée');
   });
 });
 

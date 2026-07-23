@@ -26,6 +26,7 @@ export interface AccountApi {
   readonly email: string;
   readonly status: string;
   readonly isUsingOverage: boolean;
+  readonly plan: string;
   readonly five_hour: FenetreApi;
   readonly seven_day: FenetreApi;
 }
@@ -33,14 +34,17 @@ export interface AccountApi {
 const FENETRE_INCONNUE: FenetreApi = { util: 0, resetLabel: '—' };
 
 /**
- * `☠` `resetA` est en SECONDES Unix (H-63.1, relevé verbatim sur un vrai
- * `rate_limit_event`), pas en millisecondes. Multiplier par 1000 est
- * obligatoire — l'oubli produit une date en 1970, donc une fenêtre qui paraît
- * éternellement expirée.
+ * `☠` UNITÉ DE LA COLONNE `reset_a` : MILLISECONDES epoch. Une seule convention,
+ * fixée à l'écriture (`sonde-quotas.ts` normalise ISO ou secondes vers des ms).
+ *
+ * Cette fonction attendait des SECONDES pendant que la sonde écrivait des
+ * millisecondes : l'écran a affiché « reset dans 495278229 h » (constaté le
+ * 23/07). Deux unités dans une même colonne ne se rattrapent pas à la lecture —
+ * la normalisation appartient au point d'écriture, ici on fait confiance.
  */
-function libelleReset(resetSecondes: number | null, maintenantMs: number): string {
-  if (resetSecondes === null) return '—';
-  const restantMs = resetSecondes * 1000 - maintenantMs;
+function libelleReset(resetMs: number | null, maintenantMs: number): string {
+  if (resetMs === null) return '—';
+  const restantMs = resetMs - maintenantMs;
   if (restantMs <= 0) return 'expirée';
   const minutes = Math.round(restantMs / 60_000);
   if (minutes < 60) return `${minutes} min`;
@@ -62,6 +66,10 @@ export function versAccountApi(compte: Compte, quotas: readonly Quota[], mainten
     id: compte.id,
     label: compte.organisation ?? compte.id,
     email: compte.email ?? '',
+    // `☠` MESURÉ, jamais supposé : l'interface affichait « Max » en dur sur des
+    // comptes réellement « Claude Pro » (23/07). Vide tant qu'aucune sonde n'a
+    // répondu — un champ vide est honnête, une valeur inventée ne l'est pas.
+    plan: compte.typeAbonnement ?? '',
     // Le statut affiché est celui de la fenêtre 5 h : c'est elle qui décide de
     // la capacité à lancer une mission maintenant.
     status: cinqHeures?.statut ?? 'allowed',

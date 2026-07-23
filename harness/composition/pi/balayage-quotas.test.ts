@@ -59,3 +59,18 @@ describe('balayage — jauges de rate limit', () => {
     expect(cinqH?.utilisation).toBe(84);
   });
 });
+
+describe('balayage — identité mesurée du compte', () => {
+  test('☠ email et abonnement viennent de la SONDE, jamais d’un libellé écrit en dur', async () => {
+    await balayer([MESURE]);
+    const compte = registre.comptes.lire('compte-a');
+    expect(compte?.email).toBe('x@y.z');
+    expect(compte?.typeAbonnement).toBe('Claude Pro');
+  });
+
+  test('une sonde sans identité n’efface pas ce qu’on savait déjà', async () => {
+    await balayer([MESURE]);
+    await balayer([{ ...MESURE, email: null, typeAbonnement: null }]);
+    expect(registre.comptes.lire('compte-a')?.email).toBe('x@y.z');
+  });
+});

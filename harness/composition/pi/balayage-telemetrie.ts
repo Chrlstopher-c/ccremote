@@ -134,6 +134,7 @@ function appliquerQuotas(registre: Registre, mesures: readonly QuotaCompteMesure
       log.debug({ compteId: mesure.compteId, echec: mesure.echec }, 'jauge non mesurée — valeur précédente conservée');
       continue;
     }
+    registre.comptes.majIdentiteMesuree(mesure.compteId, mesure.email, mesure.typeAbonnement);
     for (const f of mesure.fenetres) {
       registre.comptes.releverQuota({
         compteId: mesure.compteId,

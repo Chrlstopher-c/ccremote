@@ -15,7 +15,7 @@ function hAccountBlock(a, missionsForAccount) {
 
   return `<div class="card acc ${isActive ? 'active' : 'saturated'}">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
-      <div style="min-width:0;"><div style="font-size:13.5px;font-weight:600;">${a.label}</div><div class="mono" style="font-size:10.5px;color:var(--ink-3);margin-top:3px;">${a.email} · Max · oauth</div></div>
+      <div style="min-width:0;"><div style="font-size:13.5px;font-weight:600;">${a.label}</div><div class="mono" style="font-size:10.5px;color:var(--ink-3);margin-top:3px;">${a.email || 'identité non mesurée'}${a.plan ? ' · ' + a.plan : ''}</div></div>
       <span class="badge" style="${isActive ? 'background:var(--ok-soft);color:var(--ok);' : 'background:var(--err-soft);color:var(--err);'}">${a.status}</span>
     </div>
     ${a.isUsingOverage ? `<div style="margin-top:9px;padding:9px 11px;border-radius:10px;background:var(--warn-soft);font-size:11px;color:#8A6A12;line-height:1.5;">

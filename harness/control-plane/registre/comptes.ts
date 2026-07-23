@@ -81,6 +81,24 @@ export class DepotComptes {
    * Dernier-gagne par (compte, fenêtre). `utilisation` est optionnel côté SDK :
    * ne pas écraser une valeur connue par un `undefined`.
    */
+  /**
+   * Renseigne l'identité mesurée d'un compte (email, abonnement). `☠` Seule la
+   * SONDE connaît ces valeurs : l'interface les affichait en dur (« Max ») sur
+   * des comptes réellement « Claude Pro » (23/07). N'écrase jamais avec du vide —
+   * une sonde en échec ne doit pas effacer ce qu'on savait.
+   */
+  public majIdentiteMesuree(id: string, email: string | null, typeAbonnement: string | null, maintenant: number = Date.now()): void {
+    executer(
+      'comptes.majIdentiteMesuree',
+      () => {
+        this.db
+          .query('UPDATE compte SET email = COALESCE(?, email), type_abonnement = COALESCE(?, type_abonnement), maj_a = ? WHERE id = ?')
+          .run(email, typeAbonnement, maintenant, id);
+      },
+      { id },
+    );
+  }
+
   public releverQuota(releve: RelevéQuota): Quota {
     return executer(
       'comptes.releverQuota',
