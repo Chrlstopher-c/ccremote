@@ -116,6 +116,8 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   const missionId = randomUUID();
   const sessionId = randomUUID();
   const lotId = randomUUID();
+  const modele = p.modele ?? MODELE_LEAD_DEFAUT;
+  const effort = effortValide(p.effort);
   // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
   // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
   // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
@@ -134,6 +136,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     critereArret: p.critereArret,
     budgetMaxUsd: p.budgetMaxUsd,
     worktree: cwd,
+    // `☠` Le modèle est CONNU ici : c'est le harness qui l'impose, pas le CLI qui
+    // le choisit. L'écrire évite un « (non résolu) » à l'écran alors que la
+    // valeur ne fait aucun doute. Ce qui reste réellement inconnu du Pi tant que
+    // la télémétrie n'existe pas : coût, contexte, état SDK.
+    modeleDemande: modele,
+    modeleResolu: modele,
   });
 
   const demande: DemandeDemarrageTransportable = {
@@ -146,8 +154,8 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       mandate: p.objectif,
       deniedToolPatterns: [...(deps.deniedToolPatterns ?? [])],
       maxBudgetUsd: p.budgetMaxUsd > 0 ? p.budgetMaxUsd : BUDGET_DEFAUT_USD,
-      model: p.modele ?? MODELE_LEAD_DEFAUT,
-      effortLevel: effortValide(p.effort),
+      model: modele,
+      effortLevel: effort,
       configDir: compte.configDir,
     },
   };
