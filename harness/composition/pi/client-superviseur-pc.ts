@@ -141,6 +141,12 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
    */
   async demarrer(demande: DemandeDemarrageTransportable): Promise<{ readonly detail: string }> {
     const reponse = await this.#appeler({ type: 'demarrer_worker', demande });
+    // `☠` Un refus du PC est une ERREUR, jamais un succès silencieux. Sans cette
+    // garde (constaté en prod le 23/07), un worker qui n'avait pas démarré était
+    // annoncé « équipe lancée » à l'opérateur, mandat consommé à l'appui.
+    if (!reponse.ok) {
+      throw new Error(reponse.detail ?? "le PC a refusé de démarrer l'équipe");
+    }
     return { detail: reponse.detail ?? 'équipe démarrée' };
   }
 

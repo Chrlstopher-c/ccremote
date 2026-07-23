@@ -75,7 +75,11 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   const missionId = randomUUID();
   const sessionId = randomUUID();
   const lotId = randomUUID();
-  const cwd = join(deps.repertoireProjets, p.projet);
+  // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
+  // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
+  // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
+  // aucune des deux machines (constaté en prod le 23/07).
+  const cwd = p.projet.startsWith('/') ? p.projet : join(deps.repertoireProjets, p.projet);
 
   deps.registre.lots.creer({ id: lotId, intention: p.objectif, origine: 'orchestrateur' });
   deps.registre.missions.creer({
@@ -106,6 +110,10 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   };
 
   const { detail } = await deps.demarreur.demarrer(demande);
+  // `☠` L'état n'est avancé qu'APRÈS un démarrage confirmé : une mission laissée
+  // `planifiee` alors que le worker tourne serait une équipe fantôme, et
+  // l'inverse ferait croire à une équipe vivante qui n'existe pas.
+  deps.registre.etats.appliquerEtatHarness(missionId, 'en_cours', { motif: 'mandat autorisé par l’opérateur' });
   log.info({ missionId, projet: p.projet, compteId: compte.id }, 'équipe démarrée après autorisation humaine (H-61)');
   return { missionId, detail };
 }

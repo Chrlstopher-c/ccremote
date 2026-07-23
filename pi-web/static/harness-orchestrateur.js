@@ -178,7 +178,9 @@ async function hApprouverMandat(id) {
     return;
   }
   hTamponMandat(id, 'Autorisée — équipe lancée', 'var(--ok)');
-  showToast(r.effet || 'Équipe lancée', 'ok');
+  // Un identifiant de session brut n'apprend rien à l'opérateur : on annonce
+  // l'effet, le détail technique reste dans les logs.
+  showToast('Équipe lancée — visible dans le Parc', 'ok');
   if (typeof hRenderParc === 'function') hRenderParc();
 }
 
