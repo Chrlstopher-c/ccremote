@@ -21,6 +21,12 @@
       déterministe** (0 à 4 lignes sur 5 sous-agents). La vérité sur « qui existe » vient du
       transcript (`SessionStore.listSubkeys()`), pas du flux ; un sous-agent sans flux se rend avec
       `feedUnavailable: true`, **jamais omis**.
+- [ ] **(F) L'orchestrateur ne peut pas LIRE les fichiers d'un projet** — il tourne sur le Pi, le FS
+      du PC ne lui est pas monté. `explorer_projets` ne rend que l'ARBORESCENCE : il voit que
+      `src-tauri/` existe, il ne peut pas lire une ligne. Constaté en conditions réelles le 23/07
+      (il l'a diagnostiqué lui-même, correctement). Manque un outil MCP de lecture de fichier
+      passant par le lien Pi↔PC, avec les mêmes bornes que l'exploration : racine `/mnt/projects`,
+      lecture seule, taille plafonnée. Même chemin de câblage que `explorer_projets`.
 - [ ] **(E-bis) Revoir les AUTRES opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en
       entier ; `CCREMOTE_PI_ORCHESTRATEUR` est corrigé (relu sur le Pi), les autres variables n'ont
       PAS été passées en revue. Même défaut possible : un déploiement de routine qui éteint un

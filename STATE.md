@@ -35,6 +35,23 @@ observables et pilotables à distance depuis mobile.
   `☠` Le CLI écrit un `agent-<id>.meta.json` porteur de `{agentType, description, toolUseId,
   spawnDepth}` : ce `toolUseId` EST le `parent_tool_use_id` du flux, donc la corrélation
   flux ⟷ store existe sur disque. Validé sur la session à 5 sous-agents de H-72.4 : **5 sur 5**.
+- **Une équipe ne meurt plus à chaque fin de tour** (`1dc52f2`, `7a6fc05`). `☠` LE défaut central :
+  `#surveillerResultats` marquait le worker MORT au PREMIER `result` et cessait de lire. Banc réel
+  (SDK 0.3.217, streaming input) : après `result` n°1 le flux émet `background_tasks_changed`,
+  `task_notification`, un nouvel `init`, puis le lead REPART SEUL avec le résultat de son sous-agent
+  jusqu'à un `result` n°2 — et le flux ne se termine jamais. Le comportement natif de Claude Code
+  n'avait rien à reconstruire : il fallait arrêter de raccrocher. En prod, trois runs sur quatre
+  mouraient au même endroit. `☠` Le critère « tâches de fond vivantes » seul NE SUFFIT PAS : un lead
+  qui annonce « j'attends » alors que plus rien ne tourne se trompe — d'où une fin normale qui laisse
+  désormais l'équipe AU REPOS (vivante, `idle`), jamais tuée. Répare `envoyer_a_equipe`.
+- **Modèle et raisonnement réellement appliqués** (`56bf2aa`, `7a6fc05`) — le sélecteur ne pilotait
+  RIEN : le client n'envoyait pas les champs, la route sœur les jetait, la session tournait sur sa
+  constante. Appliqués via `setModel()`/`applyFlagSettings()`, attribués PAR ÉVÈNEMENT (migration 12),
+  mémorisés par conversation.
+- **`☠` Aucun cache-busting sur les assets** (`7a6fc05`) — un déploiement front pouvait rester
+  invisible derrière le cache du navigateur, rechargement compris. On a cherché des bugs DÉJÀ
+  CORRIGÉS à cause de ça. Empreinte = mtime le plus récent de `static/`. Règle remontée en global
+  (`~/.claude/rules/code-standards.md` + réflexe de debug dans `session-awareness.md`).
 - **Un déploiement de routine n'éteint plus l'orchestrateur** (`8a102d2`) — `deploy-harness-pi.sh`
   réécrit `.env` EN ENTIER : tout opt-in absent de l'environnement de l'appelant retombait à sa
   valeur d'usine. Trois déploiements ont ainsi éteint l'orchestrateur (`route inconnue :
