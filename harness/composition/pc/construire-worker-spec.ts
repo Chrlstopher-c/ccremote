@@ -25,6 +25,7 @@ export interface ParametresWorkerSpec {
   readonly deniedToolPatterns: readonly string[];
   readonly maxBudgetUsd: number;
   readonly model?: string;
+  readonly effortLevel?: 'low' | 'medium' | 'high' | 'xhigh';
   readonly configDir?: string;
   readonly agentTeams?: boolean;
   readonly extraEnv?: Readonly<Record<string, string>>;

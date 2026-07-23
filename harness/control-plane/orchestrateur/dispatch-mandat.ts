@@ -44,6 +44,32 @@ export interface ResultatDispatch {
 const BUDGET_DEFAUT_USD = 12;
 
 /**
+ * `☠` Défauts du team leader, POSÉS et non hérités du CLI (décision Chris,
+ * 2026-07-23). Un lead est le cerveau d'une équipe : le laisser tomber sur le
+ * modèle ou l'effort par défaut de la machine le ferait échouer lentement, sans
+ * qu'aucun signal ne le dise. L'orchestrateur peut les remplacer si l'opérateur
+ * le lui demande (« sonnet 5 medium »), jamais de sa propre initiative.
+ */
+export const MODELE_LEAD_DEFAUT = 'claude-opus-4-8';
+export const EFFORT_LEAD_DEFAUT = 'high';
+
+const EFFORTS_VALIDES: readonly string[] = ['low', 'medium', 'high', 'xhigh'];
+
+/**
+ * `☠` Un effort invalide est SILENCIEUSEMENT ignoré par le SDK (mesuré le
+ * 2026-07-22 : `effort: 'ultra'` passe sans erreur et retombe au défaut). On le
+ * refuse ici plutôt que de croire l'avoir appliqué.
+ */
+function effortValide(brut: string | null): 'low' | 'medium' | 'high' | 'xhigh' {
+  const e = (brut ?? EFFORT_LEAD_DEFAUT).toLowerCase();
+  if (!EFFORTS_VALIDES.includes(e)) {
+    log.warn({ effort: brut }, 'niveau de raisonnement inconnu — repli sur le défaut du lead');
+    return EFFORT_LEAD_DEFAUT as 'high';
+  }
+  return e as 'low' | 'medium' | 'high' | 'xhigh';
+}
+
+/**
  * Compose le premier message du lead. `☠` Jamais vide : un flux d'entrée
  * silencieux n'émet jamais `init`, et le worker resterait muet (piège H-60).
  */
@@ -59,6 +85,21 @@ export function composerPromptInitial(p: Proposition): string {
     ``,
     `Commence par établir l'état des lieux avant de modifier quoi que ce soit.`,
   ].join('\n');
+}
+
+/**
+ * `☠` L'epoch DOIT croître à chaque dispatch sur un même worktree : le fencing
+ * (M-11) rejette explicitement une égalité, précisément pour empêcher deux
+ * workers de coexister sur le même répertoire. Un `epoch: 1` codé en dur rendait
+ * donc tout second dispatch impossible sur un projet déjà utilisé (constaté en
+ * prod le 23/07 : `collision_meme_epoch`).
+ */
+function prochainEpoch(registre: Registre, projet: string): number {
+  const epochs = registre.missions
+    .listerRecentes()
+    .filter((m) => m.projet === projet)
+    .map((m) => m.epoch);
+  return epochs.length === 0 ? 1 : Math.max(...epochs) + 1;
 }
 
 /**
@@ -97,7 +138,7 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
 
   const demande: DemandeDemarrageTransportable = {
     missionId,
-    epoch: 1,
+    epoch: prochainEpoch(deps.registre, p.projet),
     promptInitial: composerPromptInitial(p),
     parametres: {
       sessionId,
@@ -105,6 +146,8 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       mandate: p.objectif,
       deniedToolPatterns: [...(deps.deniedToolPatterns ?? [])],
       maxBudgetUsd: p.budgetMaxUsd > 0 ? p.budgetMaxUsd : BUDGET_DEFAUT_USD,
+      model: p.modele ?? MODELE_LEAD_DEFAUT,
+      effortLevel: effortValide(p.effort),
       configDir: compte.configDir,
     },
   };

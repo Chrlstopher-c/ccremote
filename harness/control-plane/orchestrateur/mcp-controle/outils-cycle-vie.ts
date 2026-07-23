@@ -75,6 +75,8 @@ export function proposerCreationEquipe(
   lecteur: LecteurUtilisationParc,
   config: ConfigPlafondParc,
   enregistreur?: EnregistreurProposition,
+  modele?: string | null,
+  effort?: string | null,
 ): ContratRetour {
   const intention = `proposer une équipe sur ${projet}`;
   try {
@@ -87,7 +89,7 @@ export function proposerCreationEquipe(
     if (enregistreur === undefined) {
       return refuse(intention, "aucun registre de propositions câblé : impossible de soumettre ce mandat à l'opérateur");
     }
-    const ref = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre });
+    const ref = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, modele, effort });
     return {
       ok: true,
       intention,

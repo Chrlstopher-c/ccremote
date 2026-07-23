@@ -156,14 +156,18 @@ function outilsCycleVie(deps: DependancesServeurControle) {
     tool(
       'creer_equipe',
       "Propose une nouvelle équipe sur un projet, avec un mandat. NE CRÉE RIEN : " +
-        "H-61 — la création exige une autorisation humaine explicite, présentée par l'UI.",
+        "H-61 — la création exige une autorisation humaine explicite, présentée par l'UI. " +
+        "`modele` et `effort` : ne les renseigne QUE si l'opérateur a précisé lesquels. " +
+        'Laissés vides, le lead démarre sur les défauts du harness (Opus 4.8, effort high).',
       {
         projet: z.string(),
         objectif: z.string(),
         critereArret: z.string().nullable(),
         perimetre: z.string(),
+        modele: z.string().nullable().optional(),
+        effort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
       },
-      async ({ projet, objectif, critereArret, perimetre }) =>
+      async ({ projet, objectif, critereArret, perimetre, modele, effort }) =>
         protege('creer_equipe', () =>
           proposerCreationEquipe(
             projet,
@@ -173,6 +177,8 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             deps.utilisationParc,
             deps.configPlafondParc,
             deps.propositions,
+            modele,
+            effort,
           ),
         ),
     ),

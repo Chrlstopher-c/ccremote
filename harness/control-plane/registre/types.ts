@@ -225,6 +225,10 @@ export interface Proposition {
   readonly critereArret: string | null;
   readonly perimetre: string;
   readonly budgetMaxUsd: number;
+  /** Modèle du lead. `null` ⇒ le défaut du dispatch (Opus 4.8). */
+  readonly modele: string | null;
+  /** Niveau de raisonnement. `null` ⇒ le défaut du dispatch (high). */
+  readonly effort: string | null;
   readonly statut: StatutProposition;
   readonly missionId: string | null;
   readonly detail: string | null;

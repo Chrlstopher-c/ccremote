@@ -21,6 +21,8 @@ interface LigneProposition {
   critere_arret: string | null;
   perimetre: string;
   budget_max_usd: number;
+  modele: string | null;
+  effort: string | null;
   statut: string;
   mission_id: string | null;
   detail: string | null;
@@ -37,6 +39,8 @@ function versProposition(l: LigneProposition): Proposition {
     critereArret: l.critere_arret,
     perimetre: l.perimetre,
     budgetMaxUsd: l.budget_max_usd,
+    modele: l.modele,
+    effort: l.effort,
     // as : colonne sous CHECK IN ('en_attente','approuvee','refusee').
     statut: l.statut as StatutProposition,
     missionId: l.mission_id,
@@ -54,6 +58,8 @@ export interface CreationProposition {
   readonly critereArret: string | null;
   readonly perimetre: string;
   readonly budgetMaxUsd: number;
+  readonly modele?: string | null;
+  readonly effort?: string | null;
 }
 
 export class DepotPropositions {
@@ -71,8 +77,8 @@ export class DepotPropositions {
           .query(
             `INSERT INTO proposition
                (id, conversation_id, projet, objectif, critere_arret, perimetre,
-                budget_max_usd, statut, mission_id, detail, cree_a, maj_a)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
+                budget_max_usd, modele, effort, statut, mission_id, detail, cree_a, maj_a)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
           )
           .run(
             creation.id,
@@ -82,6 +88,8 @@ export class DepotPropositions {
             creation.critereArret,
             creation.perimetre,
             creation.budgetMaxUsd,
+            creation.modele ?? null,
+            creation.effort ?? null,
             maintenant,
             maintenant,
           );

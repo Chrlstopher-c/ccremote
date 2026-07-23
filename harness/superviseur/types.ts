@@ -41,6 +41,8 @@ export interface ParametresSpecTransportables {
   readonly deniedToolPatterns: readonly string[];
   readonly maxBudgetUsd: number;
   readonly model?: string;
+  /** Niveau de raisonnement du lead (posé via `Options.settings`). */
+  readonly effortLevel?: 'low' | 'medium' | 'high' | 'xhigh';
   readonly configDir?: string;
   readonly agentTeams?: boolean;
   readonly extraEnv?: Readonly<Record<string, string>>;

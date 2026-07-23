@@ -268,11 +268,24 @@ ALTER TABLE conversation_evenement_v4 RENAME TO conversation_evenement;
 CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
 `;
 
+/**
+ * Migration 5 — modèle et niveau de raisonnement choisis pour l'équipe.
+ *
+ * `☠` Le choix doit vivre sur la PROPOSITION, pas être décidé au dispatch :
+ * l'opérateur autorise un mandat précis, modèle compris. Le décider après coup
+ * ferait démarrer une équipe sur un modèle que personne n'a validé.
+ */
+const MIGRATION_5 = `
+ALTER TABLE proposition ADD COLUMN modele TEXT;
+ALTER TABLE proposition ADD COLUMN effort TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
   { version: 3, nom: 'compaction-conversations', sql: MIGRATION_3 },
   { version: 4, nom: 'propositions-mandat', sql: MIGRATION_4 },
+  { version: 5, nom: 'modele-effort-proposition', sql: MIGRATION_5 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

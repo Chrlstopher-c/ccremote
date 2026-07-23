@@ -103,7 +103,9 @@ export function composeWorkerOptions(
     // un jour dans un settings.json aurait laissé un lead saturer son contexte en
     // silence, sans que rien dans ce dépôt ne le dise. Vérifié le 2026-07-23 :
     // aucun settings du poste ni des comptes ne mentionnait la compaction.
-    settings: { autoCompactEnabled: true },
+    // `☠` Modèle ET effort sont POSÉS, jamais laissés au défaut du CLI : un lead
+    // qui raisonne au niveau minimal échoue lentement, sans que rien ne le dise.
+    settings: { autoCompactEnabled: true, ...(spec.effortLevel ? { effortLevel: spec.effortLevel } : {}) },
     includePartialMessages: true,
     forwardSubagentText: true,
     agentProgressSummaries: true,

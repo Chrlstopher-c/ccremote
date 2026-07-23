@@ -83,6 +83,8 @@ export interface WorkerSpec {
   readonly maxBudgetUsd: number;
   /** Alias ou identifiant de modèle ; résolu puis comparé au plancher (H-43). */
   readonly model?: string;
+  /** Niveau de raisonnement, posé via `Options.settings` (jamais deviné). */
+  readonly effortLevel?: 'low' | 'medium' | 'high' | 'xhigh';
   /** Répertoire de config du compte Claude Code à utiliser (H-53). */
   readonly configDir?: string;
   /** Agent Teams (N2), expérimental, par équipe (H-14). */

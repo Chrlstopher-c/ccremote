@@ -226,6 +226,8 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 critereArret: mandat.critereArret,
                 perimetre: mandat.perimetre,
                 budgetMaxUsd: BUDGET_MANDAT_DEFAUT_USD,
+                modele: mandat.modele ?? null,
+                effort: mandat.effort ?? null,
               });
               registre.conversations.ajouterEvenement({ conversationId, type: 'mandat', contenu: p.id });
               return p.id;

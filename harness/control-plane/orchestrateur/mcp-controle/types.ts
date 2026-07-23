@@ -121,5 +121,7 @@ export interface EnregistreurProposition {
     readonly objectif: string;
     readonly critereArret: string | null;
     readonly perimetre: string;
+    readonly modele?: string | null;
+    readonly effort?: string | null;
   }): string;
 }
