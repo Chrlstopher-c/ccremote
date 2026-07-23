@@ -99,6 +99,10 @@ async function hRenderMissionDetail(id) {
     <div class="card" style="padding:14px;margin-bottom:14px;">
       <div class="sec-title">Identité et bornes</div>
       <div class="kv">
+        <!-- ☠ L'identifiant est ce que l'orchestrateur comprend le plus sûrement.
+             Ne pas l'afficher obligeait à le deviner ou à désigner l'équipe par
+             un nom que l'outil n'acceptait pas — constaté le 23/07. -->
+        <div><span class="k">Identifiant</span><span class="v mono" style="cursor:pointer;" title="Copier l'identifiant" onclick="hCopierId('${m.id}')">${escapeHtml(m.id)}</span></div>
         <div><span class="k">Projet</span><span class="v">${m.project}</span></div>
         <div><span class="k">Worktree</span><span class="v">${escapeHtml(m.worktree || '—')}</span></div>
         <div><span class="k">sessionId</span><span class="v">${m.sessionId || '—'}</span></div>
@@ -147,6 +151,15 @@ async function hRenderMissionDetail(id) {
   const scroll = document.getElementById('hFeedScroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
   hRenderTeamTree();
+}
+
+async function hCopierId(id) {
+  try {
+    await navigator.clipboard.writeText(id);
+    showToast('Identifiant copié — utilisable tel quel avec le master', 'accent');
+  } catch {
+    showToast('Copie refusée par le navigateur', 'warn');
+  }
 }
 
 async function hSendInstruction(missionId) {

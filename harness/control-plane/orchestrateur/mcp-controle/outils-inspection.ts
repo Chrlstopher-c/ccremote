@@ -23,34 +23,102 @@ function resumerMission(m: Mission): string {
   return `${m.id} · ${m.nom} · projet=${m.projet} · harness=${m.etatHarness} · sdk=${m.etatSdk ?? 'inconnu'}`;
 }
 
-/** `lister_equipes` (A.2.2) — quelles équipes, quels états. Résumé, jamais le flux brut (H-45). */
+/** Combien d'équipes terminées restent visibles à l'orchestrateur — les récentes suffisent. */
+const TERMINEES_VISIBLES = 15;
+
+/**
+ * `☠` Une équipe TERMINÉE doit rester interrogeable. `lister_equipes` ne rendait
+ * que `listerActives()` : à la seconde où une mission s'achevait, elle
+ * disparaissait de tout ce que l'orchestrateur peut voir. Il répondait donc
+ * « équipe introuvable » à l'opérateur qui venait de la voir finir sous ses yeux
+ * — constaté le 23/07. Une équipe qui vient de se terminer est précisément celle
+ * dont on veut le bilan.
+ */
 export function listerEquipes(registre: Registre): ContratRetour {
   try {
-    const missions = registre.missions.listerActives();
-    const resume = missions.length === 0 ? 'aucune équipe active' : missions.map(resumerMission).join(' | ');
-    return applique('lister les équipes actives', resume);
+    const recentes = registre.missions.listerRecentes(200);
+    const actives = new Set(registre.missions.listerActives().map((m) => m.id));
+    const vivantes = recentes.filter((m) => actives.has(m.id));
+    const terminees = recentes.filter((m) => !actives.has(m.id)).slice(0, TERMINEES_VISIBLES);
+    const parties = [
+      vivantes.length === 0 ? 'aucune équipe active' : `actives: ${vivantes.map(resumerMission).join(' | ')}`,
+      ...(terminees.length > 0 ? [`terminées récentes: ${terminees.map(resumerMission).join(' | ')}`] : []),
+    ];
+    return applique('lister les équipes', parties.join(' — '));
   } catch (erreur) {
     journal.error({ err: erreur }, 'lister_equipes en échec');
-    return echecInattendu('lister les équipes actives', erreur);
+    return echecInattendu('lister les équipes', erreur);
   }
 }
 
+export type ResolutionMission =
+  | { readonly trouve: Mission }
+  | { readonly ambigu: readonly Mission[] }
+  | { readonly absent: true };
+
+/**
+ * Résout une désignation d'équipe : identifiant exact, sinon nom, sinon projet,
+ * sinon fragment de l'un des trois.
+ *
+ * `☠` L'opérateur désigne une équipe par son NOM — c'est ce qu'il lit à l'écran.
+ * N'accepter que l'identifiant obligeait l'orchestrateur à répondre
+ * « introuvable » sur une équipe parfaitement existante (23/07). Une
+ * correspondance ambiguë n'est jamais tranchée au hasard : on rend les
+ * candidats, l'orchestrateur redemande.
+ */
+export function resoudreMission(registre: Registre, designation: string): ResolutionMission {
+  const exact = registre.missions.lire(designation);
+  if (exact !== null) return { trouve: exact };
+  const aiguille = designation.trim().toLowerCase();
+  if (aiguille.length === 0) return { absent: true };
+  const candidats = registre.missions.listerRecentes(200);
+  const parChamp = candidats.filter(
+    (m) => m.nom.toLowerCase() === aiguille || m.projet.toLowerCase() === aiguille,
+  );
+  const retenus =
+    parChamp.length > 0
+      ? parChamp
+      : candidats.filter(
+          (m) =>
+            m.id.toLowerCase().includes(aiguille) ||
+            m.nom.toLowerCase().includes(aiguille) ||
+            m.projet.toLowerCase().includes(aiguille),
+        );
+  if (retenus.length === 0) return { absent: true };
+  // `listerRecentes` trie par activité décroissante : le premier est le plus récent.
+  if (retenus.length === 1) return { trouve: retenus[0] as Mission };
+  return { ambigu: retenus.slice(0, 10) };
+}
+
 /** `etat_equipe` (A.2.2) — détail d'une équipe : tâche, coût, contexte, capacités manquantes. */
-export function etatEquipe(registre: Registre, missionId: string): ContratRetour {
+export function etatEquipe(registre: Registre, designation: string): ContratRetour {
+  const intention = `état de ${designation}`;
   try {
-    const mission = registre.missions.lire(missionId);
-    if (mission === null) return { ok: false, intention: `état de ${missionId}`, effet: 'refuse', raison: 'mission introuvable' };
-    const manquantes = registre.capacites.manquantesSurveillees(missionId);
+    const resolution = resoudreMission(registre, designation);
+    if ('absent' in resolution) {
+      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
+    }
+    if ('ambigu' in resolution) {
+      const listeCandidats = resolution.ambigu.map((m) => `${m.id} (${m.nom})`).join(' | ');
+      return {
+        ok: false,
+        intention,
+        effet: 'refuse',
+        raison: `désignation ambiguë — préciser l'identifiant parmi : ${listeCandidats}`,
+      };
+    }
+    const mission = resolution.trouve;
+    const manquantes = registre.capacites.manquantesSurveillees(mission.id);
     const etat = [
       resumerMission(mission),
       `budget=${mission.budgetConsommeUsd}/${mission.budgetMaxUsd ?? '∞'} USD`,
       `contexte=${mission.contexteTokensUtilises ?? '?'}/${mission.contexteTokensMax ?? '?'}`,
       manquantes.length > 0 ? `capacités manquantes: ${manquantes.join(', ')}` : 'capacités surveillées toutes présentes',
     ].join(' · ');
-    return applique(`état de ${missionId}`, etat);
+    return applique(intention, etat);
   } catch (erreur) {
-    journal.error({ err: erreur, missionId }, 'etat_equipe en échec');
-    return echecInattendu(`état de ${missionId}`, erreur);
+    journal.error({ err: erreur, designation }, 'etat_equipe en échec');
+    return echecInattendu(intention, erreur);
   }
 }
 
@@ -86,9 +154,14 @@ export async function listerProjets(
 }
 
 /** `historique_equipe` (A.2.2) — dernières transitions d'état, résumées (jamais le flux brut). */
-export function historiqueEquipe(registre: Registre, missionId: string, limite = 20): ContratRetour {
-  const intention = `historique de ${missionId}`;
+export function historiqueEquipe(registre: Registre, designation: string, limite = 20): ContratRetour {
+  const intention = `historique de ${designation}`;
   try {
+    const resolution = resoudreMission(registre, designation);
+    if (!('trouve' in resolution)) {
+      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
+    }
+    const missionId = resolution.trouve.id;
     const transitions = registre.etats.historique(missionId, limite);
     if (transitions.length === 0) return applique(intention, 'aucune transition connue');
     const resume = transitions
@@ -96,7 +169,7 @@ export function historiqueEquipe(registre: Registre, missionId: string, limite =
       .join(' | ');
     return applique(intention, resume);
   } catch (erreur) {
-    journal.error({ err: erreur, missionId }, 'historique_equipe en échec');
+    journal.error({ err: erreur, designation }, 'historique_equipe en échec');
     return echecInattendu(intention, erreur);
   }
 }

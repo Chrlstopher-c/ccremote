@@ -239,6 +239,23 @@ export class MachineEtatsDemandes {
     return this.#parEtat('en_attente');
   }
 
+  /**
+   * Toutes les demandes d'un worker, QUEL QUE SOIT leur état — y compris celles
+   * que le lead a résolues seul.
+   *
+   * `☠` Ne pas confondre avec `enAttente()` : le fil d'audit d'une mission doit
+   * montrer les décisions déjà prises, pas seulement ce qui bloque encore. Ne
+   * filtrer que l'attente donnerait un journal vide sur une mission qui s'est
+   * bien passée, ce qui est exactement l'inverse du besoin.
+   */
+  parWorker(idWorker: string): readonly DemandePermission[] {
+    const resultat: DemandePermission[] = [];
+    for (const demande of this.#demandes.values()) {
+      if (demande.idWorker === idWorker) resultat.push({ ...demande });
+    }
+    return resultat;
+  }
+
   notificationsEmises(): number {
     return this.#notifications;
   }

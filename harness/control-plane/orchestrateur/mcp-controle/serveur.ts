@@ -131,14 +131,18 @@ export async function protege(nom: string, action: () => Promise<ContratRetour> 
 
 function outilsInspection(deps: DependancesServeurControle) {
   return [
-    tool('lister_equipes', 'Liste les équipes actives et leurs états.', {}, async () =>
+    tool('lister_equipes', 'Liste les équipes actives ET les équipes récemment terminées, avec leurs états.', {}, async () =>
       protege('lister_equipes', () => listerEquipes(deps.registre)),
     { annotations: { readOnlyHint: true } }),
     tool(
       'etat_equipe',
-      "Détail d'une équipe : tâche, coût, contexte, capacités manquantes.",
-      { missionId: z.string() },
-      async ({ missionId }) => protege('etat_equipe', () => etatEquipe(deps.registre, missionId)),
+      "Détail d'une équipe : tâche, coût, contexte, capacités manquantes. Fonctionne aussi sur une équipe terminée.",
+      {
+        equipe: z
+          .string()
+          .describe("Identifiant, nom ou projet de l'équipe — le nom suffit si aucune autre ne lui ressemble."),
+      },
+      async ({ equipe }) => protege('etat_equipe', () => etatEquipe(deps.registre, equipe)),
       { annotations: { readOnlyHint: true } },
     ),
     tool('lister_projets', 'Projets connus et leur worktree.', {}, async () =>
@@ -147,9 +151,12 @@ function outilsInspection(deps: DependancesServeurControle) {
     tool(
       'historique_equipe',
       "Dernières transitions d'état d'une équipe, résumées.",
-      { missionId: z.string(), limite: z.number().int().positive().optional() },
-      async ({ missionId, limite }) =>
-        protege('historique_equipe', () => historiqueEquipe(deps.registre, missionId, limite)),
+      {
+        equipe: z.string().describe("Identifiant, nom ou projet de l'équipe."),
+        limite: z.number().int().positive().optional(),
+      },
+      async ({ equipe, limite }) =>
+        protege('historique_equipe', () => historiqueEquipe(deps.registre, equipe, limite)),
       { annotations: { readOnlyHint: true } },
     ),
     tool('permissions_en_attente', 'Ce qui bloque en escalade, et depuis quand.', {}, async () =>

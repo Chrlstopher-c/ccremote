@@ -8,16 +8,21 @@
  * l'autorité du domaine et ne doit rien savoir de l'UI. Le jour où l'interface
  * change de vocabulaire, ce fichier change, le registre non.
  *
- * `☠ HONNÊTETÉ DES CHAMPS` — le contrat décrit des champs dont AUCUNE source
- * réelle n'existe encore côté Pi : `subagents` et `feed` vivent sur le PC
- * (observabilité, D.1), `landing` dépend d'un comportement d'atterrissage qui
- * n'est pas encore réel (H-70). Ils sont retournés VIDES, jamais fabriqués.
- * Une donnée inventée qui a l'air vraie coûte bien plus cher qu'un tableau
- * vide : elle se propage dans les décisions avant qu'on découvre qu'elle ment.
+ * `☠ HONNÊTETÉ DES CHAMPS` — `subagents` et `landing` n'ont toujours aucune
+ * source réelle côté Pi (observabilité D.1 côté PC ; atterrissage H-70 pas
+ * encore réel) : ils restent VIDES, jamais fabriqués. Une donnée inventée qui a
+ * l'air vraie coûte bien plus cher qu'un tableau vide.
+ *
+ * `☠` `feed` en revanche EST désormais alimenté, à partir des transitions d'état
+ * et des demandes de permission — deux sources persistées et vérifiables. Le
+ * laisser vide « par honnêteté » alors que la matière existait produisait un
+ * « 0 évènements » sur des équipes qui travaillaient (23/07) : c'est aussi
+ * trompeur qu'une donnée inventée, dans l'autre sens.
  */
 
 import type { EtatHarness, Mission } from '../registre/index.ts';
 import { ageLisible } from './duree.ts';
+import type { FeedEventApi } from './vue-feed.ts';
 
 /** États d'affichage du contrat — vocabulaire de l'interface, pas du domaine. */
 export type EtatMissionApi = 'requires_action' | 'running' | 'idle' | 'paused' | 'echec' | 'terminee';
@@ -47,7 +52,7 @@ export interface MissionApi {
   readonly freshlyDispatched: boolean;
   readonly ultracode: boolean;
   readonly subagents: readonly never[];
-  readonly feed: readonly never[];
+  readonly feed: readonly FeedEventApi[];
   readonly landing: null;
 }
 
@@ -94,7 +99,17 @@ function anciennete(etat: EtatMissionApi, majA: number, maintenant: number): Pic
   };
 }
 
-export function versMissionApi(mission: Mission, plafondRelances: number, maintenant: number = Date.now()): MissionApi {
+/**
+ * `feed` est passé par l'appelant plutôt que construit ici : la liste du parc
+ * n'en a pas besoin, et le construire pour chaque mission de la liste ferait N
+ * requêtes d'historique pour un écran qui ne les affiche pas.
+ */
+export function versMissionApi(
+  mission: Mission,
+  plafondRelances: number,
+  maintenant: number = Date.now(),
+  feed: readonly FeedEventApi[] = [],
+): MissionApi {
   const state = ETATS[mission.etatHarness];
   return {
     ...anciennete(state, mission.etatHarnessMajA, maintenant),
@@ -123,7 +138,7 @@ export function versMissionApi(mission: Mission, plafondRelances: number, mainte
     freshlyDispatched: false,
     ultracode: false,
     subagents: [],
-    feed: [],
+    feed,
     landing: null,
   };
 }

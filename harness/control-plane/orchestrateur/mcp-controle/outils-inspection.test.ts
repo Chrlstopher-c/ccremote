@@ -47,7 +47,37 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     const resultat = etatEquipe(registre, 'inconnue');
     expect(resultat.ok).toBe(false);
     expect(resultat.effet).toBe('refuse');
-    expect(resultat.raison).toBe('mission introuvable');
+    expect(resultat.raison).toContain('aucune équipe');
+  });
+
+  test('☠ lister_equipes montre aussi les équipes TERMINÉES (23/07)', () => {
+    registre.missions.creer({ id: 'm-viv', lotId: 'lot-1', nom: 'en cours', projet: 'alpha', compteId: 'compte1' });
+    registre.missions.creer({ id: 'm-fin', lotId: 'lot-1', nom: 'finie', projet: 'beta', compteId: 'compte1' });
+    registre.etats.appliquerEtatHarness('m-fin', 'terminee');
+    const resultat = listerEquipes(registre);
+    expect(resultat.etat).toContain('m-viv');
+    // Sans ce rendu, l'orchestrateur répondait « introuvable » sur une équipe
+    // que l'opérateur venait de voir se terminer.
+    expect(resultat.etat).toContain('m-fin');
+    expect(resultat.etat).toContain('terminées récentes');
+  });
+
+  test('☠ etat_equipe accepte le NOM, pas seulement l’identifiant (23/07)', () => {
+    registre.missions.creer({ id: 'm-3', lotId: 'lot-1', nom: 'refonte panier', projet: 'vela', compteId: 'compte1' });
+    expect(etatEquipe(registre, 'refonte panier').ok).toBe(true);
+    expect(etatEquipe(registre, 'vela').ok).toBe(true);
+    // Fragment : ce que l'opérateur retient réellement d'un nom.
+    expect(etatEquipe(registre, 'panier').ok).toBe(true);
+  });
+
+  test('etat_equipe : désignation ambiguë ⇒ refus qui liste les candidats, jamais un choix au hasard', () => {
+    registre.missions.creer({ id: 'm-a', lotId: 'lot-1', nom: 'refonte panier', projet: 'vela', compteId: 'compte1' });
+    registre.missions.creer({ id: 'm-b', lotId: 'lot-1', nom: 'refonte compte', projet: 'lattice', compteId: 'compte1' });
+    const resultat = etatEquipe(registre, 'refonte');
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('ambiguë');
+    expect(resultat.raison).toContain('m-a');
+    expect(resultat.raison).toContain('m-b');
   });
 
   test('etat_equipe : détail budget/contexte/capacités', () => {

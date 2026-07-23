@@ -25,6 +25,7 @@ import type { MachineEtatsDemandes } from '../bus-permissions/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
 import { versMissionApi } from './vue-missions.ts';
 import { versEscaladeApi } from './vue-escalades.ts';
+import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
 import { traiterEcriture, type OrdresVersPc, type OrchestrateurConversation } from './ecritures.ts';
 import {
@@ -155,7 +156,8 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     // `☠` Une mission inconnue avec le PC EN LIGNE est un vrai 404 ; le PC
     // absent ne doit jamais transformer « inconnue » en « peut-être plus tard ».
     if (trouvee === null) throw introuvable('mission');
-    return enveloppe(pcOnline, versMissionApi(trouvee, plafond, maintenant));
+    const feed = construireFeed(deps.registre, trouvee.id, deps.escalades);
+    return enveloppe(pcOnline, versMissionApi(trouvee, plafond, maintenant, feed));
   }
 
   if (chemin === '/escalades') {
