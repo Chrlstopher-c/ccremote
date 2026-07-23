@@ -81,6 +81,15 @@
   .switch.on::after { transform: translateX(16px); }
   .hist-item:hover { background: var(--bg-2); }
   #sidebar { transition: transform 0.2s ease; }
+  /* ☠ La sidebar est un `flex flex-col` sans conteneur scrollable : passé une
+     certaine hauteur de contenu (quotas par compte, équipes actives), le bas
+     était purement inatteignable — constaté en vue mobile le 23/07.
+     `flex-shrink: 0` sur les enfants est indispensable : sans lui, un flex-col
+     COMPRIME ses enfants au lieu de déclencher le défilement, et le contenu
+     devient illisible plutôt qu'inaccessible. `overscroll-behavior: contain`
+     évite que le scroll en fin de course parte dans la page derrière. */
+  #sidebar { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  #sidebar > * { flex-shrink: 0; }
   @media (max-width: 1023px) {
     #sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); width: 82vw; max-width: 300px; }
     #sidebar.open { transform: translateX(0); }
