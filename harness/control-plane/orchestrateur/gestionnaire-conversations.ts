@@ -156,6 +156,12 @@ export class GestionnaireConversations {
   constructor(
     private readonly registre: Registre,
     private readonly construireSession: ConstruireSessionConversation,
+    /**
+     * Bascule vers le compte suivant quand celui en cours est saturé. Rend
+     * `true` s'il restait un compte de repli. Absent ⇒ pas de rotation : la
+     * session reste muette, mais l'erreur est visible dans le fil.
+     */
+    private readonly rotationCompte?: () => boolean,
   ) {}
 
   listerConversations(): readonly EntreeListeConversation[] {
@@ -381,6 +387,20 @@ export class GestionnaireConversations {
       for await (const message of poignee.query) {
         poignee.ingererMessage(message);
         collecteur.ingerer(message);
+        // `☠` Compte saturé : la session ne répondra plus. On la ferme pour que
+        // le prochain envoi reparte sur le compte de repli — sinon l'orchestrateur
+        // reste muet et rien n'explique pourquoi (vécu le 23/07).
+        if (collecteur.sature) {
+          const bascule = this.rotationCompte?.() ?? false;
+          log.warn({ conversationId, bascule }, 'compte de l’orchestrateur saturé — session fermée');
+          collecteur.marquerErreur(
+            bascule
+              ? 'Compte saturé — bascule sur le compte de repli. Renvoie ton message.'
+              : 'Compte saturé et aucun compte de repli disponible sur le Pi.',
+          );
+          this.fermer(conversationId);
+          break;
+        }
         // Fin de tour : c'est le seul moment sûr pour honorer une compaction que
         // l'orchestrateur a demandée lui-même pendant sa réponse.
         if (message.type === 'result' && this.#compactionDemandee.delete(conversationId)) {

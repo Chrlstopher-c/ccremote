@@ -62,6 +62,10 @@ async function main(): Promise<void> {
     repertoireProjets,
     cwdOrchestrateur,
     configDirOrchestrateur,
+    configDirsOrchestrateur: (process.env['CCREMOTE_PI_CONFIG_DIRS_ORCHESTRATEUR'] ?? '')
+      .split(',')
+      .map((d) => d.trim())
+      .filter((d) => d.length > 0),
     portLienPc,
     hostnameLienPc,
     secretLienPc,

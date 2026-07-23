@@ -79,6 +79,12 @@ export interface OptionsAssemblageControlPlanePi {
   /** Port de l'API web servie à `pi-web` — toujours sur `127.0.0.1`. */
   readonly portApiWeb: number;
   readonly configDirOrchestrateur?: string;
+  /**
+   * Comptes de repli du MASTER, sur le Pi. `☠` Distincts des comptes du registre,
+   * qui vivent sur le PC et sont inutilisables ici : sans repli local, une
+   * saturation rend l'orchestrateur définitivement muet (vécu le 23/07).
+   */
+  readonly configDirsOrchestrateur?: readonly string[];
   readonly seuilUtilisationPctPlafondParc?: number;
   /** Comptes Claude à garantir dans le registre au démarrage (idempotent). */
   readonly comptes?: readonly { readonly id: string; readonly configDir: string; readonly libelle?: string }[];
@@ -196,6 +202,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     // Référence différée : le gestionnaire n'existe pas encore quand on décrit
     // comment construire ses sessions — mais il existera à l'appel.
     let gestionnaire: GestionnaireConversations | null = null;
+    const comptesMaster = [
+      ...(options.configDirOrchestrateur !== undefined ? [options.configDirOrchestrateur] : []),
+      ...(options.configDirsOrchestrateur ?? []),
+    ].filter((d, i, tout) => tout.indexOf(d) === i);
+    let indexMaster = 0;
     const construireSession: ConstruireSessionConversation = (
       stockageIdentite: StockageIdentite,
       conversationId: string,
@@ -240,9 +251,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
         reconciliation: dependancesReconciliation,
         incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
         cwd: options.cwdOrchestrateur,
-        configDir: options.configDirOrchestrateur,
+        configDir: comptesMaster[indexMaster] ?? options.configDirOrchestrateur,
       });
-    gestionnaireConversations = new GestionnaireConversations(registre, construireSession);
+    gestionnaireConversations = new GestionnaireConversations(registre, construireSession, () => {
+      if (indexMaster + 1 >= comptesMaster.length) return false;
+      indexMaster += 1;
+      log.warn({ configDir: comptesMaster[indexMaster] }, 'rotation du compte de l’orchestrateur');
+      return true;
+    });
     gestionnaire = gestionnaireConversations;
   } else {
     log.warn(

@@ -56,6 +56,10 @@ CCREMOTE_PI_IDENTITE_ORCHESTRATEUR=$REMOTE_DIR/identite-orchestrateur.json
 CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR=$REMOTE_DIR/incidents-orchestrateur.jsonl
 # Compte dédié à la session maître, connecté par un /login humain sur le Pi.
 CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR=${CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR:-/home/pi/.claude-orchestrateur}
+# ☠ Comptes de REPLI du master, sur le Pi. Distincts des comptes du registre
+# (CCREMOTE_PI_COMPTES), qui vivent sur le PC et sont inutilisables ici. Sans
+# repli local, une saturation rend l'orchestrateur définitivement muet (23/07).
+CCREMOTE_PI_CONFIG_DIRS_ORCHESTRATEUR=${CCREMOTE_PI_CONFIG_DIRS_ORCHESTRATEUR:-/home/pi/.claude-orchestrateur,/home/pi/.claude-orchestrateur-b}
 # ☠ Comptes Claude garantis au démarrage du service (idempotent, dans SA
 # connexion) : plus de script séparé qui se faisait effacer par une course WAL.
 CCREMOTE_PI_COMPTES=${CCREMOTE_PI_COMPTES:-compte-a=/home/trinity/.claude-comptes/compte-a,compte-b=/home/trinity/.claude-comptes/compte-b}

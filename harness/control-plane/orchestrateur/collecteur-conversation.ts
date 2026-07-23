@@ -86,12 +86,26 @@ function typeDepuisBloc(typeBloc: string | undefined): TypeEvenementConversation
   return null;
 }
 
+/**
+ * `☠` Motifs observés en RÉEL (23/07) : le CLI annonce la limite en clair et la
+ * session devient muette. Sans détection, l'orchestrateur ne répond plus et rien
+ * n'explique pourquoi — l'opérateur croit à une panne du harness.
+ */
+const MOTIFS_SATURATION: readonly RegExp[] = [
+  /spend limit/i,
+  /usage limit/i,
+  /rate limit/i,
+  /quota exceeded/i,
+  /limite de d[ée]pense/i,
+];
+
 export class CollecteurConversation {
   #genere = false;
   #streameCeTour = false;
   #partiel: { type: TypeEvenementConversation; contenu: string } | null = null;
   /** Tour interne (compaction) : rien n'est persisté, le texte est capté à part. */
   #muet = false;
+  #sature = false;
   #capture = '';
   #finTour: ((texte: string) => void) | null = null;
 
@@ -138,6 +152,11 @@ export class CollecteurConversation {
     return this.#genere;
   }
 
+  /** Le compte de cette session a annoncé une limite atteinte : il faut tourner. */
+  get sature(): boolean {
+    return this.#sature;
+  }
+
   /**
    * Le bloc en cours de frappe, ou `null`. Lu par l'API à chaque sondage.
    * `☠` Masqué pendant un tour interne : sinon l'opérateur verrait le résumé de
@@ -160,6 +179,15 @@ export class CollecteurConversation {
         // `☠` Déjà persisté bloc par bloc pendant le streaming : ne pas doubler.
         if (this.#streameCeTour) return;
         for (const bloc of blocsAssistant(message)) this.#persister(bloc.type, bloc.contenu);
+        return;
+      }
+      if (message.type === 'system') {
+        const sonde = message as unknown as { subtype?: string; content?: string; text?: string };
+        const texte = sonde.content ?? sonde.text ?? '';
+        if (MOTIFS_SATURATION.some((m) => m.test(texte))) {
+          this.#sature = true;
+          this.#persister('erreur', `Compte saturé : ${texte.slice(0, 200)}`);
+        }
         return;
       }
       if (message.type === 'result') this.#terminerTour(message);
@@ -244,6 +272,12 @@ export class CollecteurConversation {
   }
 
   #persister(type: TypeEvenementConversation, contenu: string): void {
+    // `☠` Mesuré le 23/07 : la limite N'ARRIVE PAS en message système, mais en
+    // TEXTE ASSISTANT (« You've hit your monthly spend limit … »). Ne la chercher
+    // que dans les messages système, c'était ne jamais la voir.
+    if (type === 'texte' && !this.#sature && MOTIFS_SATURATION.some((m) => m.test(contenu))) {
+      this.#sature = true;
+    }
     // Tour interne : on capte le texte, on n'écrit rien dans le fil.
     if (this.#muet) {
       if (type === 'texte') this.#capture += contenu;
