@@ -17,7 +17,13 @@ import type { Compte, Quota } from '../registre/index.ts';
 
 export interface FenetreApi {
   readonly util: number;
+  /** Délai relatif : « 3 h 30 », « 12 min », « expirée ». */
   readonly resetLabel: string;
+  /**
+   * Heure exacte du reset — « 10:30 PM », ou « lundi 28 juil. · 08:00 AM » pour
+   * la fenêtre hebdomadaire. `null` quand aucun reset n'est connu ou déjà passé.
+   */
+  readonly resetAt: string | null;
 }
 
 export interface AccountApi {
@@ -31,7 +37,7 @@ export interface AccountApi {
   readonly seven_day: FenetreApi;
 }
 
-const FENETRE_INCONNUE: FenetreApi = { util: 0, resetLabel: '—' };
+const FENETRE_INCONNUE: FenetreApi = { util: 0, resetLabel: '—', resetAt: null };
 
 /**
  * `☠` UNITÉ DE LA COLONNE `reset_a` : MILLISECONDES epoch. Une seule convention,
@@ -51,11 +57,42 @@ function libelleReset(resetMs: number | null, maintenantMs: number): string {
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
 }
 
-function versFenetre(quota: Quota | undefined, maintenantMs: number): FenetreApi {
+/** Fuseau de l'opérateur — un reset lu en UTC désignerait la mauvaise heure. */
+const FUSEAU = 'Europe/Paris';
+
+/** `10:30 PM`. Format 12 h demandé par l'opérateur (23/07). */
+function heureAmPm(date: Date): string {
+  return date.toLocaleTimeString('en-US', {
+    timeZone: FUSEAU,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
+ * Heure exacte du reset. `☠` Complète le délai relatif, ne le remplace pas :
+ * « dans 3 h 30 » dit s'il faut attendre, « 10:30 PM » dit s'il faut aller
+ * dormir. Les deux servent, à des moments différents.
+ *
+ * La fenêtre 5 h tombe presque toujours le jour même : l'heure seule suffit. La
+ * fenêtre 7 j tombe des jours plus tard — sans le jour, « 08:00 AM » ne dit rien
+ * d'utilisable (demandé par l'opérateur, 23/07).
+ */
+function libelleHeureReset(resetMs: number | null, maintenantMs: number, avecJour: boolean): string | null {
+  if (resetMs === null || resetMs <= maintenantMs) return null;
+  const date = new Date(resetMs);
+  if (!avecJour) return heureAmPm(date);
+  const jour = date.toLocaleDateString('fr-FR', { timeZone: FUSEAU, weekday: 'long', day: 'numeric', month: 'short' });
+  return `${jour} · ${heureAmPm(date)}`;
+}
+
+function versFenetre(quota: Quota | undefined, maintenantMs: number, avecJour = false): FenetreApi {
   if (quota === undefined) return FENETRE_INCONNUE;
   return {
     util: quota.utilisation ?? 0,
     resetLabel: libelleReset(quota.resetA, maintenantMs),
+    resetAt: libelleHeureReset(quota.resetA, maintenantMs, avecJour),
   };
 }
 
@@ -75,6 +112,7 @@ export function versAccountApi(compte: Compte, quotas: readonly Quota[], mainten
     status: cinqHeures?.statut ?? 'allowed',
     isUsingOverage: cinqHeures?.utiliseOverage ?? false,
     five_hour: versFenetre(cinqHeures, maintenantMs),
-    seven_day: versFenetre(septJours, maintenantMs),
+    // Le jour compte pour la fenêtre hebdomadaire : elle retombe plusieurs jours plus tard.
+    seven_day: versFenetre(septJours, maintenantMs, true),
   };
 }

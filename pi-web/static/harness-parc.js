@@ -123,15 +123,15 @@ async function hRenderTeamTree(missionsMaybe) {
 function hAccGaugeMini(a) {
   // Un compte sans relevé de quota est normal (jamais interrogé encore) :
   // on affiche 0, on ne plante pas.
-  a = { five_hour: { util: 0, resetLabel: '—' }, seven_day: { util: 0, resetLabel: '—' }, ...a };
+  a = { five_hour: { util: 0, resetLabel: '—', resetAt: null }, seven_day: { util: 0, resetLabel: '—', resetAt: null }, ...a };
   const fiveColor = a.five_hour.util >= 90 ? 'var(--err)' : a.five_hour.util >= 65 ? 'var(--warn)' : 'var(--ok)';
   const sevenColor = a.seven_day.util >= 90 ? 'var(--err)' : a.seven_day.util >= 65 ? 'var(--warn)' : 'var(--ok)';
   return `<div class="mg-acc">
     <div class="mgl">${a.label}<span class="badge" style="${a.status === 'allowed' ? 'background:var(--ok-soft);color:var(--ok);' : 'background:var(--err-soft);color:var(--err);'}">${a.status}</span>${a.isUsingOverage ? '<span class="badge" style="background:var(--warn-soft);color:#8A6A12;margin-left:4px;">dépassement (crédits)</span>' : ''}</div>
     <div class="mg-row"><span class="lbl">5h</span><div class="usage-track"><div class="usage-fill" style="width:${a.five_hour.util}%;background:${fiveColor};"></div></div><span class="pct">${a.five_hour.util}%</span></div>
-    <div class="mg-reset">reset ${a.five_hour.resetLabel}</div>
+    <div class="mg-reset">reset ${a.five_hour.resetLabel}${a.five_hour.resetAt ? ` · ${a.five_hour.resetAt}` : ''}</div>
     <div class="mg-row" style="margin-top:6px;"><span class="lbl">7j</span><div class="usage-track"><div class="usage-fill" style="width:${a.seven_day.util}%;background:${sevenColor};"></div></div><span class="pct">${a.seven_day.util}%</span></div>
-    <div class="mg-reset">reset ${a.seven_day.resetLabel}</div>
+    <div class="mg-reset">reset ${a.seven_day.resetLabel}${a.seven_day.resetAt ? ` · ${a.seven_day.resetAt}` : ''}</div>
   </div>`;
 }
 async function hRenderMiniGauges() {

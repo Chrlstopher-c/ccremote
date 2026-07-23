@@ -10,7 +10,7 @@ function hAccountBlock(a, missionsForAccount) {
     <div class="qrow">
       <div class="qh"><span style="color:var(--ink-3);">${name}${activeWin ? ' <span class="badge" style="background:var(--ink);color:var(--bg);margin-left:4px;">fenêtre active</span>' : ''}</span><span>${w.util} %</span></div>
       <div class="usage-track"><div class="usage-fill" style="width:${w.util}%;background:${w.util >= 90 ? 'var(--err)' : w.util >= 65 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
-      <div class="mono" style="font-size:10px;color:${w.util >= 90 ? 'var(--err)' : 'var(--ink-3)'};margin-top:4px;">${w.util >= 90 ? 'saturé · ' : ''}reset ${w.resetLabel}</div>
+      <div class="mono" style="font-size:10px;color:${w.util >= 90 ? 'var(--err)' : 'var(--ink-3)'};margin-top:4px;">${w.util >= 90 ? 'saturé · ' : ''}reset ${w.resetLabel}${w.resetAt ? ` · ${w.resetAt}` : ''}</div>
     </div>`).join('');
 
   return `<div class="card acc ${isActive ? 'active' : 'saturated'}">

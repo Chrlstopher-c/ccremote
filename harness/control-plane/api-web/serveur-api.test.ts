@@ -143,7 +143,7 @@ describe('API web — comptes', () => {
     semerMission();
     const comptes = (await lire('/accounts')).corps['data'] as Record<string, unknown>[];
     expect(comptes).toHaveLength(1);
-    expect(comptes[0]?.['five_hour']).toEqual({ util: 0, resetLabel: '—' });
+    expect(comptes[0]?.['five_hour']).toEqual({ util: 0, resetLabel: '—', resetAt: null });
   });
 
   test('☠ reset_a est en MILLISECONDES epoch — une seule unité, fixée à l’écriture', async () => {
@@ -323,5 +323,40 @@ describe('API web — pilotage d’une mission vivante (A.2.2)', () => {
       pc: { arreter: async () => {} },
     });
     expect((await poster('/missions/m1/pause', {})).statut).toBe(501);
+  });
+});
+
+describe('API web — heure exacte du reset (23/07)', () => {
+  test('fenêtre 5 h : heure en AM/PM, sans le jour', async () => {
+    semerMission();
+    registre.comptes.releverQuota({
+      compteId: 'compte-a',
+      typeFenetre: 'five_hour',
+      statut: 'allowed',
+      resetA: MAINTENANT + 3 * 3600 * 1000,
+      utilisation: 42,
+    });
+    const cinqH = ((await lire('/accounts')).corps['data'] as Record<string, unknown>[])[0]?.['five_hour'] as Record<string, unknown>;
+    expect(cinqH['resetAt']).toMatch(/^\d{2}:\d{2} (AM|PM)$/);
+  });
+
+  test('☠ fenêtre 7 j : le JOUR est indispensable — « 08:00 AM » seul ne dit rien', async () => {
+    semerMission();
+    registre.comptes.releverQuota({
+      compteId: 'compte-a',
+      typeFenetre: 'seven_day',
+      statut: 'allowed',
+      resetA: MAINTENANT + 4 * 24 * 3600 * 1000,
+      utilisation: 60,
+    });
+    const septJ = ((await lire('/accounts')).corps['data'] as Record<string, unknown>[])[0]?.['seven_day'] as Record<string, unknown>;
+    expect(septJ['resetAt']).toMatch(/^.+ · \d{2}:\d{2} (AM|PM)$/);
+  });
+
+  test('reset inconnu ou déjà passé ⇒ null, jamais une heure inventée', async () => {
+    semerMission();
+    registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', resetA: null });
+    const cinqH = ((await lire('/accounts')).corps['data'] as Record<string, unknown>[])[0]?.['five_hour'] as Record<string, unknown>;
+    expect(cinqH['resetAt']).toBeNull();
   });
 });
