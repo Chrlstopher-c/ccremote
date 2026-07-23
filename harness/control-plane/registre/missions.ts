@@ -19,6 +19,7 @@ import {
   type NatureActiviteMission,
   type PosteContexteMission,
   type SousAgentMission,
+  type ActiviteSousAgentMission,
 } from './types.ts';
 
 const PLACEHOLDERS_ACTIFS = ETATS_HARNESS_ACTIFS.map(() => '?').join(', ');
@@ -310,6 +311,59 @@ export class DepotMissions {
         })();
       },
       { missionId, agents: agents.length },
+    );
+  }
+
+  /**
+   * Remplace le fil d'un sous-agent. `☠` Même politique que `poserSousAgents` :
+   * remplacement, jamais cumul — le PC rend l'état courant complet du transcript
+   * (borné aux dernières lignes), pas un delta.
+   */
+  public poserActivitesSousAgent(
+    missionId: string,
+    agentId: string,
+    activites: readonly ActiviteSousAgentMission[],
+  ): void {
+    executer(
+      'missions.poserActivitesSousAgent',
+      () => {
+        this.db.transaction(() => {
+          this.db
+            .query('DELETE FROM activite_sous_agent WHERE mission_id = ? AND agent_id = ?')
+            .run(missionId, agentId);
+          activites.forEach((a, rang) => {
+            this.db
+              .query(
+                `INSERT INTO activite_sous_agent (mission_id, agent_id, texte, survenu_a, type, outil, rang)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              )
+              .run(missionId, agentId, a.texte, a.survenuA, a.type, a.outil, rang);
+          });
+        })();
+      },
+      { missionId, agentId, activites: activites.length },
+    );
+  }
+
+  /** Fil d'un sous-agent, dans l'ordre où il l'a produit. */
+  public activitesSousAgent(missionId: string, agentId: string): readonly ActiviteSousAgentMission[] {
+    return executer(
+      'missions.activitesSousAgent',
+      () => {
+        const lignes = this.db
+          .query<{ texte: string; survenu_a: number; type: string; outil: string | null }, [string, string]>(
+            `SELECT texte, survenu_a, type, outil FROM activite_sous_agent
+              WHERE mission_id = ? AND agent_id = ? ORDER BY rang ASC`,
+          )
+          .all(missionId, agentId);
+        return lignes.map((l) => ({
+          texte: l.texte,
+          survenuA: l.survenu_a,
+          type: l.type as NatureActiviteMission,
+          outil: l.outil,
+        }));
+      },
+      { missionId, agentId },
     );
   }
 

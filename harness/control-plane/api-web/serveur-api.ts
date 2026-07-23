@@ -23,7 +23,7 @@ import type { Server } from 'bun';
 import type { Registre } from '../registre/index.ts';
 import type { MachineEtatsDemandes } from '../bus-permissions/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
-import { versMissionApi } from './vue-missions.ts';
+import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
 import { versEscaladeApi } from './vue-escalades.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
@@ -165,6 +165,22 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     return enveloppe(
       pcOnline,
       versMissionApi(trouvee, plafond, maintenant, feed, deps.registre.missions.sousAgents(trouvee.id)),
+    );
+  }
+
+  // `☠` Route RÉELLE du détail d'un sous-agent. Le client interrogeait jusqu'ici
+  // le jeu de DÉMO (`findAgent` sur `db` dans `harness-api.js`) : cliquer sur un
+  // sous-agent réel rendait « Sous-agent introuvable », alors que la mission
+  // l'affichait juste au-dessus (constaté 23/07, premier vrai dispatch).
+  const agent = chemin.match(/^\/missions\/([^/]+)\/agents\/([^/]+)$/);
+  if (agent?.[1] !== undefined && agent[2] !== undefined) {
+    const missionId = decodeURIComponent(agent[1]);
+    const agentId = decodeURIComponent(agent[2]);
+    const trouve = deps.registre.missions.sousAgents(missionId).find((a) => a.agentId === agentId);
+    if (trouve === undefined) throw introuvable('sous-agent');
+    return enveloppe(
+      pcOnline,
+      versSubagentDetailApi(trouve, deps.registre.missions.activitesSousAgent(missionId, agentId)),
     );
   }
 

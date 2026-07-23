@@ -102,6 +102,11 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
   // et le statut d'un agent (actif ⟶ terminé) se déduit du temps qui passe côté
   // PC — ne rien écrire quand la liste « n'a pas changé » figerait ce statut.
   registre.missions.poserSousAgents(t.missionId, t.sousAgents);
+  // Le fil de CHAQUE sous-agent, sans quoi cliquer dessus rendait « Sous-agent
+  // introuvable » : la vue n'avait que sa dernière action.
+  for (const sa of t.sousAgents) {
+    registre.missions.poserActivitesSousAgent(t.missionId, sa.agentId, sa.activites);
+  }
 
   if (t.modeleResolu !== null && mission.modeleResolu !== t.modeleResolu) {
     registre.missions.definirModeleResolu(t.missionId, t.modeleResolu);

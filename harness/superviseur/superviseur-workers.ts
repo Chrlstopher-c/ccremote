@@ -274,6 +274,21 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     return lireJetonsComptes(this.#comptesASonder);
   }
 
+  /**
+   * Arborescence des projets du PC (A.2.2, `lister_projets`/`explorer_projets`).
+   *
+   * `☠` 7ᵉ occurrence du motif « écrit, testé, branché sur rien » : la fonction
+   * `explorerProjets` et la racine `#racineProjets` existaient toutes les deux,
+   * mais AUCUNE méthode ne les exposait. `canal-controle.ts` appelle
+   * `superviseur.explorerProjets?.()`, obtenait `undefined`, et répondait
+   * « exploration non câblée sur ce superviseur » — l'orchestrateur en déduisait
+   * qu'il ne pouvait pas vérifier un chemin et partait sur celui qu'on lui
+   * donnait, à l'aveugle (constaté en prod le 23/07, au premier vrai dispatch).
+   */
+  explorerProjets(chemin?: string): ResultatExploration {
+    return explorerProjets(this.#racineProjets, chemin);
+  }
+
   inventaire(): readonly DescripteurWorkerPc[] {
     const reels = this.#registre.tous().map((e) => ({
       sessionId: e.sessionId,

@@ -368,6 +368,25 @@ CREATE TABLE IF NOT EXISTS sous_agent_mission (
 CREATE INDEX IF NOT EXISTS idx_sous_agent_mission ON sous_agent_mission(mission_id);
 `;
 
+/**
+ * Fil de travail d'un sous-agent. `☠` Remplacé en bloc à chaque relevé, comme
+ * `sous_agent_mission` : c'est un état courant rapatrié du disque du PC, pas un
+ * journal. Sans cette table, cliquer sur un sous-agent rendait « Sous-agent
+ * introuvable » — la vue n'avait que sa dernière action (constaté 23/07).
+ */
+const MIGRATION_11 = `
+CREATE TABLE IF NOT EXISTS activite_sous_agent (
+  mission_id TEXT NOT NULL,
+  agent_id   TEXT NOT NULL,
+  texte      TEXT NOT NULL,
+  survenu_a  INTEGER NOT NULL,
+  type       TEXT NOT NULL,
+  outil      TEXT,
+  rang       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_activite_sous_agent ON activite_sous_agent(mission_id, agent_id, rang);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -379,6 +398,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 8, nom: 'nature-activite-mission', sql: MIGRATION_8 },
   { version: 9, nom: 'jeton-oauth-compte', sql: MIGRATION_9 },
   { version: 10, nom: 'sous-agents-mission', sql: MIGRATION_10 },
+  { version: 11, nom: 'activites-sous-agent', sql: MIGRATION_11 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

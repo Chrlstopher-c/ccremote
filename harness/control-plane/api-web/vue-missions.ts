@@ -25,7 +25,7 @@
  * trompeur qu'une donnée inventée, dans l'autre sens.
  */
 
-import type { EtatHarness, Mission, SousAgentMission } from '../registre/index.ts';
+import type { ActiviteSousAgentMission, EtatHarness, Mission, SousAgentMission } from '../registre/index.ts';
 import { ageLisible } from './duree.ts';
 import type { FeedEventApi } from './vue-feed.ts';
 
@@ -174,6 +174,28 @@ function versSubagentApi(a: SousAgentMission): SubagentApi {
     action: a.derniereAction ?? 'aucune action lisible relevée',
     feed: [],
     feedUnavailable: a.derniereAction === null,
+  };
+}
+
+/**
+ * Le détail d'UN sous-agent, avec son fil (H-72.1, « même niveau de détail que
+ * le lead »). `☠` `feedUnavailable` reste vrai quand rien n'a pu être relevé :
+ * l'agent existe, on le montre, on ne prétend pas savoir ce qu'il fait.
+ */
+export function versSubagentDetailApi(
+  agent: SousAgentMission,
+  activites: readonly ActiviteSousAgentMission[],
+): SubagentApi {
+  return {
+    ...versSubagentApi(agent),
+    feed: activites.map((a) => ({
+      ts: new Date(a.survenuA).toTimeString().slice(0, 8),
+      type: 'activity' as const,
+      text: a.texte,
+      ...(a.type === 'texte' ? {} : { nature: a.type }),
+      ...(a.outil === null ? {} : { tool: a.outil }),
+    })),
+    feedUnavailable: activites.length === 0,
   };
 }
 

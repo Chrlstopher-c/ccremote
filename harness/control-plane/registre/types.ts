@@ -146,6 +146,14 @@ export interface ActiviteMission {
  * réellement lancés). Un sous-agent existe parce qu'il a un fichier, pas parce
  * qu'une ligne est arrivée.
  */
+/** Une ligne du fil d'un sous-agent (migration 11). */
+export interface ActiviteSousAgentMission {
+  readonly texte: string;
+  readonly survenuA: number;
+  readonly type: NatureActiviteMission;
+  readonly outil: string | null;
+}
+
 export interface SousAgentMission {
   readonly agentId: string;
   /** `general-purpose`, `Explore`… tel qu'écrit par le CLI. `null` si meta illisible. */

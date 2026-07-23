@@ -7,7 +7,12 @@
 
 ### 🎯 EN COURS — priorités à la reprise (23/07 au soir)
 
-- [ ] **(B) Faire apparaître les SOUS-AGENTS** — *seul point de la liste du 23/07 encore entier.*
+- [x] **(B) Faire apparaître les SOUS-AGENTS** — LIVRÉ le 23/07 (`c482742`), lus sur le TRANSCRIT
+      (migration 10). Le `agent-<id>.meta.json` du CLI porte `toolUseId` = `parent_tool_use_id` du
+      flux : la corrélation flux ⟷ store existe sur disque. 5 sur 5 sur la session de mesure H-72.4.
+      Reste le détail par agent, voir (B-suite) ci-dessus.
+
+- [ ] ~~**(B) Faire apparaître les SOUS-AGENTS**~~ — *seul point de la liste du 23/07 encore entier.*
       La vue n'affiche que « Team leader », ce qui laisse croire qu'il n'y en a aucun.
       `forwardSubagentText` et `agentProgressSummaries` sont déjà activés côté workers, et
       `observabilite/` sait construire l'arbre — **rien ne le remonte au Pi**.
@@ -16,6 +21,15 @@
       déterministe** (0 à 4 lignes sur 5 sous-agents). La vérité sur « qui existe » vient du
       transcript (`SessionStore.listSubkeys()`), pas du flux ; un sous-agent sans flux se rend avec
       `feedUnavailable: true`, **jamais omis**.
+- [ ] **(E-bis) Revoir les AUTRES opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en
+      entier ; `CCREMOTE_PI_ORCHESTRATEUR` est corrigé (relu sur le Pi), les autres variables n'ont
+      PAS été passées en revue. Même défaut possible : un déploiement de routine qui éteint un
+      réglage sans un mot.
+- [ ] **(B-suite) Le clic sur un sous-agent reste MOCK** — `getAgent` n'est pas câblé. Le fil PAR
+      AGENT existe côté PC (`sous-agents-disque.ts` rend les activités) mais seule `derniereAction`
+      est persistée au registre. C'est le « même niveau de détail que le lead » de H-72.1.
+- [ ] **(B-suite) Rien n'est validé sur une équipe VIVANTE** — la télémétrie ne parcourt que les
+      workers vivants ; les 5 sur 5 sont vérifiés sur transcripts d'archives, pas en direct.
 - [ ] **(D) Élucider l'écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés
       sur une mission réelle — alors qu'elle tombait au token près en mesure locale. À mesurer sur
       deux relevés successifs d'une même session vivante. **Le total reste la référence** en

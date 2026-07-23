@@ -15,11 +15,53 @@ observables et pilotables à distance depuis mobile.
   le reste (décisions de Chris + faits vérifiés contre le SDK).
 - **Code** : `harness/`, TypeScript + Bun, SDK `@anthropic-ai/claude-agent-sdk` **épinglé 0.3.217**.
 - **Maquette UI v2** : `design-v2/` — maquette de comparaison avec l'app actuelle, pas une refonte.
-- **État au 23/07 (soir)** : **EN PRODUCTION**, exercé sur de vraies équipes. Commit `d96ecd4`,
-  **1007 tests verts**, typecheck propre, schéma du registre en **version 8**.
-  Trois services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC).
+- **État au 23/07 (nuit)** : **EN PRODUCTION**, exercé sur de vraies équipes. Commit `8a102d2`,
+  **989 tests verts** (31 échecs PRÉEXISTANTS sur `control-plane/projets`, vérifiés identiques sur
+  HEAD — sans rapport avec les chantiers en cours), typecheck propre, schéma du registre en
+  **version 10**. Trois services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC).
 
-**Livré le 23/07** — le harness ne se contente plus de piloter, il *rend compte* : fil de mission
+**Livré le 23/07 (soirée)** — quotas en temps réel et sous-agents visibles :
+
+- **Quotas mesurés sans consommer un token, et sans le PC** (`b6aa6fc`). La mesure passait par une
+  session Claude Code par compte : coûteuse, donc cachée 10 min, donc un écran toujours en retard —
+  et morte dès l'extinction du PC. Le Pi interroge maintenant lui-même l'endpoint OAuth d'usage
+  toutes les 20 s (~200 ms, zéro token, zéro process). Le PC n'est plus que la SOURCE du jeton,
+  persisté au registre (migration 9) : les jauges vivent PC éteint jusqu'à expiration (~8 h),
+  **vérifié en réel, service PC arrêté**. Aucun refresh hors du CLI — les refresh tokens sont
+  tournants. `☠` La réponse OAuth est PLATE, pas enveloppée dans `rate_limits` comme celle du SDK :
+  la première version rendait zéro jauge sur un HTTP 200, en silence.
+- **Les sous-agents existent enfin à l'écran** (`c482742`). La vue n'affichait que « Team leader ».
+  La liste vient du TRANSCRIT (migration 10), jamais du flux — mesuré non déterministe (H-72.4).
+  `☠` Le CLI écrit un `agent-<id>.meta.json` porteur de `{agentType, description, toolUseId,
+  spawnDepth}` : ce `toolUseId` EST le `parent_tool_use_id` du flux, donc la corrélation
+  flux ⟷ store existe sur disque. Validé sur la session à 5 sous-agents de H-72.4 : **5 sur 5**.
+- **Un déploiement de routine n'éteint plus l'orchestrateur** (`8a102d2`) — `deploy-harness-pi.sh`
+  réécrit `.env` EN ENTIER : tout opt-in absent de l'environnement de l'appelant retombait à sa
+  valeur d'usine. Trois déploiements ont ainsi éteint l'orchestrateur (`route inconnue :
+  /orchestrator/conversations`). Le défaut d'un réglage est désormais SA PROPRE VALEUR, relue sur
+  le Pi. `⚠` Revue des AUTRES opt-in du `.env` pas encore faite — même défaut possible ailleurs.
+- **`explorer_projets` enfin câblé** — 7ᵉ occurrence de « écrit, testé, branché sur rien » :
+  `SuperviseurWorkers` importait `explorerProjets` et gardait `#racineProjets`, sans jamais exposer
+  la méthode que `canal-controle.ts` interroge. L'orchestrateur répondait « exploration non câblée
+  sur ce superviseur » et partait sur le chemin donné **à l'aveugle** (constaté au premier vrai
+  dispatch, 23/07). Aucun test ne couvrait ce chemin : il en existe un d'ASSEMBLAGE maintenant —
+  seul type de test capable d'attraper ce motif.
+
+### `☠` Garde-fous du dispatch — ce que le harness N'IMPOSE PAS
+
+À savoir avant tout test du système agentique (établi 23/07) :
+
+1. **`creer_equipe` ne crée rien** — c'est une PROPOSITION (H-61). Un humain autorise dans l'UI.
+2. **Le modèle des SOUS-AGENTS ne peut pas être imposé.** `creer_equipe` n'accepte `modele`/`effort`
+   que pour le LEAD ; le modèle de chaque sous-agent est choisi par le lead à l'appel de l'outil
+   `Agent`. « Sous-agents en Haiku » est une instruction de CONDUITE dans le mandat, pas un verrou.
+3. **« Lecture seule » n'est pas un verrou** — dette (E), `deniedToolPatterns: []` au dispatch : le
+   plancher de déni est VIDE, la contrainte ne vit que dans le texte du mandat.
+
+Conséquence : un test d'équipe mesure la CONFORMITÉ du modèle aux consignes, pas une contrainte
+appliquée par le harness.
+
+**Livré le 23/07 (journée)** — le harness ne se contente plus de piloter, il *rend compte* : fil de mission
 réel (réflexions, outils, textes du lead), équipes terminées consultables et désignables par nom,
 contexte ventilé par poste, jauges de rate limit réellement mesurées, rafraîchissement temps réel
 de l'interface sans reconstruire le DOM.

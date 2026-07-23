@@ -360,3 +360,56 @@ describe('API web — heure exacte du reset (23/07)', () => {
     expect(cinqH['resetAt']).toBeNull();
   });
 });
+
+describe('API web — détail d’un sous-agent (H-72.1)', () => {
+  test('☠ le sous-agent réel est SERVI — avant, le client lisait le jeu de démo et rendait « introuvable »', async () => {
+    const id = semerMission();
+    registre.missions.poserSousAgents(id, [
+      {
+        agentId: 'a-mer',
+        type: 'general-purpose',
+        description: 'Paragraphe sur la mer',
+        toolUseId: 'toolu_1',
+        profondeur: 1,
+        statut: 'actif',
+        derniereAction: 'je lis le code',
+        majA: MAINTENANT,
+      },
+    ]);
+    registre.missions.poserActivitesSousAgent(id, 'a-mer', [
+      { texte: 'je réfléchis', survenuA: MAINTENANT, type: 'reflexion', outil: null },
+      { texte: 'Read', survenuA: MAINTENANT, type: 'outil', outil: 'Read' },
+    ]);
+
+    const { statut, corps } = await lire(`/missions/${id}/agents/a-mer`);
+    expect(statut).toBe(200);
+    const agent = corps.data as { name: string; feed: unknown[]; feedUnavailable: boolean };
+    expect(agent.name).toBe('Paragraphe sur la mer');
+    expect(agent.feed).toHaveLength(2);
+    expect(agent.feedUnavailable).toBe(false);
+  });
+
+  test('☠ un agent connu SANS fil relevé sort quand même, avec feedUnavailable — jamais omis (H-72.4)', async () => {
+    const id = semerMission();
+    registre.missions.poserSousAgents(id, [
+      {
+        agentId: 'a-muet',
+        type: null,
+        description: null,
+        toolUseId: null,
+        profondeur: 1,
+        statut: 'termine',
+        derniereAction: null,
+        majA: MAINTENANT,
+      },
+    ]);
+    const { statut, corps } = await lire(`/missions/${id}/agents/a-muet`);
+    expect(statut).toBe(200);
+    expect((corps.data as { feedUnavailable: boolean }).feedUnavailable).toBe(true);
+  });
+
+  test('un agent inconnu est un vrai 404, jamais une coquille vide', async () => {
+    const id = semerMission();
+    expect((await lire(`/missions/${id}/agents/fantome`)).statut).toBe(404);
+  });
+});

@@ -83,11 +83,6 @@ const HarnessAPI = (() => {
   }
 
   function findMission(id) { return db.missions.find((m) => m.id === id) || null; }
-  function findAgent(missionId, agentId) {
-    const m = findMission(missionId);
-    return m ? (m.subagents || []).find((a) => a.id === agentId) || null : null;
-  }
-
   return {
     /* ---- démo uniquement : jamais dans une build réelle ---- */
     _setPcOnline(v) { pcOnline = v; },
@@ -144,9 +139,14 @@ const HarnessAPI = (() => {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/archive`, {});
     },
 
+    // ☠ RÉEL depuis le 23/07. Interrogeait le jeu de DÉMO (`findAgent` sur `db`) :
+    // cliquer sur un sous-agent réel rendait « Sous-agent introuvable », alors que
+    // la vue Mission l'affichait juste au-dessus.
+    async getAgent(missionId, agentId) {
+      return lireReel(`/missions/${encodeURIComponent(missionId)}/agents/${encodeURIComponent(agentId)}`);
+    },
+
     /* ================= ENCORE EN DÉMO ==================================== */
-    // ☠ Le serveur ne remonte pas encore les sous-agents (ils vivent sur le PC).
-    async getAgent(missionId, agentId) { return withPc(() => findAgent(missionId, agentId)); },
 
     async getModels() {
       // ☠ En réel : `supportedModels()[].supportedEffortLevels`, jamais une constante figée.
