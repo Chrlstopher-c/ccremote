@@ -18,6 +18,7 @@ import {
   type Mission,
   type NatureActiviteMission,
   type PosteContexteMission,
+  type SousAgentMission,
 } from './types.ts';
 
 const PLACEHOLDERS_ACTIFS = ETATS_HARNESS_ACTIFS.map(() => '?').join(', ');
@@ -275,6 +276,81 @@ export class DepotMissions {
    * lire : sans ça, le fil ne montre que des changements d'état, et un rapport
    * final n'apparaît nulle part (23/07).
    */
+  /**
+   * Remplace l'état connu des sous-agents d'une mission. `☠` REMPLACE, ne
+   * cumule pas : c'est un état courant relevé sur disque côté PC, pas un
+   * journal. Un agent disparu du relevé disparaît d'ici — mais le disque ne
+   * perd jamais un agent qui a tourné, donc ça n'arrive pas en pratique.
+   */
+  public poserSousAgents(missionId: string, agents: readonly SousAgentMission[]): void {
+    executer(
+      'missions.poserSousAgents',
+      () => {
+        this.db.transaction(() => {
+          this.db.query('DELETE FROM sous_agent_mission WHERE mission_id = ?').run(missionId);
+          for (const a of agents) {
+            this.db
+              .query(
+                `INSERT INTO sous_agent_mission
+                   (mission_id, agent_id, type, description, tool_use_id, profondeur, statut, derniere_action, maj_a)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              )
+              .run(
+                missionId,
+                a.agentId,
+                a.type,
+                a.description,
+                a.toolUseId,
+                a.profondeur,
+                a.statut,
+                a.derniereAction,
+                a.majA,
+              );
+          }
+        })();
+      },
+      { missionId, agents: agents.length },
+    );
+  }
+
+  /** Sous-agents connus d'une mission, du plus ancien relevé au plus récent. */
+  public sousAgents(missionId: string): readonly SousAgentMission[] {
+    return executer(
+      'missions.sousAgents',
+      () => {
+        const lignes = this.db
+          .query<
+            {
+              agent_id: string;
+              type: string | null;
+              description: string | null;
+              tool_use_id: string | null;
+              profondeur: number;
+              statut: string;
+              derniere_action: string | null;
+              maj_a: number;
+            },
+            [string]
+          >(
+            `SELECT agent_id, type, description, tool_use_id, profondeur, statut, derniere_action, maj_a
+               FROM sous_agent_mission WHERE mission_id = ? ORDER BY maj_a ASC`,
+          )
+          .all(missionId);
+        return lignes.map((l) => ({
+          agentId: l.agent_id,
+          type: l.type,
+          description: l.description,
+          toolUseId: l.tool_use_id,
+          profondeur: l.profondeur,
+          statut: l.statut === 'actif' ? ('actif' as const) : ('termine' as const),
+          derniereAction: l.derniere_action,
+          majA: l.maj_a,
+        }));
+      },
+      { missionId },
+    );
+  }
+
   public ajouterActivite(
     missionId: string,
     texte: string,

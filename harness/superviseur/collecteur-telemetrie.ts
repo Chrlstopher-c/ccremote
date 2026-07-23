@@ -13,6 +13,7 @@
  * d'affichage ne peut pas être la perte du pilotage.
  */
 
+import type { SousAgentObserve } from './sous-agents-disque.ts';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { NatureActivite, PosteContexte, TelemetrieWorker } from './types.ts';
 import { superviseurLogger } from './logger.ts';
@@ -57,6 +58,12 @@ interface Etat {
   derniereActivite: string | null;
   /** Activités produites, en attente de rapatriement vers le Pi. Vidée à chaque relevé. */
   activitesEnAttente: { texte: string; survenuA: number; type: NatureActivite; outil?: string }[];
+  /**
+   * Dernier relevé disque des sous-agents. `☠` Posé de l'extérieur (le
+   * collecteur ne lit pas le disque), et NON drainant contrairement aux
+   * activités : c'est un état courant complet, pas un flux d'évènements.
+   */
+  sousAgents: readonly SousAgentObserve[];
   quotaSature: boolean;
   motifQuota: string | null;
   observeA: number;
@@ -159,6 +166,7 @@ export class CollecteurTelemetrie {
       contexteVentilation: null,
       derniereActivite: null,
       activitesEnAttente: [],
+      sousAgents: [],
       quotaSature: false,
       motifQuota: null,
       observeA: maintenant,
@@ -183,6 +191,13 @@ export class CollecteurTelemetrie {
    * valable que pendant que la session vit — après le `result`, le transport est
    * fermé (fait mesuré le 22/07).
    */
+  /** Relevé disque des sous-agents (`sous-agents-disque.ts`), posé par le superviseur. */
+  poserSousAgents(missionId: string, sousAgents: readonly SousAgentObserve[]): void {
+    const etat = this.#par.get(missionId);
+    if (etat === undefined) return;
+    etat.sousAgents = sousAgents;
+  }
+
   poserContexte(
     missionId: string,
     utilises: number,

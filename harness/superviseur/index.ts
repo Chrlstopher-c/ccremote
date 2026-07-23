@@ -77,3 +77,5 @@ export type { FenetreQuotaMesuree, QuotaCompteMesure } from './sonde-quotas.ts';
 export { sonderQuotaHttp, sonderQuotasHttp } from './sonde-quotas-http.ts';
 export type { JetonCompte } from './sonde-quotas-http.ts';
 export { lireJetonCompte, lireJetonsComptes } from './jetons-comptes.ts';
+export { lireSousAgents, dossierSousAgents } from './sous-agents-disque.ts';
+export type { SousAgentObserve, ActiviteSousAgent } from './sous-agents-disque.ts';

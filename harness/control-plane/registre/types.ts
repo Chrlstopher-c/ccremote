@@ -138,6 +138,31 @@ export interface ActiviteMission {
   readonly outil: string | null;
 }
 
+/**
+ * Un sous-agent d'une mission, tel que le disque du PC le connaît (migration 10).
+ *
+ * `☠` La liste vient du TRANSCRIT, jamais du flux temps réel : celui-ci est
+ * mesuré non déterministe (H-72.4, 0 à 4 lignes livrées sur 5 sous-agents
+ * réellement lancés). Un sous-agent existe parce qu'il a un fichier, pas parce
+ * qu'une ligne est arrivée.
+ */
+export interface SousAgentMission {
+  readonly agentId: string;
+  /** `general-purpose`, `Explore`… tel qu'écrit par le CLI. `null` si meta illisible. */
+  readonly type: string | null;
+  readonly description: string | null;
+  /**
+   * `parent_tool_use_id` côté flux — le pont flux ⟷ store, trouvé dans le
+   * `agent-<id>.meta.json` écrit par le CLI (23/07). Absent des types publics
+   * du SDK, d'où sa réputation d'introuvable.
+   */
+  readonly toolUseId: string | null;
+  readonly profondeur: number;
+  readonly statut: 'actif' | 'termine';
+  readonly derniereAction: string | null;
+  readonly majA: number;
+}
+
 export interface Mission {
   readonly id: string;
   readonly lotId: string;

@@ -345,6 +345,29 @@ CREATE TABLE IF NOT EXISTS jeton_compte (
 );
 `;
 
+/**
+ * Sous-agents d'une mission, tels que le disque du PC les connaît.
+ *
+ * `☠` Dernier-gagne par (mission, agent) : c'est un ÉTAT COURANT rapatrié, pas
+ * un journal. Accumuler les relevés ferait grossir la table de cinq lignes
+ * toutes les 5 secondes pour la même équipe.
+ */
+const MIGRATION_10 = `
+CREATE TABLE IF NOT EXISTS sous_agent_mission (
+  mission_id      TEXT NOT NULL REFERENCES mission(id) ON DELETE CASCADE,
+  agent_id        TEXT NOT NULL,
+  type            TEXT,
+  description     TEXT,
+  tool_use_id     TEXT,
+  profondeur      INTEGER NOT NULL DEFAULT 1,
+  statut          TEXT NOT NULL,
+  derniere_action TEXT,
+  maj_a           INTEGER NOT NULL,
+  PRIMARY KEY (mission_id, agent_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sous_agent_mission ON sous_agent_mission(mission_id);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -355,6 +378,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 7, nom: 'activite-mission', sql: MIGRATION_7 },
   { version: 8, nom: 'nature-activite-mission', sql: MIGRATION_8 },
   { version: 9, nom: 'jeton-oauth-compte', sql: MIGRATION_9 },
+  { version: 10, nom: 'sous-agents-mission', sql: MIGRATION_10 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

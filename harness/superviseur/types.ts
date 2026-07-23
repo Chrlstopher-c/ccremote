@@ -13,6 +13,7 @@
  * (`DemandeDemarrage`) et ce qu'il observe lui-même (résultats de tour). Toute
  * decision qui a besoin du registre passe par un port injecté, jamais un import direct.
  */
+import type { SousAgentObserve } from './sous-agents-disque.ts';
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { GenerateurEntree } from '../control-plane/orchestrateur/entree/index.ts';
@@ -276,6 +277,15 @@ export interface TelemetrieWorker {
     readonly type: NatureActivite;
     readonly outil?: string;
   }[];
+  /**
+   * Sous-agents de la mission, lus sur le DISQUE (`sous-agents-disque.ts`).
+   *
+   * `☠` Jamais depuis le flux : mesuré non déterministe (H-72.4, 0 à 4 lignes
+   * sur 5 sous-agents réellement lancés). La vue n'affichait donc que « Team
+   * leader », ce qui laissait croire qu'aucun sous-agent n'existait — sur des
+   * missions qui en avaient cinq.
+   */
+  readonly sousAgents: readonly SousAgentObserve[];
   /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */
   readonly quotaSature: boolean;
   readonly motifQuota: string | null;

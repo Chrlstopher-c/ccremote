@@ -8,10 +8,15 @@
  * l'autorité du domaine et ne doit rien savoir de l'UI. Le jour où l'interface
  * change de vocabulaire, ce fichier change, le registre non.
  *
- * `☠ HONNÊTETÉ DES CHAMPS` — `subagents` et `landing` n'ont toujours aucune
- * source réelle côté Pi (observabilité D.1 côté PC ; atterrissage H-70 pas
- * encore réel) : ils restent VIDES, jamais fabriqués. Une donnée inventée qui a
- * l'air vraie coûte bien plus cher qu'un tableau vide.
+ * `☠ HONNÊTETÉ DES CHAMPS` — `landing` n'a toujours aucune source réelle côté Pi
+ * (atterrissage H-70 pas encore réel) : il reste VIDE, jamais fabriqué. Une
+ * donnée inventée qui a l'air vraie coûte bien plus cher qu'un tableau vide.
+ *
+ * `☠` `subagents` EST alimenté depuis le 23/07 — par le TRANSCRIT du PC, jamais
+ * par le flux temps réel (mesuré non déterministe, H-72.4 : 0 à 4 lignes sur 5
+ * sous-agents lancés). Un agent connu du disque dont aucun texte n'a été relevé
+ * sort avec `feedUnavailable: true` et `feed: []`, JAMAIS omis : l'écran doit
+ * montrer une équipe de cinq même quand il ne sait dire ce que font les cinq.
  *
  * `☠` `feed` en revanche EST désormais alimenté, à partir des transitions d'état
  * et des demandes de permission — deux sources persistées et vérifiables. Le
@@ -20,12 +25,24 @@
  * trompeur qu'une donnée inventée, dans l'autre sens.
  */
 
-import type { EtatHarness, Mission } from '../registre/index.ts';
+import type { EtatHarness, Mission, SousAgentMission } from '../registre/index.ts';
 import { ageLisible } from './duree.ts';
 import type { FeedEventApi } from './vue-feed.ts';
 
 /** États d'affichage du contrat — vocabulaire de l'interface, pas du domaine. */
 export type EtatMissionApi = 'requires_action' | 'running' | 'idle' | 'paused' | 'echec' | 'terminee';
+
+/** Forme d'affichage d'un sous-agent — `pi-web/CONTRAT-API-HARNESS.md`. */
+export interface SubagentApi {
+  readonly id: string;
+  readonly name: string;
+  readonly role: string;
+  readonly status: 'actif' | 'attente' | 'termine';
+  readonly action: string;
+  readonly feed: readonly FeedEventApi[];
+  /** `true` quand l'agent est connu mais qu'aucun détail n'a pu être relevé (H-72.4). */
+  readonly feedUnavailable: boolean;
+}
 
 export interface MissionApi {
   readonly id: string;
@@ -61,7 +78,7 @@ export interface MissionApi {
   readonly doneAgo: string | null;
   readonly freshlyDispatched: boolean;
   readonly ultracode: boolean;
-  readonly subagents: readonly never[];
+  readonly subagents: readonly SubagentApi[];
   readonly feed: readonly FeedEventApi[];
   readonly landing: null;
 }
@@ -139,11 +156,33 @@ function anciennete(
  * n'en a pas besoin, et le construire pour chaque mission de la liste ferait N
  * requêtes d'historique pour un écran qui ne les affiche pas.
  */
+/**
+ * Traduit un sous-agent du registre vers la forme d'affichage.
+ *
+ * `☠` `feedUnavailable` dit la VÉRITÉ sur ce qu'on sait : l'agent existe (le
+ * disque le prouve), mais rien de lisible n'a encore été relevé de lui. L'écran
+ * l'affiche alors sans détail — jamais masqué, jamais rempli d'un texte inventé.
+ */
+function versSubagentApi(a: SousAgentMission): SubagentApi {
+  return {
+    id: a.agentId,
+    // Le nom parlant est la description du dispatch (« Paragraphe sur la mer ») :
+    // c'est ce que l'opérateur a demandé, pas un identifiant hexadécimal.
+    name: a.description ?? a.type ?? a.agentId,
+    role: a.type ?? 'sous-agent',
+    status: a.statut === 'actif' ? 'actif' : 'termine',
+    action: a.derniereAction ?? 'aucune action lisible relevée',
+    feed: [],
+    feedUnavailable: a.derniereAction === null,
+  };
+}
+
 export function versMissionApi(
   mission: Mission,
   plafondRelances: number,
   maintenant: number = Date.now(),
   feed: readonly FeedEventApi[] = [],
+  sousAgents: readonly SousAgentMission[] = [],
 ): MissionApi {
   const state = etatAffiche(mission);
   return {
@@ -159,10 +198,9 @@ export function versMissionApi(
     ctxDetail: mission.contexteVentilation ?? [],
     ctxTokens: { utilises: mission.contexteTokensUtilises, max: mission.contexteTokensMax },
     cost: mission.budgetConsommeUsd,
-    // Aucune source réelle côté Pi tant que l'observabilité des sous-agents
-    // n'est pas rapatriée du PC — voir l'en-tête. Libellé neutre, jamais un
-    // effectif inventé.
-    team: 'lead',
+    // Effectif RÉEL, compté sur le transcript. « lead seul » n'est plus une
+    // valeur par défaut faute de source : c'est désormais une observation.
+    team: sousAgents.length === 0 ? 'lead seul' : `lead + ${sousAgents.length} sous-agents`,
     model: mission.modeleResolu ?? mission.modeleDemande ?? '(non résolu)',
     epoch: mission.epoch,
     retries: `${mission.compteurRelances} / ${plafondRelances}`,
@@ -174,7 +212,7 @@ export function versMissionApi(
     // Transitoires d'interface, sans source côté serveur — jamais devinés.
     freshlyDispatched: false,
     ultracode: false,
-    subagents: [],
+    subagents: sousAgents.map(versSubagentApi),
     feed,
     landing: null,
   };

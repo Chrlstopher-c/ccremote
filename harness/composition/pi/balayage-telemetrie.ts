@@ -98,6 +98,11 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
     registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA, a.type, a.outil ?? null);
   }
 
+  // `☠` Écrit à CHAQUE passage, même identique : `poserSousAgents` remplace,
+  // et le statut d'un agent (actif ⟶ terminé) se déduit du temps qui passe côté
+  // PC — ne rien écrire quand la liste « n'a pas changé » figerait ce statut.
+  registre.missions.poserSousAgents(t.missionId, t.sousAgents);
+
   if (t.modeleResolu !== null && mission.modeleResolu !== t.modeleResolu) {
     registre.missions.definirModeleResolu(t.missionId, t.modeleResolu);
   }

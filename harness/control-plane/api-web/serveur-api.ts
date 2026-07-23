@@ -146,7 +146,12 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
   if (conversation !== null) return conversation;
 
   if (chemin === '/missions') {
-    const missions = deps.registre.missions.listerRecentes().map((m) => versMissionApi(m, plafond, maintenant));
+    // `☠` La LISTE porte aussi ses sous-agents : sans eux, la carte du parc
+    // affiche « lead seul » sur une équipe de cinq, et l'écart avec la vue
+    // détail passe pour un bug d'affichage.
+    const missions = deps.registre.missions
+      .listerRecentes()
+      .map((m) => versMissionApi(m, plafond, maintenant, [], deps.registre.missions.sousAgents(m.id)));
     return enveloppe(pcOnline, missions);
   }
 
@@ -157,7 +162,10 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     // absent ne doit jamais transformer « inconnue » en « peut-être plus tard ».
     if (trouvee === null) throw introuvable('mission');
     const feed = construireFeed(deps.registre, trouvee.id, deps.escalades);
-    return enveloppe(pcOnline, versMissionApi(trouvee, plafond, maintenant, feed));
+    return enveloppe(
+      pcOnline,
+      versMissionApi(trouvee, plafond, maintenant, feed, deps.registre.missions.sousAgents(trouvee.id)),
+    );
   }
 
   if (chemin === '/escalades') {

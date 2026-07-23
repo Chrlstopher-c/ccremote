@@ -37,6 +37,7 @@ export type {
   StatutProposition,
   Quota,
   RelevéQuota,
+  SousAgentMission,
   StatutConversation,
   StatutQuota,
   Transition,

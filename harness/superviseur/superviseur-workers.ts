@@ -31,6 +31,7 @@ import { deciderRelance } from '../relance/politique-relance.ts';
 import { sonderQuotas } from './sonde-quotas.ts';
 import type { JetonCompte } from './sonde-quotas-http.ts';
 import { lireJetonsComptes } from './jetons-comptes.ts';
+import { lireSousAgents } from './sous-agents-disque.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
@@ -225,6 +226,20 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         }
       } catch {
         // Session close ou transport fermé : régime nominal, pas une panne.
+      }
+      // `☠` Lu sur DISQUE, pas sur le flux : `forwardSubagentText` est non
+      // déterministe (H-72.4, 0 à 4 lignes sur 5 sous-agents lancés). Le parc
+      // n'affichait donc que « Team leader » sur des équipes qui en avaient cinq.
+      // Le disque les rend tous les cinq — vérifié sur les transcripts réels.
+      try {
+        this.#telemetrie.poserSousAgents(
+          e.missionId,
+          await lireSousAgents(e.sessionId, e.spec.cwd, e.spec.configDir),
+        );
+      } catch (erreur) {
+        // Un relevé de sous-agents raté ne doit rien coûter au reste de la
+        // télémétrie : le dernier connu reste en place.
+        superviseurLogger.debug({ err: erreur, missionId: e.missionId }, 'relevé des sous-agents impossible');
       }
     }
     return this.#telemetrie.tous();
