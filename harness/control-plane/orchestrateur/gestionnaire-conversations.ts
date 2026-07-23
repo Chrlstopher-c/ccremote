@@ -375,6 +375,13 @@ export class GestionnaireConversations {
       return await this.construireSession(stockage, conversationId);
     } catch (erreur) {
       const message = erreur instanceof Error ? erreur.message : String(erreur);
+      // Session inconnue du compte courant (rotation, transcript purgé) : on
+      // oublie l'identité et on repart à froid plutôt que de rester bloqué.
+      if (/no conversation found/i.test(message)) {
+        log.warn({ conversationId }, 'session introuvable sur ce compte — redémarrage à froid');
+        this.registre.conversations.oublierSession(conversationId);
+        return this.construireSession(stockage, conversationId);
+      }
       if (!/already in use/i.test(message)) throw erreur;
       log.warn({ conversationId }, 'identifiant de session déjà pris — nouvelle tentative en reprise explicite');
       return this.construireSession(stockage, conversationId, true);
@@ -392,6 +399,10 @@ export class GestionnaireConversations {
         // reste muet et rien n'explique pourquoi (vécu le 23/07).
         if (collecteur.sature) {
           const bascule = this.rotationCompte?.() ?? false;
+          // `☠` La session appartient au compte qui l'a créée : la reprendre sur
+          // le compte de repli échoue (« No conversation found with session ID »).
+          // On oublie l'identité pour repartir à froid sur le nouveau compte.
+          if (bascule) this.registre.conversations.oublierSession(conversationId);
           log.warn({ conversationId, bascule }, 'compte de l’orchestrateur saturé — session fermée');
           collecteur.marquerErreur(
             bascule

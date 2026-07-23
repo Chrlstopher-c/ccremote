@@ -184,6 +184,22 @@ export class DepotConversations {
   }
 
   /**
+   * Oublie l'identité SDK : la prochaine session repartira à froid. `☠`
+   * Indispensable après une rotation de compte — une session appartient au
+   * compte qui l'a créée, et la reprendre ailleurs échoue sur
+   * « No conversation found with session ID » (vécu le 23/07).
+   */
+  public oublierSession(id: string, maintenant: number = Date.now()): void {
+    executer(
+      'conversations.oublierSession',
+      () => {
+        this.db.query('UPDATE conversation SET session_id = NULL, maj_a = ? WHERE id = ?').run(maintenant, id);
+      },
+      { id },
+    );
+  }
+
+  /**
    * Ajoute un événement ET touche `maj_a` dans la même transaction. Retourne le
    * `seq` attribué — le curseur que l'UI utilisera pour ne pas relire ce bloc.
    */
