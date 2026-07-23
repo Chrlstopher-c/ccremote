@@ -518,11 +518,45 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
           continue;
         }
 
-        if (actionAntiBoucle !== 'couper') this.#registre.marquerMort(handle.sessionId);
-        this.#telemetrie.fermer(missionId);
+        // ☠☠ UN TOUR QUI FINIT N'EST PAS UNE ÉQUIPE QUI MEURT.
+        //
+        // Le critère « des tâches de fond tournent » (ci-dessus) est nécessaire
+        // mais PAS suffisant, mesuré en prod le 23/07 : un lead qui reçoit le
+        // premier lot, annonce « j'attends les cinq autres » et rend la main le
+        // fait à un instant où PLUS AUCUNE tâche ne tourne — il croit attendre.
+        // Trois runs sur quatre sont morts exactement là.
+        //
+        // La session, elle, est bel et bien vivante : on peut lui parler. La
+        // tuer était donc un choix, pas une fatalité — et c'est ce choix qui
+        // faisait perdre le travail. Le worker reste VIVANT, au repos (`idle`) :
+        // l'orchestrateur peut le relancer d'un message, l'opérateur peut lui
+        // écrire, et `arreter_equipe` reste le seul geste qui termine une équipe.
+        //
+        // C'est aussi ce qui répare `envoyer_a_equipe`, qui repartait en
+        // « processus mort » dès le premier tour (défaut noté dans STATE.md).
+        //
+        // La mort reste CONSTATÉE, jamais déduite : fin réelle du flux, arrêt
+        // explicite, ou coupure du juge anti-boucle.
         const decision = deciderRelance(handle.sessionId, message.terminal_reason, {
           compteur: this.#compteurRelances,
         });
+
+        // `☠` Une FIN NORMALE laisse l'équipe au repos, session ouverte. Les
+        // autres issues (échec à relancer, borne atteinte) gardent le chemin
+        // d'avant : elles exigent un nouveau process ou un arbitrage humain, et
+        // court-circuiter `deciderRelance` ici tuerait la relance automatique.
+        if (decision.action === 'rien' && actionAntiBoucle !== 'couper') {
+          this.#telemetrie.marquerAuRepos(missionId);
+          this.#notifierDecision(missionId, decision);
+          log.info(
+            { sessionId: handle.sessionId, motif: decision.motif },
+            'tour terminé, aucune tâche de fond — équipe AU REPOS, session gardée ouverte (ni tuée ni terminée)',
+          );
+          continue;
+        }
+
+        if (actionAntiBoucle !== 'couper') this.#registre.marquerMort(handle.sessionId);
+        this.#telemetrie.fermer(missionId);
         log.info({ action: decision.action, motif: decision.motif }, 'terminaison observée, politique de relance appliquée');
         this.#notifierDecision(missionId, decision);
         // ☠ H-68 : `couper`/`escalader` priment sur `deciderRelance`, jamais l'inverse (log déjà émis par `#antiBoucle`).

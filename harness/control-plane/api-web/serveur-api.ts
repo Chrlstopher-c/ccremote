@@ -129,6 +129,12 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
       active: d.active,
       contextPct: d.contextePct,
       compactions: d.compactions,
+      // `☠` Sans ces deux champs, l'interface n'a rien pour rouvrir le fil sur
+      // son propre réglage : elle retombait sur Opus 4.8 / high à chaque
+      // rafraîchissement (constaté en prod le 23/07, après un premier correctif
+      // incomplet — le chemin de DONNÉES manquait, pas seulement l'affichage).
+      model: d.modele,
+      effort: d.effort,
       partial: d.partiel,
     });
   }

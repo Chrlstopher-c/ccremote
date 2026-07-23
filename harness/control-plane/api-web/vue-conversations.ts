@@ -85,6 +85,8 @@ export interface PortConversations {
     readonly active: boolean;
     readonly contextePct: number | null;
     readonly compactions: number;
+    readonly modele: string | null;
+    readonly effort: string | null;
     readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
   evenementsDepuis(id: string, depuis: number): {

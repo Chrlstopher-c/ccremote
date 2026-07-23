@@ -10,6 +10,7 @@ from fastapi.requests import Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pathlib import Path
 
 from agent import usage as agent_usage
 from agent.chat import run_agent_stream
@@ -75,9 +76,27 @@ async def logout():
     return response
 
 
+def _version_statique() -> str:
+    """Empreinte des fichiers statiques, pour forcer le navigateur à les relire.
+
+    ☠ Les <script> étaient servis sans version : un déploiement front restait
+    invisible derrière le cache du navigateur, même après rechargement. On a
+    cherché des bugs déjà corrigés à cause de ça (23/07). L'empreinte est le
+    mtime le plus récent du dossier statique — elle change dès qu'on déploie,
+    jamais autrement.
+    """
+    try:
+        racine = Path(__file__).parent / "static"
+        return str(int(max(f.stat().st_mtime for f in racine.rglob("*") if f.is_file())))
+    except (ValueError, OSError):
+        return "0"
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, _: str = Depends(check_session)):
-    return templates.TemplateResponse(request=request, name="index.html")
+    return templates.TemplateResponse(
+        request=request, name="index.html", context={"v": _version_statique()}
+    )
 
 
 @app.get("/api/status")

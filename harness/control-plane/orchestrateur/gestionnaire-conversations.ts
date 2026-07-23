@@ -121,6 +121,13 @@ export interface DetailConversation {
   readonly active: boolean;
   readonly contextePct: number | null;
   readonly compactions: number;
+  /**
+   * Dernier modèle et effort du fil. `☠` Sans eux, l'interface n'a AUCUN moyen
+   * de rouvrir la conversation sur son propre réglage : elle retombe sur ses
+   * défauts, en contradiction avec le message affiché juste au-dessus.
+   */
+  readonly modele: string | null;
+  readonly effort: string | null;
   /** Bloc en cours de frappe (streaming token par token), ou `null`. */
   readonly partiel: BlocPartiel | null;
 }
@@ -226,6 +233,8 @@ export class GestionnaireConversations {
       active: this.#sessions.has(id),
       contextePct: this.#contextePct(id),
       compactions: conv.compactions,
+      modele: conv.modele,
+      effort: conv.effort,
       partiel: this.#partiel(id),
     };
   }
