@@ -56,6 +56,7 @@ import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
 import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
+import { choisirCompteDisponible } from './choix-compte-orchestrateur.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
 
@@ -209,7 +210,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       ...(options.configDirOrchestrateur !== undefined ? [options.configDirOrchestrateur] : []),
       ...(options.configDirsOrchestrateur ?? []),
     ].filter((d, i, tout) => tout.indexOf(d) === i);
-    let indexMaster = 0;
+    // `☠` Sur QUOTA MESURÉ, jamais « toujours le premier » : l'index vivait en
+    // mémoire et repartait à 0 à chaque redémarrage du Pi, renvoyant
+    // l'orchestrateur sur un compte à 100 % — l'opérateur devait écrire deux
+    // fois, à chaque déploiement (vécu le 23/07).
+    let indexMaster = choisirCompteDisponible(comptesMaster, registre);
     const construireSession: ConstruireSessionConversation = (
       stockageIdentite: StockageIdentite,
       conversationId: string,
@@ -257,8 +262,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
         configDir: comptesMaster[indexMaster] ?? options.configDirOrchestrateur,
       });
     gestionnaireConversations = new GestionnaireConversations(registre, construireSession, () => {
-      if (indexMaster + 1 >= comptesMaster.length) return false;
-      indexMaster += 1;
+      // On saute les comptes que le registre sait déjà saturés : basculer sur un
+      // compte mort ne fait que déplacer le mur d'un message.
+      const suivant = choisirCompteDisponible(comptesMaster, registre, indexMaster + 1);
+      if (suivant >= comptesMaster.length || suivant === indexMaster) return false;
+      indexMaster = suivant;
       log.warn({ configDir: comptesMaster[indexMaster] }, 'rotation du compte de l’orchestrateur');
       return true;
     });

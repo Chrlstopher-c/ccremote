@@ -22,6 +22,7 @@
  * Une exception ici tuerait la boucle et figerait la conversation.
  */
 
+import { annonceSaturation } from '../../shared/saturation-compte.ts';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { DepotConversations } from '../registre/index.ts';
 import type { TypeEvenementConversation } from '../registre/index.ts';
@@ -91,14 +92,6 @@ function typeDepuisBloc(typeBloc: string | undefined): TypeEvenementConversation
  * session devient muette. Sans détection, l'orchestrateur ne répond plus et rien
  * n'explique pourquoi — l'opérateur croit à une panne du harness.
  */
-const MOTIFS_SATURATION: readonly RegExp[] = [
-  /spend limit/i,
-  /usage limit/i,
-  /rate limit/i,
-  /quota exceeded/i,
-  /limite de d[ée]pense/i,
-];
-
 export class CollecteurConversation {
   #genere = false;
   #streameCeTour = false;
@@ -199,7 +192,7 @@ export class CollecteurConversation {
       if (message.type === 'system') {
         const sonde = message as unknown as { subtype?: string; content?: string; text?: string };
         const texte = sonde.content ?? sonde.text ?? '';
-        if (MOTIFS_SATURATION.some((m) => m.test(texte))) {
+        if (annonceSaturation(texte)) {
           this.#sature = true;
           this.#persister('erreur', `Compte saturé : ${texte.slice(0, 200)}`);
         }
@@ -296,7 +289,7 @@ export class CollecteurConversation {
     // `☠` Mesuré le 23/07 : la limite N'ARRIVE PAS en message système, mais en
     // TEXTE ASSISTANT (« You've hit your monthly spend limit … »). Ne la chercher
     // que dans les messages système, c'était ne jamais la voir.
-    if (type === 'texte' && !this.#sature && MOTIFS_SATURATION.some((m) => m.test(contenu))) {
+    if (type === 'texte' && !this.#sature && annonceSaturation(contenu)) {
       this.#sature = true;
     }
     // Tour interne : on capte le texte, on n'écrit rien dans le fil.

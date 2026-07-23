@@ -13,6 +13,7 @@
  * d'affichage ne peut pas être la perte du pilotage.
  */
 
+import { annonceSaturation } from '../shared/saturation-compte.ts';
 import type { SousAgentObserve } from './sous-agents-disque.ts';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { NatureActivite, PosteContexte, TelemetrieWorker } from './types.ts';
@@ -82,21 +83,6 @@ interface Etat {
   motifQuota: string | null;
   observeA: number;
 }
-
-/**
- * `☠` Motifs de saturation observés en RÉEL (23/07) : le CLI annonce la limite
- * en clair dans un message système, et le worker enchaîne ensuite des
- * `api_error` sans jamais produire de `result`. Sans cette détection, le harness
- * relance indéfiniment sur un compte qui ne répondra plus — c'est ce qui a fait
- * passer une équipe entière pour « en cours » sans une seule réponse.
- */
-const MOTIFS_SATURATION: readonly RegExp[] = [
-  /spend limit/i,
-  /usage limit/i,
-  /rate limit/i,
-  /quota exceeded/i,
-  /limite de d[ée]pense/i,
-];
 
 /**
  * Champs d'entrée d'outil réellement parlants pour un humain qui suit une
@@ -281,7 +267,7 @@ export class CollecteurTelemetrie {
 
     if (sonde.type === 'system' && (sonde.subtype === 'informational' || sonde.subtype === 'notification')) {
       const texte = typeof sonde.content === 'string' ? sonde.content : (sonde.text ?? '');
-      if (MOTIFS_SATURATION.some((m) => m.test(texte))) {
+      if (annonceSaturation(texte)) {
         etat.quotaSature = true;
         etat.motifQuota = texte.slice(0, APERCU_MAX);
       }
