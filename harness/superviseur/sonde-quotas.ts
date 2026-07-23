@@ -46,7 +46,7 @@ interface FenetreBrute {
   readonly resets_at?: string | number;
 }
 
-interface UsageBrut {
+export interface UsageBrut {
   readonly rate_limits?: Record<string, unknown> & {
     readonly extra_usage?: { readonly is_enabled?: boolean } | null;
   };
@@ -60,7 +60,7 @@ function versHorodatage(valeur: string | number | undefined): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
-function extraireFenetres(usage: UsageBrut | null): readonly FenetreQuotaMesuree[] {
+export function extraireFenetres(usage: UsageBrut | null): readonly FenetreQuotaMesuree[] {
   const limites = usage?.rate_limits;
   if (limites === undefined || limites === null) return [];
   const fenetres: FenetreQuotaMesuree[] = [];

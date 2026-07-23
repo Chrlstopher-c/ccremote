@@ -184,6 +184,49 @@ export class DepotComptes {
       return lignes.map(versCompte);
     });
   }
+
+  /**
+   * Mémorise le jeton d'accès OAuth relevé sur le PC. `☠` C'est ce qui permet au
+   * Pi de continuer à mesurer les quotas PC ÉTEINT — sans lui, les jauges se
+   * figeaient à la dernière valeur connue dès l'extinction du PC.
+   *
+   * `☠` Jeton d'ACCÈS uniquement. Le refresh token n'entre jamais dans cette
+   * table : il est tournant, le faire tourner hors du CLI casserait le compte.
+   */
+  public poserJeton(compteId: string, jetonAcces: string, expireA: number, maintenant: number = Date.now()): void {
+    executer(
+      'comptes.poserJeton',
+      () => {
+        this.db
+          .query(
+            `INSERT INTO jeton_compte (compte_id, jeton_acces, expire_a, releve_a)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT(compte_id) DO UPDATE SET
+               jeton_acces = excluded.jeton_acces,
+               expire_a = excluded.expire_a,
+               releve_a = excluded.releve_a`,
+          )
+          .run(compteId, jetonAcces, expireA, maintenant);
+      },
+      { compteId },
+    );
+  }
+
+  /**
+   * Jetons connus, expirés COMPRIS : c'est l'appelant qui décide quoi en faire.
+   * Les filtrer ici priverait l'écran de la raison pour laquelle une jauge ne
+   * bouge plus — « jeton expiré » n'est pas la même chose que « aucun compte ».
+   */
+  public listerJetons(): readonly { readonly compteId: string; readonly jetonAcces: string; readonly expireA: number }[] {
+    return executer('comptes.listerJetons', () => {
+      const lignes = this.db
+        .query<{ compte_id: string; jeton_acces: string; expire_a: number }, []>(
+          'SELECT compte_id, jeton_acces, expire_a FROM jeton_compte ORDER BY compte_id',
+        )
+        .all();
+      return lignes.map((l) => ({ compteId: l.compte_id, jetonAcces: l.jeton_acces, expireA: l.expire_a }));
+    });
+  }
 }
 
 function booleenOuNull(valeur: boolean | null | undefined): number | null {

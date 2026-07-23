@@ -163,7 +163,7 @@ async function hRenderQuotaStrip() {
   const el = document.getElementById('hQuotaStripParc');
   if (!el) return;
   const accounts = hListeComptes(await HarnessAPI.getAccounts());
-  if (accounts === null) { hEcrireSiDifferent(el, `<span style="color:var(--ink-3);">PC absent — quotas indisponibles</span>`); return; }
+  if (accounts === null) { hEcrireSiDifferent(el, `<span style="color:var(--ink-3);">Pi injoignable — quotas indisponibles</span>`); return; }
   if (accounts.length === 0) { hEcrireSiDifferent(el, `<span style="color:var(--ink-3);">Aucun compte enregistré</span>`); return; }
   const v = (a, w) => (a[w].util >= 90 ? `<b class="warnv">${a[w].util}%</b>` : `<b>${a[w].util}%</b>`);
   el.innerHTML = `${accounts.map((a) => `<button>${a.label} 5h ${v(a, 'five_hour')} · 7j ${v(a, 'seven_day')}${a.isUsingOverage ? ' <b class="warnv">· crédits</b>' : ''}</button>`).join('')}
@@ -240,4 +240,14 @@ function hDemarrerRafraichissement() {
   hVueTimer = setInterval(hRafraichirVue, HVUE_POLL_MS);
   // Revenir sur l'onglet doit montrer l'état RÉEL tout de suite, pas dans 4 s.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) hRafraichirVue(); });
+  // ☠ `visibilitychange` NE SUFFIT PAS SUR MOBILE. Une page restaurée depuis le
+  // bfcache (revenir à l'onglet après avoir quitté le navigateur, ce que fait un
+  // téléphone en permanence) émet `pageshow` avec `persisted`, PAS
+  // `visibilitychange` : la minuterie reprend mais l'écran garde son rendu
+  // d'avant, indéfiniment. Constaté le 23/07 — quotas figés sur des heures de
+  // reset déjà passées, sur téléphone uniquement, PC parfaitement à jour.
+  window.addEventListener('pageshow', (e) => { if (e.persisted) hRafraichirVue(); });
+  // Filet supplémentaire : certains navigateurs mobiles gèlent la minuterie en
+  // arrière-plan et ne la reprennent qu'au focus, sans aucun des deux événements.
+  window.addEventListener('focus', hRafraichirVue);
 }

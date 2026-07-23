@@ -57,7 +57,7 @@ import type {
   OperationControle,
   ReponseControle,
   TelemetrieWorker,
-  QuotaCompteMesure,
+  JetonCompte,
 } from '../../superviseur/index.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
 import type { Lien } from '../../transport/contrat.ts';
@@ -145,16 +145,18 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
   }
 
   /**
-   * Usage des fenêtres de rate limit, mesuré par le PC. PC absent ⇒ liste vide :
-   * les jauges gardent alors leur dernière valeur connue au registre, elles ne
-   * retombent pas à zéro.
+   * Jetons d'accès OAuth des comptes, relevés sur le PC. `☠` C'est le SEUL
+   * moment où le PC est nécessaire à la mesure des quotas : le Pi sonde ensuite
+   * l'endpoint OAuth lui-même, donc les jauges continuent de vivre PC éteint,
+   * jusqu'à expiration du jeton (~8 h). PC absent ⇒ liste vide, le Pi garde les
+   * jetons qu'il a déjà persistés.
    */
-  async quotas(): Promise<readonly QuotaCompteMesure[]> {
+  async jetons(): Promise<readonly JetonCompte[]> {
     try {
-      const reponse = await this.#appeler({ type: 'quotas' });
-      return reponse.quotas ?? [];
+      const reponse = await this.#appeler({ type: 'jetons' });
+      return reponse.jetons ?? [];
     } catch (erreur) {
-      log.debug({ err: erreur }, 'quotas du PC indisponibles — dernières valeurs conservées');
+      log.debug({ err: erreur }, 'jetons du PC indisponibles — les derniers connus restent en vigueur');
       return [];
     }
   }

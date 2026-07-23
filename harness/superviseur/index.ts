@@ -74,3 +74,6 @@ export { explorerProjets, resoudreDansRacine } from './exploration-projets.ts';
 export type { EntreeProjet, ResultatExploration } from './exploration-projets.ts';
 export { sonderQuotaCompte, sonderQuotas } from './sonde-quotas.ts';
 export type { FenetreQuotaMesuree, QuotaCompteMesure } from './sonde-quotas.ts';
+export { sonderQuotaHttp, sonderQuotasHttp } from './sonde-quotas-http.ts';
+export type { JetonCompte } from './sonde-quotas-http.ts';
+export { lireJetonCompte, lireJetonsComptes } from './jetons-comptes.ts';

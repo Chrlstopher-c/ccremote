@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
-import type { QuotaCompteMesure, TelemetrieWorker } from '../../superviseur/index.ts';
-import { demarrerBalayageTelemetrie } from './balayage-telemetrie.ts';
+import type { JetonCompte, QuotaCompteMesure } from '../../superviseur/index.ts';
+import { demarrerBalayageQuotas } from './balayage-quotas.ts';
 
 let registre: Registre;
+
+const JETON: JetonCompte = { compteId: 'compte-a', jetonAcces: 'sk-ant-oat01-x', expireA: 9_999_999_999_999 };
 
 beforeEach(() => {
   registre = ouvrirRegistre({ chemin: ':memory:' });
@@ -12,16 +14,22 @@ beforeEach(() => {
 
 afterEach(() => registre.fermer());
 
-async function balayer(quotas: readonly QuotaCompteMesure[]) {
-  const b = demarrerBalayageTelemetrie({
+async function balayer(
+  mesures: readonly QuotaCompteMesure[],
+  jetons: readonly JetonCompte[] = [JETON],
+): Promise<readonly JetonCompte[]> {
+  const sondes: JetonCompte[] = [];
+  const b = demarrerBalayageQuotas({
     registre,
-    source: {
-      telemetrie: async (): Promise<readonly TelemetrieWorker[]> => [],
-      quotas: async () => quotas,
+    source: { jetons: async () => jetons },
+    sonder: async (j) => {
+      sondes.push(...j);
+      return mesures;
     },
   });
   await b.passer();
   b.arreter();
+  return sondes;
 }
 
 const MESURE: QuotaCompteMesure = {
@@ -72,5 +80,27 @@ describe('balayage — identité mesurée du compte', () => {
     await balayer([MESURE]);
     await balayer([{ ...MESURE, email: null, typeAbonnement: null }]);
     expect(registre.comptes.lire('compte-a')?.email).toBe('x@y.z');
+  });
+});
+
+describe('balayage — jetons, et survie au PC éteint', () => {
+  test('☠ le jeton relevé sur le PC est PERSISTÉ — sans ça, tout se fige à son extinction', async () => {
+    await balayer([MESURE]);
+    expect(registre.comptes.listerJetons()).toEqual([
+      { compteId: 'compte-a', jetonAcces: 'sk-ant-oat01-x', expireA: 9_999_999_999_999 },
+    ]);
+  });
+
+  test('☠ PC éteint (aucun jeton relevé), la sonde tourne quand même sur le jeton persisté', async () => {
+    await balayer([MESURE]);
+    // Deuxième passe SANS le PC : c'est le cas que toute la refonte vise.
+    const sondes = await balayer([{ ...MESURE, fenetres: [{ typeFenetre: 'five_hour', utilisation: 90, resetA: null }] }], []);
+    expect(sondes).toHaveLength(1);
+    expect(registre.comptes.listerQuotas('compte-a').find((q) => q.typeFenetre === 'five_hour')?.utilisation).toBe(90);
+  });
+
+  test('aucun jeton connu ⇒ aucune sonde, plutôt qu’un appel voué au 401', async () => {
+    const sondes = await balayer([MESURE], []);
+    expect(sondes).toHaveLength(0);
   });
 });

@@ -329,6 +329,22 @@ ALTER TABLE activite_mission ADD COLUMN type TEXT NOT NULL DEFAULT 'texte';
 ALTER TABLE activite_mission ADD COLUMN outil TEXT;
 `;
 
+/**
+ * Jeton d'accès OAuth par compte, relevé sur le PC pour que le Pi sonde les
+ * quotas lui-même en HTTP — c'est ce qui garde les jauges vivantes PC éteint.
+ *
+ * `☠` Jeton d'ACCÈS seulement (durée ~8 h). Le refresh token ne descend jamais
+ * jusqu'ici : il est TOURNANT, le faire tourner hors du CLI casserait le compte.
+ */
+const MIGRATION_9 = `
+CREATE TABLE IF NOT EXISTS jeton_compte (
+  compte_id   TEXT PRIMARY KEY REFERENCES compte(id) ON DELETE CASCADE,
+  jeton_acces TEXT NOT NULL,
+  expire_a    INTEGER NOT NULL,
+  releve_a    INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -338,6 +354,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 6, nom: 'ventilation-contexte-mission', sql: MIGRATION_6 },
   { version: 7, nom: 'activite-mission', sql: MIGRATION_7 },
   { version: 8, nom: 'nature-activite-mission', sql: MIGRATION_8 },
+  { version: 9, nom: 'jeton-oauth-compte', sql: MIGRATION_9 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

@@ -55,6 +55,7 @@ import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
 import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
+import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
 
@@ -112,6 +113,7 @@ export interface ControlPlanePiAssemble {
    */
   readonly gestionnaireConversations: GestionnaireConversations | null;
   readonly balayageTelemetrie: BalayageTelemetrie;
+  readonly balayageQuotas: BalayageQuotas;
 }
 
 function construireDependancesReconciliation(client: ClientSuperviseurPc, machine: MachineEtatsDemandes): DependancesReconciliation {
@@ -319,6 +321,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     reconcilier: () => reconcilier(registre, dependancesReconciliation, 'reconnexion'),
   });
 
+  // `☠` Boucle SÉPARÉE de la télémétrie : elle interroge l'API d'usage en HTTP,
+  // sans le PC et sans lancer la moindre session. C'est ce qui fait tenir des
+  // jauges vivantes PC ÉTEINT, là où la sonde SDK côté PC les figeait dès
+  // l'extinction — et avec 10 min de retard même PC allumé (23/07).
+  const balayageQuotas = demarrerBalayageQuotas({ registre, source: clientSuperviseurPc });
+  void balayageQuotas.passer();
+
   log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
 
   return {
@@ -329,5 +338,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     serveurApiWeb,
     gestionnaireConversations,
     balayageTelemetrie,
+    balayageQuotas,
   };
 }

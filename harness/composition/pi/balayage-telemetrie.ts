@@ -2,6 +2,10 @@
  * Responsabilité : rapatrier périodiquement, du PC vers le registre du Pi, ce que
  * seul le PC observe — modèle résolu, état SDK, coût, usage de contexte.
  *
+ * `☠` Les JAUGES DE QUOTA ne passent plus par ici : elles vivaient dans ce
+ * balayage, donc elles mouraient avec le PC. Elles ont leur propre boucle,
+ * `balayage-quotas.ts`, qui interroge l'API d'usage en HTTP depuis le Pi.
+ *
  * `☠` C'est le Pi qui INTERROGE (D.3.2) : le PC ne pousse jamais rien de sa
  * propre initiative. Un balayage périodique est donc la seule forme possible ;
  * il tolère par construction un PC éteint ou un relevé manqué.
@@ -13,7 +17,7 @@
  */
 
 import { ETATS_HARNESS_ACTIFS, type Registre } from '../../control-plane/registre/index.ts';
-import type { QuotaCompteMesure, TelemetrieWorker } from '../../superviseur/index.ts';
+import type { TelemetrieWorker } from '../../superviseur/index.ts';
 import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'balayage-telemetrie' });
@@ -23,13 +27,6 @@ export const PERIODE_BALAYAGE_MS = 5_000;
 
 export interface SourceTelemetrie {
   telemetrie(): Promise<readonly TelemetrieWorker[]>;
-  /**
-   * Usage mesuré des fenêtres de rate limit. `☠` Absent ⇒ aucune jauge n'est
-   * écrite, ce qui est honnête : jusqu'au 23/07, `releverQuota` n'était appelé
-   * QUE pour marquer une saturation, donc les jauges affichaient 0 % et
-   * « reset — » en permanence, sur des comptes réellement à 84 et 100 %.
-   */
-  quotas?(): Promise<readonly QuotaCompteMesure[]>;
 }
 
 export interface OptionsBalayage {
@@ -122,35 +119,6 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
   return mortEnCoursDeRoute;
 }
 
-/**
- * Écrit les jauges mesurées. `☠` Une mesure EN ÉCHEC n'écrit rien : écraser une
- * jauge connue par un zéro parce que la sonde a échoué ferait croire à un compte
- * disponible alors qu'il est peut-être saturé — exactement la décision qu'on ne
- * veut pas prendre à l'aveugle.
- */
-function appliquerQuotas(registre: Registre, mesures: readonly QuotaCompteMesure[]): void {
-  for (const mesure of mesures) {
-    if (mesure.echec !== undefined) {
-      log.debug({ compteId: mesure.compteId, echec: mesure.echec }, 'jauge non mesurée — valeur précédente conservée');
-      continue;
-    }
-    registre.comptes.majIdentiteMesuree(mesure.compteId, mesure.email, mesure.typeAbonnement);
-    for (const f of mesure.fenetres) {
-      registre.comptes.releverQuota({
-        compteId: mesure.compteId,
-        typeFenetre: f.typeFenetre,
-        // 100 % d'une fenêtre = compte réellement inutilisable : `listerDisponibles()`
-        // doit l'écarter, sinon le prochain dispatch part droit dans le mur (H-53).
-        statut: f.utilisation >= 100 ? 'rejected' : f.utilisation >= 80 ? 'allowed_warning' : 'allowed',
-        utilisation: f.utilisation,
-        resetA: f.resetA,
-        utiliseOverage: mesure.creditsPayantsActifs,
-        observeA: mesure.observeA,
-      });
-    }
-  }
-}
-
 export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTelemetrie {
   const periode = options.periodeMs ?? PERIODE_BALAYAGE_MS;
 
@@ -165,14 +133,6 @@ export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTe
           log.error({ err: erreur, missionId: t.missionId }, 'relevé de télémétrie inapplicable — les autres sont traités');
         }
       }
-      if (options.source.quotas !== undefined) {
-        try {
-          appliquerQuotas(options.registre, await options.source.quotas());
-        } catch (erreur) {
-          log.debug({ err: erreur }, 'quotas indisponibles — jauges laissées en l’état');
-        }
-      }
-
       // `☠` UNE seule réconciliation par passe, quel que soit le nombre de morts
       // observés : elle balaie tout le parc, l'appeler par mission ferait N
       // passes redondantes à chaque tour de balayage.

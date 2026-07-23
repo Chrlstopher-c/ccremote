@@ -31,7 +31,7 @@ import type {
   TelemetrieWorker,
 } from './types.ts';
 import type { ResultatExploration } from './exploration-projets.ts';
-import type { QuotaCompteMesure } from './sonde-quotas.ts';
+import type { JetonCompte } from './sonde-quotas-http.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
 /**
@@ -45,12 +45,6 @@ export interface PortSuperviseurControle {
   demarrer(demande: DemandeDemarrage): Promise<{ readonly sessionId: string }>;
   /** Optionnel : une doublure qui ne l'implémente pas rend une liste vide, jamais une panne. */
   telemetrie?(): Promise<readonly TelemetrieWorker[]> | readonly TelemetrieWorker[];
-  /**
-   * Usage RÉEL des fenêtres de rate limit, par compte. `☠` Mesuré côté PC : les
-   * `CLAUDE_CONFIG_DIR` y vivent, le Pi ne peut pas les lire. Sans ça, les jauges
-   * restent à 0 % en permanence (constaté le 23/07).
-   */
-  quotas?(): Promise<readonly QuotaCompteMesure[]> | readonly QuotaCompteMesure[];
   /** Absent ⇒ opération refusée : mieux qu'une arborescence vide prise pour la vérité. */
   explorerProjets?(chemin?: string): ResultatExploration;
   arreter(missionId: string): Promise<void>;
@@ -65,6 +59,11 @@ export interface PortSuperviseurControle {
    * de méthode absente. `SuperviseurWorkers` réel l'implémente toujours.
    */
   arretUrgence?(graceMs?: number): Promise<RapportArretUrgence>;
+  /**
+   * Jetons d'accès OAuth des comptes. Optionnel : une doublure de test n'a pas
+   * de comptes réels, et l'absence de jeton n'est pas une panne.
+   */
+  jetons?(): Promise<readonly JetonCompte[]>;
   /**
    * Pilotage d'une mission vivante (instruction, pause, reprise). Optionnel au
    * même titre qu'`arretUrgence` et pour la même raison : une doublure de test
@@ -95,8 +94,12 @@ export type OperationControle =
   | { readonly type: 'inventaire' }
   /** Lecture pure : ce que seul le PC observe du flux de ses workers. */
   | { readonly type: 'telemetrie' }
-  /** Lecture pure : l'usage des fenêtres de rate limit, mesuré compte par compte. */
-  | { readonly type: 'quotas' }
+  /**
+   * Lecture pure : les jetons d'accès OAuth des comptes, pour que le Pi sonde
+   * les quotas lui-même en HTTP. `☠` Jeton d'ACCÈS seulement (durée ~8 h) — le
+   * refresh token ne traverse jamais le lien.
+   */
+  | { readonly type: 'jetons' }
   /** Lecture pure : parcourir l'arborescence des projets, qui vit sur le PC. */
   | { readonly type: 'explorer_projets'; readonly chemin?: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
@@ -126,7 +129,7 @@ type OperationMutative = Exclude<
   OperationControle,
   | { readonly type: 'inventaire' }
   | { readonly type: 'telemetrie' }
-  | { readonly type: 'quotas' }
+  | { readonly type: 'jetons' }
   | { readonly type: 'explorer_projets' }
 >;
 
@@ -145,8 +148,8 @@ export interface ReponseControle {
   readonly inventaire?: readonly DescripteurWorkerPc[];
   /** Présent uniquement pour `telemetrie` — lecture pure, hors cache d'idempotence. */
   readonly telemetrie?: readonly TelemetrieWorker[];
-  /** Présent uniquement pour `quotas` — lecture pure, hors cache d'idempotence. */
-  readonly quotas?: readonly QuotaCompteMesure[];
+  /** Présent uniquement pour `jetons` — lecture pure, hors cache d'idempotence. */
+  readonly jetons?: readonly JetonCompte[];
   /** Présent uniquement pour `explorer_projets`. */
   readonly explorationProjets?: ResultatExploration;
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
@@ -203,10 +206,10 @@ export class CanalControle {
       return { ok: true, effet: 'applique', telemetrie: (await this.#superviseur.telemetrie?.()) ?? [] };
     }
 
-    if (requete.operation.type === 'quotas') {
+    if (requete.operation.type === 'jetons') {
       // `☠` Absent ⇒ liste vide, jamais un refus : une doublure de test n'a pas
-      // de comptes réels à sonder, et l'absence de jauge n'est pas une panne.
-      return { ok: true, effet: 'applique', quotas: (await this.#superviseur.quotas?.()) ?? [] };
+      // de comptes réels, et l'absence de jeton n'est pas une panne.
+      return { ok: true, effet: 'applique', jetons: (await this.#superviseur.jetons?.()) ?? [] };
     }
 
     const dejaTraitee = this.#traitees.get(requete.opId);

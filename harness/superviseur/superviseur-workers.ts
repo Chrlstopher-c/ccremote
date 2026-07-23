@@ -28,7 +28,9 @@
 import { creerCablageAntiBoucle, type CablageAntiBoucle } from './anti-boucle-workers.ts';
 import { arbitrerFencingWorktree } from './fencing-arbitrage-workers.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
-import { sonderQuotas, type QuotaCompteMesure } from './sonde-quotas.ts';
+import { sonderQuotas } from './sonde-quotas.ts';
+import type { JetonCompte } from './sonde-quotas-http.ts';
+import { lireJetonsComptes } from './jetons-comptes.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
@@ -86,12 +88,11 @@ export { GRACE_ARRET_URGENCE_MS_DEFAUT, SuperviseurError, type DemarrerWorkerFn,
  * (H-56) ; un enregistrement mort survit pour permettre la relance (B.3.3).
  */
 /**
- * `☠` Entre deux sondes. Chaque sonde ouvre une session CLI par compte : trop
- * fréquent, c'est du process en continu pour une jauge ; trop rare, l'opérateur
- * pilote sur des chiffres périmés. Dix minutes tient les deux bouts — une
- * fenêtre de 5 h ne bouge pas significativement en moins que ça.
+ * `☠` En-deçà de cette marge avant expiration, le jeton est renouvelé en ouvrant
+ * une session CLI. Assez large pour qu'un relevé toutes les 5 min ait toujours
+ * le temps de le faire avant que le Pi ne se retrouve avec un jeton mort.
  */
-export const PERIODE_SONDE_QUOTAS_MS = 600_000;
+const MARGE_RENOUVELLEMENT_JETON_MS = 3_600_000;
 
 export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession, RepertoireCibles, ArreteurMission, RelanceurMission {
   readonly #registre: RegistreWorkers;
@@ -108,17 +109,6 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #racineProjets: string;
   /** Comptes à sonder pour les jauges de rate limit — vide si non configurés. */
   readonly #comptesASonder: readonly { readonly id: string; readonly configDir: string }[];
-  /**
-   * Dernière mesure de quotas et son horodatage.
-   *
-   * `☠` Une sonde ouvre une session CLI par compte : la refaire à chaque
-   * interrogation du Pi (toutes les 5 s) lancerait des process en continu pour
-   * une simple jauge. On garde donc la dernière mesure et on ne re-sonde qu'au
-   * bout de `PERIODE_SONDE_QUOTAS_MS`.
-   */
-  #quotasMesures: readonly QuotaCompteMesure[] = [];
-  #quotasMesuresA = 0;
-  #sondeEnCours: Promise<void> | null = null;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
   readonly #attendreGrace: (delaiMs: number) => Promise<void>;
   readonly #persistance: PersistanceRegistre | undefined;
@@ -241,29 +231,32 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   }
 
   /**
-   * Usage des fenêtres de rate limit. Rend TOUJOURS la dernière mesure connue et
-   * déclenche une nouvelle sonde en arrière-plan quand elle a vieilli.
+   * Jetons d'accès OAuth des comptes, pour que le Pi sonde les quotas lui-même
+   * en HTTP — c'est ce qui garde les jauges vivantes PC ÉTEINT, et ce qui a
+   * permis de tomber de 10 min de retard à quelques secondes.
    *
-   * `☠` Ne bloque JAMAIS sur la sonde : elle prend plusieurs secondes par compte,
-   * et le Pi attend cette réponse pour afficher son écran. Une jauge fraîche ne
-   * vaut pas une interface qui se fige.
+   * `☠` Lecture disque à chaque appel, jamais mise en cache : le CLI réécrit
+   * `.credentials.json` quand il renouvelle le jeton, et servir un jeton mémorisé
+   * périmé condamnerait la mesure jusqu'au prochain redémarrage du PC.
    */
-  async quotas(): Promise<readonly QuotaCompteMesure[]> {
+  async jetons(): Promise<readonly JetonCompte[]> {
     if (this.#comptesASonder.length === 0) return [];
-    const perime = Date.now() - this.#quotasMesuresA > PERIODE_SONDE_QUOTAS_MS;
-    if (perime && this.#sondeEnCours === null) {
-      this.#sondeEnCours = (async (): Promise<void> => {
-        try {
-          this.#quotasMesures = await sonderQuotas(this.#comptesASonder);
-          this.#quotasMesuresA = Date.now();
-        } finally {
-          this.#sondeEnCours = null;
-        }
-      })();
-      // Première mesure : on l'attend, sinon l'écran resterait vide au démarrage.
-      if (this.#quotasMesuresA === 0) await this.#sondeEnCours;
-    }
-    return this.#quotasMesures;
+    const jetons = await lireJetonsComptes(this.#comptesASonder);
+    const aRenouveler = this.#comptesASonder.filter((c) => {
+      const jeton = jetons.find((j) => j.compteId === c.id);
+      return jeton === undefined || jeton.expireA - Date.now() < MARGE_RENOUVELLEMENT_JETON_MS;
+    });
+    if (aRenouveler.length === 0) return jetons;
+    // `☠` SEUL usage restant de la sonde SDK, et le seul qu'elle sache faire
+    // qu'une requête HTTP ne sait pas : lancer le CLI, qui renouvelle le jeton
+    // au passage. Sans ça, un PC allumé 8 h sans lancer une seule mission verrait
+    // ses jauges se figer sur un jeton expiré. Au plus une fois par ~8 h.
+    superviseurLogger.info(
+      { comptes: aRenouveler.map((c) => c.id) },
+      'jeton proche de l’expiration — session CLI ouverte pour le renouveler',
+    );
+    await sonderQuotas(aRenouveler);
+    return lireJetonsComptes(this.#comptesASonder);
   }
 
   inventaire(): readonly DescripteurWorkerPc[] {
