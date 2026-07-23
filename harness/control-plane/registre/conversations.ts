@@ -184,6 +184,25 @@ export class DepotConversations {
   }
 
   /**
+   * Pose un contexte de reprise ET oublie l'identité SDK, sans compter de
+   * compaction. `☠` Utilisé à la rotation de compte : la session suivante repart
+   * à froid sur un autre compte, mais elle ne doit pas repartir AMNÉSIQUE — sans
+   * ce report, l'orchestrateur perdait tout le fil et redemandait à l'opérateur
+   * ce qu'il venait de lui dire (vécu le 23/07).
+   */
+  public poserResumeContexte(id: string, resume: string, maintenant: number = Date.now()): void {
+    executer(
+      'conversations.poserResumeContexte',
+      () => {
+        this.db
+          .query('UPDATE conversation SET resume_contexte = ?, session_id = NULL, maj_a = ? WHERE id = ?')
+          .run(resume, maintenant, id);
+      },
+      { id },
+    );
+  }
+
+  /**
    * Oublie l'identité SDK : la prochaine session repartira à froid. `☠`
    * Indispensable après une rotation de compte — une session appartient au
    * compte qui l'a créée, et la reprendre ailleurs échoue sur

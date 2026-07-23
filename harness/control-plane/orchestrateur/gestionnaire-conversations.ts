@@ -45,11 +45,31 @@ const PROMPT_RESUME =
   "l'opérateur. Omets les politesses et les formulations. Réponds UNIQUEMENT par le résumé, sans " +
   'préambule ni commentaire.';
 
+/** Nombre d'événements repris pour réamorcer après une rotation. */
+const EVENEMENTS_REPRIS = 30;
+
+/**
+ * Reconstruit un contexte lisible à partir du fil DÉJÀ PERSISTÉ. `☠` On ne peut
+ * pas demander de résumé à une session saturée — elle ne répond plus. Mais tout
+ * l'historique est en base : c'est lui qui sert de mémoire de secours.
+ */
+export function transcriptPourReprise(
+  evenements: readonly { readonly type: string; readonly contenu: string }[],
+): string {
+  const lignes: string[] = [];
+  for (const e of evenements.slice(-EVENEMENTS_REPRIS)) {
+    if (e.type === 'operateur') lignes.push(`Opérateur : ${e.contenu}`);
+    else if (e.type === 'texte') lignes.push(`Toi : ${e.contenu}`);
+    else if (e.type === 'compaction') lignes.push(`[résumé antérieur] ${e.contenu}`);
+  }
+  return lignes.join('\n\n').slice(0, 12_000);
+}
+
 /** Amorce injectée à la session qui suit une compaction. */
 export function amorceApresCompaction(resume: string): string {
   return (
-    'Reprise après compaction du contexte. Voici le résumé de tout ce qui précède — ' +
-    "il remplace l'historique et fait autorité :\n\n" +
+    'Reprise de cette conversation sur une session neuve (compaction ou changement ' +
+    'de compte). Voici ce qui précède — cela remplace ton historique et fait autorité :\n\n' +
     resume +
     "\n\nAccuse réception en une phrase courte, puis attends l'opérateur."
   );
@@ -344,8 +364,10 @@ export class GestionnaireConversations {
     // `☠` Session neuve APRÈS une compaction : elle ne sait rien. On la réamorce
     // avec le résumé, en tour interne — sinon l'opérateur verrait le harness
     // recoller son propre contexte dans le fil.
+    // `☠` Condition sur le RÉSUMÉ, pas sur le compteur de compactions : une
+    // rotation de compte pose aussi un contexte de reprise sans compacter.
     const resume = avant?.resumeContexte;
-    if (avant !== null && avant.compactions > 0 && typeof resume === 'string' && resume.length > 0) {
+    if (avant !== null && typeof resume === 'string' && resume.length > 0) {
       try {
         const attente = collecteur.ouvrirTourInterne(TIMEOUT_RESUME_MS);
         await poignee.entree.envoyerOperateur(amorceApresCompaction(resume));
@@ -402,7 +424,12 @@ export class GestionnaireConversations {
           // `☠` La session appartient au compte qui l'a créée : la reprendre sur
           // le compte de repli échoue (« No conversation found with session ID »).
           // On oublie l'identité pour repartir à froid sur le nouveau compte.
-          if (bascule) this.registre.conversations.oublierSession(conversationId);
+          if (bascule) {
+            const fil = this.registre.conversations.evenements(conversationId);
+            const transcript = transcriptPourReprise(fil);
+            if (transcript.length > 0) this.registre.conversations.poserResumeContexte(conversationId, transcript);
+            else this.registre.conversations.oublierSession(conversationId);
+          }
           log.warn({ conversationId, bascule }, 'compte de l’orchestrateur saturé — session fermée');
           collecteur.marquerErreur(
             bascule
