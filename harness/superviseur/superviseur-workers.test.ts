@@ -500,10 +500,7 @@ describe('câblage des budgets (mission M-51) sur un flux réel', () => {
       },
     ]);
     // ☠ le rate_limit_event n'a PAS provoqué de break : le `result` qui suit a bien été traité.
-    // La preuve n'est plus la MORT du worker (une fin normale le laisse désormais
-    // au repos, session ouverte) mais son passage à `idle`.
-    expect((await superviseur.telemetrie())[0]?.etatSdk).toBe('idle');
-    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 
   test('☠ panne #16 : une bannière d’avertissement ne suspend rien et ne notifie rien', async () => {
@@ -572,10 +569,7 @@ describe('câblage des budgets (mission M-51) sur un flux réel', () => {
     });
     await expect(superviseur.demarrer(demande())).resolves.toBeDefined();
     await laisserPasserLesMicrotaches();
-    // La surveillance a survécu à l'observateur défaillant : le `result` qui
-    // suivait a bien été traité, donc le tour est clos (`idle`). Ce n'est plus
-    // la mort du worker qui le prouve — une fin normale le laisse au repos.
-    expect((await superviseur.telemetrie())[0]?.etatSdk).toBe('idle');
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 
   test("sans observateurUsage fourni : aucune exception (port optionnel)", async () => {
@@ -646,7 +640,7 @@ describe('un `result` pendant des tâches de fond ne tue PAS la session', () => 
     expect(superviseur.inventaire()[0]?.vivant).toBe(true);
   });
 
-  test('plus aucune tâche de fond : le tour est bien clos — équipe AU REPOS, pas morte', async () => {
+  test('plus aucune tâche de fond : le result vaut bien fin de mission', async () => {
     const superviseur = new SuperviseurWorkers({
       compteurRelances: new CompteurRelances(),
       demarrerWorker: demarrerWorkerFactice(() =>
@@ -661,22 +655,20 @@ describe('un `result` pendant des tâches de fond ne tue PAS la session', () => 
     });
     await superviseur.demarrer(demande());
     await laisserPasserLesMicrotaches();
-    // ☠ AU REPOS, jamais mort : le lead qui annonce « j'attends » alors que plus
-    // rien ne tourne se trompe, mais sa session est vivante — la tuer, c'était
-    // perdre le travail de trois runs sur quatre (mesuré en prod le 23/07).
-    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
-    expect((await superviseur.telemetrie())[0]?.etatSdk).toBe('idle');
+    // ☠ Le sous-agent a fini (ensemble vidé) : le lead a rendu son travail, la
+    // mission est FINIE. La laisser ouverte, c'était une équipe « en cours » à
+    // vie, synthèse déjà rendue (mesuré sur a122e20c, 23/07).
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 
-  test('☠ aucune tâche de fond du tout : tour clos proprement, sans tuer l’équipe', async () => {
+  test('☠ aucune tâche de fond du tout : comportement d’avant INCHANGÉ', async () => {
     const superviseur = new SuperviseurWorkers({
       compteurRelances: new CompteurRelances(),
       demarrerWorker: demarrerWorkerFactice(() => fakeQuery([resultOk()])),
     });
     await superviseur.demarrer(demande());
     await laisserPasserLesMicrotaches();
-    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
-    expect((await superviseur.telemetrie())[0]?.etatSdk).toBe('idle');
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 
   test('☠ les tâches de fond repartent VIDES à chaque `init` — sinon un worker relancé n’est plus jamais tenu pour fini', async () => {
@@ -698,8 +690,8 @@ describe('un `result` pendant des tâches de fond ne tue PAS la session', () => 
     });
     await superviseur.demarrer(demande());
     await laisserPasserLesMicrotaches();
-    // L'ensemble hérité a bien été purgé : le tour se clôt (idle) au lieu de
+    // L'ensemble hérité a bien été purgé : la mission se termine, au lieu de
     // rester indéfiniment « en attente de tâches » qui n'existent plus.
-    expect((await superviseur.telemetrie())[0]?.etatSdk).toBe('idle');
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 });

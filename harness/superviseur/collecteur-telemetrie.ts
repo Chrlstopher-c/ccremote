@@ -200,18 +200,6 @@ export class CollecteurTelemetrie {
     return (this.#par.get(missionId)?.tachesFond.length ?? 0) > 0;
   }
 
-  /**
-   * Le tour est fini, la session reste OUVERTE. `☠` Distinct de `fermer()` :
-   * l'équipe est au repos, pas morte — elle peut recevoir une instruction et
-   * repartir. Confondre les deux, c'était tuer une équipe à chaque fin de tour.
-   */
-  marquerAuRepos(missionId: string, maintenant: number = Date.now()): void {
-    const etat = this.#par.get(missionId);
-    if (etat === undefined) return;
-    etat.etatSdk = 'idle';
-    etat.observeA = maintenant;
-  }
-
   /** Relevé disque des sous-agents (`sous-agents-disque.ts`), posé par le superviseur. */
   poserSousAgents(missionId: string, sousAgents: readonly SousAgentObserve[]): void {
     const etat = this.#par.get(missionId);

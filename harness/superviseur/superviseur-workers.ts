@@ -541,20 +541,15 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
           compteur: this.#compteurRelances,
         });
 
-        // `☠` Une FIN NORMALE laisse l'équipe au repos, session ouverte. Les
-        // autres issues (échec à relancer, borne atteinte) gardent le chemin
-        // d'avant : elles exigent un nouveau process ou un arbitrage humain, et
-        // court-circuiter `deciderRelance` ici tuerait la relance automatique.
-        if (decision.action === 'rien' && actionAntiBoucle !== 'couper') {
-          this.#telemetrie.marquerAuRepos(missionId);
-          this.#notifierDecision(missionId, decision);
-          log.info(
-            { sessionId: handle.sessionId, motif: decision.motif },
-            'tour terminé, aucune tâche de fond — équipe AU REPOS, session gardée ouverte (ni tuée ni terminée)',
-          );
-          continue;
-        }
-
+        // `☠ SUR-CORRECTION RETIRÉE (23/07)` — j'ai un temps gardé la session
+        // ouverte sur TOUTE fin normale, en croyant qu'un lead pouvait « croire
+        // attendre » sans tâche de fond. La mesure a tranché contre moi : sur la
+        // mission a122e20c, la garde ci-dessus a bel et bien retenu la session à
+        // 18:40:13 pendant que le sous-agent travaillait, le lead a repris seul
+        // et rendu sa synthèse à 18:43:35. La garde SUFFIT. Ne rien terminer
+        // ensuite laissait une équipe « en cours » à vie, travail rendu.
+        //
+        // Donc : plus aucune tâche de fond + fin normale = la mission est FINIE.
         if (actionAntiBoucle !== 'couper') this.#registre.marquerMort(handle.sessionId);
         this.#telemetrie.fermer(missionId);
         log.info({ action: decision.action, motif: decision.motif }, 'terminaison observée, politique de relance appliquée');
