@@ -64,6 +64,20 @@ interface Etat {
    * activités : c'est un état courant complet, pas un flux d'évènements.
    */
   sousAgents: readonly SousAgentObserve[];
+  /**
+   * Tâches de fond VIVANTES, telles que le dernier `background_tasks_changed`
+   * les a décrites.
+   *
+   * `☠` Signal de NIVEAU, sémantique REPLACE imposée par le SDK : on remplace
+   * l'ensemble à chaque message, on n'apparie jamais des débuts et des fins. Le
+   * SDK le dit explicitement — apparier des bornes laisse un indicateur coincé
+   * en « ça tourne » dès qu'une borne se perd.
+   *
+   * `☠` Rien n'est émis au démarrage : l'ensemble DOIT repartir vide à chaque
+   * (re)démarrage du process CLI, sinon un worker relancé hérite des tâches du
+   * précédent et ne se termine plus jamais.
+   */
+  tachesFond: readonly { readonly taskId: string; readonly type: string; readonly description: string }[];
   quotaSature: boolean;
   motifQuota: string | null;
   observeA: number;
@@ -167,6 +181,7 @@ export class CollecteurTelemetrie {
       derniereActivite: null,
       activitesEnAttente: [],
       sousAgents: [],
+      tachesFond: [],
       quotaSature: false,
       motifQuota: null,
       observeA: maintenant,
@@ -191,6 +206,14 @@ export class CollecteurTelemetrie {
    * valable que pendant que la session vit — après le `result`, le transport est
    * fermé (fait mesuré le 22/07).
    */
+  /**
+   * Des tâches de fond tournent-elles encore pour cette mission ? C'est ce qui
+   * autorise, ou non, à traiter un `result` comme une fin de session.
+   */
+  aDesTachesFond(missionId: string): boolean {
+    return (this.#par.get(missionId)?.tachesFond.length ?? 0) > 0;
+  }
+
   /** Relevé disque des sous-agents (`sous-agents-disque.ts`), posé par le superviseur. */
   poserSousAgents(missionId: string, sousAgents: readonly SousAgentObserve[]): void {
     const etat = this.#par.get(missionId);
@@ -253,7 +276,25 @@ export class CollecteurTelemetrie {
       return;
     }
 
+    // `☠` LE signal qui distingue « le lead a fini » de « le lead attend ses
+    // sous-agents ». Sans lui, un `result` émis pendant que des sous-agents
+    // tournent était pris pour une fin de mission : l'équipe était déclarée
+    // terminée et ses sous-agents mouraient avec elle, en plein travail
+    // (mesuré le 23/07 sur une vraie mission — 4 transcripts arrêtés net).
+    // REPLACE, jamais un appariement début/fin : c'est la consigne explicite du SDK.
+    if (sonde.type === 'system' && sonde.subtype === 'background_tasks_changed') {
+      const taches = (message as unknown as { tasks?: { task_id: string; task_type: string; description: string }[] }).tasks;
+      etat.tachesFond = Array.isArray(taches)
+        ? taches.map((t) => ({ taskId: t.task_id, type: t.task_type, description: t.description }))
+        : [];
+      return;
+    }
+
     if (sonde.type === 'system' && sonde.subtype === 'init') {
+      // `☠` Rien n'est émis au démarrage : l'ensemble des tâches de fond DOIT
+      // repartir vide quand le process CLI (re)démarre, sinon un worker relancé
+      // hérite des tâches du précédent et n'est plus jamais tenu pour fini.
+      etat.tachesFond = [];
       // Le modèle résolu n'est connu qu'ici : le CLI peut résoudre un alias
       // (`opus`) vers un identifiant précis, et c'est celui-là qui compte.
       if (typeof sonde.model === 'string') etat.modeleResolu = sonde.model;

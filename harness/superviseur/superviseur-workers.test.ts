@@ -33,13 +33,26 @@ function fakeQuery(
     reinitialize?: () => Promise<unknown>;
   } = {},
 ): Query {
+  // ☠ Le flux NE SE TERMINE PAS quand les messages sont épuisés : mesuré sur banc
+  // réel (23/07), une session en streaming input reste ouverte après ses `result`
+  // et peut repartir seule (fin d'un sous-agent de fond). Une doublure qui se
+  // termine tout de suite modélise une session que le SDK n'a jamais eue — et
+  // c'est précisément cette croyance qui faisait couper les équipes en plein vol.
+  let fermer = (): void => {};
+  const close = new Promise<void>((resolve) => {
+    fermer = resolve;
+  });
   async function* flux(): AsyncGenerator<SDKMessage, void> {
     for (const message of messages) yield message;
+    await close;
   }
   const iterateur = flux();
   return Object.assign(iterateur, {
     interrupt: overrides.interrupt ?? (async () => ({ still_queued: [] })),
-    close: overrides.close ?? ((): void => {}),
+    close: (): void => {
+      fermer();
+      overrides.close?.();
+    },
     reinitialize: overrides.reinitialize ?? (async () => ({ commands: [], agents: [], models: [] })),
   }) as unknown as Query;
 }
@@ -568,5 +581,112 @@ describe('câblage des budgets (mission M-51) sur un flux réel', () => {
     });
     await expect(superviseur.demarrer(demande())).resolves.toBeDefined();
     await laisserPasserLesMicrotaches();
+  });
+});
+
+/**
+ * ☠ LE défaut qui coupait des équipes en plein travail (mesuré en prod le 23/07).
+ *
+ * Un `result` marque la fin d'un TOUR, pas de la session. Le SDK en streaming
+ * input rouvre un tour tout seul quand un sous-agent de fond se termine — banc
+ * réel : `result` n°1, puis `background_tasks_changed`, `task_notification`,
+ * `init`, le lead reprend avec le résultat de son sous-agent, `result` n°2.
+ * Le module marquait le worker MORT au premier `result` : les quatre sous-agents
+ * d'une vraie mission se sont arrêtés net, deux après cinq lignes.
+ */
+describe('un `result` pendant des tâches de fond ne tue PAS la session', () => {
+  function tachesDeFond(taches: readonly { task_id: string; task_type: string; description: string }[]): SDKMessage {
+    return {
+      type: 'system',
+      subtype: 'background_tasks_changed',
+      tasks: taches,
+      uuid: '99999999-2222-3333-4444-555555555555',
+      session_id: '11111111-2222-3333-4444-555555555555',
+    } as unknown as SDKMessage;
+  }
+
+  function resultOk(): SDKMessage {
+    return {
+      type: 'result',
+      subtype: 'success',
+      duration_ms: 1,
+      duration_api_ms: 1,
+      is_error: false,
+      num_turns: 1,
+      result: 'ok',
+      stop_reason: null,
+      total_cost_usd: 0.01,
+      usage: {} as never,
+      modelUsage: {},
+      permission_denials: [],
+      terminal_reason: 'completed' as never,
+      uuid: '11111111-2222-3333-4444-555555555555',
+      session_id: '11111111-2222-3333-4444-555555555555',
+    } as unknown as SDKMessage;
+  }
+
+  test('☠ un sous-agent de fond vit encore : le worker RESTE vivant après le result', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([
+          tachesDeFond([{ task_id: 't-1', task_type: 'subagent', description: 'Paragraphe sur la mer' }]),
+          resultOk(),
+        ]),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
+  });
+
+  test('plus aucune tâche de fond : le result vaut bien fin de session', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([
+          tachesDeFond([{ task_id: 't-1', task_type: 'subagent', description: 'en cours' }]),
+          // Le sous-agent se termine : le SDK réémet l'ENSEMBLE, désormais vide
+          // (sémantique REPLACE — jamais un appariement début/fin).
+          tachesDeFond([]),
+          resultOk(),
+        ]),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test('☠ aucune tâche de fond du tout : comportement d’avant INCHANGÉ, pas d’équipe en attente éternelle', async () => {
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery([resultOk()])),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+
+  test('☠ les tâches de fond repartent VIDES à chaque `init` — sinon un worker relancé n’est plus jamais tenu pour fini', async () => {
+    const init = {
+      type: 'system',
+      subtype: 'init',
+      uuid: '88888888-2222-3333-4444-555555555555',
+      session_id: '11111111-2222-3333-4444-555555555555',
+    } as unknown as SDKMessage;
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([
+          tachesDeFond([{ task_id: 't-1', task_type: 'subagent', description: 'héritée' }]),
+          init,
+          resultOk(),
+        ]),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 });

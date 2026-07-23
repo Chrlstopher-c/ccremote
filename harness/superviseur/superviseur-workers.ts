@@ -11,8 +11,17 @@
  * dispatch) et de ce qu'il observe lui-même sur le `Query` du worker.
  *
  * **`deciderRelance()` (dette M-34)** : seul endroit du harness qui lit les
- * `SDKResultMessage` réels (`#surveillerResultats`) — un `result` ferme tout le
- * process (mesuré), donc chaque issue de tour est un CHOIX : relancer ou remonter.
+ * `SDKResultMessage` réels (`#surveillerResultats`) — chaque issue de tour est un
+ * CHOIX : relancer ou remonter.
+ *
+ * `☠ CORRIGÉ LE 23/07` — l'en-tête affirmait ici qu'« un `result` ferme tout le
+ * process (mesuré) ». C'est FAUX en streaming input, et cette croyance coûtait
+ * des équipes entières : le module marquait le worker mort au premier `result`.
+ * Banc réel : après `result n°1`, le SDK émet `background_tasks_changed`, une
+ * `task_notification`, un nouvel `init`, et le lead REPART SEUL avec le résultat
+ * de son sous-agent jusqu'à un `result n°2` ; le flux ne se termine jamais. La
+ * mesure d'origine valait pour un prompt unique, pas pour une session pilotée
+ * par un générateur d'entrée — qui est notre cas.
  *
  * **Idempotence** (D.3.1/D.3.2) : NATURELLE ici (rejouer `arreter`/`relancer`/
  * `tuerSansPreavis` sur un worker déjà dans l'état visé est un no-op, vérifié
@@ -482,6 +491,33 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         // encore `vivant` pour que `arreter()` (appelé PAR le câblage anti-boucle) produise un
         // effet réel (`entree.fermer()` + `query.close()`), pas un no-op sur un mort déjà marqué.
         const actionAntiBoucle = await this.#antiBoucle.evaluerEtAppliquer(missionId, message, (id) => this.arreter(id));
+
+        // ☠☠ UN `result` EST LA FIN D'UN TOUR, PAS LA FIN DE LA SESSION.
+        //
+        // Ce module marquait le worker MORT et sortait de la boucle au PREMIER
+        // `result`. En streaming input, la session survit pourtant à ses tours :
+        // mesuré sur banc réel (23/07) — après `result n°1`, le SDK a émis
+        // `background_tasks_changed`, `task_notification`, un nouvel `init`, puis
+        // le lead a REPRIS TOUT SEUL avec le résultat de son sous-agent, jusqu'à
+        // un `result n°2`. Le flux, lui, ne s'est jamais terminé.
+        //
+        // Conséquence du défaut, mesurée en production le même jour : une équipe
+        // dont le lead déléguait à quatre sous-agents était déclarée « terminée »
+        // à la seconde où il rendait la main ; les quatre transcripts se sont
+        // arrêtés net, deux d'entre eux après cinq lignes. Le travail était perdu
+        // et l'opérateur lisait « terminée ».
+        //
+        // On ne raccroche donc plus sur un `result` tant qu'une tâche de fond
+        // vit. La mort n'est plus DÉDUITE : elle est CONSTATÉE à la fin réelle du
+        // flux (après la boucle) ou décidée par un arrêt explicite.
+        if (this.#telemetrie.aDesTachesFond(missionId) && actionAntiBoucle !== 'couper') {
+          log.info(
+            { taches: true },
+            'tour terminé mais des tâches de fond vivent — la session reste ouverte, écoute poursuivie',
+          );
+          continue;
+        }
+
         if (actionAntiBoucle !== 'couper') this.#registre.marquerMort(handle.sessionId);
         this.#telemetrie.fermer(missionId);
         const decision = deciderRelance(handle.sessionId, message.terminal_reason, {
@@ -499,9 +535,31 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         }
         break;
       }
+      // ☠ Sortie NATURELLE du flux : la session est réellement close (le SDK a
+      // fermé le transport, ou `arreter()` a fermé l'entrée). C'est le seul
+      // constat de mort qui ne soit pas une déduction.
+      this.#marquerMortSiToujoursLeNotre(missionId, handle);
     } catch (erreur) {
       log.error({ err: erreur }, 'boucle de surveillance des résultats interrompue par une exception');
+      // Une exception laisse un worker qu'on ne lit plus : le taire le ferait
+      // passer pour vivant à jamais, et l'opérateur piloterait un fantôme.
+      this.#marquerMortSiToujoursLeNotre(missionId, handle);
     }
+  }
+
+  /**
+   * Constate la mort du worker qu'on surveillait — et de LUI SEUL.
+   *
+   * `☠` Une relance réutilise le MÊME `sessionId` (`resume`, B.3.3) : marquer
+   * mort par identifiant après la boucle tuait le worker RELANCÉ, celui qui vient
+   * tout juste de prendre la place. La comparaison porte donc sur la poignée
+   * elle-même, seule identité qui distingue deux générations d'un même id.
+   */
+  #marquerMortSiToujoursLeNotre(missionId: string, handle: WorkerHandle): void {
+    const courant = this.#registre.parSession(handle.sessionId);
+    if (courant !== null && courant.handle !== handle) return;
+    this.#registre.marquerMort(handle.sessionId);
+    this.#telemetrie.fermer(missionId);
   }
 
   /**

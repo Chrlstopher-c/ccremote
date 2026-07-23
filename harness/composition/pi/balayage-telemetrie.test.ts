@@ -18,6 +18,7 @@ const RELEVE: TelemetrieWorker = {
   derniereActivite: null,
   activitesEnAttente: [],
   sousAgents: [],
+  tachesFond: [],
   quotaSature: false,
   motifQuota: null,
   observeA: 0,

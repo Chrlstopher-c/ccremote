@@ -286,6 +286,14 @@ export interface TelemetrieWorker {
    * missions qui en avaient cinq.
    */
   readonly sousAgents: readonly SousAgentObserve[];
+  /**
+   * Tâches de fond vivantes (sous-agents en arrière-plan, commandes détachées).
+   *
+   * `☠` Non vide ⇒ un `result` du lead ne signifie PAS que la mission est finie :
+   * il attend ses sous-agents. C'est ce qui distingue « a rendu son travail » de
+   * « patiente » — sans quoi l'équipe était coupée en plein vol (23/07).
+   */
+  readonly tachesFond: readonly { readonly taskId: string; readonly type: string; readonly description: string }[];
   /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */
   readonly quotaSature: boolean;
   readonly motifQuota: string | null;

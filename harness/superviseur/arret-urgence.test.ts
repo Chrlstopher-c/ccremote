@@ -31,13 +31,24 @@ function fakeQuery(
     close?: () => void;
   } = {},
 ): Query {
+  // ☠ Le flux reste OUVERT tant que `close()` n'est pas appelé — c'est le
+  // comportement réel du SDK en streaming input (mesuré 23/07). Une doublure qui
+  // se termine d'elle-même ferait constater une mort qui n'a pas lieu.
+  let fermer = (): void => {};
+  const close = new Promise<void>((resolve) => {
+    fermer = resolve;
+  });
   async function* flux(): AsyncGenerator<SDKMessage, void> {
     // Jamais de message : ces tests n'exercent pas `#surveillerResultats`.
+    await close;
   }
   const iterateur = flux();
   return Object.assign(iterateur, {
     interrupt: overrides.interrupt ?? (async () => ({ still_queued: [] })),
-    close: overrides.close ?? ((): void => {}),
+    close: (): void => {
+      fermer();
+      overrides.close?.();
+    },
     reinitialize: async () => ({ commands: [], agents: [], models: [] }),
   }) as unknown as Query;
 }
