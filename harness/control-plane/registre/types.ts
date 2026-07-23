@@ -262,6 +262,14 @@ export interface Conversation {
   readonly compactions: number;
   /** Résumé réinjecté à la prochaine session après compaction. */
   readonly resumeContexte: string | null;
+  /**
+   * Dernier modèle et effort utilisés dans ce fil. `☠` C'est ce qui permet de
+   * ROUVRIR la conversation là où on l'avait laissée : l'UI retombait sur ses
+   * défauts (Opus 4.8 / high) à chaque rafraîchissement, en contradiction avec
+   * le message affiché juste au-dessus.
+   */
+  readonly modele: string | null;
+  readonly effort: string | null;
 }
 
 export type TypeEvenementConversation =
@@ -305,6 +313,16 @@ export interface EvenementConversation {
   readonly type: TypeEvenementConversation;
   readonly contenu: string;
   readonly creeA: number;
+  /**
+   * Modèle et effort qui ont RÉELLEMENT produit cet évènement.
+   *
+   * `☠` Portés par l'évènement, pas seulement par la conversation : changer de
+   * modèle en cours de fil ne doit pas réécrire l'attribution des réponses déjà
+   * rendues. Sans ça, impossible de savoir laquelle venait de quel modèle —
+   * exactement la friction remontée le 23/07.
+   */
+  readonly modele: string | null;
+  readonly effort: string | null;
 }
 
 /** Vue « où en est ce que j'ai demandé hier soir ? » (F2.0.1). */

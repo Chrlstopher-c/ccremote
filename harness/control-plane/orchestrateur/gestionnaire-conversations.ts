@@ -152,6 +152,12 @@ export class ConversationIntrouvableError extends Error {
   }
 }
 
+/** Choix d'affichage de l'opérateur pour un envoi. Absents ⇒ on garde ceux du fil. */
+export interface ChoixModele {
+  readonly modele?: string | null;
+  readonly effort?: string | null;
+}
+
 export class GestionnaireConversations {
   readonly #sessions = new Map<string, SessionActive>();
   readonly #demarrages = new Map<string, Promise<SessionActive>>();
@@ -246,16 +252,55 @@ export class GestionnaireConversations {
    * réponse : `envoyerOperateur` ne fait qu'enfiler — la réponse remonte par le
    * streaming (événements). L'appelant HTTP rend la main tout de suite.
    */
-  async envoyer(id: string, texte: string): Promise<void> {
+  async envoyer(id: string, texte: string, choix: ChoixModele = {}): Promise<void> {
     const propre = texte.trim();
     if (propre.length === 0) throw new RangeError('message vide');
     const conv = this.registre.conversations.lire(id);
     if (conv === null) throw new ConversationIntrouvableError(id);
 
-    this.registre.conversations.ajouterEvenement({ conversationId: id, type: 'operateur', contenu: propre });
+    // `☠` Le choix de l'opérateur n'était appliqué NULLE PART : l'UI envoyait
+    // bien `model` et `effort`, la route les jetait, et la session tournait sur
+    // sa constante. L'écran donnait donc le change sur un réglage sans effet
+    // (constaté le 23/07). Le dernier choix retenu vaut aussi pour les envois
+    // suivants qui ne précisent rien — sinon rouvrir un fil le ferait taire.
+    const modele = choix.modele ?? conv.modele;
+    const effort = choix.effort ?? conv.effort;
+
+    this.registre.conversations.ajouterEvenement({
+      conversationId: id,
+      type: 'operateur',
+      contenu: propre,
+      modele,
+      effort,
+    });
     const session = await this.#assurerSession(conv);
+    await this.#appliquerChoixModele(session.poignee.query, id, modele, effort);
+    if (choix.modele !== undefined || choix.effort !== undefined) {
+      this.registre.conversations.poserModeleEffort(id, modele, effort);
+    }
     session.collecteur.marquerEnvoi();
+    session.collecteur.poserModeleEffort(modele, effort);
     await session.poignee.entree.envoyerOperateur(propre);
+  }
+
+  /**
+   * Applique modèle et effort à la session VIVANTE. `☠` Les deux ne sont
+   * disponibles qu'en streaming input (doc du SDK) — c'est notre cas. Un échec
+   * ne fait jamais perdre le message : on journalise et on envoie quand même,
+   * plutôt que de refuser un tour pour un réglage d'affichage.
+   */
+  async #appliquerChoixModele(
+    query: { setModel?: (m?: string) => Promise<void>; applyFlagSettings?: (s: Record<string, unknown>) => Promise<void> },
+    conversationId: string,
+    modele: string | null,
+    effort: string | null,
+  ): Promise<void> {
+    try {
+      if (modele !== null) await query.setModel?.(modele);
+      if (effort !== null) await query.applyFlagSettings?.({ effortLevel: effort });
+    } catch (erreur) {
+      log.warn({ err: erreur, conversationId, modele, effort }, 'modèle/effort non appliqués — message envoyé quand même');
+    }
   }
 
   /**

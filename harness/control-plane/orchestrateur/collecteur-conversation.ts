@@ -114,6 +114,21 @@ export class CollecteurConversation {
     private readonly depot: DepotConversations,
   ) {}
 
+  /**
+   * Modèle et effort du tour en cours, estampillés sur CHAQUE évènement produit.
+   *
+   * `☠` Sans cette attribution, une conversation où l'opérateur change de modèle
+   * en cours de route devient illisible : rien ne dit quelle réponse vient de
+   * quel modèle ni de quel niveau de raisonnement (friction remontée le 23/07).
+   */
+  #modele: string | null = null;
+  #effort: string | null = null;
+
+  poserModeleEffort(modele: string | null, effort: string | null): void {
+    this.#modele = modele;
+    this.#effort = effort;
+  }
+
   /** L'opérateur vient d'envoyer : un tour de génération commence. */
   marquerEnvoi(): void {
     this.#genere = true;
@@ -201,7 +216,13 @@ export class CollecteurConversation {
     this.#genere = false;
     this.#partiel = null;
     try {
-      this.depot.ajouterEvenement({ conversationId: this.conversationId, type: 'erreur', contenu: raison });
+      this.depot.ajouterEvenement({
+        conversationId: this.conversationId,
+        type: 'erreur',
+        contenu: raison,
+        modele: this.#modele,
+        effort: this.#effort,
+      });
     } catch (erreur) {
       log.error({ err: erreur, conversationId: this.conversationId }, 'échec de persistance de l’erreur terminale');
     }
@@ -284,7 +305,13 @@ export class CollecteurConversation {
       return;
     }
     try {
-      this.depot.ajouterEvenement({ conversationId: this.conversationId, type, contenu });
+      this.depot.ajouterEvenement({
+        conversationId: this.conversationId,
+        type,
+        contenu,
+        modele: this.#modele,
+        effort: this.#effort,
+      });
     } catch (erreur) {
       log.error({ err: erreur, conversationId: this.conversationId, type }, 'échec de persistance d’un événement');
     }

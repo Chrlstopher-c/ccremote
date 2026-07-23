@@ -21,6 +21,8 @@ interface LigneConversation {
   maj_a: number;
   compactions: number;
   resume_contexte: string | null;
+  modele: string | null;
+  effort: string | null;
 }
 
 interface LigneEvenement {
@@ -29,6 +31,8 @@ interface LigneEvenement {
   type: string;
   contenu: string;
   cree_a: number;
+  modele: string | null;
+  effort: string | null;
 }
 
 function versConversation(l: LigneConversation): Conversation {
@@ -42,6 +46,8 @@ function versConversation(l: LigneConversation): Conversation {
     majA: l.maj_a,
     compactions: l.compactions,
     resumeContexte: l.resume_contexte,
+    modele: l.modele,
+    effort: l.effort,
   };
 }
 
@@ -53,6 +59,8 @@ function versEvenement(l: LigneEvenement): EvenementConversation {
     type: l.type as TypeEvenementConversation,
     contenu: l.contenu,
     creeA: l.cree_a,
+    modele: l.modele,
+    effort: l.effort,
   };
 }
 
@@ -65,6 +73,9 @@ export interface AjoutEvenement {
   readonly conversationId: string;
   readonly type: TypeEvenementConversation;
   readonly contenu: string;
+  /** Ce qui a produit CET évènement — jamais réécrit si le fil change de modèle ensuite. */
+  readonly modele?: string | null;
+  readonly effort?: string | null;
 }
 
 export class DepotConversations {
@@ -228,8 +239,18 @@ export class DepotConversations {
       () =>
         this.db.transaction(() => {
           const res = this.db
-            .query('INSERT INTO conversation_evenement (conversation_id, type, contenu, cree_a) VALUES (?, ?, ?, ?)')
-            .run(ajout.conversationId, ajout.type, ajout.contenu, maintenant);
+            .query(
+              `INSERT INTO conversation_evenement (conversation_id, type, contenu, cree_a, modele, effort)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+            )
+            .run(
+              ajout.conversationId,
+              ajout.type,
+              ajout.contenu,
+              maintenant,
+              ajout.modele ?? null,
+              ajout.effort ?? null,
+            );
           this.db.query('UPDATE conversation SET maj_a = ? WHERE id = ?').run(maintenant, ajout.conversationId);
           return {
             seq: Number(res.lastInsertRowid),
@@ -237,9 +258,28 @@ export class DepotConversations {
             type: ajout.type,
             contenu: ajout.contenu,
             creeA: maintenant,
+            modele: ajout.modele ?? null,
+            effort: ajout.effort ?? null,
           };
         })(),
       { conversationId: ajout.conversationId, type: ajout.type },
+    );
+  }
+
+  /**
+   * Mémorise le dernier couple modèle/effort du fil. `☠` C'est ce qui permet de
+   * rouvrir la conversation là où on l'a laissée, au lieu de retomber sur les
+   * défauts en contradiction avec le dernier message affiché.
+   */
+  public poserModeleEffort(id: string, modele: string | null, effort: string | null, maintenant: number = Date.now()): void {
+    executer(
+      'conversations.poserModeleEffort',
+      () => {
+        this.db
+          .query('UPDATE conversation SET modele = ?, effort = ?, maj_a = ? WHERE id = ?')
+          .run(modele, effort, maintenant, id);
+      },
+      { id, modele, effort },
     );
   }
 

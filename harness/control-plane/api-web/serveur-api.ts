@@ -271,10 +271,14 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     const corps = await lireCorps(req);
     const texte = corps['text'];
     if (typeof texte !== 'string' || texte.trim().length === 0) throw requeteInvalide('message vide');
+    // `☠` Modèle et effort étaient reçus ici et JETÉS : l'interface proposait un
+    // réglage sans le moindre effet, et la session tournait sur sa constante.
+    const modele = typeof corps['model'] === 'string' ? corps['model'] : undefined;
+    const effort = typeof corps['effort'] === 'string' ? corps['effort'] : undefined;
     // `☠` NE bloque pas jusqu'à la réponse : `envoyer` enfile puis rend la main.
     // La réponse remonte par le streaming (GET .../events). Un POST bloquant
     // jusqu'au `result` immobiliserait le relais et Cloudflare le couperait.
-    await conv.envoyer(decodeURIComponent(message[1]), texte);
+    await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort });
     return { ok: true, effet: 'message envoyé — la réponse arrive en streaming' };
   }
 

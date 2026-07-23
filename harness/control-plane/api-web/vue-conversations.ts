@@ -14,6 +14,13 @@ export interface EvenementApi {
   readonly type: TypeEvenementConversation;
   readonly contenu: string;
   readonly at: number;
+  /**
+   * Ce qui a produit cet évènement. `☠` Porté PAR ÉVÈNEMENT : un fil où
+   * l'opérateur change de modèle en cours de route doit rester lisible après
+   * coup — sans ça, impossible de savoir quelle réponse venait de quel modèle.
+   */
+  readonly model: string | null;
+  readonly effort: string | null;
 }
 
 export interface ConversationApi {
@@ -24,6 +31,13 @@ export interface ConversationApi {
   readonly active: boolean;
   readonly contextPct: number | null;
   readonly compactions: number;
+  /**
+   * Dernier couple utilisé dans ce fil — ce sur quoi l'interface doit ROUVRIR.
+   * `null` sur un fil vierge : c'est alors, et alors seulement, que les défauts
+   * s'appliquent.
+   */
+  readonly model: string | null;
+  readonly effort: string | null;
 }
 
 export interface DetailConversationApi extends ConversationApi {
@@ -82,12 +96,17 @@ export interface PortConversations {
     readonly compactions: number;
     readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
-  envoyer(id: string, texte: string): Promise<void>;
+  /**
+   * `choix` absent ou partiel ⇒ le fil garde ce qu'il utilisait déjà. `☠` Ces
+   * deux valeurs étaient reçues par la route puis jetées : le sélecteur de
+   * l'interface n'avait aucun effet sur la session (23/07).
+   */
+  envoyer(id: string, texte: string, choix?: { readonly modele?: string; readonly effort?: string }): Promise<void>;
   compacter(id: string): Promise<{ readonly compacte: boolean; readonly detail: string }>;
 }
 
 export function versEvenementApi(ev: EvenementConversation): EvenementApi {
-  return { seq: ev.seq, type: ev.type, contenu: ev.contenu, at: ev.creeA };
+  return { seq: ev.seq, type: ev.type, contenu: ev.contenu, at: ev.creeA, model: ev.modele, effort: ev.effort };
 }
 
 export function versConversationApi(entree: {
@@ -98,6 +117,8 @@ export function versConversationApi(entree: {
   readonly active: boolean;
   readonly contextePct: number | null;
   readonly compactions?: number;
+  readonly modele?: string | null;
+  readonly effort?: string | null;
 }): ConversationApi {
   return {
     id: entree.id,
@@ -107,6 +128,8 @@ export function versConversationApi(entree: {
     active: entree.active,
     contextPct: entree.contextePct,
     compactions: entree.compactions ?? 0,
+    model: entree.modele ?? null,
+    effort: entree.effort ?? null,
   };
 }
 

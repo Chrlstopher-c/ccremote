@@ -387,6 +387,26 @@ CREATE TABLE IF NOT EXISTS activite_sous_agent (
 CREATE INDEX IF NOT EXISTS idx_activite_sous_agent ON activite_sous_agent(mission_id, agent_id, rang);
 `;
 
+/**
+ * Modèle et effort d'une conversation orchestrateur.
+ *
+ * `☠` DEUX défauts réunis, constatés le 23/07 : (1) le choix de l'opérateur
+ * n'était appliqué NULLE PART — `sendOrchestratorMessage` envoyait bien `model`
+ * et `effort`, la route les jetait, et la session tournait sur sa constante ;
+ * (2) rien n'était mémorisé, donc l'UI retombait sur Opus/high à chaque refresh,
+ * en désaccord avec le message juste au-dessus.
+ *
+ * Sur la conversation : le DERNIER choix, pour rouvrir là où on s'était arrêté.
+ * Sur l'évènement : ce qui a réellement produit CETTE réponse — un historique ne
+ * se réécrit pas quand on change de modèle en cours de route.
+ */
+const MIGRATION_12 = `
+ALTER TABLE conversation ADD COLUMN modele TEXT;
+ALTER TABLE conversation ADD COLUMN effort TEXT;
+ALTER TABLE conversation_evenement ADD COLUMN modele TEXT;
+ALTER TABLE conversation_evenement ADD COLUMN effort TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -399,6 +419,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 9, nom: 'jeton-oauth-compte', sql: MIGRATION_9 },
   { version: 10, nom: 'sous-agents-mission', sql: MIGRATION_10 },
   { version: 11, nom: 'activites-sous-agent', sql: MIGRATION_11 },
+  { version: 12, nom: 'modele-effort-conversation', sql: MIGRATION_12 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

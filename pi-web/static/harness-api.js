@@ -115,10 +115,17 @@ const HarnessAPI = (() => {
       return lireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/events?since=${since | 0}`);
     },
     async createConversation(titre) { return ecrireReel('/orchestrator/conversations', titre ? { titre } : {}); },
-    async sendConversationMessage(id, text) {
+    async sendConversationMessage(id, text, choix) {
       // ☠ NON bloquant : le serveur enfile puis rend la main, la réponse arrive
       // en streaming via getConversationEvents. On ne fabrique jamais de réponse.
-      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/message`, { text });
+      // ☠ `model`/`effort` n'étaient PAS transmis sur cette route : le sélecteur
+      // de l'interface ne pilotait donc rien du tout, la session tournait sur sa
+      // constante. Corrigé le 23/07 — et appliqué réellement côté serveur.
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/message`, {
+        text,
+        model: choix?.model,
+        effort: choix?.effort,
+      });
     },
     async renameConversation(id, titre) {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/rename`, { titre });

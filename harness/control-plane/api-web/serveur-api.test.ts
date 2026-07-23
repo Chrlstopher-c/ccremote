@@ -413,3 +413,35 @@ describe('API web — détail d’un sous-agent (H-72.1)', () => {
     expect((await lire(`/missions/${id}/agents/fantome`)).statut).toBe(404);
   });
 });
+
+describe('API web — modèle et raisonnement d’une conversation (23/07)', () => {
+  test('☠ le choix est TRANSMIS au gestionnaire — il était reçu puis jeté, le sélecteur ne pilotait rien', async () => {
+    const recus: { texte: string; choix: unknown }[] = [];
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      escalades,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      conversations: {
+        lister: () => [],
+        detail: () => null,
+        evenements: () => null,
+        creer: () => ({ id: 'c1', titre: 't', creeA: MAINTENANT, majA: MAINTENANT }),
+        envoyer: async (_id: string, texte: string, choix?: unknown) => {
+          recus.push({ texte, choix });
+        },
+        renommer: async () => {},
+        archiver: async () => {},
+        compacter: async () => ({ compacte: false, detail: 'rien' }),
+      } as never,
+    });
+    const rep = await fetch(`http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations/c1/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'salut', model: 'claude-sonnet-5', effort: 'medium' }),
+    });
+    expect(rep.status).toBe(200);
+    expect(recus[0]?.choix).toEqual({ modele: 'claude-sonnet-5', effort: 'medium' });
+  });
+});

@@ -224,6 +224,16 @@ async function hOpenConversation(id) {
   (d.events || []).forEach(hAppendEvent);
   hOrch.cursor = d.cursor || 0;
   hOrch.generating = !!d.generating;
+  // ☠ On ROUVRE sur ce que ce fil utilisait, pas sur les défauts. L'interface
+  // retombait sur Opus 4.8 / high à chaque rafraîchissement, en contradiction
+  // avec le message affiché juste au-dessus — et il fallait re-régler à chaque
+  // fois (friction remontée le 23/07). Un fil VIERGE n'a pas de mémoire : c'est
+  // alors, et alors seulement, que les défauts s'appliquent.
+  if (d.model) {
+    HarnessState.orchModel.model = d.model;
+    if (d.effort) HarnessState.orchModel.effort = d.effort;
+    hSyncSelecteursModele();
+  }
   if (!d.events || d.events.length === 0) {
     chat.innerHTML = `<div class="conv-empty"><div class="ce-t">Nouvelle conversation</div>Écris à l'orchestrateur — sa session démarre au premier message.</div>`;
   }
@@ -429,7 +439,33 @@ function hAppendEvent(ev) {
   const noeud = hBlocNode(ev.type, ev.contenu, false);
   if (!noeud) return;
   if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
-  hInsererDansGroupe(hEnsureAssistant(chat), noeud);
+  const groupe = hEnsureAssistant(chat);
+  // ☠ L'attribution est portée par l'ÉVÈNEMENT, pas par l'état courant du
+  // sélecteur : relire un fil où l'on a changé de modèle doit montrer ce qui a
+  // réellement produit CHAQUE réponse, pas le dernier réglage en date.
+  hMarquerAttribution(groupe, ev);
+  hInsererDansGroupe(groupe, noeud);
+}
+
+/** Nom lisible d'un modèle — l'identifiant technique ne dit rien à l'œil. */
+function hLibelleModele(id) {
+  const connu = (typeof hModelsCache !== 'undefined' && hModelsCache || []).find((m) => m.id === id);
+  return connu ? connu.label : id;
+}
+
+/**
+ * Pose, une seule fois par groupe, l'étiquette « quel modèle · quel
+ * raisonnement ». Sans elle, une conversation où l'on change de modèle en cours
+ * de route devient illisible après coup : rien ne dit qui a répondu quoi.
+ */
+function hMarquerAttribution(groupe, ev) {
+  if (!ev.model || groupe.querySelector('.attrib')) return;
+  const eff = ev.effort ? ` · ${(typeof HARNESS_EFFORT_LABEL !== 'undefined' && HARNESS_EFFORT_LABEL[ev.effort]) || ev.effort}` : '';
+  const tag = document.createElement('div');
+  tag.className = 'attrib mono';
+  tag.style.cssText = 'font-size:9.5px;color:var(--ink-3);margin-bottom:6px;letter-spacing:.02em;';
+  tag.textContent = `${hLibelleModele(ev.model)}${eff}`;
+  groupe.insertBefore(tag, groupe.firstChild);
 }
 
 /**
@@ -582,7 +618,10 @@ async function hSendOrchMessage() {
   hShowTyping(true);
   hScrollChat();
 
-  const r = await HarnessAPI.sendConversationMessage(hOrch.convId, text);
+  const r = await HarnessAPI.sendConversationMessage(hOrch.convId, text, {
+    model: HarnessState.orchModel.model,
+    effort: HarnessState.orchModel.effort,
+  });
   btn.disabled = false;
   // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.
   if (!r.ok) {
@@ -593,7 +632,23 @@ async function hSendOrchMessage() {
   hStartPoll();
 }
 
-// ============ Sélecteur de modèle / raisonnement (inchangé) ============
+/**
+ * Réaligne les deux listes déroulantes sur `HarnessState.orchModel`. Appelé à
+ * l'ouverture d'un fil : sans ça, l'état interne serait juste, mais l'écran
+ * continuerait d'afficher le modèle précédent — pire qu'un simple défaut.
+ */
+function hSyncSelecteursModele() {
+  const selModel = document.getElementById('hSelModel');
+  if (!selModel || !hModelsCache) return;
+  selModel.value = HarnessState.orchModel.model;
+  hRefreshEffortOptions();
+  const selEffort = document.getElementById('hSelEffort');
+  if (selEffort && !selEffort.disabled) selEffort.value = HarnessState.orchModel.effort;
+  hRefreshModelToggles();
+  hUpdateModelHint();
+}
+
+// ============ Sélecteur de modèle / raisonnement ============
 async function hRenderModelSelector() {
   hModelsCache = (await HarnessAPI.getModels());
   const selModel = document.getElementById('hSelModel');
