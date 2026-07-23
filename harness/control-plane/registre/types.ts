@@ -210,7 +210,27 @@ export type TypeEvenementConversation =
   | 'resultat'
   | 'erreur'
   /** Marqueur laissé dans le fil à chaque compaction — contenu : le résumé retenu. */
-  | 'compaction';
+  | 'compaction'
+  /** Proposition de mandat (H-61) — contenu : l'identifiant de la proposition. */
+  | 'mandat';
+
+export type StatutProposition = 'en_attente' | 'approuvee' | 'refusee';
+
+/** Mandat proposé par l'orchestrateur, en attente d'autorisation humaine (H-61). */
+export interface Proposition {
+  readonly id: string;
+  readonly conversationId: string | null;
+  readonly projet: string;
+  readonly objectif: string;
+  readonly critereArret: string | null;
+  readonly perimetre: string;
+  readonly budgetMaxUsd: number;
+  readonly statut: StatutProposition;
+  readonly missionId: string | null;
+  readonly detail: string | null;
+  readonly creeA: number;
+  readonly majA: number;
+}
 
 /** Un bloc du fil, dans l'ordre d'arrivée. `seq` est le curseur de streaming. */
 export interface EvenementConversation {

@@ -28,6 +28,9 @@ import type { FermetureTerminale } from '../../transport/contrat.ts';
 import type { LienWebSocket } from '../../transport/lien-websocket.ts';
 import { compositionLogger } from '../logger.ts';
 import { cablerRecepteurControlePc, type RecepteurControlePc } from './canal-controle-recepteur.ts';
+import { construireWorkerSpec } from './construire-worker-spec.ts';
+import { creerPortBusPermissionsDistant } from './port-bus-permissions-distant.ts';
+import { CollecteurAuditPermissions, creerHooksAuditPermissions } from '../../control-plane/audit-permissions/index.ts';
 import { creerClientLienPi } from './client-lien-pi.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-superviseur-pc' });
@@ -79,7 +82,19 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
     secret: options.secretLienPi,
     surFermetureTerminale: options.surFermetureTerminale,
   });
-  const recepteurControle = cablerRecepteurControlePc(superviseur, lien);
+  // `☠` L'assembleur est LE point où un worker reçoit ses ports. Le Pi n'envoie
+  // que des données (voir `ParametresSpecTransportables`) : sans ce réassemblage,
+  // un worker démarrerait sans audit ni bus de permissions — protections
+  // silencieusement absentes (H-73.1, H-74). `construireWorkerSpec` exige les
+  // deux ports en paramètres, ce qui rend l'oubli impossible.
+  const portBusPermissions = creerPortBusPermissionsDistant(lien);
+  const recepteurControle = cablerRecepteurControlePc(superviseur, lien, {
+    assemblerSpec: (parametres) =>
+      construireWorkerSpec(parametres, portBusPermissions, () => {
+        const collecteur = new CollecteurAuditPermissions();
+        return creerHooksAuditPermissions(collecteur);
+      }),
+  });
   void lien.connecter();
 
   return {

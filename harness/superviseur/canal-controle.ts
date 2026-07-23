@@ -23,7 +23,13 @@
 
 import type { DemandeEnAttenteReinitialisation, DescripteurWorkerPc } from '../control-plane/reconciliation/types.ts';
 import { superviseurLogger as journal } from './logger.ts';
-import type { DemandeDemarrage, RapportArretUrgence } from './types.ts';
+import type {
+  DemandeDemarrage,
+  DemandeDemarrageTransportable,
+  ParametresSpecTransportables,
+  RapportArretUrgence,
+} from './types.ts';
+import type { WorkerSpec } from '../workers/index.ts';
 
 /**
  * Sous-ensemble de `SuperviseurWorkers` réellement utilisé ici — un port, pas la
@@ -66,9 +72,15 @@ const REFUS_PILOTAGE = {
   detail: 'pilotage non câblé sur ce superviseur',
 };
 
+const REFUS_DISPATCH = {
+  ok: false as const,
+  effet: 'refuse' as const,
+  detail: "démarrage d'équipe non câblé sur ce superviseur (assembleur de spec absent)",
+};
+
 export type OperationControle =
   | { readonly type: 'inventaire' }
-  | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrage }
+  | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
   | { readonly type: 'relancer_worker'; readonly missionId: string; readonly sessionId: string }
@@ -116,17 +128,25 @@ const TAILLE_MAX_CACHE_DEFAUT = 1000;
 export interface OptionsCanalControle {
   /** Borne mémoire du cache d'idempotence — un opId très ancien est purgé (FIFO). */
   readonly tailleMaxCache?: number;
+  /**
+   * Réassemble un `WorkerSpec` complet à partir des données reçues du Pi, en y
+   * injectant les ports LOCAUX du PC (audit, bus de permissions). Absent ⇒
+   * `demarrer_worker` est refusé explicitement — voir `REFUS_DISPATCH`.
+   */
+  readonly assemblerSpec?: (parametres: ParametresSpecTransportables) => WorkerSpec;
 }
 
 export class CanalControle {
   readonly #superviseur: PortSuperviseurControle;
   readonly #tailleMaxCache: number;
+  readonly #assemblerSpec: ((parametres: ParametresSpecTransportables) => WorkerSpec) | undefined;
   /** Cache d'idempotence : opId ⇒ réponse d'une mutation RÉUSSIE (D.3.2). */
   readonly #traitees = new Map<string, ReponseControle>();
 
   constructor(superviseur: PortSuperviseurControle, options: OptionsCanalControle = {}) {
     this.#superviseur = superviseur;
     this.#tailleMaxCache = options.tailleMaxCache ?? TAILLE_MAX_CACHE_DEFAUT;
+    this.#assemblerSpec = options.assemblerSpec;
   }
 
   /**
@@ -159,7 +179,17 @@ export class CanalControle {
     try {
       switch (operation.type) {
         case 'demarrer_worker': {
-          const handle = await this.#superviseur.demarrer(operation.demande);
+          // `☠` Sans assembleur, on REFUSE : construire un spec sans ports
+          // donnerait un worker sans audit ni bus de permissions, qui aurait
+          // l'air de marcher. Un refus explicite vaut mieux qu'un agent nu.
+          if (this.#assemblerSpec === undefined) return REFUS_DISPATCH;
+          const d = operation.demande;
+          const handle = await this.#superviseur.demarrer({
+            missionId: d.missionId,
+            epoch: d.epoch,
+            promptInitial: d.promptInitial,
+            spec: this.#assemblerSpec(d.parametres),
+          });
           return { ok: true, effet: 'applique', detail: `worker démarré : ${handle.sessionId}` };
         }
         case 'arreter_worker':

@@ -7,7 +7,6 @@
  * ☠ (d) Aucune fonction ici ne laisse une exception s'échapper.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { Registre } from '../../registre/index.ts';
 import { construireMessageUtilisateur } from '../entree/index.ts';
 import { deciderCreationMission } from '../../../budgets/index.ts';
@@ -19,6 +18,7 @@ import type {
   ArreteurMission,
   ConfigPlafondParc,
   ContratRetour,
+  EnregistreurProposition,
   LecteurUtilisationParc,
   RelanceurMission,
   RepertoireCibles,
@@ -74,17 +74,25 @@ export function proposerCreationEquipe(
   perimetre: string,
   lecteur: LecteurUtilisationParc,
   config: ConfigPlafondParc,
+  enregistreur?: EnregistreurProposition,
 ): ContratRetour {
   const intention = `proposer une équipe sur ${projet}`;
   try {
     const plafond = evaluerPlafondParc(lecteur, config);
     if (!plafond.autorise) return refuse(intention, plafond.motif);
     const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre);
+    // `☠` Sans enregistreur, la proposition ne survit pas à ce tour : l'interface
+    // n'aurait rien à autoriser et H-61 deviendrait une impasse. On le DIT au
+    // modèle plutôt que de le laisser annoncer un bouton qui n'existe pas.
+    if (enregistreur === undefined) {
+      return refuse(intention, "aucun registre de propositions câblé : impossible de soumettre ce mandat à l'opérateur");
+    }
+    const ref = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre });
     return {
       ok: true,
       intention,
       effet: 'differe',
-      ref: randomUUID(),
+      ref,
       etat: JSON.stringify(proposition),
     };
   } catch (erreur) {

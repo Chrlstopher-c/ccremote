@@ -7,6 +7,8 @@
 export type {
   ConcurrentRestaure,
   DemandeDemarrage,
+  DemandeDemarrageTransportable,
+  ParametresSpecTransportables,
   EnregistrementWorker,
   EtapeArretUrgence,
   EtatRevalidationProcess,

@@ -10,7 +10,35 @@
 import { describe, expect, test } from 'bun:test';
 import type { DescripteurWorkerPc } from '../control-plane/reconciliation/types.ts';
 import { CanalControle, type PortSuperviseurControle } from './canal-controle.ts';
-import type { DemandeDemarrage, RapportArretUrgence } from './types.ts';
+import type {
+  DemandeDemarrage,
+  DemandeDemarrageTransportable,
+  ParametresSpecTransportables,
+  RapportArretUrgence,
+} from './types.ts';
+import type { WorkerSpec } from '../workers/index.ts';
+
+/** Ce que le Pi envoie réellement : des données seules, aucun port. */
+function demandeTransportable(): DemandeDemarrageTransportable {
+  return {
+    missionId: 'mission-1',
+    epoch: 1,
+    promptInitial: 'demarre',
+    parametres: {
+      sessionId: 's1',
+      cwd: '/tmp/worktree-alpha',
+      mandate: 'team leader',
+      deniedToolPatterns: [],
+      maxBudgetUsd: 12,
+    },
+  };
+}
+
+/** Réassemblage côté PC : les ports sont injectés ICI, jamais transportés. */
+function assembleurFactice(parametres: ParametresSpecTransportables): WorkerSpec {
+  // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
+  return { ...parametres, portAuditPermissions: () => ({}) };
+}
 
 function demande(): DemandeDemarrage {
   return {
@@ -118,14 +146,15 @@ describe('idempotence mécanique par opId (D.3.2)', () => {
 
   test('même garantie pour tuer_sans_preavis, demarrer_worker, reinitialiser', async () => {
     const superviseur = superviseurFactice();
-    const canal = new CanalControle(superviseur);
+    const canal = new CanalControle(superviseur, { assemblerSpec: assembleurFactice });
 
     await canal.traiter({ opId: 'op-tuer', operation: { type: 'tuer_sans_preavis', sessionId: 's1' } });
     await canal.traiter({ opId: 'op-tuer', operation: { type: 'tuer_sans_preavis', sessionId: 's1' } });
     expect(superviseur.compteurs.tuerSansPreavis).toBe(1);
 
-    await canal.traiter({ opId: 'op-demarrer', operation: { type: 'demarrer_worker', demande: demande() } });
-    await canal.traiter({ opId: 'op-demarrer', operation: { type: 'demarrer_worker', demande: demande() } });
+    const dem = demandeTransportable();
+    await canal.traiter({ opId: 'op-demarrer', operation: { type: 'demarrer_worker', demande: dem } });
+    await canal.traiter({ opId: 'op-demarrer', operation: { type: 'demarrer_worker', demande: dem } });
     expect(superviseur.compteurs.demarrer).toBe(1);
 
     await canal.traiter({ opId: 'op-reinit', operation: { type: 'reinitialiser', sessionId: 's1' } });

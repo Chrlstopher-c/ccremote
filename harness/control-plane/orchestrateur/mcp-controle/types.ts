@@ -108,3 +108,18 @@ export interface LecteurUtilisationParc {
 }
 
 export type { ConfigPlafondParc, SDKUserMessage };
+
+/**
+ * Persiste un mandat proposé pour qu'il soit soumis à l'opérateur (H-61) et
+ * rend sa référence. Implémenté par la composition, qui capture la conversation
+ * d'où vient la demande — c'est ce qui permet d'afficher la carte au bon endroit
+ * dans le fil plutôt que dans une liste hors contexte.
+ */
+export interface EnregistreurProposition {
+  enregistrer(mandat: {
+    readonly projet: string;
+    readonly objectif: string;
+    readonly critereArret: string | null;
+    readonly perimetre: string;
+  }): string;
+}

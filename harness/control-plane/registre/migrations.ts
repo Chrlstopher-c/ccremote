@@ -218,10 +218,61 @@ ALTER TABLE conversation_evenement_nouveau RENAME TO conversation_evenement;
 CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
 `;
 
+/**
+ * Migration 4 — propositions de mandat (H-61).
+ *
+ * `☠` Avant cette table, `creer_equipe` rendait une proposition qui n'était
+ * persistée NULLE PART : elle n'existait que dans la réponse faite à
+ * l'orchestrateur. L'interface n'avait donc rien à afficher, et l'opérateur ne
+ * pouvait rien autoriser — l'orchestrateur lui répétait « valide dans
+ * l'interface » devant un écran sans bouton. H-61 exige une autorisation
+ * humaine : encore faut-il que la demande survive au tour qui l'a produite.
+ *
+ * `conversation_evenement` est recréée pour accueillir le type `mandat`, qui
+ * place la carte au bon endroit dans le fil. Les `seq` sont préservés — ce sont
+ * les curseurs de streaming.
+ */
+const MIGRATION_4 = `
+CREATE TABLE proposition (
+  id              TEXT PRIMARY KEY,
+  conversation_id TEXT REFERENCES conversation(id) ON DELETE SET NULL,
+  projet          TEXT NOT NULL,
+  objectif        TEXT NOT NULL,
+  critere_arret   TEXT,
+  perimetre       TEXT NOT NULL,
+  budget_max_usd  REAL NOT NULL,
+  statut          TEXT NOT NULL DEFAULT 'en_attente'
+                    CHECK (statut IN ('en_attente', 'approuvee', 'refusee')),
+  mission_id      TEXT,
+  detail          TEXT,
+  cree_a          INTEGER NOT NULL,
+  maj_a           INTEGER NOT NULL
+) STRICT;
+
+CREATE INDEX idx_proposition_attente ON proposition(statut, cree_a DESC);
+
+CREATE TABLE conversation_evenement_v4 (
+  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL CHECK (type IN ('operateur', 'reflexion', 'texte', 'outil', 'resultat', 'erreur', 'compaction', 'mandat')),
+  contenu         TEXT NOT NULL,
+  cree_a          INTEGER NOT NULL
+) STRICT;
+
+INSERT INTO conversation_evenement_v4 (seq, conversation_id, type, contenu, cree_a)
+  SELECT seq, conversation_id, type, contenu, cree_a FROM conversation_evenement;
+
+DROP TABLE conversation_evenement;
+ALTER TABLE conversation_evenement_v4 RENAME TO conversation_evenement;
+
+CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
   { version: 3, nom: 'compaction-conversations', sql: MIGRATION_3 },
+  { version: 4, nom: 'propositions-mandat', sql: MIGRATION_4 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

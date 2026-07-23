@@ -12,7 +12,7 @@ let hModelsCache = [];
 // ☠ `barreSig` : la barre n'est réécrite que si son contenu change RÉELLEMENT.
 // Réécrire innerHTML à chaque sondage faisait re-jouer les animations d'entrée —
 // c'est ce qui donnait l'impression que tout clignotait pendant l'auto-refresh.
-const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [], barreSig: '', partielEl: null };
+const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [], barreSig: '', partielEl: null, mandats: {} };
 const HORCH_KEY = 'ccremote.orch.conv';
 const HORCH_POLL_MS = 400;
 
@@ -167,6 +167,40 @@ async function hCompacterMaintenant() {
   if (r.compacted) await hOpenConversation(hOrch.convId);
 }
 
+async function hApprouverMandat(id) {
+  const carte = document.getElementById('hMandate_' + id);
+  if (carte) carte.classList.add('resolved');
+  showToast('Autorisation transmise — création de l\'équipe…', 'accent');
+  const r = await HarnessAPI.approveMandat(id);
+  if (!r.ok) {
+    if (carte) carte.classList.remove('resolved');
+    showToast(r.erreur || 'Dispatch impossible', 'warn');
+    return;
+  }
+  hTamponMandat(id, 'Autorisée — équipe lancée', 'var(--ok)');
+  showToast(r.effet || 'Équipe lancée', 'ok');
+  if (typeof hRenderParc === 'function') hRenderParc();
+}
+
+async function hRefuserMandat(id) {
+  const r = await HarnessAPI.rejectMandat(id);
+  if (!r.ok) { showToast(r.erreur || 'Refus impossible', 'warn'); return; }
+  hTamponMandat(id, 'Refusée — aucune équipe créée', 'var(--err)');
+  showToast('Mandat refusé', 'warn');
+}
+
+function hTamponMandat(id, libelle, couleur) {
+  const carte = document.getElementById('hMandate_' + id);
+  if (!carte) return;
+  carte.classList.add('resolved');
+  const t = document.createElement('div');
+  t.className = 'verdict-stamp';
+  t.style.color = couleur;
+  t.textContent = libelle + ' à ' + new Date().toTimeString().slice(0, 8);
+  carte.appendChild(t);
+  delete hOrch.mandats[id];
+}
+
 // ---- ouverture + rendu complet d'un fil ------------------------------------
 async function hOpenConversation(id) {
   hStopPoll();
@@ -175,6 +209,12 @@ async function hOpenConversation(id) {
   hRenderConvBar(hOrch.list);
   const chat = document.getElementById('hChatBody');
   chat.innerHTML = '';
+  // ☠ Les mandats en attente sont chargés AVANT le rendu : une carte rendue sans
+  // sa proposition n'afficherait aucun bouton, et l'opérateur ne pourrait rien
+  // autoriser — exactement le blocage qu'on corrige.
+  const props = await HarnessAPI.getPropositions();
+  hOrch.mandats = {};
+  for (const p of (props.data || [])) hOrch.mandats[p.id] = p;
   const r = await HarnessAPI.getConversation(id);
   if (id !== hOrch.convId) return; // l'utilisateur a changé de fil pendant l'attente
   if (r.erreur) { chat.innerHTML = `<div class="conv-empty">${escapeHtml(r.erreur)}</div>`; return; }
@@ -278,6 +318,37 @@ function hBlocNode(type, contenu, live) {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
     return e;
   }
+  if (type === 'mandat') {
+    const p = hOrch.mandats[contenu];
+    const d = document.createElement('div');
+    d.className = 'mandate-card';
+    d.id = 'hMandate_' + contenu;
+    if (!p) {
+      // La proposition n'est plus en attente : on le dit, plutôt que d'afficher
+      // des boutons qui ne feraient rien.
+      d.innerHTML = `<div class="mh2">Proposition de mandat</div>
+        <div class="mb"><div style="font-size:12px;color:var(--ink-3);">Déjà tranchée — voir le Parc pour l'équipe correspondante.</div></div>`;
+      return d;
+    }
+    d.innerHTML = `<div class="mh2">Proposition de mandat — ton autorisation est requise (H-61)</div>
+      <div class="mb">
+        <div class="mrow"><div class="k">Projet</div><div class="v mono"></div></div>
+        <div class="mrow"><div class="k">Objectif</div><div class="v"></div></div>
+        <div class="mrow"><div class="k">Critère d'arrêt</div><div class="v"></div></div>
+        <div class="mrow"><div class="k">Périmètre</div><div class="v mono"></div></div>
+        <div class="mrow"><div class="k">Budget</div><div class="v mono">${hMoney(p.budgetMaxUsd)}</div></div>
+      </div>
+      <div class="macts">
+        <button class="btn btn-accent" onclick="hApprouverMandat('${contenu}')">Autoriser et lancer</button>
+        <button class="btn btn-ghost" style="color:var(--err);border-color:var(--err-soft);" onclick="hRefuserMandat('${contenu}')">Refuser</button>
+      </div>`;
+    const v = d.querySelectorAll('.mrow .v');
+    v[0].textContent = p.projet;
+    v[1].textContent = p.objectif;
+    v[2].textContent = p.critereArret || '— non fixé';
+    v[3].textContent = p.perimetre;
+    return d;
+  }
   if (type === 'compaction') {
     const d = document.createElement('details');
     d.className = 'orch-compact';
@@ -342,6 +413,11 @@ function hAppendEvent(ev) {
 
   // La compaction est une césure du fil, pas une parole de l'orchestrateur :
   // posée au niveau de la conversation, elle referme le groupe en cours.
+  if (ev.type === 'mandat') {
+    const noeud = hBlocNode('mandat', ev.contenu, false);
+    if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
+    chat.appendChild(noeud); hOrch.cur = null; return;
+  }
   if (ev.type === 'compaction') {
     const noeud = hBlocNode('compaction', ev.contenu, false);
     if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
@@ -449,6 +525,14 @@ async function hPollNow() {
   // blocs finalisés s'insèrent AVANT lui (voir `hInsererDansGroupe`). L'ancienne
   // version le supprimait puis le recréait à chaque cycle — un nœud recréé
   // rejoue son animation d'entrée (clignotement) et casse la sélection en cours.
+  // Un mandat proposé EN COURS de génération arriverait sans ses données : on
+  // recharge les propositions avant de poser la carte, sinon elle serait vide.
+  const nouveauMandat = (d.events || []).some((ev) => ev.type === 'mandat' && !hOrch.mandats[ev.contenu]);
+  if (nouveauMandat) {
+    const props = await HarnessAPI.getPropositions();
+    for (const p of (props.data || [])) hOrch.mandats[p.id] = p;
+    if (id !== hOrch.convId) return;
+  }
   (d.events || []).forEach((ev) => { hAppendEvent(ev); hOrch.cursor = ev.seq; });
   hOrch.generating = !!d.generating;
   hRenderPartiel(d.partial || null);

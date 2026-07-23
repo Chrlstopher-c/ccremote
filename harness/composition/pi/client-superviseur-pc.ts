@@ -52,7 +52,7 @@ import type {
   ResultatReinitialisation,
 } from '../../control-plane/reconciliation/index.ts';
 import type { ArreteurMission, RelanceurMission } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
-import type { OperationControle, ReponseControle } from '../../superviseur/index.ts';
+import type { DemandeDemarrageTransportable, OperationControle, ReponseControle } from '../../superviseur/index.ts';
 import type { Lien } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
 import { CorrelateurReponses } from '../lien-pc-pi/correlateur.ts';
@@ -133,6 +133,15 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
   async reinitialiser(sessionId: string): Promise<ResultatReinitialisation> {
     const reponse = await this.#appeler({ type: 'reinitialiser', sessionId });
     return { demandesEnAttente: versDemandesEnAttente(reponse) };
+  }
+
+  /**
+   * Démarre réellement une équipe sur le PC (H-61 : appelé UNIQUEMENT après
+   * l'autorisation humaine d'un mandat, jamais par l'orchestrateur seul).
+   */
+  async demarrer(demande: DemandeDemarrageTransportable): Promise<{ readonly detail: string }> {
+    const reponse = await this.#appeler({ type: 'demarrer_worker', demande });
+    return { detail: reponse.detail ?? 'équipe démarrée' };
   }
 
   async arreter(missionId: string): Promise<void> {

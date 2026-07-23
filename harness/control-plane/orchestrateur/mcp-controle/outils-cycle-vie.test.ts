@@ -51,6 +51,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
       'src/auth/**',
       LECTEUR_PERMISSIF,
       PLAFOND_DESACTIVE,
+      { enregistrer: () => 'prop-test' },
     );
     expect(resultat.effet).toBe('differe');
     expect(resultat.ref).toBeDefined();
@@ -58,7 +59,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
   });
 
   test('☠ ne touche à AUCUN registre — aucune mission créée', () => {
-    proposerCreationEquipe('alpha', 'x', 'y', 'z', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE);
+    proposerCreationEquipe('alpha', 'x', 'y', 'z', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: () => 'prop-test' });
     expect(registre.missions.listerActives().length).toBe(0);
   });
 });
@@ -68,7 +69,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 10 });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 10 }, { enregistrer: () => 'prop-test' });
     expect(resultat.ok).toBe(false);
     expect(resultat.effet).toBe('refuse');
     expect(resultat.raison).toContain('compte1');
@@ -79,7 +80,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 20, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => 'prop-test' });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -88,7 +89,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 99, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'five_hour', utilisation: 5, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => 'prop-test' });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -97,14 +98,14 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'seven_day', utilisation: 95, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => 'prop-test' });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('compte1');
     expect(resultat.raison).toContain('compte2');
   });
 
   test('aucun compte connu ⇒ rien à borner, autorisé', () => {
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: () => 'prop-test' });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -115,7 +116,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       },
       releves: () => [],
     };
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, PLAFOND_DESACTIVE);
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', lecteur, PLAFOND_DESACTIVE, { enregistrer: () => 'prop-test' });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('port hors service');
   });

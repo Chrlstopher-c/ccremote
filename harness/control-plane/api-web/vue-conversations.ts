@@ -109,3 +109,21 @@ export function versConversationApi(entree: {
     compactions: entree.compactions ?? 0,
   };
 }
+
+/** Autorisation des mandats proposés (H-61), vue de l'API. */
+export interface PortMandats {
+  enAttente(): readonly {
+    readonly id: string;
+    readonly projet: string;
+    readonly objectif: string;
+    readonly critereArret: string | null;
+    readonly perimetre: string;
+    readonly budgetMaxUsd: number;
+    readonly conversationId: string | null;
+    readonly statut: string;
+    readonly missionId: string | null;
+    readonly detail: string | null;
+  }[];
+  approuver(id: string): Promise<{ readonly missionId: string; readonly detail: string }>;
+  refuser(id: string): boolean;
+}

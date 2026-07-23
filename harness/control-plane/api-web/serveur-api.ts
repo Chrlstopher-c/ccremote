@@ -31,6 +31,7 @@ import {
   versEvenementApi,
   versConversationApi,
   type PortConversations,
+  type PortMandats,
 } from './vue-conversations.ts';
 import { apiWebLogger } from './logger.ts';
 
@@ -57,6 +58,11 @@ export interface DependancesApiWeb {
    * répondent 501, jamais une conversation fabriquée.
    */
   readonly conversations?: PortConversations;
+  /**
+   * Autorisation des mandats (H-61). Absent ⇒ les routes répondent 501 : mieux
+   * vaut un bouton absent qu'un bouton qui n'autorise rien.
+   */
+  readonly mandats?: PortMandats;
   /** Contexte réel de l'orchestrateur (ratio 0-1), lu de la sentinelle. Absent = orchestrateur inactif. */
   readonly orchestrateurContexteRatio?: () => number | null;
   readonly maintenant?: () => number;
@@ -164,6 +170,11 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     return enveloppe(pcOnline, comptes);
   }
 
+  if (chemin === '/orchestrator/propositions') {
+    const liste = deps.mandats === undefined ? [] : deps.mandats.enAttente();
+    return enveloppe(pcOnline, liste);
+  }
+
   if (chemin === '/orchestrator/gauges') {
     // `☠` Le contexte vient de la VRAIE sentinelle. `null` (orchestrateur
     // inactif ou pas encore de mesure) ⇒ `contextPct: null`, jamais un chiffre
@@ -199,6 +210,23 @@ async function lireCorps(req: Request): Promise<Record<string, unknown>> {
  * route conversation.
  */
 async function routerEcritureConversation(chemin: string, req: Request, deps: DependancesApiWeb): Promise<unknown> {
+  // `☠` Les mandats sont traités AVANT le filtre sur `/orchestrator/conversations` :
+  // placés après, ils n'étaient jamais atteints (404 « route inconnue »), et le
+  // bouton d'autorisation ne pouvait rien faire.
+  const mandat = chemin.match(/^\/orchestrator\/propositions\/([^/]+)\/(approve|reject)$/);
+  if (mandat?.[1] !== undefined && mandat[2] !== undefined) {
+    if (deps.mandats === undefined) throw new ErreurApi(501, "autorisation des mandats non câblée sur ce déploiement");
+    const id = decodeURIComponent(mandat[1]);
+    if (mandat[2] === 'reject') {
+      if (!deps.mandats.refuser(id)) throw new ErreurApi(409, 'mandat déjà tranché ou inconnu');
+      return { ok: true, effet: 'mandat refusé — aucune équipe créée' };
+    }
+    // `☠` L'approbation DISPATCHE réellement : un échec doit remonter tel quel,
+    // jamais être maquillé en succès — l'opérateur croirait son équipe lancée.
+    const r = await deps.mandats.approuver(id);
+    return { ok: true, effet: r.detail, missionId: r.missionId };
+  }
+
   if (!chemin.startsWith('/orchestrator/conversations')) return null;
   if (deps.conversations === undefined) {
     throw new ErreurApi(501, 'session orchestrateur non active sur ce déploiement (CCREMOTE_PI_ORCHESTRATEUR=1)');

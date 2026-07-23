@@ -34,7 +34,14 @@ async function api(method, path, body) {
 }
 
 // ============ VIEW ROUTER ============
+// ☠ Les CONTENEURS de vue portent eux aussi `data-view` (c'est ainsi que
+// `switchView` les retrouve). Leur attacher un gestionnaire de clic faisait
+// qu'un clic N'IMPORTE OÙ dans une vue remontait jusqu'à elle par propagation
+// et la re-rendait entièrement : fil vidé puis reconstruit, animations d'entrée
+// rejouées (clignotement) et sélection de texte en cours détruite. Seuls les
+// éléments de NAVIGATION doivent déclencher un changement de vue.
 document.querySelectorAll('[data-view]').forEach(el => {
+  if (el.classList.contains('view')) return;
   el.addEventListener('click', () => { if (el.dataset.view) switchView(el.dataset.view); });
 });
 

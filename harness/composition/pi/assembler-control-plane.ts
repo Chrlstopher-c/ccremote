@@ -43,6 +43,9 @@ import {
   GestionnaireConversations,
   type ConstruireSessionConversation,
 } from '../../control-plane/orchestrateur/gestionnaire-conversations.ts';
+import { randomUUID } from 'node:crypto';
+import { dispatcherMandat } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
+import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
 import { cablerPermissionVerdictDistant } from './permission-verdict-distant.ts';
@@ -53,6 +56,9 @@ import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
+
+/** Budget par défaut d'un mandat proposé — l'orchestrateur n'en fixe pas encore. */
+const BUDGET_MANDAT_DEFAUT_USD = 12;
 
 export interface OptionsAssemblageControlPlanePi {
   readonly cheminRegistreDb: string;
@@ -155,7 +161,10 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
    * `compacter_mon_contexte` doit savoir quelle session il compacte. Un serveur
    * partagé ne pourrait pas le dire — il compacterait au hasard.
    */
-  const construireServeurControle = (compacteur?: CompacteurContexte): McpServerConfig =>
+  const construireServeurControle = (
+    compacteur?: CompacteurContexte,
+    propositions?: EnregistreurProposition,
+  ): McpServerConfig =>
     creerServeurMcpControle({
       registre,
       repertoireProjets: options.repertoireProjets,
@@ -167,6 +176,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       utilisationParc: creerLecteurUtilisationParc(registre),
       configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
       compacteurContexte: compacteur,
+      propositions,
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :
@@ -198,10 +208,30 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
           forcerReprise === true
             ? { existe: async (): Promise<boolean> => true }
             : creerVerificateurSessionSdk(options.cwdOrchestrateur, options.configDirOrchestrateur),
-        serveurControle: construireServeurControle({
-          demander: () =>
-            gestionnaire?.demanderCompaction(conversationId) ?? { arme: false, detail: 'gestionnaire indisponible' },
-        }),
+        serveurControle: construireServeurControle(
+          {
+            demander: () =>
+              gestionnaire?.demanderCompaction(conversationId) ?? { arme: false, detail: 'gestionnaire indisponible' },
+          },
+          {
+            // `☠` La proposition est persistée ET un marqueur est posé dans le
+            // fil : c'est ce marqueur qui fait apparaître la carte à autoriser au
+            // bon endroit, au lieu d'une liste hors contexte.
+            enregistrer: (mandat) => {
+              const p = registre.propositions.creer({
+                id: randomUUID(),
+                conversationId,
+                projet: mandat.projet,
+                objectif: mandat.objectif,
+                critereArret: mandat.critereArret,
+                perimetre: mandat.perimetre,
+                budgetMaxUsd: BUDGET_MANDAT_DEFAUT_USD,
+              });
+              registre.conversations.ajouterEvenement({ conversationId, type: 'mandat', contenu: p.id });
+              return p.id;
+            },
+          },
+        ),
         registre,
         reconciliation: dependancesReconciliation,
         incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
@@ -236,6 +266,24 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       reprendre: (missionId) => clientSuperviseurPc.reprendre(missionId),
     },
     conversations: gestionnaireConversations ?? undefined,
+    mandats: {
+      enAttente: () => registre.propositions.enAttente(),
+      refuser: (id) => registre.propositions.trancher(id, 'refusee', "refusé par l'opérateur", null),
+      approuver: async (id) => {
+        const p = registre.propositions.lire(id);
+        if (p === null) throw new Error('mandat inconnu');
+        if (p.statut !== 'en_attente') throw new Error(`mandat déjà ${p.statut}`);
+        const r = await dispatcherMandat(p, {
+          registre,
+          demarreur: clientSuperviseurPc,
+          repertoireProjets: options.repertoireProjets,
+        });
+        // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
+        // laisserait un mandat consommé sans équipe si le PC refusait.
+        registre.propositions.trancher(id, 'approuvee', r.detail, r.missionId);
+        return r;
+      },
+    },
   });
 
   log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');

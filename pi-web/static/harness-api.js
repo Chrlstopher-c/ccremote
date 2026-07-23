@@ -135,6 +135,11 @@ const HarnessAPI = (() => {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/compact`, {});
     },
 
+    // H-61 : mandats en attente d'autorisation humaine — RÉEL.
+    async getPropositions() { return lireReel('/orchestrator/propositions'); },
+    async approveMandat(id) { return ecrireReel(`/orchestrator/propositions/${encodeURIComponent(id)}/approve`, {}); },
+    async rejectMandat(id) { return ecrireReel(`/orchestrator/propositions/${encodeURIComponent(id)}/reject`, {}); },
+
     async archiveConversation(id) {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/archive`, {});
     },

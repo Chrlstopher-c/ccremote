@@ -11,6 +11,7 @@ import { fermerBase, ouvrirBase, type OptionsConnexion } from './connexion.ts';
 import { DepotCapacites } from './capacites.ts';
 import { DepotComptes } from './comptes.ts';
 import { DepotConversations } from './conversations.ts';
+import { DepotPropositions } from './propositions.ts';
 import { DepotEtats } from './etats.ts';
 import { DepotLots } from './lots.ts';
 import { DepotMissions } from './missions.ts';
@@ -32,6 +33,8 @@ export type {
   Lot,
   Mission,
   OrigineTransition,
+  Proposition,
+  StatutProposition,
   Quota,
   RelevéQuota,
   StatutConversation,
@@ -41,6 +44,8 @@ export type {
   TypeFenetreQuota,
 } from './types.ts';
 export { DepotConversations } from './conversations.ts';
+export { DepotPropositions } from './propositions.ts';
+export type { CreationProposition } from './propositions.ts';
 export type { AjoutEvenement, CreationConversation } from './conversations.ts';
 export { ETATS_HARNESS_ACTIFS, ETATS_HARNESS_TERMINAUX } from './types.ts';
 export { CAPACITES_SURVEILLEES } from './capacites.ts';
@@ -61,6 +66,7 @@ export class Registre {
   public readonly comptes: DepotComptes;
   public readonly capacites: DepotCapacites;
   public readonly conversations: DepotConversations;
+  public readonly propositions: DepotPropositions;
 
   private readonly db: Database;
 
@@ -72,6 +78,7 @@ export class Registre {
     this.comptes = new DepotComptes(db);
     this.capacites = new DepotCapacites(db);
     this.conversations = new DepotConversations(db);
+    this.propositions = new DepotPropositions(db);
   }
 
   public get version(): number {

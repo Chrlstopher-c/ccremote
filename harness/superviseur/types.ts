@@ -24,6 +24,36 @@ export type { FileEntreeCiblee } from '../pause/index.ts';
 export type { ObservateurUsage } from '../budgets/index.ts';
 
 /** Ce que le Pi fournit en plus du `WorkerSpec` au moment du dispatch (D.2.3, D.3.1). */
+/**
+ * Ce qui traverse RÉELLEMENT le lien pour démarrer une équipe.
+ *
+ * `☠` Un `WorkerSpec` complet n'est PAS transportable : il porte des ports
+ * (`portAuditPermissions`, `portBusPermissions`) et des fonctions de spawn, qui
+ * ne survivent pas à une sérialisation JSON. Les envoyer produirait côté PC un
+ * worker sans audit ni bus de permissions — soit un agent qui passe tous les
+ * contrôles en ne protégeant rien (H-73.1, H-74). Le Pi n'envoie donc que des
+ * données, et le PC réassemble le spec avec SES ports locaux.
+ */
+export interface ParametresSpecTransportables {
+  readonly sessionId: string;
+  readonly cwd: string;
+  readonly mandate: string;
+  readonly deniedToolPatterns: readonly string[];
+  readonly maxBudgetUsd: number;
+  readonly model?: string;
+  readonly configDir?: string;
+  readonly agentTeams?: boolean;
+  readonly extraEnv?: Readonly<Record<string, string>>;
+}
+
+/** Forme transportable de `DemandeDemarrage` (voir ci-dessus). */
+export interface DemandeDemarrageTransportable {
+  readonly missionId: string;
+  readonly epoch: number;
+  readonly promptInitial: string;
+  readonly parametres: ParametresSpecTransportables;
+}
+
 export interface DemandeDemarrage {
   readonly missionId: string;
   /** Epoch attribué par le Pi à ce rattachement (D.2.3) — stocké, pas arbitré ici (M-11). */

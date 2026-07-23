@@ -41,6 +41,7 @@ import type {
   DefinisseurBudget,
   LecteurEscalades,
   LecteurUtilisationParc,
+  EnregistreurProposition,
   RelanceurMission,
   RepertoireCibles,
 } from './types.ts';
@@ -81,6 +82,11 @@ export interface DependancesServeurControle {
    * humaine a précédé l'appel — ne jamais présenter cette règle comme mécanique.
    */
   readonly compacteurContexte?: CompacteurContexte;
+  /**
+   * Enregistre les mandats proposés (H-61). Absent ⇒ `creer_equipe` REFUSE au
+   * lieu de rendre une proposition que personne ne pourrait autoriser.
+   */
+  readonly propositions?: EnregistreurProposition;
 }
 
 /** Port de compaction du contexte de la session appelante. */
@@ -166,6 +172,7 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             perimetre,
             deps.utilisationParc,
             deps.configPlafondParc,
+            deps.propositions,
           ),
         ),
     ),
