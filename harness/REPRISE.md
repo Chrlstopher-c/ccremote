@@ -638,6 +638,23 @@ transporté par l'opération `telemetrie` et servi à la vue Mission.
 `☠` H-45 : jamais le flux BRUT dans le contexte de l'orchestrateur — c'est une
 vue pour l'humain, pas une entrée de modèle.
 
+**A bis. Le master ne retrouve PAS une équipe terminée** (signalé 23/07 — cause
+vérifiée dans le code, pas supposée) :
+- `listerEquipes` appelle `registre.missions.listerActives()` : dès qu'une équipe
+  se termine, elle SORT de la vue de l'orchestrateur. Il répond alors « aucune
+  équipe » sur un travail qui vient de s'achever.
+- `etatEquipe(missionId)` n'accepte QUE l'identifiant. Donner un nom ou un projet
+  ne mène à rien, et l'identifiant n'est affiché nulle part de façon copiable.
+
+Correctifs à faire ensemble, sinon le trou reste :
+1. `lister_equipes` doit inclure les terminées récentes (`listerRecentes`), avec
+   leur état — une équipe finie reste consultable.
+2. Permettre de désigner une équipe par NOM ou PROJET, pas seulement par id
+   (soit `etat_equipe` tolérant, soit un outil `trouver_equipe`).
+3. Vue Mission : afficher l'ID COMPLET avec un bouton copier (aujourd'hui il
+   n'apparaît qu'en en-tête, tronqué et non copiable) — c'est ce que Chris doit
+   pouvoir coller à l'orchestrateur.
+
 **B. Faire apparaître les SOUS-AGENTS.** La vue ne montre que « Team leader », ce
 qui laisse croire qu'il n'y en a aucun. `forwardSubagentText` et
 `agentProgressSummaries` sont déjà activés pour les workers ; `observabilite/`
