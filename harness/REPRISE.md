@@ -1,7 +1,7 @@
 # REPRISE — harness d'orchestration ccremote
 
 Point d'entrée unique pour reprendre le chantier à froid, sans le contexte de la conversation d'origine.
-*Dernière mise à jour : 2026-07-23 — orchestrateur multi-conversations + streaming livré (voir la section datée).*
+*Dernière mise à jour : 2026-07-23 (nuit) — voir « SESSION DU 23/07 » en fin de fichier : c'est l'état le plus récent.*
 
 ---
 
@@ -599,3 +599,66 @@ Un parc autonome peut donc dépenser de l'argent réel **sans passer par l'API**
 — voir `TODO.md`.
 
 Ne **pas** s'appuyer sur le message `init` : ses champs de quota sont revenus `null` en test.
+
+
+---
+
+## ▶ SESSION DU 23/07 (nuit) — état réel à la reprise
+
+**Tout est déployé et commité.** Trois services actifs : `ccremote-harness` +
+`ccremote-web` (Pi), `ccremote-pc` (PC, `systemd --user`). 972 tests verts.
+
+`☠` **Redémarrer LES DEUX daemons après tout changement de protocole.**
+`deploy-harness-pi.sh` redémarre le Pi ; le PC ne l'est JAMAIS automatiquement
+(`systemctl --user restart ccremote-pc`). Un PC resté sur l'ancien protocole
+échoue côté distant, en silence — vécu deux fois cette nuit.
+
+### Livré et VÉRIFIÉ EN PROD
+
+| Sujet | Preuve |
+|---|---|
+| Streaming token par token de l'orchestrateur | texte 33→128→208→784 car. observé en cours de génération |
+| Multi-conversations (sessions SDK indépendantes) | fils créés/repris/archivés, persistance au hard-reload |
+| Compaction (`/compact`, bouton, outil MCP) | résumé dense produit, session neuve répond juste sur les contraintes d'avant |
+| Rendu Markdown des réponses | réutilise `renderMarkdown` (marked+DOMPurify) de chat.js |
+| Validation des mandats (H-61) | proposition persistée → carte → refus effectif |
+| Dispatch réel d'une équipe | worker observé (PID, cwd, budget) sur `/mnt/projects/vela` |
+| Modèle + effort du lead | ligne de commande : `--model claude-opus-4-8` + `effortLevel:"high"` ; imposé : `claude-sonnet-5`/`medium` |
+| Télémétrie PC→Pi | **contexte 6 % et modèle résolu observés à l'écran** |
+| Rotation de compte (master) | « spend limit » détecté → bascule loguée → contexte reporté |
+| `explorer_projets` | 69 projets listés, échappement de racine refusé |
+
+### ⚠ NON RÉSOLU / NON PROUVÉ — à reprendre ici
+
+1. **Fil de la mission VIDE** (« 0 évènements »). La télémétrie remonte l'état,
+   le modèle et le contexte, mais PAS le flux d'activité. `derniereActivite` est
+   collecté côté PC et jamais exposé. C'est ce qui donne l'impression que rien ne
+   bouge. **Prochain chantier évident.**
+2. **Coût toujours à 0,00 $** — écrit seulement au message `result` ; jamais
+   observé non nul. Non prouvé.
+3. **L'index de rotation du master est EN MÉMOIRE** : au redémarrage du service
+   il repart sur le compte A, saturé. À persister (les comptes du parc, eux, sont
+   marqués `rejected` en base).
+4. **Les deux comptes du Pi semblent au plafond mensuel** (`monthly spend limit`,
+   pas une fenêtre 5 h → ne se réinitialise pas seul).
+5. **Plancher de déni VIDE au dispatch** (`deniedToolPatterns: []`) : « lecture
+   seule » n'est qu'une consigne au modèle, pas un verrou mécanique.
+6. `harness-orchestrateur.js` dépasse 500 lignes (~640) — à découper.
+
+### Pièges payés cette nuit (ne pas les repayer)
+
+- `getSessionInfo` **n'est pas un test d'existence** (rend `undefined` aussi pour
+  une session sans résumé) et son `dir` est le répertoire de PROJET, pas le
+  `CLAUDE_CONFIG_DIR`. Vérifier le fichier de transcript à la place.
+- **Une session appartient au compte qui l'a créée** : après rotation, la
+  reprendre échoue (`No conversation found`). Oublier l'identité SDK.
+- `rsync --delete --exclude '*.db'` **ne couvre pas `registre.db-wal`** — en WAL
+  tout le contenu récent y vit. Perte de données réelle.
+- Le conteneur d'une vue porte `data-view` : lui attacher un `click` re-rendait
+  la vue à chaque clic (clignotement + sélection cassée).
+- `includePartialMessages` était déjà actif : le streaming se lit dans les
+  `stream_event`, pas dans les messages `assistant` complets.
+- La limite de compte arrive en **texte assistant**, pas en message système.
+- `epoch` codé en dur ⇒ `collision_meme_epoch` au 2ᵉ dispatch sur un projet.
+- Un `WorkerSpec` **ne traverse pas le réseau** (ports d'audit/permissions) : le
+  PC réassemble à partir de `ParametresSpecTransportables`.
