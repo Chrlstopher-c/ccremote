@@ -72,3 +72,18 @@ describe('vue-feed — le fil d’une mission', () => {
     expect(sans.find((e) => e.type === 'permission')?.path).toBeUndefined();
   });
 });
+
+describe('vue-feed — suivre une équipe qui cherche', () => {
+  test('☠ réflexions et outils entrent au fil (avant : figé sur « sdk running »)', () => {
+    registre.missions.ajouterActivite('m-1', 'j’explore le dépôt', 1_000, 'reflexion');
+    registre.missions.ajouterActivite('m-1', 'pattern=TODO · path=/src', 2_000, 'outil', 'Grep');
+    registre.missions.ajouterActivite('m-1', 'Voici mon rapport.', 3_000, 'texte');
+    const feed = construireFeed(registre, 'm-1').filter((e) => e.type === 'activity');
+    expect(feed).toHaveLength(3);
+    expect(feed.find((e) => e.nature === 'reflexion')).toBeDefined();
+    const outil = feed.find((e) => e.nature === 'outil');
+    expect(outil?.tool).toBe('Grep');
+    // Un texte n'est pas décoré : c'est la réponse, pas une étape.
+    expect(feed.find((e) => e.text.includes('rapport'))?.nature).toBeUndefined();
+  });
+});

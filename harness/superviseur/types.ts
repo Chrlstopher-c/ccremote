@@ -227,6 +227,13 @@ export interface RapportArretUrgence {
  * (~36 K d'outils MCP et système) ne sont PAS comptés dans `totalTokens`. Les
  * additionner ferait dépasser le total réel de plus du double.
  */
+/**
+ * Nature d'une activité au fil. `☠` Distinguées parce qu'on n'en fait PAS le
+ * même usage : `texte` est le livrable (rendu entier au master), `reflexion` et
+ * `outil` servent à suivre la progression et restent bornés.
+ */
+export type NatureActivite = 'texte' | 'reflexion' | 'outil';
+
 export interface PosteContexte {
   readonly nom: string;
   readonly tokens: number;
@@ -257,12 +264,18 @@ export interface TelemetrieWorker {
   /** Dernier texte de l'assistant, tronqué court — de quoi voir que ça avance (H-45). */
   readonly derniereActivite: string | null;
   /**
-   * Textes produits depuis le dernier relevé, en attente d'entrer au fil de la
-   * mission. `☠` Le relevé est DRAINANT : ces entrées ne seront pas rendues deux
-   * fois. C'est ce qui permet à l'opérateur de lire ce que son équipe a écrit —
-   * sans quoi il n'a « que les états et compteurs » (23/07).
+   * Activités produites depuis le dernier relevé, en attente d'entrer au fil de
+   * la mission. `☠` Le relevé est DRAINANT : ces entrées ne seront pas rendues
+   * deux fois. C'est ce qui permet à l'opérateur de SUIVRE son équipe — sans
+   * quoi il n'a « que les états et compteurs », et un fil figé sur « sdk
+   * running » pendant qu'elle cherche (23/07).
    */
-  readonly activitesEnAttente: readonly { readonly texte: string; readonly survenuA: number }[];
+  readonly activitesEnAttente: readonly {
+    readonly texte: string;
+    readonly survenuA: number;
+    readonly type: NatureActivite;
+    readonly outil?: string;
+  }[];
   /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */
   readonly quotaSature: boolean;
   readonly motifQuota: string | null;

@@ -127,6 +127,17 @@ export interface PosteContexteMission {
   readonly differe: boolean;
 }
 
+/** Nature d'une activité au fil d'une mission — voir migration 8. */
+export type NatureActiviteMission = 'texte' | 'reflexion' | 'outil';
+
+export interface ActiviteMission {
+  readonly texte: string;
+  readonly survenuA: number;
+  readonly type: NatureActiviteMission;
+  /** Nom de l'outil, renseigné seulement pour `type: 'outil'`. */
+  readonly outil: string | null;
+}
+
 export interface Mission {
   readonly id: string;
   readonly lotId: string;

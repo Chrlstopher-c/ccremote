@@ -14,7 +14,9 @@ import {
   ETATS_HARNESS_ACTIFS,
   type CreationMission,
   type EtatHarness,
+  type ActiviteMission,
   type Mission,
+  type NatureActiviteMission,
   type PosteContexteMission,
 } from './types.ts';
 
@@ -273,29 +275,73 @@ export class DepotMissions {
    * lire : sans ça, le fil ne montre que des changements d'état, et un rapport
    * final n'apparaît nulle part (23/07).
    */
-  public ajouterActivite(missionId: string, texte: string, survenuA: number = Date.now()): void {
+  public ajouterActivite(
+    missionId: string,
+    texte: string,
+    survenuA: number = Date.now(),
+    type: NatureActiviteMission = 'texte',
+    outil: string | null = null,
+  ): void {
     executer(
       'missions.ajouterActivite',
       () => {
         this.db
-          .query('INSERT INTO activite_mission (mission_id, texte, survenu_a) VALUES (?, ?, ?)')
-          .run(missionId, texte, survenuA);
+          .query('INSERT INTO activite_mission (mission_id, texte, survenu_a, type, outil) VALUES (?, ?, ?, ?, ?)')
+          .run(missionId, texte, survenuA, type, outil);
+      },
+      { missionId, type },
+    );
+  }
+
+  /**
+   * Activités de l'équipe, du plus ancien au plus récent.
+   *
+   * `☠` La borne prend les DERNIÈRES, pas les premières : sur une mission
+   * bavarde, garder le début du fil masquerait précisément la synthèse de fin —
+   * la seule chose qu'on cherche presque toujours.
+   */
+  public activites(missionId: string, limite = 400): readonly ActiviteMission[] {
+    return executer(
+      'missions.activites',
+      () => {
+        const lignes = this.db
+          .query<{ texte: string; survenu_a: number; type: string; outil: string | null }, [string, number]>(
+            `SELECT texte, survenu_a, type, outil FROM (
+               SELECT texte, survenu_a, type, outil, id FROM activite_mission
+                WHERE mission_id = ? ORDER BY survenu_a DESC, id DESC LIMIT ?
+             ) ORDER BY survenu_a, id`,
+          )
+          .all(missionId, limite);
+        // as : colonne alimentée par ce dépôt seul, valeurs closes par NatureActiviteMission.
+        return lignes.map((l) => ({
+          texte: l.texte,
+          survenuA: l.survenu_a,
+          type: l.type as NatureActiviteMission,
+          outil: l.outil,
+        }));
       },
       { missionId },
     );
   }
 
-  /** Textes produits par l'équipe, du plus ancien au plus récent, bornés. */
-  public activites(missionId: string, limite = 200): readonly { texte: string; survenuA: number }[] {
+  /**
+   * Dernier TEXTE produit par l'équipe, entier. `☠` Ni tronqué ni résumé : c'est
+   * la synthèse de fin, et une synthèse coupée en deux ne vaut rien (décision de
+   * l'opérateur, 23/07). Les réflexions et appels d'outils sont écartés — on veut
+   * ce que l'équipe DIT, pas ce qu'elle a fait pour y arriver.
+   */
+  public dernierTexte(missionId: string): ActiviteMission | null {
     return executer(
-      'missions.activites',
+      'missions.dernierTexte',
       () => {
-        const lignes = this.db
-          .query<{ texte: string; survenu_a: number }, [string, number]>(
-            'SELECT texte, survenu_a FROM activite_mission WHERE mission_id = ? ORDER BY survenu_a, id LIMIT ?',
+        const l = this.db
+          .query<{ texte: string; survenu_a: number; type: string; outil: string | null }, [string]>(
+            `SELECT texte, survenu_a, type, outil FROM activite_mission
+              WHERE mission_id = ? AND type = 'texte' ORDER BY survenu_a DESC, id DESC LIMIT 1`,
           )
-          .all(missionId, limite);
-        return lignes.map((l) => ({ texte: l.texte, survenuA: l.survenu_a }));
+          .get(missionId);
+        if (l === null || l === undefined) return null;
+        return { texte: l.texte, survenuA: l.survenu_a, type: 'texte', outil: l.outil };
       },
       { missionId },
     );

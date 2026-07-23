@@ -111,6 +111,13 @@
   .fitem.permission.pending .tool-tag { background: var(--accent); color: #fff; }
   .fitem.permission.pending { background: var(--accent-soft); }
   .fitem.system .tool-tag { background: var(--warn-soft); color: #8A6A12; }
+  /* Natures d'activité : une réflexion s'efface, un outil se repère, une réponse ressort. */
+  .fitem.activity.n-reflexion { color: var(--ink-3); font-style: italic; }
+  .fitem.activity.n-reflexion .tool-tag { background: transparent; color: var(--ink-3); border: 1px solid var(--line); font-style: normal; }
+  .fitem.activity.n-outil .tool-tag { background: var(--accent-soft); color: var(--accent-2); }
+  .fitem.activity.n-outil .body { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  .fitem.activity:not(.n-reflexion):not(.n-outil) { background: var(--bg-2); }
+  .fitem.activity:not(.n-reflexion):not(.n-outil) .body { white-space: pre-wrap; }
   .fitem.instruction .tool-tag { background: var(--ink); color: var(--bg); }
   .instr-row { display: flex; gap: 8px; margin-top: 10px; }
   .instr-row .input-wrap { flex: 1; padding: 7px 11px; }

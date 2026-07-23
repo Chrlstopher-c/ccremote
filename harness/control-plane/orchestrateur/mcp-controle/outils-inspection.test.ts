@@ -162,11 +162,23 @@ describe('rapport_equipe — ce que l’équipe a écrit', () => {
     expect(resultat.etat).toContain('aucun texte produit');
   });
 
-  test('ne retient que les dernières prises — un rapport final est en fin de course', () => {
+  test('☠ rend le dernier texte ENTIER, jamais tronqué (décision opérateur 23/07)', () => {
     registre.missions.creer({ id: 'm-n', lotId: 'lot-1', nom: 'long', projet: 'aegis', compteId: 'compte1' });
-    for (let i = 1; i <= 10; i += 1) registre.missions.ajouterActivite('m-n', `message ${i}`, i * 1_000);
-    const resultat = rapportEquipe(registre, 'aegis', 2);
-    expect(resultat.etat).toContain('message 10');
-    expect(resultat.etat).not.toContain('message 1\n');
+    const synthese = `SYNTHÈSE\n${'détail '.repeat(2_000)}FIN`;
+    registre.missions.ajouterActivite('m-n', synthese, 9_000);
+    const resultat = rapportEquipe(registre, 'aegis');
+    // Une synthèse coupée en son milieu ne vaut rien : le début ET la fin doivent survivre.
+    expect(resultat.etat).toContain('SYNTHÈSE');
+    expect(resultat.etat).toContain('FIN');
+    expect((resultat.etat ?? '').length).toBe(synthese.length);
+  });
+
+  test('☠ réflexions et appels d’outils ne sont JAMAIS pris pour le rapport', () => {
+    registre.missions.creer({ id: 'm-t', lotId: 'lot-1', nom: 'mixte', projet: 'flux', compteId: 'compte1' });
+    registre.missions.ajouterActivite('m-t', 'la vraie synthèse', 1_000, 'texte');
+    registre.missions.ajouterActivite('m-t', 'je me demande si…', 2_000, 'reflexion');
+    registre.missions.ajouterActivite('m-t', 'pattern=TODO', 3_000, 'outil', 'Grep');
+    // Le dernier ÉVÉNEMENT est un outil ; le dernier TEXTE reste la synthèse.
+    expect(rapportEquipe(registre, 'flux').etat).toBe('la vraie synthèse');
   });
 });

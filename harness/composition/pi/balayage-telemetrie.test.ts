@@ -93,8 +93,8 @@ describe('balayage-telemetrie — ce que l’équipe produit', () => {
     const b = balayer({
       ...RELEVE,
       activitesEnAttente: [
-        { texte: 'Rapport : le projet compile.', survenuA: 1_000 },
-        { texte: 'Rien à signaler côté tests.', survenuA: 2_000 },
+        { texte: 'Rapport : le projet compile.', survenuA: 1_000, type: 'texte' as const },
+        { texte: 'Rien à signaler côté tests.', survenuA: 2_000, type: 'texte' as const },
       ],
     });
     await b.passer();
@@ -105,7 +105,7 @@ describe('balayage-telemetrie — ce que l’équipe produit', () => {
   });
 
   test('☠ un second passage sans nouvelle activité ne duplique rien', async () => {
-    const releve = { ...RELEVE, activitesEnAttente: [{ texte: 'un seul message', survenuA: 1_000 }] };
+    const releve = { ...RELEVE, activitesEnAttente: [{ texte: 'un seul message', survenuA: 1_000, type: 'texte' as const }] };
     const b = demarrerBalayageTelemetrie({
       registre,
       // Le PC draine sa file : le second relevé ne reporte plus l'activité.

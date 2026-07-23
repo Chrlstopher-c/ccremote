@@ -91,7 +91,7 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
   // ces entrées ne repasseront pas. Les ignorer, comme c'était le cas jusqu'au
   // 23/07, laissait l'opérateur avec « les états et compteurs » et rien d'autre.
   for (const a of t.activitesEnAttente) {
-    registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA);
+    registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA, a.type, a.outil ?? null);
   }
 
   if (t.modeleResolu !== null && mission.modeleResolu !== t.modeleResolu) {

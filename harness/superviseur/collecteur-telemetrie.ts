@@ -14,7 +14,7 @@
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { PosteContexte, TelemetrieWorker } from './types.ts';
+import type { NatureActivite, PosteContexte, TelemetrieWorker } from './types.ts';
 import { superviseurLogger } from './logger.ts';
 
 const log = superviseurLogger.child({ composant: 'collecteur-telemetrie' });
@@ -26,13 +26,17 @@ const log = superviseurLogger.child({ composant: 'collecteur-telemetrie' });
 const APERCU_MAX = 240;
 
 /**
- * Longueur retenue pour le FIL de l'opérateur. `☠` Volontairement bien plus
- * généreuse que `APERCU_MAX` : H-45 protège le contexte de l'orchestrateur, pas
- * le droit de l'humain à LIRE ce que son équipe a produit. Tronquer le rapport
- * final à 240 caractères revenait à ne rien livrer du tout — l'opérateur ne
- * voyait « que les états et compteurs » (23/07).
+ * `☠` Le TEXTE d'un lead n'est PAS tronqué. Une synthèse de fin coupée en son
+ * milieu ne vaut rien : c'est le livrable de l'équipe, on le rapatrie entier
+ * (décision de l'opérateur, 23/07). La borne au flux tient ailleurs — H-45 vaut
+ * pour ce qu'on donne au MASTER, pas pour ce qu'on stocke.
+ *
+ * La réflexion et les appels d'outils, eux, restent bornés : ils servent à
+ * SUIVRE la progression, pas à être relus intégralement, et un `tool_use` peut
+ * porter un fichier entier en argument.
  */
-const ACTIVITE_MAX = 4_000;
+const REFLEXION_MAX = 2_000;
+const OUTIL_MAX = 400;
 
 /**
  * Combien de prises d'activité on garde en attente de rapatriement. `☠` Bornée :
@@ -51,8 +55,8 @@ interface Etat {
   contexteTokensMax: number | null;
   contexteVentilation: readonly PosteContexte[] | null;
   derniereActivite: string | null;
-  /** Textes produits, en attente de rapatriement vers le Pi. Vidée à chaque relevé. */
-  activitesEnAttente: { texte: string; survenuA: number }[];
+  /** Activités produites, en attente de rapatriement vers le Pi. Vidée à chaque relevé. */
+  activitesEnAttente: { texte: string; survenuA: number; type: NatureActivite; outil?: string }[];
   quotaSature: boolean;
   motifQuota: string | null;
   observeA: number;
@@ -73,15 +77,70 @@ const MOTIFS_SATURATION: readonly RegExp[] = [
   /limite de d[ée]pense/i,
 ];
 
-function texteAssistant(message: SDKMessage): string | null {
-  if (message.type !== 'assistant') return null;
+/**
+ * Champs d'entrée d'outil réellement parlants pour un humain qui suit une
+ * mission. `☠` On ne dumpe JAMAIS l'entrée complète : un `Write` porte le
+ * fichier entier, un `Edit` deux versions — le fil deviendrait illisible et la
+ * base grossirait sans raison. On rend ce qui dit « ce qu'il fait, sur quoi ».
+ */
+const CHAMPS_OUTIL: readonly string[] = [
+  'description',
+  'command',
+  'file_path',
+  'path',
+  'pattern',
+  'query',
+  'url',
+  'prompt',
+  'notebook_path',
+];
+
+function resumerEntreeOutil(entree: unknown): string {
+  if (typeof entree !== 'object' || entree === null) return '';
+  const source = entree as Record<string, unknown>;
+  const parties: string[] = [];
+  for (const champ of CHAMPS_OUTIL) {
+    const valeur = source[champ];
+    if (typeof valeur === 'string' && valeur.trim().length > 0) parties.push(`${champ}=${valeur.trim()}`);
+  }
+  return parties.join(' · ').slice(0, OUTIL_MAX);
+}
+
+interface PriseActivite {
+  readonly texte: string;
+  readonly type: NatureActivite;
+  readonly outil?: string;
+}
+
+/**
+ * Décompose un message assistant en prises d'activité. `☠` Un seul message peut
+ * porter à la fois de la réflexion, du texte et plusieurs appels d'outils : les
+ * fusionner en une ligne effacerait justement la progression que l'opérateur
+ * veut voir.
+ */
+function prisesAssistant(message: SDKMessage): readonly PriseActivite[] {
+  if (message.type !== 'assistant') return [];
   const contenu = (message as { message?: { content?: unknown } }).message?.content;
-  if (!Array.isArray(contenu)) return null;
-  const morceaux = (contenu as { type?: string; text?: string }[])
-    .filter((b) => b.type === 'text' && typeof b.text === 'string')
-    .map((b) => b.text as string);
-  const texte = morceaux.join('').trim();
-  return texte.length === 0 ? null : texte;
+  if (!Array.isArray(contenu)) return [];
+  const prises: PriseActivite[] = [];
+  for (const bloc of contenu as { type?: string; text?: string; thinking?: string; name?: string; input?: unknown }[]) {
+    if (bloc.type === 'text' && typeof bloc.text === 'string' && bloc.text.trim().length > 0) {
+      // JAMAIS tronqué — c'est le livrable.
+      prises.push({ texte: bloc.text.trim(), type: 'texte' });
+    } else if (bloc.type === 'thinking' && typeof bloc.thinking === 'string' && bloc.thinking.trim().length > 0) {
+      prises.push({ texte: bloc.thinking.trim().slice(0, REFLEXION_MAX), type: 'reflexion' });
+    } else if (bloc.type === 'tool_use' && typeof bloc.name === 'string') {
+      const resume = resumerEntreeOutil(bloc.input);
+      prises.push({ texte: resume.length > 0 ? resume : bloc.name, type: 'outil', outil: bloc.name });
+    }
+  }
+  return prises;
+}
+
+/** Dernier texte visible, pour l'aperçu court rendu au master (H-45). */
+function apercuTexte(prises: readonly PriseActivite[]): string | null {
+  const dernier = [...prises].reverse().find((p) => p.type === 'texte');
+  return dernier === undefined ? null : dernier.texte.slice(0, APERCU_MAX);
 }
 
 export class CollecteurTelemetrie {
@@ -188,14 +247,16 @@ export class CollecteurTelemetrie {
 
     if (sonde.type === 'assistant') {
       etat.etatSdk = 'running';
-      const texte = texteAssistant(message);
-      if (texte !== null) {
-        etat.derniereActivite = texte.slice(0, APERCU_MAX);
-        // `☠` Une FILE, pas un simple « dernier » : le balayage passe toutes les
-        // 5 s et plusieurs messages peuvent tomber entre deux passages. N'en
-        // garder qu'un ferait silencieusement disparaître du fil tout ce que le
-        // lead a écrit entre-temps — y compris son rapport final.
-        etat.activitesEnAttente.push({ texte: texte.slice(0, ACTIVITE_MAX), survenuA: Date.now() });
+      const prises = prisesAssistant(message);
+      const apercu = apercuTexte(prises);
+      if (apercu !== null) etat.derniereActivite = apercu;
+      // `☠` Une FILE, pas un simple « dernier » : le balayage passe toutes les
+      // 5 s et plusieurs messages peuvent tomber entre deux passages. N'en
+      // garder qu'un ferait silencieusement disparaître du fil tout ce que le
+      // lead a fait entre-temps — y compris son rapport final.
+      const maintenant = Date.now();
+      for (const prise of prises) {
+        etat.activitesEnAttente.push({ ...prise, survenuA: maintenant });
         if (etat.activitesEnAttente.length > FILE_ACTIVITE_MAX) etat.activitesEnAttente.shift();
       }
       return;

@@ -20,6 +20,12 @@ export interface FeedEventApi {
   readonly ts: string;
   readonly type: 'permission' | 'activity' | 'system' | 'instruction';
   readonly text: string;
+  /**
+   * Précision sur une `activity` : `reflexion` ou `outil`. Absent pour un texte.
+   * `☠` Distingué plutôt que fondu dans `type` : l'UI n'affiche PAS une réflexion
+   * comme une réponse, et le contrat existant ne doit pas changer de sens.
+   */
+  readonly nature?: 'reflexion' | 'outil';
   readonly tool?: string;
   readonly auto?: boolean;
   readonly pending?: boolean;
@@ -91,9 +97,17 @@ export function construireFeed(
     .historique(missionId, limite)
     .map(versEvenementTransition);
 
-  // Ce que l'équipe a écrit — la seule chose que l'opérateur voulait vraiment lire.
+  // Ce que l'équipe FAIT et ÉCRIT : réflexions, appels d'outils, textes. `☠` Sans
+  // les outils et les réflexions, le fil restait figé sur « sdk running » pendant
+  // qu'une équipe cherchait plusieurs minutes (23/07).
   for (const a of registre.missions.activites(missionId, limite)) {
-    evenements.push({ ts: horodatage(a.survenuA), type: 'activity', text: a.texte });
+    evenements.push({
+      ts: horodatage(a.survenuA),
+      type: 'activity',
+      text: a.texte,
+      ...(a.outil !== null ? { tool: a.outil } : {}),
+      ...(a.type !== 'texte' ? { nature: a.type } : {}),
+    });
   }
 
   if (demandes !== undefined) {

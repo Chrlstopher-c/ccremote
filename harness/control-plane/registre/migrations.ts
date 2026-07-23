@@ -314,6 +314,21 @@ CREATE TABLE activite_mission (
 CREATE INDEX idx_activite_mission ON activite_mission(mission_id, survenu_a);
 `;
 
+/**
+ * Migration 8 — nature de chaque activité.
+ *
+ * `☠` Un fil qui ne montre que le texte final donne « mandat autorisé, sdk
+ * running » et plus rien pendant qu'une équipe cherche pendant des minutes
+ * (constaté le 23/07). L'opérateur veut voir les phases : ce que le lead
+ * réfléchit, quels outils il lance, ce qu'il cherche. Les trois natures sont
+ * distinguées parce que l'UI et le master ne les traitent PAS pareil — le
+ * rapport de fin est un `texte`, jamais un appel d'outil.
+ */
+const MIGRATION_8 = `
+ALTER TABLE activite_mission ADD COLUMN type TEXT NOT NULL DEFAULT 'texte';
+ALTER TABLE activite_mission ADD COLUMN outil TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -322,6 +337,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 5, nom: 'modele-effort-proposition', sql: MIGRATION_5 },
   { version: 6, nom: 'ventilation-contexte-mission', sql: MIGRATION_6 },
   { version: 7, nom: 'activite-mission', sql: MIGRATION_7 },
+  { version: 8, nom: 'nature-activite-mission', sql: MIGRATION_8 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

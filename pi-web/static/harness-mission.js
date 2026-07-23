@@ -1,13 +1,27 @@
 // ============ HARNESS — détail de mission (mandat, équipe, fil, consommation) ============
 
+/**
+ * ☠ Une réflexion et un rapport ne se lisent pas pareil. Le fil montre désormais
+ * les phases du lead (réflexions, outils, textes) — sans distinction visuelle,
+ * une réflexion exploratoire se lirait comme une conclusion.
+ */
 function hFeedItemTemplate(ev) {
   let cls = 'fitem ' + ev.type;
   if (ev.type === 'permission') cls += ev.pending ? ' pending' : (ev.resolved ? ' pending' : ' auto');
+  if (ev.nature) cls += ' n-' + ev.nature;
   const tagLabel = ev.type === 'permission' ? (ev.pending ? (ev.tool + ' · en attente') : ev.resolved ? (ev.tool + ' · ' + ev.resolved) : (ev.tool + ' · auto'))
-    : ev.type === 'instruction' ? 'instruction opérateur' : ev.type === 'system' ? (ev.tool || 'système') : (ev.tool || 'activité');
+    : ev.type === 'instruction' ? 'instruction opérateur'
+    : ev.type === 'system' ? (ev.tool || 'système')
+    : ev.nature === 'reflexion' ? 'réflexion'
+    : ev.nature === 'outil' ? (ev.tool || 'outil')
+    : 'réponse';
+  // Une réflexion longue est repliée : elle sert à voir que ça avance, pas à être lue en entier.
+  const corps = ev.nature === 'reflexion' && ev.text.length > 320
+    ? `<details><summary style="cursor:pointer;">${escapeHtml(ev.text.slice(0, 320))}…</summary><div style="margin-top:4px;">${escapeHtml(ev.text)}</div></details>`
+    : escapeHtml(ev.text);
   return `<div class="${cls}">
     <span class="ts">${ev.ts || ''}</span>
-    <div class="body"><span class="tool-tag">${escapeHtml(tagLabel)}</span>${escapeHtml(ev.text)}
+    <div class="body"><span class="tool-tag">${escapeHtml(tagLabel)}</span>${corps}
       ${ev.path ? `<div class="mono" style="font-size:10px;color:var(--err);margin-top:3px;">${escapeHtml(ev.path)}</div>` : ''}
     </div>
   </div>`;

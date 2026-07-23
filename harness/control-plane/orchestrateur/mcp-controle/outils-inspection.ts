@@ -183,20 +183,20 @@ export function historiqueEquipe(registre: Registre, designation: string, limite
  * l'orchestrateur n'avait accès qu'aux états et compteurs — il pouvait dire
  * qu'une équipe avait fini, jamais ce qu'elle avait trouvé (constaté le 23/07).
  */
-export function rapportEquipe(registre: Registre, designation: string, dernieres = 5): ContratRetour {
+export function rapportEquipe(registre: Registre, designation: string): ContratRetour {
   const intention = `rapport de ${designation}`;
   try {
     const resolution = resoudreMission(registre, designation);
     if (!('trouve' in resolution)) {
       return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
     }
-    const activites = registre.missions.activites(resolution.trouve.id);
-    if (activites.length === 0) {
+    const dernier = registre.missions.dernierTexte(resolution.trouve.id);
+    if (dernier === null) {
       return applique(intention, "aucun texte produit n'a encore été rapatrié pour cette équipe");
     }
-    // Les DERNIÈRES : un rapport final est en fin de course, et c'est lui qu'on veut.
-    const retenues = activites.slice(-dernieres);
-    return applique(intention, retenues.map((a) => a.texte).join('\n\n---\n\n'));
+    // `☠` ENTIER, jamais tronqué : c'est la synthèse de fin de l'équipe. En
+    // couper la moitié la rend inutilisable — décision de l'opérateur (23/07).
+    return applique(intention, dernier.texte);
   } catch (erreur) {
     journal.error({ err: erreur, designation }, 'rapport_equipe en échec');
     return echecInattendu(intention, erreur);
