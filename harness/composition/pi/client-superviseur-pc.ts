@@ -57,6 +57,7 @@ import type {
   OperationControle,
   ReponseControle,
   TelemetrieWorker,
+  QuotaCompteMesure,
 } from '../../superviseur/index.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
 import type { Lien } from '../../transport/contrat.ts';
@@ -139,6 +140,21 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
       return reponse.telemetrie ?? [];
     } catch (erreur) {
       log.debug({ err: erreur }, 'télémétrie du PC indisponible — traitée comme vide');
+      return [];
+    }
+  }
+
+  /**
+   * Usage des fenêtres de rate limit, mesuré par le PC. PC absent ⇒ liste vide :
+   * les jauges gardent alors leur dernière valeur connue au registre, elles ne
+   * retombent pas à zéro.
+   */
+  async quotas(): Promise<readonly QuotaCompteMesure[]> {
+    try {
+      const reponse = await this.#appeler({ type: 'quotas' });
+      return reponse.quotas ?? [];
+    } catch (erreur) {
+      log.debug({ err: erreur }, 'quotas du PC indisponibles — dernières valeurs conservées');
       return [];
     }
   }

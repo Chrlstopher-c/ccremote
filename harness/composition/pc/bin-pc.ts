@@ -45,11 +45,20 @@ function main(): void {
   // `☠` Jamais de valeur par défaut (H-74, point 2) : un secret manquant doit
   // arrêter le démarrage bruyamment, jamais tourner sans authentification.
   const secretLienPi = envObligatoire('CCREMOTE_LIEN_SECRET');
+  // `☠` Les comptes vivent ICI, sur le PC : seul ce process peut mesurer leurs
+  // fenêtres de rate limit. Même format que côté Pi (`id=configDir,…`) pour
+  // qu'un opérateur n'ait pas deux syntaxes à retenir.
+  const comptesASonder = (process.env['CCREMOTE_PC_COMPTES'] ?? '')
+    .split(',')
+    .map((paire) => paire.trim())
+    .filter((paire) => paire.includes('='))
+    .map((paire) => ({ id: paire.slice(0, paire.indexOf('=')), configDir: paire.slice(paire.indexOf('=') + 1) }));
 
   const assemble = assemblerSuperviseurPc({
     cheminRegistrePersistance,
     urlPi,
     secretLienPi,
+    comptesASonder,
     // `☠` Fermeture terminale (ex. secret invalide) : jamais de reconnexion
     // interne — H-75. On arrête le PROCESS ; systemd décide seul de la suite,
     // après `RestartSec=60`, jamais un martèlement du Pi.

@@ -77,6 +77,12 @@ export interface DependancesSuperviseur {
    * `/mnt/projects` — l'emplacement réel des projets de l'opérateur.
    */
   readonly racineProjets?: string;
+  /**
+   * Comptes Claude à sonder pour mesurer l'usage des fenêtres de rate limit.
+   * `☠` Absents ⇒ aucune sonde : les jauges restent non mesurées, ce qui est
+   * honnête. Elles affichaient 0 % en permanence avant cette mesure (23/07).
+   */
+  readonly comptesASonder?: readonly { readonly id: string; readonly configDir: string }[];
   /** Ordonnancement du délai de backoff avant une relance. Réel = `setTimeout`, synchrone en test. */
   readonly planifier?: (delaiMs: number, tache: () => void) => void;
   /**

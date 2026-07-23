@@ -72,3 +72,5 @@ export { missionLogger, superviseurLogger } from './logger.ts';
 
 export { explorerProjets, resoudreDansRacine } from './exploration-projets.ts';
 export type { EntreeProjet, ResultatExploration } from './exploration-projets.ts';
+export { sonderQuotaCompte, sonderQuotas } from './sonde-quotas.ts';
+export type { FenetreQuotaMesuree, QuotaCompteMesure } from './sonde-quotas.ts';

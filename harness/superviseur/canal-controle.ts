@@ -31,6 +31,7 @@ import type {
   TelemetrieWorker,
 } from './types.ts';
 import type { ResultatExploration } from './exploration-projets.ts';
+import type { QuotaCompteMesure } from './sonde-quotas.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
 /**
@@ -44,6 +45,12 @@ export interface PortSuperviseurControle {
   demarrer(demande: DemandeDemarrage): Promise<{ readonly sessionId: string }>;
   /** Optionnel : une doublure qui ne l'implémente pas rend une liste vide, jamais une panne. */
   telemetrie?(): Promise<readonly TelemetrieWorker[]> | readonly TelemetrieWorker[];
+  /**
+   * Usage RÉEL des fenêtres de rate limit, par compte. `☠` Mesuré côté PC : les
+   * `CLAUDE_CONFIG_DIR` y vivent, le Pi ne peut pas les lire. Sans ça, les jauges
+   * restent à 0 % en permanence (constaté le 23/07).
+   */
+  quotas?(): Promise<readonly QuotaCompteMesure[]> | readonly QuotaCompteMesure[];
   /** Absent ⇒ opération refusée : mieux qu'une arborescence vide prise pour la vérité. */
   explorerProjets?(chemin?: string): ResultatExploration;
   arreter(missionId: string): Promise<void>;
@@ -88,6 +95,8 @@ export type OperationControle =
   | { readonly type: 'inventaire' }
   /** Lecture pure : ce que seul le PC observe du flux de ses workers. */
   | { readonly type: 'telemetrie' }
+  /** Lecture pure : l'usage des fenêtres de rate limit, mesuré compte par compte. */
+  | { readonly type: 'quotas' }
   /** Lecture pure : parcourir l'arborescence des projets, qui vit sur le PC. */
   | { readonly type: 'explorer_projets'; readonly chemin?: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
@@ -115,7 +124,10 @@ export type OperationControle =
 /** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
 type OperationMutative = Exclude<
   OperationControle,
-  { readonly type: 'inventaire' } | { readonly type: 'telemetrie' } | { readonly type: 'explorer_projets' }
+  | { readonly type: 'inventaire' }
+  | { readonly type: 'telemetrie' }
+  | { readonly type: 'quotas' }
+  | { readonly type: 'explorer_projets' }
 >;
 
 export interface RequeteControle {
@@ -133,6 +145,8 @@ export interface ReponseControle {
   readonly inventaire?: readonly DescripteurWorkerPc[];
   /** Présent uniquement pour `telemetrie` — lecture pure, hors cache d'idempotence. */
   readonly telemetrie?: readonly TelemetrieWorker[];
+  /** Présent uniquement pour `quotas` — lecture pure, hors cache d'idempotence. */
+  readonly quotas?: readonly QuotaCompteMesure[];
   /** Présent uniquement pour `explorer_projets`. */
   readonly explorationProjets?: ResultatExploration;
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
@@ -187,6 +201,12 @@ export class CanalControle {
 
     if (requete.operation.type === 'telemetrie') {
       return { ok: true, effet: 'applique', telemetrie: (await this.#superviseur.telemetrie?.()) ?? [] };
+    }
+
+    if (requete.operation.type === 'quotas') {
+      // `☠` Absent ⇒ liste vide, jamais un refus : une doublure de test n'a pas
+      // de comptes réels à sonder, et l'absence de jauge n'est pas une panne.
+      return { ok: true, effet: 'applique', quotas: (await this.#superviseur.quotas?.()) ?? [] };
     }
 
     const dejaTraitee = this.#traitees.get(requete.opId);

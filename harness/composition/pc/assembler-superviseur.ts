@@ -44,6 +44,13 @@ export interface OptionsAssemblageSuperviseurPc {
   readonly plafondRelancesDefaut?: number;
   /** H-75 : une fermeture terminale (secret invalide, epoch dépassé) n'est jamais retentée en interne — voir `client-lien-pi.ts`. */
   readonly surFermetureTerminale?: (fermeture: FermetureTerminale) => void;
+  /**
+   * Comptes Claude à sonder pour les jauges de rate limit. `☠` Ils vivent sur le
+   * PC (`CLAUDE_CONFIG_DIR`) : le Pi ne peut PAS les lire. Absents ⇒ jauges non
+   * mesurées, ce qui est honnête — mais c'est ce qui les laissait à 0 % en
+   * permanence jusqu'au 23/07.
+   */
+  readonly comptesASonder?: readonly { readonly id: string; readonly configDir: string }[];
 }
 
 export interface SuperviseurPcAssemble {
@@ -68,6 +75,7 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
     compteurRelances,
     persistance,
     jugeBoucle,
+    ...(options.comptesASonder ? { comptesASonder: options.comptesASonder } : {}),
   });
 
   // Dette n°1 : SANS cet appel, un redémarrage du PC repart avec un registre

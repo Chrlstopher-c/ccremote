@@ -28,6 +28,7 @@
 import { creerCablageAntiBoucle, type CablageAntiBoucle } from './anti-boucle-workers.ts';
 import { arbitrerFencingWorktree } from './fencing-arbitrage-workers.ts';
 import { deciderRelance } from '../relance/politique-relance.ts';
+import { sonderQuotas, type QuotaCompteMesure } from './sonde-quotas.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
@@ -84,6 +85,14 @@ export { GRACE_ARRET_URGENCE_MS_DEFAUT, SuperviseurError, type DemarrerWorkerFn,
  * Superviseur de workers du PC (B.1.4, D.3.1). Un worker vivant par mission
  * (H-56) ; un enregistrement mort survit pour permettre la relance (B.3.3).
  */
+/**
+ * `☠` Entre deux sondes. Chaque sonde ouvre une session CLI par compte : trop
+ * fréquent, c'est du process en continu pour une jauge ; trop rare, l'opérateur
+ * pilote sur des chiffres périmés. Dix minutes tient les deux bouts — une
+ * fenêtre de 5 h ne bouge pas significativement en moins que ça.
+ */
+export const PERIODE_SONDE_QUOTAS_MS = 600_000;
+
 export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession, RepertoireCibles, ArreteurMission, RelanceurMission {
   readonly #registre: RegistreWorkers;
   readonly #compteurRelances: CompteurRelances;
@@ -97,6 +106,19 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   readonly #telemetrie = new CollecteurTelemetrie();
   /** Racine des projets sur le PC — borne l'exploration, jamais dépassée. */
   readonly #racineProjets: string;
+  /** Comptes à sonder pour les jauges de rate limit — vide si non configurés. */
+  readonly #comptesASonder: readonly { readonly id: string; readonly configDir: string }[];
+  /**
+   * Dernière mesure de quotas et son horodatage.
+   *
+   * `☠` Une sonde ouvre une session CLI par compte : la refaire à chaque
+   * interrogation du Pi (toutes les 5 s) lancerait des process en continu pour
+   * une simple jauge. On garde donc la dernière mesure et on ne re-sonde qu'au
+   * bout de `PERIODE_SONDE_QUOTAS_MS`.
+   */
+  #quotasMesures: readonly QuotaCompteMesure[] = [];
+  #quotasMesuresA = 0;
+  #sondeEnCours: Promise<void> | null = null;
   readonly #planifier: (delaiMs: number, tache: () => void) => void;
   readonly #attendreGrace: (delaiMs: number) => Promise<void>;
   readonly #persistance: PersistanceRegistre | undefined;
@@ -108,6 +130,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
     this.#racineProjets = deps.racineProjets ?? '/mnt/projects';
+    this.#comptesASonder = deps.comptesASonder ?? [];
     this.#observateurRelance = deps.observateurRelance;
     this.#observateurUsage = deps.observateurUsage;
     this.#observateurFlux = deps.observateurFlux;
@@ -215,6 +238,32 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       }
     }
     return this.#telemetrie.tous();
+  }
+
+  /**
+   * Usage des fenêtres de rate limit. Rend TOUJOURS la dernière mesure connue et
+   * déclenche une nouvelle sonde en arrière-plan quand elle a vieilli.
+   *
+   * `☠` Ne bloque JAMAIS sur la sonde : elle prend plusieurs secondes par compte,
+   * et le Pi attend cette réponse pour afficher son écran. Une jauge fraîche ne
+   * vaut pas une interface qui se fige.
+   */
+  async quotas(): Promise<readonly QuotaCompteMesure[]> {
+    if (this.#comptesASonder.length === 0) return [];
+    const perime = Date.now() - this.#quotasMesuresA > PERIODE_SONDE_QUOTAS_MS;
+    if (perime && this.#sondeEnCours === null) {
+      this.#sondeEnCours = (async (): Promise<void> => {
+        try {
+          this.#quotasMesures = await sonderQuotas(this.#comptesASonder);
+          this.#quotasMesuresA = Date.now();
+        } finally {
+          this.#sondeEnCours = null;
+        }
+      })();
+      // Première mesure : on l'attend, sinon l'écran resterait vide au démarrage.
+      if (this.#quotasMesuresA === 0) await this.#sondeEnCours;
+    }
+    return this.#quotasMesures;
   }
 
   inventaire(): readonly DescripteurWorkerPc[] {
