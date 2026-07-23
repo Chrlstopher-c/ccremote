@@ -268,6 +268,39 @@ export class DepotMissions {
     );
   }
 
+  /**
+   * Enregistre un texte produit par l'équipe. `☠` C'est ce que l'opérateur veut
+   * lire : sans ça, le fil ne montre que des changements d'état, et un rapport
+   * final n'apparaît nulle part (23/07).
+   */
+  public ajouterActivite(missionId: string, texte: string, survenuA: number = Date.now()): void {
+    executer(
+      'missions.ajouterActivite',
+      () => {
+        this.db
+          .query('INSERT INTO activite_mission (mission_id, texte, survenu_a) VALUES (?, ?, ?)')
+          .run(missionId, texte, survenuA);
+      },
+      { missionId },
+    );
+  }
+
+  /** Textes produits par l'équipe, du plus ancien au plus récent, bornés. */
+  public activites(missionId: string, limite = 200): readonly { texte: string; survenuA: number }[] {
+    return executer(
+      'missions.activites',
+      () => {
+        const lignes = this.db
+          .query<{ texte: string; survenu_a: number }, [string, number]>(
+            'SELECT texte, survenu_a FROM activite_mission WHERE mission_id = ? ORDER BY survenu_a, id LIMIT ?',
+          )
+          .all(missionId, limite);
+        return lignes.map((l) => ({ texte: l.texte, survenuA: l.survenu_a }));
+      },
+      { missionId },
+    );
+  }
+
   public incrementerRelances(id: string): number {
     return executer(
       'missions.incrementerRelances',

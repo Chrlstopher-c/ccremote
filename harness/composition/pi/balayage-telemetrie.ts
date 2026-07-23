@@ -87,6 +87,13 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
 
   if (t.quotaSature) marquerCompteSature(registre, mission.compteId, t.motifQuota);
 
+  // `☠` Ce que l'équipe PRODUIT entre au fil. Le relevé est drainant côté PC :
+  // ces entrées ne repasseront pas. Les ignorer, comme c'était le cas jusqu'au
+  // 23/07, laissait l'opérateur avec « les états et compteurs » et rien d'autre.
+  for (const a of t.activitesEnAttente) {
+    registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA);
+  }
+
   if (t.modeleResolu !== null && mission.modeleResolu !== t.modeleResolu) {
     registre.missions.definirModeleResolu(t.missionId, t.modeleResolu);
   }

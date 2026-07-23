@@ -21,6 +21,7 @@ import {
   etatEquipe,
   historiqueEquipe,
   listerEquipes,
+  rapportEquipe,
   listerProjets,
   permissionsEnAttente,
 } from './outils-inspection.ts';
@@ -143,6 +144,16 @@ function outilsInspection(deps: DependancesServeurControle) {
           .describe("Identifiant, nom ou projet de l'équipe — le nom suffit si aucune autre ne lui ressemble."),
       },
       async ({ equipe }) => protege('etat_equipe', () => etatEquipe(deps.registre, equipe)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'rapport_equipe',
+      "Ce que l'équipe a écrit : son rapport et ses derniers messages. À utiliser dès qu'on demande son RÉSULTAT, et pas seulement son état.",
+      {
+        equipe: z.string().describe("Identifiant, nom ou projet de l'équipe."),
+        dernieres: z.number().int().positive().optional().describe('Nombre de messages retenus (5 par défaut).'),
+      },
+      async ({ equipe, dernieres }) => protege('rapport_equipe', () => rapportEquipe(deps.registre, equipe, dernieres)),
       { annotations: { readOnlyHint: true } },
     ),
     tool('lister_projets', 'Projets connus et leur worktree.', {}, async () =>

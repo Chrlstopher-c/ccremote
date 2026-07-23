@@ -19,8 +19,27 @@ import { superviseurLogger } from './logger.ts';
 
 const log = superviseurLogger.child({ composant: 'collecteur-telemetrie' });
 
-/** Longueur retenue de la dernière activité — un aperçu, jamais un transcript (H-45). */
+/**
+ * Longueur retenue de l'aperçu rendu à l'ORCHESTRATEUR — un aperçu, jamais un
+ * transcript (H-45) : son contexte ne doit pas se remplir du travail des autres.
+ */
 const APERCU_MAX = 240;
+
+/**
+ * Longueur retenue pour le FIL de l'opérateur. `☠` Volontairement bien plus
+ * généreuse que `APERCU_MAX` : H-45 protège le contexte de l'orchestrateur, pas
+ * le droit de l'humain à LIRE ce que son équipe a produit. Tronquer le rapport
+ * final à 240 caractères revenait à ne rien livrer du tout — l'opérateur ne
+ * voyait « que les états et compteurs » (23/07).
+ */
+const ACTIVITE_MAX = 4_000;
+
+/**
+ * Combien de prises d'activité on garde en attente de rapatriement. `☠` Bornée :
+ * le balayage passe toutes les 5 s, un lead bavard produirait sinon une file
+ * sans fin en mémoire du PC.
+ */
+const FILE_ACTIVITE_MAX = 50;
 
 interface Etat {
   sessionId: string;
@@ -32,6 +51,8 @@ interface Etat {
   contexteTokensMax: number | null;
   contexteVentilation: readonly PosteContexte[] | null;
   derniereActivite: string | null;
+  /** Textes produits, en attente de rapatriement vers le Pi. Vidée à chaque relevé. */
+  activitesEnAttente: { texte: string; survenuA: number }[];
   quotaSature: boolean;
   motifQuota: string | null;
   observeA: number;
@@ -60,7 +81,7 @@ function texteAssistant(message: SDKMessage): string | null {
     .filter((b) => b.type === 'text' && typeof b.text === 'string')
     .map((b) => b.text as string);
   const texte = morceaux.join('').trim();
-  return texte.length === 0 ? null : texte.slice(0, APERCU_MAX);
+  return texte.length === 0 ? null : texte;
 }
 
 export class CollecteurTelemetrie {
@@ -78,6 +99,7 @@ export class CollecteurTelemetrie {
       contexteTokensMax: null,
       contexteVentilation: null,
       derniereActivite: null,
+      activitesEnAttente: [],
       quotaSature: false,
       motifQuota: null,
       observeA: maintenant,
@@ -124,8 +146,17 @@ export class CollecteurTelemetrie {
     etat.observeA = maintenant;
   }
 
+  /**
+   * `☠` DRAINANT : les activités rendues sont retirées de la file. Le relevé est
+   * consommé une fois — les relire à chaque passage de balayage dupliquerait
+   * chaque message du lead dans le fil toutes les 5 secondes.
+   */
   tous(): readonly TelemetrieWorker[] {
-    return [...this.#par.entries()].map(([missionId, e]) => ({ missionId, ...e }));
+    return [...this.#par.entries()].map(([missionId, e]) => {
+      const activites = e.activitesEnAttente;
+      e.activitesEnAttente = [];
+      return { missionId, ...e, activitesEnAttente: activites };
+    });
   }
 
   #appliquer(etat: Etat, message: SDKMessage): void {
@@ -158,7 +189,15 @@ export class CollecteurTelemetrie {
     if (sonde.type === 'assistant') {
       etat.etatSdk = 'running';
       const texte = texteAssistant(message);
-      if (texte !== null) etat.derniereActivite = texte;
+      if (texte !== null) {
+        etat.derniereActivite = texte.slice(0, APERCU_MAX);
+        // `☠` Une FILE, pas un simple « dernier » : le balayage passe toutes les
+        // 5 s et plusieurs messages peuvent tomber entre deux passages. N'en
+        // garder qu'un ferait silencieusement disparaître du fil tout ce que le
+        // lead a écrit entre-temps — y compris son rapport final.
+        etat.activitesEnAttente.push({ texte: texte.slice(0, ACTIVITE_MAX), survenuA: Date.now() });
+        if (etat.activitesEnAttente.length > FILE_ACTIVITE_MAX) etat.activitesEnAttente.shift();
+      }
       return;
     }
 

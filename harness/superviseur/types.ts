@@ -254,8 +254,15 @@ export interface TelemetrieWorker {
    * et c'est justement la distinction sur laquelle on décide d'un atterrissage.
    */
   readonly contexteVentilation: readonly PosteContexte[] | null;
-  /** Dernier texte de l'assistant, tronqué — de quoi voir que ça avance. */
+  /** Dernier texte de l'assistant, tronqué court — de quoi voir que ça avance (H-45). */
   readonly derniereActivite: string | null;
+  /**
+   * Textes produits depuis le dernier relevé, en attente d'entrer au fil de la
+   * mission. `☠` Le relevé est DRAINANT : ces entrées ne seront pas rendues deux
+   * fois. C'est ce qui permet à l'opérateur de lire ce que son équipe a écrit —
+   * sans quoi il n'a « que les états et compteurs » (23/07).
+   */
+  readonly activitesEnAttente: readonly { readonly texte: string; readonly survenuA: number }[];
   /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */
   readonly quotaSature: boolean;
   readonly motifQuota: string | null;

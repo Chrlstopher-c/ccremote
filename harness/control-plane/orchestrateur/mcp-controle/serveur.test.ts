@@ -64,6 +64,7 @@ describe('surface d’outils (A.2.2)', () => {
       [
         'lister_equipes',
         'etat_equipe',
+        'rapport_equipe',
         'lister_projets',
         'historique_equipe',
         'permissions_en_attente',
@@ -84,7 +85,7 @@ describe('surface d’outils (A.2.2)', () => {
   });
 
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
-    const inspection = ['lister_equipes', 'etat_equipe', 'lister_projets', 'historique_equipe', 'permissions_en_attente'];
+    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'lister_projets', 'historique_equipe', 'permissions_en_attente'];
     const outils = construireOutilsControle(deps);
     for (const nom of inspection) {
       const outil = outils.find((o) => o.name === nom);

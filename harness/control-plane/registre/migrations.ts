@@ -295,6 +295,25 @@ const MIGRATION_6 = `
 ALTER TABLE mission ADD COLUMN contexte_ventilation TEXT;
 `;
 
+/**
+ * Migration 7 — ce que l'équipe PRODUIT, pas seulement ce qu'elle devient.
+ *
+ * `☠` Le fil d'une mission ne portait que des transitions d'état et des
+ * permissions. L'opérateur — et l'orchestrateur — n'avaient donc « que les états
+ * et compteurs » : le rapport d'une équipe qui venait de terminer proprement
+ * n'était visible NULLE PART (constaté le 23/07). Le texte existe pourtant, il
+ * est observé côté PC ; il n'était simplement jamais rapatrié.
+ */
+const MIGRATION_7 = `
+CREATE TABLE activite_mission (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  mission_id TEXT NOT NULL REFERENCES mission(id),
+  texte TEXT NOT NULL,
+  survenu_a INTEGER NOT NULL
+);
+CREATE INDEX idx_activite_mission ON activite_mission(mission_id, survenu_a);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -302,6 +321,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 4, nom: 'propositions-mandat', sql: MIGRATION_4 },
   { version: 5, nom: 'modele-effort-proposition', sql: MIGRATION_5 },
   { version: 6, nom: 'ventilation-contexte-mission', sql: MIGRATION_6 },
+  { version: 7, nom: 'activite-mission', sql: MIGRATION_7 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

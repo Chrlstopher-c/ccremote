@@ -91,6 +91,11 @@ export function construireFeed(
     .historique(missionId, limite)
     .map(versEvenementTransition);
 
+  // Ce que l'équipe a écrit — la seule chose que l'opérateur voulait vraiment lire.
+  for (const a of registre.missions.activites(missionId, limite)) {
+    evenements.push({ ts: horodatage(a.survenuA), type: 'activity', text: a.texte });
+  }
+
   if (demandes !== undefined) {
     for (const d of demandes.parWorker(missionId)) evenements.push(versEvenementPermission(d));
   }

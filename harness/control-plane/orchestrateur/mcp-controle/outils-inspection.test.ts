@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import type { InterrogateurGit } from '../../../projets/index.ts';
-import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, permissionsEnAttente } from './outils-inspection.ts';
+import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, permissionsEnAttente, rapportEquipe } from './outils-inspection.ts';
 import type { LecteurEscalades } from './types.ts';
 
 const GIT_FACTICE_NON_GIT: InterrogateurGit = {
@@ -142,5 +142,31 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     const resultat = permissionsEnAttente(escalades);
     expect(resultat.etat).toContain('r-1');
     expect(resultat.etat).toContain('Bash');
+  });
+});
+
+describe('rapport_equipe — ce que l’équipe a écrit', () => {
+  test('☠ rend les textes produits, pas seulement les compteurs (23/07)', () => {
+    registre.missions.creer({ id: 'm-r', lotId: 'lot-1', nom: 'vela', projet: 'vela', compteId: 'compte1' });
+    registre.missions.ajouterActivite('m-r', 'Premier constat.', 1_000);
+    registre.missions.ajouterActivite('m-r', 'Rapport final : tout compile.', 2_000);
+    const resultat = rapportEquipe(registre, 'vela');
+    expect(resultat.ok).toBe(true);
+    expect(resultat.etat).toContain('Rapport final');
+  });
+
+  test('aucune activité rapatriée ⇒ le dit, sans prétendre que l’équipe n’a rien fait', () => {
+    registre.missions.creer({ id: 'm-v', lotId: 'lot-1', nom: 'vide', projet: 'lattice', compteId: 'compte1' });
+    const resultat = rapportEquipe(registre, 'lattice');
+    expect(resultat.ok).toBe(true);
+    expect(resultat.etat).toContain('aucun texte produit');
+  });
+
+  test('ne retient que les dernières prises — un rapport final est en fin de course', () => {
+    registre.missions.creer({ id: 'm-n', lotId: 'lot-1', nom: 'long', projet: 'aegis', compteId: 'compte1' });
+    for (let i = 1; i <= 10; i += 1) registre.missions.ajouterActivite('m-n', `message ${i}`, i * 1_000);
+    const resultat = rapportEquipe(registre, 'aegis', 2);
+    expect(resultat.etat).toContain('message 10');
+    expect(resultat.etat).not.toContain('message 1\n');
   });
 });

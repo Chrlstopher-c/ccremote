@@ -16,6 +16,7 @@ const RELEVE: TelemetrieWorker = {
   contexteTokensMax: 967_000,
   contexteVentilation: [{ nom: 'Messages', tokens: 10_326, differe: false }],
   derniereActivite: null,
+  activitesEnAttente: [],
   quotaSature: false,
   motifQuota: null,
   observeA: 0,
@@ -84,5 +85,37 @@ describe('balayage-telemetrie — mort d’un worker en cours de route', () => {
     const m = registre.missions.lire('m-1');
     expect(m?.contexteTokensUtilises).toBe(45_828);
     expect(m?.contexteVentilation).toEqual([{ nom: 'Messages', tokens: 10_326, differe: false }]);
+  });
+});
+
+describe('balayage-telemetrie — ce que l’équipe produit', () => {
+  test('☠ les textes produits entrent au fil de la mission (23/07)', async () => {
+    const b = balayer({
+      ...RELEVE,
+      activitesEnAttente: [
+        { texte: 'Rapport : le projet compile.', survenuA: 1_000 },
+        { texte: 'Rien à signaler côté tests.', survenuA: 2_000 },
+      ],
+    });
+    await b.passer();
+    b.arreter();
+    const activites = registre.missions.activites('m-1');
+    expect(activites).toHaveLength(2);
+    expect(activites[0]?.texte).toContain('le projet compile');
+  });
+
+  test('☠ un second passage sans nouvelle activité ne duplique rien', async () => {
+    const releve = { ...RELEVE, activitesEnAttente: [{ texte: 'un seul message', survenuA: 1_000 }] };
+    const b = demarrerBalayageTelemetrie({
+      registre,
+      // Le PC draine sa file : le second relevé ne reporte plus l'activité.
+      source: { telemetrie: async () => [{ ...releve, activitesEnAttente: [] }] },
+    });
+    const premier = demarrerBalayageTelemetrie({ registre, source: { telemetrie: async () => [releve] } });
+    await premier.passer();
+    premier.arreter();
+    await b.passer();
+    b.arreter();
+    expect(registre.missions.activites('m-1')).toHaveLength(1);
   });
 });
