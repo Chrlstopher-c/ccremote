@@ -1,10 +1,11 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-07-22*
+*Dernière mise à jour : 2026-07-23*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
-**Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
-harness — REPRISE.md est plus précis et tenu à jour.
+**Point d'entrée pour reprendre : `harness/REPRISE.md`, section « SESSION DU 23/07 (journée) », en
+FIN de fichier.** Ne pas repartir de ce STATE pour le harness — REPRISE.md est plus précis et tenu
+à jour.
 
 Upgrade majeure : piloter des projets depuis l'app vers le PC. Un orchestrateur maître (session
 Agent SDK sur le Pi) avec qui Chris discute, qui dispatche des missions Claude Code sur le PC,
@@ -14,8 +15,18 @@ observables et pilotables à distance depuis mobile.
   le reste (décisions de Chris + faits vérifiés contre le SDK).
 - **Code** : `harness/`, TypeScript + Bun, SDK `@anthropic-ai/claude-agent-sdk` **épinglé 0.3.217**.
 - **Maquette UI v2** : `design-v2/` — maquette de comparaison avec l'app actuelle, pas une refonte.
-- **État** : Lot 0 livré (commit `5c2f65f`), **93 tests verts, typecheck propre**. Prochaine étape :
-  vague 2 (M-10 tunnel, M-20 plancher de déni en priorité).
+- **État au 23/07 (soir)** : **EN PRODUCTION**, exercé sur de vraies équipes. Commit `d96ecd4`,
+  **1007 tests verts**, typecheck propre, schéma du registre en **version 8**.
+  Trois services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC).
+
+**Livré le 23/07** — le harness ne se contente plus de piloter, il *rend compte* : fil de mission
+réel (réflexions, outils, textes du lead), équipes terminées consultables et désignables par nom,
+contexte ventilé par poste, jauges de rate limit réellement mesurées, rafraîchissement temps réel
+de l'interface sans reconstruire le DOM.
+
+**Reste à faire, dans l'ordre** : (B) faire apparaître les sous-agents — seul point de la liste du
+23/07 encore entier ; (D) élucider un écart de ~4 K tokens entre `totalTokens` et la somme des
+postes ; (E) dettes connues listées dans REPRISE.md.
 
 Décisions structurantes à connaître : v1 = **une seule mission active par projet** (H-56) · **deux**
 boutons de sûreté distincts, pause globale ≠ arrêt d'urgence (H-57) · plafond en dollars désactivé,
@@ -160,6 +171,27 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
 
 ## Contexte non-évident
 
+### `☠` Mise à jour automatique d'une interface — jamais le DOM complet (23/07)
+
+Toute vue qui se rafraîchit seule ne réécrit **jamais** `innerHTML` sur un conteneur entier :
+les nœuds sont détruits et recréés, ce qui efface la saisie en cours, referme les `<details>`,
+annule la sélection de texte et rejette le défilement en bas. Forme correcte : empreinte des champs
+volatils → écriture ciblée par `data-maj` → **append** des seuls éléments neufs → une seule
+minuterie liée à la vue visible, suspendue sur `document.hidden`, non réentrante. Un rendu complet
+n'est légitime que **sur action de l'utilisateur**. Détail : `pi-web/CONTRAT-API-HARNESS.md`,
+section « RÈGLE ABSOLUE ».
+
+### Faits mesurés sur le contexte et les quotas (23/07)
+
+- Le **socle** d'une session pèse ~24 K tokens avant le moindre échange (prompt système, outils,
+  CLAUDE.md, skills). Un « 10 % » précoce n'est donc pas forcément anormal.
+- Les postes **différés** (`isDeferred`) ne comptent PAS dans `totalTokens`.
+- **`maxTokens` n'est pas comparable d'un modèle à l'autre** : 967 000 (Sonnet) vs 1 000 000
+  (Opus), soit exactement les 33 000 du buffer d'autocompact. Deux jauges à « 10 % » ne désignent
+  pas la même marge.
+- **`reset_a` est en millisecondes epoch**, normalisé au point d'écriture. Une seule convention.
+
+
 - **`~/.claude/.credentials_account1.json` / `_account2.json`** existaient déjà avant cette
   session (créés manuellement par Chris) — ccremote ne fait que les orchestrer. Les tokens sont
   opaques (`sk-ant-oat01-...`), pas de JWT décodable : impossible de déterminer par le code quel
@@ -183,13 +215,48 @@ conversations persistantes en localStorage. Déployé et vérifié fonctionnel e
   (limite 30 000) — la marge réelle avant un 429 est donc bien plus faible que ce que la longueur de
   la conversation seule suggérerait. C'est justement ce que le nouveau suivi de quotas rend visible.
 
+## Ce qui a été fait — session du 2026-07-23 (harness)
+
+*Détail complet, faits mesurés et pièges : `harness/REPRISE.md`, section « SESSION DU 23/07
+(journée) ». Ce résumé ne le remplace pas.*
+
+- **Fil de la mission** — il était rendu VIDE « par honnêteté » alors que deux sources persistées
+  existaient déjà (transitions d'état, permissions). Enrichi ensuite des activités du lead :
+  le collecteur ne lisait que les blocs `text` d'un message assistant et **jetait** `thinking` et
+  `tool_use`. Migrations 7 et 8.
+- **Équipes terminées retrouvables** — `listerEquipes` n'appelait que `listerActives()` : une équipe
+  sortait de la vue de l'orchestrateur à la seconde où elle finissait. Désignation par id, nom,
+  projet ou fragment ; ambiguïté refusée avec ses candidats ; identifiant copiable dans l'UI.
+- **Contexte ventilé par poste** (migration 6) — le SDK rendait une ventilation qu'on jetait.
+- **Mort d'un worker détectée** — `reconcilier()` ne tourne qu'au démarrage et au rattachement ;
+  un worker mort en cours de route n'était vu par personne. Le balayage télémétrie le déclenche.
+- **État d'affichage honnête** — `en_cours` + `etatSdk=idle` s'affichait « running ».
+- **`rapport_equipe`** — rend le dernier TEXTE du lead, entier, jamais tronqué.
+- **Jauges de rate limit** — `releverQuota()` n'était appelé QUE pour marquer une saturation ;
+  l'usage courant n'était jamais mesuré. Sonde réelle côté PC, cache 10 min.
+- **Rafraîchissement temps réel de l'UI** — aucune vue du parc ne se rafraîchissait. Diff ciblé +
+  append, sans jamais reconstruire le DOM (règle posée, voir ci-dessous).
+- **Sidebar scrollable** en vue mobile.
+
 ## Prochaines étapes
 
-- Aucune tâche explicitement demandée en attente à la fin de cette session.
-- Voir "Points en suspens" pour ce qui mériterait attention prochainement.
+1. **(B) Faire apparaître les sous-agents** — seul point de la liste du 23/07 encore entier.
+   `subagents: []` est délibérément vide : ne PAS le remplir avant d'avoir une vraie source.
+   La vérité sur « qui existe » vient du transcript, pas du flux (H-72.4, non déterministe).
+2. **(D) Élucider l'écart de ~4 K tokens** entre `totalTokens` et la somme des postes chargés.
+3. **(E) Dettes** : `deniedToolPatterns: []` au dispatch, index de rotation du master en mémoire,
+   `harness-orchestrateur.js` au-delà de 500 lignes.
 
 ## Points en suspens
 
+- **Les deux comptes Claude sont saturés** (mesuré le 23/07 au soir) : fenêtre 5 h à 100 % sur A et
+  B, semaine à 93 % sur A. Aucune équipe ne pourra être dispatchée avant les resets. Ce n'est plus
+  un défaut silencieux — le harness l'affiche et écarte les comptes `rejected`.
+- **Écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés, sur une mission
+  réelle, alors que la somme tombait au token près en mesure locale. Hypothèse non prouvée : total
+  calculé en direct, catégories issues d'un état antérieur. **Le total reste la référence.**
+- **La sonde de quota ouvre une session CLI par compte toutes les 10 min** — coût mesuré
+  négligeable, mais compromis à revoir si les comptes restent durablement saturés.
 - **Bouton extinction non re-testé en réel** après le fix polkit (le test aurait réellement éteint
   la machine) — vérification faite uniquement via `pkcheck` (résultat `yes`). À confirmer par Chris
   depuis l'app à sa prochaine utilisation.

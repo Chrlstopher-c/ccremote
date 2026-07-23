@@ -11,7 +11,10 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `control-plane/api-web/enveloppe.ts` — l'enveloppe `pcOnline`/`stale`/`data` : le PC absent n'est JAMAIS une erreur (H-75), une panne du control plane en reste une
 - `control-plane/api-web/vue-missions.ts` — `Mission` du registre → forme d'affichage ; champs sans source réelle rendus vides, jamais fabriqués
 - `control-plane/api-web/vue-escalades.ts` — demandes réellement escaladées uniquement (H-40/M-20)
-- `control-plane/api-web/vue-comptes.ts` — jauges 5 h / 7 j en pourcentage (les dollars sont `null` sur abonnement, H-70)
+- `control-plane/api-web/vue-comptes.ts` — jauges 5 h / 7 j en pourcentage + heure exacte du reset (AM/PM, avec le jour pour la semaine) ; `reset_a` est en **millisecondes** epoch, une seule convention
+- `control-plane/api-web/vue-feed.ts` — le fil d'une mission : transitions d'état, permissions (y compris celles résolues seules par le lead, H-64) et activités du lead (réflexion / outil / texte)
+- `control-plane/api-web/vue-feed.test.ts` — banc du fil : natures distinguées, permissions auto tracées, chemin bloqué jamais inventé
+- `control-plane/api-web/vue-missions.test.ts` — banc de l'état affiché (harness × SDK) et du contexte ventilé
 - `control-plane/api-web/duree.ts` — libellés d'ancienneté partagés par les vues
 - `control-plane/api-web/serveur-api.test.ts` — banc : vrai serveur, vrai registre, les trois issues de l'enveloppe
 - `control-plane/api-web/logger.ts` — journal pino du domaine
@@ -33,6 +36,9 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/pi/permission-verdict-distant.ts` — reçoit les `permission_demande` du PC, interroge la vraie `MachineEtatsDemandes`, pousse le verdict (H-73.1 fermé pour de vrai en déploiement 2 machines)
 - `composition/pi/reconciliation-sur-rattachement.ts` — câble `reconcilier(..., 'reconnexion')` sur CHAQUE rattachement du PC (epoch incrémenté à l'adoption d'orphelins, D.2.3/D.2.4)
 - `composition/pi/port-utilisation-parc.ts` — `LecteurUtilisationParc` réel, backé par `Registre.comptes` (G.1.3)
+- `composition/pi/balayage-telemetrie.ts` — le Pi INTERROGE le PC (D.3.2) toutes les 5 s : modèle résolu, état SDK, coût (en écart, jamais en absolu), contexte ventilé, activités du lead, jauges de quota ; déclenche la réconciliation quand un worker MORT est vu sur une mission active
+- `composition/pi/balayage-telemetrie.test.ts` — banc : mort en cours de route, drainage des activités, réconciliation qui échoue sans arrêter le balayage
+- `composition/pi/balayage-quotas.test.ts` — banc des jauges : 100 % ⇒ compte `rejected` (H-53), sonde en échec qui n'écrase jamais une valeur connue
 - `composition/pi/ports-non-cables.ts` — `RepertoireCibles`/`DefinisseurBudget` : refus explicites, aucune implémentation réseau n'existe (voir rapport)
 - `composition/pi/verificateur-session-sdk.ts` — `VerificateurSessionExistante` réel via `getSessionInfo` du SDK
 - `composition/pc/assembler-superviseur.ts` — racine de composition du PC (persistance+boot_id, anti-boucle, lien vers le Pi)
@@ -170,6 +176,9 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `anti-boucle-workers.ts` — `CablageAntiBoucle`, câblage du juge (H-68), optionnalité bruyante (H-74)
 - `anti-boucle-cablage.test.ts` — tests du câblage anti-boucle
 - `budgets-workers.ts` — relais `rate_limit_event`/messages d'usage vers `ObservateurUsage`
+- `sonde-quotas.ts` — mesure RÉELLE des fenêtres de rate limit d'un compte (`usage_EXPERIMENTAL`) ; interroge dès `init` puis interrompt — la méthode n'est valable que pendant que la session vit, et la laisser ouverte consommerait le quota qu'on surveille
+- `collecteur-telemetrie.ts` — ce que SEUL le PC observe : modèle résolu, coût, contexte ventilé, saturation de compte, et la file DRAINANTE des activités du lead (réflexion / outil / texte)
+- `exploration-projets.ts` — listing en lecture seule BORNÉ à une racine (un `..` est résolu avant le contrôle, jamais après)
 - `fencing-arbitrage-workers.ts` — arbitrage de fencing appliqué au flux de résultats
 - `observateur-flux-cablage.test.ts` — tests du relais de flux vers l'observabilité
 - `superviseur-workers-restauration.test.ts` — tests d'intégration restauration ↔ superviseur

@@ -3,7 +3,48 @@
 
 ## ⚡ Harness d'orchestration — chantier actif
 
-**Contexte complet : `harness/REPRISE.md`.**
+**Contexte complet : `harness/REPRISE.md`, section « SESSION DU 23/07 (journée) » en FIN de fichier.**
+
+### 🎯 EN COURS — priorités à la reprise (23/07 au soir)
+
+- [ ] **(B) Faire apparaître les SOUS-AGENTS** — *seul point de la liste du 23/07 encore entier.*
+      La vue n'affiche que « Team leader », ce qui laisse croire qu'il n'y en a aucun.
+      `forwardSubagentText` et `agentProgressSummaries` sont déjà activés côté workers, et
+      `observabilite/` sait construire l'arbre — **rien ne le remonte au Pi**.
+      `☠` `subagents: []` est délibérément vide dans `vue-missions.ts` : ne PAS le remplir avant
+      d'avoir une vraie source. H-72.4 déjà mesuré : le flux temps réel des sous-agents est **non
+      déterministe** (0 à 4 lignes sur 5 sous-agents). La vérité sur « qui existe » vient du
+      transcript (`SessionStore.listSubkeys()`), pas du flux ; un sous-agent sans flux se rend avec
+      `feedUnavailable: true`, **jamais omis**.
+- [ ] **(D) Élucider l'écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés
+      sur une mission réelle — alors qu'elle tombait au token près en mesure locale. À mesurer sur
+      deux relevés successifs d'une même session vivante. **Le total reste la référence** en
+      attendant ; la ventilation sert à voir *où* ça part, pas à refaire l'addition.
+- [ ] **(E) Dettes ouvertes** — `deniedToolPatterns: []` au dispatch (« lecture seule » n'est qu'une
+      consigne au modèle, pas un verrou) · index de rotation du master **en mémoire** (repart sur le
+      compte A même saturé après un redémarrage) · `harness-orchestrateur.js` ~640 lignes.
+
+### ✅ TERMINÉ — session du 23/07 (journée)
+
+- [x] **(A) Fil de la mission** — rendu VIDE alors que transitions d'état et permissions étaient
+      déjà persistées. Puis enrichi : le collecteur ne lisait que les blocs `text` et **jetait**
+      `thinking` et `tool_use`. Migrations 7 et 8.
+- [x] **(A bis) Équipe terminée introuvable par le master** — `listerEquipes` n'appelait que
+      `listerActives()`. Désignation par id / nom / projet / fragment, ambiguïté refusée avec ses
+      candidats, identifiant copiable dans la vue Mission.
+- [x] **(C) % de contexte suspect** — la ventilation rendue par le SDK était jetée (migration 6).
+      *Hypothèse d'origine invalidée par la mesure : le socle ne pèse que ~24 K, pas 100 K.*
+- [x] **`rapport_equipe`** — le dernier TEXTE du lead, entier, jamais tronqué.
+- [x] **Mort d'un worker en cours de route** — `reconcilier()` ne tournait qu'au démarrage et au
+      rattachement ; le balayage télémétrie le déclenche désormais.
+- [x] **État d'affichage honnête** — `en_cours` + `etatSdk=idle` s'affichait « running ».
+- [x] **Jauges de rate limit réellement mesurées** — `releverQuota()` n'était appelé QUE pour
+      marquer une saturation. Sonde côté PC, cache 10 min, unité `reset_a` unifiée en ms,
+      heure de reset en AM/PM (+ jour pour la fenêtre hebdomadaire).
+- [x] **Fin du « Max · oauth » écrit en dur** dans le HTML — les comptes sont en « Claude Pro ».
+- [x] **Rafraîchissement temps réel des vues** — aucune ne se rafraîchissait. Diff ciblé + append,
+      sans jamais reconstruire le DOM (règle posée en doc, skill et mémoire).
+- [x] **Sidebar scrollable** en vue mobile.
 
 ## 🎯 OBJECTIF COURANT (priorités données par Chris, 2026-07-22 au soir)
 
@@ -14,16 +55,15 @@
    résolution d'escalade vont de l'écran jusqu'au superviseur. `ControleurPause` a enfin son
    premier appelant réel (6ᵉ occurrence du défaut « écrit, testé, branché sur rien »).
    `⚠` Reste : `arret_urgence` n'a pas de méthode sur `ClientSuperviseurPc` ⇒ la route répond 501.
-4. **Remonter `subagents` / `feed` / `inspection` du PC vers le Pi** — les vues Mission et Agent
-   restent en démo faute de source. C'est le prochain vrai manque.
-4ter. **Vue Orchestrateur entièrement en démo** — conversation ET jauges. `☠` Les chiffres affichés
-   (« contexte 23 % », « fin de fenêtre 17:00 », « 13,25 $ ») sont codés en dur : ils MENTENT.
-   Les vrais quotas sont dans la vue Comptes. À câbler avec la session orchestrateur (4bis), ou à
-   marquer visiblement « démonstration » à l'écran en attendant — un chiffre faux non signalé est
-   pire qu'un chiffre absent.
-4bis. **Session orchestrateur sur le Pi** — code prêt, activée par
-   `CCREMOTE_PI_ORCHESTRATEUR=1`. Bloquée sur une action humaine : les credentials Claude du Pi
-   datent du 2 juillet et les refresh tokens tournent, il faut un `/login` sur la machine.
+4. **Remonter `subagents` / `inspection` du PC vers le Pi** — `feed` est **livré le 23/07** (fil réel :
+   transitions, permissions, réflexions, outils, textes). Restent `subagents` (voir « EN COURS » en
+   tête de fichier) et `inspection` (verdicts du juge H-68, rendus côté PC, jamais remontés).
+4ter. ~~**Vue Orchestrateur entièrement en démo**~~ — **résolu** : la conversation est réelle depuis
+   le 23/07 (nuit), et les jauges de quota sont **réellement mesurées** depuis le 23/07 (journée).
+   `☠` La leçon reste : un chiffre faux non signalé est pire qu'un chiffre absent. C'est ce qui a
+   fait retirer le « Max · oauth » écrit en dur dans le HTML des comptes.
+4bis. ~~**Session orchestrateur sur le Pi**~~ — **active en production** (`CCREMOTE_PI_ORCHESTRATEUR=1`),
+   avec deux comptes de repli locaux (`CCREMOTE_PI_CONFIG_DIRS_ORCHESTRATEUR`) et rotation vérifiée.
 5. ~~Exercer le lien entre deux vraies machines~~ — **fait le 2026-07-22**, 2 défauts trouvés et
    corrigés (`3ff794c`). Restent non éprouvés : le passage par **Cloudflare Tunnel** (banc en LAN
    direct) et un **vrai redémarrage machine** (le `boot_id` n'a jamais changé pendant le banc).

@@ -1,7 +1,7 @@
 # REPRISE — harness d'orchestration ccremote
 
 Point d'entrée unique pour reprendre le chantier à froid, sans le contexte de la conversation d'origine.
-*Dernière mise à jour : 2026-07-23 (nuit) — voir « SESSION DU 23/07 » en fin de fichier : c'est l'état le plus récent.*
+*Dernière mise à jour : 2026-07-23 (journée) — voir « SESSION DU 23/07 (journée) » en FIN de fichier : c'est l'état le plus récent. La section « (nuit) » qui la précède est de la même journée mais ANTÉRIEURE.*
 
 ---
 
@@ -705,3 +705,125 @@ documentée, décision déjà prise (M-42).
 - `epoch` codé en dur ⇒ `collision_meme_epoch` au 2ᵉ dispatch sur un projet.
 - Un `WorkerSpec` **ne traverse pas le réseau** (ports d'audit/permissions) : le
   PC réassemble à partir de `ParametresSpecTransportables`.
+
+---
+
+## ▶▶ SESSION DU 23/07 (journée) — A, A bis et C livrés · jauges de quota branchées
+
+*Tout ce qui suit est déployé en production et vérifié sur données réelles, pas sur des doublures.*
+**1007 tests verts, typecheck propre. Dernier commit : `d96ecd4`.**
+
+### Ce qui est FAIT (et qui ne l'était pas ce matin)
+
+| Chantier | Ce qui bloquait réellement | Vérification |
+|---|---|---|
+| **A. Fil de la mission** | Le fil était rendu VIDE « par honnêteté », alors que deux sources persistées existaient déjà | 4 évènements réels sur une mission Vela terminée |
+| **A. Fil enrichi** | Le collecteur ne lisait que les blocs `text` d'un message assistant et JETAIT `thinking` et `tool_use` | réflexions, outils et textes distingués à l'écran |
+| **A bis. Équipe terminée introuvable** | `listerEquipes` n'appelait que `listerActives()` : une équipe SORT de la vue à la seconde où elle finit | désignation par id / nom / projet / fragment, ambiguïté refusée avec ses candidats |
+| **C. % de contexte** | La ventilation rendue par le SDK était jetée ; seul `totalTokens` était gardé | mesuré sur `claude-sonnet-5`, détail dépliable en prod |
+| **Mort d'un worker** | `reconcilier()` ne tourne QUE au démarrage et au rattachement — un worker mort en cours de route n'était vu par personne | mission passée en `terminee` au 1er passage du balayage |
+| **État affiché** | `en_cours` + `etatSdk=idle` s'affichait « running » : rien ne tournait, l'écran disait l'inverse | `etatAffiche()` croise les deux autorités |
+| **Rapport de l'équipe** | Aucun moyen de lire ce qu'une équipe avait PRODUIT | `rapport_equipe` rend le dernier TEXTE, entier |
+| **Jauges de rate limit** | `releverQuota()` n'était appelé QUE pour marquer une saturation — l'usage courant n'était JAMAIS mesuré | sonde réelle : comptes à 100 % / 93 %, plan « Claude Pro » |
+| **Auto-update de l'UI** | Aucune vue du parc ne se rafraîchissait ; il fallait recharger la page | diff ciblé + append, sans reconstruire le DOM |
+
+### Migrations ajoutées (schéma en **version 8** en production)
+
+| Version | Objet | Pourquoi |
+|---|---|---|
+| 6 | `mission.contexte_ventilation` (JSON) | distinguer le socle incompressible du travail réel |
+| 7 | table `activite_mission` | ce que l'équipe PRODUIT, pas seulement ce qu'elle devient |
+| 8 | `activite_mission.type` + `.outil` | réflexion / outil / texte ne se lisent pas pareil |
+
+### FAITS MESURÉS (ne pas re-supposer — ça a coûté du temps)
+
+**Contexte, relevé réel sur `claude-sonnet-5` :** `totalTokens` 34 718 = prompt système 263 +
+outils 6 190 + CLAUDE.md 11 596 + skills 6 343 + messages 10 326. Le socle pèse donc **~24 K
+avant le moindre échange**. Les postes **différés** (`isDeferred`, ~36 K d'outils MCP et système)
+ne comptent **PAS** dans le total — les additionner ferait dépasser le réel de plus du double.
+
+`☠` **`maxTokens` n'est pas comparable d'un modèle à l'autre** : 967 000 sur Sonnet, 1 000 000 sur
+Opus. L'écart fait exactement 33 000 — le *buffer d'autocompact*, déduit dans un cas et pas dans
+l'autre. **Deux jauges à « 10 % » ne désignent donc pas la même marge restante.**
+
+`⚠` **Écart non expliqué** : sur une mission réelle, la somme des postes chargés (75 008) dépasse
+le `totalTokens` annoncé (70 947) de ~4 061, alors qu'elle tombait au token près sur la mesure
+locale. Hypothèse non prouvée : le CLI calcule le total en direct et les catégories depuis un état
+légèrement antérieur. **Le total reste la référence** ; la ventilation sert à comprendre *où* ça
+part, jamais à refaire l'addition.
+
+**Quotas, relevés réels le 23/07 :** les deux comptes sont en **Claude Pro** (l'interface affichait
+« Max » **écrit en dur dans le HTML**), compte A à 100 % / 93 %, compte B à 100 % / 46 %.
+
+`☠` **`reset_a` est en MILLISECONDES epoch**, une seule convention, normalisée au point d'écriture
+(`sonde-quotas.ts`). Elle a porté deux unités pendant quelques heures ⇒ « reset dans 495278229 h ».
+Un test verrouille les deux sens : une erreur d'unité doit rester **visible** (« expirée »), jamais
+produire un délai plausible.
+
+### Décisions prises cette session (avec leur raison)
+
+1. **H-45 dédoublé.** La règle protège le contexte de l'ORCHESTRATEUR, pas le droit de l'opérateur à
+   lire son équipe : aperçu 240 car pour le master, **texte entier** pour le fil humain. *Décision de
+   Chris, explicite.*
+2. **`rapport_equipe` rend le dernier TEXTE, pas le dernier événement.** Le dernier événement d'une
+   équipe est souvent un `Grep` — ça aurait donné « pattern=TODO » comme rapport final.
+3. **Les entrées d'outils sont RÉSUMÉES** aux champs parlants (`command`, `file_path`, `pattern`,
+   `query`, `url`). Dumper l'entrée complète mettrait un fichier entier dans le fil à chaque `Write`.
+4. **Une fenêtre à 100 % marque le compte `rejected`** — sinon le prochain dispatch part droit dans
+   un compte saturé (H-53). Effet de bord voulu : la rotation fonctionne enfin pour de bon.
+5. **Une sonde de quota EN ÉCHEC n'écrit RIEN.** Un zéro écrit là ferait croire à un compte libre.
+6. **Ventilation stockée en JSON** : donnée d'affichage, jamais critère de requête — une table
+   dédiée coûterait une jointure pour rien.
+7. **`activites()` prend les DERNIÈRES, pas les premières.** Sur une mission bavarde, la borne
+   masquait exactement la synthèse de fin.
+
+### `☠` RÈGLE POSÉE — mise à jour automatique de l'interface
+
+**Un rafraîchissement automatique ne recharge JAMAIS le DOM complet.** Réassigner `innerHTML`
+détruit et recrée tous les nœuds : clignotement, **saisie en cours effacée**, `<details>` refermés,
+sélection annulée, défilement rejeté en bas. Forme correcte : empreinte → écriture ciblée par
+`data-maj` → **append** des seuls éléments neufs → une seule minuterie liée à la vue visible,
+suspendue sur `document.hidden`, non réentrante.
+
+Écrit à trois endroits, exprès : `pi-web/CONTRAT-API-HARNESS.md` (section « RÈGLE ABSOLUE »),
+`~/.claude/skills/code/SKILL.md`, et la mémoire `ui-auto-update-never-full-dom`.
+
+### ▶ PROCHAIN CHANTIER — dans cet ordre
+
+**B. Faire apparaître les SOUS-AGENTS** *(seul point de la liste du 23/07 qui reste entier)*.
+La vue n'affiche que « Team leader », ce qui laisse croire qu'il n'y en a aucun.
+`forwardSubagentText` et `agentProgressSummaries` sont déjà activés pour les workers, et
+`observabilite/` sait construire l'arbre — **rien ne le remonte au Pi**. `subagents: []` est
+délibérément vide dans `vue-missions.ts` : ne PAS le remplir avant d'avoir une vraie source.
+`☠` H-72.4, déjà mesuré : le flux temps réel des sous-agents est **non déterministe** (0 à 4 lignes
+sur 5 sous-agents lancés). La vérité sur « qui existe » doit venir du transcript
+(`SessionStore.listSubkeys()`), pas du flux ; un sous-agent sans flux se rend avec
+`feedUnavailable: true`, **jamais omis**.
+
+**D. Élucider l'écart de 4 061 tokens** entre `totalTokens` et la somme des postes (voir plus haut).
+Mesure à faire sur deux relevés successifs d'une même session vivante.
+
+**E. Dettes connues, non urgentes :**
+- `deniedToolPatterns: []` au dispatch — « lecture seule » n'est qu'une consigne au modèle, pas un
+  verrou mécanique.
+- L'index de rotation du master vit **en mémoire** : au redémarrage, il repart sur le compte A même
+  s'il est saturé.
+- `harness-orchestrateur.js` (~640 lignes) et `harness-mission.js` (330) — le premier dépasse la
+  limite de 500.
+- La sonde de quota ouvre une session CLI par compte toutes les 10 min. Coût mesuré négligeable,
+  mais c'est un compromis à revoir si les comptes sont durablement saturés.
+
+### Pièges payés cette journée (ne pas les repayer)
+
+- **`getContextUsage()` ferme le transport au `result`** : l'appeler après ⇒ « ProcessTransport is
+  not ready for writing ». Mesurer **pendant** que la session vit.
+- **Un flux silencieux n'émet jamais `init`** : la sonde de quota DOIT envoyer un prompt non vide,
+  sinon l'attente est un interblocage.
+- **`env` REMPLACE l'environnement**, il ne le complète pas : sans `...process.env`, le PATH est
+  perdu et le CLI est introuvable.
+- **`mission.projet` est sous contrainte d'unicité** — un projet n'a qu'une équipe à la fois, ce qui
+  rend la désignation par projet quasi toujours non ambiguë.
+- **Un `flex flex-col` comprime ses enfants au lieu de scroller** : `overflow-y: auto` seul ne suffit
+  pas, il faut `flex-shrink: 0` sur les enfants directs.
+- **Le test qui encode l'ancienne convention** doit être RETOURNÉ, pas supprimé : celui de `reset_a`
+  vérifie maintenant qu'une erreur d'unité reste visible.
