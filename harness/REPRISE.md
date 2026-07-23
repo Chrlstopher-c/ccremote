@@ -628,6 +628,32 @@ Ne **pas** s'appuyer sur le message `init` : ses champs de quota sont revenus `n
 | Rotation de compte (master) | « spend limit » détecté → bascule loguée → contexte reporté |
 | `explorer_projets` | 69 projets listés, échappement de racine refusé |
 
+### ▶ PROCHAIN FIX — demandé par Chris le 23/07 (dans cet ordre)
+
+**A. Remonter le FIL DE LA MISSION** (« 0 évènements » alors que l'équipe
+travaille). Le PC lit déjà tout le flux et `CollecteurTelemetrie.derniereActivite`
+capte le dernier texte — mais rien n'expose la suite des événements. Il faut un
+journal borné par mission côté PC (outils appelés, textes, autorisations),
+transporté par l'opération `telemetrie` et servi à la vue Mission.
+`☠` H-45 : jamais le flux BRUT dans le contexte de l'orchestrateur — c'est une
+vue pour l'humain, pas une entrée de modèle.
+
+**B. Faire apparaître les SOUS-AGENTS.** La vue ne montre que « Team leader », ce
+qui laisse croire qu'il n'y en a aucun. `forwardSubagentText` et
+`agentProgressSummaries` sont déjà activés pour les workers ; `observabilite/`
+sait construire l'arbre. Rien ne le remonte au Pi.
+
+**C. Vérifier le % de contexte, jugé suspect par Chris** (10 % affichés très tôt).
+Piste la plus probable, à mesurer avant de corriger : `getContextUsage()` rend un
+`totalTokens` qui INCLUT le prompt système, les définitions d'outils, CLAUDE.md
+et les skills — 100 K de socle sur une fenêtre 1 M donnent bien 10 % sans qu'un
+seul tour n'ait eu lieu. Si c'est confirmé, ce n'est pas un bug mais un affichage
+trompeur : montrer le socle à part, ou compter à partir de la conversation.
+`☠` Ne PAS se rabattre sur le champ `percentage` du SDK — son échelle n'est pas
+documentée, décision déjà prise (M-42).
+`⚠` Vérifier aussi `maxTokens` vs `rawMaxTokens` : le collecteur retient
+`maxTokens`, et l'écart entre les deux n'a jamais été mesuré.
+
 ### ⚠ NON RÉSOLU / NON PROUVÉ — à reprendre ici
 
 1. **Fil de la mission VIDE** (« 0 évènements »). La télémétrie remonte l'état,
