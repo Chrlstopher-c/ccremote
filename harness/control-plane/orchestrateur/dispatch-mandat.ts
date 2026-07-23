@@ -108,9 +108,21 @@ function prochainEpoch(registre: Registre, projet: string): number {
  * doit se voir, jamais se perdre.
  */
 export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
-  const compte = deps.registre.comptes.listerDisponibles()[0];
+  // `☠` Rotation (H-53) : `listerDisponibles()` exclut les comptes marqués
+  // `rejected` par le balayage de télémétrie. C'est ici que la bascule se fait —
+  // silencieusement pour l'opérateur, mais tracée.
+  const disponibles = deps.registre.comptes.listerDisponibles();
+  const compte = disponibles[0];
   if (compte === undefined) {
-    throw new Error('aucun compte Claude disponible — tous saturés ou aucun enregistré');
+    const tous = deps.registre.comptes.lister().length;
+    throw new Error(
+      tous === 0
+        ? 'aucun compte Claude enregistré — impossible de démarrer une équipe'
+        : `les ${tous} comptes connus sont saturés — attends une remise à zéro de fenêtre avant de relancer`,
+    );
+  }
+  if (deps.registre.comptes.lister()[0]?.id !== compte.id) {
+    log.info({ compteId: compte.id }, 'rotation de compte : le précédent est saturé');
   }
 
   const missionId = randomUUID();

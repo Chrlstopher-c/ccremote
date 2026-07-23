@@ -234,5 +234,8 @@ export interface TelemetrieWorker {
   readonly contexteTokensMax: number | null;
   /** Dernier texte de l'assistant, tronqué — de quoi voir que ça avance. */
   readonly derniereActivite: string | null;
+  /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */
+  readonly quotaSature: boolean;
+  readonly motifQuota: string | null;
   readonly observeA: number;
 }

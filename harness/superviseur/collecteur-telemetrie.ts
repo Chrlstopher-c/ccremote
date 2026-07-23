@@ -31,8 +31,25 @@ interface Etat {
   contexteTokensUtilises: number | null;
   contexteTokensMax: number | null;
   derniereActivite: string | null;
+  quotaSature: boolean;
+  motifQuota: string | null;
   observeA: number;
 }
+
+/**
+ * `☠` Motifs de saturation observés en RÉEL (23/07) : le CLI annonce la limite
+ * en clair dans un message système, et le worker enchaîne ensuite des
+ * `api_error` sans jamais produire de `result`. Sans cette détection, le harness
+ * relance indéfiniment sur un compte qui ne répondra plus — c'est ce qui a fait
+ * passer une équipe entière pour « en cours » sans une seule réponse.
+ */
+const MOTIFS_SATURATION: readonly RegExp[] = [
+  /spend limit/i,
+  /usage limit/i,
+  /rate limit/i,
+  /quota exceeded/i,
+  /limite de d[ée]pense/i,
+];
 
 function texteAssistant(message: SDKMessage): string | null {
   if (message.type !== 'assistant') return null;
@@ -59,6 +76,8 @@ export class CollecteurTelemetrie {
       contexteTokensUtilises: null,
       contexteTokensMax: null,
       derniereActivite: null,
+      quotaSature: false,
+      motifQuota: null,
       observeA: maintenant,
     });
   }
@@ -107,8 +126,19 @@ export class CollecteurTelemetrie {
       subtype?: string;
       model?: string;
       total_cost_usd?: number;
+      content?: string;
+      text?: string;
       usage?: { input_tokens?: number; output_tokens?: number };
     };
+
+    if (sonde.type === 'system' && (sonde.subtype === 'informational' || sonde.subtype === 'notification')) {
+      const texte = typeof sonde.content === 'string' ? sonde.content : (sonde.text ?? '');
+      if (MOTIFS_SATURATION.some((m) => m.test(texte))) {
+        etat.quotaSature = true;
+        etat.motifQuota = texte.slice(0, APERCU_MAX);
+      }
+      return;
+    }
 
     if (sonde.type === 'system' && sonde.subtype === 'init') {
       // Le modèle résolu n'est connu qu'ici : le CLI peut résoudre un alias

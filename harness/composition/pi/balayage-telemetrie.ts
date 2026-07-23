@@ -37,10 +37,31 @@ export interface BalayageTelemetrie {
   passer(): Promise<void>;
 }
 
+/**
+ * Marque le compte d'une mission comme saturé. `☠` C'est ce qui rend la rotation
+ * possible : `listerDisponibles()` exclut les comptes `rejected`, donc le
+ * prochain dispatch part sur un autre compte. Sans ce relevé, aucun compte n'est
+ * jamais marqué et le harness réessaie indéfiniment sur celui qui refuse — c'est
+ * ce qui a laissé une équipe « en cours » sans une seule réponse (23/07).
+ */
+function marquerCompteSature(registre: Registre, compteId: string, motif: string | null): void {
+  const dejaRejete = registre.comptes.listerQuotas(compteId).some((q) => q.statut === 'rejected');
+  if (dejaRejete) return;
+  registre.comptes.releverQuota({
+    compteId,
+    typeFenetre: 'spend_limit',
+    statut: 'rejected',
+    seuilDepasse: motif ?? 'limite annoncée par le CLI',
+  });
+  log.warn({ compteId, motif }, 'compte saturé — écarté des prochains dispatchs (rotation H-53)');
+}
+
 /** Applique un relevé à une mission. Ne lève jamais : un mauvais relevé n'arrête pas les autres. */
 function appliquer(registre: Registre, t: TelemetrieWorker): void {
   const mission = registre.missions.lire(t.missionId);
   if (mission === null) return; // mission inconnue du Pi : la réconciliation s'en charge, pas nous.
+
+  if (t.quotaSature) marquerCompteSature(registre, mission.compteId, t.motifQuota);
 
   if (t.modeleResolu !== null && mission.modeleResolu !== t.modeleResolu) {
     registre.missions.definirModeleResolu(t.missionId, t.modeleResolu);
