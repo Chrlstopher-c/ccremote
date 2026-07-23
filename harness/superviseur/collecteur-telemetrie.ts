@@ -14,7 +14,7 @@
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { TelemetrieWorker } from './types.ts';
+import type { PosteContexte, TelemetrieWorker } from './types.ts';
 import { superviseurLogger } from './logger.ts';
 
 const log = superviseurLogger.child({ composant: 'collecteur-telemetrie' });
@@ -30,6 +30,7 @@ interface Etat {
   coutUsd: number;
   contexteTokensUtilises: number | null;
   contexteTokensMax: number | null;
+  contexteVentilation: readonly PosteContexte[] | null;
   derniereActivite: string | null;
   quotaSature: boolean;
   motifQuota: string | null;
@@ -75,6 +76,7 @@ export class CollecteurTelemetrie {
       coutUsd: 0,
       contexteTokensUtilises: null,
       contexteTokensMax: null,
+      contexteVentilation: null,
       derniereActivite: null,
       quotaSature: false,
       motifQuota: null,
@@ -100,11 +102,17 @@ export class CollecteurTelemetrie {
    * valable que pendant que la session vit — après le `result`, le transport est
    * fermé (fait mesuré le 22/07).
    */
-  poserContexte(missionId: string, utilises: number, max: number | null): void {
+  poserContexte(
+    missionId: string,
+    utilises: number,
+    max: number | null,
+    ventilation: readonly PosteContexte[] | null = null,
+  ): void {
     const etat = this.#par.get(missionId);
     if (etat === undefined) return;
     etat.contexteTokensUtilises = utilises;
     if (max !== null) etat.contexteTokensMax = max;
+    if (ventilation !== null) etat.contexteVentilation = ventilation;
   }
 
   /** Le worker est mort : on garde son dernier état connu, marqué non vivant. */

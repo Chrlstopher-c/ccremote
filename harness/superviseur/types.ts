@@ -221,6 +221,18 @@ export interface RapportArretUrgence {
  * coupé, service redémarré). Un delta perdu fausserait le total pour toujours,
  * alors qu'une valeur absolue se resynchronise au relevé suivant.
  */
+/**
+ * Un poste de la ventilation du contexte. `☠` `differe` (`isDeferred` côté SDK)
+ * signale un poste ANNONCÉ mais PAS chargé : mesuré, les postes différés
+ * (~36 K d'outils MCP et système) ne sont PAS comptés dans `totalTokens`. Les
+ * additionner ferait dépasser le total réel de plus du double.
+ */
+export interface PosteContexte {
+  readonly nom: string;
+  readonly tokens: number;
+  readonly differe: boolean;
+}
+
 export interface TelemetrieWorker {
   readonly missionId: string;
   readonly sessionId: string;
@@ -232,6 +244,16 @@ export interface TelemetrieWorker {
   readonly coutUsd: number;
   readonly contexteTokensUtilises: number | null;
   readonly contexteTokensMax: number | null;
+  /**
+   * Ventilation du contexte par poste, telle que le SDK la rend.
+   *
+   * `☠` MESURÉ le 23/07 : `totalTokens` seul rend la jauge illisible. Sur une
+   * mission à « 10 % », ~24 K sont du socle incompressible (prompt système,
+   * outils, CLAUDE.md, skills) présent dès le premier token, et ~79 K sont du
+   * travail réel. Sans la ventilation, ces deux natures sont indiscernables —
+   * et c'est justement la distinction sur laquelle on décide d'un atterrissage.
+   */
+  readonly contexteVentilation: readonly PosteContexte[] | null;
   /** Dernier texte de l'assistant, tronqué — de quoi voir que ça avance. */
   readonly derniereActivite: string | null;
   /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */

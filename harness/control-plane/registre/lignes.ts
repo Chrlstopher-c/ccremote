@@ -11,10 +11,34 @@ import type {
   Lot,
   Mission,
   OrigineTransition,
+  PosteContexteMission,
   Quota,
   StatutQuota,
   Transition,
 } from './types.ts';
+
+/**
+ * `☠` La ventilation est stockée en JSON. Un contenu illisible (colonne écrite
+ * par une version antérieure, écriture tronquée) ne doit JAMAIS faire échouer la
+ * lecture d'une mission : on rend `null`, l'interface affiche la jauge sans
+ * détail. Perdre le pilotage d'une mission pour un chiffre d'affichage serait un
+ * très mauvais échange.
+ */
+function lireVentilation(brut: string | null): readonly PosteContexteMission[] | null {
+  if (brut === null || brut.length === 0) return null;
+  try {
+    const analyse: unknown = JSON.parse(brut);
+    if (!Array.isArray(analyse)) return null;
+    return analyse
+      .filter((p): p is { nom: string; tokens: number; differe?: boolean } =>
+        typeof p === 'object' && p !== null &&
+        typeof (p as { nom?: unknown }).nom === 'string' &&
+        typeof (p as { tokens?: unknown }).tokens === 'number')
+      .map((p) => ({ nom: p.nom, tokens: p.tokens, differe: p.differe === true }));
+  } catch {
+    return null;
+  }
+}
 
 export interface LigneLot {
   id: string;
@@ -71,6 +95,7 @@ export interface LigneMission {
   budget_consomme_usd: number;
   contexte_tokens_utilises: number | null;
   contexte_tokens_max: number | null;
+  contexte_ventilation: string | null;
   compteur_relances: number;
   derniere_raison_terminale: string | null;
   cree_a: number;
@@ -161,6 +186,7 @@ export function versMission(l: LigneMission): Mission {
     budgetConsommeUsd: l.budget_consomme_usd,
     contexteTokensUtilises: l.contexte_tokens_utilises,
     contexteTokensMax: l.contexte_tokens_max,
+    contexteVentilation: lireVentilation(l.contexte_ventilation),
     compteurRelances: l.compteur_relances,
     derniereRaisonTerminale: l.derniere_raison_terminale,
     creeA: l.cree_a,

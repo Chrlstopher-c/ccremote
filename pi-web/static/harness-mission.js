@@ -111,8 +111,9 @@ async function hRenderMissionDetail(id) {
         <div><span class="k">Epoch</span><span class="v">${m.epoch}</span></div>
       </div>
       <div style="margin-top:11px;">
-        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;"><span class="muted">Usage de contexte</span><span class="mono">${m.ctx} %</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;"><span class="muted">Usage de contexte</span><span class="mono">${m.ctx} %${hCtxTokens(m)}</span></div>
         <div class="usage-track"><div class="usage-fill" style="width:${m.ctx}%;background:${m.ctx >= 75 ? 'var(--err)' : m.ctx >= 50 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
+        ${hCtxDetail(m)}
       </div>
       ${canLand ? `<div style="margin-top:11px;"><button class="btn btn-ghost btn-sm" onclick="hSimulateLanding('${m.id}')">Simuler un atterrissage (démo)</button></div>` : ''}
     </div>
@@ -151,6 +152,43 @@ async function hRenderMissionDetail(id) {
   const scroll = document.getElementById('hFeedScroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
   hRenderTeamTree();
+}
+
+function hTokens(n) {
+  return n >= 1000 ? `${Math.round(n / 100) / 10} K` : `${n}`;
+}
+
+function hCtxTokens(m) {
+  const t = m.ctxTokens;
+  if (!t || t.utilises === null || t.utilises === undefined) return '';
+  return ` <span class="muted">· ${hTokens(t.utilises)}${t.max ? ` / ${hTokens(t.max)}` : ''}</span>`;
+}
+
+/**
+ * ☠ Le pourcentage seul ne dit pas ce qu'il contient. Mesuré le 23/07 : sur une
+ * mission à 10 %, ~24 K sont du socle présent dès le premier token (prompt
+ * système, outils, CLAUDE.md, skills) et le reste est du travail réel. C'est sur
+ * cette distinction qu'on décide d'un atterrissage — l'afficher, c'est éviter de
+ * conclure « le lead sature » quand il n'a encore rien fait.
+ *
+ * Les postes DIFFÉRÉS sont annoncés mais pas chargés : ils ne comptent pas dans
+ * le total, et sont donc rendus à part plutôt que mêlés aux autres.
+ */
+function hCtxDetail(m) {
+  const postes = (m.ctxDetail || []).filter((p) => p.tokens > 0 && p.nom !== 'Free space');
+  if (postes.length === 0) return '';
+  const charges = postes.filter((p) => !p.differe);
+  const differes = postes.filter((p) => p.differe);
+  const ligne = (p) =>
+    `<div style="display:flex;justify-content:space-between;gap:10px;"><span>${escapeHtml(p.nom)}</span><span class="mono">${hTokens(p.tokens)}</span></div>`;
+  return `
+    <details style="margin-top:8px;">
+      <summary style="font-size:11px;color:var(--ink-3);cursor:pointer;">Détail du contexte</summary>
+      <div style="font-size:11px;color:var(--ink-2);margin-top:6px;display:grid;gap:3px;">
+        ${charges.map(ligne).join('')}
+        ${differes.length > 0 ? `<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--bg-2);color:var(--ink-3);">Annoncés mais non chargés — hors total</div>${differes.map(ligne).join('')}` : ''}
+      </div>
+    </details>`;
 }
 
 async function hCopierId(id) {

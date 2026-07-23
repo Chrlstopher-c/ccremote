@@ -196,9 +196,19 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         const brut = (await e.handle.query.getContextUsage()) as unknown as {
           totalTokens?: number;
           maxTokens?: number;
+          categories?: { name?: string; tokens?: number; isDeferred?: boolean }[];
         };
         if (typeof brut.totalTokens === 'number') {
-          this.#telemetrie.poserContexte(e.missionId, brut.totalTokens, brut.maxTokens ?? null);
+          // `☠` La ventilation est rendue par le SDK et jetée jusqu'au 23/07 :
+          // sans elle, impossible de distinguer un socle incompressible d'un
+          // contexte réellement rempli par le travail.
+          const ventilation = Array.isArray(brut.categories)
+            ? brut.categories
+                .filter((c): c is { name: string; tokens: number; isDeferred?: boolean } =>
+                  typeof c.name === 'string' && typeof c.tokens === 'number')
+                .map((c) => ({ nom: c.name, tokens: c.tokens, differe: c.isDeferred === true }))
+            : null;
+          this.#telemetrie.poserContexte(e.missionId, brut.totalTokens, brut.maxTokens ?? null, ventilation);
         }
       } catch {
         // Session close ou transport fermé : régime nominal, pas une panne.

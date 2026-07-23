@@ -280,12 +280,28 @@ ALTER TABLE proposition ADD COLUMN modele TEXT;
 ALTER TABLE proposition ADD COLUMN effort TEXT;
 `;
 
+/**
+ * Migration 6 — ventilation du contexte par poste, telle que mesurée côté PC.
+ *
+ * `☠` Un seul pourcentage ne dit pas ce qu'il contient. Mesuré le 23/07 sur une
+ * mission à 10 % : ~24 K de socle incompressible (prompt système, outils,
+ * CLAUDE.md, skills) et ~79 K de travail réel. On décide un atterrissage sur
+ * cette distinction — la perdre revient à décider à l'aveugle.
+ *
+ * Stockée en JSON : c'est une donnée d'affichage, jamais un critère de requête.
+ * Une table dédiée coûterait une jointure pour rien.
+ */
+const MIGRATION_6 = `
+ALTER TABLE mission ADD COLUMN contexte_ventilation TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
   { version: 3, nom: 'compaction-conversations', sql: MIGRATION_3 },
   { version: 4, nom: 'propositions-mandat', sql: MIGRATION_4 },
   { version: 5, nom: 'modele-effort-proposition', sql: MIGRATION_5 },
+  { version: 6, nom: 'ventilation-contexte-mission', sql: MIGRATION_6 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

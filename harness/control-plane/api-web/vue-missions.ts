@@ -36,6 +36,16 @@ export interface MissionApi {
   readonly account: string;
   readonly state: EtatMissionApi;
   readonly ctx: number;
+  /**
+   * Détail de ce que contient `ctx`. `☠` MESURÉ le 23/07 : sur une mission à
+   * 10 %, ~24 K sont du socle incompressible (prompt système, outils, CLAUDE.md,
+   * skills) présent dès le premier token, et ~79 K du travail réel. Le
+   * pourcentage seul ne permet pas de trancher — et c'est sur cette distinction
+   * qu'on décide d'un atterrissage.
+   */
+  readonly ctxDetail: readonly { readonly nom: string; readonly tokens: number; readonly differe: boolean }[];
+  /** Tokens bruts, pour lire autre chose qu'un pourcentage arrondi. */
+  readonly ctxTokens: { readonly utilises: number | null; readonly max: number | null };
   readonly cost: number;
   readonly team: string;
   readonly model: string;
@@ -73,6 +83,23 @@ const ETATS: Readonly<Record<EtatHarness, EtatMissionApi>> = {
 };
 
 /**
+ * État d'affichage réel : croise l'état HARNESS (la mission est-elle ouverte ?)
+ * et l'état SDK (le lead travaille-t-il en ce moment ?).
+ *
+ * `☠` Ce sont deux choses différentes, et les confondre trompe l'opérateur.
+ * Constaté le 23/07 : une mission `en_cours` dont le lead avait fini son tour
+ * (`etatSdk = idle`) s'affichait « running ». Rien ne tournait, rien ne
+ * consommait, et l'écran laissait croire l'inverse — on attend alors un résultat
+ * qui ne viendra jamais sans instruction. Une mission ouverte dont le lead se
+ * repose est `idle`, pas `running`.
+ */
+function etatAffiche(mission: Mission): EtatMissionApi {
+  const base = ETATS[mission.etatHarness];
+  if (base !== 'running') return base;
+  return mission.etatSdk === 'idle' ? 'idle' : base;
+}
+
+/**
  * Pourcentage de contexte consommé. `☠` MESURÉ, jamais estimé (H-54) : si le
  * registre n'a pas encore reçu de relevé, on retourne 0 plutôt qu'une
  * extrapolation — une jauge fausse est pire qu'une jauge à zéro, parce qu'on
@@ -89,8 +116,16 @@ function pourcentageContexte(mission: Mission): number {
  * l'état courant. `etatHarnessMajA` est la date de la dernière transition —
  * donc, par construction, depuis quand la mission est dans cet état.
  */
-function anciennete(etat: EtatMissionApi, majA: number, maintenant: number): Pick<MissionApi, 'blockedSince' | 'pausedAgo' | 'idleAgo' | 'doneAgo'> {
-  const age = ageLisible(majA, maintenant);
+function anciennete(
+  etat: EtatMissionApi,
+  mission: Mission,
+  maintenant: number,
+): Pick<MissionApi, 'blockedSince' | 'pausedAgo' | 'idleAgo' | 'doneAgo'> {
+  // `☠` Quand le repos vient du SDK et non du harness, l'ancienneté pertinente
+  // est celle de la transition SDK : `etatHarnessMajA` daterait du dispatch et
+  // annoncerait « au repos depuis 12 min » un lead qui vient de finir son tour.
+  const repereSdk = etat === 'idle' && mission.etatHarness === 'en_cours' && mission.etatSdkMajA !== null;
+  const age = ageLisible(repereSdk ? (mission.etatSdkMajA as number) : mission.etatHarnessMajA, maintenant);
   return {
     blockedSince: etat === 'requires_action' ? age : null,
     pausedAgo: etat === 'paused' ? age : null,
@@ -110,9 +145,9 @@ export function versMissionApi(
   maintenant: number = Date.now(),
   feed: readonly FeedEventApi[] = [],
 ): MissionApi {
-  const state = ETATS[mission.etatHarness];
+  const state = etatAffiche(mission);
   return {
-    ...anciennete(state, mission.etatHarnessMajA, maintenant),
+    ...anciennete(state, mission, maintenant),
     id: mission.id,
     title: mission.nom,
     project: mission.projet,
@@ -121,6 +156,8 @@ export function versMissionApi(
     account: mission.compteId,
     state,
     ctx: pourcentageContexte(mission),
+    ctxDetail: mission.contexteVentilation ?? [],
+    ctxTokens: { utilises: mission.contexteTokensUtilises, max: mission.contexteTokensMax },
     cost: mission.budgetConsommeUsd,
     // Aucune source réelle côté Pi tant que l'observabilité des sous-agents
     // n'est pas rapatriée du PC — voir l'en-tête. Libellé neutre, jamais un

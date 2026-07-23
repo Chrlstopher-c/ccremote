@@ -115,6 +115,18 @@ export interface RelevéQuota {
 }
 
 /** Mission instanciée, jetable, à but borné (F2.0.1). */
+/**
+ * Un poste de la ventilation du contexte. `☠` `differe` marque un poste ANNONCÉ
+ * mais PAS chargé : mesuré le 23/07, les postes différés (~36 K d'outils MCP et
+ * système) ne comptent PAS dans le total. Les additionner ferait dépasser le
+ * total réel de plus du double.
+ */
+export interface PosteContexteMission {
+  readonly nom: string;
+  readonly tokens: number;
+  readonly differe: boolean;
+}
+
 export interface Mission {
   readonly id: string;
   readonly lotId: string;
@@ -140,6 +152,12 @@ export interface Mission {
   readonly budgetConsommeUsd: number;
   readonly contexteTokensUtilises: number | null;
   readonly contexteTokensMax: number | null;
+  /**
+   * Ventilation du contexte par poste, mesurée côté PC. `☠` Un pourcentage seul
+   * ne dit pas s'il s'agit du socle incompressible ou de travail réel — c'est
+   * pourtant la distinction sur laquelle on décide d'un atterrissage.
+   */
+  readonly contexteVentilation: readonly PosteContexteMission[] | null;
   readonly compteurRelances: number;
   readonly derniereRaisonTerminale: string | null;
   readonly creeA: number;

@@ -10,7 +10,13 @@
 import type { Database } from 'bun:sqlite';
 import { executer } from './journal.ts';
 import { versMission, type LigneMission } from './lignes.ts';
-import { ETATS_HARNESS_ACTIFS, type CreationMission, type EtatHarness, type Mission } from './types.ts';
+import {
+  ETATS_HARNESS_ACTIFS,
+  type CreationMission,
+  type EtatHarness,
+  type Mission,
+  type PosteContexteMission,
+} from './types.ts';
 
 const PLACEHOLDERS_ACTIFS = ETATS_HARNESS_ACTIFS.map(() => '?').join(', ');
 
@@ -234,15 +240,28 @@ export class DepotMissions {
     );
   }
 
-  public definirUsageContexte(id: string, utilises: number, max: number | null): Mission {
+  public definirUsageContexte(
+    id: string,
+    utilises: number,
+    max: number | null,
+    ventilation: readonly PosteContexteMission[] | null = null,
+  ): Mission {
     return executer(
       'missions.definirUsageContexte',
       () => {
+        // `☠` `COALESCE` sur la ventilation : un relevé qui n'en porte pas ne
+        // doit pas EFFACER la dernière connue. Le SDK ne la rend que pendant que
+        // la session vit — l'écraser à null au premier relevé sans détail
+        // reviendrait à ne jamais rien afficher sur une mission terminée.
         this.db
           .query(
-            'UPDATE mission SET contexte_tokens_utilises = ?, contexte_tokens_max = ? WHERE id = ?',
+            `UPDATE mission
+                SET contexte_tokens_utilises = ?,
+                    contexte_tokens_max = ?,
+                    contexte_ventilation = COALESCE(?, contexte_ventilation)
+              WHERE id = ?`,
           )
-          .run(utilises, max, id);
+          .run(utilises, max, ventilation === null ? null : JSON.stringify(ventilation), id);
         return this.exiger(id);
       },
       { id },

@@ -12,7 +12,7 @@
  * tour de balayage.
  */
 
-import type { Registre } from '../../control-plane/registre/index.ts';
+import { ETATS_HARNESS_ACTIFS, type Registre } from '../../control-plane/registre/index.ts';
 import type { TelemetrieWorker } from '../../superviseur/index.ts';
 import { compositionLogger } from '../logger.ts';
 
@@ -29,6 +29,21 @@ export interface OptionsBalayage {
   readonly registre: Registre;
   readonly source: SourceTelemetrie;
   readonly periodeMs?: number;
+  /**
+   * Réconciliation à déclencher quand un worker MORT est observé sur une mission
+   * que le registre croit active.
+   *
+   * `☠` Sans ce câblage, la mort d'un worker en cours de route n'est jamais vue :
+   * `reconcilier()` ne tourne qu'au démarrage du Pi et à la reconnexion du PC.
+   * Une équipe morte restait donc `en_cours` indéfiniment — l'orchestrateur lui
+   * envoyait des messages qui repartaient en « processus mort », et l'opérateur
+   * lisait « running » sur une équipe qui n'existait plus (constaté le 23/07).
+   *
+   * On DÉLÈGUE à `reconcilier()` plutôt que de marquer nous-mêmes : la décision
+   * « fantôme » a des conséquences (libération de worktree, état terminal) et ne
+   * doit exister qu'à un seul endroit.
+   */
+  readonly reconcilier?: () => Promise<unknown>;
 }
 
 export interface BalayageTelemetrie {
@@ -56,10 +71,19 @@ function marquerCompteSature(registre: Registre, compteId: string, motif: string
   log.warn({ compteId, motif }, 'compte saturé — écarté des prochains dispatchs (rotation H-53)');
 }
 
-/** Applique un relevé à une mission. Ne lève jamais : un mauvais relevé n'arrête pas les autres. */
-function appliquer(registre: Registre, t: TelemetrieWorker): void {
+/**
+ * Applique un relevé à une mission. Ne lève jamais : un mauvais relevé n'arrête
+ * pas les autres. Rend `true` si un worker MORT a été vu sur une mission encore
+ * tenue pour active — l'appelant en déduit qu'une réconciliation s'impose.
+ */
+function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
   const mission = registre.missions.lire(t.missionId);
-  if (mission === null) return; // mission inconnue du Pi : la réconciliation s'en charge, pas nous.
+  if (mission === null) return false; // mission inconnue du Pi : la réconciliation s'en charge, pas nous.
+
+  // `☠` Relevé AVANT toute écriture : les valeurs d'un worker mort restent
+  // celles de son dernier instant, elles ne mentent pas — mais son état, lui,
+  // ne doit plus être présenté comme vivant.
+  const mortEnCoursDeRoute = !t.vivant && ETATS_HARNESS_ACTIFS.includes(mission.etatHarness);
 
   if (t.quotaSature) marquerCompteSature(registre, mission.compteId, t.motifQuota);
 
@@ -74,8 +98,14 @@ function appliquer(registre: Registre, t: TelemetrieWorker): void {
   if (ecart > 0) registre.missions.ajouterCout(t.missionId, ecart);
 
   if (t.contexteTokensUtilises !== null && mission.contexteTokensUtilises !== t.contexteTokensUtilises) {
-    registre.missions.definirUsageContexte(t.missionId, t.contexteTokensUtilises, t.contexteTokensMax);
+    registre.missions.definirUsageContexte(
+      t.missionId,
+      t.contexteTokensUtilises,
+      t.contexteTokensMax,
+      t.contexteVentilation,
+    );
   }
+  return mortEnCoursDeRoute;
 }
 
 export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTelemetrie {
@@ -84,11 +114,23 @@ export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTe
   const passer = async (): Promise<void> => {
     try {
       const releves = await options.source.telemetrie();
+      let reconciliationRequise = false;
       for (const t of releves) {
         try {
-          appliquer(options.registre, t);
+          if (appliquer(options.registre, t)) reconciliationRequise = true;
         } catch (erreur) {
           log.error({ err: erreur, missionId: t.missionId }, 'relevé de télémétrie inapplicable — les autres sont traités');
+        }
+      }
+      // `☠` UNE seule réconciliation par passe, quel que soit le nombre de morts
+      // observés : elle balaie tout le parc, l'appeler par mission ferait N
+      // passes redondantes à chaque tour de balayage.
+      if (reconciliationRequise && options.reconcilier !== undefined) {
+        log.warn({}, 'worker mort observé sur une mission active — réconciliation déclenchée');
+        try {
+          await options.reconcilier();
+        } catch (erreur) {
+          log.error({ err: erreur }, 'réconciliation en échec — le balayage continue');
         }
       }
     } catch (erreur) {

@@ -38,7 +38,7 @@ import {
   JournalIncidentsFichier,
   type StockageIdentite,
 } from '../../control-plane/orchestrateur/processus/index.ts';
-import type { DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
+import { reconcilier, type DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
 import {
   GestionnaireConversations,
   type ConstruireSessionConversation,
@@ -310,7 +310,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // `☠` Sans ce balayage, l'interface affiche « (non résolu) », un coût à 0 et un
   // contexte à 0 sur des équipes qui travaillent : le PC observe tout, mais rien
   // ne remontait jusqu'au registre du Pi.
-  const balayageTelemetrie = demarrerBalayageTelemetrie({ registre, source: clientSuperviseurPc });
+  // `☠` La réconciliation est câblée ICI, et pas seulement au démarrage/rattachement :
+  // un worker qui meurt alors que tout est connecté n'était vu par PERSONNE, et sa
+  // mission restait `en_cours` à jamais (23/07).
+  const balayageTelemetrie = demarrerBalayageTelemetrie({
+    registre,
+    source: clientSuperviseurPc,
+    reconcilier: () => reconcilier(registre, dependancesReconciliation, 'reconnexion'),
+  });
 
   log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
 
