@@ -284,3 +284,43 @@ Repris tel quel dans le report de la mission — aucun changement de plus par ra
   légèrement H-70 (« la décision appartient au superviseur qui voit tout le compte, jamais au
   lead/à la mission isolément ») — gardé pour la testabilité de la démo, à retirer si ce
   comportement devient réel (déjà signalé dans `design-v3/CHANGEMENTS.md`, non résolu ici).
+
+---
+
+## ☠ RÈGLE ABSOLUE — mise à jour automatique de l'interface
+
+**Un rafraîchissement automatique ne recharge JAMAIS le DOM complet.** Jamais de
+`innerHTML = ...` sur un conteneur entier dans une boucle périodique.
+
+Cette règle n'est pas une préférence de style : réassigner `innerHTML` détruit et
+recrée tous les nœuds enfants. Invisible sur un clic, très visible sur une boucle
+de quelques secondes. Les conséquences constatées en réel (23/07) :
+
+- **clignotement** de toute la zone à chaque tick ;
+- **saisie perdue** — le texte en cours de frappe dans un champ est effacé ;
+- **blocs dépliés refermés** (`<details>`, réflexions du lead) ;
+- **sélection de texte annulée** — impossible de copier quoi que ce soit ;
+- **défilement rejeté en bas** alors que l'opérateur lisait plus haut.
+
+### Ce qu'il faut faire à la place
+
+1. **Comparer avant d'écrire.** Une empreinte des champs qui bougent
+   (`hEmpreinteMission`) décide s'il y a lieu de toucher au DOM. Rien n'a changé
+   ⇒ rien n'est touché.
+2. **Cibler les champs.** Chaque valeur volatile porte une ancre `data-maj="..."`
+   et n'est réécrite que si elle diffère (`hMajChamp`).
+3. **Ajouter, ne pas réécrire** pour les listes qui grossissent : le fil d'une
+   mission fait un `insertAdjacentHTML('beforeend', ...)` sur les seuls éléments
+   neufs (`hMajFil`). Le passé n'est jamais reconstruit.
+4. **Écrire sous condition** quand un rendu de bloc reste nécessaire :
+   `hEcrireSiDifferent(el, html)` — jamais un `innerHTML` nu.
+5. **Respecter la position de lecture.** Ne rattraper le bas que si l'utilisateur
+   y était déjà (marge ~60 px), jamais de force.
+6. **Une seule minuterie, liée à la vue visible**, suspendue quand l'onglet est
+   masqué (`document.hidden`) et jamais réentrante (garde `hVueEnCours`).
+
+Un rendu complet reste légitime **sur action de l'utilisateur** : changement de
+mission, changement de filtre, premier affichage. Jamais en boucle.
+
+Implémentation de référence : `static/harness-parc.js` (boucle + parc) et
+`static/harness-mission.js` (`hMajMissionDetail`, `hMajFil`).

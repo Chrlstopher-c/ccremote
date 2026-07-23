@@ -87,9 +87,19 @@ async function hRenderParc() {
   html += `<div class="sec-title" style="margin-top:22px;">Au repos et arrêtées</div>`;
   html += restM.length ? restM.map(hMcardTemplate).join('') : `<div class="empty-state card"><div class="t">Rien au repos</div></div>`;
 
-  document.getElementById('hParcBody').innerHTML = html;
+  // ☠ N'écrire QUE si le rendu diffère. Réassigner un innerHTML identique
+  // détruit et recrée tous les nœuds — invisible sur un clic, très visible sur
+  // une boucle de 4 s (clignotement, sélection de texte perdue).
+  const corps = document.getElementById('hParcBody');
+  if (corps.innerHTML !== html) corps.innerHTML = html;
   hRenderTeamTree(missions);
   hRenderQuotaStrip();
+}
+
+/** ☠ Écrit seulement si le contenu change — voir hRenderParc : un innerHTML
+ *  identique réassigné recrée quand même tous les nœuds, et ça se voit en boucle. */
+function hEcrireSiDifferent(el, html) {
+  if (el && el.innerHTML !== html) el.innerHTML = html;
 }
 
 async function hRenderTeamTree(missionsMaybe) {
@@ -97,8 +107,8 @@ async function hRenderTeamTree(missionsMaybe) {
   if (!el) return;
   const missions = missionsMaybe || (await HarnessAPI.getMissions()).data || [];
   const teams = missions.filter((m) => ['running', 'requires_action'].includes(m.state));
-  if (!teams.length) { el.innerHTML = `<div class="team-tree-empty">Aucune équipe active</div>`; return; }
-  el.innerHTML = teams.map((m) => {
+  if (!teams.length) { hEcrireSiDifferent(el, `<div class="team-tree-empty">Aucune équipe active</div>`); return; }
+  hEcrireSiDifferent(el, teams.map((m) => {
     const isLanding = m.landing && m.landing.active;
     const color = isLanding ? 'var(--warn)' : m.state === 'requires_action' ? 'var(--accent)' : 'var(--ok)';
     const active = HarnessState.selectedMissionId === m.id;
@@ -107,7 +117,7 @@ async function hRenderTeamTree(missionsMaybe) {
       <span class="tname">${escapeHtml(m.project)}</span>
       <span class="tmeta">${isLanding ? 'atterrit' : m.state === 'requires_action' ? 'bloquée' : 'ok'}</span>
     </button>`;
-  }).join('');
+  }).join(''));
 }
 
 function hAccGaugeMini(a) {
@@ -133,9 +143,9 @@ async function hRenderMiniGauges() {
   // et une page blanche — un écran vide ne dit RIEN, alors que « aucun compte
   // enregistré » dit exactement quoi faire.
   const accounts = hListeComptes(res);
-  if (accounts === null) { el.innerHTML = `<div class="mgh">Quotas — PC absent</div>`; return; }
-  if (accounts.length === 0) { el.innerHTML = `<div class="mgh">Quotas</div><div class="mg-reset">Aucun compte enregistré dans le registre.</div>`; return; }
-  el.innerHTML = `<div class="mgh">Quotas — par compte (H-72)</div>${accounts.map(hAccGaugeMini).join('')}`;
+  if (accounts === null) { hEcrireSiDifferent(el, `<div class="mgh">Quotas — PC absent</div>`); return; }
+  if (accounts.length === 0) { hEcrireSiDifferent(el, `<div class="mgh">Quotas</div><div class="mg-reset">Aucun compte enregistré dans le registre.</div>`); return; }
+  hEcrireSiDifferent(el, `<div class="mgh">Quotas — par compte (H-72)</div>${accounts.map(hAccGaugeMini).join('')}`);
 }
 
 /**
@@ -153,8 +163,8 @@ async function hRenderQuotaStrip() {
   const el = document.getElementById('hQuotaStripParc');
   if (!el) return;
   const accounts = hListeComptes(await HarnessAPI.getAccounts());
-  if (accounts === null) { el.innerHTML = `<span style="color:var(--ink-3);">PC absent — quotas indisponibles</span>`; return; }
-  if (accounts.length === 0) { el.innerHTML = `<span style="color:var(--ink-3);">Aucun compte enregistré</span>`; return; }
+  if (accounts === null) { hEcrireSiDifferent(el, `<span style="color:var(--ink-3);">PC absent — quotas indisponibles</span>`); return; }
+  if (accounts.length === 0) { hEcrireSiDifferent(el, `<span style="color:var(--ink-3);">Aucun compte enregistré</span>`); return; }
   const v = (a, w) => (a[w].util >= 90 ? `<b class="warnv">${a[w].util}%</b>` : `<b>${a[w].util}%</b>`);
   el.innerHTML = `${accounts.map((a) => `<button>${a.label} 5h ${v(a, 'five_hour')} · 7j ${v(a, 'seven_day')}${a.isUsingOverage ? ' <b class="warnv">· crédits</b>' : ''}</button>`).join('')}
     <span style="color:var(--ink-3);">— fenêtres non synchronisées, tap pour le détail</span>`;
@@ -172,4 +182,62 @@ function hGoToMission(id) {
   HarnessState.feedFilter = 'tout';
   hGoto('harness-mission');
   hRenderMissionDetail(id);
+}
+
+// ============ RAFRAÎCHISSEMENT AUTOMATIQUE DES VUES DU PARC ============
+/**
+ * ☠ Aucune de ces vues ne se rafraîchissait : rendues une fois, puis figées.
+ * L'opérateur devait recharger la page pour voir avancer une mission, et une
+ * équipe qui se terminait restait affichée « en cours » indéfiniment (23/07).
+ * L'orchestrateur avait sa boucle ; le parc n'en a jamais eu.
+ *
+ * ☠ UNE seule minuterie, toujours liée à la vue VISIBLE : une boucle par vue
+ * continuerait d'interroger l'API pour des écrans que personne ne regarde.
+ */
+const HVUE_POLL_MS = 4000;
+let hVueTimer = null;
+let hVueEnCours = false;
+
+const HVUES_RAFRAICHIES = {
+  'harness-parc': () => hRenderParc(),
+  'harness-escalades': () => hRenderEscalades(),
+  'harness-comptes': () => hRenderComptes(),
+  // ☠ Mise à jour CIBLÉE, jamais un rendu complet : la saisie en cours, les blocs
+  // dépliés et la position de lecture doivent survivre. Repli sur un rendu franc
+  // seulement si la page n'est pas encore montée (retour de `false`).
+  'harness-mission': async () => {
+    const id = HarnessState.selectedMissionId;
+    if (!id) return;
+    if (!(await hMajMissionDetail(id))) await hRenderMissionDetail(id);
+  },
+};
+
+function hVueActive() {
+  const el = document.querySelector('.view.active');
+  return el ? el.dataset.view : null;
+}
+
+async function hRafraichirVue() {
+  // ☠ Jamais deux rendus concurrents : un rendu lent (mission + fil) chevaucherait
+  // le suivant et ferait clignoter la page — le défaut qu'on a mis des heures à tuer.
+  if (hVueEnCours) return;
+  if (document.hidden) return;
+  const rendre = HVUES_RAFRAICHIES[hVueActive()];
+  if (!rendre) return;
+  hVueEnCours = true;
+  try {
+    await rendre();
+  } catch (e) {
+    // Un rafraîchissement raté n'interrompt jamais la boucle : le Pi peut être
+    // momentanément injoignable, la vue reprendra au tour suivant.
+  } finally {
+    hVueEnCours = false;
+  }
+}
+
+function hDemarrerRafraichissement() {
+  if (hVueTimer !== null) return;
+  hVueTimer = setInterval(hRafraichirVue, HVUE_POLL_MS);
+  // Revenir sur l'onglet doit montrer l'état RÉEL tout de suite, pas dans 4 s.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) hRafraichirVue(); });
 }

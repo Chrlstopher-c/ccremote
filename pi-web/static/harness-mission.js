@@ -121,18 +121,18 @@ async function hRenderMissionDetail(id) {
         <div><span class="k">Worktree</span><span class="v">${escapeHtml(m.worktree || '—')}</span></div>
         <div><span class="k">sessionId</span><span class="v">${m.sessionId || '—'}</span></div>
         <div><span class="k">Compte Claude Code</span><span class="v">compte #${m.account}</span></div>
-        <div><span class="k">Modèle résolu</span><span class="v">${m.model}</span></div>
+        <div><span class="k">Modèle résolu</span><span class="v" data-maj="model">${m.model}</span></div>
         <div><span class="k">Epoch</span><span class="v">${m.epoch}</span></div>
       </div>
       <div style="margin-top:11px;">
-        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;"><span class="muted">Usage de contexte</span><span class="mono">${m.ctx} %${hCtxTokens(m)}</span></div>
-        <div class="usage-track"><div class="usage-fill" style="width:${m.ctx}%;background:${m.ctx >= 75 ? 'var(--err)' : m.ctx >= 50 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px;"><span class="muted">Usage de contexte</span><span class="mono" data-maj="ctx">${m.ctx} %${hCtxTokens(m)}</span></div>
+        <div class="usage-track"><div class="usage-fill" data-maj="ctxbar" style="width:${m.ctx}%;background:${m.ctx >= 75 ? 'var(--err)' : m.ctx >= 50 ? 'var(--warn)' : 'var(--ok)'};"></div></div>
         ${hCtxDetail(m)}
       </div>
       ${canLand ? `<div style="margin-top:11px;"><button class="btn btn-ghost btn-sm" onclick="hSimulateLanding('${m.id}')">Simuler un atterrissage (démo)</button></div>` : ''}
     </div>
     <div class="card" style="padding:14px;margin-bottom:14px;">
-      <div class="sec-title">Consommation &amp; inspection <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${hMoney(m.cost)} consommés</span></div>
+      <div class="sec-title">Consommation &amp; inspection <span class="badge" data-maj="cost" style="background:var(--bg-2);color:var(--ink-3);">${hMoney(m.cost)} consommés</span></div>
       <p style="font-size:11px;color:var(--ink-3);line-height:1.5;margin:0 0 11px;">Sur abonnement, le dollar ne borne rien (H-68) — c'est un déclencheur d'inspection, jamais un plafond.</p>
       <div class="kv" style="grid-template-columns: 1fr !important;">
         <div><span class="k">Prochain point d'inspection</span><span class="v">${hNextThreshold(m.cost) !== null ? hMoney(hNextThreshold(m.cost)) : '— mission arrêtée'}</span></div>
@@ -144,7 +144,7 @@ async function hRenderMissionDetail(id) {
       </div>
     </div>
     <div class="card" style="padding:14px;margin-bottom:14px;">
-      <div class="sec-title">Fil de la mission <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${m.feed.length} évènements</span></div>
+      <div class="sec-title">Fil de la mission <span class="badge" data-maj="feedcount" style="background:var(--bg-2);color:var(--ink-3);">${m.feed.length} évènements</span></div>
       <div class="feed-filter">
         <button class="fchip ${HarnessState.feedFilter === 'tout' ? 'active' : ''}" onclick="hSetFeedFilter('tout')">Tout</button>
         <button class="fchip ${HarnessState.feedFilter === 'activite' ? 'active' : ''}" onclick="hSetFeedFilter('activite')">Activité</button>
@@ -165,6 +165,7 @@ async function hRenderMissionDetail(id) {
   `;
   const scroll = document.getElementById('hFeedScroll');
   if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  hMissionRendue = { id: m.id, empreinte: hEmpreinteMission(m), feedLen: m.feed.length };
   hRenderTeamTree();
 }
 
@@ -246,4 +247,84 @@ async function hSimulateLanding(missionId) {
   await HarnessAPI.simulateLanding(missionId);
   hRenderParc(); hRenderMissionDetail(missionId);
   showToast('Atterrissage engagé (démo)', 'warn');
+}
+
+
+// ============ MISE À JOUR CIBLÉE (jamais de re-rendu complet en boucle) ============
+/**
+ * ☠ Réécrire `innerHTML` toutes les 4 s EST le clignotement — c'est le défaut
+ * qu'on a mis des heures à traquer le 23/07. La boucle ne reconstruit donc
+ * jamais la page : elle compare, puis ne touche QUE ce qui a changé. Un rendu
+ * complet reste possible, mais seulement sur changement de mission ou de filtre.
+ */
+let hMissionRendue = null;
+
+/** Ce qui, en changeant, justifie de toucher au DOM. Le fil est compté à part. */
+function hEmpreinteMission(m) {
+  return [m.state, m.model, m.ctx, m.cost, m.sessionId, m.worktree, m.epoch, m.retries,
+    m.blockedSince, m.pausedAgo, m.idleAgo, m.doneAgo, (m.subagents || []).length].join('|');
+}
+
+function hMajChamp(nom, html) {
+  const el = document.querySelector(`#hMissionBody [data-maj="${nom}"]`);
+  // ☠ Ne réécrire que si la valeur DIFFÈRE : réassigner un innerHTML identique
+  // recrée quand même les nœuds, et c'est visible à l'œil sur une boucle courte.
+  if (el && el.innerHTML !== html) el.innerHTML = html;
+}
+
+/**
+ * Rafraîchit la vue mission SANS la reconstruire. Rend `false` si un rendu
+ * complet est nécessaire (autre mission, page pas encore montée).
+ */
+async function hMajMissionDetail(id) {
+  if (!hMissionRendue || hMissionRendue.id !== id) return false;
+  if (!document.querySelector('#hMissionBody [data-maj="ctx"]')) return false;
+  const res = await HarnessAPI.getMission(id);
+  const m = res.data;
+  if (!m) return false;
+
+  const empreinte = hEmpreinteMission(m);
+  if (empreinte !== hMissionRendue.empreinte) {
+    document.getElementById('hMissionBadge').style.cssText = HARNESS_STATE_BADGE[m.state];
+    document.getElementById('hMissionBadge').textContent = HARNESS_STATE_LABEL[m.state];
+    hMajChamp('model', m.model);
+    hMajChamp('ctx', `${m.ctx} %${hCtxTokens(m)}`);
+    hMajChamp('cost', `${hMoney(m.cost)} consommés`);
+    const barre = document.querySelector('#hMissionBody [data-maj="ctxbar"]');
+    if (barre) {
+      barre.style.width = `${m.ctx}%`;
+      barre.style.background = m.ctx >= 75 ? 'var(--err)' : m.ctx >= 50 ? 'var(--warn)' : 'var(--ok)';
+    }
+    hMissionRendue.empreinte = empreinte;
+  }
+
+  hMajFil(m);
+  return true;
+}
+
+/**
+ * Ajoute au fil les évènements manquants, sans toucher aux précédents.
+ *
+ * ☠ Append seulement : réécrire tout le fil refermerait les réflexions dépliées
+ * et casserait la sélection de texte en cours. Le fil est trié et ne réordonne
+ * jamais son passé — le nombre d'éléments suffit donc à savoir ce qui est neuf.
+ */
+function hMajFil(m) {
+  const filtre = hFilteredFeed(m);
+  const scroll = document.getElementById('hFeedScroll');
+  if (!scroll) return;
+  hMajChamp('feedcount', `${m.feed.length} évènements`);
+  const dejaLa = scroll.querySelectorAll('.fitem').length;
+  if (filtre.length === dejaLa) return;
+  if (filtre.length < dejaLa) {
+    // Le fil a rétréci (changement de filtre) : là, un rendu franc est correct.
+    scroll.innerHTML = filtre.map(hFeedItemTemplate).join('');
+    return;
+  }
+  // « Collé en bas » à 40 px près : ne rattraper le défilement que si on suivait déjà.
+  const suivait = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 60;
+  const vide = scroll.querySelector('.empty-state');
+  if (vide) vide.remove();
+  scroll.insertAdjacentHTML('beforeend', filtre.slice(dejaLa).map(hFeedItemTemplate).join(''));
+  if (suivait) scroll.scrollTop = scroll.scrollHeight;
 }

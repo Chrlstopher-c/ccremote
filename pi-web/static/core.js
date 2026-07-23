@@ -57,6 +57,11 @@ function switchView(view) {
   if (view === 'harness-escalades') hRenderEscalades();
   if (view === 'harness-comptes') hRenderComptes();
   if (view === 'harness-orchestrateur') hInitOrchestrateur();
+  // ☠ Le parc, les escalades, les comptes et le détail d'une mission se
+  // rafraîchissent d'eux-mêmes désormais (voir harness-parc.js) : sans ça, il
+  // fallait recharger la page pour voir bouger quoi que ce soit, et une équipe
+  // terminée restait affichée « en cours » (23/07).
+  if (typeof hDemarrerRafraichissement === 'function') hDemarrerRafraichissement();
   const active = document.querySelector('.view.active');
   if (active) active.scrollTop = 0;
   closeSidebar();
