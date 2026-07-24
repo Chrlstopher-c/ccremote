@@ -107,6 +107,25 @@ function prochainEpoch(registre: Registre, projet: string): number {
  * l'appelant traduit en erreur visible : un mandat autorisé dont rien ne part
  * doit se voir, jamais se perdre.
  */
+/**
+ * Une équipe est déjà active sur ce projet (H-56 : une seule à la fois). Erreur
+ * NOMMÉE, pas générique : l'appelant doit pouvoir en faire un refus lisible
+ * plutôt qu'un 500 anonyme.
+ */
+export class ErreurProjetOccupe extends Error {
+  constructor(
+    readonly missionId: string,
+    readonly projet: string,
+    readonly etat: string,
+  ) {
+    super(
+      `une équipe est déjà active sur « ${projet} » (mission ${missionId.slice(0, 8)}, état ${etat}) — ` +
+        'termine-la avec `arreter_equipe` avant d’en lancer une autre (H-56 : une équipe par projet)',
+    );
+    this.name = 'ErreurProjetOccupe';
+  }
+}
+
 export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
   // `☠` Rotation (H-53) : `listerDisponibles()` exclut les comptes marqués
   // `rejected` par le balayage de télémétrie. C'est ici que la bascule se fait —
@@ -123,6 +142,17 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   }
   if (deps.registre.comptes.lister()[0]?.id !== compte.id) {
     log.info({ compteId: compte.id }, 'rotation de compte : le précédent est saturé');
+  }
+
+  // `☠` H-56 VÉRIFIÉ ICI, avant toute écriture. L'index unique partiel de la base
+  // fait bien son travail, mais son échec remontait en `SQLITE_CONSTRAINT_UNIQUE`
+  // ⇒ 500 ⇒ « erreur interne du control plane » à l'écran (constaté en prod le
+  // 23/07). Une règle métier connue n'est PAS une panne : elle se refuse en
+  // clair, en nommant l'équipe qui bloque, sinon l'opérateur clique trois fois
+  // sans jamais comprendre pourquoi rien ne part.
+  const dejaActive = deps.registre.missions.listerActives().find((m) => m.projet === p.projet);
+  if (dejaActive !== undefined) {
+    throw new ErreurProjetOccupe(dejaActive.id, p.projet, dejaActive.etatHarness);
   }
 
   const missionId = randomUUID();

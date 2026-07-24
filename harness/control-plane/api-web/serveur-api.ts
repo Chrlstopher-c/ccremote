@@ -24,6 +24,7 @@ import type { Registre } from '../registre/index.ts';
 import type { MachineEtatsDemandes } from '../bus-permissions/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
 import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
+import { ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
 import { versEscaladeApi } from './vue-escalades.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
@@ -255,8 +256,17 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     }
     // `☠` L'approbation DISPATCHE réellement : un échec doit remonter tel quel,
     // jamais être maquillé en succès — l'opérateur croirait son équipe lancée.
-    const r = await deps.mandats.approuver(id);
-    return { ok: true, effet: r.detail, missionId: r.missionId };
+    try {
+      const r = await deps.mandats.approuver(id);
+      return { ok: true, effet: r.detail, missionId: r.missionId };
+    } catch (erreur) {
+      // `☠` Une règle métier connue n'est PAS une panne. « Une équipe est déjà
+      // active sur ce projet » (H-56) remontait en 500 « erreur interne du
+      // control plane » : l'opérateur a cliqué trois fois sans jamais savoir
+      // pourquoi rien ne partait (prod, 23/07). 409 + le motif exact.
+      if (erreur instanceof ErreurProjetOccupe) throw new ErreurApi(409, erreur.message);
+      throw erreur;
+    }
   }
 
   if (!chemin.startsWith('/orchestrator/conversations')) return null;

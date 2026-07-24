@@ -163,18 +163,33 @@ describe('fantômes (acceptation a)', () => {
 // ------------------------------------------------------------------ orphelins
 
 describe('orphelins (acceptation b)', () => {
-  test('worker vivant avec historique de mission terminale ⇒ adopté (réouvert)', async () => {
+  test('☠ worker survivant sur une mission ANNULÉE ⇒ tué, JAMAIS réadopté (la décision tient)', async () => {
+    // Vécu en prod le 23/07 : l'opérateur arrête une équipe, la réconciliation
+    // la rouvrait (`orphelin_adopte`) et le projet restait bloqué par une équipe
+    // qu'il croyait soldée. Une transition terminale est une DÉCISION, pas une
+    // croyance périmée — « le PC gagne » n'arbitre qu'une divergence d'observation.
     creerMission('m-1', 'projet-alpha', 'sess-1');
-    registre.etats.appliquerEtatHarness('m-1', 'terminee');
+    registre.etats.appliquerEtatHarness('m-1', 'annulee');
     inventairePc.definir([{ sessionId: 'sess-1', worktree: '/wt/alpha', epoch: 0, vivant: true }]);
 
     const rapport = await reconcilier(registre, deps(), 'demarrage', { journal });
 
-    expect(rapport.orphelinsAdoptes).toEqual(['sess-1']);
-    expect(registre.missions.exiger('m-1').etatHarness).toBe('en_cours');
-    expect(registre.missions.exiger('m-1').epoch).toBe(1);
-    expect(journal.contient('epoch_incremente')).toBe(true);
-    expect(journal.contient('orphelin_adopte')).toBe(true);
+    expect(rapport.orphelinsAdoptes).toEqual([]);
+    expect(rapport.orphelinsTues).toEqual(['sess-1']);
+    expect(inventairePc.tues).toEqual(['sess-1']);
+    // ☠ L'état ne repasse PAS à `en_cours` : c'est tout l'enjeu.
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('annulee');
+  });
+
+  test('☠ même chose pour une mission TERMINÉE — un worker résiduel ne la ressuscite pas', async () => {
+    creerMission('m-1', 'projet-alpha', 'sess-1');
+    registre.etats.appliquerEtatHarness('m-1', 'terminee');
+    inventairePc.definir([{ sessionId: 'sess-1', worktree: '/wt/alpha', epoch: 0, vivant: true }]);
+
+    await reconcilier(registre, deps(), 'demarrage', { journal });
+
+    expect(inventairePc.tues).toEqual(['sess-1']);
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('terminee');
   });
 
   test('worker vivant sans AUCUNE trace ⇒ tué, jamais ignoré par défaut', async () => {
@@ -251,14 +266,16 @@ describe('reinitialize() au rattachement (acceptation d, panne #3)', () => {
     expect(journal.contient('reinitialize_appele')).toBe(true);
   });
 
-  test('appelé aussi pour un orphelin adopté', async () => {
+  test('☠ JAMAIS réinitialisé sur une mission terminale — le worker est tué, pas relancé', async () => {
     creerMission('m-1', 'projet-alpha', 'sess-1');
-    registre.etats.appliquerEtatHarness('m-1', 'terminee');
+    registre.etats.appliquerEtatHarness('m-1', 'annulee');
     inventairePc.definir([{ sessionId: 'sess-1', worktree: '/wt/alpha', epoch: 0, vivant: true }]);
 
     await reconcilier(registre, deps(), 'demarrage', { journal });
 
-    expect(reinitialisateur.appels).toEqual(['sess-1']);
+    // Réinitialiser un worker qu'on s'apprête à tuer serait doublement absurde.
+    expect(reinitialisateur.appels).toEqual([]);
+    expect(inventairePc.tues).toEqual(['sess-1']);
   });
 
   test('jamais appelé sur un déclencheur périodique — pas de rituel de rattachement à chaque tic', async () => {

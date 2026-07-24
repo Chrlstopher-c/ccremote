@@ -21,7 +21,7 @@
  * l'équipe reste bloquée en paraissant saine. Voir `tenterReinitialiser`.
  */
 
-import { ETATS_HARNESS_ACTIFS, type Registre } from '../registre/index.ts';
+import { ETATS_HARNESS_ACTIFS, ETATS_HARNESS_TERMINAUX, type Registre } from '../registre/index.ts';
 import { reconciliationLogger as logger } from './logger.ts';
 import type {
   DeclencheurReconciliation,
@@ -153,20 +153,28 @@ async function traiterOrphelins(
     if (missionConnue !== null && ETATS_HARNESS_ACTIFS.includes(missionConnue.etatHarness)) continue;
 
     // ☠ Aucun `continue` conditionnel ici : tout worker vivant non déjà actif est
-    // soit adopté, soit tué (acceptation b). Un interrupteur capable de le laisser
-    // filer serait lui-même la panne #11 — on ne le code donc pas, même pour un test.
-    if (missionConnue !== null) {
-      // Orphelin avec historique (E.1.4) : adopter — le PC gagne, on réouvre la mission.
-      const epoch = registre.missions.incrementerEpoch(missionConnue.id);
-      journal?.enregistrer('epoch_incremente', { missionId: missionConnue.id, epoch });
-      registre.etats.appliquerEtatHarness(missionConnue.id, 'en_cours', {
-        motif: 'orphelin_adopte : worker vivant sans mission active correspondante',
-      });
-      journal?.enregistrer('orphelin_adopte', { missionId: missionConnue.id, sessionId: worker.sessionId });
-      compteurs.orphelinsAdoptes.push(worker.sessionId);
-      if (declencheur !== 'periodique') {
-        await tenterReinitialiser(registre, deps, missionConnue.id, worker.sessionId, compteurs, journal);
-      }
+    // TUÉ (acceptation b). Un interrupteur capable de le laisser filer serait
+    // lui-même la panne #11 — on ne le code donc pas, même pour un test.
+    // `☠` UNE DÉCISION TERMINALE NE SE DÉFAIT PAS TOUTE SEULE. « Le PC gagne »
+    // (E.1.4) arbitre une DIVERGENCE d'observation, jamais un ordre donné : une
+    // mission `annulee`/`terminee`/`echec_definitif` l'est parce que quelqu'un
+    // l'a décidé. L'adopter, c'est annuler cet ordre sans que personne l'ait
+    // demandé — vécu en prod le 23/07 : l'opérateur arrête une équipe à 18:53:29,
+    // la réconciliation la rouvre à 18:55:00 (`orphelin_adopte`), et le projet
+    // reste bloqué par une équipe qu'il croyait avoir soldée.
+    //
+    // Le worker survivant est alors un RÉSIDU : on le tue, comme tout worker
+    // vivant sans mission qui le réclame. C'est le même geste que pour un
+    // orphelin sans trace, pour la même raison — ne rien laisser tourner qui
+    // n'apparaisse nulle part.
+    if (missionConnue !== null && ETATS_HARNESS_TERMINAUX.includes(missionConnue.etatHarness)) {
+      logger.warn(
+        { missionId: missionConnue.id, etat: missionConnue.etatHarness, sessionId: worker.sessionId },
+        'worker survivant sur une mission déjà terminée — mis à mort, JAMAIS réadopté (la décision tient)',
+      );
+      await deps.inventairePc.tuerSansPreavis(worker.sessionId);
+      journal?.enregistrer('orphelin_tue', { sessionId: worker.sessionId });
+      compteurs.orphelinsTues.push(worker.sessionId);
       continue;
     }
 
