@@ -1,5 +1,5 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-07-23*
+*Dernière mise à jour : 2026-07-24*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
