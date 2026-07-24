@@ -15,10 +15,11 @@ observables et pilotables à distance depuis mobile.
   le reste (décisions de Chris + faits vérifiés contre le SDK).
 - **Code** : `harness/`, TypeScript + Bun, SDK `@anthropic-ai/claude-agent-sdk` **épinglé 0.3.217**.
 - **Maquette UI v2** : `design-v2/` — maquette de comparaison avec l'app actuelle, pas une refonte.
-- **État au 23/07 (nuit)** : **EN PRODUCTION**, exercé sur de vraies équipes. Commit `8a102d2`,
-  **989 tests verts** (31 échecs PRÉEXISTANTS sur `control-plane/projets`, vérifiés identiques sur
+- **État au 24/07 (nuit)** : **EN PRODUCTION**, exercé sur de vraies équipes. Commit `046ecce`,
+  **1017 tests verts** (31 échecs PRÉEXISTANTS sur `control-plane/projets`, vérifiés identiques sur
   HEAD — sans rapport avec les chantiers en cours), typecheck propre, schéma du registre en
-  **version 10**. Trois services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC).
+  **version 12**. Trois services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC).
+  Compte A (compte-a) saturé à 100 % hebdo jusqu'au dimanche 26 juil. 21h ; tout passe sur B.
 
 **Livré le 23/07 (soirée)** — quotas en temps réel et sous-agents visibles :
 
@@ -41,9 +42,29 @@ observables et pilotables à distance depuis mobile.
   `task_notification`, un nouvel `init`, puis le lead REPART SEUL avec le résultat de son sous-agent
   jusqu'à un `result` n°2 — et le flux ne se termine jamais. Le comportement natif de Claude Code
   n'avait rien à reconstruire : il fallait arrêter de raccrocher. En prod, trois runs sur quatre
-  mouraient au même endroit. `☠` Le critère « tâches de fond vivantes » seul NE SUFFIT PAS : un lead
-  qui annonce « j'attends » alors que plus rien ne tourne se trompe — d'où une fin normale qui laisse
-  désormais l'équipe AU REPOS (vivante, `idle`), jamais tuée. Répare `envoyer_a_equipe`.
+  mouraient au même endroit. Le critère : `background_tasks_changed` (signal de NIVEAU, sémantique
+  REPLACE imposée par le SDK). Tâches de fond vivantes ⇒ on écoute ; ensemble vide + fin normale ⇒
+  la mission est FINIE. `☠ J'AI SUR-CORRIGÉ` (`ad2795a`, retour arrière) : un temps gardé la session
+  ouverte sur TOUTE fin normale, en me fondant sur le récit de l'orchestrateur (« le lead croit
+  attendre ») plutôt que sur la mesure — résultat, une équipe qui avait rendu sa synthèse restait
+  `en_cours` à vie. Les logs (mission a122e20c : garde à 18:40, synthèse à 18:43) ont tranché contre
+  moi. La garde SUFFIT, la sur-correction est partie. Répare aussi `envoyer_a_equipe`.
+- **La rotation de compte se déclenche enfin** (`d56634b`). `☠` DEUX défauts, l'un masquant l'autre :
+  (1) « weekly limit » — la forme réelle du CLI — n'était détectée par AUCUN motif (`spend/usage/rate
+  limit`, `quota exceeded`), donc la saturation n'était jamais vue et la bascule jamais tentée ; la
+  règle vivait DUPLIQUÉE dans deux fichiers, tous deux périmés → extraite dans
+  `shared/saturation-compte.ts`, source unique. (2) L'index de rotation repartait à 0 à chaque
+  redémarrage du Pi (dette E), renvoyant l'orchestrateur sur le compte à 100 % → compte de départ
+  choisi sur le quota MESURÉ (`choix-compte-orchestrateur.ts`), lien config-dir ⟷ compte par l'EMAIL
+  (`oauthAccount.emailAddress`), inconnu ≠ saturé. Vérifié en prod.
+- **La réconciliation ne ressuscite plus une équipe qu'on vient d'arrêter** (`046ecce`). `☠ LE PIRE
+  DÉFAUT de la série` : l'opérateur arrête une équipe (`en_cours → annulee`, 18:53:29), la
+  réconciliation la ROUVRE 90 s plus tard (`annulee → en_cours — orphelin_adopte`). La branche
+  « orphelin avec historique » adoptait toute mission non-active — or les états sont exactement
+  actifs ∪ terminaux, donc « non-active » ≡ TERMINALE. « Le PC gagne » (E.1.4) arbitre une divergence
+  d'OBSERVATION, JAMAIS un ordre. Un worker survivant sur une mission terminale est un RÉSIDU : tué,
+  jamais réadopté. Branche d'adoption retirée (code mort). Corrige au passage H-56 qui remontait en
+  500 « erreur interne du control plane » → `ErreurProjetOccupe` en 409 lisible.
 - **Modèle et raisonnement réellement appliqués** (`56bf2aa`, `7a6fc05`) — le sélecteur ne pilotait
   RIEN : le client n'envoyait pas les champs, la route sœur les jetait, la session tournait sur sa
   constante. Appliqués via `setModel()`/`applyFlagSettings()`, attribués PAR ÉVÈNEMENT (migration 12),

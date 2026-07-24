@@ -5,37 +5,40 @@
 
 **Contexte complet : `harness/REPRISE.md`, section « SESSION DU 23/07 (journée) » en FIN de fichier.**
 
-### 🎯 EN COURS — priorités à la reprise (23/07 au soir)
+### 🎯 EN COURS — priorités à la reprise (24/07)
 
-- [x] **(B) Faire apparaître les SOUS-AGENTS** — LIVRÉ le 23/07 (`c482742`), lus sur le TRANSCRIT
-      (migration 10). Le `agent-<id>.meta.json` du CLI porte `toolUseId` = `parent_tool_use_id` du
-      flux : la corrélation flux ⟷ store existe sur disque. 5 sur 5 sur la session de mesure H-72.4.
-      Reste le détail par agent, voir (B-suite) ci-dessus.
-
-- [ ] ~~**(B) Faire apparaître les SOUS-AGENTS**~~ — *seul point de la liste du 23/07 encore entier.*
-      La vue n'affiche que « Team leader », ce qui laisse croire qu'il n'y en a aucun.
-      `forwardSubagentText` et `agentProgressSummaries` sont déjà activés côté workers, et
-      `observabilite/` sait construire l'arbre — **rien ne le remonte au Pi**.
-      `☠` `subagents: []` est délibérément vide dans `vue-missions.ts` : ne PAS le remplir avant
-      d'avoir une vraie source. H-72.4 déjà mesuré : le flux temps réel des sous-agents est **non
-      déterministe** (0 à 4 lignes sur 5 sous-agents). La vérité sur « qui existe » vient du
-      transcript (`SessionStore.listSubkeys()`), pas du flux ; un sous-agent sans flux se rend avec
-      `feedUnavailable: true`, **jamais omis**.
-- [ ] **(F) L'orchestrateur ne peut pas LIRE les fichiers d'un projet** — il tourne sur le Pi, le FS
-      du PC ne lui est pas monté. `explorer_projets` ne rend que l'ARBORESCENCE : il voit que
-      `src-tauri/` existe, il ne peut pas lire une ligne. Constaté en conditions réelles le 23/07
-      (il l'a diagnostiqué lui-même, correctement). Manque un outil MCP de lecture de fichier
-      passant par le lien Pi↔PC, avec les mêmes bornes que l'exploration : racine `/mnt/projects`,
-      lecture seule, taille plafonnée. Même chemin de câblage que `explorer_projets`.
+- [ ] **(F) ⭐ PRIORITÉ — l'orchestrateur ne peut pas LIRE les fichiers d'un projet.** Il tourne sur
+      le Pi, le FS du PC ne lui est pas monté. `explorer_projets` ne rend que l'ARBORESCENCE : il voit
+      que `src-tauri/` existe, il ne peut pas lire une ligne — donc toute synthèse « d'après le code »
+      est en réalité aveugle. Il l'a diagnostiqué lui-même, correctement, en conditions réelles.
+      Manque un outil MCP de lecture de fichier passant par le lien Pi↔PC, mêmes bornes que
+      l'exploration : racine `/mnt/projects`, lecture seule, taille plafonnée. **Même chemin de
+      câblage que `explorer_projets`** (désormais branché, `superviseur-workers.ts` → `canal-controle`
+      → `client-superviseur-pc`).
 - [ ] **(E-bis) Revoir les AUTRES opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en
       entier ; `CCREMOTE_PI_ORCHESTRATEUR` est corrigé (relu sur le Pi), les autres variables n'ont
-      PAS été passées en revue. Même défaut possible : un déploiement de routine qui éteint un
-      réglage sans un mot.
-- [ ] **(B-suite) Le clic sur un sous-agent reste MOCK** — `getAgent` n'est pas câblé. Le fil PAR
-      AGENT existe côté PC (`sous-agents-disque.ts` rend les activités) mais seule `derniereAction`
-      est persistée au registre. C'est le « même niveau de détail que le lead » de H-72.1.
-- [ ] **(B-suite) Rien n'est validé sur une équipe VIVANTE** — la télémétrie ne parcourt que les
-      workers vivants ; les 5 sur 5 sont vérifiés sur transcripts d'archives, pas en direct.
+      PAS été passées en revue. Même défaut possible : un déploiement de routine qui éteint un réglage.
+- [ ] **Solder la mission Vela restée `en_cours`** — résidu du bug de résurrection (corrigé depuis).
+      La réannuler depuis l'orchestrateur devrait maintenant TENIR (plus de réadoption). À confirmer.
+
+### ✅ TERMINÉ — session du 23/07 (soirée) → 24/07
+
+- [x] **(B) Sous-agents à l'écran** (`c482742`) — lus sur le TRANSCRIT (migration 10),
+      `agent-<id>.meta.json` porte `toolUseId` = `parent_tool_use_id`. 5/5 sur la session H-72.4.
+- [x] **(B-suite) Clic sur un sous-agent → vrai fil** (`bd3a0e7`) — route réelle
+      `GET /missions/{id}/agents/{agentId}`, fil par agent persisté (migration 11), doublure de démo
+      supprimée. Un agent sans fil sort `feedUnavailable`, jamais omis.
+- [x] **(B-suite) Validé sur équipe VIVANTE** — mission Vela réelle : lead Sonnet + 3-4 sous-agents
+      Haiku, fil complet, attribution modèle/effort affichée. Le système agentique tourne bout en bout.
+- [x] **Quotas temps réel sans token ni PC** (`b6aa6fc`, migration 9) — sonde OAuth côté Pi.
+- [x] **`result` ne tue plus la session** (`1dc52f2` + rollback `ad2795a`) — `background_tasks_changed`.
+- [x] **Modèle/effort appliqués + attribués + mémorisés** (`56bf2aa`, `7a6fc05`, migration 12).
+- [x] **Cache-busting des assets** (`7a6fc05`) — empreinte mtime, règle remontée en global.
+- [x] **Déploiement n'éteint plus l'orchestrateur** (`8a102d2`).
+- [x] **`explorer_projets` câblé** (`bd3a0e7`) — 7ᵉ « écrit, testé, branché sur rien ».
+- [x] **Rotation de compte + « weekly limit »** (`d56634b`) — `shared/saturation-compte.ts`, choix
+      sur quota mesuré.
+- [x] **Réconciliation ne ressuscite plus une équipe arrêtée** (`046ecce`) + H-56 en 409.
 - [ ] **(D) Élucider l'écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés
       sur une mission réelle — alors qu'elle tombait au token près en mesure locale. À mesurer sur
       deux relevés successifs d'une même session vivante. **Le total reste la référence** en
