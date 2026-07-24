@@ -827,3 +827,94 @@ Mesure à faire sur deux relevés successifs d'une même session vivante.
   pas, il faut `flex-shrink: 0` sur les enfants directs.
 - **Le test qui encode l'ancienne convention** doit être RETOURNÉ, pas supprimé : celui de `reset_a`
   vérifie maintenant qu'une erreur d'unité reste visible.
+
+---
+
+# SESSION DU 23-24/07 (SOIRÉE → NUIT) — reprendre ICI
+
+**État : EN PROD, commit `046ecce` + checkpoint `c84a9c3`, 1017 tests verts (31 échecs
+PRÉEXISTANTS sur `control-plane/projets`, vérifiés identiques sur HEAD, sans rapport), schéma
+registre `v12`.** Services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC).
+
+## ⭐ PROCHAINE PRIORITÉ — (F) l'orchestrateur ne peut pas LIRE les fichiers d'un projet
+
+L'orchestrateur tourne sur le Pi ; le FS du PC ne lui est PAS monté. `explorer_projets` ne rend que
+l'ARBORESCENCE — il voit que `src-tauri/` existe, il ne peut lire aucune ligne. Toute synthèse
+« d'après le code » est donc AVEUGLE (l'orchestrateur l'a diagnostiqué lui-même, correctement, en
+prod). **À faire** : un outil MCP de lecture de fichier via le lien Pi↔PC, mêmes bornes que
+l'exploration (racine `/mnt/projects`, lecture seule, taille plafonnée). **Chemin de câblage déjà
+tracé** — copier celui d'`explorer_projets`, désormais branché de bout en bout :
+`superviseur-workers.ts::explorerProjets` → `canal-controle.ts` (op `explorer_projets`) →
+`client-superviseur-pc.ts` → `serveur-api.ts`. Ajouter une op `lire_fichier` symétrique.
+
+## Ce qui a été LIVRÉ cette session (11 correctifs, tous en prod)
+
+1. **Quotas temps réel sans token ni PC** (`b6aa6fc`, migration 9). Sonde OAuth
+   `GET https://api.anthropic.com/api/oauth/usage` (header `anthropic-beta: oauth-2025-04-20`) côté
+   Pi, toutes les 20 s (`composition/pi/balayage-quotas.ts`). Le PC ne fournit plus que le jeton
+   (`superviseur/jetons-comptes.ts`), persisté au registre → jauges vivent PC éteint ~8 h. `☠` La
+   réponse OAuth est PLATE, pas enveloppée dans `rate_limits` (`superviseur/sonde-quotas-http.ts`
+   ré-enveloppe). Aucun refresh hors du CLI (refresh tokens tournants).
+2. **Sous-agents à l'écran** (`c482742`, migration 10). Lus sur le TRANSCRIT
+   (`superviseur/sous-agents-disque.ts`), jamais le flux (non déterministe, H-72.4). `☠` Le CLI écrit
+   `<configDir>/projects/<cwd→->/<sessionId>/subagents/agent-<id>.meta.json` porteur de
+   `{agentType, description, toolUseId, spawnDepth}` — ce `toolUseId` EST le `parent_tool_use_id` du
+   flux. `☠` `mtime` ne prime jamais sur l'horodatage du dernier message (sinon un fichier touché
+   passe « actif »).
+3. **Déploiement n'éteint plus l'orchestrateur** (`8a102d2`). `deploy-harness-pi.sh` réécrit `.env`
+   en entier ; un opt-in absent de l'env de l'appelant retombait à sa valeur d'usine. Le script relit
+   maintenant la valeur en place sur le Pi. `⚠` Les AUTRES opt-in du `.env` ne sont PAS revus (E-bis).
+4. **`explorer_projets` câblé** (`bd3a0e7`). 7ᵉ « écrit, testé, branché sur rien ». Test d'ASSEMBLAGE.
+5. **Clic sur un sous-agent → vrai fil** (`bd3a0e7`, migration 11). Route
+   `GET /missions/{id}/agents/{agentId}`, doublure de démo supprimée.
+6. **`result` ne tue plus la session** (`1dc52f2`). `☠` `result` = fin d'un TOUR, pas de la session
+   (streaming input). Critère : `background_tasks_changed.tasks[]` — signal de NIVEAU, REPLACE, jamais
+   d'appariement début/fin ; ensemble remis à VIDE à chaque `init`. `marquerMort` post-boucle gardé
+   par l'identité du HANDLE (une relance réutilise le sessionId).
+7. **Modèle/effort réels + attribués + mémorisés** (`56bf2aa`, migration 12). `☠` Le sélecteur ne
+   pilotait RIEN : client n'envoyait pas les champs, route sœur les jetait, session sur sa constante.
+   `setModel()` + `applyFlagSettings({effortLevel})`. Attribution PAR ÉVÈNEMENT, réglage mémorisé par
+   conversation, restauré à l'ouverture (`detail()` DOIT rendre modele/effort — sinon UI aveugle).
+8. **Cache-busting des assets** (`7a6fc05`). `pi-web/app.py::_version_statique()` = mtime max de
+   `static/`, injecté `?v={{ v }}`. Règle remontée en global (`~/.claude/rules/`).
+9. **Retour arrière sur une sur-correction** (`ad2795a`). J'avais gardé la session ouverte sur TOUTE
+   fin normale (récit, pas mesure) → équipe `en_cours` à vie après synthèse rendue. La garde (6) suffit.
+10. **Rotation de compte** (`d56634b`). `☠` « weekly limit » n'était détecté par aucun motif → règle
+    extraite dans `shared/saturation-compte.ts` (source unique, était dupliquée). `☠` Index de
+    rotation repartait à 0 au reboot → compte de départ choisi sur quota MESURÉ
+    (`composition/pi/choix-compte-orchestrateur.ts`, lien config-dir⟷compte par l'EMAIL, inconnu ≠ saturé).
+11. **Réconciliation ne ressuscite plus une équipe arrêtée** (`046ecce`). `☠ LE PIRE DÉFAUT` :
+    arrêt à 18:53, réadoption à 18:55 (`orphelin_adopte`). Une transition terminale
+    (`annulee`/`terminee`/`echec_definitif`) est une DÉCISION, pas une croyance périmée ; « le PC
+    gagne » n'arbitre qu'une divergence d'OBSERVATION. Worker survivant sur mission terminale = RÉSIDU,
+    tué. Branche d'adoption retirée (non-active ≡ terminale, donc code mort). H-56 en 409 (`ErreurProjetOccupe`)
+    au lieu de 500.
+
+## En suspens / à confirmer à la reprise
+
+- **Mission Vela restée `en_cours`** — résidu du bug de résurrection (corrigé). La réannuler depuis
+  l'orchestrateur devrait TENIR maintenant. À vérifier en premier.
+- **Comptes** : A (compte-a) saturé 100 % hebdo jusqu'au **dimanche 26 juil. 21h**, tout passe
+  sur B (compte-b, ~51 %).
+- **Dette E** partiellement soldée : l'index de rotation n'est plus le problème (choix sur quota
+  mesuré), mais `deniedToolPatterns: []` au dispatch reste vide (lecture seule = consigne, pas verrou)
+  et `harness-orchestrateur.js` reste > 500 lignes.
+- **(D)** écart ~4 061 tokens : toujours pas élucidé.
+
+## Pièges payés cette session (ne pas les repayer)
+
+- **La réponse OAuth d'usage est PLATE** (`{five_hour, seven_day, extra_usage}`), pas `{rate_limits:{…}}`
+  comme le SDK. Passer la réponse brute à `extraireFenetres` ⇒ zéro jauge sur un HTTP 200, EN SILENCE.
+- **`result` n'est PAS la fin de session** en streaming input — voir livrable 6. La croyance inverse
+  était même écrite dans l'en-tête de `superviseur-workers.ts` (mesure d'un prompt unique, pas d'un
+  générateur d'entrée).
+- **Une règle métier dupliquée diverge en silence** : `MOTIFS_SATURATION` vivait dans 2 fichiers,
+  tous deux périmés en même temps → rotation morte. Sources uniques dans `shared/`.
+- **Une transition terminale ne se défait pas toute seule** : la réconciliation « PC gagne » arbitre
+  une divergence d'observation, jamais un ordre. Sinon elle ressuscite ce que l'opérateur a arrêté.
+- **`SQLITE_CONSTRAINT_UNIQUE` ne doit jamais atteindre l'opérateur** : une règle métier connue (H-56)
+  se refuse en clair (409 + le geste à faire), pas en 500 « erreur interne ».
+- **Un cache-busting manquant fait re-débugger du code déjà corrigé** : symptôme « déployé + testé +
+  API juste, mais l'écran ne change pas » ⇒ grep `?v=` AVANT toute ré-investigation.
+- **Mesurer avant de corriger une machine à états** : j'ai sur-corrigé deux fois sur du récit. Établir
+  le fait sur un artefact réel (log/banc/row), avant ET après.

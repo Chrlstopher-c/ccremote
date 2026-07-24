@@ -3,8 +3,8 @@
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
-**Point d'entrée pour reprendre : `harness/REPRISE.md`, section « SESSION DU 23/07 (journée) », en
-FIN de fichier.** Ne pas repartir de ce STATE pour le harness — REPRISE.md est plus précis et tenu
+**Point d'entrée pour reprendre : `harness/REPRISE.md`, section « SESSION DU 23-24/07 (SOIRÉE → NUIT) »,
+en FIN de fichier.** Ne pas repartir de ce STATE pour le harness — REPRISE.md est plus précis et tenu
 à jour.
 
 Upgrade majeure : piloter des projets depuis l'app vers le PC. Un orchestrateur maître (session
