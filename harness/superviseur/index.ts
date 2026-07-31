@@ -73,6 +73,8 @@ export { missionLogger, superviseurLogger } from './logger.ts';
 export { estDansRacine, explorerProjets, resoudreDansRacine } from './exploration-projets.ts';
 export type { EntreeProjet, ResultatExploration } from './exploration-projets.ts';
 export { lireFichier, PLAFOND_LECTURE_OCTETS } from './lecture-fichier.ts';
+export { rechercherDansProjets, RECHERCHE_MAX_RESULTATS } from './recherche-projets.ts';
+export type { OccurrenceRecherche, ResultatRecherche } from './recherche-projets.ts';
 export type { ResultatLectureFichier } from './lecture-fichier.ts';
 export { sonderQuotaCompte, sonderQuotas } from './sonde-quotas.ts';
 export type { FenetreQuotaMesuree, QuotaCompteMesure } from './sonde-quotas.ts';

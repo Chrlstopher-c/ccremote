@@ -188,6 +188,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       propositions,
       explorateurProjets: { explorerProjets: (chemin) => clientSuperviseurPc.explorerProjets(chemin) },
       lecteurFichier: { lireFichier: (chemin) => clientSuperviseurPc.lireFichier(chemin) },
+      // `☠` Câblé le jour même où l'outil existe. Le motif « écrit, testé,
+      // branché sur rien » a coûté neuf fois à ce dépôt, dont deux fois sur ces
+      // mêmes ports projets (23/07) — l'orchestrateur voyait l'arborescence sans
+      // pouvoir en lire une ligne, puis lisait sans pouvoir chercher.
+      chercheurProjets: {
+        rechercherProjets: (motif, chemin, max) => clientSuperviseurPc.rechercherProjets(motif, chemin, max),
+      },
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :

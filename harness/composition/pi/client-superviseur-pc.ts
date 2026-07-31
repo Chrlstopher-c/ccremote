@@ -60,6 +60,7 @@ import type {
   JetonCompte,
 } from '../../superviseur/index.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
+import type { ResultatRecherche } from '../../superviseur/recherche-projets.ts';
 import type { ResultatLectureFichier } from '../../superviseur/lecture-fichier.ts';
 import type { Lien } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
@@ -182,6 +183,31 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     } catch (erreur) {
       log.warn({ err: erreur }, 'exploration des projets impossible — PC injoignable');
       return { racine: '', chemin: chemin ?? '', entrees: [], note: 'PC injoignable' };
+    }
+  }
+
+  /**
+   * Cherche un motif dans le contenu des projets DU PC.
+   *
+   * `☠` PC absent ⇒ note explicite, jamais une liste vide muette : « aucune
+   * occurrence » et « je n'ai pas pu chercher » mènent à des décisions
+   * opposées, et c'est précisément sur cette recherche que l'orchestrateur
+   * cadre un mandat.
+   */
+  async rechercherProjets(motif: string, chemin?: string, max?: number): Promise<ResultatRecherche> {
+    try {
+      const reponse = await this.#appeler({ type: 'rechercher_projets', motif, chemin, max });
+      return (
+        reponse.rechercheProjets ?? {
+          motif,
+          chemin: chemin ?? '',
+          occurrences: [],
+          note: reponse.detail ?? 'recherche indisponible',
+        }
+      );
+    } catch (erreur) {
+      log.warn({ err: erreur, motif }, 'recherche dans les projets impossible — PC injoignable');
+      return { motif, chemin: chemin ?? '', occurrences: [], note: 'PC injoignable — recherche non effectuée' };
     }
   }
 

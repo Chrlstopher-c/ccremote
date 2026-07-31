@@ -32,6 +32,7 @@ import type {
 } from './types.ts';
 import type { ResultatExploration } from './exploration-projets.ts';
 import type { ResultatLectureFichier } from './lecture-fichier.ts';
+import type { ResultatRecherche } from './recherche-projets.ts';
 import type { JetonCompte } from './sonde-quotas-http.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
@@ -50,6 +51,8 @@ export interface PortSuperviseurControle {
   explorerProjets?(chemin?: string): ResultatExploration;
   /** Absent ⇒ opération refusée, jamais un contenu vide qui passerait pour un fichier vide. */
   lireFichier?(chemin: string): ResultatLectureFichier;
+  /** Recherche de contenu bornée dans les projets du PC. */
+  rechercherProjets?(motif: string, chemin?: string, max?: number): Promise<ResultatRecherche>;
   arreter(missionId: string): Promise<void>;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
   relancer(missionId: string, sessionId: string): Promise<void>;
@@ -110,6 +113,13 @@ export type OperationControle =
    * contrairement à l'exploration, il n'existe pas de défaut raisonnable.
    */
   | { readonly type: 'lire_fichier'; readonly chemin: string }
+  /** Lecture pure : chercher un motif DANS le contenu des projets du PC. */
+  | {
+      readonly type: 'rechercher_projets';
+      readonly motif: string;
+      readonly chemin?: string;
+      readonly max?: number;
+    }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
@@ -140,6 +150,7 @@ type OperationMutative = Exclude<
   | { readonly type: 'jetons' }
   | { readonly type: 'explorer_projets' }
   | { readonly type: 'lire_fichier' }
+  | { readonly type: 'rechercher_projets' }
 >;
 
 export interface RequeteControle {
@@ -163,6 +174,7 @@ export interface ReponseControle {
   readonly explorationProjets?: ResultatExploration;
   /** Présent uniquement pour `lire_fichier`. */
   readonly lectureFichier?: ResultatLectureFichier;
+  readonly rechercheProjets?: ResultatRecherche;
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
   /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
   readonly rapportArretUrgence?: RapportArretUrgence;
@@ -228,6 +240,23 @@ export class CanalControle {
         effet: 'applique',
         lectureFichier: lecture,
         ...(lecture.note !== undefined ? { detail: lecture.note } : {}),
+      };
+    }
+
+    // `☠` Hors cache d'idempotence, même raison que les deux précédentes : une
+    // recherche servie depuis le cache rendrait l'état d'un dépôt tel qu'il était
+    // au premier appel, y compris après qu'une équipe l'a modifié.
+    if (requete.operation.type === 'rechercher_projets') {
+      const op = requete.operation;
+      const recherche = await this.#superviseur.rechercherProjets?.(op.motif, op.chemin, op.max);
+      if (recherche === undefined) {
+        return { ok: false, effet: 'refuse', detail: 'recherche non câblée sur ce superviseur' };
+      }
+      return {
+        ok: true,
+        effet: 'applique',
+        rechercheProjets: recherche,
+        ...(recherche.note !== undefined ? { detail: recherche.note } : {}),
       };
     }
 

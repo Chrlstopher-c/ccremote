@@ -44,6 +44,7 @@ import type {
   DefinisseurBudget,
   LecteurUtilisationParc,
   EnregistreurProposition,
+  ChercheurProjets,
   ExplorateurProjets,
   LecteurFichierProjet,
   RelanceurMission,
@@ -104,6 +105,13 @@ export interface DependancesServeurControle {
    * mieux vaut un outil que le modèle ne voit pas qu'un outil qui rend du vide.
    */
   readonly lecteurFichier?: LecteurFichierProjet;
+  /**
+   * Recherche de contenu DANS les projets du PC. Absent ⇒ l'outil n'est pas
+   * exposé du tout — même règle que les deux précédents : mieux vaut un outil
+   * que le modèle ne voit pas qu'un outil qui rend systématiquement du vide,
+   * qu'il lirait comme « rien ne correspond ».
+   */
+  readonly chercheurProjets?: ChercheurProjets;
   /**
    * Conversation dont ce serveur est la surface (migration 15). `☠` Un serveur
    * de contrôle est construit PAR conversation — sans cet identifiant,
@@ -332,6 +340,39 @@ function outilsExploration(deps: DependancesServeurControle) {
 }
 
 /**
+ * Recherche de contenu — présente SEULEMENT si la composition a câblé un
+ * chercheur vers le PC (voir `DependancesServeurControle.chercheurProjets`).
+ */
+function outilsRecherche(deps: DependancesServeurControle) {
+  const chercheur = deps.chercheurProjets;
+  if (chercheur === undefined) return [];
+  return [
+    tool(
+      'rechercher_projets',
+      "Cherche un motif dans le CONTENU des fichiers, sur le PC (racine /mnt/projects). " +
+        "C'est l'outil du CADRAGE : avant de proposer un mandat sur un projet que tu ne " +
+        'connais pas, cherche plutôt que de lire des fichiers au hasard. `motif` est une ' +
+        'expression régulière (ripgrep), casse ignorée si tu écris en minuscules. ' +
+        '`chemin` est OBLIGATOIRE : on cherche dans UN projet, la racine entière est trop ' +
+        "vaste (mesuré : plus de deux minutes). Si tu ne sais pas encore lequel, appelle " +
+        "d'abord `explorer_projets`. Résultats bornés à 40 : si la note dit que c'est " +
+        "tronqué, affine le motif — n'essaie pas d'en obtenir plus.",
+      {
+        motif: z.string().describe('Expression régulière recherchée dans le contenu.'),
+        chemin: z.string().describe('Projet où chercher — obligatoire. Ex. « ccremote » ou un chemin absolu.'),
+        max: z.number().int().positive().optional().describe('Occurrences voulues, 40 au maximum.'),
+      },
+      async ({ motif, chemin, max }) =>
+        protege('rechercher_projets', async () => {
+          const r = await chercheur.rechercherProjets(motif, chemin, max);
+          return applique('chercher dans les projets', JSON.stringify(r), r.chemin);
+        }),
+      { annotations: { readOnlyHint: true } },
+    ),
+  ];
+}
+
+/**
  * Outil de lecture de fichier — présent SEULEMENT si la composition a câblé un
  * lecteur vers le PC (voir `DependancesServeurControle.lecteurFichier`).
  */
@@ -389,6 +430,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsBudget(deps),
     ...outilsContexte(deps),
     ...outilsExploration(deps),
+    ...outilsRecherche(deps),
     ...outilsLectureFichier(deps),
   ];
 }

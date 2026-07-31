@@ -137,6 +137,31 @@ export interface ResultatEnregistrement {
  * une ligne. Lecture seule et bornée à la racine — la garde vit côté PC
  * (`superviseur/lecture-fichier.ts`), jamais dans l'appelant.
  */
+/**
+ * Cherche un motif dans le CONTENU des projets, qui vivent sur le PC (H-75).
+ *
+ * `☠` Complément d'`ExplorateurProjets` et de `LecteurFichierProjet` : lister
+ * puis lire ne permet de trouver que ce qu'on sait déjà nommer. Sur un dépôt
+ * inconnu, cadrer un mandat sans chercher revient à ouvrir les fichiers un par
+ * un — et à saturer son contexte avant d'avoir trouvé quoi que ce soit.
+ */
+export interface ChercheurProjets {
+  rechercherProjets(motif: string, chemin?: string, max?: number): Promise<ResultatRechercheProjets>;
+}
+
+export interface OccurrenceProjet {
+  readonly fichier: string;
+  readonly ligne: number;
+  readonly texte: string;
+}
+
+export interface ResultatRechercheProjets {
+  readonly motif: string;
+  readonly chemin: string;
+  readonly occurrences: readonly OccurrenceProjet[];
+  readonly note?: string;
+}
+
 export interface LecteurFichierProjet {
   lireFichier(chemin: string): Promise<{
     readonly ok: boolean;

@@ -44,6 +44,7 @@ import { lireSousAgents } from './sous-agents-disque.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
+import { rechercherDansProjets, type ResultatRecherche } from './recherche-projets.ts';
 import { lireFichier, type ResultatLectureFichier } from './lecture-fichier.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
@@ -310,6 +311,18 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    */
   lireFichier(chemin: string): ResultatLectureFichier {
     return lireFichier(this.#racineProjets, chemin);
+  }
+
+  /**
+   * Recherche de contenu dans les projets du PC (A.2.2, `rechercher_projets`).
+   *
+   * `☠` Même racine et même confinement que les deux méthodes ci-dessus. Et
+   * surtout : câblée ICI le jour même où l'opération existe. Le motif « écrit,
+   * testé, branché sur rien » est documenté deux paragraphes plus haut — le
+   * répéter sur la fonction suivante serait impardonnable.
+   */
+  rechercherProjets(motif: string, chemin?: string, max?: number): Promise<ResultatRecherche> {
+    return rechercherDansProjets(this.#racineProjets, motif, chemin, max);
   }
 
   inventaire(): readonly DescripteurWorkerPc[] {

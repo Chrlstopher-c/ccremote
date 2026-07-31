@@ -92,6 +92,25 @@ describe('surface d’outils (A.2.2)', () => {
     );
   });
 
+  // ☠ Les outils de PROJET sont conditionnels : absents si la composition n'a
+  // pas câblé leur port. C'est voulu (mieux vaut un outil invisible qu'un outil
+  // qui rend du vide) — mais ça veut dire que le compte ci-dessus ne les couvre
+  // PAS, et qu'un port oublié à l'assemblage ne ferait échouer aucun test. D'où
+  // les deux tests suivants : ils vérifient l'apparition, pas l'existence.
+  test('rechercher_projets apparaît dès que le chercheur est câblé', () => {
+    const avec = construireOutilsControle({
+      ...deps,
+      chercheurProjets: { rechercherProjets: async () => ({ motif: 'x', chemin: '/', occurrences: [] }) },
+    }).map((o) => o.name);
+    expect(avec).toContain('rechercher_projets');
+  });
+
+  test('et reste ABSENT quand il ne l’est pas — jamais un outil qui rend du vide', () => {
+    // Un `rechercher_projets` exposé sans port rendrait « aucune occurrence »
+    // sur tout, et l'orchestrateur conclurait que le code cherché n'existe pas.
+    expect(construireOutilsControle(deps).map((o) => o.name)).not.toContain('rechercher_projets');
+  });
+
   test('☠ H-57 (FAIT AUTORITÉ) — arret_urgence n’est JAMAIS un outil de l’orchestrateur', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms).not.toContain('arret_urgence');
