@@ -6,14 +6,28 @@
 **Point d'entrée pour reprendre : `harness/REPRISE.md`, section « SESSION DU 31/07 (matin) », en FIN
 de fichier.** Ne pas repartir de ce STATE pour le harness — REPRISE.md est plus précis et tenu à jour.
 
-**État au 31/07 (matin)** : EN PRODUCTION, commit `bb80c8f`, **1093 tests / 1062 verts** (31 rouges
-PRÉEXISTANTS sur `projets/` + `validation-proprietes/`), typecheck propre, SDK épinglé **0.3.220**
-(CLI embarqué 2.1.220). Six correctifs livrés dans la matinée — saturation périmée, sonde de quotas,
-`lire_fichier`, validation du modèle, bump SDK, epoch de fencing. Trois missions réelles sur
-`/mnt/projects/agora` terminées, la dernière avec `epoch=1` et le compte A à 3 % hebdo.
-`☠` Deux réflexes hérités de cette session : le déploiement a DEUX moitiés (redémarrer
-`ccremote-pc` après toute modification du canal ou du SDK), et un correctif vert peut cacher une
-panne intacte (vérifier que la SOURCE d'un calcul est écrite, sur un artefact réel).
+**État au 31/07 (fin de journée)** : EN PRODUCTION, commit `05999e4`, **1039 tests / 1039 verts**
+(la suite est VERTE — les « 31 rouges préexistants » dépendaient du scratchpad d'une session Claude
+Code disparue, corrigé), typecheck propre, SDK épinglé **0.3.220** (CLI embarqué 2.1.220), schéma du
+registre en **version 13**. Trois services actifs, `pcOnline: true`.
+
+Deux chantiers structurants livrés dans la journée, au-delà des six correctifs du matin :
+
+1. **Les droits d'une équipe existent réellement.** `creer_equipe` exige `acces` (`lecture` |
+   `ecriture`), l'orchestrateur le choisit, Chris le voit sur la carte avant d'autoriser, et le
+   harness le POSE en `disallowedTools`. Avant : `deniedToolPatterns: []` — le plancher de déni
+   lui-même n'était branché sur aucun chemin de production. Vérifié de bout en bout sur deux mandats
+   réels (Vela en `lecture` puis en `ecriture`, accès relu en base).
+2. **Autonomie totale.** Le bus d'escalade est RETIRÉ (il était câblé de bout en bout et n'a jamais
+   rien porté), les workers tournent en `bypassPermissions`, `AskUserQuestion` leur est refusé.
+   Aucune autorisation ne remonte plus jamais à un humain : Chris décide à l'approbation du mandat,
+   plus jamais action par action.
+
+`☠` Trois réflexes hérités de cette journée : le déploiement a DEUX moitiés (redémarrer
+`ccremote-pc` après toute modification du canal, du SDK ou des options de worker) · un correctif vert
+peut cacher une panne intacte (vérifier que la SOURCE d'un calcul est écrite, sur un artefact réel) ·
+le system prompt de l'orchestrateur est une SURFACE À DÉPLOYER, pas de la documentation — toute
+capacité ajoutée ou retirée à sa surface MCP s'y répercute le même jour.
 
 Upgrade majeure : piloter des projets depuis l'app vers le PC. Un orchestrateur maître (session
 Agent SDK sur le Pi) avec qui Chris discute, qui dispatche des missions Claude Code sur le PC,
@@ -97,15 +111,24 @@ observables et pilotables à distance depuis mobile.
 
 À savoir avant tout test du système agentique (établi 23/07) :
 
-1. **`creer_equipe` ne crée rien** — c'est une PROPOSITION (H-61). Un humain autorise dans l'UI.
+1. **`creer_equipe` ne crée rien** — c'est une PROPOSITION (H-61). Chris autorise dans l'UI. C'est
+   le SEUL point de décision humaine qui subsiste, et il est délibéré.
 2. **Le modèle des SOUS-AGENTS ne peut pas être imposé.** `creer_equipe` n'accepte `modele`/`effort`
    que pour le LEAD ; le modèle de chaque sous-agent est choisi par le lead à l'appel de l'outil
    `Agent`. « Sous-agents en Haiku » est une instruction de CONDUITE dans le mandat, pas un verrou.
-3. **« Lecture seule » n'est pas un verrou** — dette (E), `deniedToolPatterns: []` au dispatch : le
-   plancher de déni est VIDE, la contrainte ne vit que dans le texte du mandat.
+3. **CE QUI EST un verrou, depuis le 31/07** (`ef2524f`, `b60b371`) : le plancher de déni (H-41),
+   inconditionnel sur tout dispatch · l'accès du mandat — `lecture` retire Write/Edit/NotebookEdit
+   de la liste d'outils du worker · `AskUserQuestion`, refusé à toute équipe. Mesuré sur un worker
+   réel, pas déduit : `acceptation/bypass-denis-reel.ts`.
+4. **CE QUI N'EST TOUJOURS PAS un verrou** : le champ `perimetre`, qui reste une description en
+   clair adressée au lead. « Pas de refactor », « ne touche qu'à src/ », « commits isolés » tiennent
+   à son obéissance. Ne jamais les présenter à Chris comme une contrainte appliquée.
+   `Bash` reste ouvert même en `lecture` (décision Chris) : la restriction porte sur l'écriture de
+   FICHIERS, pas sur l'exécution de commandes — écrire via `sed -i` reste possible, mais jamais
+   accidentel.
 
-Conséquence : un test d'équipe mesure la CONFORMITÉ du modèle aux consignes, pas une contrainte
-appliquée par le harness.
+Conséquence : un test d'équipe mesure la conformité du modèle aux consignes de CONDUITE (périmètre,
+sous-agents), et une contrainte réellement appliquée pour les DROITS (accès, plancher).
 
 **Livré le 23/07 (journée)** — le harness ne se contente plus de piloter, il *rend compte* : fil de mission
 réel (réflexions, outils, textes du lead), équipes terminées consultables et désignables par nom,
@@ -138,114 +161,43 @@ Design "Anthropic-style" (cream/serif/orange) repris d'un mockup fourni par Chri
 re-câblé sur le vrai backend (aucune donnée fictive). Mobile-first, streaming SSE, markdown stylisé,
 conversations persistantes en localStorage. Déployé et vérifié fonctionnel en prod.
 
-## Ce qui a été fait — session du 2026-07-06 (suite, fin de journée)
+## Ce qui a été fait — session du 2026-07-31 (harness)
 
-- **Fix bouton extinction PC (bug signalé par Chris)** : `subprocess.Popen(["poweroff"])` échouait
-  silencieusement côté serveur (`Access denied — interactive authentication required`, vu dans
-  `journalctl -u ccremote-server`). Cause : `ccremote-server.service` tourne comme service systemd
-  (`User=trinity`) hors session logind — le `CanPowerOff=yes` vérifié précédemment ne valait que
-  pour la session graphique active, pas pour un process de service. Fix : règle polkit dédiée
-  `/etc/polkit-1/rules.d/49-ccremote-poweroff.rules` autorisant `org.freedesktop.login1.power-off`
-  pour l'uid `trinity` sans condition de session. Vérifié via `pkcheck` (`result=yes`) ; pas de test
-  réel déclenché (irréversible), à valider par Chris depuis l'app.
-- **Fix quotas Cerebras pas "temps réel" (bug signalé par Chris)** : les quotas affichés restaient
-  figés sur les valeurs du dernier appel API réel — après un appel épuisant un quota (ex: 5/min),
-  la minute suivante sans nouvel appel montrait toujours l'ancien `remaining`, donnant l'impression
-  fausse que le quota ne se régénère jamais. Cause : `agent/usage.py` stocke un snapshot passif des
-  headers `x-ratelimit-*`, jamais recalculé entre deux appels. Fix : `_effective_quotas()` compare
-  le temps écoulé depuis `updated_at` à la durée de la fenêtre (`WINDOW_SECONDS`) et resynthétise
-  `remaining = limit` si la fenêtre est dépassée — heuristique "reset complet après un cycle entier
-  sans appel", cohérente avec une fenêtre glissante Cerebras. Appliqué à `get_snapshot()` et
-  `_combined_quotas()`. Déployé sur le Pi (`scp` + `systemctl restart ccremote-web`), service
-  vérifié actif.
+Seize commits. Six correctifs le matin (voir `harness/REPRISE.md`), puis deux chantiers de fond.
 
-## Ce qui a été fait — session du 2026-07-06
+**Les droits d'une équipe deviennent réels** (`ef2524f`, `a34cfef`) — `shared/acces-mandat.ts`
+devient la source unique : `acces` s'énumère (`lecture` | `ecriture`), se valide, et se traduit en
+refus d'outils POSÉS sur le worker. Migration 13. Deux défauts distincts fermés du même coup : le
+plancher de déni n'était branché sur aucun chemin de production (`?? []` rendait un tableau vide,
+donc rien n'interdisait d'écraser `~/.ssh` ou les identifiants OAuth du poste — 9ᵉ « écrit, testé,
+branché sur rien »), et `perimetre` était un texte libre qui ne partait que dans le prompt du lead.
+Le system prompt de l'orchestrateur apprend ce droit et comment choisir.
 
-- Retrait du sous-titre "Agent local" sous le logo ccremote dans la sidebar (demande directe de Chris)
-- Déploiement effectué directement par l'agent via `~/.ssh/id_ed25519_ccremote` (accès SSH direct
-  au Pi `pi@pi.exemple`, sudo passwordless pour le restart du service) — plus besoin que Chris
-  exécute les commandes lui-même à chaque déploiement pi-web. Voir mémoire sémantique
-  `ccremote-pi-ssh-access`.
-- Affichage des quotas repensé après remarque de Chris : la carte "Utilisation" montrait
-  seulement la clé active, ce qui donnait l'impression fausse d'être proche du mur en cas de
-  quasi-épuisement de key1 alors que key2 est intacte à côté. Vu que le fallback est réel et
-  automatique, la capacité combinée (10 req/min, 60k tokens/min avec 2 clés) n'est pas fictive —
-  affichée en priorité (`agent/usage.py::get_all`, somme des limites/restants des clés
-  configurées), avec le détail par clé toujours visible en dessous pour ne rien cacher.
-- Fix signalé par Chris : le snapshot de quotas (en mémoire) redevenait vide à chaque restart du
-  serveur, ce qui donnait l'impression trompeuse que le quota réel était remis à zéro — alors que
-  le quota côté Cerebras n'est jamais affecté par un restart de notre process, seul notre miroir
-  local l'était. Fix : `warm_up_usage()` (`agent/client.py`) fait un appel minimal (max_tokens=1)
-  par clé configurée au démarrage du serveur (`lifespan` FastAPI, `app.py` — migré depuis
-  `on_event("startup")` déprécié au passage), pour peupler le vrai snapshot avant toute requête
-  utilisateur. Coût : 1 requête par clé et par restart.
-- Rotation automatique de clé API Cerebras (`CEREBRAS_API_KEY_2`) : `create_completion`/
-  `create_completion_stream` (`agent/client.py`) essaient la clé active, et sur `RateLimitError`
-  (429) basculent vers la clé suivante et retentent une fois avant de propager l'erreur. Quotas
-  suivis séparément par clé (`agent/usage.py`, `get_snapshot(key_label)`). Un event SSE
-  `key_rotated` prévient l'UI (toast + entrée historique) quand la bascule a lieu en cours de
-  conversation. Logique de rotation validée par un test isolé (mock de RateLimitError, sans
-  requête réseau — le rate limit Cerebras (fenêtre glissante) rendait un test live peu fiable
-  sans gaspiller le quota réel).
-- Suivi d'usage API Cerebras (`agent/usage.py`) : `create_completion`/`create_completion_stream` passent
-  par `with_raw_response` pour capturer les vrais headers `x-ratelimit-{limit,remaining}-{requests,tokens}-
-  {minute,hour,day}` renvoyés par Cerebras à chaque appel, stockés en snapshot mémoire (process unique,
-  pas de DB nécessaire). Exposé via `GET /api/agent/usage` et embarqué dans chaque event `done` du stream
-  (`agent/chat.py`), donc mis à jour dans l'UI sans requête supplémentaire après chaque échange.
-- Contexte de la conversation active : `POST /api/agent/context-usage` réutilise
-  `estimate_messages_tokens`/`MODEL_CONTEXT_TOKENS` déjà en place pour le compactage — donne
-  tokens_used/tokens_limit pour l'historique + le modèle courants, rafraîchi au changement de vue/modèle/
-  conversation. Affiché en pill compacte dans le header Agent IA (`headerContextUsage`) et en détail dans
-  une nouvelle carte "Utilisation" (Paramètres), avec les 6 barres de quotas (2 types × 3 fenêtres),
-  couleur verte/orange/rouge selon le ratio consommé (seuils 70%/90%).
-- Fix `deploy-web-pi.sh` : ne synchronisait que 4 fichiers (app.py/config.py/requirements.txt/
-  templates/index.html), jamais `agent/`, `static/`, ni `pc_client.py` — bug pré-existant découvert
-  en tentant de déployer cette feature. Corrigé pour syncer les dossiers entiers.
-- Fix header mobile dupliqué (topbar séparée + header de vue) → hamburger intégré dans chaque
-  header de vue, un seul header visible par vue
-- Fix bug de propagation d'event : le clic sur le hamburger bubblait jusqu'au listener global
-  `[data-view]` qui refermait la sidebar juste après l'avoir ouverte (`stopPropagation()`)
-- Réponses de l'agent IA en streaming SSE (token par token), `content_delta`/`reasoning_delta`/
-  `tool_call`/`compacted`/`done` comme types d'event
-- Rendu markdown stylisé (marked + DOMPurify, CDN pinnés) au lieu de texte brut échappé
-- Conversations persistantes : listables/reprenables depuis la sidebar (localStorage
-  `ccr_conversations`), fini la perte au clic sur "Nouvelle conversation"
-- Compactage automatique de l'historique selon la fenêtre de contexte du modèle actif
-  (`agent/context.py`) — résumé via le même modèle, notifié côté UI par un event `compacted`
-- Fix bug prod (crash rapporté par Chris) : `tmux send-keys` envoyait texte + `Enter` en un seul
-  appel — Claude Code (TUI en bracketed-paste) avalait l'Enter sans soumettre, le texte restait
-  visible dans l'input sans être envoyé. Fix : deux appels `send-keys` séparés par un court délai
-- Fix robustesse : timeout ajouté sur `ws.recv()` (jamais de hang indéfini côté pi-web↔PC),
-  erreurs Cerebras interceptées proprement dans la boucle de streaming au lieu de couper le flux
-  SSE sans event `done`
-- Nouveau : switch de compte Claude Code depuis Paramètres — deux comptes déjà présents en
-  snapshots (`~/.claude/.credentials_account1.json` / `_account2.json`), un switch bascule
-  `.credentials.json` et redémarre les sessions tmux en cours pour qu'elles chargent la nouvelle
-  identité. Métadonnées dans `~/.claude/.ccremote-accounts.json` (créé et confirmé cette session :
-  account1 = compte-a@exemple.fr actif, account2 = compte-b@exemple.fr)
-- Nouveau : bouton extinction PC (`poweroff`, sans sudo — confirmé autorisé par polkit pour la
-  session active via `CanPowerOff` → yes)
-- Déployé et vérifié en prod à chaque étape (curl direct + Playwright DOM/console, jamais de
-  screenshot sur demande explicite de Chris)
-- Fix hauteur mobile Safari : `h-screen`/`min-h-screen` (`100vh`) remplacés par `100dvh` (avec
-  fallback `vh`) sur `index.html` (`.app-shell`) et `login.html` — la barre d'outils dynamique de
-  Safari iOS rendait `100vh` plus grand que la zone réellement visible, poussant le bas de page
-  hors écran et rendant toute la page scrollable (cachait tour à tour header et input selon le
-  scroll). Confirmé par Chris sur iPhone XS.
-- Fix responsive carte "PC distant" (Paramètres) : `grid-cols-2` forçait deux colonnes même sur
-  mobile, coupant la valeur MAC. Passé en `grid-cols-1 sm:grid-cols-2` avec label/valeur empilés
-  verticalement sur mobile.
-- `gemma-4-31b` confirmé réellement utilisé et fonctionnel par Chris (levée du doute posé plus tôt
-  dans la session sur ce modèle)
-- Conformité complète aux standards projet : `README.md`, `ARCHITECTURE.md` (avec justification
-  explicite de la déviation "découpage par machine" plutôt que par domaine métier pur — pertinent
-  pour un outil perso à 3 exécutables physiques), `start.sh`/`stop.sh`/`restart.sh` (gèrent le
-  dev local de `pi-web` par PID file, `server.py` reste géré par systemd), `.env.example` racine
+**Autonomie totale** (`df0e351`, `b60b371`) — le bus d'escalade est retiré : câblé de bout en bout
+(port distant, canal bidirectionnel, machine à états, outils MCP, routes, UI) et structurellement
+mort, son unique producteur `canUseTool` n'étant jamais appelé en `permissionMode: 'auto'`. Les
+workers passent en `bypassPermissions` (renversement assumé de H-40/H-42, dont le test garde-fou est
+réécrit avec son motif), `AskUserQuestion` leur est refusé, et le prompt initial dit au lead qu'il
+décide seul et que ses questions vont dans son rapport final.
+
+**La suite de tests redevient un signal** (`0383baa`) — les 31 rouges « préexistants » ne l'étaient
+pas : ils codaient en dur le scratchpad d'une session Claude Code disparue et validaient des
+répertoires créés à la main dedans. `test-harness/racine-temporaire.ts` : un test crée ce qu'il
+valide, sous `os.tmpdir()`. **1039 tests, 0 échec.**
+
+**Vérifié en production, sur artefact** — deux mandats réels sur Vela, `acces=lecture` puis
+`acces=ecriture` relus en base ; l'orchestrateur choisit de lui-même, l'annonce, et adapte objectif
+et critère d'arrêt au changement de droits.
 
 ## Décisions prises
 
 | Décision | Raison | Date |
 |----------|--------|------|
+| `acces` obligatoire dans `creer_equipe`, deux valeurs | Un droit s'énumère et se valide ; la sortie d'un LLM passée à un exécutable est une entrée utilisateur | 2026-07-31 |
+| `Bash` reste ouvert en accès `lecture` | Décision Chris : « lecture seule » borne l'écriture de FICHIERS, pas l'exécution de commandes. Un agent d'exploration travaille au shell — l'en priver le rend infirme, pas sûr. Écrire via `sed -i` reste possible mais jamais ACCIDENTEL, et le plancher couvre le catastrophique | 2026-07-31 |
+| Retrait complet du bus d'escalade | Câblé de bout en bout, zéro demande depuis le premier jour (`canUseTool` jamais appelé en mode `auto`). Une catégorie vide affirme une protection inexistante | 2026-07-31 |
+| Workers en `bypassPermissions` | Renversement de H-40/H-42. Le mode `auto` était un client silencieux du bus supprimé : un refus du classifieur ne menait plus nulle part et l'équipe aurait attendu un verdict que personne ne peut rendre | 2026-07-31 |
+| `AskUserQuestion` refusé à toute équipe | Exception C.1.2 atteignant `canUseTool` même sous une règle d'allow. Personne ne lit le flux d'une équipe qui travaille — le lead y perdait un tour | 2026-07-31 |
 | Cerebras (pas Groq) comme provider IA | Choix explicite de Chris | avant 2026-07-06 |
 | Modèle par défaut `gpt-oss-120b` | Seul modèle avec tool-calling vérifié fonctionnel parmi les 3 dispo sur la clé | avant 2026-07-06 |
 | Contexte des modèles estimé, pas documenté par l'API | `/v1/models` Cerebras ne renvoie pas la taille de contexte ; valeurs conservatrices posées en dur dans `client.py` | 2026-07-06 |
@@ -328,23 +280,38 @@ section « RÈGLE ABSOLUE ».
 
 ## Prochaines étapes
 
-1. **(B) Faire apparaître les sous-agents** — seul point de la liste du 23/07 encore entier.
-   `subagents: []` est délibérément vide : ne PAS le remplir avant d'avoir une vraie source.
-   La vérité sur « qui existe » vient du transcript, pas du flux (H-72.4, non déterministe).
-2. **(D) Élucider l'écart de ~4 K tokens** entre `totalTokens` et la somme des postes chargés.
-3. **(E) Dettes** : `deniedToolPatterns: []` au dispatch, index de rotation du master en mémoire,
-   `harness-orchestrateur.js` au-delà de 500 lignes.
+**Liste tenue à jour dans `TODO.md`** (section « EN COURS »), plus précise que celle-ci.
+
+1. **Chris envoie ses notes d'idées** prises il y a quelques jours — cas d'usage et améliorations à
+   tester. C'est le point de reprise convenu en fin de session du 31/07.
+2. **Exercer le mode rapide et ultracode** — `fastMode` est exposé par `/modeles` (seul Opus 5 le
+   déclare), les cases existent à l'écran, leur effet réel n'a jamais été vérifié.
+3. **(D) Élucider l'écart de ~4 K tokens** entre `totalTokens` et la somme des postes chargés.
+4. **(E-bis) Revoir les autres opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en
+   entier ; un seul opt-in a été vérifié.
+5. **Dettes** : `superviseur-workers.ts` à 710 lignes · index de rotation du master en mémoire ·
+   `harness-orchestrateur.js` au-delà de 500 lignes · `BUDGET_MANDAT_DEFAUT_USD` codé en dur à 12 $,
+   non réglable depuis l'orchestrateur ni l'interface.
 
 ## Points en suspens
 
-- **Les deux comptes Claude sont saturés** (mesuré le 23/07 au soir) : fenêtre 5 h à 100 % sur A et
-  B, semaine à 93 % sur A. Aucune équipe ne pourra être dispatchée avant les resets. Ce n'est plus
-  un défaut silencieux — le harness l'affiche et écarte les comptes `rejected`.
+- **Deux surfaces mortes repérées le 31/07, non traitées** (signalées à Chris, hors scope du jour) :
+  l'audit `PreToolUse` est branché sur un `CollecteurAuditPermissions` créé neuf à chaque worker,
+  jeté à la fin, que personne ne lit — même famille de défaut que le bus d'escalade · le formulaire
+  manuel de mandat dans l'UI est un mock (`proposeMandate` empile une proposition locale et ne
+  dispatche rien), il ne porte donc pas l'accès.
+- **L'étage « lead → orchestrateur » n'existe pas.** L'organisation voulue est « sous-agents → lead
+  → orchestrateur → humain ». Les deux premiers étages sont natifs du SDK, le troisième est absent —
+  et ce n'est PAS du bus de permissions : c'est un canal de conversation remontante (le lead a une
+  QUESTION et attend). Aujourd'hui l'orchestrateur peut lire une équipe et lui pousser un message,
+  l'inverse n'existe pas.
+- **`STATE.md` dépasse encore la limite de 300 lignes** (335) : il couvre deux produits, l'app v1 et
+  le harness. À scinder si la limite devient gênante.
+- **Quotas** : compte A à 27 % / 3 %, compte B à 12 % / 76 % (mesuré le 31/07 au matin). La sonde
+  tourne à 60 s par compte en rotation, le 429 chronique est résorbé.
 - **Écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés, sur une mission
   réelle, alors que la somme tombait au token près en mesure locale. Hypothèse non prouvée : total
   calculé en direct, catégories issues d'un état antérieur. **Le total reste la référence.**
-- **La sonde de quota ouvre une session CLI par compte toutes les 10 min** — coût mesuré
-  négligeable, mais compromis à revoir si les comptes restent durablement saturés.
 - **Bouton extinction non re-testé en réel** après le fix polkit (le test aurait réellement éteint
   la machine) — vérification faite uniquement via `pkcheck` (résultat `yes`). À confirmer par Chris
   depuis l'app à sa prochaine utilisation.
@@ -364,6 +331,14 @@ section « RÈGLE ABSOLUE ».
   fenêtre de contexte n'est pas vérifiée (32k posé par prudence).
 
 ## Historique
+
+### Sessions du 2026-07-06 (app v1) — archivé le 31/07
+Deux sessions consacrées à l'app v1 (chat Cerebras + pilotage du PC), avant l'existence du harness.
+Livré : agent IA avec tool-calling, refonte frontend d'après mockup, page de login, passe
+mobile-first, bascule multi-comptes Claude Code par snapshots de `.credentials.json`, bouton
+d'extinction du PC, fix `100dvh` pour Safari iOS, conformité aux standards projet (README,
+ARCHITECTURE, start/stop/restart, `.env.example`). L'app v1 reste en production et fonctionne —
+le harness est un ajout, pas un remplacement. Détail complet dans l'historique git (juillet 2026).
 
 ### Sessions précédentes (avant 2026-07-06)
 - Mise en place initiale : repo GitHub privé, checkpoint stable

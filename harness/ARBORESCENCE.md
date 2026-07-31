@@ -66,7 +66,7 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `serveur.ts` / `.test.ts` — assemble le serveur MCP (`createSdkMcpServer`), 12 outils
 - `outils-inspection.ts` / `.test.ts` — outils en lecture (lister/état/historique/permissions)
 - `outils-cycle-vie.ts` / `.test.ts` — `creer_equipe`/`envoyer_a_equipe`/`interrompre`/`arreter`/`relancer`
-- `outils-arbitrage.ts` / `.test.ts` — `repondre_permission`/`definir_budget`
+- `outils-budget.ts` — `definir_budget` (ex-`outils-arbitrage.ts` : `repondre_permission` est parti avec le bus d'escalade le 31/07)
 - `contrat.ts` / `.test.ts` — contrat de retour uniforme (`applique`/`accepte`/`refuse`/`differe`)
 - `plafond.ts` / `.test.ts` — `avecPlafond`, garantie mécanique du non-blocage (A.2.1)
 - `mandat.ts` / `.test.ts` — construction d'une proposition de mandat (H-61)
@@ -294,6 +294,10 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
 
 - `orchestrateur-reel.ts` — M-40+M-41+M-42 assemblés sur une vraie session Opus
 - `worker-reel.ts` — M-01+M-20+M-31 en conditions réelles
+- `bypass-denis-reel.ts` — `☠` prouve sur un worker RÉEL que `disallowedTools` tient en
+  `bypassPermissions` : Write/Edit/NotebookEdit retirés de la liste d'outils, Read/Bash conservés,
+  règle scopée du plancher toujours refusée. Tout l'accès `lecture` d'un mandat en dépend —
+  **à repasser à tout changement de version du SDK**
 - `worktree-git-reel.ts` — git réel, bug de perte de données trouvé et corrigé
 - `multi-comptes-reel.ts` — deux comptes Claude Code en parallèle
 - `session-store-reel.ts` — `SessionStore` sollicité par le vrai SDK
