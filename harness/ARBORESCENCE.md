@@ -10,7 +10,6 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `control-plane/api-web/serveur-api.ts` — serveur HTTP en loopback (refuse de démarrer sur une interface publique : aucune authentification propre, pi-web la lui apporte)
 - `control-plane/api-web/enveloppe.ts` — l'enveloppe `pcOnline`/`stale`/`data` : le PC absent n'est JAMAIS une erreur (H-75), une panne du control plane en reste une
 - `control-plane/api-web/vue-missions.ts` — `Mission` du registre → forme d'affichage ; champs sans source réelle rendus vides, jamais fabriqués
-- `control-plane/api-web/vue-escalades.ts` — demandes réellement escaladées uniquement (H-40/M-20)
 - `control-plane/api-web/vue-comptes.ts` — jauges 5 h / 7 j en pourcentage + heure exacte du reset (AM/PM, avec le jour pour la semaine) ; `reset_a` est en **millisecondes** epoch, une seule convention
 - `control-plane/api-web/vue-feed.ts` — le fil d'une mission : transitions d'état, permissions (y compris celles résolues seules par le lead, H-64) et activités du lead (réflexion / outil / texte)
 - `control-plane/api-web/vue-feed.test.ts` — banc du fil : natures distinguées, permissions auto tracées, chemin bloqué jamais inventé
@@ -48,9 +47,7 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `acceptation/lien-deux-machines-pi.ts` / `-pc.ts` — banc RÉEL à deux machines (aucune session Claude Code, aucun quota consommé) : lancer le premier sur le Pi, le second sur le PC
 - `composition/pc/horloge-avec-gigue.ts` — injecte de la gigue par tentative dans le backoff de `LienWebSocket` via le seam `HorlogeTransport` (limite mesurée : `backoffMs` est un tableau fixe, pas de gigue possible autrement)
 - `composition/pc/canal-controle-recepteur.ts` — reçoit les `controle_requete` du Pi sur le lien unique, les fait traverser `CanalControle`, répond (remplace `serveur-controle.ts`, supprimé)
-- `composition/pc/port-bus-permissions-distant.ts` — `PortBusPermissions` réel pour le déploiement à DEUX machines (H-73.1), complète `bus-permissions/port-colocalise.ts`
-- `composition/pc/construire-worker-spec.ts` — construit un `WorkerSpec` qui n'omet jamais `portBusPermissions`
-- `composition/bus-permissions/port-colocalise.ts` — `PortBusPermissions` réel pour déploiement colocalisé (limite documentée en tête de fichier)
+- `composition/pc/construire-worker-spec.ts` — construit un `WorkerSpec` qui n'omet jamais `portAuditPermissions`
 - `composition/deploiement/ccremote-pc.service` — unité `systemd --user` du process PC, `Restart=always` (H-75)
 
 ## `control-plane/` — branche Pi (autorité unique)
@@ -109,11 +106,10 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `registre.test.ts` — tests d'intégration du point d'entrée `Registre`
 - `index.ts` — interface publique + `ouvrirRegistre()`
 
-### `bus-permissions/` — C.2/C.3, mission M-21
-- `machine-etats.ts` / `.test.ts` — `MachineEtatsDemandes`, six états, cinq invariants
-- `types.ts` — formes de données (`EntreeDemande`, `Verdict`, `ResultatRedelivrance`)
-- `logger.ts` — journal pino
-- `index.ts` — interface publique
+### `bus-permissions/` — RETIRÉ le 2026-07-31
+Le bus d'escalade était câblé de bout en bout et n'a jamais rien porté : son seul producteur
+possible, `canUseTool`, n'est jamais appelé en `permissionMode: 'auto'`. Ce qui protège
+réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/acces-mandat.ts`.
 
 ### `audit-permissions/` — C.5, mission M-22
 - `collecteur.ts` / `.test.ts` — `CollecteurAuditPermissions`, trace d'audit
@@ -150,7 +146,7 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 
 - `start-worker.ts` / `.test.ts` — séquence de démarrage (pré-vol → spawn → capacités)
 - `options-composition.ts` / `.test.ts` — composition des `Options` SDK d'un worker (H-44)
-- `can-use-tool.ts` / `.test.ts` — rappel `canUseTool` (H-73.1), refus par défaut sans port
+- `can-use-tool.ts` — rappel `canUseTool` réduit à un refus fail-closed : le SDK lève si le champ manque lors d'une redélivrance, il n'arbitre plus rien
 - `process-spawner.ts` / `.test.ts` — spawn local, capture pid+starttime (dette n°1)
 - `preflight-config.ts` / `.test.ts` — pré-vol config machine (H-44, `machine_claude_md_missing`)
 - `model-floor.ts` / `.test.ts` — résolution d'alias modèle + plancher (H-43)
@@ -271,11 +267,18 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `logger.ts` — journal pino
 - `index.ts` — interface publique
 
+## `shared/` — règles transverses, une par fichier, sans I/O
+
+- `acces-mandat.ts` / `.test.ts` — ce qu'une équipe a le DROIT de faire (`lecture` | `ecriture`) et les outils que ça refuse. Source unique : `perimetre` est descriptif, lui seul porte un droit
+- `modeles-claude.ts` / `.test.ts` — catalogue des modèles et de leurs niveaux d'effort, aligné sur `supportedModels()` du SDK embarqué ; normalise ce qu'un LLM écrit spontanément
+- `saturation-compte.ts` / `.test.ts` — un verdict de saturation ne survit pas à sa fenêtre de quota
+
 ## `test-harness/` — outillage de test, jamais importé par un module de production
 
-- `contrats/*.ts` — contrats de pannes injectables (permissions, transport, session-store, superviseur, diffusion, horloge)
+- `contrats/*.ts` — contrats de pannes injectables (transport, session-store, superviseur, diffusion, horloge)
+- `racine-temporaire.ts` — racine de fichiers éphémères sous `os.tmpdir()` : un test crée ce qu'il valide, jamais un chemin de scratchpad préparé à la main
 - `deterministe/*.ts` — horloge simulée, aléa semé, pompe de tours
-- `doublures/*.ts` — doublures de tous les ports externes (bus, diffusion, lien, store, superviseur, tuyau)
+- `doublures/*.ts` — doublures des ports externes (diffusion, lien, store, superviseur, tuyau)
 - `journal/*.ts` — journal de pannes injectées
 - `rejeu.ts` — rejeu déterministe d'un scénario
 - `logger.ts` — journal pino
@@ -283,7 +286,8 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 
 ## `validation-proprietes/` — mission M-53, les cinq propriétés
 
-- `non-blocage.test.ts` / `isolation.test.ts` / `reprise.test.ts` / `modularite.test.ts` / `bornage.test.ts`
+- `non-blocage.test.ts` / `isolation.test.ts` / `modularite.test.ts` / `bornage.test.ts`
+- `reprise.test.ts` — RETIRÉ le 2026-07-31 : la propriété portait entièrement sur la redélivrance du bus d'escalade, qui n'existe plus
 - `README.md` — verdict par propriété, ce qui n'est pas prouvé
 
 ## `acceptation/` — bancs d'essai RÉELS (hors `bun test`, jamais lancés en CI)

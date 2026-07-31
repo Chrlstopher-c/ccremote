@@ -17,6 +17,19 @@
 - [x] ~~**Surveiller la sonde de quotas.**~~ Clos le 31/07 : relevé prod à 09:19 → compte-a observé
       à 09:19:26, compte-b à 09:18:26, **60 s d'écart exact**. La rotation tourne à la période
       nominale, le 429 chronique est résorbé, pas de backoff nécessaire.
+- [x] ~~**Dette : `deniedToolPatterns: []` au dispatch**~~ — corrigé le 31/07 (`ef2524f`). Le plancher
+      de déni est désormais INCONDITIONNEL, et l'accès du mandat (`lecture` | `ecriture`) refuse
+      réellement Write/Edit/NotebookEdit/Bash à une équipe de lecture. `perimetre` reste descriptif.
+- [x] ~~**Bus d'escalade**~~ — RETIRÉ le 31/07 (`df0e351`), décision de Chris. Il était câblé de bout
+      en bout et n'a jamais rien porté : `canUseTool` n'est jamais appelé en `permissionMode: 'auto'`.
+      Surface MCP 13 → 11 outils, routes `/escalades` et vue UI supprimées.
+- [x] ~~**31 tests rouges permanents**~~ — corrigés le 31/07 (`0383baa`). Ils dépendaient du
+      scratchpad d'une session Claude Code disparue. Suite complète : **1037 pass, 0 fail**.
+- [ ] **L'étage manquant : le lead ne peut pas interpeller l'orchestrateur.** L'organisation voulue
+      par Chris est « sous-agents → lead → orchestrateur → humain ». Les deux premiers étages
+      existent (natifs du SDK). Le troisième n'existe pas, et ce n'est PAS du bus de permissions :
+      c'est un canal de conversation remontante (le lead a une QUESTION et attend). Aujourd'hui
+      l'orchestrateur peut lire une équipe et lui pousser un message ; l'inverse n'existe pas.
 - [ ] **Mode rapide et ultracode : jamais exercés.** `fastMode` est exposé par `/modeles` (seul
       Opus 5 le déclare) et les cases existent à l'écran — leur effet réel n'a jamais été vérifié.
 - [ ] **(E-bis) Revoir les AUTRES opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en

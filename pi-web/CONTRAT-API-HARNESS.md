@@ -118,33 +118,24 @@ Verdict `boucle` ⇒ `state` bascule à `echec`, worktree conservé. `incertain`
 
 ---
 
-## Escalades
+## Escalades — RETIRÉ le 2026-07-31
 
-### `GET /api/harness/escalades` → `HarnessAPI.getEscalades()`
+Les routes `GET /api/harness/escalades` et `POST /api/harness/escalades/{id}/resolve` **n'existent
+plus**, non plus que la vue correspondante.
 
-```ts
-type Escalade = {
-  id: string; missionId: string; title: string; sub: string;
-  age: string; old: boolean; tool: string;
-  phrase: string;                    // ce que l'agent voulait faire
-  why: string;                       // decisionReason du plancher de déni (H-40/M-20)
-  path?: string;
-  suggestions: string[];             // suggestions du SDK, si présentes
-}
-```
-Ne contient **que** ce qui a franchi le plancher de déni générique (H-40/M-20). Tout le reste —
-y compris les permissions résolues seules par le lead — vit dans `feed` de la mission (H-64), pas
-ici. Les demandes **n'expirent jamais** côté données ; `old` est un indicateur d'affichage seulement.
+Motif, mesuré et non supposé : le bus d'escalade était câblé de bout en bout — port distant côté PC,
+canal bidirectionnel Pi↔PC, machine à états sur le Pi, outils MCP, routes, UI — et n'a jamais rien
+porté. Son unique producteur possible était `canUseTool`, que le SDK **n'appelle jamais** en
+`permissionMode: 'auto'` : le classifieur du lead tranche seul (H-40/H-64). Zéro demande depuis le
+premier jour, donc une catégorie vide à l'écran qui affirmait une protection inexistante.
 
-### `POST /api/harness/escalades/{id}/resolve` → `HarnessAPI.resolveEscalade(id, verdict, reason?)`
-`verdict: 'autorise' | 'refuse'`. En cas de refus, `reason` est **réinjecté à l'agent** via son
-`requestId` (pas un simple log) — c'est ce qui lui permet de repartir sur une autre voie.
+Ce qui protège réellement, et qui reste :
+- le **plancher de déni** (H-41), inconditionnel, posé en `disallowedTools` à chaque dispatch ;
+- l'**accès du mandat** (`lecture` | `ecriture`), qui refuse `Write`, `Edit`, `NotebookEdit` et
+  `Bash` à une équipe en lecture seule — voir `harness/shared/acces-mandat.ts`.
 
-`⚠` Pièges mesurés à respecter dans l'implémentation réelle (H-73/H-73.1) :
-- `canUseTool` doit être fourni **même en `permissionMode: 'auto'`** — c'est l'unique canal de
-  redélivrance après une reconnexion, alors même qu'il n'est jamais appelé en régime normal.
-- Dédupliquer par `request_id` pour les requêtes **déjà résolues** (le SDK déduplique nativement
-  les requêtes encore en vol, pas celles-ci).
+Les deux refusent sans passer par aucun arbitre, humain ou non. L'audit `PreToolUse` reste en place :
+il observe, il n'arbitre pas.
 
 ---
 
@@ -251,7 +242,7 @@ qu'un clic a eu un effet qu'il n'a pas eu.
 
 ## Ce qui reste en données de démonstration (à remplacer)
 
-Tout `pi-web/static/harness-mock-data.js` : missions, comptes, escalades et modèles sont fictifs,
+Tout `pi-web/static/harness-mock-data.js` : missions, comptes et modèles sont fictifs,
 en mémoire, réinitialisés à chaque rechargement de page. `pi-web/static/harness-api.js` simule une
 latence réseau et un état PC absent activable depuis Paramètres (bouton « Simuler une absence de
 PC ») — ce bouton et les fonctions `_setPcOnline`/`_isPcOnline`/`simulate*` sont marqués `☠ démo
