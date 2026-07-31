@@ -44,3 +44,40 @@ function hPcAbsentBanner(view) {
     <span>PC absent — ${escapeHtml(view || 'cette vue')} affiche les dernières données connues. C'est normal (H-75) : le PC peut être absent des heures, sans que ça soit une erreur.</span>
   </div>`;
 }
+
+/**
+ * Replie/déplie les entrées secondaires de la barre latérale.
+ *
+ * ☠ L'état est mémorisé : replier à chaque chargement une section que Chris
+ * vient d'ouvrir revient à décider à sa place, chaque fois.
+ */
+function hBasculerPlus() {
+  const bloc = document.getElementById('navPlus');
+  const bouton = document.getElementById('btnPlus');
+  if (!bloc || !bouton) return;
+  const ouvert = bloc.style.display !== 'none';
+  bloc.style.display = ouvert ? 'none' : '';
+  bouton.classList.toggle('ouvert', !ouvert);
+  try {
+    localStorage.setItem('ccremote.nav.plus', ouvert ? '0' : '1');
+  } catch {
+    // Stockage refusé (navigation privée) : le repli reste valable pour la session.
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  let ouvrir = false;
+  try {
+    ouvrir = localStorage.getItem('ccremote.nav.plus') === '1';
+  } catch {
+    ouvrir = false;
+  }
+  // ☠ Rouvre aussi si la vue courante EST dans « Plus » — sinon l'élément actif
+  // serait invisible et la barre semblerait avoir perdu la page qu'on regarde.
+  const active = document.querySelector('#navPlus .nav-item.active');
+  if (ouvrir || active) {
+    const bloc = document.getElementById('navPlus');
+    if (bloc) bloc.style.display = '';
+    document.getElementById('btnPlus')?.classList.add('ouvert');
+  }
+});
