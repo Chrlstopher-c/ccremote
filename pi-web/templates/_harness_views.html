@@ -22,20 +22,35 @@
       <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 harness-safety-bar"></div>
     </div>
 
-    <!-- ============ VIEW: HARNESS — DÉTAIL MISSION ============ -->
-    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-mission">
-      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
-        <button class="p-1.5 -ml-1.5 rounded-md hover:bg-black/5" data-view="harness-parc">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><polyline points="15 18 9 12 15 6"/></svg>
+    <!-- ============ VIEW: HARNESS — DÉTAIL MISSION ============
+         ☠ Une mission EST une conversation avec un agent qui utilise des outils.
+         La page n'a donc qu'un header, un fil, et une barre pour lui parler ;
+         tout le reste (identité, mandat, sous-agents, fin de vie) vit derrière
+         le bouton « ··· ». Le tableau de bord d'avant mettait le fil en
+         cinquième position, sous quatre cartes de même poids. -->
+    <div class="view flex-1 flex-col overflow-y-auto h-mission-view" data-view="harness-mission">
+      <header class="h-mhead">
+        <button class="ic" data-view="harness-parc" aria-label="Retour au parc">
+          <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>
         </button>
-        <div class="min-w-0 flex-1">
-          <h1 id="hMissionTitle" class="serif text-[17px] font-medium leading-none" style="color: var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">—</h1>
-          <div id="hMissionSub" class="mono text-[11px] mt-1" style="color: var(--ink-3);">—</div>
+        <div class="ttl">
+          <h1 id="hMissionTitle" class="t1">—</h1>
+          <div id="hMissionSub" class="t2">—</div>
         </div>
-        <span id="hMissionBadge" class="badge">—</span>
+        <button class="more" onclick="hOuvrirDetails()" aria-label="Détails de la mission">···</button>
       </header>
-      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6" id="hMissionBody"></div>
-      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 harness-safety-bar"></div>
+      <div class="h-flow" id="hMissionBody"></div>
+      <div class="h-dock" id="hMissionDock">
+        <div class="h-box">
+          <textarea id="hInstrInput" rows="1" placeholder="Parler à cette équipe…"></textarea>
+          <div class="h-ctl">
+            <span class="h-hint">Lue au prochain tour disponible.</span>
+            <button class="h-snd" onclick="hSendInstruction()" aria-label="Envoyer">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ============ VIEW: HARNESS — SOUS-AGENT (H-72.3) ============ -->

@@ -285,3 +285,193 @@
   .field-error { display: none; font-size: 11px; color: var(--err); margin-top: 6px; background: var(--err-soft); border-radius: 8px; padding: 7px 9px; line-height: 1.45; }
   .field-error.show { display: block; }
   .field.has-error .input-wrap { border-color: var(--err); }
+
+  /* ================= PAGE MISSION — calque Claude Code mobile =================
+     ☠ Le vocabulaire est volontairement limité à cinq objets : la bulle
+     opérateur, la parole de l'agent (serif, sans fond), la valise (une ligne
+     grise qui ouvre une feuille), la feuille, et le dock. Tout ajout d'une
+     sixième forme fait revenir le tableau de bord par la fenêtre. */
+
+  .h-mission-view { background: var(--bg-2); position: relative; }
+  .h-mhead { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; background: var(--bg-3); border-bottom: 1px solid var(--line); }
+  .h-mhead .ic { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto; color: var(--ink); border-radius: 8px; }
+  .h-mhead .ic:hover { background: rgba(31,30,29,.05); }
+  .h-mhead .ttl { flex: 1; min-width: 0; text-align: center; }
+  .h-mhead .t1 { font-size: 15px; font-weight: 600; line-height: 1.2; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-mhead .t2 { font-size: 12.5px; color: var(--ink-3); line-height: 1.3; margin-top: 2px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-mhead .more { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--ink);
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; letter-spacing: 1px; line-height: 0; padding-bottom: 3px; color: var(--ink); }
+  .h-mhead .more:hover { background: rgba(31,30,29,.05); }
+  .h-sd { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
+
+  .h-flow { flex: 1; max-width: 760px; margin: 0 auto; width: 100%; padding: 20px 0 170px; }
+
+  /* bulle opérateur — la seule chose du fil qui porte un fond */
+  .h-op { display: flex; justify-content: flex-end; padding: 14px 18px 22px 46px; }
+  .h-op .b { background: var(--bg-3); border-radius: 20px; padding: 13px 17px;
+    font-size: 15.5px; line-height: 1.44; color: var(--ink); }
+
+  /* parole de l'agent — serif, pleine largeur, aucun fond, aucune carte */
+  .h-say { font-family: 'Source Serif 4', serif; font-size: 19px; line-height: 1.42;
+    color: var(--ink); padding: 0 18px; margin-bottom: 22px; }
+  .h-say > *:last-child { margin-bottom: 0; }
+  .h-say p { margin: 0 0 14px; }
+  .h-say strong { font-weight: 700; }
+  .h-say em { font-style: italic; }
+  /* ☠ Aucun fond, aucune bordure : dans un corps serif, encadrer chaque terme
+     technique fabrique des pavés qui hachent la ligne (mesuré à l'écran 01/08). */
+  .h-say code { font-family: 'JetBrains Mono', monospace; font-size: .82em; word-break: break-word; }
+  .h-say h1 { font-size: 24px; font-weight: 700; line-height: 1.22; margin: 8px 0 14px; letter-spacing: -.01em; }
+  .h-say h2 { font-size: 20.5px; font-weight: 700; line-height: 1.26; margin: 26px 0 11px; }
+  .h-say h3 { font-size: 18.5px; font-weight: 700; margin: 20px 0 8px; }
+  .h-say ul, .h-say ol { margin: 0 0 14px; padding-left: 24px; }
+  .h-say li { margin-bottom: 8px; }
+  .h-say hr { border: none; border-top: 1px solid var(--line-2); margin: 24px 0; }
+  .h-say pre { background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 13px 15px; overflow-x: auto; margin: 0 0 15px; }
+  .h-say pre code { font-size: 13px; line-height: 1.62; white-space: pre; display: block; color: var(--ink-2); }
+  .md-tw { overflow-x: auto; margin: 0 0 15px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  .h-say table { border-collapse: collapse; width: 100%; font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.4; }
+  .h-say th { text-align: left; padding: 10px 13px; font-weight: 600; background: var(--bg-2);
+    border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .h-say td { padding: 10px 13px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  .h-say tr:last-child td { border-bottom: none; }
+  .h-say td code, .h-say th code { font-size: 12.5px; white-space: nowrap; }
+
+  /* valise — une ligne grise, rien d'autre */
+  .h-case { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    padding: 6px 18px 22px; font-size: 15.5px; color: var(--ink-3); background: none; border: none; }
+  .h-case:hover .lb { color: var(--ink-2); }
+  .h-case .lb { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-case .cv { flex: 0 0 auto; font-size: 18px; }
+  .h-case svg { flex: 0 0 auto; }
+
+  /* autorisation en attente — la seule valise qui a le droit d'être visible */
+  .h-perm { margin: 0 18px 22px; background: var(--card); border: 1px solid var(--line);
+    border-radius: 14px; padding: 13px 15px; }
+  .h-perm .ph { display: flex; align-items: center; gap: 8px; font-size: 13px;
+    color: var(--accent-2); font-weight: 500; margin-bottom: 7px; }
+  .h-perm .pc { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--ink-2);
+    line-height: 1.5; word-break: break-all; margin-bottom: 11px; }
+  .h-perm .pr { display: flex; gap: 8px; }
+  .h-perm .pb { padding: 8px 16px; border-radius: 9999px; background: var(--ink); color: var(--bg);
+    font-size: 13.5px; font-weight: 500; }
+  .h-perm .pg { padding: 8px 16px; border-radius: 9999px; border: 1px solid var(--line-2); font-size: 13.5px; }
+
+  .h-sys { display: flex; align-items: center; gap: 12px; padding: 2px 18px 22px;
+    font-size: 12px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
+  .h-sys::before, .h-sys::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+
+  /* ☠ Troisième voix : ni Chris, ni le lead. L'attribuer à l'un des deux est H-66. */
+  .h-harness { margin: 0 18px 22px; padding: 10px 15px; border-left: 2px solid var(--line-2);
+    font-size: 14px; line-height: 1.5; color: var(--ink-3); }
+  .h-harness p { margin: 0 0 8px; }
+  .h-harness > *:last-child { margin-bottom: 0; }
+  .h-harness code { font-family: 'JetBrains Mono', monospace; font-size: .88em; }
+  .h-vide { padding: 40px 18px; text-align: center; color: var(--ink-3); font-size: 13.5px; }
+
+  /* dock */
+  .h-dock { position: sticky; bottom: 0; z-index: 15; max-width: 760px; margin: 0 auto; width: 100%;
+    padding: 0 12px 14px; background: linear-gradient(180deg, transparent, var(--bg-2) 34%); }
+  .h-dock.h-dock-off { opacity: .5; pointer-events: none; }
+  .h-box { background: var(--card); border: 1px solid var(--line); border-radius: 24px;
+    box-shadow: 0 6px 22px rgba(31,30,29,.08); padding: 13px 17px 9px; }
+  .h-box textarea { width: 100%; border: none; outline: none; resize: none; font: inherit;
+    font-size: 15.5px; background: none; line-height: 1.4; max-height: 120px; color: var(--ink); }
+  .h-box textarea::placeholder { color: var(--ink-3); }
+  .h-ctl { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .h-ctl .h-hint { flex: 1; font-size: 11px; color: var(--ink-3); }
+  .h-snd { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--bg);
+    display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .h-snd:hover { background: #2C2A28; }
+
+  /* ================= feuilles ================= */
+  .hsheet-root { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
+  .hsheet-scrim { position: absolute; inset: 0; background: rgba(31,30,29,.3);
+    opacity: 0; transition: opacity .26s ease; }
+  .hsheet { position: absolute; left: 0; right: 0; bottom: 0; height: 80vh; max-width: 760px;
+    margin: 0 auto; background: var(--bg); border-radius: 22px 22px 0 0;
+    transform: translateY(102%); transition: transform .3s cubic-bezier(.22,.8,.28,1);
+    display: flex; flex-direction: column; box-shadow: 0 -6px 30px rgba(31,30,29,.16); }
+  .hsheet-root.on { pointer-events: auto; }
+  .hsheet-root.on .hsheet-scrim { opacity: 1; }
+  .hsheet-root.on .hsheet { transform: translateY(0); }
+  .hsheet-grab { width: 38px; height: 4px; border-radius: 3px; background: var(--line-2);
+    margin: 9px auto 0; flex: 0 0 auto; }
+  .hsheet-hd { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 13px 18px 16px; }
+  .hsheet-lead { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+    flex: 0 0 auto; color: var(--ink); }
+  .hsheet-lead.back { width: auto; gap: 5px; font-size: 15px; }
+  .hsheet-t { flex: 1; text-align: center; font-size: 16px; font-weight: 700; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hsheet-pad { width: 30px; flex: 0 0 auto; }
+  .hsheet-bd { flex: 1; min-height: 0; overflow-y: auto; padding: 0 18px 44px; }
+
+  /* liste d'étapes d'une valise : verbe noir, argument gris, reliés par un trait */
+  .h-step { display: flex; align-items: flex-start; gap: 11px; width: 100%; text-align: left;
+    padding: 9px 0; font-size: 15px; position: relative; background: none; border: none; }
+  .h-step:not(:last-child)::after { content: ''; position: absolute; left: 11px; top: 32px;
+    bottom: -1px; width: 1px; background: var(--line-2); }
+  .h-step .si { flex: 0 0 auto; width: 22px; display: flex; justify-content: center;
+    color: var(--ink-2); margin-top: 2px; }
+  .h-step .sv { flex: 1; min-width: 0; line-height: 1.35; color: var(--ink-3); }
+  .h-step .sv b { font-weight: 400; color: var(--ink); }
+  .h-step .sv .mono { font-family: 'JetBrains Mono', monospace; font-size: 13.5px; }
+  .h-step:hover .sv { color: var(--ink-2); }
+  .h-step-desc { font-size: 14.5px; color: var(--ink-2); line-height: 1.5; margin-bottom: 4px; }
+  .h-lbl { font-size: 14px; color: var(--ink-3); margin: 16px 0 8px; }
+  .h-blk { border: 1px solid var(--line); border-radius: 12px; background: var(--card);
+    padding: 13px 15px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+    line-height: 1.66; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
+  .h-note { font-size: 12px; color: var(--ink-3); line-height: 1.5; margin-top: 16px; }
+  .h-think { font-family: 'Source Serif 4', serif; font-size: 18px; line-height: 1.46; color: var(--ink); }
+  .h-think p { margin: 0 0 15px; }
+  .h-think code { font-family: 'JetBrains Mono', monospace; font-size: .82em; }
+
+  .h-grp { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 2px 15px; margin-bottom: 14px; }
+  .h-grp .gh { font-size: 12.5px; color: var(--ink-3); padding: 13px 0 4px; }
+  .h-kv > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
+    padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .h-kv > div:last-child { border-bottom: none; }
+  .h-kv .k { color: var(--ink-3); flex: 0 0 auto; }
+  .h-kv .v { text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink-2); }
+  .h-kv .v.texte { font-family: 'Inter', sans-serif; font-size: 14px; }
+  .h-gauge { padding: 4px 0 12px; }
+  .h-gauge .gt { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 7px; }
+  .h-gauge .gt span:last-child { font-family: 'JetBrains Mono', monospace; color: var(--ink-3); }
+  .h-bar { height: 5px; border-radius: 3px; background: var(--bg-3); overflow: hidden; }
+  .h-bar i { display: block; height: 100%; border-radius: 3px; }
+  .h-row { display: flex; align-items: center; justify-content: space-between; width: 100%;
+    padding: 14px 0; font-size: 15px; border-bottom: 1px solid var(--line);
+    background: none; border-left: none; border-right: none; border-top: none; text-align: left; color: var(--ink); }
+  .h-row:last-child { border-bottom: none; }
+  .h-row.danger { color: var(--err); }
+  .h-row:disabled { opacity: .4; cursor: not-allowed; }
+  .h-row .rv { color: var(--ink-3); font-size: 13px; }
+  .h-agent { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+    padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14.5px;
+    background: none; border-left: none; border-right: none; border-top: none; color: var(--ink); }
+  .h-agent:last-child { border-bottom: none; }
+  .h-agent .an { flex: 1; min-width: 0; }
+  .h-agent .an i { display: block; font-style: normal; font-size: 12px; color: var(--ink-3);
+    margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-agent .as { font-size: 12px; color: var(--ink-3); flex: 0 0 auto; }
+  .h-agent .ad { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .h-mand { font-size: 15px; line-height: 1.55; color: var(--ink-2); }
+  .h-mand h4 { font-size: 12.5px; color: var(--ink-3); font-weight: 400; margin: 20px 0 6px; }
+  .h-mand p { margin: 0 0 12px; }
+  .h-mand code { font-family: 'JetBrains Mono', monospace; font-size: .88em; }
+  .h-det { margin-top: 4px; }
+  .h-det summary { font-size: 12.5px; color: var(--ink-3); cursor: pointer; padding: 6px 0; list-style: none; }
+  .h-det summary::-webkit-details-marker { display: none; }
+  .h-det summary::before { content: '› '; display: inline-block; transition: transform .18s ease; }
+  .h-det[open] summary::before { transform: rotate(90deg); }
+  .h-sep { padding: 8px 0 2px; font-size: 12px; color: var(--ink-3); border-bottom: none !important; }

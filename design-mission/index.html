@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ccremote — page mission (calque Claude Code mobile)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F0EEE9; --bg-head:#EAE8E2; --bubble:#E6E4DD; --sheet:#FAFAF7; --card:#FFFFFF;
+  --line:#DEDBD2; --line-2:#CFCBBF;
+  --ink:#16150F; --ink-2:#4A4845; --ink-3:#8C8880;
+  --accent:#D97757; --accent-2:#B85C38;
+  --ok:#5E8C61; --warn:#C99A2E; --err:#B5524A;
+  --code:#F4F3EE;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+html,body{height:100%}
+body{background:#D9D7D1;font-family:'Inter',sans-serif;color:var(--ink);
+  display:flex;align-items:stretch;justify-content:center}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer;text-align:left}
+::-webkit-scrollbar{width:0;height:0}
+.phone{position:relative;width:100%;max-width:430px;background:var(--bg);
+  display:flex;flex-direction:column;overflow:hidden}
+@media(min-width:520px){body{padding:20px 0}
+  .phone{border-radius:26px;box-shadow:0 18px 60px rgba(0,0,0,.22);max-height:100%}}
+
+/* ============ header ============ */
+.hd{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:12px 14px;
+  background:var(--bg-head);border-bottom:1px solid var(--line);z-index:30}
+.hd .ic{width:32px;height:32px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.hd .ttl{flex:1;min-width:0;text-align:center}
+.hd .t1{font-size:15px;font-weight:600;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd .t2{font-size:12.5px;color:var(--ink-3);line-height:1.3;margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;
+  justify-content:center;gap:6px}
+.hd .more{width:32px;height:32px;border-radius:50%;border:1.5px solid var(--ink);flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:15px;letter-spacing:1px;
+  line-height:0;padding-bottom:3px}
+.sd{width:6px;height:6px;border-radius:50%;background:var(--ok);flex:0 0 auto;display:inline-block}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.live{animation:blink 2s infinite}
+
+/* ============ flux ============ */
+.flow{flex:1;min-height:0;overflow-y:auto;padding:20px 0 160px;-webkit-overflow-scrolling:touch}
+
+/* message opérateur */
+.op{display:flex;justify-content:flex-end;padding:14px 18px 22px 46px}
+.op .b{background:var(--bubble);border-radius:20px;padding:13px 17px;font-size:16px;line-height:1.44}
+
+/* parole de l'agent — serif, pleine largeur, aucun fond */
+.say{font-family:'Source Serif 4',serif;font-size:19.5px;line-height:1.38;color:var(--ink);
+  padding:0 18px;margin-bottom:22px}
+.say p{margin:0 0 14px}
+.say>*:last-child{margin-bottom:0}
+.say strong{font-weight:700}
+.say em{font-style:italic}
+/* ☠ Aucun fond, aucune bordure : dans un corps serif, un cadre sur chaque terme
+   technique fabrique des pavés qui hachent la ligne. Seule la police change. */
+.say code{font-family:'JetBrains Mono',monospace;font-size:.82em;
+  word-break:break-word;color:var(--ink)}
+.say h1{font-size:25px;font-weight:700;line-height:1.2;margin:8px 0 14px;letter-spacing:-.01em}
+.say h2{font-size:21px;font-weight:700;line-height:1.26;margin:28px 0 11px}
+.say h3{font-size:19px;font-weight:700;margin:20px 0 8px}
+.say ul,.say ol{margin:0 0 14px;padding-left:24px}
+.say li{margin-bottom:8px;padding-left:2px}
+.say hr{border:none;border-top:1px solid var(--line-2);margin:24px 0}
+.say pre{background:var(--code);border:1px solid var(--line);border-radius:12px;
+  padding:13px 15px;overflow-x:auto;margin:0 0 15px}
+.say pre code{font-size:13px;line-height:1.62;white-space:pre;display:block;color:var(--ink-2)}
+.tw{overflow-x:auto;margin:0 0 15px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.say table{border-collapse:collapse;width:100%;font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.4}
+.say th{text-align:left;padding:10px 13px;font-weight:600;background:var(--bg-head);
+  border-bottom:1px solid var(--line);white-space:nowrap}
+.say td{padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+.say tr:last-child td{border-bottom:none}
+.say td code,.say th code{font-size:12.5px;white-space:nowrap}
+
+/* ============ valises ============ */
+.case{display:flex;align-items:center;gap:10px;width:100%;padding:6px 18px 22px;
+  font-size:16px;color:var(--ink-3)}
+.case:active{opacity:.5}
+.case .lb{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.case .cv{flex:0 0 auto;font-size:18px}
+.case svg{flex:0 0 auto}
+
+/* autorisation — sobre : une carte blanche, pas un panneau saumon */
+.perm{margin:0 18px 22px;background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:13px 15px}
+.perm .ph{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--accent-2);
+  font-weight:500;margin-bottom:7px}
+.perm .pc{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink-2);
+  line-height:1.5;word-break:break-all;margin-bottom:11px}
+.perm .pr{display:flex;gap:8px}
+.perm .pb{padding:8px 16px;border-radius:9999px;background:var(--ink);color:var(--bg);
+  font-size:14px;font-weight:500}
+.perm .pg{padding:8px 16px;border-radius:9999px;border:1px solid var(--line-2);font-size:14px}
+
+/* actions sous une réponse */
+.acts{display:flex;gap:24px;padding:0 18px 26px;color:var(--ink-3)}
+.acts button:active{opacity:.5}
+
+/* évènement système — discret, centré */
+.sys{display:flex;align-items:center;gap:12px;padding:2px 18px 22px;
+  font-size:12.5px;color:var(--ink-3);font-family:'JetBrains Mono',monospace}
+.sys::before,.sys::after{content:'';flex:1;height:1px;background:var(--line)}
+
+/* message du harness — ni opérateur, ni agent */
+.harn{margin:0 18px 22px;padding:12px 15px;border-left:2px solid var(--line-2);
+  font-size:14.5px;line-height:1.5;color:var(--ink-3)}
+.harn b{color:var(--ink-2);font-weight:500}
+
+/* ============ dock ============ */
+.dock{position:absolute;left:0;right:0;bottom:0;padding:0 12px 12px;z-index:25;
+  background:linear-gradient(180deg,transparent,var(--bg) 34%)}
+.jump{width:42px;height:42px;border-radius:50%;background:var(--card);border:1px solid var(--line);
+  box-shadow:0 3px 12px rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;margin:0 auto 10px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:26px;
+  box-shadow:0 6px 22px rgba(0,0,0,.08);padding:14px 18px 10px}
+.box textarea{width:100%;border:none;outline:none;resize:none;font:inherit;font-size:16.5px;
+  background:none;line-height:1.4;max-height:110px}
+.box textarea::placeholder{color:var(--ink-3)}
+.ctl{display:flex;align-items:center;gap:9px;margin-top:10px}
+.pill{display:flex;align-items:center;gap:7px;height:36px;padding:0 15px;border-radius:9999px;
+  background:var(--bg-head);font-size:14px;white-space:nowrap}
+.pill.round{width:36px;padding:0;justify-content:center;font-size:19px}
+.ctl .sp{flex:1}
+.mic{width:36px;height:36px;border-radius:50%;background:var(--bg-head);
+  display:flex;align-items:center;justify-content:center}
+.snd{width:38px;height:38px;border-radius:50%;background:var(--ink);color:var(--bg);
+  display:flex;align-items:center;justify-content:center}
+
+/* ============ feuilles ============ */
+.scrim{position:absolute;inset:0;background:rgba(22,21,15,.3);opacity:0;pointer-events:none;
+  transition:opacity .26s ease;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:78vh;background:var(--sheet);
+  border-radius:22px 22px 0 0;z-index:50;transform:translateY(102%);
+  transition:transform .3s cubic-bezier(.22,.8,.28,1);display:flex;flex-direction:column;
+  box-shadow:0 -6px 30px rgba(0,0,0,.14)}
+.sheet.on{transform:translateY(0)}
+.grab{width:38px;height:4px;border-radius:3px;background:var(--line-2);margin:9px auto 0;flex:0 0 auto}
+.sh-hd{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:13px 18px 16px}
+.sh-hd .x{width:30px;height:30px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.sh-hd .back{display:flex;align-items:center;gap:5px;font-size:16px;flex:0 0 auto}
+.sh-hd .st{flex:1;text-align:center;font-size:17px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sh-hd .pad{width:30px;flex:0 0 auto}
+.sh-bd{flex:1;min-height:0;overflow-y:auto;padding:0 18px 44px}
+
+/* liste d'étapes dans une feuille */
+.step{display:flex;align-items:flex-start;gap:11px;width:100%;padding:9px 0;font-size:16px;position:relative}
+.step:not(:last-child)::after{content:'';position:absolute;left:11px;top:33px;bottom:-1px;
+  width:1px;background:var(--line-2)}
+.step .si{flex:0 0 auto;width:22px;display:flex;justify-content:center;color:var(--ink-2);margin-top:2px}
+.step .sv{flex:1;min-width:0;line-height:1.35;color:var(--ink-3)}
+.step .sv b{font-weight:400;color:var(--ink)}
+.step .sv .mono{font-family:'JetBrains Mono',monospace;font-size:14.5px}
+.step:active{opacity:.5}
+
+.lbl{font-size:15px;color:var(--ink-3);margin:16px 0 8px}
+.blk{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:13px 15px;
+  font-family:'JetBrains Mono',monospace;font-size:13.5px;line-height:1.66;
+  overflow-x:auto;white-space:pre}
+.blk .s{color:#3F7A46}
+.blk .f{color:var(--ink-3)}
+
+.think{font-family:'Source Serif 4',serif;font-size:18.5px;line-height:1.44}
+.think p{margin:0 0 15px}
+.think code{font-family:'JetBrains Mono',monospace;font-size:.82em}
+
+/* feuille détails */
+.grp{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:2px 15px;margin-bottom:14px}
+.grp .gh{font-size:13px;color:var(--ink-3);padding:13px 0 4px}
+.kv>div{display:flex;align-items:baseline;justify-content:space-between;gap:14px;
+  padding:11px 0;border-bottom:1px solid var(--line);font-size:15px}
+.kv>div:last-child{border-bottom:none}
+.kv .k{color:var(--ink-3);flex:0 0 auto}
+.kv .v{text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:'JetBrains Mono',monospace;font-size:14px}
+.gauge{padding:4px 0 12px}
+.gt{display:flex;justify-content:space-between;font-size:14px;margin-bottom:7px}
+.gt span:last-child{font-family:'JetBrains Mono',monospace;color:var(--ink-3)}
+.bar{height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px}
+.agent{display:flex;align-items:center;gap:11px;width:100%;padding:12px 0;
+  border-bottom:1px solid var(--line);font-size:15.5px}
+.agent:last-child{border-bottom:none}
+.agent .an{flex:1;min-width:0}
+.agent .an i{display:block;font-style:normal;font-size:13px;color:var(--ink-3);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent .as{font-size:13px;color:var(--ink-3);flex:0 0 auto}
+.agent .ad{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.row-btn{display:flex;align-items:center;justify-content:space-between;width:100%;
+  padding:14px 0;font-size:16px;border-bottom:1px solid var(--line)}
+.row-btn:last-child{border-bottom:none}
+.row-btn.danger{color:var(--err)}
+.row-btn .rv{color:var(--ink-3);font-size:14px}
+.mand{font-size:15.5px;line-height:1.5;color:var(--ink-2)}
+.mand h4{font-size:13px;color:var(--ink-3);font-weight:400;margin:18px 0 6px}
+.mand p{margin:0 0 12px}
+.mand code{font-family:'JetBrains Mono',monospace;font-size:14px}
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="hd">
+    <button class="ic"><svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg></button>
+    <div class="ttl">
+      <div class="t1">Qwen3.6-35B-A3B sur llama.cpp</div>
+      <div class="t2"><span class="sd live"></span>echohub · Opus 5 · 5,07 $</div>
+    </div>
+    <button class="more" onclick="open1('shDetails')">···</button>
+  </div>
+
+  <div class="flow" id="flow">
+
+    <div class="op"><div class="b">Télécharger et tester le modèle Qwen3.6-35B-A3B en GGUF Q4_K_M sur le moteur llama.cpp d'EchoHub, sur une RTX 3060 12 Go.</div></div>
+
+    <div class="say"><p>Je commence par l'état des lieux matériel et l'arborescence des modèles.</p></div>
+
+    <button class="case" onclick="openTools()"><span class="lb">Ran 7 commands, read 2 files</span><span class="cv">›</span></button>
+
+    <button class="case" onclick="open1('shThink')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>
+      <span class="lb">Arbitré l'offload MoE contre la VRAM disponible</span><span class="cv">›</span></button>
+
+    <div class="say"><p>Le binaire fourni par unsloth est compilé <strong>sans support GPU</strong> (<code>no usable GPU found</code>). Je recompile dans un répertoire séparé pour laisser <code>build/</code> intact — unsloth s'en sert.</p></div>
+
+    <div class="perm">
+      <div class="ph">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v5M12 17h.01"/><circle cx="12" cy="12" r="9.5"/></svg>
+        Bash attend ton autorisation
+      </div>
+      <div class="pc">cmake --build build-cuda -j 6</div>
+      <div class="pr"><button class="pb">Autoriser</button><button class="pg">Refuser</button></div>
+    </div>
+
+    <button class="case" onclick="open1('shAgents')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="7" r="3"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+      <span class="lb">Delegated to 3 subagents</span><span class="cv">›</span></button>
+
+    <button class="case" onclick="openTools()"><span class="lb">Ran 24 commands, wrote a file</span><span class="cv">›</span></button>
+
+    <div class="op"><div class="b">Et le multi-slot ? Tu l'as mesuré ?</div></div>
+
+    <div class="say"><p>Non — et je ne veux pas l'annoncer sans l'avoir fait. <code>-np 4</code> partage le même contexte de 32 K entre quatre slots, donc chaque slot tombe à 8 K : le gain net dépend entièrement de la longueur réelle des prompts. Je le note comme non mesuré plutôt que d'extrapoler.</p></div>
+
+    <button class="case" onclick="openTools()"><span class="lb">Ran 3 commands</span><span class="cv">›</span></button>
+
+    <div class="say" id="rapport"></div>
+
+    <div class="acts">
+      <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M6 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V6"/></svg></button>
+      <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 4l13 8-13 8z"/></svg></button>
+      <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 10v10H4V10zM7 10l4.5-7c1.3 0 2 .9 2 2v3.5h5a2 2 0 0 1 2 2.4l-1.4 6.6a2 2 0 0 1-2 1.5H7"/></svg></button>
+      <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" style="transform:rotate(180deg)"><path d="M7 10v10H4V10zM7 10l4.5-7c1.3 0 2 .9 2 2v3.5h5a2 2 0 0 1 2 2.4l-1.4 6.6a2 2 0 0 1-2 1.5H7"/></svg></button>
+      <button><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
+    </div>
+
+    <div class="sys">running → idle</div>
+
+    <div class="harn"><b>Équipe close automatiquement</b> après 28 min au repos sans instruction — le projet est libéré. La session est conservée : une relance reprend exactement ici.</div>
+  </div>
+
+  <div class="dock">
+    <button class="jump"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v15M5 13l7 7 7-7"/></svg></button>
+    <div class="box">
+      <textarea rows="1" placeholder="Parler à cette équipe…"></textarea>
+      <div class="ctl">
+        <button class="pill round">+</button>
+        <button class="pill">Opus 5</button>
+        <button class="pill"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Auto</button>
+        <span class="sp"></span>
+        <button class="mic"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
+        <button class="snd"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="scrim" id="scrim" onclick="closeAll()"></div>
+
+  <!-- feuille : liste d'outils -->
+  <div class="sheet" id="shTools">
+    <div class="grab"></div>
+    <div class="sh-hd">
+      <button class="x" onclick="closeAll()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+      <div class="st">Ran 7 commands, read 2 files</div><div class="pad"></div>
+    </div>
+    <div class="sh-bd" id="stepList"></div>
+  </div>
+
+  <!-- feuille : un outil -->
+  <div class="sheet" id="shTool">
+    <div class="grab"></div>
+    <div class="sh-hd">
+      <button class="back" onclick="openTools()"><svg width="11" height="18" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>Back</button>
+      <div class="st" id="toolName">Bash</div><div class="pad"></div>
+    </div>
+    <div class="sh-bd">
+      <div class="lbl">Command</div>
+      <div class="blk">llama-server -m <span class="s">"$MODELS_DIR/…UD-Q4_K_M.gguf"</span> \
+  -ngl 99 --n-cpu-moe 30 --cache-type-k <span class="s">q8_0</span> \
+  -c 32768 -fa on -t 6</div>
+      <div class="lbl">Output</div>
+      <div class="blk"><span class="f">load_tensors: offloading 40 repeating layers to GPU
+llama_kv_cache: KV self size = 1088.00 MiB, K (q8_0)
+prompt eval time = 253.24 tok/s
+       eval time =  25.54 tok/s</span></div>
+    </div>
+  </div>
+
+  <!-- feuille : pensée -->
+  <div class="sheet" id="shThink">
+    <div class="grab"></div>
+    <div class="sh-hd">
+      <button class="x" onclick="closeAll()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+      <div class="st">Thought process</div><div class="pad"></div>
+    </div>
+    <div class="sh-bd"><div class="think">
+      <p>9,3 Go disponibles seulement — le bureau en consomme 2,9 en permanence (mpvpaper ×2, Chrome, Electron). Le modèle fait 22,1 Go, donc l'offload des experts n'est pas une option de confort : c'est la seule voie praticable.</p>
+      <p>Je ne veux pas deviner la valeur de <code>--n-cpu-moe</code>. Un balayage descendant coûte quelques minutes et donne le point de bascule exact, alors qu'une estimation me ferait soit sous-utiliser la VRAM, soit tomber en OOM au premier prompt long.</p>
+      <p>Le risque à surveiller : l'occupation du bureau peut bouger pendant le test et rendre la mesure non reproductible. Je relève la VRAM libre avant chaque passe.</p>
+    </div></div>
+  </div>
+
+  <!-- feuille : sous-agents -->
+  <div class="sheet" id="shAgents">
+    <div class="grab"></div>
+    <div class="sh-hd">
+      <button class="x" onclick="closeAll()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+      <div class="st">3 subagents</div><div class="pad"></div>
+    </div>
+    <div class="sh-bd"><div class="grp">
+      <button class="agent"><span class="ad live" style="background:var(--ok)"></span><span class="an">Bench débit<i>llama-bench sur 4 types de prompts</i></span><span class="as">actif ›</span></button>
+      <button class="agent"><span class="ad" style="background:var(--warn)"></span><span class="an">Mesure VRAM<i>attend la fin du build CUDA</i></span><span class="as">attente ›</span></button>
+      <button class="agent"><span class="ad" style="background:var(--ink-3)"></span><span class="an">Téléchargement GGUF<i>22,1 Go — terminé</i></span><span class="as">fini ›</span></button>
+    </div></div>
+  </div>
+
+  <!-- feuille : détails -->
+  <div class="sheet" id="shDetails">
+    <div class="grab"></div>
+    <div class="sh-hd">
+      <button class="x" onclick="closeAll()"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg></button>
+      <div class="st">Détails de la mission</div><div class="pad"></div>
+    </div>
+    <div class="sh-bd">
+      <div class="grp">
+        <div class="gh">Contexte</div>
+        <div class="gauge">
+          <div class="gt"><span>12 %</span><span>122 K / 1 M</span></div>
+          <div class="bar"><i style="width:12%;background:var(--ok)"></i></div>
+        </div>
+        <div class="kv">
+          <div><span class="k">Consommé</span><span class="v">5,07 $</span></div>
+          <div><span class="k">Prochaine inspection</span><span class="v">10,00 $</span></div>
+          <div><span class="k">Durée</span><span class="v">42 min</span></div>
+        </div>
+      </div>
+      <div class="grp">
+        <div class="gh">Identité</div>
+        <div class="kv">
+          <div><span class="k">Projet</span><span class="v">/mnt/projects/echohub</span></div>
+          <div><span class="k">Mission</span><span class="v">8bf11efb…294333</span></div>
+          <div><span class="k">Session</span><span class="v">a404a286…f466b38</span></div>
+          <div><span class="k">Compte</span><span class="v">compte-a</span></div>
+          <div><span class="k">Modèle</span><span class="v">claude-opus-5</span></div>
+          <div><span class="k">Epoch</span><span class="v">1</span></div>
+        </div>
+      </div>
+      <div class="grp">
+        <button class="row-btn" onclick="open1('shMandat')">Mandat<span class="rv">›</span></button>
+        <button class="row-btn" onclick="open1('shAgents')">Sous-agents<span class="rv">3 ›</span></button>
+        <button class="row-btn">Autorisations<span class="rv">12 ›</span></button>
+      </div>
+      <div class="grp">
+        <button class="row-btn">Mettre en pause</button>
+        <button class="row-btn">Relancer l'équipe</button>
+        <button class="row-btn danger">Terminer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- feuille : mandat -->
+  <div class="sheet" id="shMandat">
+    <div class="grab"></div>
+    <div class="sh-hd">
+      <button class="back" onclick="open1('shDetails')"><svg width="11" height="18" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>Back</button>
+      <div class="st">Mandat</div><div class="pad"></div>
+    </div>
+    <div class="sh-bd"><div class="mand">
+      <p>Télécharger et tester Qwen3.6-35B-A3B en GGUF Q4_K_M sur llama.cpp, sur une RTX 3060 12 Go.</p>
+      <h4>Contexte matériel</h4>
+      <p>Le modèle fait 22,1 Go, il ne rentre pas en VRAM — c'est voulu. C'est un MoE à 3 B de paramètres actifs : la stratégie est d'offloader les experts en RAM et de garder attention et KV cache sur le GPU.</p>
+      <h4>Critère d'arrêt</h4>
+      <p>Testé sur les 4 types de prompts avec des mesures chiffrées de débit, VRAM et RAM. Ou un verdict argumenté et chiffré que la machine ne permet pas de le faire tourner utilement.</p>
+    </div></div>
+  </div>
+
+</div>
+
+<script type="text/plain" id="src">
+# Rapport — Qwen3.6-35B-A3B sur llama.cpp / RTX 3060 12 Go
+
+## Critère d'arrêt : **atteint**
+
+Modèle téléchargé, lancé avec un offload MoE optimisé par balayage, testé sur les 4 types de prompts. **25,5 tok/s en génération** — le modèle est utilisable sur cette machine. Un bloqueur d'intégration EchoHub a été identifié et chiffré, non corrigé : hors mandat.
+
+## Mesures
+
+La contrainte réelle n'est pas les 12 Go annoncés. Le bureau en consomme ~2 900 MiB en permanence, il reste **~9,3 Go**.
+
+| `--n-cpu-moe` | Experts en VRAM | VRAM | génération |
+|---|---|---|---|
+| 999 (départ) | 0/40 | 6 686 MiB | 17,36 tok/s |
+| 32 | 8/40 | 10 216 MiB | 25,39 tok/s |
+| 30 (KV f16) | 10/40 | 11 194 MiB | 23,75 tok/s |
+| **30 + KV q8_0** | **10/40** | **10 794 MiB** | **25,54 tok/s** |
+
+Deux enseignements. `--n-cpu-moe 30` en KV f16 **régresse** parce que la VRAM sature à 11,2 sur 12,3 Go. Quantifier le KV cache en `q8_0` récupère 400 MiB et repasse devant — c'est le réglage retenu.
+
+## Commande retenue
+
+```bash
+llama-server -m $MODELS_DIR/…Q4_K_M.gguf \
+  -ngl 99 --n-cpu-moe 30 --cache-type-k q8_0 \
+  -c 32768 -fa on -t 6
+```
+
+## Ouvert
+
+- **Le câble SATA de sda.** Décision matérielle, hors de ma portée. Tant qu'il n'est pas remplacé, chaque écriture sur `/mnt/models` est un pari.
+- **Le câblage dans EchoHub.** Deux voies, non tranchées parce qu'elles engagent l'architecture. Je penche pour un backend `llama-server` externe — je ne l'ai pas prise.
+- **Non mesuré** : le débit à `-c 131072`, le multi-slot, l'effet du prompt cache en usage conversationnel réel.
+</script>
+
+<script>
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function inl(s){return esc(s)
+  .replace(/`([^`]+)`/g,'<code>$1</code>')
+  .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+  .replace(/(^|[^*])\*([^*]+)\*/g,'$1<em>$2</em>')}
+function md(src){
+  const L=src.replace(/\r/g,'').split('\n'),out=[],par=[];let i=0;
+  const fl=()=>{if(par.length){out.push('<p>'+inl(par.join(' '))+'</p>');par.length=0}};
+  while(i<L.length){const l=L[i];
+    if(/^```/.test(l)){fl();const b=[];i++;while(i<L.length&&!/^```/.test(L[i]))b.push(L[i++]);i++;
+      out.push('<pre><code>'+esc(b.join('\n'))+'</code></pre>');continue}
+    if(/^\|/.test(l)&&/^\|[\s:—-]+\|/.test(L[i+1]||'')){fl();
+      const c=r=>r.split('|').slice(1,-1).map(x=>x.trim());
+      const h=c(l);i+=2;const rw=[];while(i<L.length&&/^\|/.test(L[i]))rw.push(c(L[i++]));
+      out.push('<div class="tw"><table><thead><tr>'+h.map(x=>'<th>'+inl(x)+'</th>').join('')+
+        '</tr></thead><tbody>'+rw.map(r=>'<tr>'+r.map(x=>'<td>'+inl(x)+'</td>').join('')+'</tr>').join('')+
+        '</tbody></table></div>');continue}
+    const hh=l.match(/^(#{1,4})\s+(.*)$/);
+    if(hh){fl();out.push('<h'+hh[1].length+'>'+inl(hh[2])+'</h'+hh[1].length+'>');i++;continue}
+    if(/^---+$/.test(l)){fl();out.push('<hr>');i++;continue}
+    if(/^\s*(?:[-*]|\d+\.)\s+/.test(l)){fl();const o=/^\s*\d+\./.test(l),it=[];
+      while(i<L.length){const m=L[i].match(/^\s*(?:[-*]|\d+\.)\s+(.*)$/);if(!m)break;it.push(m[1]);i++}
+      out.push('<'+(o?'ol':'ul')+'>'+it.map(t=>'<li>'+inl(t)+'</li>').join('')+'</'+(o?'ol':'ul')+'>');continue}
+    if(!l.trim()){fl();i++;continue}
+    par.push(l);i++}
+  fl();return out.join('')}
+document.getElementById('rapport').innerHTML=md(document.getElementById('src').textContent);
+
+/* Les étapes d'une valise — générées, comme elles le seront depuis le registre. */
+const ICO={ran:'<path d="M4 6l5 5-5 5M12 17h8"/>',read:'<path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/>',
+  write:'<path d="M4 20h16M6 16l9.5-9.5a2 2 0 0 0-3-3L3 13v3h3z"/>'};
+const STEPS=[
+  ['ran','Ran','Vérifier disque, RAM, VRAM',0],
+  ['ran','Ran',"Lister l'arborescence des modèles",0],
+  ['ran','Ran','Processus GPU et binaire llama.cpp',0],
+  ['read','Read','models.py',1],
+  ['read','Read','start-llama.sh',1],
+  ['ran','Ran','Balayage --n-cpu-moe de 999 à 20',0],
+  ['write','Wrote','logs/dl-qwen36-35b.log',1],
+];
+document.getElementById('stepList').innerHTML=STEPS.map(([k,v,a,m])=>
+  `<button class="step" onclick="openTool('${v==='Read'?'Read':v==='Wrote'?'Write':'Bash'}')">
+     <span class="si"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${ICO[k]}</svg></span>
+     <span class="sv"><b>${v}</b> <span class="${m?'mono':''}">${a}</span></span>
+   </button>`).join('');
+
+const sheets=['shTools','shTool','shThink','shAgents','shDetails','shMandat'];
+function closeAll(){sheets.forEach(s=>document.getElementById(s).classList.remove('on'));
+  document.getElementById('scrim').classList.remove('on')}
+function open1(id){sheets.forEach(s=>{if(s!==id)document.getElementById(s).classList.remove('on')});
+  document.getElementById(id).classList.add('on');document.getElementById('scrim').classList.add('on')}
+function openTools(){open1('shTools')}
+function openTool(n){document.getElementById('toolName').textContent=n;open1('shTool')}
+
+const ta=document.querySelector('.box textarea');
+ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,110)+'px'});
+</script>
+</body>
+</html>
