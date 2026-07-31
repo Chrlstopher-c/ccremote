@@ -124,13 +124,15 @@ export function composerPromptInitial(p: Proposition): string {
  * workers de coexister sur le même répertoire. Un `epoch: 1` codé en dur rendait
  * donc tout second dispatch impossible sur un projet déjà utilisé (constaté en
  * prod le 23/07 : `collision_meme_epoch`).
+ *
+ * `☠` Le maximum se lit sur TOUTE la colonne, jamais sur une fenêtre de
+ * récence : filtrer les 200 missions les plus récentes tous projets confondus
+ * faisait redescendre l'epoch d'un projet peu actif dès que le harness
+ * dépassait 200 missions au total — la collision revenait par la porte de
+ * derrière, des mois après le correctif.
  */
 function prochainEpoch(registre: Registre, projet: string): number {
-  const epochs = registre.missions
-    .listerRecentes()
-    .filter((m) => m.projet === projet)
-    .map((m) => m.epoch);
-  return epochs.length === 0 ? 1 : Math.max(...epochs) + 1;
+  return registre.missions.epochMaxDuProjet(projet) + 1;
 }
 
 /**

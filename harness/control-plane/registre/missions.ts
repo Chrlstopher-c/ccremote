@@ -156,6 +156,32 @@ export class DepotMissions {
     );
   }
 
+  /**
+   * Plus grand epoch jamais attribué à ce projet, `0` si le projet est neuf.
+   *
+   * `☠` Requête dédiée, et surtout NON bornée par une fenêtre de récence. Le
+   * calcul du prochain epoch passait par `listerRecentes()` — 200 lignes tous
+   * projets confondus — puis filtrait sur le projet. Passé 200 missions au
+   * total, celles d'un projet peu actif sortent de la fenêtre : le maximum
+   * observé retombe à 0 et l'epoch REDESCEND, rouvrant très exactement la
+   * collision de fencing (M-11) que ce compteur existe pour empêcher. Un
+   * maximum se lit sur toute la colonne, ou ne se lit pas.
+   */
+  public epochMaxDuProjet(projet: string): number {
+    return executer(
+      'missions.epochMaxDuProjet',
+      () => {
+        const ligne = this.db
+          .query<{ max_epoch: number | null }, [string]>(
+            'SELECT MAX(epoch) AS max_epoch FROM mission WHERE projet = ?',
+          )
+          .get(projet);
+        return ligne?.max_epoch ?? 0;
+      },
+      { projet },
+    );
+  }
+
   public listerParLot(lotId: string): readonly Mission[] {
     return executer(
       'missions.listerParLot',
