@@ -28,6 +28,7 @@ import { ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
 import { versEscaladeApi } from './vue-escalades.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
+import { MODELES } from '../../shared/modeles-claude.ts';
 import { traiterEcriture, type OrdresVersPc, type OrchestrateurConversation } from './ecritures.ts';
 import {
   versEvenementApi,
@@ -201,6 +202,29 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
       .lister()
       .map((c) => versAccountApi(c, deps.registre.comptes.listerQuotas(c.id), maintenant));
     return enveloppe(pcOnline, comptes);
+  }
+
+  if (chemin === '/modeles') {
+    // `☠` Le sélecteur de l'orchestrateur lisait encore la MAQUETTE
+    // (`harness-mock-data.js`) : les modèles proposés à l'écran n'avaient aucun
+    // rapport avec ce que le CLI accepte, et les niveaux de raisonnement étaient
+    // les mêmes pour tous — alors que Haiku n'en accepte AUCUN et que `xhigh`
+    // n'existe pas avant Opus 4.7. Source unique : `shared/modeles-claude.ts`.
+    return enveloppe(
+      pcOnline,
+      MODELES.map((m) => ({
+        id: m.id,
+        label: m.libelle,
+        alias: m.alias,
+        // Tout le catalogue est sélectionnable : la disponibilité réelle dépend
+        // de l'abonnement du compte, et le CLI la tranche à l'usage.
+        enabled: true,
+        effort: [...m.efforts],
+        effortDefaut: m.effortDefaut,
+        fastMode: m.modeRapide,
+        note: m.note,
+      })),
+    );
   }
 
   if (chemin === '/orchestrator/propositions') {

@@ -42,7 +42,18 @@ export interface ParametresSpecTransportables {
   readonly deniedToolPatterns: readonly string[];
   readonly maxBudgetUsd: number;
   readonly model?: string;
-  /** Niveau de raisonnement du lead (posé via `Options.settings`). */
+  /**
+   * Niveau de raisonnement du lead, posé via `Options.settings`.
+   *
+   * `☠` PAS de `max` ici, et ce n'est pas un oubli : le SDK expose bien
+   * `EffortLevel = low|medium|high|xhigh|max`, mais `max` n'est accepté QUE par
+   * `applyFlagSettings` (portée session, jamais persistée) — la cascade de
+   * réglages persistés, qui est exactement le chemin emprunté ici
+   * (`workers/options-composition.ts`), l'exclut délibérément. Élargir ce type
+   * ferait passer `max` sur un chemin qui ne peut pas l'appliquer : le pire des
+   * cas, un réglage qu'on croit posé et qui ne l'est pas. Le dispatch le ramène
+   * donc à `xhigh` en le disant.
+   */
   readonly effortLevel?: 'low' | 'medium' | 'high' | 'xhigh';
   readonly configDir?: string;
   readonly agentTeams?: boolean;

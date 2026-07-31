@@ -153,13 +153,20 @@ const HarnessAPI = (() => {
       return lireReel(`/missions/${encodeURIComponent(missionId)}/agents/${encodeURIComponent(agentId)}`);
     },
 
-    /* ================= ENCORE EN DÉMO ==================================== */
-
+    // ☠ RÉEL depuis le 31/07. Cette route lisait la MAQUETTE : le sélecteur
+    // proposait des modèles et des niveaux d'effort sans rapport avec ce que le
+    // CLI accepte. Les niveaux viennent maintenant du catalogue serveur, lui-même
+    // aligné sur `supportedModels()` — Haiku n'en déclare AUCUN, et un niveau
+    // invalide est ignoré EN SILENCE par le SDK, jamais rejeté.
     async getModels() {
-      // ☠ En réel : `supportedModels()[].supportedEffortLevels`, jamais une constante figée.
-      await delay(60);
-      return db.models.map((m) => ({ ...m }));
+      const r = await lireReel('/modeles');
+      // Repli sur la maquette seulement si le Pi est injoignable : un sélecteur
+      // vide empêcherait tout choix, y compris le modèle déjà en place.
+      if (r.erreur || !Array.isArray(r.data)) return db.models.map((m) => ({ ...m }));
+      return r.data;
     },
+
+    /* ================= ENCORE EN DÉMO ==================================== */
 
     // ☠ RÉEL : le contexte vient de la sentinelle de la session orchestrateur.
     // contextPct null = session inactive ou pas encore de mesure — l'UI doit

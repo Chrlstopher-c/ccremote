@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Proposition, Registre } from '../registre/index.ts';
 import type { DemandeDemarrageTransportable } from '../../superviseur/index.ts';
+import { effortsDe, messageModeleInconnu, normaliserModele } from '../../shared/modeles-claude.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'dispatch-mandat' });
@@ -50,23 +51,53 @@ const BUDGET_DEFAUT_USD = 12;
  * qu'aucun signal ne le dise. L'orchestrateur peut les remplacer si l'opérateur
  * le lui demande (« sonnet 5 medium »), jamais de sa propre initiative.
  */
-export const MODELE_LEAD_DEFAUT = 'claude-opus-4-8';
+// `☠` Suivait `claude-opus-4-8`, qui a DISPARU de `supportedModels()` au passage
+// au SDK 0.3.220 (CLI 2.1.220) : tout dispatch serait parti sur un modèle que le
+// CLI n'expose plus. Mesuré le 31/07, pas supposé.
+export const MODELE_LEAD_DEFAUT = 'claude-opus-5';
 export const EFFORT_LEAD_DEFAUT = 'high';
-
-const EFFORTS_VALIDES: readonly string[] = ['low', 'medium', 'high', 'xhigh'];
 
 /**
  * `☠` Un effort invalide est SILENCIEUSEMENT ignoré par le SDK (mesuré le
  * 2026-07-22 : `effort: 'ultra'` passe sans erreur et retombe au défaut). On le
  * refuse ici plutôt que de croire l'avoir appliqué.
+ *
+ * `☠` Les niveaux acceptés DÉPENDENT DU MODÈLE — la liste vivait en dur ici et
+ * ignorait `max`, qui retombait donc en silence sur `high` alors qu'il est
+ * valide partout sauf sur Haiku. Source unique : `shared/modeles-claude.ts`.
  */
-function effortValide(brut: string | null): 'low' | 'medium' | 'high' | 'xhigh' {
-  const e = (brut ?? EFFORT_LEAD_DEFAUT).toLowerCase();
-  if (!EFFORTS_VALIDES.includes(e)) {
-    log.warn({ effort: brut }, 'niveau de raisonnement inconnu — repli sur le défaut du lead');
-    return EFFORT_LEAD_DEFAUT as 'high';
+type EffortWorker = 'low' | 'medium' | 'high' | 'xhigh';
+
+function effortValide(brut: string | null, modele: string): EffortWorker {
+  // `☠` `max` est retiré des choix POUR UN WORKER : il n'existe que via
+  // `applyFlagSettings` (portée session), et un worker reçoit son effort par la
+  // cascade de settings persistés, qui l'exclut. L'accepter ici donnerait un
+  // réglage qu'on croit posé et qui ne l'est pas — voir `superviseur/types.ts`.
+  const acceptes = effortsDe(modele).filter((e): e is EffortWorker => e !== 'max');
+  // Haiku n'accepte AUCUN effort ; rien à valider, le défaut passe tel quel.
+  if (acceptes.length === 0) return EFFORT_LEAD_DEFAUT as EffortWorker;
+  const e = (brut ?? EFFORT_LEAD_DEFAUT).toLowerCase() as EffortWorker;
+  if (!acceptes.includes(e)) {
+    log.warn(
+      { effort: brut, modele, acceptes },
+      'niveau de raisonnement indisponible pour ce modèle sur un worker — repli sur le défaut',
+    );
+    return EFFORT_LEAD_DEFAUT as EffortWorker;
   }
-  return e as 'low' | 'medium' | 'high' | 'xhigh';
+  return e;
+}
+
+/**
+ * Le modèle demandé n'est pas reconnaissable. `☠` Erreur NOMMÉE, levée AVANT
+ * toute écriture : l'orchestrateur est un modèle, il se corrige tout seul si on
+ * lui rend la liste des valeurs acceptées. Une équipe morte deux secondes après
+ * son démarrage ne lui apprend rien (vécu le 31/07 avec « sonnet 5 »).
+ */
+export class ErreurModeleInconnu extends Error {
+  constructor(readonly demande: string) {
+    super(messageModeleInconnu(demande));
+    this.name = 'ErreurModeleInconnu';
+  }
 }
 
 /**
@@ -158,8 +189,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   const missionId = randomUUID();
   const sessionId = randomUUID();
   const lotId = randomUUID();
-  const modele = p.modele ?? MODELE_LEAD_DEFAUT;
-  const effort = effortValide(p.effort);
+  // `☠` VALIDÉ ICI, avant la moindre écriture : la valeur vient d'un LLM qui
+  // écrit en langage naturel. « sonnet 5 » partait tel quel au CLI et tuait
+  // l'équipe deux secondes après son démarrage (31/07).
+  const modele = p.modele === null || p.modele === undefined ? MODELE_LEAD_DEFAUT : normaliserModele(p.modele);
+  if (modele === null) throw new ErreurModeleInconnu(p.modele ?? '');
+  const effort = effortValide(p.effort, modele);
   // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
   // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
   // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
