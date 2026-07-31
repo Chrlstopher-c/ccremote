@@ -6,6 +6,9 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 
 ## `control-plane/api-web/` — API web lue par pi-web
 
+- `vue-notifications.ts` — forme des notifications servie à l'interface (`read` / `delivered`
+  exposés séparément : deux faits distincts, jamais fondus)
+
 - `control-plane/api-web/index.ts` — interface publique du module
 - `control-plane/api-web/serveur-api.ts` — serveur HTTP en loopback (refuse de démarrer sur une interface publique : aucune authentification propre, pi-web la lui apporte)
 - `control-plane/api-web/enveloppe.ts` — l'enveloppe `pcOnline`/`stale`/`data` : le PC absent n'est JAMAIS une erreur (H-75), une panne du control plane en reste une
@@ -93,6 +96,9 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `index.ts` — interface publique
 
 ### `registre/` — E.1, mission M-03, SQLite
+
+- `notifications.ts` — dépôt des faits notifiables (migration 14). `luA` (Chris) et `remisA`
+  (orchestrateur) sont deux marqueurs indépendants.
 - `connexion.ts` — ouverture/migration de la base (WAL, un seul écrivain)
 - `missions.ts` / `.test.ts` — dépôt missions, transitions d'état
 - `etats.ts` — transitions d'état harness/SDK
@@ -105,6 +111,23 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `types.ts` — types du domaine registre
 - `registre.test.ts` — tests d'intégration du point d'entrée `Registre`
 - `index.ts` — interface publique + `ouvrirRegistre()`
+
+### `notifications/` — canal asynchrone, migration 14 (2026-08-01)
+
+- `index.ts` — interface publique du domaine
+- `detecteur-fin-equipe.ts` — reconnaît `running → idle`, la seule transition où la fin d'un
+  travail est observable. Pur.
+- `redaction.ts` — deux textes par fait : celui que Chris lit, celui que l'orchestrateur reçoit.
+  Ce second est un PROMPT, pas un libellé. Pur.
+- `service-notifications.ts` — journalise PUIS tente la remise ; le réveil d'une session endormie
+  est un choix explicite, jamais le défaut (quota)
+- `logger.ts` — journal du domaine
+
+### `autonomie/` — qui autorise un mandat, migration 15 (2026-08-01)
+
+- `index.ts` — interface publique du domaine
+- `decision-autorisation.ts` — plafond, puis fenêtre datée, puis engagement du fil. L'ordre EST le
+  garde-fou. Pur, aucune I/O.
 
 ### `bus-permissions/` — RETIRÉ le 2026-07-31
 Le bus d'escalade était câblé de bout en bout et n'a jamais rien porté : son seul producteur
@@ -156,6 +179,9 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
 - `index.ts` — interface publique
 
 ## `superviseur/` — branche B/D.3, mission M-13, superviseur PC
+
+- `recherche-projets.ts` — recherche de contenu bornée via `rg`. `chemin` OBLIGATOIRE : la racine
+  entière dépasse deux minutes (mesuré 01/08). Confinement partagé avec `exploration-projets.ts`.
 
 - `superviseur-workers.ts` / `.test.ts` — `SuperviseurWorkers`, implémente tous les ports A.2/E.1.4
 - `superviseur-workers-types.ts` — dépendances et constantes extraites (limite 500 lignes)

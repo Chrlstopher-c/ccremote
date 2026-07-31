@@ -1,5 +1,40 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-07-31*
+*Dernière mise à jour : 2026-08-01*
+
+## ⚡ Harness d'orchestration — chantier actif
+
+**Contexte complet : `harness/REPRISE.md`.**
+
+### 🎯 À LA REPRISE (01/08)
+
+- [ ] **Test bout en bout par Chris** — nouvelle conversation orchestrateur (PAS un resume : le
+      prompt système a changé six fois le 01/08, seule une session neuve le charge). Scénario :
+      brainstorm → mandat autorisé → `suivre_equipe` pendant le travail → fin d'équipe → il réagit
+      seul → 2ᵉ mandat qui part SANS clic. Protocole détaillé dans la conversation du 01/08.
+      **Le piège à guetter** : s'il annonce « en attente de ton autorisation » alors que l'équipe
+      tourne, prompt et harness ont divergé — c'est un bug, pas un malentendu.
+- [ ] **Créer / supprimer un projet depuis l'orchestrateur** — demandé le 01/08, NON fait, et
+      volontairement. La création ne pose pas de problème. La SUPPRESSION en autonomie, la nuit,
+      sans clic, est exactement le mode de panne de `rm -rf sessions/*` (agora, 29/07,
+      irrécupérable). Proposition à trancher avec Chris : création libre, suppression réservée à
+      un clic humain explicite, jamais auto-approuvable.
+- [ ] **Élévation hors périmètre projets** — sans objet tant que la ligne ci-dessus n'est pas
+      tranchée.
+- [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
+      visuel, branché sur le vrai back, ne contraint rien en amont.
+
+### ✅ LIVRÉ LE 01/08
+
+- [x] Canal asynchrone : fin d'équipe → notification → orchestrateur (migration 14)
+- [x] Page Notifications + badge temps réel, clic → fil d'origine
+- [x] Autonomie de fil : 1er mandat autorisé, suivants automatiques (migration 15)
+- [x] Fenêtre d'autonomie datée (début / fin / objectif) + interface
+- [x] `suivre_equipe` — 10 lignes par défaut, 200 max
+- [x] `mon_autonomie` — il sait ce qu'il a le droit de lancer et jusqu'à quand
+- [x] `carburant_parc` — quotas + conseil actionnable, plus d'autonomie aveugle
+- [x] `rechercher_projets` — cadrage sur un projet inconnu (chemin OBLIGATOIRE)
+- [x] Prompt système : autonomie, surveillance, carburant, recherche web, cadrage
+
 
 ## ⚡ Harness d'orchestration — chantier actif
 
