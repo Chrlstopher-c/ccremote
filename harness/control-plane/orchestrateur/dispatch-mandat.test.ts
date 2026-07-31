@@ -74,3 +74,57 @@ describe('dispatch — une seule équipe active par projet (H-56)', () => {
     expect(r.missionId).toBeDefined();
   });
 });
+
+describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’autre', () => {
+  /** Termine la mission pour libérer le projet (H-56) sans effacer son epoch. */
+  function terminer(missionId: string): void {
+    registre.etats.appliquerEtatHarness(missionId, 'terminee');
+  }
+
+  test('deux dispatchs successifs sur le même projet ne portent pas le même epoch', async () => {
+    const epochsEnvoyes: number[] = [];
+    const depsTracantes = (): DependancesDispatch => ({
+      ...deps(),
+      demarreur: {
+        demarrer: async (d: { epoch: number }) => {
+          epochsEnvoyes.push(d.epoch);
+          return { detail: 'ok' };
+        },
+      } as never,
+    });
+
+    const un = await dispatcherMandat(PROPOSITION, depsTracantes());
+    terminer(un.missionId);
+    const deux = await dispatcherMandat(PROPOSITION, depsTracantes());
+
+    // Le défaut vécu : la colonne restait à 0, `prochainEpoch` rendait donc
+    // toujours 1 et les deux workers portaient le MÊME epoch — précisément ce
+    // que le fencing (M-11) doit rejeter.
+    expect(epochsEnvoyes).toEqual([1, 2]);
+    expect(registre.missions.lire(un.missionId)?.epoch).toBe(1);
+    expect(registre.missions.lire(deux.missionId)?.epoch).toBe(2);
+  });
+
+  test('☠ l’epoch ENVOYÉ au PC est celui ÉCRIT au registre — deux calculs divergeraient', async () => {
+    let envoye = -1;
+    const d: DependancesDispatch = {
+      ...deps(),
+      demarreur: {
+        demarrer: async (dem: { epoch: number }) => {
+          envoye = dem.epoch;
+          return { detail: 'ok' };
+        },
+      } as never,
+    };
+    const r = await dispatcherMandat(PROPOSITION, d);
+    expect(registre.missions.lire(r.missionId)?.epoch).toBe(envoye);
+  });
+
+  test('un projet DIFFÉRENT repart à 1 — le fencing est par worktree, pas global', async () => {
+    const premier = await dispatcherMandat(PROPOSITION, deps());
+    terminer(premier.missionId);
+    const autreProposition = { ...(PROPOSITION as object), projet: '/mnt/projects/agora' } as never;
+    const autre = await dispatcherMandat(autreProposition, deps());
+    expect(registre.missions.lire(autre.missionId)?.epoch).toBe(1);
+  });
+});

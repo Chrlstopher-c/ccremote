@@ -200,6 +200,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
   // aucune des deux machines (constaté en prod le 23/07).
   const cwd = p.projet.startsWith('/') ? p.projet : join(deps.repertoireProjets, p.projet);
+  // `☠` Calculé UNE FOIS, puis écrit au registre ET envoyé au PC. Il n'était
+  // qu'envoyé : la colonne restait à 0, et comme `prochainEpoch()` la lit, il
+  // rendait toujours 1 — deux dispatchs successifs sur un même worktree
+  // portaient donc le même epoch, ce que le fencing (M-11) doit justement
+  // rejeter. Deux valeurs calculées séparément divergeraient de la même façon.
+  const epoch = prochainEpoch(deps.registre, p.projet);
 
   deps.registre.lots.creer({ id: lotId, intention: p.objectif, origine: 'orchestrateur' });
   deps.registre.missions.creer({
@@ -219,11 +225,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     // la télémétrie n'existe pas : coût, contexte, état SDK.
     modeleDemande: modele,
     modeleResolu: modele,
+    epoch,
   });
 
   const demande: DemandeDemarrageTransportable = {
     missionId,
-    epoch: prochainEpoch(deps.registre, p.projet),
+    epoch,
     promptInitial: composerPromptInitial(p),
     parametres: {
       sessionId,

@@ -223,6 +223,18 @@ export interface CreationMission {
   readonly modeleDemande?: string | null;
   readonly modeleResolu?: string | null;
   readonly budgetMaxUsd?: number | null;
+  /**
+   * Epoch de fencing (M-11) réellement envoyé au PC pour ce dispatch.
+   *
+   * `☠` Ce champ MANQUAIT, et son absence a neutralisé le correctif du 23/07 :
+   * `prochainEpoch()` calcule `max(epochs) + 1` en lisant cette colonne, mais
+   * rien ne l'écrivait jamais. Toutes les missions restaient à 0 (mesuré le
+   * 31/07 : cinq sur cinq, dont trois sur un même worktree), donc le calcul
+   * rendait éternellement `1` — la constante en dur qu'il était censé remplacer,
+   * atteinte par un chemin plus long. Un epoch identique sur deux workers du
+   * même worktree est exactement ce que le fencing doit rejeter.
+   */
+  readonly epoch?: number | null;
 }
 
 /** Historique des transitions — `origine` préserve la distinction même a posteriori. */
