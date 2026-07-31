@@ -36,11 +36,17 @@ async function loadConfig() {
   state.config = cfg;
   if (!prefs.model || !cfg.models.includes(prefs.model)) { prefs.model = cfg.default_model; savePrefs(); }
 
-  document.getElementById('pcHostLabel').textContent = cfg.pc_host;
-  document.getElementById('headerHost').textContent = cfg.pc_host;
-  document.getElementById('setHost').textContent = cfg.pc_host;
-  document.getElementById('setMac').textContent = cfg.pc_mac;
-  document.getElementById('headerModel').textContent = prefs.model;
+  // ☠ Écriture GARDÉE sur chaque cible. `pcHostLabel` vivait dans la carte PC de
+  // la barre latérale, retirée le 01/08 : sans garde, la première ligne lève une
+  // TypeError et TOUT le reste de la fonction est abandonné — l'hôte, la MAC et
+  // le modèle ne s'affichaient plus nulle part, sans autre signe qu'une ligne
+  // dans la console. Un seul identifiant disparu suffit à éteindre la fonction.
+  const poser = (id, valeur) => { const el = document.getElementById(id); if (el) el.textContent = valeur; };
+  poser('pcHostLabel', cfg.pc_host);
+  poser('headerHost', cfg.pc_host);
+  poser('setHost', cfg.pc_host);
+  poser('setMac', cfg.pc_mac);
+  poser('headerModel', prefs.model);
 
   populateModelSelect(document.getElementById('modelSelect'), cfg.models, prefs.model);
   populateModelSelect(document.getElementById('modelBadge'), cfg.models, prefs.model);

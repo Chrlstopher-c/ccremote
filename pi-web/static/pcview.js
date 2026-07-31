@@ -3,6 +3,7 @@ let pcViewInterval = null;
 
 function renderPcView() {
   fetchAndRenderMetrics();
+  void renderPcQuotas();
   clearInterval(pcViewInterval);
   pcViewInterval = setInterval(() => {
     if (!document.querySelector('.view[data-view="pc"].active')) { clearInterval(pcViewInterval); return; }
@@ -34,3 +35,28 @@ async function fetchAndRenderMetrics() {
 }
 
 document.getElementById('refreshPc').addEventListener('click', () => { fetchAndRenderMetrics(); showToast('Données actualisées', 'ok'); });
+
+/**
+ * Quotas par compte, sur la page « État du système ».
+ *
+ * ☠ Réutilise `hAccGaugeMini` plutôt que d'écrire un second rendu : deux
+ * représentations d'une même mesure divergent toujours, et c'est sur ces
+ * pourcentages qu'on décide de lancer ou non une équipe.
+ */
+async function renderPcQuotas() {
+  const el = document.getElementById('pcQuotas');
+  if (!el || typeof hListeComptes !== 'function') return;
+  const comptes = hListeComptes(await HarnessAPI.getAccounts());
+  if (comptes === null) {
+    el.innerHTML = '<div class="rounded-xl border p-4 text-[12.5px]" style="border-color:var(--line);background:var(--card);color:var(--ink-3);">Pi injoignable — quotas indisponibles.</div>';
+    return;
+  }
+  if (comptes.length === 0) {
+    el.innerHTML = '<div class="rounded-xl border p-4 text-[12.5px]" style="border-color:var(--line);background:var(--card);color:var(--ink-3);">Aucun compte enregistré dans le registre.</div>';
+    return;
+  }
+  el.innerHTML = `<div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
+      <div class="text-[10.5px] uppercase tracking-wider mb-3" style="color: var(--ink-3);">Quotas par compte (H-72)</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">${comptes.map(hAccGaugeMini).join('')}</div>
+    </div>`;
+}

@@ -651,3 +651,12 @@
     /* Sans gutter, le titre n'a plus de raison d'être en retrait. */
     [data-view="harness-orchestrateur"] .h-topbar .lead { padding-left: 12px; }
   }
+  /* Ligne d'état du lien — au-dessus du pied de barre, pleine largeur. */
+  .sb-lien { display: flex; align-items: center; gap: 8px; width: calc(100% - 20px);
+    margin: 0 10px; height: 32px; padding: 0 8px; border-radius: 8px;
+    background: none; border: none; text-align: left; transition: background .15s ease; }
+  .sb-lien:hover { background: rgba(31,30,29,.05); }
+  .sb-lien .sb-user-txt { flex: 1; }
+  .sb-lien-chev { color: var(--ink-3); font-size: 15px; flex: 0 0 auto; }
+  .sb-ava-txt { font-size: 10px; font-weight: 600; color: var(--ink-2); }
+  #pcQuotas .mg-acc + .mg-acc { margin-top: 0; }

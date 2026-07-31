@@ -6,7 +6,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <div class="min-w-0">
-            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du PC</h1>
+            <h1 class="serif text-[17px] lg:text-[19px] font-medium leading-none" style="color: var(--ink);">État du système</h1>
             <div id="pcSubHeader" class="text-[11px] mt-1" style="color: var(--ink-3);">—</div>
           </div>
         </div>
@@ -16,6 +16,10 @@
         </button>
       </header>
       <div class="max-w-4xl mx-auto w-full px-4 lg:px-7 py-6 space-y-5">
+        <!-- ☠ Quotas et machine sur UNE page : ce sont les deux moitiés d'une
+             même question — « est-ce que je peux lancer une équipe maintenant ? ».
+             Les séparer obligeait à ouvrir deux écrans pour y répondre. -->
+        <div id="pcQuotas"></div>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
             <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">CPU</div>

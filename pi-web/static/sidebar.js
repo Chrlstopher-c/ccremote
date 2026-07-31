@@ -1,20 +1,25 @@
 // ============ SIDEBAR / PC STATUS ============
+/**
+ * ☠ Chaque accès est GARDÉ. La carte CPU/RAM de la barre latérale a été retirée
+ * (ses chiffres vivent dans « État du système »), et ces identifiants n'existent
+ * plus. Sans garde, `dot.innerHTML` lève une TypeError à chaque sondage — soit
+ * toutes les cinq secondes, en silence dans la console, avec pour effet de
+ * couper la mise à jour de TOUT ce qui suit dans la fonction.
+ */
 function setPcOnline(online) {
   state.pcOnline = online;
   const dot = document.getElementById('pcStatusDot');
   const text = document.getElementById('pcStatusText');
-  if (online === null) {
-    dot.innerHTML = '<span class="w-2 h-2 rounded-full" style="background: var(--ink-3);"></span>';
-    text.textContent = 'Vérification…';
-    text.style.color = 'var(--ink-3)';
-  } else if (online) {
-    dot.innerHTML = '<span class="w-2 h-2 rounded-full dot-live" style="background: var(--ok);"></span><span class="absolute w-2 h-2 rounded-full ripple" style="background: var(--ok);"></span>';
-    text.textContent = 'PC en ligne';
-    text.style.color = 'var(--ink)';
-  } else {
-    dot.innerHTML = '<span class="w-2 h-2 rounded-full" style="background: var(--err);"></span>';
-    text.textContent = 'PC éteint';
-    text.style.color = 'var(--ink-3)';
+  if (dot) {
+    dot.innerHTML = online === null
+      ? '<span class="w-2 h-2 rounded-full" style="background: var(--ink-3);"></span>'
+      : online
+        ? '<span class="w-2 h-2 rounded-full dot-live" style="background: var(--ok);"></span><span class="absolute w-2 h-2 rounded-full ripple" style="background: var(--ok);"></span>'
+        : '<span class="w-2 h-2 rounded-full" style="background: var(--err);"></span>';
+  }
+  if (text) {
+    text.textContent = online === null ? 'Vérification…' : online ? 'PC en ligne' : 'PC éteint';
+    text.style.color = online ? 'var(--ink)' : 'var(--ink-3)';
   }
   const nsEl = document.getElementById('nsPcStatus');
   if (nsEl) {
@@ -34,11 +39,12 @@ async function pollSidebar() {
     setPcOnline(status.pc_online);
     if (!status.pc_online) return;
     const m = await api('GET', '/api/metrics');
-    document.getElementById('cpuBar').style.width = m.cpu + '%';
-    document.getElementById('cpuVal').textContent = m.cpu + '%';
-    document.getElementById('ramBar').style.width = m.mem_percent + '%';
-    document.getElementById('ramVal').textContent = m.mem_percent + '%';
-    document.getElementById('uptimeText').textContent = 'Uptime · ' + formatUptime(m.uptime_s);
+    const poser = (id, appliquer) => { const el = document.getElementById(id); if (el) appliquer(el); };
+    poser('cpuBar', (el) => { el.style.width = m.cpu + '%'; });
+    poser('cpuVal', (el) => { el.textContent = m.cpu + '%'; });
+    poser('ramBar', (el) => { el.style.width = m.mem_percent + '%'; });
+    poser('ramVal', (el) => { el.textContent = m.mem_percent + '%'; });
+    poser('uptimeText', (el) => { el.textContent = 'Uptime · ' + formatUptime(m.uptime_s); });
   } catch { setPcOnline(null); }
 }
 

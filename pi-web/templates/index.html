@@ -193,30 +193,6 @@
     <div class="text-[10px] uppercase tracking-wider px-3 pt-3 pb-1" style="color: var(--ink-3);">Équipes actives</div>
     <div class="team-tree" id="hTeamTree"></div>
     <div class="mini-gauges" id="hMiniGauges"></div>
-    <!-- ☠ PIED DE BARRE — l'état du lien et les deux actions permanentes.
-         Les notifications ne sont plus une entrée de menu : ce n'est pas une
-         destination qu'on choisit, c'est un état qu'on surveille. Une pastille
-         en pied de barre le dit sans coûter une ligne de navigation. -->
-    <div class="sb-footer">
-      <button class="sb-user" data-view="pc" title="État du lien Pi ↔ PC">
-        <span class="sb-ava"><span id="hLinkDot" class="dot-live"></span></span>
-        <span class="sb-user-txt">
-          <span id="hLinkText">PC en ligne</span>
-          <span class="sb-dot">·</span>
-          <span id="hLinkWire" class="sb-muted">lien</span>
-        </span>
-      </button>
-      <div class="sb-aux">
-        <button class="sb-icon" data-view="harness-notifications" title="Notifications du parc" aria-label="Notifications">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <span id="hNavCountNotifs" class="sb-pastille" style="display:none;">0</span>
-        </button>
-        <button class="sb-icon" data-view="settings" title="Paramètres" aria-label="Paramètres">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-      </div>
-    </div>
-
     <!-- ☠ DEUX listes distinctes, jamais fondues : les fils de l'orchestrateur
          (Agent SDK, avec leur contexte et leurs équipes) et les conversations du
          chat cloud n'ont ni le même contenu ni la même durée de vie. Afficher
@@ -229,39 +205,38 @@
       <div id="hOrchConvList" class="space-y-0.5" style="display:none;"></div>
     </div>
 
-    <div class="m-3 p-3.5 rounded-xl border" style="border-color: var(--line); background: var(--card);">
-      <div class="flex items-center justify-between mb-2.5">
-        <div class="flex items-center gap-2">
-          <span id="pcStatusDot" class="relative flex">
-            <span class="w-2 h-2 rounded-full" style="background: var(--ink-3);"></span>
-          </span>
-          <span id="pcStatusText" class="text-[12px] font-medium" style="color: var(--ink-3);">Vérification…</span>
-        </div>
-        <span id="pcHostLabel" class="text-[10px] mono" style="color: var(--ink-3);">—</span>
-      </div>
-      <div class="grid grid-cols-2 gap-2 text-[11px]">
-        <div>
-          <div class="mono" style="color: var(--ink-3);">CPU</div>
-          <div class="flex items-center gap-1.5 mt-0.5">
-            <div class="flex-1 h-1 rounded-full overflow-hidden" style="background: var(--bg-3);">
-              <div id="cpuBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div>
-            </div>
-            <span id="cpuVal" class="mono" style="color: var(--ink-2);">—</span>
-          </div>
-        </div>
-        <div>
-          <div class="mono" style="color: var(--ink-3);">RAM</div>
-          <div class="flex items-center gap-1.5 mt-0.5">
-            <div class="flex-1 h-1 rounded-full overflow-hidden" style="background: var(--bg-3);">
-              <div id="ramBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div>
-            </div>
-            <span id="ramVal" class="mono" style="color: var(--ink-2);">—</span>
-          </div>
-        </div>
-      </div>
-      <div class="mt-2.5 pt-2.5 border-t flex items-center justify-between" style="border-color: var(--line);">
-        <span id="uptimeText" class="text-[10.5px]" style="color: var(--ink-3);">—</span>
-        <button class="text-[10.5px] font-medium" style="color: var(--accent-2);" data-view="pc">Détails →</button>
+
+    <!-- ☠ La carte CPU/RAM/uptime qui vivait ici est partie : quatre chiffres
+         qui bougent en permanence dans une colonne de navigation, c'est du
+         mouvement continu en périphérie du regard, pour une information qu'on
+         consulte deux fois par jour. Elle est dans « État du système », avec les
+         quotas, en une seule page. Cette ligne en est le résumé et le lien. -->
+    <button class="sb-lien" data-view="pc" title="CPU, mémoire, quotas par compte">
+      <span class="sb-ava"><span id="hLinkDot" class="dot-live"></span></span>
+      <span class="sb-user-txt">
+        <span id="hLinkText">PC en ligne</span>
+        <span class="sb-dot">·</span>
+        <span id="hLinkWire" class="sb-muted">lien</span>
+      </span>
+      <span class="sb-lien-chev">›</span>
+    </button>
+
+    <!-- ☠ PIED DE BARRE, tout en bas. Les notifications ne sont pas une
+         destination qu'on choisit mais un état qu'on surveille : une icône à
+         pastille le dit sans coûter une ligne de navigation. -->
+    <div class="sb-footer">
+      <button class="sb-user" data-view="settings" title="Paramètres">
+        <span class="sb-ava sb-ava-txt">C</span>
+        <span class="sb-user-txt"><span>Chris</span><span class="sb-dot">·</span><span class="sb-muted">harness</span></span>
+      </button>
+      <div class="sb-aux">
+        <button class="sb-icon" data-view="harness-notifications" title="Notifications du parc" aria-label="Notifications">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span id="hNavCountNotifs" class="sb-pastille" style="display:none;">0</span>
+        </button>
+        <button class="sb-icon" data-view="settings" title="Paramètres" aria-label="Paramètres">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
       </div>
     </div>
   </aside>
