@@ -157,3 +157,19 @@ function hMajListeLaterale() {
         <span class="truncate flex-1">${escapeHtml(c.titre)}</span>
       </button>`).join('');
 }
+
+/**
+ * Nouveau fil — orchestrateur ou chat, selon la liste affichée.
+ *
+ * ☠ Le bouton vit sur un titre de section qui change de sens avec le module :
+ * créer un fil d'orchestrateur alors que la liste montre les conversations du
+ * chat ajouterait une entrée invisible, dans une liste qu'on ne regarde pas.
+ */
+function hNouveauFil() {
+  const vue = document.querySelector('.view.active')?.dataset.view || '';
+  if (vue.startsWith('harness-')) {
+    hNewConversation();
+    return;
+  }
+  document.getElementById('newChatBtn')?.click();
+}

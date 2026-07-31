@@ -24,7 +24,11 @@ function hApplyLinkVisuals(up) {
   document.getElementById('hLinkText').textContent = up ? 'PC en ligne' : 'PC absent';
   document.getElementById('hLinkText').style.color = up ? '' : 'var(--err)';
   document.getElementById('hLinkWire').classList.toggle('down', !up);
-  document.getElementById('hLinkBanner').classList.toggle('show', !up);
+  // ☠ Gardé : le bandeau vivait dans la barre d'onglets, supprimée le 01/08.
+  // Sans garde, une TypeError ici abandonnait la suite de la fonction — donc la
+  // désactivation des commandes de sûreté quand le PC tombe. L'absence du PC
+  // reste dite par le pied de barre, en rouge.
+  document.getElementById('hLinkBanner')?.classList.toggle('show', !up);
   document.querySelectorAll('.harness-safety-bar').forEach((b) => b.classList.toggle('link-down', !up));
 }
 

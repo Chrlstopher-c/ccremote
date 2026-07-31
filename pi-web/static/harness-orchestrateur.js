@@ -40,6 +40,12 @@ async function hLoadConvList() {
 }
 
 function hRenderConvBar(list, erreur) {
+  // ☠ AVANT toute sortie anticipée : la barre d'onglets a été supprimée, donc
+  // `hConvBar` n'existe plus et la fonction sortait aussitôt — emportant avec
+  // elle la mise à jour du titre et de la liste latérale, qui étaient en fin de
+  // corps. Le titre serait resté figé sur le premier fil ouvert, sans erreur.
+  if (typeof hMajBarreOrch === 'function') hMajBarreOrch();
+  if (typeof hMajListeLaterale === 'function') hMajListeLaterale();
   const bar = document.getElementById('hConvBar');
   if (!bar) return;
   if (erreur) {
@@ -65,10 +71,6 @@ function hRenderConvBar(list, erreur) {
     </div>`;
   }).join('');
   bar.innerHTML = chips + `<button class="conv-new" onclick="hNewConversation()">+ Nouveau</button>`;
-  // La barre de titre et la liste latérale lisent la même source : les mettre à
-  // jour ici garantit qu'elles ne divergent jamais de la barre d'onglets.
-  if (typeof hMajBarreOrch === 'function') hMajBarreOrch();
-  if (typeof hMajListeLaterale === 'function') hMajListeLaterale();
 }
 
 async function hNewConversation() {

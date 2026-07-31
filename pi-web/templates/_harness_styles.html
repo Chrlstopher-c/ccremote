@@ -660,3 +660,12 @@
   .sb-lien-chev { color: var(--ink-3); font-size: 15px; flex: 0 0 auto; }
   .sb-ava-txt { font-size: 10px; font-weight: 600; color: var(--ink-2); }
   #pcQuotas .mg-acc + .mg-acc { margin-top: 0; }
+  .sb-sec-t { display: flex; align-items: center; gap: 6px; }
+  .sb-sec-t > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sb-sec-plus { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 6px; border: none;
+    background: none; color: var(--ink-3); display: flex; align-items: center;
+    justify-content: center; opacity: 0; transition: opacity .15s ease, background .15s ease; }
+  .sb-sec:hover .sb-sec-plus, .sb-sec-plus:focus-visible { opacity: 1; }
+  .sb-sec-plus:hover { background: rgba(31,30,29,.08); color: var(--ink); }
+  /* ☠ Aucun survol possible au doigt : le bouton reste visible en permanence. */
+  @media (hover: none) { .sb-sec-plus { opacity: 1; } }

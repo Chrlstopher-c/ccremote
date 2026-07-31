@@ -235,7 +235,16 @@
          chercher un fil qui n'a jamais été là. Celle du module courant est
          montrée, l'autre est masquée. -->
       <section class="sb-sec">
-        <div class="sb-sec-t" id="convListTitre">Conversations</div>
+        <div class="sb-sec-t">
+          <span id="convListTitre">Conversations</span>
+          <!-- ☠ Révélé au survol sur PC, TOUJOURS visible au doigt : sans
+               pointeur, un `:hover` n'existe pas et le bouton serait
+               inatteignable — une action offerte à la souris et refusée au
+               tactile. La media query `hover: none` le rend permanent. -->
+          <button class="sb-sec-plus" onclick="hNouveauFil()" title="Nouveau fil" aria-label="Nouveau fil">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
         <div class="sb-sec-b">
           <div id="convList" class="space-y-0.5"></div>
           <div id="hOrchConvList" class="space-y-0.5" style="display:none;"></div>
