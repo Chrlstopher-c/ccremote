@@ -56,3 +56,38 @@ export function annonceSaturation(texte: string): boolean {
   if (MOTIFS_AVERTISSEMENT.some((m) => m.test(texte))) return false;
   return MOTIFS_SATURATION.some((m) => m.test(texte));
 }
+
+/** Forme minimale d'un quota — évite de coupler cette règle au registre. */
+export interface FenetreQuotaJugeable {
+  readonly statut: string;
+  /** Epoch ms de la fin de fenêtre. `null` = fin inconnue. */
+  readonly resetA: number | null;
+}
+
+/**
+ * Ce quota écarte-t-il ENCORE le compte ?
+ *
+ * `☠ VÉCU DU 26 AU 31/07` — un verdict de saturation ne survit pas à sa propre
+ * fenêtre. La fenêtre hebdomadaire du compte A a été relevée `rejected` le 24/07
+ * avec un reset au 26/07 ; la sonde n'ayant plus rien écrit depuis (429 sur
+ * l'endpoint OAuth), ce `rejected` est resté en base. Cinq jours après la fin de
+ * la fenêtre, `listerDisponibles()` et le choix du compte orchestrateur
+ * écartaient toujours un compte parfaitement utilisable : la moitié de la
+ * capacité perdue sur une mesure périmée que personne ne contredisait.
+ *
+ * Une fenêtre dont le reset est PASSÉ est finie — son verdict est caduc, quelle
+ * que soit la fraîcheur de la mesure. C'est une déduction sur le temps, pas une
+ * mesure : elle reste vraie même sonde muette, ce qui est exactement ce qu'il
+ * fallait ici.
+ *
+ * `☠` Reset INCONNU (`null`) ⇒ le verdict tient. On ne relâche que sur une fin
+ * de fenêtre établie, jamais sur une ignorance : écarter un compte sain coûte de
+ * la capacité, en dispatcher un sur un compte mort coûte une mission.
+ */
+export function fenetreEncoreSaturante(
+  quota: FenetreQuotaJugeable,
+  maintenant: number = Date.now(),
+): boolean {
+  if (quota.statut !== 'rejected') return false;
+  return quota.resetA === null || quota.resetA > maintenant;
+}

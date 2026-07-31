@@ -208,6 +208,21 @@ describe('comptes et quotas', () => {
     expect(registre.comptes.listerDisponibles().map((c) => c.id)).toEqual(['compte2']);
   });
 
+  test('☠ une saturation dont la FENÊTRE EST FINIE ne sort plus le compte (vécu 26→31/07)', () => {
+    const maintenant = 1_700_000_000_000;
+    registre.comptes.releverQuota({
+      compteId: 'compte1',
+      typeFenetre: 'seven_day',
+      statut: 'rejected',
+      utilisation: 100,
+      resetA: maintenant - 5 * 86_400_000,
+    });
+    // Sans la fin de fenêtre, ce `rejected` du 24/07 écartait encore le compte le 31.
+    expect(registre.comptes.listerDisponibles(maintenant).map((c) => c.id)).toEqual(['compte1', 'compte2']);
+    // La même saturation, fenêtre encore ouverte, écarte toujours.
+    expect(registre.comptes.listerDisponibles(maintenant - 6 * 86_400_000).map((c) => c.id)).toEqual(['compte2']);
+  });
+
   test('les fenêtres de quota coexistent par compte', () => {
     registre.comptes.releverQuota({
       compteId: 'compte1',

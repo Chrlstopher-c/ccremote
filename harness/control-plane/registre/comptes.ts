@@ -7,6 +7,7 @@
  */
 
 import type { Database } from 'bun:sqlite';
+import { fenetreEncoreSaturante } from '../../shared/saturation-compte.ts';
 import { executer } from './journal.ts';
 import { versCompte, versQuota, type LigneCompte, type LigneQuota } from './lignes.ts';
 import type { Compte, CreationCompte, Quota, RelevéQuota } from './types.ts';
@@ -168,20 +169,26 @@ export class DepotComptes {
     );
   }
 
-  /** Comptes actifs sans fenêtre `rejected` — alimente la rotation de H-53. */
-  public listerDisponibles(): readonly Compte[] {
+  /**
+   * Comptes actifs dont aucune fenêtre ne sature ENCORE — alimente la rotation
+   * de H-53.
+   *
+   * `☠` Le filtre était en SQL (`NOT EXISTS … statut = 'rejected'`) et ignorait
+   * `reset_a` : un `rejected` relevé une fois écartait le compte à vie tant que
+   * la sonde ne le contredisait pas. Le tri se fait maintenant en TypeScript pour
+   * que la règle vive dans `fenetreEncoreSaturante` et nulle part ailleurs — une
+   * règle métier dupliquée entre SQL et TS diverge exactement comme
+   * `MOTIFS_SATURATION` l'a fait. Le coût est nul : on compte les comptes sur
+   * les doigts d'une main.
+   */
+  public listerDisponibles(maintenant: number = Date.now()): readonly Compte[] {
     return executer('comptes.listerDisponibles', () => {
       const lignes = this.db
-        .query<LigneCompte, []>(
-          `SELECT c.* FROM compte c
-            WHERE c.actif = 1
-              AND NOT EXISTS (
-                SELECT 1 FROM quota_compte q
-                 WHERE q.compte_id = c.id AND q.statut = 'rejected')
-            ORDER BY c.id`,
-        )
+        .query<LigneCompte, []>('SELECT * FROM compte WHERE actif = 1 ORDER BY id')
         .all();
-      return lignes.map(versCompte);
+      return lignes
+        .map(versCompte)
+        .filter((c) => !this.listerQuotas(c.id).some((q) => fenetreEncoreSaturante(q, maintenant)));
     });
   }
 

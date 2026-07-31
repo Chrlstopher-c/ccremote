@@ -27,6 +27,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Registre } from '../../control-plane/registre/index.ts';
+import { fenetreEncoreSaturante } from '../../shared/saturation-compte.ts';
 import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'choix-compte-orchestrateur' });
@@ -49,11 +50,13 @@ export function emailDuConfigDir(configDir: string): string | null {
  * deux : saturé / disponible / inconnu — et l'inconnu se comporte comme
  * disponible (voir l'en-tête).
  */
-function estSature(registre: Registre, email: string | null): boolean {
+function estSature(registre: Registre, email: string | null, maintenant: number = Date.now()): boolean {
   if (email === null) return false;
   const compte = registre.comptes.lister().find((c) => c.email === email);
   if (compte === undefined) return false;
-  return registre.comptes.listerQuotas(compte.id).some((q) => q.statut === 'rejected');
+  // `☠` La fin de fenêtre compte autant que le verdict : voir `fenetreEncoreSaturante`.
+  // Un `rejected` dont le reset est passé écartait le compte des jours durant.
+  return registre.comptes.listerQuotas(compte.id).some((q) => fenetreEncoreSaturante(q, maintenant));
 }
 
 /**
@@ -66,11 +69,12 @@ export function choisirCompteDisponible(
   configDirs: readonly string[],
   registre: Registre,
   depuis = 0,
+  maintenant: number = Date.now(),
 ): number {
   for (let i = depuis; i < configDirs.length; i += 1) {
     const dir = configDirs[i];
     if (dir === undefined) continue;
-    if (!estSature(registre, emailDuConfigDir(dir))) {
+    if (!estSature(registre, emailDuConfigDir(dir), maintenant)) {
       if (i !== depuis) log.info({ configDir: dir, index: i }, 'compte orchestrateur choisi sur quota mesuré');
       return i;
     }

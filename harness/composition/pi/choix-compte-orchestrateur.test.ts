@@ -79,3 +79,34 @@ describe('choix du compte orchestrateur — sur quota MESURÉ', () => {
     expect(emailDuConfigDir(join(racine, 'inexistant'))).toBeNull();
   });
 });
+
+describe('☠ une saturation périmée ne condamne plus le compte (vécu 26→31/07)', () => {
+  const MAINTENANT = 1_700_000_000_000;
+
+  function declarerAvecReset(id: string, email: string, resetA: number): void {
+    registre.comptes.enregistrer({ id, configDir: `/pc/${id}`, email });
+    registre.comptes.releverQuota({
+      compteId: id,
+      typeFenetre: 'seven_day',
+      statut: 'rejected',
+      utilisation: 100,
+      resetA,
+    });
+  }
+
+  test('fenêtre finie il y a cinq jours : l’orchestrateur redémarre sur le compte A', async () => {
+    const a = await configDir('a', 'a@exemple.fr');
+    const b = await configDir('b', 'b@exemple.fr');
+    declarerAvecReset('compte-a', 'a@exemple.fr', MAINTENANT - 5 * 86_400_000);
+    declarerCompte('compte-b', 'b@exemple.fr', false);
+    expect(choisirCompteDisponible([a, b], registre, 0, MAINTENANT)).toBe(0);
+  });
+
+  test('fenêtre encore ouverte : le compte reste sauté', async () => {
+    const a = await configDir('a', 'a@exemple.fr');
+    const b = await configDir('b', 'b@exemple.fr');
+    declarerAvecReset('compte-a', 'a@exemple.fr', MAINTENANT + 3_600_000);
+    declarerCompte('compte-b', 'b@exemple.fr', false);
+    expect(choisirCompteDisponible([a, b], registre, 0, MAINTENANT)).toBe(1);
+  });
+});
