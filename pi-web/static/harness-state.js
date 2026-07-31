@@ -102,3 +102,16 @@ document.addEventListener('click', (e) => {
   document.getElementById('btnPlus')?.classList.remove('ouvert');
   document.getElementById('sidebar')?.classList.remove('plus-ouvert');
 });
+
+
+/**
+ * ☠ La vue d'atterrissage porte `active` en dur dans le HTML : personne n'a donc
+ * appelé `switchView`, et son initialisation (sondage, chargement des fils,
+ * élément de navigation surligné) n'a jamais lieu. On arrivait sur un
+ * orchestrateur vide qui ne se remplissait qu'après un clic ailleurs puis
+ * retour. On rejoue le passage une fois, au chargement.
+ */
+document.addEventListener('DOMContentLoaded', () => {
+  const active = document.querySelector('.view.active')?.dataset.view;
+  if (active && typeof switchView === 'function') switchView(active);
+});
