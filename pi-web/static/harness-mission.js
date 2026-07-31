@@ -130,8 +130,10 @@ function hSousTitre(m) {
     : m.state === 'paused' ? 'var(--warn)'
     : m.state === 'echec' ? 'var(--err)' : 'var(--ink-3)';
   const vif = m.state === 'running' ? ' dot-live' : '';
-  const bits = [projet, escapeHtml(m.model || '—'), hMoney(m.cost)];
-  return `<span class="h-sd${vif}" style="background:${couleur}"></span>${bits.join(' · ')}`;
+  // ☠ Une PILULE d'une ligne, pas une bande de métriques : le reste (contexte,
+  // durée, identité) vit derrière « ··· ». Le point d'état porte la couleur.
+  return `<span class="h-sd${vif}" style="background:${couleur}"></span>` +
+    `${projet} · ${escapeHtml(m.model || '—')} · ${hMoney(m.cost)}`;
 }
 
 function hDefilerEnBas() {

@@ -601,3 +601,38 @@
     font-size: 9.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
   #navPlus { overflow: hidden; }
   #btnPlus.ouvert #chevronPlus { transform: rotate(180deg); }
+
+  /* ===== barre de titre — valeurs du markup de référence =====
+     h-[32px], gutter absolu de 32 px à gauche, titre en bouton texte, actions
+     à droite en carrés. Une seule ligne : ce qui n'y tient pas va dans la
+     pilule ou derrière « ··· ». */
+  /* ☠ `flex: 0 0 auto` indispensable : dans un flex-column, un enfant sans base
+     figée se fait COMPRIMER par le contenu — la barre mesurait 31 px dans une
+     vue et 44 dans l'autre, pour le même CSS. */
+  .h-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center;
+    flex: 0 0 auto; height: 38px; padding: 0 10px 0 0; background: var(--bg-2);
+    border-bottom: 1px solid var(--line); }
+  .h-topbar .lead { position: relative; display: flex; align-items: center; gap: 7px;
+    min-width: 0; padding-left: 34px; flex: 1; }
+  .h-topbar .gutter { position: absolute; left: 3px; top: 50%; transform: translateY(-50%);
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; color: var(--ink-3); background: none; border: none; }
+  .h-topbar .gutter:hover { background: rgba(31,30,29,.06); color: var(--ink); }
+  /* ☠ `cursor: text` dans la référence : le titre est un libellé qu'on peut
+     renommer, pas un bouton d'action. Le curseur le dit avant le clic. */
+  .tb-titre { min-width: 0; max-width: 46%; padding: 0; border: none; background: none;
+    font-size: 14px; font-weight: 500; color: var(--ink); text-align: left;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: text; }
+  .tb-pilule { display: inline-flex; align-items: center; height: 19px; padding: 0 8px;
+    border-radius: 9999px; background: var(--bg-3); border: none; color: var(--ink-2);
+    font-size: 11.5px; min-width: 0; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; flex: 0 1 auto; }
+  .tb-pilule:hover { background: var(--line); }
+  .h-topbar .aux { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; padding-left: 20px; }
+  .tb-ico { position: relative; width: 28px; height: 28px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; color: var(--ink-2);
+    background: none; border: none; transition: all .15s ease; }
+  .tb-ico:hover { background: rgba(31,30,29,.06); color: var(--ink); }
+  /* Pastille de 4 px, comme la référence — un point, pas un compteur. */
+  .tb-pastille { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px;
+    border-radius: 50%; background: var(--accent); }

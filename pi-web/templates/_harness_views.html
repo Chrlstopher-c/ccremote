@@ -28,15 +28,24 @@
          le bouton « ··· ». Le tableau de bord d'avant mettait le fil en
          cinquième position, sous quatre cartes de même poids. -->
     <div class="view flex-1 flex-col overflow-y-auto h-mission-view" data-view="harness-mission">
-      <header class="h-mhead">
-        <button class="ic" data-view="harness-parc" aria-label="Retour au parc">
-          <svg width="12" height="20" viewBox="0 0 12 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2 2 10l8 8"/></svg>
-        </button>
-        <div class="ttl">
-          <h1 id="hMissionTitle" class="t1">—</h1>
-          <div id="hMissionSub" class="t2">—</div>
+      <!-- ☠ Barre de titre à 32 px, UNE seule ligne : le titre est un bouton
+           texte aligné à gauche, l'icône d'état occupe un gutter en position
+           absolue, les actions sont à droite. Le titre centré sur deux lignes
+           que j'avais mis est un motif d'app mobile. Ce qui ne tient pas ici
+           (projet, modèle, coût) vit dans la pilule et dans « ··· ». -->
+      <header class="h-topbar">
+        <div class="lead">
+          <button class="gutter" data-view="harness-parc" aria-label="Retour au parc" title="Retour au parc">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button id="hMissionTitle" class="tb-titre">—</button>
+          <button id="hMissionSub" class="tb-pilule">—</button>
         </div>
-        <button class="more" onclick="hOuvrirDetails()" aria-label="Détails de la mission">···</button>
+        <div class="aux">
+          <button class="tb-ico" onclick="hOuvrirDetails()" aria-label="Détails de la mission" title="Détails">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>
+          </button>
+        </div>
       </header>
       <div class="h-flow" id="hMissionBody"></div>
       <div class="h-dock" id="hMissionDock">
@@ -106,17 +115,20 @@
            Les entrées Autonomie / Rappels / Stats vivaient ici en boutons et en
            panneaux dépliants — elles sont passées dans la feuille d'options, qui
            EMPRUNTE les panneaux existants plutôt que de les dupliquer. -->
-      <header class="h-mhead">
-        <button class="sidebarToggle ic lg:hidden">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-        <div class="ttl">
-          <h1 class="t1">Orchestrateur</h1>
-          <div class="t2" id="hOrchSub">Session Agent SDK · MCP de contrôle du parc</div>
+      <header class="h-topbar">
+        <div class="lead">
+          <button class="gutter sidebarToggle" aria-label="Menu" title="Menu">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <button class="tb-titre" id="hOrchTitre">Orchestrateur</button>
+          <button class="tb-pilule" id="hOrchSub" onclick="hOuvrirOptionsOrch()">Agent SDK</button>
         </div>
-        <button class="more" onclick="hOuvrirOptionsOrch()" aria-label="Options de la conversation">
-          ···<span class="h-pastille" id="hOrchPastille" style="display:none;"></span>
-        </button>
+        <div class="aux">
+          <button class="tb-ico" onclick="hOuvrirOptionsOrch()" aria-label="Options de la conversation" title="Options">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>
+            <span class="tb-pastille" id="hOrchPastille" style="display:none;"></span>
+          </button>
+        </div>
       </header>
       <!-- ☠ Ces trois éléments sont ÉCRITS par d'autres modules
            (`harness-rappels.js` → `hRappelsCount`, `harness-autonomie.js` →
