@@ -252,7 +252,9 @@ function hEnsureAssistant(chat) {
   if (hOrch.cur && hOrch.cur.isConnected) return hOrch.cur;
   const a = document.createElement('div'); a.className = 'bubble-a msg-wrap';
   // Copie tout le texte rendu du groupe (hors réflexion repliée et outils).
-  a.appendChild(hBoutonCopier(() => [...a.querySelectorAll('.md')].map((n) => n.innerText).join('\n\n').trim()));
+  // ☠ `.h-say` depuis le passage au vocabulaire de la page mission : le sélecteur
+  // `.md` seul ne trouvait plus rien et le bouton copiait une chaîne vide.
+  a.appendChild(hBoutonCopier(() => [...a.querySelectorAll('.h-say, .md')].map((n) => n.innerText).join('\n\n').trim()));
   chat.appendChild(a); hOrch.cur = a; return a;
 }
 function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
@@ -286,45 +288,56 @@ function hPeindreTexte(noeud, contenu, live) {
  */
 function hBlocNode(type, contenu, live) {
   if (type === 'texte') {
+    // ☠ Même corps que la page mission : serif, pleine largeur, aucun fond.
+    // C'est ce que l'orchestrateur DIT — la seule chose qu'on vient lire.
     const d = document.createElement('div');
-    d.className = 'md text-[14px] leading-relaxed';
-    d.style.color = 'var(--ink)';
+    d.className = 'h-say';
     hPeindreTexte(d, contenu, live);
     return d;
   }
   if (type === 'reflexion') {
-    const d = document.createElement('div');
-    d.className = 'think rounded-lg' + (live ? '' : ' collapsed');
-    d.innerHTML = `
-      <button class="think-toggle w-full flex items-center gap-2 px-3.5 py-2.5 text-left">
-        <svg class="think-chevron" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-3);"><polyline points="6 9 12 15 18 9"/></svg>
-        <span class="text-[11.5px] font-medium uppercase tracking-wider" style="color: var(--ink-3);">${live ? 'Réflexion en cours' : 'Réflexion'}</span>
-      </button>
-      <div class="think-body px-3.5 pb-3.5 pt-0"><div class="pl-5 border-l-2 text-[13px] italic leading-relaxed serif" style="border-color: var(--line-2); color: var(--ink-2);"></div></div>`;
-    d.querySelector('.think-body > div').textContent = contenu;
-    d.querySelector('.think-toggle').addEventListener('click', () => d.classList.toggle('collapsed'));
-    return d;
+    // ☠ Pendant la frappe, la réflexion reste DÉPLIÉE : c'est le seul signe
+    // visible que le modèle travaille, et `hRenderPartiel` écrit dans
+    // `.think-body > div`. Une fois le tour fini, `hClearPartiel` retire ce
+    // nœud et l'évènement définitif repasse ici avec `live` faux — on rend
+    // alors une valise, comme dans la page mission.
+    if (live) {
+      const d = document.createElement('div');
+      d.className = 'think rounded-lg';
+      d.innerHTML = `
+        <div class="w-full flex items-center gap-2 px-3.5 py-2.5 text-left">
+          <span class="text-[11.5px] font-medium uppercase tracking-wider" style="color: var(--ink-3);">Réflexion en cours</span>
+        </div>
+        <div class="think-body px-3.5 pb-3.5 pt-0"><div class="pl-5 border-l-2 text-[13px] italic leading-relaxed serif" style="border-color: var(--line-2); color: var(--ink-2);"></div></div>`;
+      d.querySelector('.think-body > div').textContent = contenu;
+      return d;
+    }
+    const b = document.createElement('button');
+    b.className = 'h-case';
+    b.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>
+      <span class="lb"></span><span class="cv">›</span>`;
+    b.querySelector('.lb').textContent = String(contenu).replace(/\s+/g, ' ').trim();
+    b.addEventListener('click', () => HSheets.ouvrir({
+      titre: 'Thought process',
+      html: `<div class="h-think">${hMarkdown(contenu)}</div>`,
+    }));
+    return b;
   }
   if (type === 'outil') {
-    const d = document.createElement('div');
-    d.className = 'tool tool-success my-1';
-    d.innerHTML = `
-      <div class="flex items-center gap-3 px-3.5 py-2.5">
-        <div class="shrink-0 w-7 h-7 rounded-md flex items-center justify-center" style="background: var(--bg-2);">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="color: var(--ink-2);"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 2"/></svg>
-        </div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="text-[12.5px] font-medium mono nomOutil" style="color: var(--ink);"></span>
-            <span class="badge" style="background: var(--ok-soft); color: var(--ok);">terminé</span>
-          </div>
-          <div class="text-[11.5px] mt-0.5 truncate cheminOutil" style="color: var(--ink-3);"></div>
-        </div>
-      </div>`;
-    d.querySelector('.nomOutil').textContent = hToolLabel(contenu);
-    // Chemin complet de l'outil MCP : utile pour savoir d'où il vient.
-    d.querySelector('.cheminOutil').textContent = contenu;
-    return d;
+    // ☠ Une carte par appel d'outil noyait le fil : sur un tour d'orchestrateur,
+    // les outils sont l'essentiel du volume et l'accessoire du sens. Une ligne,
+    // et le chemin complet dans la feuille pour savoir d'où vient l'outil MCP.
+    const b = document.createElement('button');
+    b.className = 'h-case';
+    b.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l5 5-5 5M12 17h8"/></svg>
+      <span class="lb"></span><span class="cv">›</span>`;
+    b.querySelector('.lb').textContent = `Called ${hToolLabel(contenu)}`;
+    b.addEventListener('click', () => HSheets.ouvrir({
+      titre: hToolLabel(contenu),
+      html: `<div class="h-lbl">Outil appelé</div><div class="h-blk">${escapeHtml(contenu)}</div>`
+        + '<div class="h-note">Le harness journalise l’appel, pas son résultat (H-45).</div>',
+    }));
+    return b;
   }
   if (type === 'erreur') {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
@@ -385,12 +398,9 @@ function hBlocNode(type, contenu, live) {
   // La notification serait remise à l'orchestrateur, agirait sur lui, et
   // n'apparaîtrait nulle part à l'écran.
   if (type === 'notification') {
-    const d = document.createElement('details');
-    d.className = 'orch-compact';
-    const s3 = document.createElement('summary');
-    s3.textContent = 'Notification du harness — ' + String(contenu).split('\n')[0].replace('[HARNESS] ', '').slice(0, 90);
-    const b3 = document.createElement('div'); b3.className = 'think-body'; b3.textContent = contenu;
-    d.append(s3, b3);
+    const d = document.createElement('div');
+    d.className = 'h-harness';
+    d.innerHTML = hMarkdown(String(contenu).replace(/^\[HARNESS\]\s*/, ''));
     return d;
   }
   return null;

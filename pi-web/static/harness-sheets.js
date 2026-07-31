@@ -40,7 +40,7 @@ const HSheets = (() => {
    * « Back » qui rappelle cette fonction : c'est ce qui permet valise → détail
    * d'un outil sans jamais empiler deux surfaces.
    */
-  function ouvrir({ titre, html, retour }) {
+  function ouvrir({ titre, html, noeud, retour }) {
     const r = assurerRacine();
     const lead = r.querySelector('[data-lead]');
     lead.innerHTML = retour ? `${ICONE_RETOUR}<span>Back</span>` : ICONE_X;
@@ -48,17 +48,54 @@ const HSheets = (() => {
     lead.onclick = retour || fermer;
     r.querySelector('[data-titre]').textContent = titre;
     const corps = r.querySelector('[data-corps]');
-    corps.innerHTML = html;
+    // ☠ RENDRE AVANT DE VIDER. Sans cette ligne, enchaîner deux feuilles
+    // (« Rappels » puis « Statistiques ») détruisait le panneau emprunté par la
+    // première : `innerHTML = ''` l'efface du document, `getElementById` rend
+    // ensuite `null`, et le panneau n'existe plus jusqu'au rechargement de la
+    // page. Mesuré le 01/08 — la fermeture seule ne suffit pas à le restituer.
+    restituer();
+    // ☠ `noeud` DÉPLACE un élément déjà monté au lieu d'en cloner le HTML :
+    // les panneaux Autonomie et Rappels portent des identifiants que leur code
+    // interroge (`hAutoDebut`, `hRappelsListe`…). Un clone créerait des doublons
+    // d'id et `getElementById` rendrait le mauvais — panne silencieuse garantie.
+    corps.innerHTML = '';
+    if (noeud) {
+      noeud.style.display = '';
+      corps.appendChild(noeud);
+    } else {
+      corps.innerHTML = html || '';
+    }
     corps.scrollTop = 0;
     // Deux images successives pour que la transition parte de l'état fermé.
     requestAnimationFrame(() => r.classList.add('on'));
     document.addEventListener('keydown', surEchap);
   }
 
+  /**
+   * Rend à son hôte tout nœud emprunté encore présent dans la feuille.
+   *
+   * ☠ Appelée à la FERMETURE *et* à chaque ouverture : un nœud laissé dans la
+   * feuille disparaît du document dès qu'on écrit son contenu, et le code qui
+   * l'alimente écrit alors dans un élément détaché — visible nulle part, sans
+   * la moindre erreur pour le signaler.
+   */
+  function restituer() {
+    if (!racine) return;
+    const corps = racine.querySelector('[data-corps]');
+    [...corps.children].forEach((n) => {
+      const hote = n.dataset && n.dataset.hote ? document.getElementById(n.dataset.hote) : null;
+      if (hote) {
+        n.style.display = 'none';
+        hote.appendChild(n);
+      }
+    });
+  }
+
   function fermer() {
     if (!racine) return;
     racine.classList.remove('on');
     document.removeEventListener('keydown', surEchap);
+    restituer();
   }
 
   function surEchap(e) {

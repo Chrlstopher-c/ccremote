@@ -99,29 +99,40 @@
 
     <!-- ============ VIEW: HARNESS — ORCHESTRATEUR ============ -->
     <div class="view flex-1 flex-col min-h-0" data-view="harness-orchestrateur">
-      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b" style="border-color: var(--line);">
-        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <!-- ☠ Même header que la page mission : hamburger, identité centrée, « ··· ».
+           Les entrées Autonomie / Rappels / Stats vivaient ici en boutons et en
+           panneaux dépliants — elles sont passées dans la feuille d'options, qui
+           EMPRUNTE les panneaux existants plutôt que de les dupliquer. -->
+      <header class="h-mhead">
+        <button class="sidebarToggle ic lg:hidden">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
-        <div class="min-w-0">
-          <h1 class="serif text-[17px] font-medium leading-none" style="color: var(--ink);">Orchestrateur</h1>
-          <div class="text-[11px] mt-1" style="color: var(--ink-3);">Session Agent SDK · MCP de contrôle du parc</div>
+        <div class="ttl">
+          <h1 class="t1">Orchestrateur</h1>
+          <div class="t2" id="hOrchSub">Session Agent SDK · MCP de contrôle du parc</div>
         </div>
-        <button onclick="hOuvrirRappels()" class="ml-auto text-[11.5px] px-2.5 py-1.5 rounded-md hover:bg-black/5 flex items-center gap-1.5" style="color: var(--ink-2);" title="Rappels programmés de cette conversation">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-          <span>Rappels</span><span id="hRappelsCount" class="text-[10px] px-1.5 rounded-full" style="background: var(--bg-3); color: var(--ink-3); display:none;">0</span>
+        <button class="more" onclick="hOuvrirOptionsOrch()" aria-label="Options de la conversation">
+          ···<span class="h-pastille" id="hOrchPastille" style="display:none;"></span>
         </button>
-        <button onclick="hOuvrirAutonomie()" class="text-[11.5px] px-2.5 py-1.5 rounded-md hover:bg-black/5 flex items-center gap-1.5" style="color: var(--ink-2);" title="Déléguer une plage de travail à ce fil">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-          <span id="hAutonomieLabel">Autonomie</span>
-        </button>
-        <div class="orch-stats" id="hOrchStats"></div>
       </header>
+      <!-- ☠ Ces trois éléments sont ÉCRITS par d'autres modules
+           (`harness-rappels.js` → `hRappelsCount`, `harness-autonomie.js` →
+           `hAutonomieLabel`, `harness-orchestrateur.js` → `hOrchStats`). Les
+           supprimer du header en les déplaçant dans la feuille aurait produit
+           une panne muette : `getElementById` rend `null`, le code sort sans
+           rien dire, et l'information disparaît sans erreur. Ils restent donc
+           montés en permanence, hors écran, et la feuille les lit ou les
+           emprunte. -->
+      <div id="hOrchStatsHote" style="display:none;"><div class="orch-stats" id="hOrchStats" data-hote="hOrchStatsHote"></div></div>
+      <div style="display:none;">
+        <span id="hRappelsCount"></span><span id="hAutonomieLabel">Autonomie</span>
+      </div>
       <!-- ☠ La CRÉATION n'est pas ici, et c'est délibéré : une consigne de rappel
            est un texte réinjecté à l'orchestrateur, qui doit pouvoir l'exploiter
            sans contexte. C'est lui qui la rédige, avec ses outils. L'écran donne
            la visibilité et le contrôle — voir, mettre en pause, reprendre, supprimer. -->
-      <div id="hRappelsPanneau" class="px-4 lg:px-7 pt-3" style="display:none;">
+      <div id="hRappelsHote" style="display:none;"></div>
+      <div id="hRappelsPanneau" data-hote="hRappelsHote" style="display:none;">
         <div class="rounded-lg border px-3.5 py-3" style="border-color: var(--line); background: var(--bg-2);">
           <div class="flex items-center gap-2 mb-2">
             <div class="text-[12.5px] font-medium" style="color: var(--ink);">Rappels de cette conversation</div>
@@ -135,7 +146,8 @@
       <!-- ☠ Plage DATÉE, pas « mode nuit » : une deadline explicite est ce qui
            fait arbitrer l'orchestrateur entre lancer une équipe de plus et
            consolider. Un simple interrupteur ne lui apprendrait rien du temps. -->
-      <div id="hAutonomiePanneau" class="px-4 lg:px-7 pt-3" style="display:none;">
+      <div id="hAutonomieHote" style="display:none;"></div>
+      <div id="hAutonomiePanneau" data-hote="hAutonomieHote" style="display:none;">
         <div class="rounded-lg border px-3.5 py-3" style="border-color: var(--line); background: var(--bg-2);">
           <div class="text-[12.5px] font-medium mb-2" style="color: var(--ink);">Déléguer une plage de travail à ce fil</div>
           <div class="text-[11px] mb-2.5" style="color: var(--ink-3);">Pendant la plage, les mandats de cette conversation démarrent sans ton clic, et l'échéance sert de deadline à l'orchestrateur.</div>

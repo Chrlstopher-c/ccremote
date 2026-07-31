@@ -475,3 +475,21 @@
   .h-det summary::before { content: '› '; display: inline-block; transition: transform .18s ease; }
   .h-det[open] summary::before { transform: rotate(90deg); }
   .h-sep { padding: 8px 0 2px; font-size: 12px; color: var(--ink-3); border-bottom: none !important; }
+
+  /* ===== conversation orchestrateur — même vocabulaire que la page mission =====
+     ☠ On restyle, on ne réécrit pas : le streaming (bloc partiel, curseur de
+     frappe, garde de sélection) est du code éprouvé qu'un refactor visuel n'a
+     aucune raison de traverser. */
+  [data-view="harness-orchestrateur"] #hChatBody { gap: 0; padding-top: 20px; }
+  /* La bulle opérateur passe du noir plein au gris clair d'Anthropic : sur un
+     fond crème, un bloc noir attire l'œil plus que la réponse elle-même. */
+  [data-view="harness-orchestrateur"] .bubble-u { background: var(--bg-3); color: var(--ink);
+    border-radius: 20px; padding: 13px 17px; font-size: 15.5px; line-height: 1.44;
+    max-width: 86%; margin: 14px 0 22px auto; }
+  [data-view="harness-orchestrateur"] .bubble-a { display: flex; flex-direction: column; }
+  [data-view="harness-orchestrateur"] .h-case { padding-left: 0; padding-right: 0; }
+  [data-view="harness-orchestrateur"] .h-say { padding-left: 0; padding-right: 0; }
+  [data-view="harness-orchestrateur"] .h-harness { margin-left: 0; margin-right: 0; }
+  .h-pastille { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--accent); }
+  .h-mhead .more { position: relative; }
