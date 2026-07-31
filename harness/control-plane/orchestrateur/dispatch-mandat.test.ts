@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
+import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
+import { OUTILS_ECRITURE } from '../../shared/acces-mandat.ts';
 import { dispatcherMandat, ErreurProjetOccupe, type DependancesDispatch } from './dispatch-mandat.ts';
 
 let registre: Registre;
@@ -151,5 +153,72 @@ describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’aut
 
     const second = await dispatcherMandat(PROPOSITION, deps());
     expect(registre.missions.lire(second.missionId)?.epoch).toBe(2);
+  });
+});
+
+describe('☠ l’accès du mandat est un DROIT posé sur le worker, pas une phrase', () => {
+  /** Capture ce qui part RÉELLEMENT vers le PC — seul artefact qui fasse foi. */
+  async function dispatcher(acces?: string): Promise<{
+    readonly denis: readonly string[];
+    readonly prompt: string;
+  }> {
+    let denis: readonly string[] = [];
+    let prompt = '';
+    const d: DependancesDispatch = {
+      ...deps(),
+      demarreur: {
+        demarrer: async (dem: {
+          promptInitial: string;
+          parametres: { deniedToolPatterns: readonly string[] };
+        }) => {
+          denis = dem.parametres.deniedToolPatterns;
+          prompt = dem.promptInitial;
+          return { detail: 'ok' };
+        },
+      } as never,
+    };
+    const proposition = { ...(PROPOSITION as object), acces } as never;
+    await dispatcherMandat(proposition, d);
+    return { denis, prompt };
+  }
+
+  test('☠ le PLANCHER de déni part sur TOUT dispatch, quel que soit l’accès', async () => {
+    // Le défaut vécu : le seul site de dispatch réel n'alimente pas
+    // `deps.deniedToolPatterns`, donc `?? []` rendait un tableau vide et
+    // `disallowedTools` était vide sur le worker. Le plancher existait, était
+    // testé, et ne protégeait rien — y compris `~/.ssh` et `.credentials.json`.
+    for (const acces of ['lecture', 'ecriture']) {
+      const { denis } = await dispatcher(acces);
+      for (const motif of PLANCHER_DENI_SDK) expect(denis).toContain(motif);
+      registre.etats.appliquerEtatHarness(
+        registre.missions.listerActives()[0]?.id ?? '',
+        'terminee',
+      );
+    }
+  });
+
+  test('`lecture` refuse RÉELLEMENT les outils d’écriture, Bash compris', async () => {
+    const { denis, prompt } = await dispatcher('lecture');
+    for (const outil of OUTILS_ECRITURE) expect(denis).toContain(outil);
+    expect(prompt).toContain('LECTURE SEULE');
+  });
+
+  test('`ecriture` n’ajoute rien au plancher — une équipe de modification travaille', async () => {
+    const { denis, prompt } = await dispatcher('ecriture');
+    for (const outil of OUTILS_ECRITURE) expect(denis).not.toContain(outil);
+    expect(denis).toEqual([...PLANCHER_DENI_SDK]);
+    expect(prompt).toContain('lecture et écriture');
+  });
+
+  test('☠ un accès ABSENT ou illisible retombe sur la lecture — jamais sur l’écriture', async () => {
+    for (const valeur of [undefined, '', 'admin', 'lecture+']) {
+      const { denis, prompt } = await dispatcher(valeur);
+      expect(denis).toContain('Bash');
+      expect(prompt).toContain('LECTURE SEULE');
+      registre.etats.appliquerEtatHarness(
+        registre.missions.listerActives()[0]?.id ?? '',
+        'terminee',
+      );
+    }
   });
 });

@@ -45,6 +45,7 @@ import {
 } from '../../control-plane/orchestrateur/gestionnaire-conversations.ts';
 import { randomUUID } from 'node:crypto';
 import { dispatcherMandat } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
+import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
@@ -247,6 +248,9 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 objectif: mandat.objectif,
                 critereArret: mandat.critereArret,
                 perimetre: mandat.perimetre,
+                // `☠` Absent ⇒ `lecture`, jamais l'écriture : un chemin qui
+                // oublierait de transmettre l'accès doit RETIRER des droits.
+                acces: mandat.acces ?? ACCES_DEFAUT,
                 budgetMaxUsd: BUDGET_MANDAT_DEFAUT_USD,
                 modele: mandat.modele ?? null,
                 effort: mandat.effort ?? null,

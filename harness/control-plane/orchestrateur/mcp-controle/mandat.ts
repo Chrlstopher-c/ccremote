@@ -5,11 +5,14 @@
  * présentera à l'approbation humaine.
  */
 
+import type { AccesMandat } from '../../../shared/acces-mandat.ts';
+
 export interface PropositionMandat {
   readonly projet: string;
   readonly objectif: string;
   readonly critereArret: string | null;
   readonly perimetre: string;
+  readonly acces: AccesMandat;
   readonly texte: string;
 }
 
@@ -34,12 +37,17 @@ export function construireMandatPropose(
   objectif: string,
   critereArret: string | null,
   perimetre: string,
+  acces: AccesMandat,
 ): PropositionMandat {
   const lignes = [
     `Objectif : ${objectif}`,
     `Périmètre autorisé : ${perimetre} (interdiction de sortir du worktree)`,
+    // `☠` L'accès figure dans le TEXTE soumis à l'opérateur : H-61 veut une
+    // autorisation éclairée, et « lecture seule » ou « écriture » est ce qui
+    // change le plus la portée de ce qu'il approuve d'un clic.
+    `Accès accordé : ${acces === 'lecture' ? 'LECTURE SEULE (Write, Edit, NotebookEdit et Bash refusés)' : 'lecture et écriture'}`,
     `Critère d'arrêt : ${critereArret ?? '⚠ non fourni — à compléter avant approbation'}`,
     ...CLAUSES_FIXES,
   ];
-  return { projet, objectif, critereArret, perimetre, texte: lignes.join('\n\n') };
+  return { projet, objectif, critereArret, perimetre, acces, texte: lignes.join('\n\n') };
 }

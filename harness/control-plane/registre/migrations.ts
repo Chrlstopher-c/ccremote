@@ -407,6 +407,23 @@ ALTER TABLE conversation_evenement ADD COLUMN modele TEXT;
 ALTER TABLE conversation_evenement ADD COLUMN effort TEXT;
 `;
 
+/**
+ * L'accès d'un mandat devient une donnée, plus une phrase.
+ *
+ * `☠` Défaut `'lecture'` et non `'ecriture'` : les propositions antérieures sont
+ * toutes tranchées, le défaut ne change donc rien pour elles — mais il fixe le
+ * sens du doute pour tout ce qui viendrait ensuite sans préciser. Un accès
+ * manquant doit RETIRER des droits, jamais en accorder.
+ *
+ * `perimetre` survit à côté : il reste la description libre du cadre de travail,
+ * lue par le lead. Ce qu'on lui retire, c'est la charge de porter un droit —
+ * qu'il n'a jamais portée autrement qu'en apparence (voir `shared/acces-mandat.ts`).
+ */
+const MIGRATION_13 = `
+ALTER TABLE proposition ADD COLUMN acces TEXT NOT NULL DEFAULT 'lecture'
+  CHECK (acces IN ('lecture','ecriture'));
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -420,6 +437,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 10, nom: 'sous-agents-mission', sql: MIGRATION_10 },
   { version: 11, nom: 'activites-sous-agent', sql: MIGRATION_11 },
   { version: 12, nom: 'modele-effort-conversation', sql: MIGRATION_12 },
+  { version: 13, nom: 'acces-mandat', sql: MIGRATION_13 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

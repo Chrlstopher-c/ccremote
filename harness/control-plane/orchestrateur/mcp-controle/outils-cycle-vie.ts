@@ -14,6 +14,7 @@ import { accepte, applique, echecInattendu, refuse } from './contrat.ts';
 import { construireMandatPropose } from './mandat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import { avecPlafond } from './plafond.ts';
+import type { AccesMandat } from '../../../shared/acces-mandat.ts';
 import type {
   ArreteurMission,
   ConfigPlafondParc,
@@ -72,6 +73,7 @@ export function proposerCreationEquipe(
   objectif: string,
   critereArret: string | null,
   perimetre: string,
+  acces: AccesMandat,
   lecteur: LecteurUtilisationParc,
   config: ConfigPlafondParc,
   enregistreur?: EnregistreurProposition,
@@ -82,14 +84,14 @@ export function proposerCreationEquipe(
   try {
     const plafond = evaluerPlafondParc(lecteur, config);
     if (!plafond.autorise) return refuse(intention, plafond.motif);
-    const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre);
+    const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre, acces);
     // `☠` Sans enregistreur, la proposition ne survit pas à ce tour : l'interface
     // n'aurait rien à autoriser et H-61 deviendrait une impasse. On le DIT au
     // modèle plutôt que de le laisser annoncer un bouton qui n'existe pas.
     if (enregistreur === undefined) {
       return refuse(intention, "aucun registre de propositions câblé : impossible de soumettre ce mandat à l'opérateur");
     }
-    const ref = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, modele, effort });
+    const ref = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, acces, modele, effort });
     return {
       ok: true,
       intention,

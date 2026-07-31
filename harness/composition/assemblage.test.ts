@@ -47,7 +47,7 @@ describe('assemblage — plafond de parc (G.1.3, H-74 occurrence n°2)', () => {
     registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', utilisation: 95 });
 
     const lecteur = creerLecteurUtilisationParc(registre);
-    const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => 'prop-test' });
+    const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => 'prop-test' });
 
     expect(retour.effet).toBe('refuse');
     expect(retour.raison).toContain('90');
@@ -59,7 +59,7 @@ describe('assemblage — plafond de parc (G.1.3, H-74 occurrence n°2)', () => {
     registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', utilisation: 10 });
 
     const lecteur = creerLecteurUtilisationParc(registre);
-    const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => 'prop-test' });
+    const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => 'prop-test' });
 
     expect(retour.effet).toBe('differe');
   });

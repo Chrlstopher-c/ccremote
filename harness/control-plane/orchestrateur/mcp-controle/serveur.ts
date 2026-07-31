@@ -15,6 +15,7 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createSdkMcpServer, tool, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
+import { ACCES_MANDAT } from '../../../shared/acces-mandat.ts';
 import type { Registre } from '../../registre/index.ts';
 import { applique, differe, echecInattendu, refuse } from './contrat.ts';
 import {
@@ -188,23 +189,29 @@ function outilsCycleVie(deps: DependancesServeurControle) {
       'creer_equipe',
       "Propose une nouvelle équipe sur un projet, avec un mandat. NE CRÉE RIEN : " +
         "H-61 — la création exige une autorisation humaine explicite, présentée par l'UI. " +
+        "`acces` est un DROIT RÉEL, pas une consigne rédigée : `lecture` fait refuser Write, " +
+        'Edit, NotebookEdit et Bash par le harness lui-même. Choisis `lecture` pour une équipe ' +
+        "qui explore, audite ou rend un rapport ; `ecriture` seulement si elle doit modifier le " +
+        'projet. `perimetre` reste la description en clair du cadre, il ne donne aucun droit. ' +
         "`modele` et `effort` : ne les renseigne QUE si l'opérateur a précisé lesquels. " +
-        'Laissés vides, le lead démarre sur les défauts du harness (Opus 4.8, effort high).',
+        'Laissés vides, le lead démarre sur les défauts du harness (Opus 5, effort high).',
       {
         projet: z.string(),
         objectif: z.string(),
         critereArret: z.string().nullable(),
         perimetre: z.string(),
+        acces: z.enum(ACCES_MANDAT),
         modele: z.string().nullable().optional(),
         effort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
       },
-      async ({ projet, objectif, critereArret, perimetre, modele, effort }) =>
+      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort }) =>
         protege('creer_equipe', () =>
           proposerCreationEquipe(
             projet,
             objectif,
             critereArret,
             perimetre,
+            acces,
             deps.utilisationParc,
             deps.configPlafondParc,
             deps.propositions,

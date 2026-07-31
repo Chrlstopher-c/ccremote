@@ -11,6 +11,7 @@
 
 import type { Database } from 'bun:sqlite';
 import { executer } from './journal.ts';
+import { ACCES_DEFAUT, estAccesMandat, type AccesMandat } from '../../shared/acces-mandat.ts';
 import type { Proposition, StatutProposition } from './types.ts';
 
 interface LigneProposition {
@@ -20,6 +21,7 @@ interface LigneProposition {
   objectif: string;
   critere_arret: string | null;
   perimetre: string;
+  acces: string | null;
   budget_max_usd: number;
   modele: string | null;
   effort: string | null;
@@ -38,6 +40,10 @@ function versProposition(l: LigneProposition): Proposition {
     objectif: l.objectif,
     critereArret: l.critere_arret,
     perimetre: l.perimetre,
+    // `☠` Validé à la relecture, jamais casté : la colonne porte un CHECK, mais
+    // une ligne écrite avant la migration 13 n'a rien du tout. Un accès illisible
+    // retombe sur le DÉFAUT SÛR, il n'ouvre pas l'écriture par accident.
+    acces: estAccesMandat(l.acces) ? l.acces : ACCES_DEFAUT,
     budgetMaxUsd: l.budget_max_usd,
     modele: l.modele,
     effort: l.effort,
@@ -57,6 +63,8 @@ export interface CreationProposition {
   readonly objectif: string;
   readonly critereArret: string | null;
   readonly perimetre: string;
+  /** Ce que l'équipe aura le droit de faire. Absent ⇒ défaut sûr (`lecture`). */
+  readonly acces?: AccesMandat;
   readonly budgetMaxUsd: number;
   readonly modele?: string | null;
   readonly effort?: string | null;
@@ -76,9 +84,9 @@ export class DepotPropositions {
         this.db
           .query(
             `INSERT INTO proposition
-               (id, conversation_id, projet, objectif, critere_arret, perimetre,
+               (id, conversation_id, projet, objectif, critere_arret, perimetre, acces,
                 budget_max_usd, modele, effort, statut, mission_id, detail, cree_a, maj_a)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
           )
           .run(
             creation.id,
@@ -87,6 +95,7 @@ export class DepotPropositions {
             creation.objectif,
             creation.critereArret,
             creation.perimetre,
+            creation.acces ?? ACCES_DEFAUT,
             creation.budgetMaxUsd,
             creation.modele ?? null,
             creation.effort ?? null,

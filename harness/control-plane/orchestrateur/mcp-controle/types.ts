@@ -17,6 +17,7 @@ import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { FileEntreeCiblee, SourceInterruption } from '../../../pause/index.ts';
 import type { Verdict } from '../../bus-permissions/index.ts';
 import type { ConfigPlafondParc, RelevePourPlafond } from '../../../budgets/index.ts';
+import type { AccesMandat } from '../../../shared/acces-mandat.ts';
 
 /**
  * `'accepte'` ≠ `'applique'` (A.2.3) : le premier dit « pris en compte, pas
@@ -121,6 +122,8 @@ export interface EnregistreurProposition {
     readonly objectif: string;
     readonly critereArret: string | null;
     readonly perimetre: string;
+    /** Droit réel de l'équipe. Absent ⇒ défaut sûr (`lecture`), jamais l'écriture. */
+    readonly acces?: AccesMandat;
     readonly modele?: string | null;
     readonly effort?: string | null;
   }): string;

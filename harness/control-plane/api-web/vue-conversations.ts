@@ -143,6 +143,8 @@ export interface PortMandats {
     readonly objectif: string;
     readonly critereArret: string | null;
     readonly perimetre: string;
+    /** `☠` Remonté jusqu'à l'écran : H-61 veut une autorisation ÉCLAIRÉE. */
+    readonly acces: string;
     readonly budgetMaxUsd: number;
     readonly conversationId: string | null;
     readonly statut: string;

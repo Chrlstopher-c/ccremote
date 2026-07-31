@@ -18,6 +18,13 @@ import { join } from 'node:path';
 import type { Proposition, Registre } from '../registre/index.ts';
 import type { DemandeDemarrageTransportable } from '../../superviseur/index.ts';
 import { effortsDe, messageModeleInconnu, normaliserModele } from '../../shared/modeles-claude.ts';
+import {
+  ACCES_DEFAUT,
+  estAccesMandat,
+  outilsRefusesPour,
+  type AccesMandat,
+} from '../../shared/acces-mandat.ts';
+import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'dispatch-mandat' });
@@ -104,8 +111,17 @@ export class ErreurModeleInconnu extends Error {
  * Compose le premier message du lead. `☠` Jamais vide : un flux d'entrée
  * silencieux n'émet jamais `init`, et le worker resterait muet (piège H-60).
  */
-export function composerPromptInitial(p: Proposition): string {
+export function composerPromptInitial(p: Proposition, acces: AccesMandat): string {
   const critere = p.critereArret ?? 'non fixé — rends la main dès que l’objectif est atteint';
+  // `☠` L'accès est ANNONCÉ au lead en plus d'être appliqué, et il vient du MÊME
+  // calcul que les refus d'outils (paramètre, jamais relu depuis `p`) : deux
+  // lectures indépendantes finiraient par diverger, et le lead brûlerait son
+  // budget à retenter des outils qu'on lui a dit d'utiliser.
+  const ligneAcces =
+    acces === 'lecture'
+      ? 'Accès : LECTURE SEULE. Write, Edit, NotebookEdit et Bash te sont refusés par le harness — ' +
+        'inutile de les tenter. Rends tes conclusions par écrit.'
+      : 'Accès : lecture et écriture, dans les limites du plancher de déni.';
   return [
     `Mandat autorisé par l'opérateur.`,
     ``,
@@ -113,6 +129,7 @@ export function composerPromptInitial(p: Proposition): string {
     `Objectif : ${p.objectif}`,
     `Critère d'arrêt : ${critere}`,
     `Périmètre : ${p.perimetre}`,
+    ligneAcces,
     ``,
     `Commence par établir l'état des lieux avant de modifier quoi que ce soit.`,
   ].join('\n');
@@ -133,6 +150,24 @@ export function composerPromptInitial(p: Proposition): string {
  */
 function prochainEpoch(registre: Registre, projet: string): number {
   return registre.missions.epochMaxDuProjet(projet) + 1;
+}
+
+/**
+ * Les refus d'outils réellement posés sur le worker.
+ *
+ * `☠` Le PLANCHER est INCONDITIONNEL (H-41) : il ne dépend ni de l'accès demandé
+ * ni de l'appelant. Il existait, il était testé, il était utilisé par les bancs
+ * d'acceptation — et il n'était branché sur AUCUN chemin de production : le seul
+ * site de dispatch réel n'alimente pas `deps.deniedToolPatterns`, donc le `?? []`
+ * rendait un tableau vide, que `options-composition.ts` posait tel quel en
+ * `disallowedTools`. Neuvième occurrence du motif « écrit, testé, branché sur
+ * rien » sur ce projet ; constaté le 2026-07-31. Rien n'interdisait à un worker
+ * d'écraser `~/.ssh` ou les identifiants OAuth du poste.
+ *
+ * L'accès s'ajoute par-dessus, il ne remplace jamais le plancher.
+ */
+function composerDenis(acces: AccesMandat, supplementaires?: readonly string[]): readonly string[] {
+  return [...PLANCHER_DENI_SDK, ...outilsRefusesPour(acces), ...(supplementaires ?? [])];
 }
 
 /**
@@ -197,6 +232,11 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   const modele = p.modele === null || p.modele === undefined ? MODELE_LEAD_DEFAUT : normaliserModele(p.modele);
   if (modele === null) throw new ErreurModeleInconnu(p.modele ?? '');
   const effort = effortValide(p.effort, modele);
+  // `☠` Même traitement pour l'accès, et pour la même raison : un appelant qui
+  // construirait une proposition sans ce champ (chemin non câblé, restauration,
+  // test) ne doit pas obtenir l'écriture par omission. Une seule lecture, servant
+  // À LA FOIS le prompt et les refus d'outils.
+  const acces: AccesMandat = estAccesMandat(p.acces) ? p.acces : ACCES_DEFAUT;
   // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
   // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
   // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
@@ -233,12 +273,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   const demande: DemandeDemarrageTransportable = {
     missionId,
     epoch,
-    promptInitial: composerPromptInitial(p),
+    promptInitial: composerPromptInitial(p, acces),
     parametres: {
       sessionId,
       cwd,
       mandate: p.objectif,
-      deniedToolPatterns: [...(deps.deniedToolPatterns ?? [])],
+      deniedToolPatterns: composerDenis(acces, deps.deniedToolPatterns),
       maxBudgetUsd: p.budgetMaxUsd > 0 ? p.budgetMaxUsd : BUDGET_DEFAUT_USD,
       model: modele,
       effortLevel: effort,

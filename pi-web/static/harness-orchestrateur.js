@@ -348,6 +348,7 @@ function hBlocNode(type, contenu, live) {
         <div class="mrow"><div class="k">Objectif</div><div class="v"></div></div>
         <div class="mrow"><div class="k">Critère d'arrêt</div><div class="v"></div></div>
         <div class="mrow"><div class="k">Périmètre</div><div class="v mono"></div></div>
+        <div class="mrow"><div class="k">Accès</div><div class="v"></div></div>
         <div class="mrow"><div class="k">Budget</div><div class="v mono">${hMoney(p.budgetMaxUsd)}</div></div>
       </div>
       <div class="macts">
@@ -359,6 +360,11 @@ function hBlocNode(type, contenu, live) {
     v[1].textContent = p.objectif;
     v[2].textContent = p.critereArret || '— non fixé';
     v[3].textContent = p.perimetre;
+    // Le droit réel, pas la phrase : c'est ce qui change le plus la portée de ce
+    // qu'on autorise d'un clic. Écriture = signalé, jamais discret.
+    const ecrit = p.acces === 'ecriture';
+    v[4].textContent = ecrit ? 'Lecture et écriture' : 'Lecture seule';
+    v[4].style.color = ecrit ? 'var(--warn, #d89b3c)' : 'var(--ok, #6ba368)';
     return d;
   }
   if (type === 'compaction') {

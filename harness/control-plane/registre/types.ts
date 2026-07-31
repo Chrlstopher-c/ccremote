@@ -3,6 +3,8 @@
  * Aucune I/O ici — uniquement les types du domaine « registre ».
  */
 
+import type { AccesMandat } from '../../shared/acces-mandat.ts';
+
 /**
  * États rapportés par le worker (Découverte 2, E.1.1). Autorité : le PC.
  * ☠ Ne JAMAIS fusionner avec EtatHarness dans un seul champ (panne #30).
@@ -305,7 +307,14 @@ export interface Proposition {
   readonly projet: string;
   readonly objectif: string;
   readonly critereArret: string | null;
+  /** Cadre de travail en clair, pour le lead. Descriptif — ne porte aucun droit. */
   readonly perimetre: string;
+  /**
+   * Ce que l'équipe pourra RÉELLEMENT faire. `lecture` refuse les outils
+   * d'écriture au worker (`shared/acces-mandat.ts`) ; `perimetre` ne l'a jamais
+   * fait — il ne partait que dans le prompt initial.
+   */
+  readonly acces: AccesMandat;
   readonly budgetMaxUsd: number;
   /** Modèle du lead. `null` ⇒ le défaut du dispatch (Opus 4.8). */
   readonly modele: string | null;
