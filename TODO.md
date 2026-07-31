@@ -25,6 +25,11 @@
 
 ### ✅ LIVRÉ LE 01/08
 
+- [x] **Audit des prompts côté équipe** — `mandate` ne portait que l'objectif alors qu'il devient
+      le `systemPrompt` (seul survivant de la compaction du lead) ; les CLAUSES_FIXES (H-52, H-66)
+      ne partaient qu'à l'affichage de la carte, jamais au worker. Corrigé, 25 tests neufs sur une
+      surface qui n'en avait aucun.
+
 - [x] Canal asynchrone : fin d'équipe → notification → orchestrateur (migration 14)
 - [x] Page Notifications + badge temps réel, clic → fil d'origine
 - [x] Autonomie de fil : 1er mandat autorisé, suivants automatiques (migration 15)

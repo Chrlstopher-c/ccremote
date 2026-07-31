@@ -6,7 +6,7 @@
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 01/08** : EN PRODUCTION, **1098 tests / 1098 verts**, typecheck propre, SDK épinglé
+**État au 01/08** : EN PRODUCTION, **1123 tests / 1123 verts**, typecheck propre, SDK épinglé
 **0.3.220**, schéma du registre en **version 15**. Trois services actifs, `pcOnline: true`.
 
 ### Ce qui a changé le 01/08 — le harness devient réellement autonome
@@ -29,6 +29,13 @@ l'attente : le harness peut désormais travailler sans que personne ne regarde.
    lancer 40 équipes sans savoir qu'il était à 95 % de sa fenêtre 5 h. `rechercher_projets` — il
    pouvait lister et lire, jamais trouver.
 
+4. **Le team leader reçoit enfin son mandat.** `mandate` — le champ qui devient son
+   `systemPrompt`, seul survivant de sa compaction — ne portait qu'une ligne d'objectif ; tout le
+   cadre vivait dans le premier message, donc s'évaporait sur les mandats longs. Et les
+   CLAUSES_FIXES (H-52 validation réelle, H-66 attribution) ne partaient qu'à l'AFFICHAGE de la
+   carte d'autorisation, jamais au worker : dixième occurrence du motif « écrit, testé, branché
+   sur rien », cette fois sur deux règles H.
+
 `☠` **Réflexes hérités, à ne pas réapprendre :**
 - Le déploiement a DEUX moitiés — redémarrer `ccremote-pc` après toute modification du canal, du
   SDK ou des options de worker.
@@ -39,6 +46,8 @@ l'attente : le harness peut désormais travailler sans que personne ne regarde.
   ses tests unitaires ne pouvaient pas voir (timeout pris pour une absence de ripgrep ; racine
   entière infouillable, > 2 min).
 - Un test d'assemblage part du handler réellement invoqué, jamais de la fonction.
+- Ce qui doit rester vrai au tour 50 va dans le `systemPrompt`, jamais dans le premier message :
+  les workers compactent, et un premier message ne survit pas.
 
 ## Résumé de l'état actuel (app v1, en production)
 
