@@ -110,7 +110,23 @@ export interface EnregistreurProposition {
     readonly acces?: AccesMandat;
     readonly modele?: string | null;
     readonly effort?: string | null;
-  }): string;
+  }): ResultatEnregistrement;
+}
+
+/**
+ * Ce que devient un mandat déposé.
+ *
+ * `☠` `autoApprouve` remonte jusqu'au modèle, et ce n'est pas cosmétique :
+ * l'orchestrateur doit dire à Chris ce qui s'est RÉELLEMENT passé. Annoncer
+ * « en attente de ton autorisation » alors que l'équipe travaille déjà, ou
+ * l'inverse, est la forme la plus coûteuse d'écran qui ment — celle où
+ * l'opérateur attend devant un bouton qui ne viendra pas.
+ */
+export interface ResultatEnregistrement {
+  readonly ref: string;
+  readonly autoApprouve: boolean;
+  /** Phrase à reprendre telle quelle : dit pourquoi ça part ou pourquoi ça attend. */
+  readonly detail: string;
 }
 
 /**

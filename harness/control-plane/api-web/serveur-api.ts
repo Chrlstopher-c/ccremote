@@ -297,6 +297,30 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     }
   }
 
+  // Fenêtre d'autonomie d'un fil (migration 15) — pose ou retrait.
+  const fenetre = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/autonomie$/);
+  if (fenetre?.[1] !== undefined) {
+    const id = decodeURIComponent(fenetre[1]);
+    const corps = await lireCorps(req);
+    const debut = typeof corps['start'] === 'number' ? corps['start'] : null;
+    const fin = typeof corps['end'] === 'number' ? corps['end'] : null;
+    const objectif = typeof corps['goal'] === 'string' ? corps['goal'] : null;
+    // `☠` Refus AVANT écriture, et message explicite : une fenêtre dont la fin
+    // précède le début serait posée sans jamais s'ouvrir — l'opérateur croirait
+    // avoir délégué une plage et retrouverait son parc à l'arrêt au matin.
+    if (debut !== null && fin !== null && fin <= debut) {
+      throw new ErreurApi(400, "la fin de la fenêtre doit suivre son début — sinon elle ne s'ouvre jamais");
+    }
+    deps.registre.conversations.poserFenetreAutonomie(id, debut, fin, objectif);
+    const pose = debut !== null && fin !== null;
+    return {
+      ok: true,
+      effet: pose
+        ? `autonomie déléguée du ${new Date(debut).toLocaleString('fr-FR')} au ${new Date(fin).toLocaleString('fr-FR')}`
+        : 'autonomie retirée — les mandats de ce fil repassent par la règle du premier clic',
+    };
+  }
+
   // `☠` Comme les mandats, AVANT le filtre `/orchestrator/conversations` : ces
   // routes ne touchent pas le PC et ne doivent pas dépendre de son état.
   if (chemin === '/notifications/read-all') {

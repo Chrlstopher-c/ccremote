@@ -465,6 +465,37 @@ CREATE INDEX idx_notification_non_lue ON notification(lu_a, cree_a);
 CREATE INDEX idx_notification_conversation ON notification(conversation_id, cree_a);
 `;
 
+/**
+ * L'autonomie devient une propriété du FIL, pas une exception ponctuelle.
+ *
+ * `☠` H-61 exigeait un clic humain pour CHAQUE équipe. Défendable tant que
+ * l'orchestrateur ne faisait que proposer ; intenable dès qu'on lui demande de
+ * tenir une plage de travail — à 3 h du matin, il attend un clic qui ne viendra
+ * pas, et la plage est perdue.
+ *
+ * La règle de Chris (01/08) remplace le clic par un ENGAGEMENT : dans une
+ * conversation, le PREMIER mandat se fait autoriser à la main ; les suivants
+ * passent seuls. Ce que l'humain valide n'est plus une équipe, c'est une
+ * intention de travail — et il la valide en connaissance de cause, puisqu'il
+ * vient de lire le premier mandat.
+ *
+ * `origine_approbation` est le pivot : sans lui, impossible de savoir si un
+ * humain a déjà tranché dans ce fil, donc impossible de décider — et impossible
+ * de compter les auto-approbations pour les plafonner. Un drapeau booléen sur la
+ * conversation aurait pu se désynchroniser ; ici l'état se DÉDUIT des faits.
+ *
+ * La fenêtre (`autonomie_debut` / `autonomie_fin`) porte la plage datée. Elle
+ * autorise aussi le RÉVEIL d'une session endormie — le seul cas où le harness a
+ * une raison de dépenser du quota sans que personne ne regarde. Sa fin est une
+ * échéance annoncée à l'orchestrateur, pas seulement un interrupteur.
+ */
+const MIGRATION_15 = `
+ALTER TABLE conversation ADD COLUMN autonomie_debut INTEGER;
+ALTER TABLE conversation ADD COLUMN autonomie_fin INTEGER;
+ALTER TABLE conversation ADD COLUMN autonomie_objectif TEXT;
+ALTER TABLE proposition ADD COLUMN origine_approbation TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -480,6 +511,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 12, nom: 'modele-effort-conversation', sql: MIGRATION_12 },
   { version: 13, nom: 'acces-mandat', sql: MIGRATION_13 },
   { version: 14, nom: 'notifications-canal-asynchrone', sql: MIGRATION_14 },
+  { version: 15, nom: 'autonomie-fenetre-et-origine-approbation', sql: MIGRATION_15 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

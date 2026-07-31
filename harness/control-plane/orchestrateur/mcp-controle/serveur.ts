@@ -23,6 +23,8 @@ import {
   historiqueEquipe,
   listerEquipes,
   rapportEquipe,
+  suivreEquipe,
+  autonomieDuFil,
   listerProjets,
 } from './outils-inspection.ts';
 import {
@@ -101,6 +103,13 @@ export interface DependancesServeurControle {
    * mieux vaut un outil que le modèle ne voit pas qu'un outil qui rend du vide.
    */
   readonly lecteurFichier?: LecteurFichierProjet;
+  /**
+   * Conversation dont ce serveur est la surface (migration 15). `☠` Un serveur
+   * de contrôle est construit PAR conversation — sans cet identifiant,
+   * `mon_autonomie` ne saurait pas de quel fil il parle et rendrait l'état d'un
+   * autre, ou rien.
+   */
+  readonly conversationId?: string;
 }
 
 /** Port de compaction du contexte de la session appelante. */
@@ -157,6 +166,31 @@ function outilsInspection(deps: DependancesServeurControle) {
       "Le dernier message du team leader, ENTIER : sa synthèse de fin. À utiliser dès qu'on demande le RÉSULTAT d'une équipe, et pas seulement son état.",
       { equipe: z.string().describe("Identifiant, nom ou projet de l'équipe.") },
       async ({ equipe }) => protege('rapport_equipe', () => rapportEquipe(deps.registre, equipe)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'suivre_equipe',
+      "Ce qu'une équipe fait EN CE MOMENT : ses dernières lignes de fil (outils lancés, " +
+        'réflexions, texte du lead). À utiliser pendant qu’elle travaille — `rapport_equipe` ' +
+        "ne sert qu'une fois qu'elle a fini. Par défaut 10 lignes ; monte jusqu'à 200 seulement " +
+        'si tu soupçonnes un dérapage : lire un transcript entier sature ton propre contexte. ' +
+        "Si tu vois qu'elle va conclure en oubliant quelque chose, `envoyer_a_equipe` corrige " +
+        "le tir sans interrompre son tour — inutile d'un nouveau mandat pour un détail.",
+      {
+        equipe: z.string().describe("Identifiant, nom ou projet de l'équipe."),
+        lignes: z.number().int().positive().optional().describe('Défaut 10, maximum 200.'),
+      },
+      async ({ equipe, lignes }) => protege('suivre_equipe', () => suivreEquipe(deps.registre, equipe, lignes)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'mon_autonomie',
+      "Ce que tu as le droit de lancer sans demander, et jusqu'à quand. À consulter " +
+        "quand tu hésites à proposer un mandat, et au réveil d'une notification : tu ne " +
+        "peux pas le deviner autrement. Si une fenêtre est ouverte, son échéance est une " +
+        'contrainte réelle — arbitre entre lancer une équipe de plus et consolider.',
+      {},
+      async () => protege('mon_autonomie', () => autonomieDuFil(deps.registre, deps.conversationId ?? null)),
       { annotations: { readOnlyHint: true } },
     ),
     tool('lister_projets', 'Projets connus et leur worktree.', {}, async () =>

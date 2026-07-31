@@ -203,3 +203,117 @@ export function rapportEquipe(registre: Registre, designation: string): ContratR
   }
 }
 
+
+/**
+ * Combien de lignes du fil d'une équipe l'orchestrateur voit par défaut, et au
+ * maximum.
+ *
+ * `☠` Les deux bornes ont la même raison d'être, opposée : son contexte est la
+ * ressource la plus rare du harness — c'est le seul fil qui doit tenir une
+ * fenêtre d'autonomie entière. Dix lignes suffisent à savoir où en est une
+ * équipe ; deux cents lui laissent de quoi comprendre un dérapage sans devenir
+ * lui-même le lecteur du transcript. Au-delà, ce n'est plus son rôle : c'est
+ * celui de l'équipe, et lire à sa place le ferait compacter, donc oublier ce
+ * qu'il surveillait.
+ */
+export const SUIVI_LIGNES_DEFAUT = 10;
+export const SUIVI_LIGNES_MAX = 200;
+
+/** Rend une ligne du fil lisible d'un coup d'œil, sans noyer le contexte. */
+function resumerActivite(a: { texte: string; type: string; outil: string | null }): string {
+  const marqueur = a.type === 'outil' ? `⚙ ${a.outil ?? 'outil'}` : a.type === 'reflexion' ? '…' : '›';
+  // `☠` Tronqué ICI, et assumé : une ligne de fil n'est pas une synthèse. Le
+  // rapport de fin, lui, n'est JAMAIS tronqué (`rapport_equipe`) — la
+  // distinction est ce qui rend ce suivi consultable en continu.
+  const texte = a.texte.length > 220 ? `${a.texte.slice(0, 220)}…` : a.texte;
+  return `${marqueur} ${texte.replace(/\s+/g, ' ').trim()}`;
+}
+
+/**
+ * Ce qu'une équipe est en train de faire, en direct.
+ *
+ * `☠` Comble le seul angle mort qui restait à l'orchestrateur : il pouvait lire
+ * l'ÉTAT d'une équipe (compteurs, coût) et son RAPPORT de fin, mais rien entre
+ * les deux. Une équipe partie de travers restait donc invisible jusqu'à sa
+ * synthèse — trop tard pour la corriger d'un message, alors que `envoyer_a_equipe`
+ * existe et n'interrompt même pas son tour.
+ */
+export function suivreEquipe(registre: Registre, designation: string, lignes?: number): ContratRetour {
+  const intention = `suivi de ${designation}`;
+  try {
+    const resolution = resoudreMission(registre, designation);
+    if (!('trouve' in resolution)) {
+      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
+    }
+    const mission = resolution.trouve;
+    // Borné des deux côtés : une valeur absurde donne un résultat utile, jamais
+    // un refus — un modèle qui demande 5000 lignes veut « le plus possible ».
+    const demandees = Math.min(Math.max(Math.trunc(lignes ?? SUIVI_LIGNES_DEFAUT), 1), SUIVI_LIGNES_MAX);
+    const activites = registre.missions.activites(mission.id, demandees);
+    if (activites.length === 0) {
+      return applique(intention, `${resumerMission(mission)} — aucune activité rapatriée pour le moment.`);
+    }
+    const entete =
+      `${resumerMission(mission)} · ${activites.length} dernière(s) ligne(s) sur ${demandees} demandée(s)` +
+      (demandees < SUIVI_LIGNES_MAX ? ` (jusqu'à ${SUIVI_LIGNES_MAX} disponibles)` : '');
+    return applique(intention, [entete, ...activites.map(resumerActivite)].join('\n'));
+  } catch (erreur) {
+    journal.error({ err: erreur, designation }, 'suivre_equipe en échec');
+    return echecInattendu(intention, erreur);
+  }
+}
+
+/**
+ * Ce que l'orchestrateur sait de sa propre autonomie.
+ *
+ * `☠` Il ne peut PAS le déduire : la fenêtre vit dans le registre, et son
+ * système prompt est écrit une fois pour toutes. Sans cet outil, un orchestrateur
+ * à qui Chris a confié une plage de huit heures l'ignore complètement — il
+ * travaille comme si chaque mandat devait être validé, et perd la plage à
+ * attendre. L'échéance est aussi ce qui le fait ARBITRER : lancer une équipe de
+ * plus, ou consolider ce qui est déjà fait.
+ */
+export function autonomieDuFil(
+  registre: Registre,
+  conversationId: string | null,
+  maintenant: number = Date.now(),
+): ContratRetour {
+  const intention = 'état de mon autonomie';
+  try {
+    if (conversationId === null) {
+      return applique(intention, "cette session n'est rattachée à aucune conversation : aucune autonomie déléguée.");
+    }
+    const conv = registre.conversations.lire(conversationId);
+    if (conv === null) return applique(intention, 'conversation introuvable au registre.');
+
+    const humain = registre.propositions.aApprobationHumaine(conversationId);
+    const auto = registre.propositions.compterAutoApprouvees(conversationId, conv.autonomieDebut ?? 0);
+    const lignes: string[] = [];
+
+    if (conv.autonomieDebut !== null && conv.autonomieFin !== null) {
+      const ouverte = maintenant >= conv.autonomieDebut && maintenant < conv.autonomieFin;
+      const restantMin = Math.max(0, Math.round((conv.autonomieFin - maintenant) / 60_000));
+      lignes.push(
+        ouverte
+          ? `Fenêtre d'autonomie OUVERTE jusqu'au ${new Date(conv.autonomieFin).toLocaleString('fr-FR')} ` +
+              `— ${restantMin} min restantes. Tes mandats démarrent sans clic.`
+          : maintenant < conv.autonomieDebut
+            ? `Fenêtre d'autonomie PROGRAMMÉE à partir du ${new Date(conv.autonomieDebut).toLocaleString('fr-FR')}.`
+            : `Fenêtre d'autonomie CLOSE depuis le ${new Date(conv.autonomieFin).toLocaleString('fr-FR')}.`,
+      );
+      if (conv.autonomieObjectif !== null) lignes.push(`Objectif confié pour cette plage : ${conv.autonomieObjectif}`);
+    } else {
+      lignes.push("Aucune fenêtre d'autonomie sur ce fil.");
+    }
+
+    lignes.push(
+      humain
+        ? `Chris a déjà autorisé un mandat ici : les suivants partent seuls (${auto} lancé(s) sans clic).`
+        : "Aucun mandat encore autorisé ici : le prochain que tu proposes attendra son clic.",
+    );
+    return applique(intention, lignes.join('\n'));
+  } catch (erreur) {
+    journal.error({ err: erreur, conversationId }, 'autonomieDuFil en échec');
+    return echecInattendu(intention, erreur);
+  }
+}

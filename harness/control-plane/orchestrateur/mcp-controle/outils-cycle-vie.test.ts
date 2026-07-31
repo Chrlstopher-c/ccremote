@@ -52,7 +52,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
       'ecriture',
       LECTEUR_PERMISSIF,
       PLAFOND_DESACTIVE,
-      { enregistrer: () => 'prop-test' },
+      { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
     );
     expect(resultat.effet).toBe('differe');
     expect(resultat.ref).toBeDefined();
@@ -60,7 +60,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
   });
 
   test('☠ ne touche à AUCUN registre — aucune mission créée', () => {
-    proposerCreationEquipe('alpha', 'x', 'y', 'z', 'ecriture', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: () => 'prop-test' });
+    proposerCreationEquipe('alpha', 'x', 'y', 'z', 'ecriture', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(registre.missions.listerActives().length).toBe(0);
   });
 });
@@ -70,7 +70,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 10 }, { enregistrer: () => 'prop-test' });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 10 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.effet).toBe('refuse');
     expect(resultat.raison).toContain('compte1');
@@ -81,7 +81,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 20, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => 'prop-test' });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -90,7 +90,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 99, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'five_hour', utilisation: 5, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => 'prop-test' });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -99,14 +99,14 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'seven_day', utilisation: 95, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => 'prop-test' });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('compte1');
     expect(resultat.raison).toContain('compte2');
   });
 
   test('aucun compte connu ⇒ rien à borner, autorisé', () => {
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: () => 'prop-test' });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -117,7 +117,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       },
       releves: () => [],
     };
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, PLAFOND_DESACTIVE, { enregistrer: () => 'prop-test' });
+    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, PLAFOND_DESACTIVE, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('port hors service');
   });

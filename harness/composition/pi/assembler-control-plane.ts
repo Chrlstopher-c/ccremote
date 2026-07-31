@@ -24,8 +24,9 @@
  */
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
-import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
+import { ouvrirRegistre, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
 import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
+import { deciderAutorisation } from '../../control-plane/autonomie/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
@@ -167,9 +168,15 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   const construireServeurControle = (
     compacteur?: CompacteurContexte,
     propositions?: EnregistreurProposition,
+    conversationId?: string,
   ): McpServerConfig =>
     creerServeurMcpControle({
       registre,
+      // `☠` Sans lui, `mon_autonomie` ne sait pas de quel fil il parle : un
+      // serveur de contrôle est construit PAR conversation, et l'identité doit
+      // suivre jusqu'ici — sinon l'orchestrateur lit l'autonomie d'un autre fil,
+      // ou rien du tout.
+      conversationId,
       repertoireProjets: options.repertoireProjets,
       cibles: CIBLES_NON_CABLEES,
       arreteur: clientSuperviseurPc,
@@ -193,6 +200,37 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // conversation À LA DEMANDE. Aucune session au boot — le quota ne brûle que
   // quand l'opérateur écrit. La réconciliation du parc, elle, vit sur le
   // rattachement du PC (ci-dessus), indépendante de ces sessions.
+  /**
+   * Chemin UNIQUE du dispatch d'un mandat autorisé — que l'autorisation vienne
+   * d'un clic ou de l'autonomie du fil.
+   *
+   * `☠` Un seul chemin, délibérément. Deux implémentations (une pour le bouton,
+   * une pour l'auto) divergeraient au premier correctif appliqué d'un seul côté,
+   * et le côté oublié serait l'automatique — celui que personne ne regarde
+   * tourner. `origine` ne change QUE ce qu'on écrit au registre, jamais ce qui
+   * est fait.
+   *
+   * Déclarée en `function` : hoistée, donc utilisable par la closure
+   * d'enregistrement définie plus haut dans ce même corps.
+   */
+  async function dispatcherMandatAutorise(
+    id: string,
+    origine: OrigineApprobation,
+  ): Promise<{ readonly missionId: string; readonly detail: string }> {
+    const p = registre.propositions.lire(id);
+    if (p === null) throw new Error('mandat inconnu');
+    if (p.statut !== 'en_attente') throw new Error(`mandat déjà ${p.statut}`);
+    const r = await dispatcherMandat(p, {
+      registre,
+      demarreur: clientSuperviseurPc,
+      repertoireProjets: options.repertoireProjets,
+    });
+    // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
+    // laisserait un mandat consommé sans équipe si le PC refusait.
+    registre.propositions.trancher(id, 'approuvee', r.detail, r.missionId, Date.now(), origine);
+    return r;
+  }
+
   let gestionnaireConversations: GestionnaireConversations | null = null;
   // Même référence différée que `gestionnaire` ci-dessous, dans l'autre sens :
   // les deux se connaissent, aucun ne peut être construit en premier.
@@ -249,9 +287,37 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 effort: mandat.effort ?? null,
               });
               registre.conversations.ajouterEvenement({ conversationId, type: 'mandat', contenu: p.id });
-              return p.id;
+
+              // `☠` La décision d'autonomie se prend ICI, au dépôt, et pas plus
+              // tard : c'est le seul point qui connaît à la fois la conversation
+              // et le registre. Prise en aval, elle aurait laissé une carte
+              // « à autoriser » s'afficher pour un mandat déjà parti.
+              const conv = registre.conversations.lire(conversationId);
+              const decision = deciderAutorisation({
+                approbationHumaineAnterieure: registre.propositions.aApprobationHumaine(conversationId),
+                autoApprouveesDeja: registre.propositions.compterAutoApprouvees(
+                  conversationId,
+                  conv?.autonomieDebut ?? 0,
+                ),
+                fenetreDebut: conv?.autonomieDebut ?? null,
+                fenetreFin: conv?.autonomieFin ?? null,
+                maintenant: Date.now(),
+              });
+              if (decision.mode === 'humain') {
+                return { ref: p.id, autoApprouve: false, detail: decision.raison };
+              }
+
+              // `☠` Lancé sans être attendu : `enregistrer` doit rendre la main
+              // au tour de l'orchestrateur en millisecondes, et un dispatch
+              // ouvre une session sur le PC. L'échec ne se perd pas pour autant
+              // — il retombe dans le fil comme une notification.
+              void dispatcherMandatAutorise(p.id, 'auto').catch((erreur: unknown) => {
+                log.error({ err: erreur, propositionId: p.id }, 'dispatch auto en échec');
+              });
+              return { ref: p.id, autoApprouve: true, detail: decision.raison };
             },
           },
+          conversationId,
         ),
         registre,
         reconciliation: dependancesReconciliation,
@@ -300,20 +366,8 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     mandats: {
       enAttente: () => registre.propositions.enAttente(),
       refuser: (id) => registre.propositions.trancher(id, 'refusee', "refusé par l'opérateur", null),
-      approuver: async (id) => {
-        const p = registre.propositions.lire(id);
-        if (p === null) throw new Error('mandat inconnu');
-        if (p.statut !== 'en_attente') throw new Error(`mandat déjà ${p.statut}`);
-        const r = await dispatcherMandat(p, {
-          registre,
-          demarreur: clientSuperviseurPc,
-          repertoireProjets: options.repertoireProjets,
-        });
-        // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
-        // laisserait un mandat consommé sans équipe si le PC refusait.
-        registre.propositions.trancher(id, 'approuvee', r.detail, r.missionId);
-        return r;
-      },
+      // Le clic de Chris — même chemin que l'autonomie, seule l'origine change.
+      approuver: (id) => dispatcherMandatAutorise(id, 'humain'),
     },
   });
 

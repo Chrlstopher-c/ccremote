@@ -293,6 +293,18 @@ export interface Conversation {
    */
   readonly modele: string | null;
   readonly effort: string | null;
+  /**
+   * Fenêtre d'autonomie du fil (migration 15) — début, fin, et l'objectif que
+   * Chris a confié pour cette plage.
+   *
+   * `☠` Les trois vont ensemble ou pas du tout. `autonomieFin` est aussi une
+   * ÉCHÉANCE annoncée à l'orchestrateur, pas seulement un interrupteur : c'est
+   * elle qui le fait arbitrer entre « je lance encore une équipe » et « je
+   * consolide ce qui est fait ».
+   */
+  readonly autonomieDebut: number | null;
+  readonly autonomieFin: number | null;
+  readonly autonomieObjectif: string | null;
 }
 
 export type TypeEvenementConversation =
@@ -369,6 +381,15 @@ export interface EvenementConversation {
  * affiche un type qu'elle ne connaît pas plutôt que de refuser la ligne, et un
  * type ajouté côté Pi n'exige pas de déployer le front le même jour.
  */
+/**
+ * Qui a autorisé un mandat (migration 15).
+ *
+ * `☠` `null` en base = ligne antérieure à la migration, donc forcément un clic
+ * humain : les relire comme `humain` est le comportement CORRECT, pas une
+ * tolérance. L'inverse ferait croire qu'aucun fil n'a jamais été engagé.
+ */
+export type OrigineApprobation = 'humain' | 'auto';
+
 export type TypeNotification =
   /** Une équipe a rendu sa réponse — le fait qui a motivé tout ce canal. */
   | 'equipe_terminee'

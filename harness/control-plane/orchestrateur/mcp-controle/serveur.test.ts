@@ -48,7 +48,7 @@ beforeEach(() => {
     configPlafondParc: {},
     // H-61 : sans registre de propositions, `creer_equipe` refuse — la
     // proposition ne survivrait pas au tour et personne ne pourrait l'autoriser.
-    propositions: { enregistrer: () => 'prop-test' },
+    propositions: { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
   };
 });
 
@@ -57,17 +57,25 @@ afterEach(() => {
 });
 
 describe('surface d’outils (A.2.2)', () => {
-  // ☠ 11 et non 13 : `permissions_en_attente` et `repondre_permission` sont
+  // ☠ 13 depuis le 2026-08-01. Deux ajouts, deux angles morts comblés :
+  //   `suivre_equipe` — l'orchestrateur voyait l'ÉTAT d'une équipe et son RAPPORT
+  //     de fin, rien entre les deux : aucun moyen de corriger le tir avant la
+  //     synthèse, alors qu'`envoyer_a_equipe` existe et n'interrompt rien.
+  //   `mon_autonomie` — il ne peut pas DEVINER ce qu'il a le droit de lancer :
+  //     la fenêtre vit au registre et son prompt est écrit une fois pour toutes.
+  // ☠ Et non 13/14 : `permissions_en_attente` et `repondre_permission` sont
   // partis avec le bus d'escalade le 2026-07-31 — aucune demande ne l'a jamais
   // atteint, le classifieur du lead tranche seul (H-40). Ce test est le garde-fou
   // de la surface : un outil qui réapparaît sans décision doit le faire échouer.
-  test('expose exactement les 11 outils spécifiés — ni plus, ni moins', () => {
+  test('expose exactement les 13 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
         'lister_equipes',
         'etat_equipe',
         'rapport_equipe',
+        'suivre_equipe',
+        'mon_autonomie',
         'lister_projets',
         'historique_equipe',
         'creer_equipe',
@@ -86,7 +94,7 @@ describe('surface d’outils (A.2.2)', () => {
   });
 
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
-    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'lister_projets', 'historique_equipe'];
+    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'mon_autonomie', 'lister_projets', 'historique_equipe'];
     const outils = construireOutilsControle(deps);
     for (const nom of inspection) {
       const outil = outils.find((o) => o.name === nom);

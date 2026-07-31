@@ -23,6 +23,9 @@ interface LigneConversation {
   resume_contexte: string | null;
   modele: string | null;
   effort: string | null;
+  autonomie_debut: number | null;
+  autonomie_fin: number | null;
+  autonomie_objectif: string | null;
 }
 
 interface LigneEvenement {
@@ -48,6 +51,9 @@ function versConversation(l: LigneConversation): Conversation {
     resumeContexte: l.resume_contexte,
     modele: l.modele,
     effort: l.effort,
+    autonomieDebut: l.autonomie_debut,
+    autonomieFin: l.autonomie_fin,
+    autonomieObjectif: l.autonomie_objectif,
   };
 }
 
@@ -182,6 +188,31 @@ export class DepotConversations {
   }
 
   /** Fixe l'identité SDK réelle une fois la session démarrée (idempotent). */
+  /**
+   * Pose ou retire la fenêtre d'autonomie du fil (migration 15).
+   *
+   * `☠` Les trois champs bougent ENSEMBLE, jamais séparément : une fenêtre à
+   * moitié posée (début sans fin) serait ouverte pour toujours — exactement le
+   * mode de panne qu'une échéance est censée fermer. Passer `null` referme.
+   */
+  public poserFenetreAutonomie(
+    id: string,
+    debut: number | null,
+    fin: number | null,
+    objectif: string | null,
+  ): void {
+    executer(
+      'conversations.poserFenetreAutonomie',
+      () => {
+        const complet = debut !== null && fin !== null;
+        this.db
+          .query('UPDATE conversation SET autonomie_debut = ?, autonomie_fin = ?, autonomie_objectif = ? WHERE id = ?')
+          .run(complet ? debut : null, complet ? fin : null, complet ? objectif : null, id);
+      },
+      { id, debut, fin },
+    );
+  }
+
   public majSessionId(id: string, sessionId: string, maintenant: number = Date.now()): void {
     executer(
       'conversations.majSessionId',

@@ -91,13 +91,20 @@ export function proposerCreationEquipe(
     if (enregistreur === undefined) {
       return refuse(intention, "aucun registre de propositions câblé : impossible de soumettre ce mandat à l'opérateur");
     }
-    const ref = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, acces, modele, effort });
+    const depot = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, acces, modele, effort });
+    // `☠` `applique` quand l'équipe est PARTIE, `differe` quand elle attend un
+    // clic. Le contrat A.2.3 distingue les deux justement pour que le modèle ne
+    // promette pas un résultat qu'il n'a pas — garder `differe` dans les deux cas
+    // lui ferait annoncer une attente alors que le travail a commencé.
+    if (depot.autoApprouve) {
+      return applique(intention, `${depot.detail} (mandat ${depot.ref})`);
+    }
     return {
       ok: true,
       intention,
       effet: 'differe',
-      ref,
-      etat: JSON.stringify(proposition),
+      ref: depot.ref,
+      etat: JSON.stringify({ ...proposition, attente: depot.detail }),
     };
   } catch (erreur) {
     journal.error({ err: erreur, projet }, 'proposerCreationEquipe en échec');

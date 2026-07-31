@@ -12,7 +12,7 @@
 import type { Database } from 'bun:sqlite';
 import { executer } from './journal.ts';
 import { ACCES_DEFAUT, estAccesMandat, type AccesMandat } from '../../shared/acces-mandat.ts';
-import type { Proposition, StatutProposition } from './types.ts';
+import type { OrigineApprobation, Proposition, StatutProposition } from './types.ts';
 
 interface LigneProposition {
   id: string;
@@ -143,6 +143,7 @@ export class DepotPropositions {
     detail: string | null,
     missionId: string | null,
     maintenant: number = Date.now(),
+    origine: OrigineApprobation = 'humain',
   ): boolean {
     return executer(
       'propositions.trancher',
@@ -150,13 +151,63 @@ export class DepotPropositions {
         const res = this.db
           .query(
             `UPDATE proposition
-                SET statut = ?, detail = ?, mission_id = ?, maj_a = ?
+                SET statut = ?, detail = ?, mission_id = ?, maj_a = ?, origine_approbation = ?
               WHERE id = ? AND statut = 'en_attente'`,
           )
-          .run(statut, detail, missionId, maintenant, id);
+          .run(statut, detail, missionId, maintenant, origine, id);
         return res.changes > 0;
       },
-      { id, statut },
+      { id, statut, origine },
+    );
+  }
+
+  /**
+   * Un humain a-t-il déjà autorisé un mandat dans ce fil (migration 15) ?
+   *
+   * `☠` DÉDUIT des faits, jamais porté par un drapeau sur la conversation. Un
+   * booléen à maintenir se désynchronise — il aurait suffi d'un refus mal
+   * compté ou d'une restauration pour qu'un fil s'engage tout seul, ou refuse
+   * de s'engager après une vraie approbation.
+   */
+  public aApprobationHumaine(conversationId: string): boolean {
+    return executer(
+      'propositions.aApprobationHumaine',
+      () => {
+        const ligne = this.db
+          .query<{ n: number }, [string]>(
+            `SELECT COUNT(*) AS n FROM proposition
+              WHERE conversation_id = ? AND statut = 'approuvee'
+                AND (origine_approbation IS NULL OR origine_approbation = 'humain')`,
+          )
+          .get(conversationId);
+        return (ligne?.n ?? 0) > 0;
+      },
+      { conversationId },
+    );
+  }
+
+  /**
+   * Mandats partis SEULS dans ce fil — la matière du plafond d'autonomie.
+   *
+   * `☠` `depuis` permet de compter par fenêtre plutôt que sur toute la vie du
+   * fil : sans lui, une conversation ancienne et productive resterait bloquée à
+   * son plafond pour toujours, et l'autonomie s'éteindrait en silence un soir
+   * sans que rien ne l'explique.
+   */
+  public compterAutoApprouvees(conversationId: string, depuis = 0): number {
+    return executer(
+      'propositions.compterAutoApprouvees',
+      () => {
+        const ligne = this.db
+          .query<{ n: number }, [string, number]>(
+            `SELECT COUNT(*) AS n FROM proposition
+              WHERE conversation_id = ? AND statut = 'approuvee'
+                AND origine_approbation = 'auto' AND maj_a >= ?`,
+          )
+          .get(conversationId, depuis);
+        return ligne?.n ?? 0;
+      },
+      { conversationId },
     );
   }
 }

@@ -35,6 +35,7 @@ export type {
   Mission,
   Notification,
   TypeNotification,
+  OrigineApprobation,
   OrigineTransition,
   Proposition,
   StatutProposition,
