@@ -70,8 +70,10 @@ export {
 
 export { missionLogger, superviseurLogger } from './logger.ts';
 
-export { explorerProjets, resoudreDansRacine } from './exploration-projets.ts';
+export { estDansRacine, explorerProjets, resoudreDansRacine } from './exploration-projets.ts';
 export type { EntreeProjet, ResultatExploration } from './exploration-projets.ts';
+export { lireFichier, PLAFOND_LECTURE_OCTETS } from './lecture-fichier.ts';
+export type { ResultatLectureFichier } from './lecture-fichier.ts';
 export { sonderQuotaCompte, sonderQuotas } from './sonde-quotas.ts';
 export type { FenetreQuotaMesuree, QuotaCompteMesure } from './sonde-quotas.ts';
 export { sonderQuotaHttp, sonderQuotasHttp } from './sonde-quotas-http.ts';

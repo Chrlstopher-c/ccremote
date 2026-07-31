@@ -178,7 +178,8 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `budgets-workers.ts` — relais `rate_limit_event`/messages d'usage vers `ObservateurUsage`
 - `sonde-quotas.ts` — mesure RÉELLE des fenêtres de rate limit d'un compte (`usage_EXPERIMENTAL`) ; interroge dès `init` puis interrompt — la méthode n'est valable que pendant que la session vit, et la laisser ouverte consommerait le quota qu'on surveille
 - `collecteur-telemetrie.ts` — ce que SEUL le PC observe : modèle résolu, coût, contexte ventilé, saturation de compte, et la file DRAINANTE des activités du lead (réflexion / outil / texte)
-- `exploration-projets.ts` — listing en lecture seule BORNÉ à une racine (un `..` est résolu avant le contrôle, jamais après)
+- `exploration-projets.ts` — listing en lecture seule BORNÉ à une racine (un `..` est résolu avant le contrôle, jamais après) ; `estDansRacine` y est la source unique du confinement
+- `lecture-fichier.ts` / `.test.ts` — contenu d'un fichier en lecture seule, MÊME racine que l'exploration, plafonné à 200 Ko (troncature annoncée) ; liens symboliques résolus avant le contrôle, binaires refusés
 - `fencing-arbitrage-workers.ts` — arbitrage de fencing appliqué au flux de résultats
 - `observateur-flux-cablage.test.ts` — tests du relais de flux vers l'observabilité
 - `superviseur-workers-restauration.test.ts` — tests d'intégration restauration ↔ superviseur

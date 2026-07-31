@@ -13,8 +13,19 @@
  */
 
 import { describe, expect, test } from 'bun:test';
+import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MachineEtatsDemandes } from '../control-plane/bus-permissions/index.ts';
-import type { PortSuperviseurControle } from '../superviseur/index.ts';
+import { ouvrirRegistre } from '../control-plane/registre/index.ts';
+import {
+  construireOutilsControle,
+  type DependancesServeurControle,
+} from '../control-plane/orchestrateur/mcp-controle/serveur.ts';
+import type { ContratRetour } from '../control-plane/orchestrateur/mcp-controle/types.ts';
+import { CompteurRelances } from '../relance/compteur-relances.ts';
+import { SuperviseurWorkers, type PortSuperviseurControle } from '../superviseur/index.ts';
 import { LienWebSocket, type WebSocketLike } from '../transport/lien-websocket.ts';
 import { cablerRecepteurControlePc } from './pc/canal-controle-recepteur.ts';
 import { creerPortBusPermissionsDistant } from './pc/port-bus-permissions-distant.ts';
@@ -162,6 +173,157 @@ describe('assemblage — bus de permissions distant sur le lien unique (H-73.1 f
 
     const verdict = await port({ requestId: 'req-3', outil: 'Bash', input: {} });
     expect(verdict.behavior).toBe('deny');
+  });
+});
+
+/**
+ * `☠` Test d'ASSEMBLAGE de `lire_fichier`, sur le modèle de
+ * `superviseur/exploration-cablage.test.ts` mais poussé aux QUATRE couches :
+ * outil MCP → `ClientSuperviseurPc` (Pi) → lien → `CanalControle` (PC) →
+ * `SuperviseurWorkers` → disque réel.
+ *
+ * Motif payé sept fois sur ce projet — « écrit, testé, branché sur rien ».
+ * `explorerProjets` en était la 7ᵉ occurrence : la fonction était juste, testée
+ * unitairement, et le canal recevait `undefined` parce qu'aucune méthode ne
+ * l'exposait. Aucun test d'unité ne pouvait le voir, chacun testant sa moitié.
+ * Ce test-ci part de l'outil que le modèle appelle réellement et va jusqu'au
+ * fichier sur disque : si UN maillon manque, il tombe.
+ */
+type HandlerGenerique = (args: Record<string, unknown>, extra: unknown) => Promise<CallToolResult>;
+
+interface LectureRendue {
+  readonly ok: boolean;
+  readonly contenu: string;
+  readonly tronque: boolean;
+  readonly note?: string;
+}
+
+async function racineProjetsReelle(): Promise<{ racine: string; horsRacine: string }> {
+  const parent = await mkdtemp(join(tmpdir(), 'ccremote-assemblage-lecture-'));
+  const racine = join(parent, 'projets');
+  const horsRacine = join(parent, 'secrets');
+  await mkdir(racine);
+  await mkdir(horsRacine);
+  await mkdir(join(racine, 'vela', 'src-tauri'), { recursive: true });
+  await writeFile(join(racine, 'vela', 'src-tauri', 'main.rs'), 'fn main() { println!("vela"); }\n');
+  // Marqueur volontairement improbable : il ne doit apparaître dans AUCUNE
+  // réponse rendue au modèle, ni en contenu, ni en fragment de note.
+  await writeFile(join(horsRacine, 'credentials.json'), '{"token":"MARQUEUR-HORS-RACINE"}');
+  return { racine, horsRacine };
+}
+
+/**
+ * Monte la chaîne complète et rend le handler de l'outil `lire_fichier`, tel
+ * que l'orchestrateur l'appellerait. `fermer()` libère le registre.
+ *
+ * `☠` Les deux casts sont justifiés et cantonnés au test : `SuperviseurWorkers`
+ * est construit avec les seules dépendances que ce chemin touche (même procédé
+ * que `exploration-cablage.test.ts`), et le tableau d'outils mélange des schémas
+ * Zod différents dont TypeScript déduit une intersection de signatures
+ * inexploitable (même procédé que `mcp-controle/serveur.test.ts`).
+ */
+async function chaineComplete(racineProjets: string): Promise<{
+  readonly lireFichier: HandlerGenerique;
+  readonly fermer: () => void;
+}> {
+  const { pi, pc } = creerPaireLiens();
+  await Promise.all([pi.connecter(), pc.connecter()]);
+
+  const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances(), racineProjets } as never);
+  cablerRecepteurControlePc(superviseur, pc);
+  const client = new ClientSuperviseurPc(pi, { timeoutMs: 2000 });
+
+  const registre = ouvrirRegistre({ chemin: ':memory:' });
+  const deps: DependancesServeurControle = {
+    registre,
+    repertoireProjets: racineProjets,
+    escalades: { enAttente: () => [], repondre: () => true },
+    cibles: { cible: () => null },
+    arreteur: { arreter: async () => {} },
+    relanceur: { relancer: async () => {} },
+    budget: { definir: async () => {} },
+    utilisationParc: { comptesConnus: () => [], releves: () => [] },
+    configPlafondParc: {},
+    lecteurFichier: { lireFichier: (chemin) => client.lireFichier(chemin) },
+  };
+  const outil = construireOutilsControle(deps).find((o) => o.name === 'lire_fichier');
+  if (outil === undefined) throw new Error('outil "lire_fichier" absent de la surface MCP — câblage rompu');
+  return { lireFichier: (outil as unknown as { handler: HandlerGenerique }).handler, fermer: () => registre.fermer() };
+}
+
+function contratDe(resultat: CallToolResult): ContratRetour {
+  const bloc = resultat.content[0];
+  if (bloc === undefined || bloc.type !== 'text') throw new Error('bloc de contenu inattendu en test');
+  return JSON.parse(bloc.text) as ContratRetour;
+}
+
+describe('assemblage — lire_fichier : les 4 couches (outil MCP → Pi → lien → PC → disque)', () => {
+  test('☠ le contenu rendu au modèle vient du VRAI fichier sur le disque du PC', async () => {
+    const { racine } = await racineProjetsReelle();
+    const chaine = await chaineComplete(racine);
+    try {
+      const contrat = contratDe(await chaine.lireFichier({ chemin: 'vela/src-tauri/main.rs' }, undefined));
+      expect(contrat.ok).toBe(true);
+      expect(contrat.effet).toBe('applique');
+      const lecture = JSON.parse(contrat.etat ?? '{}') as LectureRendue;
+      expect(lecture.contenu).toBe('fn main() { println!("vela"); }\n');
+    } finally {
+      chaine.fermer();
+    }
+  });
+
+  test('☠ la borne de racine TIENT à travers tout le câblage — un `..` ne rend aucun contenu', async () => {
+    const { racine } = await racineProjetsReelle();
+    const chaine = await chaineComplete(racine);
+    try {
+      const contrat = contratDe(await chaine.lireFichier({ chemin: '../secrets/credentials.json' }, undefined));
+      expect(contrat.ok).toBe(false);
+      expect(contrat.effet).toBe('refuse');
+      expect(contrat.raison).toContain('refusé');
+      expect(JSON.stringify(contrat)).not.toContain('MARQUEUR-HORS-RACINE');
+    } finally {
+      chaine.fermer();
+    }
+  });
+
+  test('☠ un lien symbolique sortant est refusé de bout en bout, pas seulement en unitaire', async () => {
+    const { racine, horsRacine } = await racineProjetsReelle();
+    await symlink(join(horsRacine, 'credentials.json'), join(racine, 'innocent.json'));
+    const chaine = await chaineComplete(racine);
+    try {
+      const contrat = contratDe(await chaine.lireFichier({ chemin: 'innocent.json' }, undefined));
+      expect(contrat.ok).toBe(false);
+      expect(JSON.stringify(contrat)).not.toContain('MARQUEUR-HORS-RACINE');
+    } finally {
+      chaine.fermer();
+    }
+  });
+
+  test('un fichier absent ressort en `refuse` porteur de sa raison, jamais en succès à contenu vide', async () => {
+    const { racine } = await racineProjetsReelle();
+    const chaine = await chaineComplete(racine);
+    try {
+      const contrat = contratDe(await chaine.lireFichier({ chemin: 'vela/absent.rs' }, undefined));
+      expect(contrat.ok).toBe(false);
+      expect(contrat.raison).toContain('inexistant');
+    } finally {
+      chaine.fermer();
+    }
+  });
+
+  test('☠ la troncature survit à la sérialisation du lien — le modèle SAIT que la fin manque', async () => {
+    const { racine } = await racineProjetsReelle();
+    await writeFile(join(racine, 'vela', 'gros.log'), 'a'.repeat(200 * 1024 + 1_000));
+    const chaine = await chaineComplete(racine);
+    try {
+      const contrat = contratDe(await chaine.lireFichier({ chemin: 'vela/gros.log' }, undefined));
+      expect(contrat.ok).toBe(true);
+      const lecture = JSON.parse(contrat.etat ?? '{}') as LectureRendue;
+      expect(lecture.tronque).toBe(true);
+      expect(lecture.note).toContain('TRONQUÉ');
+    } finally {
+      chaine.fermer();
+    }
   });
 });
 

@@ -189,6 +189,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       compacteurContexte: compacteur,
       propositions,
       explorateurProjets: { explorerProjets: (chemin) => clientSuperviseurPc.explorerProjets(chemin) },
+      lecteurFichier: { lireFichier: (chemin) => clientSuperviseurPc.lireFichier(chemin) },
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :

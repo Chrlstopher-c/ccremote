@@ -126,6 +126,26 @@ export interface EnregistreurProposition {
   }): string;
 }
 
+/**
+ * Lit le CONTENU d'un fichier de projet, qui vit sur le PC (H-75).
+ *
+ * `☠` Complément indispensable d'`ExplorateurProjets` : l'arborescence seule
+ * laissait l'orchestrateur synthétiser « d'après le code » sans avoir jamais lu
+ * une ligne. Lecture seule et bornée à la racine — la garde vit côté PC
+ * (`superviseur/lecture-fichier.ts`), jamais dans l'appelant.
+ */
+export interface LecteurFichierProjet {
+  lireFichier(chemin: string): Promise<{
+    readonly ok: boolean;
+    readonly racine: string;
+    readonly chemin: string;
+    readonly contenu: string;
+    readonly octets: number;
+    readonly tronque: boolean;
+    readonly note?: string;
+  }>;
+}
+
 /** Parcourt l'arborescence des projets, qui vit sur le PC (H-75). */
 export interface ExplorateurProjets {
   explorerProjets(chemin?: string): Promise<{

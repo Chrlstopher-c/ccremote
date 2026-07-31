@@ -46,7 +46,11 @@ export interface OptionsBalayageQuotas {
   readonly periodeMs?: number;
   readonly periodeJetonsMs?: number;
   /** Injectable pour exercer la boucle sans toucher au réseau. Défaut : la sonde HTTP réelle. */
-  readonly sonder?: (jetons: readonly JetonCompte[]) => Promise<readonly QuotaCompteMesure[]>;
+  readonly sonder?: (
+    jetons: readonly JetonCompte[],
+    maintenant?: number,
+    avecProfil?: boolean,
+  ) => Promise<readonly QuotaCompteMesure[]>;
 }
 
 export interface BalayageQuotas {
@@ -83,12 +87,45 @@ function appliquer(registre: Registre, mesures: readonly QuotaCompteMesure[]): v
   }
 }
 
+/**
+ * Le compte du tour, et faut-il lui demander son profil.
+ *
+ * `☠ VÉCU DU 25 AU 31/07` — toute la liste était sondée à chaque passe. Sur un
+ * endpoint qui rationne, deux comptes en concurrence signifient un gagnant et un
+ * perdant TOUJOURS LES MÊMES : `compte-b` mesuré toutes les 20 s, `compte-a` pas
+ * une fois en six jours, avec un 0 % affiché sur un compte réellement à 7-8 %.
+ *
+ * Un seul compte par passe, à tour de rôle : le trafic est divisé par le nombre
+ * de comptes et aucun ne peut plus être affamé par un autre. Deux comptes ⇒
+ * chacun mesuré toutes les 40 s, ce qui reste « à la seconde » à l'échelle d'une
+ * fenêtre de 5 h.
+ *
+ * Le profil (email, abonnement) ne change jamais : on ne le redemande que tant
+ * que l'identité manque, au lieu de doubler le trafic à chaque passe.
+ */
+function tourSuivant(
+  jetons: readonly JetonCompte[],
+  compteur: number,
+  identiteConnue: (compteId: string) => boolean,
+): { readonly jeton: JetonCompte; readonly avecProfil: boolean } | null {
+  const jeton = jetons[compteur % jetons.length];
+  if (jeton === undefined) return null;
+  return { jeton, avecProfil: !identiteConnue(jeton.compteId) };
+}
+
 export function demarrerBalayageQuotas(options: OptionsBalayageQuotas): BalayageQuotas {
   const periode = options.periodeMs ?? PERIODE_SONDE_QUOTAS_HTTP_MS;
   const periodeJetons = options.periodeJetonsMs ?? PERIODE_RELEVE_JETONS_MS;
-  const sonder = options.sonder ?? ((jetons) => sonderQuotasHttp(jetons));
+  const sonder = options.sonder ?? sonderQuotasHttp;
   let jetonsReleveA = 0;
   let enCours = false;
+  let tour = 0;
+
+  /** Identité déjà mesurée ⇒ le profil n'a plus rien à apprendre. */
+  const identiteConnue = (compteId: string): boolean => {
+    const compte = options.registre.comptes.lire(compteId);
+    return compte !== null && compte.email !== null && compte.typeAbonnement !== null;
+  };
 
   /**
    * Rafraîchit les jetons depuis le PC quand ils ont vieilli. `☠` N'efface
@@ -122,7 +159,10 @@ export function demarrerBalayageQuotas(options: OptionsBalayageQuotas): Balayage
       }
       const jetons = options.registre.comptes.listerJetons();
       if (jetons.length === 0) return;
-      appliquer(options.registre, await sonder(jetons));
+      const choix = tourSuivant(jetons, tour, identiteConnue);
+      if (choix === null) return;
+      tour += 1;
+      appliquer(options.registre, await sonder([choix.jeton], Date.now(), choix.avecProfil));
     } catch (erreur) {
       log.debug({ err: erreur }, 'sonde de quotas indisponible — jauges laissées en l’état');
     } finally {

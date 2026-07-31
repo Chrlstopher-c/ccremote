@@ -31,6 +31,7 @@ import type {
   TelemetrieWorker,
 } from './types.ts';
 import type { ResultatExploration } from './exploration-projets.ts';
+import type { ResultatLectureFichier } from './lecture-fichier.ts';
 import type { JetonCompte } from './sonde-quotas-http.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
@@ -47,6 +48,8 @@ export interface PortSuperviseurControle {
   telemetrie?(): Promise<readonly TelemetrieWorker[]> | readonly TelemetrieWorker[];
   /** Absent ⇒ opération refusée : mieux qu'une arborescence vide prise pour la vérité. */
   explorerProjets?(chemin?: string): ResultatExploration;
+  /** Absent ⇒ opération refusée, jamais un contenu vide qui passerait pour un fichier vide. */
+  lireFichier?(chemin: string): ResultatLectureFichier;
   arreter(missionId: string): Promise<void>;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
   relancer(missionId: string, sessionId: string): Promise<void>;
@@ -102,6 +105,11 @@ export type OperationControle =
   | { readonly type: 'jetons' }
   /** Lecture pure : parcourir l'arborescence des projets, qui vit sur le PC. */
   | { readonly type: 'explorer_projets'; readonly chemin?: string }
+  /**
+   * Lecture pure : le CONTENU d'un fichier de projet. `chemin` est requis —
+   * contrairement à l'exploration, il n'existe pas de défaut raisonnable.
+   */
+  | { readonly type: 'lire_fichier'; readonly chemin: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
@@ -131,6 +139,7 @@ type OperationMutative = Exclude<
   | { readonly type: 'telemetrie' }
   | { readonly type: 'jetons' }
   | { readonly type: 'explorer_projets' }
+  | { readonly type: 'lire_fichier' }
 >;
 
 export interface RequeteControle {
@@ -152,6 +161,8 @@ export interface ReponseControle {
   readonly jetons?: readonly JetonCompte[];
   /** Présent uniquement pour `explorer_projets`. */
   readonly explorationProjets?: ResultatExploration;
+  /** Présent uniquement pour `lire_fichier`. */
+  readonly lectureFichier?: ResultatLectureFichier;
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
   /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
   readonly rapportArretUrgence?: RapportArretUrgence;
@@ -200,6 +211,24 @@ export class CanalControle {
       const exploration = this.#superviseur.explorerProjets?.(requete.operation.chemin);
       if (exploration === undefined) return { ok: false, effet: 'refuse', detail: 'exploration non câblée sur ce superviseur' };
       return { ok: true, effet: 'applique', explorationProjets: exploration };
+    }
+
+    // `☠` Hors cache d'idempotence, même raison que l'exploration : servir un
+    // fichier depuis le cache figerait son contenu sur la première lecture, et
+    // l'orchestrateur relirait indéfiniment une version qu'il vient de modifier.
+    if (requete.operation.type === 'lire_fichier') {
+      const lecture = this.#superviseur.lireFichier?.(requete.operation.chemin);
+      if (lecture === undefined) {
+        return { ok: false, effet: 'refuse', detail: 'lecture de fichier non câblée sur ce superviseur' };
+      }
+      // `ok` suit le résultat : un refus de lecture (hors racine, binaire) n'est
+      // pas une panne du canal, mais ce n'est pas un succès non plus.
+      return {
+        ok: lecture.ok,
+        effet: 'applique',
+        lectureFichier: lecture,
+        ...(lecture.note !== undefined ? { detail: lecture.note } : {}),
+      };
     }
 
     if (requete.operation.type === 'telemetrie') {

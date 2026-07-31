@@ -38,3 +38,37 @@ describe('sonde HTTP — jeton expiré', () => {
     expect(mesure?.fenetres).toHaveLength(0);
   });
 });
+
+describe('☠ les comptes sont sondés UN PAR UN (vécu 25→31/07)', () => {
+  test('deux requêtes ne sont jamais en vol ensemble — l’endpoint en rejetait une, toujours la même', async () => {
+    const vraiFetch = globalThis.fetch;
+    let enVol = 0;
+    let maxEnVol = 0;
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request): Promise<Response> => {
+      urls.push(String(url));
+      enVol += 1;
+      maxEnVol = Math.max(maxEnVol, enVol);
+      await new Promise((r) => setTimeout(r, 5));
+      enVol -= 1;
+      return new Response(JSON.stringify(REPONSE_REELLE), { status: 200 });
+    }) as typeof globalThis.fetch;
+    try {
+      const mesures = await sonderQuotasHttp(
+        [
+          { compteId: 'compte-a', jetonAcces: 'a', expireA: 9_999_999_999_999 },
+          { compteId: 'compte-b', jetonAcces: 'b', expireA: 9_999_999_999_999 },
+        ],
+        1_000,
+        false,
+      );
+      expect(mesures).toHaveLength(2);
+      // Le défaut vécu : `Promise.all` ⇒ 2 (ou 4 avec le profil) requêtes d'un coup.
+      expect(maxEnVol).toBe(1);
+      // `avecProfil: false` ⇒ aucune requête vers /profile, qui doublait le trafic.
+      expect(urls.filter((u) => u.includes('profile'))).toHaveLength(0);
+    } finally {
+      globalThis.fetch = vraiFetch;
+    }
+  });
+});

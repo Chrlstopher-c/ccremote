@@ -41,6 +41,18 @@ export interface ResultatExploration {
 }
 
 /**
+ * Vrai si `cible` est DANS `base` — les deux DÉJÀ résolus par l'appelant.
+ *
+ * `☠` SOURCE UNIQUE du confinement : l'exploration (ici) et la lecture de
+ * fichier (`lecture-fichier.ts`) s'appuient toutes deux dessus. Une règle de
+ * sécurité recopiée dans deux fichiers ne se corrige qu'à moitié le jour où
+ * elle est fausse, et la moitié corrigée donne l'impression que tout est couvert.
+ */
+export function estDansRacine(base: string, cible: string): boolean {
+  return !relative(base, cible).startsWith('..');
+}
+
+/**
  * Résout une demande DANS la racine. Rend `null` si elle s'en échappe.
  * `☠` La comparaison se fait sur le chemin RÉSOLU : comparer les chaînes brutes
  * laisserait passer `racine/../../etc`.
@@ -49,9 +61,7 @@ export function resoudreDansRacine(racine: string, demande: string | undefined):
   const base = resolve(racine);
   if (demande === undefined || demande.trim().length === 0) return base;
   const cible = isAbsolute(demande) ? resolve(demande) : resolve(base, demande);
-  const ecart = relative(base, cible);
-  if (ecart.startsWith('..')) return null;
-  return cible;
+  return estDansRacine(base, cible) ? cible : null;
 }
 
 /** Liste un répertoire de projets. Ne lève jamais : une erreur d'accès devient une note. */

@@ -104,3 +104,60 @@ describe('balayage — jetons, et survie au PC éteint', () => {
     expect(sondes).toHaveLength(0);
   });
 });
+
+describe('☠ un compte ne peut plus être affamé par un autre (vécu 25→31/07)', () => {
+  const JETON_B: JetonCompte = { compteId: 'compte-b', jetonAcces: 'sk-ant-oat01-y', expireA: 9_999_999_999_999 };
+
+  /** Sonde à mémoire : garde la trace de chaque passe, comme le ferait le réseau. */
+  function balayageDeuxComptes(): {
+    passes: JetonCompte[][];
+    profils: boolean[];
+    passer: () => Promise<void>;
+    arreter: () => void;
+  } {
+    const passes: JetonCompte[][] = [];
+    const profils: boolean[] = [];
+    const b = demarrerBalayageQuotas({
+      registre,
+      source: { jetons: async () => [JETON, JETON_B] },
+      sonder: async (j, _maintenant, avecProfil) => {
+        passes.push([...j]);
+        profils.push(avecProfil ?? true);
+        return j.map((x) => ({ ...MESURE, compteId: x.compteId }));
+      },
+    });
+    return { passes, profils, passer: b.passer, arreter: b.arreter };
+  }
+
+  test('une passe ne sonde QU’UN compte — deux requêtes simultanées, et l’endpoint en rejette une', async () => {
+    registre.comptes.enregistrer({ id: 'compte-b', configDir: '/tmp/b' });
+    const { passes, passer, arreter } = balayageDeuxComptes();
+    await passer();
+    arreter();
+    expect(passes).toHaveLength(1);
+    expect(passes[0]).toHaveLength(1);
+  });
+
+  test('☠ deux passes couvrent les DEUX comptes — avant, le perdant l’était à chaque fois', async () => {
+    registre.comptes.enregistrer({ id: 'compte-b', configDir: '/tmp/b' });
+    const { passes, passer, arreter } = balayageDeuxComptes();
+    await passer();
+    await passer();
+    arreter();
+    const sondes = passes.flat().map((j) => j.compteId).sort();
+    expect(sondes).toEqual(['compte-a', 'compte-b']);
+  });
+
+  test('le profil n’est redemandé que tant que l’identité manque — il doublait le trafic pour rien', async () => {
+    registre.comptes.enregistrer({ id: 'compte-b', configDir: '/tmp/b' });
+    const { profils, passer, arreter } = balayageDeuxComptes();
+    await passer();
+    // La première passe a écrit email + abonnement de compte-a : le tour suivant
+    // de ce compte n'a plus rien à apprendre de `/profile`.
+    await passer();
+    await passer();
+    arreter();
+    expect(profils[0]).toBe(true);
+    expect(profils[2]).toBe(false);
+  });
+});

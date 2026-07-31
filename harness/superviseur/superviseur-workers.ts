@@ -44,6 +44,7 @@ import { lireSousAgents } from './sous-agents-disque.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
+import { lireFichier, type ResultatLectureFichier } from './lecture-fichier.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 import type { ObservateurUsage } from '../budgets/index.ts';
@@ -296,6 +297,19 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    */
   explorerProjets(chemin?: string): ResultatExploration {
     return explorerProjets(this.#racineProjets, chemin);
+  }
+
+  /**
+   * Contenu d'un fichier de projet du PC (A.2.2, `lire_fichier`).
+   *
+   * `☠` Suite directe du défaut ci-dessus : une fois l'arborescence câblée,
+   * l'orchestrateur VOYAIT `src-tauri/` sans pouvoir en lire une ligne, et
+   * synthétisait quand même « d'après le code ». Même racine, mêmes bornes —
+   * `lecture-fichier.ts` réutilise le confinement de `exploration-projets.ts`
+   * plutôt que d'en poser un second.
+   */
+  lireFichier(chemin: string): ResultatLectureFichier {
+    return lireFichier(this.#racineProjets, chemin);
   }
 
   inventaire(): readonly DescripteurWorkerPc[] {

@@ -44,6 +44,7 @@ import type {
   LecteurUtilisationParc,
   EnregistreurProposition,
   ExplorateurProjets,
+  LecteurFichierProjet,
   RelanceurMission,
   RepertoireCibles,
 } from './types.ts';
@@ -95,6 +96,14 @@ export interface DependancesServeurControle {
    * qu'aucun projet n'existe, alors qu'ils sont tous sur le PC (23/07).
    */
   readonly explorateurProjets?: ExplorateurProjets;
+  /**
+   * Lecture du contenu des fichiers DU PC. `☠` Sans elle, l'orchestrateur voit
+   * l'arborescence mais aucune ligne de code, et rend malgré tout des synthèses
+   * « d'après le code » entièrement aveugles (constaté en prod). Absent ⇒
+   * l'outil n'est pas exposé DU TOUT — même règle que `compacteurContexte` :
+   * mieux vaut un outil que le modèle ne voit pas qu'un outil qui rend du vide.
+   */
+  readonly lecteurFichier?: LecteurFichierProjet;
 }
 
 /** Port de compaction du contexte de la session appelante. */
@@ -293,6 +302,36 @@ function outilsExploration(deps: DependancesServeurControle) {
   ];
 }
 
+/**
+ * Outil de lecture de fichier — présent SEULEMENT si la composition a câblé un
+ * lecteur vers le PC (voir `DependancesServeurControle.lecteurFichier`).
+ */
+function outilsLectureFichier(deps: DependancesServeurControle) {
+  const lecteur = deps.lecteurFichier;
+  if (lecteur === undefined) return [];
+  return [
+    tool(
+      'lire_fichier',
+      "Lit le CONTENU d'un fichier sur le PC de l'opérateur (racine /mnt/projects uniquement). " +
+        '`chemin` : absolu, ou relatif à la racine — tel que rendu par explorer_projets. ' +
+        "Lecture seule, plafonnée à 200 Ko : au-delà le début du fichier est rendu et `tronque` vaut true. " +
+        "Un fichier binaire, absent, ou hors de la racine est refusé avec `note` — lis-la, ne conclus jamais " +
+        'sur un contenu vide comme si le fichier était vide.',
+      { chemin: z.string() },
+      async ({ chemin }) =>
+        protege('lire_fichier', async () => {
+          const r = await lecteur.lireFichier(chemin);
+          // `☠` Un refus de lecture DOIT ressortir en `refuse`, jamais en
+          // `applique` avec un contenu vide : c'est exactement la confusion qui
+          // faisait synthétiser à l'aveugle.
+          if (!r.ok) return refuse('lire un fichier', r.note ?? 'lecture refusée');
+          return applique('lire un fichier', JSON.stringify(r), r.chemin);
+        }),
+      { annotations: { readOnlyHint: true } },
+    ),
+  ];
+}
+
 function outilsContexte(deps: DependancesServeurControle) {
   const compacteur = deps.compacteurContexte;
   if (compacteur === undefined) return [];
@@ -315,7 +354,14 @@ function outilsContexte(deps: DependancesServeurControle) {
 }
 
 export function construireOutilsControle(deps: DependancesServeurControle) {
-  return [...outilsInspection(deps), ...outilsCycleVie(deps), ...outilsArbitrage(deps), ...outilsContexte(deps), ...outilsExploration(deps)];
+  return [
+    ...outilsInspection(deps),
+    ...outilsCycleVie(deps),
+    ...outilsArbitrage(deps),
+    ...outilsContexte(deps),
+    ...outilsExploration(deps),
+    ...outilsLectureFichier(deps),
+  ];
 }
 
 /** Assemble le serveur MCP de contrôle complet (A.2.1, A.2.2). */

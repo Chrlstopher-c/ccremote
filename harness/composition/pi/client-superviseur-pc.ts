@@ -60,6 +60,7 @@ import type {
   JetonCompte,
 } from '../../superviseur/index.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
+import type { ResultatLectureFichier } from '../../superviseur/lecture-fichier.ts';
 import type { Lien } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
 import { CorrelateurReponses } from '../lien-pc-pi/correlateur.ts';
@@ -86,6 +87,11 @@ function versDescripteurs(reponse: ReponseControle): readonly DescripteurWorkerP
 
 function versDemandesEnAttente(reponse: ReponseControle): readonly DemandeEnAttenteReinitialisation[] {
   return reponse.demandesEnAttente ?? [];
+}
+
+/** Refus de lecture fabriqué côté Pi quand le PC n'a rien pu rendre. */
+function refusLecture(chemin: string, note: string): ResultatLectureFichier {
+  return { ok: false, racine: '', chemin, contenu: '', octets: 0, tronque: false, note };
 }
 
 /**
@@ -176,6 +182,21 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     } catch (erreur) {
       log.warn({ err: erreur }, 'exploration des projets impossible — PC injoignable');
       return { racine: '', chemin: chemin ?? '', entrees: [], note: 'PC injoignable' };
+    }
+  }
+
+  /**
+   * Lit un fichier de projet SUR LE PC. `☠` PC absent ⇒ refus explicite portant
+   * sa raison, jamais un contenu vide : une chaîne vide serait interprétée par
+   * l'orchestrateur comme un fichier vide, et il conclurait sur du néant.
+   */
+  async lireFichier(chemin: string): Promise<ResultatLectureFichier> {
+    try {
+      const reponse = await this.#appeler({ type: 'lire_fichier', chemin });
+      return reponse.lectureFichier ?? refusLecture(chemin, reponse.detail ?? 'lecture indisponible');
+    } catch (erreur) {
+      log.warn({ err: erreur, chemin }, 'lecture de fichier impossible — PC injoignable');
+      return refusLecture(chemin, 'PC injoignable');
     }
   }
 
