@@ -206,6 +206,13 @@ export interface Mission {
   readonly contexteVentilation: readonly PosteContexteMission[] | null;
   readonly compteurRelances: number;
   readonly derniereRaisonTerminale: string | null;
+  /**
+   * Conversation orchestrateur d'où vient cette équipe (migration 14) — donc où
+   * renvoyer ce qui la concerne. `null` quand elle naît hors conversation
+   * (restauration, test, mandat-cadre) : ce n'est pas une anomalie, seulement une
+   * notification sans destinataire à réveiller.
+   */
+  readonly conversationId: string | null;
   readonly creeA: number;
   readonly demarreeA: number | null;
   readonly termineeA: number | null;
@@ -237,6 +244,8 @@ export interface CreationMission {
    * même worktree est exactement ce que le fencing doit rejeter.
    */
   readonly epoch?: number | null;
+  /** Conversation d'origine (migration 14). Absente ⇒ mission sans destinataire. */
+  readonly conversationId?: string | null;
 }
 
 /** Historique des transitions — `origine` préserve la distinction même a posteriori. */
@@ -296,7 +305,16 @@ export type TypeEvenementConversation =
   /** Marqueur laissé dans le fil à chaque compaction — contenu : le résumé retenu. */
   | 'compaction'
   /** Proposition de mandat (H-61) — contenu : l'identifiant de la proposition. */
-  | 'mandat';
+  | 'mandat'
+  /**
+   * Fait du parc remis à l'orchestrateur par le harness (migration 14).
+   *
+   * `☠` Type DISTINCT de `operateur`, et c'est H-66 : « une équipe a terminé »
+   * n'est pas une parole de Chris. Les confondre ferait attribuer au maître
+   * d'ouvrage des instructions que le harness a fabriquées — la confusion
+   * précise que H-66 existe pour empêcher.
+   */
+  | 'notification';
 
 export type StatutProposition = 'en_attente' | 'approuvee' | 'refusee';
 
@@ -344,6 +362,40 @@ export interface EvenementConversation {
    */
   readonly modele: string | null;
   readonly effort: string | null;
+}
+
+/**
+ * Nature d'un fait notifiable. Liste OUVERTE par conception : l'interface
+ * affiche un type qu'elle ne connaît pas plutôt que de refuser la ligne, et un
+ * type ajouté côté Pi n'exige pas de déployer le front le même jour.
+ */
+export type TypeNotification =
+  /** Une équipe a rendu sa réponse — le fait qui a motivé tout ce canal. */
+  | 'equipe_terminee'
+  /** Une équipe s'est arrêtée sur un échec ou a disparu. */
+  | 'equipe_echouee'
+  | (string & {});
+
+/**
+ * Un fait du parc destiné à être lu. `☠` Deux destinataires, jamais confondus :
+ * Chris dans l'interface (`luA`) et l'orchestrateur dans son fil (`remisA`).
+ * Marquer l'un ne dit rien de l'autre — Chris peut lire une notification que
+ * l'orchestrateur n'a jamais reçue, et l'inverse est le cas normal la nuit.
+ */
+export interface Notification {
+  readonly id: string;
+  readonly type: TypeNotification;
+  readonly missionId: string | null;
+  readonly conversationId: string | null;
+  readonly titre: string;
+  readonly corps: string;
+  readonly creeA: number;
+  /** Lue par Chris dans l'interface. */
+  readonly luA: number | null;
+  /** Remise à l'orchestrateur, entrée dans son contexte. */
+  readonly remisA: number | null;
+  /** Dernière raison d'échec de remise. N'empêche pas une nouvelle tentative. */
+  readonly echecRemise: string | null;
 }
 
 /** Vue « où en est ce que j'ai demandé hier soir ? » (F2.0.1). */

@@ -25,6 +25,7 @@
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
+import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
@@ -193,6 +194,9 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // quand l'opérateur écrit. La réconciliation du parc, elle, vit sur le
   // rattachement du PC (ci-dessus), indépendante de ces sessions.
   let gestionnaireConversations: GestionnaireConversations | null = null;
+  // Même référence différée que `gestionnaire` ci-dessous, dans l'autre sens :
+  // les deux se connaissent, aucun ne peut être construit en premier.
+  let serviceNotifications: ServiceNotifications | null = null;
   if (options.avecOrchestrateur === true) {
     // Référence différée : le gestionnaire n'existe pas encore quand on décrit
     // comment construire ses sessions — mais il existera à l'appel.
@@ -263,6 +267,9 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       indexMaster = suivant;
       log.warn({ configDir: comptesMaster[indexMaster] }, 'rotation du compte de l’orchestrateur');
       return true;
+    },
+    async (conversationId) => {
+      await serviceNotifications?.remettreEnAttente(conversationId);
     });
     gestionnaire = gestionnaireConversations;
   } else {
@@ -316,10 +323,36 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // `☠` La réconciliation est câblée ICI, et pas seulement au démarrage/rattachement :
   // un worker qui meurt alors que tout est connecté n'était vu par PERSONNE, et sa
   // mission restait `en_cours` à jamais (23/07).
+  // `☠` Le canal asynchrone (migration 14) : c'est ici, et seulement ici, que
+  // le domaine des notifications rencontre le gestionnaire de conversations.
+  // L'inversion de dépendance existe pour ça — `notifications/` ne sait rien de
+  // l'orchestrateur, la composition les marie.
+  //
+  // `☠` `estActive` interdit un réveil implicite : sans orchestrateur assemblé,
+  // le service journalise et se tait, au lieu de faire échouer un balayage.
+  const conversationsPourNotifications = gestionnaireConversations;
+  const notifications = new ServiceNotifications(
+    registre,
+    conversationsPourNotifications === null
+      ? undefined
+      : {
+          estActive: (id) => conversationsPourNotifications.estActive(id),
+          remettre: (id, texte) => conversationsPourNotifications.remettreNotification(id, texte),
+        },
+  );
+  // Referme la référence différée : le gestionnaire, construit plus haut, peut
+  // désormais déclencher le rattrapage.
+  serviceNotifications = notifications;
+
   const balayageTelemetrie = demarrerBalayageTelemetrie({
     registre,
     source: clientSuperviseurPc,
     reconcilier: () => reconcilier(registre, dependancesReconciliation, 'reconnexion'),
+    signalerFinEquipe: async (missionId) => {
+      const mission = registre.missions.lire(missionId);
+      if (mission === null) return;
+      await notifications.signaler('equipe_terminee', mission);
+    },
   });
 
   // `☠` Boucle SÉPARÉE de la télémétrie : elle interroge l'API d'usage en HTTP,

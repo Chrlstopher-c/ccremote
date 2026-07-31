@@ -195,6 +195,15 @@ export class GestionnaireConversations {
      * session reste muette, mais l'erreur est visible dans le fil.
      */
     private readonly rotationCompte?: () => boolean,
+    /**
+     * Remet à ce fil les faits du parc qu'il n'a pas encore reçus (migration 14).
+     * Branché par la composition sur `ServiceNotifications.remettreEnAttente`.
+     *
+     * `☠` Pas de réentrance possible : le rattrapage passe par
+     * `remettreNotification`, qui trouve la session déjà ouverte et ne relance
+     * donc jamais `#assurerSession` en cascade.
+     */
+    private readonly rattraperNotifications?: (conversationId: string) => Promise<unknown>,
   ) {}
 
   listerConversations(): readonly EntreeListeConversation[] {
@@ -283,6 +292,11 @@ export class GestionnaireConversations {
       effort,
     });
     const session = await this.#assurerSession(conv);
+    // `☠` AVANT le message de Chris, jamais après : l'orchestrateur doit savoir
+    // qu'une équipe a fini quand il lui répond. L'inverse produit une réponse
+    // fondée sur un état périmé, suivie d'une correction au tour d'après — ce
+    // que le canal asynchrone existe précisément pour éviter.
+    await this.#rattraper(id);
     await this.#appliquerChoixModele(session.poignee.query, id, modele, effort);
     if (choix.modele !== undefined || choix.effort !== undefined) {
       this.registre.conversations.poserModeleEffort(id, modele, effort);
@@ -290,6 +304,20 @@ export class GestionnaireConversations {
     session.collecteur.marquerEnvoi();
     session.collecteur.poserModeleEffort(modele, effort);
     await session.poignee.entree.envoyerOperateur(propre);
+  }
+
+  /**
+   * `☠` Ne laisse JAMAIS un rattrapage empêcher le message de partir. Un fait du
+   * parc non remis est consultable dans l'interface et repassera au tour
+   * suivant ; un message de Chris perdu, lui, ne revient pas.
+   */
+  async #rattraper(conversationId: string): Promise<void> {
+    if (this.rattraperNotifications === undefined) return;
+    try {
+      await this.rattraperNotifications(conversationId);
+    } catch (erreur) {
+      log.warn({ err: erreur, conversationId }, 'rattrapage des notifications en échec — le message part quand même');
+    }
   }
 
   /**
@@ -352,6 +380,45 @@ export class GestionnaireConversations {
     this.registre.conversations.enregistrerCompaction(id, resume);
     log.info({ conversationId: id, tailleResume: resume.length }, 'contexte compacté');
     return { compacte: true, detail: 'contexte compacté — la suite repart sur un résumé' };
+  }
+
+  /**
+   * Une session tourne-t-elle déjà pour ce fil ? `☠` Question de COÛT, pas
+   * d'existence : c'est elle qui distingue une remise gratuite d'un réveil qui
+   * démarre une session et se met à consommer du quota en continu.
+   */
+  estActive(id: string): boolean {
+    return this.#sessions.has(id);
+  }
+
+  /**
+   * Remet un fait du parc à l'orchestrateur (migration 14).
+   *
+   * `☠` Type d'évènement `notification`, JAMAIS `operateur` : « une équipe a
+   * terminé » n'est pas une parole de Chris, et H-66 interdit de le lui faire
+   * porter. L'interface en dépend aussi — un fait du harness ne doit pas
+   * s'afficher comme un message de l'opérateur dans le fil.
+   *
+   * `☠` Ne touche NI au modèle NI à l'effort du fil, à la différence d'`envoyer`.
+   * Une notification arrivant à 3 h du matin n'a aucune raison de redéfinir le
+   * réglage que Chris a choisi la veille.
+   */
+  async remettreNotification(id: string, texte: string): Promise<void> {
+    const propre = texte.trim();
+    if (propre.length === 0) throw new RangeError('notification vide');
+    const conv = this.registre.conversations.lire(id);
+    if (conv === null) throw new ConversationIntrouvableError(id);
+
+    this.registre.conversations.ajouterEvenement({
+      conversationId: id,
+      type: 'notification',
+      contenu: propre,
+      modele: conv.modele,
+      effort: conv.effort,
+    });
+    const session = await this.#assurerSession(conv);
+    session.collecteur.marquerEnvoi();
+    await session.poignee.entree.envoyerOperateur(propre);
   }
 
   fermer(id: string): void {

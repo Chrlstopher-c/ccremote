@@ -55,8 +55,8 @@ export class DepotMissions {
                id, lot_id, nom, projet, worktree, branche, session_id, compte_id,
                mandat, critere_arret, modele_demande, modele_resolu,
                etat_sdk, etat_sdk_maj_a, etat_harness, etat_harness_maj_a,
-               budget_max_usd, cree_a, epoch
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?)`,
+               budget_max_usd, cree_a, epoch, conversation_id
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?)`,
           )
           .run(
             creation.id,
@@ -77,6 +77,11 @@ export class DepotMissions {
             // Défaut 0 : une mission créée hors dispatch (test, restauration)
             // n'invente pas un epoch de fencing qu'aucun worker ne porte.
             creation.epoch ?? 0,
+            // `☠` Absent ⇒ `null`, jamais une conversation « par défaut » : une
+            // notification adressée au mauvais fil réveillerait une session qui
+            // n'a jamais rien demandé, et lui ferait porter une équipe qu'elle
+            // n'a pas créée.
+            creation.conversationId ?? null,
           );
         return this.exiger(creation.id);
       },

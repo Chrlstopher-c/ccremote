@@ -289,6 +289,11 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     modeleDemande: modele,
     modeleResolu: modele,
     epoch,
+    // `☠` Le fil d'où vient cette équipe, propagé jusqu'à la mission. La
+    // proposition le portait déjà — il s'arrêtait là, et plus rien en aval ne
+    // savait à qui rendre compte. C'est ce chaînon qui permet à une fin d'équipe
+    // de revenir dans la conversation qui l'a demandée (migration 14).
+    conversationId: p.conversationId,
   });
 
   const demande: DemandeDemarrageTransportable = {

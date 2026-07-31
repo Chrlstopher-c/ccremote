@@ -17,6 +17,7 @@
  */
 
 import { ETATS_HARNESS_ACTIFS, type Registre } from '../../control-plane/registre/index.ts';
+import { detecterFinDeTour } from '../../control-plane/notifications/index.ts';
 import type { TelemetrieWorker } from '../../superviseur/index.ts';
 import { compositionLogger } from '../logger.ts';
 
@@ -48,6 +49,23 @@ export interface OptionsBalayage {
    * doit exister qu'à un seul endroit.
    */
   readonly reconcilier?: () => Promise<unknown>;
+  /**
+   * Notifie une fin d'équipe (migration 14). Absent ⇒ le balayage garde son
+   * comportement d'avant : rien ne remonte, personne n'est prévenu.
+   *
+   * `☠` Jamais attendu dans la boucle de relevé : notifier peut réveiller une
+   * session SDK, c'est-à-dire des secondes. Bloquer le balayage là-dessus
+   * retarderait l'état de TOUT le parc pour une seule équipe.
+   */
+  readonly signalerFinEquipe?: (missionId: string) => Promise<unknown>;
+}
+
+/** Ce qu'un relevé apprend au Pi, au-delà de ce qu'il vient d'écrire. */
+interface ResultatReleve {
+  /** Worker mort observé sur une mission encore tenue pour active. */
+  readonly mortEnCoursDeRoute: boolean;
+  /** L'équipe vient de rendre sa réponse (`running → idle`). */
+  readonly finDeTour: boolean;
 }
 
 export interface BalayageTelemetrie {
@@ -80,9 +98,10 @@ function marquerCompteSature(registre: Registre, compteId: string, motif: string
  * pas les autres. Rend `true` si un worker MORT a été vu sur une mission encore
  * tenue pour active — l'appelant en déduit qu'une réconciliation s'impose.
  */
-function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
+function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   const mission = registre.missions.lire(t.missionId);
-  if (mission === null) return false; // mission inconnue du Pi : la réconciliation s'en charge, pas nous.
+  // Mission inconnue du Pi : la réconciliation s'en charge, pas nous.
+  if (mission === null) return { mortEnCoursDeRoute: false, finDeTour: false };
 
   // `☠` Relevé AVANT toute écriture : les valeurs d'un worker mort restent
   // celles de son dernier instant, elles ne mentent pas — mais son état, lui,
@@ -111,6 +130,10 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
   if (t.modeleResolu !== null && mission.modeleResolu !== t.modeleResolu) {
     registre.missions.definirModeleResolu(t.missionId, t.modeleResolu);
   }
+  // `☠` La transition est lue AVANT l'écriture : après, le « précédent » est
+  // perdu et `running → idle` devient indistinguable d'un `idle` stable. C'est
+  // le seul instant du harness où la fin d'un travail est observable.
+  const finDeTour = detecterFinDeTour(mission.etatSdk, t.etatSdk);
   if (t.etatSdk !== null && mission.etatSdk !== t.etatSdk) {
     registre.etats.appliquerEtatSdk(t.missionId, t.etatSdk);
   }
@@ -126,7 +149,21 @@ function appliquer(registre: Registre, t: TelemetrieWorker): boolean {
       t.contexteVentilation,
     );
   }
-  return mortEnCoursDeRoute;
+  return { mortEnCoursDeRoute, finDeTour };
+}
+
+/**
+ * Lance la notification sans l'attendre, et sans jamais laisser une promesse
+ * flotter en silence : l'échec est journalisé ici. `☠` `void` explicite plutôt
+ * qu'un `await` — le balayage doit rendre la main en millisecondes, alors qu'une
+ * remise peut démarrer une session SDK.
+ */
+function notifierFinEquipe(options: OptionsBalayage, missionId: string): void {
+  const signaler = options.signalerFinEquipe;
+  if (signaler === undefined) return;
+  void signaler(missionId).catch((erreur: unknown) => {
+    log.error({ err: erreur, missionId }, 'notification de fin d’équipe en échec — le balayage continue');
+  });
 }
 
 export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTelemetrie {
@@ -138,7 +175,9 @@ export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTe
       let reconciliationRequise = false;
       for (const t of releves) {
         try {
-          if (appliquer(options.registre, t)) reconciliationRequise = true;
+          const resultat = appliquer(options.registre, t);
+          if (resultat.mortEnCoursDeRoute) reconciliationRequise = true;
+          if (resultat.finDeTour) notifierFinEquipe(options, t.missionId);
         } catch (erreur) {
           log.error({ err: erreur, missionId: t.missionId }, 'relevé de télémétrie inapplicable — les autres sont traités');
         }

@@ -424,6 +424,47 @@ ALTER TABLE proposition ADD COLUMN acces TEXT NOT NULL DEFAULT 'lecture'
   CHECK (acces IN ('lecture','ecriture'));
 `;
 
+/**
+ * Le canal asynchrone : un fait du parc peut enfin atteindre l'orchestrateur.
+ *
+ * `☠` Jusqu'ici RIEN ne pouvait lui parler. Sa conversation est un aller-retour
+ * strict amorcé par l'opérateur, et aucune session ne tourne tant qu'il n'a pas
+ * écrit. Une équipe qui finissait à 3 h du matin ne le réveillait donc pas :
+ * elle restait `en_cours` au registre jusqu'à ce qu'un balayage de
+ * réconciliation la déclare fantôme. « Je vais dormir, gère les équipes » était
+ * impossible — non par choix d'architecture, par absence de câble.
+ *
+ * `mission.conversation_id` est ce câble : il dit QUELLE conversation a fait
+ * naître cette équipe, donc où renvoyer la nouvelle. Nullable, et ce n'est pas
+ * une anomalie : une mission peut naître hors conversation (restauration, test,
+ * mandat-cadre à venir) — la notification est alors journalisée sans réveil.
+ *
+ * `notification` est écrite AVANT toute tentative de réveil et indépendamment
+ * d'elle : un réveil qui échoue (session morte, quota épuisé, conversation
+ * archivée) laisse le fait consultable au lieu de le perdre avec la tentative.
+ * Même leçon que le bus d'escalade retiré le 31/07 — un événement dont la seule
+ * trace est sa livraison n'existe plus quand la livraison rate.
+ */
+const MIGRATION_14 = `
+ALTER TABLE mission ADD COLUMN conversation_id TEXT;
+
+CREATE TABLE notification (
+  id              TEXT PRIMARY KEY,
+  type            TEXT NOT NULL,
+  mission_id      TEXT REFERENCES mission(id) ON DELETE CASCADE,
+  conversation_id TEXT,
+  titre           TEXT NOT NULL,
+  corps           TEXT NOT NULL,
+  cree_a          INTEGER NOT NULL,
+  lu_a            INTEGER,
+  remis_a         INTEGER,
+  echec_remise    TEXT
+);
+
+CREATE INDEX idx_notification_non_lue ON notification(lu_a, cree_a);
+CREATE INDEX idx_notification_conversation ON notification(conversation_id, cree_a);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -438,6 +479,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 11, nom: 'activites-sous-agent', sql: MIGRATION_11 },
   { version: 12, nom: 'modele-effort-conversation', sql: MIGRATION_12 },
   { version: 13, nom: 'acces-mandat', sql: MIGRATION_13 },
+  { version: 14, nom: 'notifications-canal-asynchrone', sql: MIGRATION_14 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(
