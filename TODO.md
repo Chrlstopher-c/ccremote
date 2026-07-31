@@ -25,6 +25,14 @@
       Surface MCP 13 → 11 outils, routes `/escalades` et vue UI supprimées.
 - [x] ~~**31 tests rouges permanents**~~ — corrigés le 31/07 (`0383baa`). Ils dépendaient du
       scratchpad d'une session Claude Code disparue. Suite complète : **1037 pass, 0 fail**.
+- [x] ~~**Autonomie totale : plus aucune autorisation manuelle**~~ — livré le 31/07 (`b60b371`).
+      Workers en `bypassPermissions` + `AskUserQuestion` refusé à toute équipe. MESURÉ sur un
+      worker réel (`acceptation/bypass-denis-reel.ts`) : Write/Edit/NotebookEdit retirés de la
+      liste d'outils, Read/Bash conservés, règle scopée du plancher toujours refusée.
+      `☠` Renversement assumé de H-40/H-42 — ne pas « rétablir » `auto` en croyant à une erreur.
+- [ ] **À TESTER par Chris (prochaine session)** : ouvrir une **nouvelle** conversation
+      orchestrateur, lui demander une équipe d'exploration puis une équipe de modification, et
+      vérifier qu'il choisit `acces` de lui-même et l'annonce. Le prompt n'a jamais été exercé.
 - [ ] **L'étage manquant : le lead ne peut pas interpeller l'orchestrateur.** L'organisation voulue
       par Chris est « sous-agents → lead → orchestrateur → humain ». Les deux premiers étages
       existent (natifs du SDK). Le troisième n'existe pas, et ce n'est PAS du bus de permissions :
@@ -53,6 +61,14 @@
   Tout rouge est désormais un vrai signal — un test crée ce qu'il valide, sous `os.tmpdir()`.
 - **Le bus d'escalade n'existe plus** (31/07). Ne pas rouvrir le sujet en croyant à un oubli de
   câblage : c'est une décision, motivée par une mesure. Voir `pi-web/CONTRAT-API-HARNESS.md`.
+- **Les workers tournent en `bypassPermissions`** (31/07), avec `allowDangerouslySkipPermissions`.
+  Un invariant de composition refuse le couple dépareillé. Ce qui borne une équipe ne dépend PAS
+  du mode : `disallowedTools` retire l'outil du contexte du modèle — mesuré, pas déduit.
+- **`acces` est OBLIGATOIRE dans `creer_equipe`** et le prompt de l'orchestrateur l'explique.
+  `☠` Toute capacité ajoutée/retirée à la surface MCP se répercute le MÊME JOUR dans
+  `control-plane/orchestrateur/processus/mandat.ts` : l'orchestrateur ne lit pas ce dépôt.
+- **Le banc `acceptation/bypass-denis-reel.ts` est à repasser à tout changement de SDK** — il
+  vérifie un contrat tiers dont dépend tout l'accès `lecture`.
 
 ### ✅ TERMINÉ — session du 31/07 (matin)
 

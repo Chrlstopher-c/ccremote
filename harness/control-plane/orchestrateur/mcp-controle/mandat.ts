@@ -32,6 +32,13 @@ const CLAUSES_FIXES = [
  * Construit le texte du mandat à soumettre à l'approbation (H-61). N'écrit rien, ne
  * dispatche rien : le seul effet est de rendre une chaîne de caractères.
  */
+/** Ce que l'opérateur lit avant de cliquer — jamais un code, toujours l'effet réel. */
+function libelleAcces(acces: AccesMandat): string {
+  return acces === 'lecture'
+    ? 'LECTURE SEULE (Write, Edit et NotebookEdit refusés ; Bash reste ouvert pour explorer)'
+    : 'lecture et écriture';
+}
+
 export function construireMandatPropose(
   projet: string,
   objectif: string,
@@ -45,7 +52,7 @@ export function construireMandatPropose(
     // `☠` L'accès figure dans le TEXTE soumis à l'opérateur : H-61 veut une
     // autorisation éclairée, et « lecture seule » ou « écriture » est ce qui
     // change le plus la portée de ce qu'il approuve d'un clic.
-    `Accès accordé : ${acces === 'lecture' ? 'LECTURE SEULE (Write, Edit et NotebookEdit refusés ; Bash reste ouvert pour explorer)' : 'lecture et écriture'}`,
+    `Accès accordé : ${libelleAcces(acces)}`,
     `Critère d'arrêt : ${critereArret ?? '⚠ non fourni — à compléter avant approbation'}`,
     ...CLAUSES_FIXES,
   ];
