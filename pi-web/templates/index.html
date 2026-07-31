@@ -118,10 +118,7 @@
     letter-spacing: .06em; color: var(--ink-3); padding: 10px 14px 3px; }
   .sb-sec-b { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch; padding: 0 12px 4px; }
-  /* ☠ Quand « Plus » est déplié, les zones du bas s'effacent le temps du choix :
-     sur une barre pleine, le menu n'aurait nulle part où s'ouvrir. */
-  #sidebar.plus-ouvert .sb-flex,
-  #sidebar.plus-ouvert #hMiniGauges { display: none; }
+
   @media (max-width: 1023px) {
     #sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); width: 82vw; max-width: 300px; }
     #sidebar.open { transform: translateX(0); }
@@ -184,7 +181,7 @@
          n'est pas une destination, c'est un état, et un état vit en pied de
          barre avec sa pastille. -->
     <nav class="px-3 space-y-px mt-0.5" id="navPrincipal">
-      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="harness-orchestrateur" style="color: var(--ink-2);">
+      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="harness-fils" style="color: var(--ink-2);">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Orchestrateur
       </button>
@@ -197,56 +194,17 @@
         Comptes &amp; quotas
       </button>
 
-      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" id="btnPlus" onclick="hBasculerPlus()" style="color: var(--ink-3);">
-        <svg id="chevronPlus" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transition: transform .18s ease;"><polyline points="6 9 12 15 18 9"/></svg>
-        Plus
-      </button>
-      <div id="navPlus" style="display:none;" class="space-y-px">
-        <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="agent" style="color: var(--ink-2);">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          Agent IA
-        </button>
-        <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="sessions" style="color: var(--ink-2);">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-          Sessions Claude Code
-          <span id="sessionBadge" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--accent-soft); color: var(--accent-2);">0</span>
-        </button>
-      </div>
-    </nav>
 
-    <!-- ☠ DEUX zones à parts égales, chacune avec SON défilement. Auparavant une
-         seule liste portait `flex-1` : en la remplissant, elle écrasait ses
-         voisines au lieu de glisser. Ici aucune ne peut manger l'autre —
-         `flex: 1 1 0` + `min-height: 0`, la seule combinaison qui fasse
-         DÉFILER un enfant de flex-column au lieu de le comprimer. -->
-    <div class="sb-flex">
-      <section class="sb-sec">
-        <div class="sb-sec-t">Équipes actives</div>
-        <div class="sb-sec-b"><div class="team-tree" id="hTeamTree"></div></div>
-      </section>
-    <!-- ☠ DEUX listes distinctes, jamais fondues : les fils de l'orchestrateur
-         (Agent SDK, avec leur contexte et leurs équipes) et les conversations du
-         chat cloud n'ont ni le même contenu ni la même durée de vie. Afficher
-         les unes sous l'étiquette des autres — ce qui était le cas — fait
-         chercher un fil qui n'a jamais été là. Celle du module courant est
-         montrée, l'autre est masquée. -->
-      <section class="sb-sec">
-        <div class="sb-sec-t">
-          <span id="convListTitre">Conversations</span>
-          <!-- ☠ Révélé au survol sur PC, TOUJOURS visible au doigt : sans
-               pointeur, un `:hover` n'existe pas et le bouton serait
-               inatteignable — une action offerte à la souris et refusée au
-               tactile. La media query `hover: none` le rend permanent. -->
-          <button class="sb-sec-plus" onclick="hNouveauFil()" title="Nouveau fil" aria-label="Nouveau fil">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
-        </div>
-        <div class="sb-sec-b">
-          <div id="convList" class="space-y-0.5"></div>
-          <div id="hOrchConvList" class="space-y-0.5" style="display:none;"></div>
-        </div>
-      </section>
-    </div>
+      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="chat-fils" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Agent IA
+      </button>
+      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="sessions" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        Sessions Claude Code
+        <span id="sessionBadge" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--accent-soft); color: var(--accent-2);">0</span>
+      </button>
+    </nav>
 
     <!-- Collé au bas de la zone variable : les quotas sont ce qu'on consulte
          avant de lancer, pas ce qu'on parcourt en naviguant. -->

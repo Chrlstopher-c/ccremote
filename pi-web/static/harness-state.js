@@ -45,63 +45,9 @@ function hPcAbsentBanner(view) {
   </div>`;
 }
 
-/**
- * Replie/déplie les entrées secondaires de la barre latérale.
- *
- * ☠ L'état est mémorisé : replier à chaque chargement une section que Chris
- * vient d'ouvrir revient à décider à sa place, chaque fois.
- */
-function hBasculerPlus() {
-  const bloc = document.getElementById('navPlus');
-  const bouton = document.getElementById('btnPlus');
-  if (!bloc || !bouton) return;
-  const ouvert = bloc.style.display !== 'none';
-  bloc.style.display = ouvert ? 'none' : '';
-  bouton.classList.toggle('ouvert', !ouvert);
-  // ☠ Les zones du bas s'effacent tant que le menu est déplié : sur une barre
-  // pleine, les entrées cachées n'auraient nulle part où s'afficher. Elles
-  // reviennent dès qu'on a choisi — voir la fermeture sur clic d'entrée.
-  document.getElementById('sidebar')?.classList.toggle('plus-ouvert', !ouvert);
-  try {
-    localStorage.setItem('ccremote.nav.plus', ouvert ? '0' : '1');
-  } catch {
-    // Stockage refusé (navigation privée) : le repli reste valable pour la session.
-  }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  let ouvrir = false;
-  try {
-    ouvrir = localStorage.getItem('ccremote.nav.plus') === '1';
-  } catch {
-    ouvrir = false;
-  }
-  // ☠ Rouvre aussi si la vue courante EST dans « Plus » — sinon l'élément actif
-  // serait invisible et la barre semblerait avoir perdu la page qu'on regarde.
-  const active = document.querySelector('#navPlus .nav-item.active');
-  if (ouvrir || active) {
-    const bloc = document.getElementById('navPlus');
-    if (bloc) bloc.style.display = '';
-    document.getElementById('btnPlus')?.classList.add('ouvert');
-  }
-});
 
 
-/**
- * Referme « Plus » dès qu'une de ses entrées est choisie.
- *
- * ☠ Sans ça, les listes du bas restent masquées après la navigation : on
- * arriverait sur la vue demandée avec une barre latérale amputée, sans lien
- * évident entre les deux.
- */
-document.addEventListener('click', (e) => {
-  const item = e.target.closest('#navPlus .nav-item');
-  if (!item) return;
-  const bloc = document.getElementById('navPlus');
-  if (bloc) bloc.style.display = 'none';
-  document.getElementById('btnPlus')?.classList.remove('ouvert');
-  document.getElementById('sidebar')?.classList.remove('plus-ouvert');
-});
+
 
 
 /**

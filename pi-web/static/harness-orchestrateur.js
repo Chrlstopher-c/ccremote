@@ -45,7 +45,7 @@ function hRenderConvBar(list, erreur) {
   // elle la mise à jour du titre et de la liste latérale, qui étaient en fin de
   // corps. Le titre serait resté figé sur le premier fil ouvert, sans erreur.
   if (typeof hMajBarreOrch === 'function') hMajBarreOrch();
-  if (typeof hMajListeLaterale === 'function') hMajListeLaterale();
+  if (typeof hRenderFils === 'function') hRenderFils();
   const bar = document.getElementById('hConvBar');
   if (!bar) return;
   if (erreur) {
@@ -79,6 +79,9 @@ async function hNewConversation() {
   await hLoadConvList();
   await hOpenConversation(r.conversation.id);
   const el = document.getElementById('hOrchInput'); if (el) el.focus();
+  // ☠ Créer sans ouvrir laisserait l'opérateur sur la liste, devant un fil vide
+  // qu'il doit re-cliquer. On entre dedans.
+  if (typeof hApresNouveauFil === 'function') hApresNouveauFil();
 }
 
 /** Confirmation obligatoire : une conversation supprimée ne se retrouve pas dans l'interface. */

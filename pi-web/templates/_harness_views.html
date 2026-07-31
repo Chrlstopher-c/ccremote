@@ -109,19 +109,61 @@
       <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6" id="hComptesBody"></div>
     </div>
 
+    <!-- ============ VIEW: LISTE DES FILS DE L'ORCHESTRATEUR ============
+         ☠ Les fils vivaient dans une section de la barre latérale, en
+         concurrence de hauteur avec les équipes actives et les quotas — d'où
+         un défilement qui écrasait ses voisins. Une page dédiée supprime le
+         problème par construction plutôt que de l'arbitrer en CSS. -->
+    <!-- ☠ Vue d'ATTERRISSAGE : on arrive sur la liste des fils, pas dans un fil
+         choisi arbitrairement. `active` est posé ici, en dur. -->
+    <div class="view active flex-1 flex-col overflow-y-auto" data-view="harness-fils">
+      <header class="h-topbar">
+        <div class="lead">
+          <button class="gutter sidebarToggle lg:hidden" aria-label="Menu" title="Menu">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <button class="tb-titre">Orchestrateur</button>
+        </div>
+        <div class="aux">
+          <button class="tb-ico" onclick="hNewConversation()" aria-label="Nouveau fil" title="Nouveau fil">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="h-liste" id="hFilsListe"></div>
+    </div>
+
+    <!-- ============ VIEW: LISTE DES CONVERSATIONS DU CHAT ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="chat-fils">
+      <header class="h-topbar">
+        <div class="lead">
+          <button class="gutter sidebarToggle lg:hidden" aria-label="Menu" title="Menu">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <button class="tb-titre">Agent IA</button>
+        </div>
+        <div class="aux">
+          <button class="tb-ico" onclick="document.getElementById('newChatBtn').click()" aria-label="Nouvelle conversation" title="Nouvelle conversation">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </header>
+      <div class="h-liste"><div id="convList" class="space-y-1"></div></div>
+    </div>
+
     <!-- ============ VIEW: HARNESS — ORCHESTRATEUR ============ -->
-    <!-- ☠ Vue d'ATTERRISSAGE : c'est le produit. Le chat basique n'est qu'un
-         outil d'appoint, et arriver dessus obligeait un détour à chaque
-         ouverture. `active` est posé ici, en dur, comme pour l'ancienne. -->
-    <div class="view active flex-1 flex-col min-h-0" data-view="harness-orchestrateur">
+    <div class="view flex-1 flex-col min-h-0" data-view="harness-orchestrateur">
       <!-- ☠ Même header que la page mission : hamburger, identité centrée, « ··· ».
            Les entrées Autonomie / Rappels / Stats vivaient ici en boutons et en
            panneaux dépliants — elles sont passées dans la feuille d'options, qui
            EMPRUNTE les panneaux existants plutôt que de les dupliquer. -->
       <header class="h-topbar">
         <div class="lead">
-          <button class="gutter sidebarToggle lg:hidden" aria-label="Menu" title="Menu">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          <!-- ☠ Retour vers la LISTE, à toutes les largeurs : sans lui, on entre
+               dans un fil sans porte de sortie évidente une fois la barre
+               latérale repliée. -->
+          <button class="gutter" data-view="harness-fils" aria-label="Retour aux fils" title="Retour aux fils">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
           <button class="tb-titre" id="hOrchTitre">Orchestrateur</button>
           <!-- ☠ Contexte, compactages et compaction manuelle vivaient dans une

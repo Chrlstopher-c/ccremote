@@ -126,36 +126,43 @@ function hMajBarreOrch() {
 }
 
 /**
- * Liste latérale : les fils de l'orchestrateur quand on est dans sa vue, les
- * conversations du chat cloud sinon.
+ * Page « fils de l'orchestrateur ».
+ *
+ * ☠ Une PAGE, plus une section de barre latérale : là-bas, les fils se
+ * disputaient la hauteur avec les équipes actives et les quotas, et le
+ * défilement écrasait ses voisins au lieu de glisser. Le problème est supprimé
+ * par construction, pas arbitré en CSS.
  */
-function hMajListeLaterale() {
-  const vue = document.querySelector('.view.active')?.dataset.view || '';
-  const orchestrateur = vue.startsWith('harness-');
-  const listeChat = document.getElementById('convList');
-  const listeOrch = document.getElementById('hOrchConvList');
-  const titre = document.getElementById('convListTitre');
-  if (!listeChat || !listeOrch || !titre) return;
-  listeChat.style.display = orchestrateur ? 'none' : '';
-  listeOrch.style.display = orchestrateur ? '' : 'none';
-  titre.textContent = orchestrateur ? 'Fils de l’orchestrateur' : 'Conversations';
-  if (!orchestrateur) return;
-
+function hRenderFils() {
+  const el = document.getElementById('hFilsListe');
+  if (!el) return;
   const items = hOrch.list || [];
-  // ☠ Signature avant écriture : cette fonction est appelée à chaque sondage
-  // (400 ms) et réécrire une liste identique casse toute sélection en cours —
-  // le défaut déjà payé sur la barre d'onglets.
-  const sig = JSON.stringify([hOrch.convId, items.map((c) => [c.id, c.titre, c.active])]);
-  if (listeOrch.dataset.sig === sig) return;
-  listeOrch.dataset.sig = sig;
-  listeOrch.innerHTML = items.length === 0
-    ? '<div class="text-[11px] px-2 py-1" style="color:var(--ink-3);">Aucun fil ouvert.</div>'
-    : items.map((c) => `
-      <button class="hist-item w-full text-left px-2 py-1.5 rounded-md text-[12.5px] flex items-center gap-2 ${c.id === hOrch.convId ? 'actif' : ''}"
-              onclick="hOpenConversation('${c.id}')" style="color: var(--ink-2);">
-        <span class="sb-fil-dot" style="background:${c.active ? 'var(--ok)' : 'var(--line-2)'}"></span>
-        <span class="truncate flex-1">${escapeHtml(c.titre)}</span>
-      </button>`).join('');
+  // Signature avant écriture : la fonction est appelée à chaque sondage et
+  // réécrire une liste identique casse toute sélection en cours.
+  const sig = JSON.stringify([hOrch.convId, items.map((c) => [c.id, c.titre, c.active, c.contextPct])]);
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  if (items.length === 0) {
+    el.innerHTML = '<div class="h-liste-vide">Aucun fil ouvert. Le « + » en haut à droite en démarre un.</div>';
+    return;
+  }
+  el.innerHTML = items.map((c) => {
+    const ctx = typeof c.contextPct === 'number' ? `contexte ${c.contextPct} %` : 'contexte non mesuré';
+    return `<button class="h-fil" onclick="hOuvrirFil('${c.id}')">
+      <span class="h-fil-dot" style="background:${c.active ? 'var(--ok)' : 'var(--line-2)'}"></span>
+      <span class="h-fil-txt">
+        <span class="h-fil-t">${escapeHtml(c.titre)}</span>
+        <span class="h-fil-s">${ctx}${c.active ? ' · session vivante' : ''}</span>
+      </span>
+      <span class="h-fil-chev">›</span>
+    </button>`;
+  }).join('');
+}
+
+/** Ouvre un fil : on entre dans la conversation depuis la liste. */
+function hOuvrirFil(id) {
+  hGoto('harness-orchestrateur');
+  hOpenConversation(id);
 }
 
 /**
@@ -172,4 +179,9 @@ function hNouveauFil() {
     return;
   }
   document.getElementById('newChatBtn')?.click();
+}
+
+/** Après création d'un fil, on entre dedans : créer sans ouvrir n'a pas de sens. */
+function hApresNouveauFil() {
+  hGoto('harness-orchestrateur');
 }
