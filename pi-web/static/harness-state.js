@@ -58,6 +58,10 @@ function hBasculerPlus() {
   const ouvert = bloc.style.display !== 'none';
   bloc.style.display = ouvert ? 'none' : '';
   bouton.classList.toggle('ouvert', !ouvert);
+  // ☠ Les zones du bas s'effacent tant que le menu est déplié : sur une barre
+  // pleine, les entrées cachées n'auraient nulle part où s'afficher. Elles
+  // reviennent dès qu'on a choisi — voir la fermeture sur clic d'entrée.
+  document.getElementById('sidebar')?.classList.toggle('plus-ouvert', !ouvert);
   try {
     localStorage.setItem('ccremote.nav.plus', ouvert ? '0' : '1');
   } catch {
@@ -80,4 +84,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (bloc) bloc.style.display = '';
     document.getElementById('btnPlus')?.classList.add('ouvert');
   }
+});
+
+
+/**
+ * Referme « Plus » dès qu'une de ses entrées est choisie.
+ *
+ * ☠ Sans ça, les listes du bas restent masquées après la navigation : on
+ * arriverait sur la vue demandée avec une barre latérale amputée, sans lien
+ * évident entre les deux.
+ */
+document.addEventListener('click', (e) => {
+  const item = e.target.closest('#navPlus .nav-item');
+  if (!item) return;
+  const bloc = document.getElementById('navPlus');
+  if (bloc) bloc.style.display = 'none';
+  document.getElementById('btnPlus')?.classList.remove('ouvert');
+  document.getElementById('sidebar')?.classList.remove('plus-ouvert');
 });

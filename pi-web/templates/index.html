@@ -88,8 +88,36 @@
      COMPRIME ses enfants au lieu de déclencher le défilement, et le contenu
      devient illisible plutôt qu'inaccessible. `overscroll-behavior: contain`
      évite que le scroll en fin de course parte dans la page derrière. */
-  #sidebar { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-  #sidebar > * { flex-shrink: 0; }
+  /* ☠ La barre elle-même NE DÉFILE PLUS : c'est `.sb-scroll` qui défile, seul.
+     Deux conteneurs scrollables imbriqués, dont l'un en `flex-1`, faisaient que
+     la molette comprimait les sections voisines au lieu de faire glisser la
+     liste — constaté le 01/08. `flex-shrink: 0` reste indispensable sur les
+     enfants : sans lui, un flex-column COMPRIME au lieu de déclencher le
+     défilement, et le contenu devient illisible plutôt qu'inaccessible. */
+  #sidebar { overflow: hidden; }
+  /* ☠ `:not(.sb-scroll)` est INDISPENSABLE : `#sidebar > *` pèse 1-0-0 et écrase
+     `.sb-scroll` (0-1-0). Sans l'exclusion, la zone de défilement héritait de
+     `flex-shrink: 0`, prenait la hauteur de son contenu (2 462 px pour 900 px de
+     fenêtre), ne défilait donc jamais — et poussait le pied de barre hors de
+     l'écran. Mesuré. Deuxième fois aujourd'hui qu'un sélecteur d'id remporte
+     une bataille qu'il ne devrait pas livrer. */
+  /* ☠ `:not(.sb-flex)` INDISPENSABLE : `#sidebar > *` pèse 1-0-0 et écrase
+     `.sb-flex` (0-1-0). Sans l'exclusion la zone héritait de `flex-shrink: 0`,
+     prenait la hauteur de son contenu (2 462 px pour 900 px de fenêtre), ne
+     défilait jamais, et poussait le pied de barre hors de l'écran. Mesuré. */
+  #sidebar > *:not(.sb-flex) { flex-shrink: 0; }
+  .sb-flex { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  /* Parts égales, et surtout `min-height: 0` : sans lui un enfant de flex-column
+     refuse de passer sous la taille de son contenu et déborde au lieu de défiler. */
+  .sb-sec { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
+  .sb-sec-t { flex: 0 0 auto; font-size: 10px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--ink-3); padding: 10px 14px 3px; }
+  .sb-sec-b { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch; padding: 0 12px 4px; }
+  /* ☠ Quand « Plus » est déplié, les zones du bas s'effacent le temps du choix :
+     sur une barre pleine, le menu n'aurait nulle part où s'ouvrir. */
+  #sidebar.plus-ouvert .sb-flex,
+  #sidebar.plus-ouvert #hMiniGauges { display: none; }
   @media (max-width: 1023px) {
     #sidebar { position: fixed; inset: 0 auto 0 0; z-index: 40; transform: translateX(-100%); width: 82vw; max-width: 300px; }
     #sidebar.open { transform: translateX(0); }
@@ -190,20 +218,34 @@
       </div>
     </nav>
 
-    <div class="text-[10px] uppercase tracking-wider px-3 pt-3 pb-1" style="color: var(--ink-3);">Équipes actives</div>
-    <div class="team-tree" id="hTeamTree"></div>
-    <div class="mini-gauges" id="hMiniGauges"></div>
+    <!-- ☠ DEUX zones à parts égales, chacune avec SON défilement. Auparavant une
+         seule liste portait `flex-1` : en la remplissant, elle écrasait ses
+         voisines au lieu de glisser. Ici aucune ne peut manger l'autre —
+         `flex: 1 1 0` + `min-height: 0`, la seule combinaison qui fasse
+         DÉFILER un enfant de flex-column au lieu de le comprimer. -->
+    <div class="sb-flex">
+      <section class="sb-sec">
+        <div class="sb-sec-t">Équipes actives</div>
+        <div class="sb-sec-b"><div class="team-tree" id="hTeamTree"></div></div>
+      </section>
     <!-- ☠ DEUX listes distinctes, jamais fondues : les fils de l'orchestrateur
          (Agent SDK, avec leur contexte et leurs équipes) et les conversations du
          chat cloud n'ont ni le même contenu ni la même durée de vie. Afficher
          les unes sous l'étiquette des autres — ce qui était le cas — fait
          chercher un fil qui n'a jamais été là. Celle du module courant est
          montrée, l'autre est masquée. -->
-    <div class="px-3 mt-2 flex-1 overflow-y-auto min-h-0">
-      <div class="text-[10px] uppercase tracking-wider px-2 py-1" id="convListTitre" style="color: var(--ink-3);">Conversations</div>
-      <div id="convList" class="space-y-0.5"></div>
-      <div id="hOrchConvList" class="space-y-0.5" style="display:none;"></div>
+      <section class="sb-sec">
+        <div class="sb-sec-t" id="convListTitre">Conversations</div>
+        <div class="sb-sec-b">
+          <div id="convList" class="space-y-0.5"></div>
+          <div id="hOrchConvList" class="space-y-0.5" style="display:none;"></div>
+        </div>
+      </section>
     </div>
+
+    <!-- Collé au bas de la zone variable : les quotas sont ce qu'on consulte
+         avant de lancer, pas ce qu'on parcourt en naviguant. -->
+    <div class="mini-gauges" id="hMiniGauges"></div>
 
 
     <!-- ☠ La carte CPU/RAM/uptime qui vivait ici est partie : quatre chiffres
