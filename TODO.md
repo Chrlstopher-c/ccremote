@@ -1,25 +1,62 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-07-22*
+*Dernière mise à jour : 2026-07-31*
 
 ## ⚡ Harness d'orchestration — chantier actif
 
-**Contexte complet : `harness/REPRISE.md`, section « SESSION DU 23/07 (journée) » en FIN de fichier.**
+**Contexte complet : `harness/REPRISE.md`, section « SESSION DU 31/07 » en FIN de fichier.**
 
-### 🎯 EN COURS — priorités à la reprise (24/07)
+### 🎯 EN COURS — priorités à la reprise (31/07)
 
-- [ ] **(F) ⭐ PRIORITÉ — l'orchestrateur ne peut pas LIRE les fichiers d'un projet.** Il tourne sur
-      le Pi, le FS du PC ne lui est pas monté. `explorer_projets` ne rend que l'ARBORESCENCE : il voit
-      que `src-tauri/` existe, il ne peut pas lire une ligne — donc toute synthèse « d'après le code »
-      est en réalité aveugle. Il l'a diagnostiqué lui-même, correctement, en conditions réelles.
-      Manque un outil MCP de lecture de fichier passant par le lien Pi↔PC, mêmes bornes que
-      l'exploration : racine `/mnt/projects`, lecture seule, taille plafonnée. **Même chemin de
-      câblage que `explorer_projets`** (désormais branché, `superviseur-workers.ts` → `canal-controle`
-      → `client-superviseur-pc`).
+- [ ] **Observer la croissance de l'epoch 1 → 2.** Le correctif (`bb80c8f`) est validé en prod :
+      mission `0ecc40eb` porte `epoch=1`, les précédentes `0`. Mais l'INCRÉMENT lui-même n'a pas
+      encore été vu — cette mission a écrit 1 parce que les autres étaient à 0 (`max(0,0)+1`).
+      Le prochain dispatch sur `/mnt/projects/agora` doit donner **2**. S'il redonne 1, un autre
+      chemin recrée les missions et le défaut n'est pas là où on croit.
+- [ ] **Surveiller la sonde de quotas.** Elle réécrit les deux comptes (429 retombé), mais l'écart
+      observé entre deux mesures est de **5 min au lieu des 2 attendues** (période 60 s × 2 comptes
+      en rotation) : certaines passes échouent encore. Si l'écart reste supérieur à la période, il
+      faut un **backoff explicite sur 429**, pas seulement un espacement. Mesure :
+      `SELECT compte_id, observe_a FROM quota_compte` sur le Pi, deux relevés espacés.
+- [ ] **Mode rapide et ultracode : jamais exercés.** `fastMode` est exposé par `/modeles` (seul
+      Opus 5 le déclare) et les cases existent à l'écran — leur effet réel n'a jamais été vérifié.
 - [ ] **(E-bis) Revoir les AUTRES opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en
       entier ; `CCREMOTE_PI_ORCHESTRATEUR` est corrigé (relu sur le Pi), les autres variables n'ont
       PAS été passées en revue. Même défaut possible : un déploiement de routine qui éteint un réglage.
-- [ ] **Solder la mission Vela restée `en_cours`** — résidu du bug de résurrection (corrigé depuis).
-      La réannuler depuis l'orchestrateur devrait maintenant TENIR (plus de réadoption). À confirmer.
+- [ ] **(D) Élucider l'écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés.
+      Le total reste la référence ; la ventilation sert à voir *où* ça part, pas à refaire l'addition.
+- [ ] **Dette : `superviseur-workers.ts` à 710 lignes** (limite 500), signalé par l'agent du
+      chantier F, non traité — violation préexistante, découpe hors scope à l'époque.
+- [ ] **Dette : `deniedToolPatterns: []` au dispatch** — « lecture seule » reste une consigne de
+      mandat, pas un verrou. Le plancher de déni est vide.
+
+### ⚠️ À SAVOIR AVANT DE TOUCHER AU HARNESS (31/07)
+
+- **Le déploiement a DEUX moitiés.** `deploy-harness-pi.sh` ne déploie que le Pi. Après toute
+  modification du canal de contrôle ou du SDK : `systemctl --user restart ccremote-pc`, sinon le PC
+  répond « opération de contrôle non gérée » avec des fichiers pourtant à jour sur disque.
+- **SDK épinglé 0.3.220** (CLI embarqué 2.1.220). La liste de `supportedModels()` dépend de CETTE
+  version, pas du compte. Tout changement de SDK ⇒ repasser `acceptation/modeles-effort-reel.ts` et
+  réaligner `shared/modeles-claude.ts`.
+- **31 tests rouges PRÉEXISTANTS** sur `projets/` et `validation-proprietes/`, stables depuis des
+  jours. Baseline : 1093 tests, 1062 verts.
+
+### ✅ TERMINÉ — session du 31/07 (matin)
+
+- [x] **(F) `lire_fichier` à travers le lien Pi↔PC** — plafond 200 Ko avec troncature annoncée,
+      test d'assemblage des 4 couches. **Validé E2E en prod** : l'orchestrateur a lu le vrai
+      `package.json` du PC. `☠` A révélé au passage que le contrôle de racine d'`explorer_projets`
+      était LEXICAL — un lien symbolique dans `/mnt/projects` vers `~/.claude/.credentials.json`
+      passait ; corrigé par `realpathSync` sur la cible ET la racine.
+- [x] **Une saturation ne survit plus à sa fenêtre** (`58f0045`) — un `rejected` dont le `reset_a`
+      est passé n'écarte plus le compte. Le compte A était écarté depuis le 26/07 ; il est à 3 % hebdo.
+- [x] **Sonde de quotas : plus de perdant systématique** (`55d49a5`) — `Promise.all` affamait
+      toujours le même compte (429). Un compte par passe + sonde séquentielle + `/profile` seulement
+      si l'identité manque + période 20 s → 60 s.
+- [x] **Validation du modèle** (`fd66e80`) — « sonnet 5 » tuait une équipe en 2 s.
+      `shared/modeles-claude.ts` normalise, préserve `[1m]`, refuse avant écriture.
+- [x] **Route `/modeles` réelle + SDK 0.3.220** — le sélecteur lisait encore la maquette.
+      Opus 5 et Sonnet 5 sélectionnables avec leurs cinq niveaux.
+- [x] **Epoch de fencing persisté** (`bb80c8f`) — 8ᵉ « écrit, testé, branché sur rien ».
 
 ### ✅ TERMINÉ — session du 23/07 (soirée) → 24/07
 

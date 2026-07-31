@@ -1,11 +1,19 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-07-24*
+*Dernière mise à jour : 2026-07-31*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
-**Point d'entrée pour reprendre : `harness/REPRISE.md`, section « SESSION DU 23-24/07 (SOIRÉE → NUIT) »,
-en FIN de fichier.** Ne pas repartir de ce STATE pour le harness — REPRISE.md est plus précis et tenu
-à jour.
+**Point d'entrée pour reprendre : `harness/REPRISE.md`, section « SESSION DU 31/07 (matin) », en FIN
+de fichier.** Ne pas repartir de ce STATE pour le harness — REPRISE.md est plus précis et tenu à jour.
+
+**État au 31/07 (matin)** : EN PRODUCTION, commit `bb80c8f`, **1093 tests / 1062 verts** (31 rouges
+PRÉEXISTANTS sur `projets/` + `validation-proprietes/`), typecheck propre, SDK épinglé **0.3.220**
+(CLI embarqué 2.1.220). Six correctifs livrés dans la matinée — saturation périmée, sonde de quotas,
+`lire_fichier`, validation du modèle, bump SDK, epoch de fencing. Trois missions réelles sur
+`/mnt/projects/agora` terminées, la dernière avec `epoch=1` et le compte A à 3 % hebdo.
+`☠` Deux réflexes hérités de cette session : le déploiement a DEUX moitiés (redémarrer
+`ccremote-pc` après toute modification du canal ou du SDK), et un correctif vert peut cacher une
+panne intacte (vérifier que la SOURCE d'un calcul est écrite, sur un artefact réel).
 
 Upgrade majeure : piloter des projets depuis l'app vers le PC. Un orchestrateur maître (session
 Agent SDK sur le Pi) avec qui Chris discute, qui dispatche des missions Claude Code sur le PC,

@@ -918,3 +918,80 @@ tracé** — copier celui d'`explorer_projets`, désormais branché de bout en b
   API juste, mais l'écran ne change pas » ⇒ grep `?v=` AVANT toute ré-investigation.
 - **Mesurer avant de corriger une machine à états** : j'ai sur-corrigé deux fois sur du récit. Établir
   le fait sur un artefact réel (log/banc/row), avant ET après.
+
+---
+
+# SESSION DU 31/07 (matin) — reprendre ICI
+
+**État : EN PROD, commit `bb80c8f`. 1093 tests, 1062 verts, 31 rouges PRÉEXISTANTS (`projets/` +
+`validation-proprietes/`, stables). Typecheck propre. SDK épinglé `0.3.220` (CLI embarqué 2.1.220).**
+Services actifs : `ccremote-harness` + `ccremote-web` (Pi), `ccremote-pc` (PC), lien rétabli.
+
+## ⚠ LES DEUX RÉFLEXES DE CETTE SESSION
+
+1. **Le déploiement a DEUX moitiés.** `deploy-harness-pi.sh` ne touche que le Pi. Le service PC
+   exécute les sources depuis `/mnt/projects` mais garde son code CHARGÉ EN MÉMOIRE : après toute
+   modification du canal de contrôle ou du SDK, `systemctl --user restart ccremote-pc`. Symptôme
+   sinon : l'outil MCP est appelé, le PC répond « opération de contrôle non gérée », et les fichiers
+   sont pourtant à jour sur disque. Seul un test E2E le révèle.
+2. **Un correctif vert peut cacher une panne intacte** — trois fois dans cette session. Quand un
+   correctif remplace une constante par un calcul, la question n'est pas « le calcul est-il juste ? »
+   mais « **ce qu'il lit est-il écrit ?** ». Et tout nouveau test se valide DANS LES DEUX SENS :
+   `git stash` du correctif, relancer, constater l'échec, restaurer.
+
+## Ce qui a été livré (6 correctifs, tous en prod)
+
+1. **Une saturation ne survit plus à sa fenêtre** (`58f0045`). Un quota `rejected` dont le `reset_a`
+   est passé est CADUC. Le compte A était écarté depuis le 26/07 sur un verdict du 24/07 — il tourne
+   à 3 % hebdo. Règle en source unique : `shared/saturation-compte.ts::fenetreEncoreSaturante`.
+   `☠` Reset INCONNU (`null`) ⇒ le verdict TIENT : on ne relâche que sur une fin de fenêtre établie.
+   Le filtre de `listerDisponibles()` est passé du SQL au TypeScript pour que la règle vive à un seul
+   endroit.
+2. **Sonde de quotas : plus de perdant systématique** (`55d49a5`). `☠` `Promise.all` sur les comptes
+   vers `/oauth/usage` : l'endpoint sert une requête et rejette l'autre en 429, et l'ordre étant
+   stable c'était TOUJOURS le même — `compte-a` pas mesuré une fois depuis le 25/07, écran à 0 % sur
+   un compte réellement à 7-8 %. Correctif : **un compte par passe, à tour de rôle** (`tourSuivant`)
+   + sonde **séquentielle** (test : `maxEnVol === 1`) + `/profile` demandé seulement tant que
+   l'identité manque + période **20 s → 60 s**. De 12 requêtes/minute à ~1.
+3. **Chantier F — `lire_fichier`** à travers le lien Pi↔PC. Plafond 200 Ko, troncature annoncée,
+   borné au descripteur. Test d'assemblage des 4 couches partant du handler réellement appelé.
+   **Validé E2E en prod.** `☠` A révélé que le confinement d'`explorer_projets` était LEXICAL : un
+   lien symbolique dans `/mnt/projects` vers `~/.claude/.credentials.json` passait. `realpathSync`
+   sur la cible ET la racine.
+4. **Validation du modèle** (`fd66e80`). `☠` « sonnet 5 » — avec l'espace — partait tel quel au CLI :
+   équipe morte en 2 s, 0,00 $, mandat déjà écrit au registre. `shared/modeles-claude.ts` normalise
+   les formes qu'un LLM écrit spontanément, PRÉSERVE le suffixe de variante `[1m]` (le retirer
+   changerait la fenêtre de contexte), tolère l'identifiant daté, et REFUSE le reste **avant toute
+   écriture** avec la liste des valeurs acceptées — un modèle se corrige sur une liste, pas sur un
+   échec.
+5. **Route `/modeles` réelle + SDK 0.3.220**. Le sélecteur lisait encore `harness-mock-data.js`.
+   `☠ FAIT MESURÉ` : la liste de `supportedModels()` dépend du **CLI EMBARQUÉ PAR LE SDK**, pas du
+   compte — 0.3.217 → CLI 2.1.217 (pas d'Opus 5, identique sur les DEUX comptes) ; 0.3.220 → CLI
+   2.1.220 (Opus 5 avec ses 5 niveaux et le mode rapide, Opus 4.8 disparaît). D'où
+   `MODELE_LEAD_DEFAUT = claude-opus-5`. `☠` Les niveaux d'effort ne sont PAS uniformes : Haiku
+   déclare `supportsEffort: false`, et un effort invalide est ignoré EN SILENCE par le SDK.
+   `☠` `max` est écarté du dispatch d'ÉQUIPE : le SDK ne l'accepte que via `applyFlagSettings`
+   (portée session), pas par la cascade de settings persistés qu'utilise un worker.
+6. **Epoch de fencing persisté** (`bb80c8f`). `☠` 8ᵉ « écrit, testé, branché sur rien », et la forme
+   la plus retorse : le correctif du 23/07 remplaçait un `epoch: 1` en dur par `prochainEpoch()` =
+   `max(epochs)+1`, qui lit `mission.epoch`… mais `CreationMission` n'avait pas ce champ. La colonne
+   restait à 0, le calcul rendait éternellement 1 — la constante remplacée, par un chemin plus long
+   et plus crédible. Calculé UNE FOIS pour le registre et pour le PC.
+
+## ▶ ACTION SUIVANTE
+
+Voir `TODO.md`, section « EN COURS — priorités à la reprise (31/07) ». En tête :
+
+1. **Voir l'epoch passer à 2** au prochain dispatch sur `/mnt/projects/agora` (il porte 1 aujourd'hui,
+   les précédents 0). S'il redonne 1, un autre chemin recrée les missions.
+2. **Surveiller la sonde** : écart observé de 5 min entre deux mesures au lieu des 2 attendues ⇒
+   certaines passes échouent encore. Si ça persiste, backoff explicite sur 429.
+
+## Bancs et mesures utiles
+
+- `harness/acceptation/modeles-effort-reel.ts` — modèles et niveaux d'effort RÉELS
+  (`COMPTE=compte-b bun run …`). À repasser après tout changement de SDK.
+- Jauges en base, sur le Pi :
+  `sqlite3` absent — passer par `python3 -c` + `sqlite3` (module standard), base en `mode=ro`.
+- État des missions : `SELECT substr(id,1,8), projet, epoch, compte_id, modele_resolu, etat_harness
+  FROM mission ORDER BY cree_a DESC LIMIT 5`.
