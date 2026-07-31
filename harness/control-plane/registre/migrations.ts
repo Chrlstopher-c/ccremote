@@ -547,6 +547,54 @@ CREATE INDEX idx_rappel_echeance ON rappel(etat, prochaine_a);
 CREATE INDEX idx_rappel_conversation ON rappel(conversation_id, etat);
 `;
 
+/**
+ * Le type d'évènement `notification` était accepté par TypeScript et REFUSÉ par
+ * la base.
+ *
+ * `☠` Panne mesurée en prod le 2026-08-01, au premier canal asynchrone réel :
+ *
+ *     non transmis (registre: échec de « conversations.ajouterEvenement » —
+ *     CHECK constraint failed: type IN ('operateur','reflexion','texte',
+ *     'outil','resultat','erreur','compaction','mandat'))
+ *
+ * La migration 14 a ajouté `'notification'` à `TypeEvenementConversation` — le
+ * type TS — sans toucher au CHECK SQL. Trois migrations avaient pourtant déjà
+ * fait ce geste (compaction en 3, mandat en 4) : le motif était établi, je l'ai
+ * oublié. Résultat : la notification était bien journalisée, Chris la voyait à
+ * l'écran, mais sa remise à l'orchestrateur échouait au dernier maillon et la
+ * conversation restait figée sur la fin d'équipe.
+ *
+ * `☠` Ce que la panne dit des tests : ceux du service utilisaient une doublure
+ * de remise et n'écrivaient JAMAIS d'évènement réel. Ils validaient la fonction,
+ * pas l'assemblage — exactement le défaut que ce dépôt documente depuis dix
+ * occurrences. Le fail-safe, lui, a parfaitement joué : le fait a survécu, et
+ * l'erreur SQL est arrivée telle quelle sous les yeux de l'opérateur.
+ *
+ * SQLite ne sait pas modifier un CHECK : la table est recréée et recopiée, comme
+ * en migrations 3 et 4. `modele` et `effort` (migration 12) sont préservés.
+ */
+const MIGRATION_17 = `
+CREATE TABLE conversation_evenement_v5 (
+  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL CHECK (type IN ('operateur', 'reflexion', 'texte', 'outil',
+                                                'resultat', 'erreur', 'compaction', 'mandat',
+                                                'notification')),
+  contenu         TEXT NOT NULL,
+  cree_a          INTEGER NOT NULL,
+  modele          TEXT,
+  effort          TEXT
+) STRICT;
+
+INSERT INTO conversation_evenement_v5 (seq, conversation_id, type, contenu, cree_a, modele, effort)
+  SELECT seq, conversation_id, type, contenu, cree_a, modele, effort FROM conversation_evenement;
+
+DROP TABLE conversation_evenement;
+ALTER TABLE conversation_evenement_v5 RENAME TO conversation_evenement;
+
+CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -564,6 +612,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 14, nom: 'notifications-canal-asynchrone', sql: MIGRATION_14 },
   { version: 15, nom: 'autonomie-fenetre-et-origine-approbation', sql: MIGRATION_15 },
   { version: 16, nom: 'rappels-programmes', sql: MIGRATION_16 },
+  { version: 17, nom: 'evenement-notification', sql: MIGRATION_17 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(
