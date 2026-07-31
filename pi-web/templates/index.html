@@ -217,9 +217,16 @@
       </div>
     </div>
 
+    <!-- ☠ DEUX listes distinctes, jamais fondues : les fils de l'orchestrateur
+         (Agent SDK, avec leur contexte et leurs équipes) et les conversations du
+         chat cloud n'ont ni le même contenu ni la même durée de vie. Afficher
+         les unes sous l'étiquette des autres — ce qui était le cas — fait
+         chercher un fil qui n'a jamais été là. Celle du module courant est
+         montrée, l'autre est masquée. -->
     <div class="px-3 mt-2 flex-1 overflow-y-auto min-h-0">
-      <div class="text-[10px] uppercase tracking-wider px-2 py-1" style="color: var(--ink-3);">Conversations</div>
+      <div class="text-[10px] uppercase tracking-wider px-2 py-1" id="convListTitre" style="color: var(--ink-3);">Conversations</div>
       <div id="convList" class="space-y-0.5"></div>
+      <div id="hOrchConvList" class="space-y-0.5" style="display:none;"></div>
     </div>
 
     <div class="m-3 p-3.5 rounded-xl border" style="border-color: var(--line); background: var(--card);">

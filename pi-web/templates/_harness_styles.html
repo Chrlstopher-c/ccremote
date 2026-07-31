@@ -636,3 +636,18 @@
   /* Pastille de 4 px, comme la référence — un point, pas un compteur. */
   .tb-pastille { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px;
     border-radius: 50%; background: var(--accent); }
+  .tb-stats { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; }
+  .tb-pilule.warn { background: var(--warn-soft); color: #8A6A12; }
+  .tb-pilule.crit { background: var(--err-soft); color: var(--err); }
+  #hOrchCompactions { gap: 4px; }
+  .sb-fil-dot { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; }
+  .hist-item.actif { background: var(--card); box-shadow: 0 0 0 1px var(--line); color: var(--ink); }
+  @media (max-width: 860px) { .tb-stats { display: none; } }
+  /* ☠ `lg:hidden` de Tailwind PERD contre `.h-topbar .gutter { display: flex }` :
+     spécificité 0-1-1 contre 0-1-0. Le hamburger restait donc visible sur PC.
+     La media query rétablit la règle sans jouer à la surenchère de sélecteurs. */
+  @media (min-width: 1024px) {
+    .h-topbar .gutter.sidebarToggle { display: none; }
+    /* Sans gutter, le titre n'a plus de raison d'être en retrait. */
+    [data-view="harness-orchestrateur"] .h-topbar .lead { padding-left: 12px; }
+  }

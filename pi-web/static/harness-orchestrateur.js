@@ -65,6 +65,10 @@ function hRenderConvBar(list, erreur) {
     </div>`;
   }).join('');
   bar.innerHTML = chips + `<button class="conv-new" onclick="hNewConversation()">+ Nouveau</button>`;
+  // La barre de titre et la liste latérale lisent la même source : les mettre à
+  // jour ici garantit qu'elles ne divergent jamais de la barre d'onglets.
+  if (typeof hMajBarreOrch === 'function') hMajBarreOrch();
+  if (typeof hMajListeLaterale === 'function') hMajListeLaterale();
 }
 
 async function hNewConversation() {

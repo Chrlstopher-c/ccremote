@@ -117,11 +117,20 @@
            EMPRUNTE les panneaux existants plutôt que de les dupliquer. -->
       <header class="h-topbar">
         <div class="lead">
-          <button class="gutter sidebarToggle" aria-label="Menu" title="Menu">
+          <button class="gutter sidebarToggle lg:hidden" aria-label="Menu" title="Menu">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
           <button class="tb-titre" id="hOrchTitre">Orchestrateur</button>
-          <button class="tb-pilule" id="hOrchSub" onclick="hOuvrirOptionsOrch()">Agent SDK</button>
+          <!-- ☠ Contexte, compactages et compaction manuelle vivaient dans une
+               boîte de stats reléguée dans une feuille : ce sont les trois
+               chiffres qu'on regarde en écrivant, ils appartiennent à la barre. -->
+          <span class="tb-stats" id="hOrchBarreStats">
+            <button class="tb-pilule" id="hOrchCtx" onclick="hOuvrirOptionsOrch()" title="Contexte du fil">ctx —</button>
+            <button class="tb-pilule" id="hOrchCompactions" onclick="hCompacterMaintenant()" title="Compacter le contexte de ce fil maintenant">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>
+              <span id="hOrchCompactionsNb">0</span>
+            </button>
+          </span>
         </div>
         <div class="aux">
           <button class="tb-ico" onclick="hOuvrirOptionsOrch()" aria-label="Options de la conversation" title="Options">

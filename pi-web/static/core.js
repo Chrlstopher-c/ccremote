@@ -57,6 +57,8 @@ function switchView(view) {
   if (view === 'harness-comptes') hRenderComptes();
   if (view === 'harness-notifications') hRenderNotifications();
   if (view === 'harness-orchestrateur') hInitOrchestrateur();
+  // La liste latérale suit le module affiché — voir `hMajListeLaterale`.
+  if (typeof hMajListeLaterale === 'function') hMajListeLaterale();
   // ☠ Le parc, les comptes et le détail d'une mission se
   // rafraîchissent d'eux-mêmes désormais (voir harness-parc.js) : sans ça, il
   // fallait recharger la page pour voir bouger quoi que ce soit, et une équipe

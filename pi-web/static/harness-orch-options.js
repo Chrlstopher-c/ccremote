@@ -93,3 +93,67 @@ function hArchiverDepuisFeuille() {
   HSheets.fermer();
   if (id) hArchiveConversation(id);
 }
+
+// ============ Barre de titre et liste latérale de l'orchestrateur ============
+
+/**
+ * Titre = nom de la conversation OUVERTE, pas le nom du module.
+ *
+ * ☠ « Orchestrateur » était écrit en dur : avec plusieurs fils ouverts, la barre
+ * ne disait jamais lequel on lisait. C'est l'information la plus utile de tout
+ * l'écran, et c'était la seule qui manquait.
+ */
+function hMajBarreOrch() {
+  const conv = (hOrch.list || []).find((c) => c.id === hOrch.convId);
+  const titre = document.getElementById('hOrchTitre');
+  if (titre) {
+    const nom = conv?.titre || 'Orchestrateur';
+    if (titre.textContent !== nom) titre.textContent = nom;
+  }
+  const ctx = document.getElementById('hOrchCtx');
+  if (ctx) {
+    const pct = typeof conv?.contextPct === 'number' ? conv.contextPct : null;
+    const texte = pct === null ? 'ctx —' : `ctx ${pct} %`;
+    if (ctx.textContent.trim() !== texte) ctx.textContent = texte;
+    // Seuils repris de la boîte de stats : au-delà de 75 %, la compaction n'est
+    // plus une option de confort.
+    ctx.className = 'tb-pilule' + (pct === null ? '' : pct >= 75 ? ' crit' : pct >= 50 ? ' warn' : '');
+  }
+  const nb = document.getElementById('hOrchCompactionsNb');
+  if (nb && typeof conv?.compactions === 'number' && nb.textContent !== String(conv.compactions)) {
+    nb.textContent = String(conv.compactions);
+  }
+}
+
+/**
+ * Liste latérale : les fils de l'orchestrateur quand on est dans sa vue, les
+ * conversations du chat cloud sinon.
+ */
+function hMajListeLaterale() {
+  const vue = document.querySelector('.view.active')?.dataset.view || '';
+  const orchestrateur = vue.startsWith('harness-');
+  const listeChat = document.getElementById('convList');
+  const listeOrch = document.getElementById('hOrchConvList');
+  const titre = document.getElementById('convListTitre');
+  if (!listeChat || !listeOrch || !titre) return;
+  listeChat.style.display = orchestrateur ? 'none' : '';
+  listeOrch.style.display = orchestrateur ? '' : 'none';
+  titre.textContent = orchestrateur ? 'Fils de l’orchestrateur' : 'Conversations';
+  if (!orchestrateur) return;
+
+  const items = hOrch.list || [];
+  // ☠ Signature avant écriture : cette fonction est appelée à chaque sondage
+  // (400 ms) et réécrire une liste identique casse toute sélection en cours —
+  // le défaut déjà payé sur la barre d'onglets.
+  const sig = JSON.stringify([hOrch.convId, items.map((c) => [c.id, c.titre, c.active])]);
+  if (listeOrch.dataset.sig === sig) return;
+  listeOrch.dataset.sig = sig;
+  listeOrch.innerHTML = items.length === 0
+    ? '<div class="text-[11px] px-2 py-1" style="color:var(--ink-3);">Aucun fil ouvert.</div>'
+    : items.map((c) => `
+      <button class="hist-item w-full text-left px-2 py-1.5 rounded-md text-[12.5px] flex items-center gap-2 ${c.id === hOrch.convId ? 'actif' : ''}"
+              onclick="hOpenConversation('${c.id}')" style="color: var(--ink-2);">
+        <span class="sb-fil-dot" style="background:${c.active ? 'var(--ok)' : 'var(--line-2)'}"></span>
+        <span class="truncate flex-1">${escapeHtml(c.titre)}</span>
+      </button>`).join('');
+}
