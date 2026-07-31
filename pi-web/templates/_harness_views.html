@@ -41,14 +41,18 @@
       </header>
       <div class="h-flow" id="hMissionBody"></div>
       <div class="h-dock" id="hMissionDock">
+        <!-- ☠ Le bouton d'envoi est DANS la boîte (en bas à droite) et la rangée
+             de réglages est DESSOUS, hors de la boîte : c'est la structure du
+             composer de référence. Tout empiler dans la boîte l'épaissit et
+             mélange l'écriture avec le paramétrage. -->
         <div class="h-box">
           <textarea id="hInstrInput" rows="1" placeholder="Parler à cette équipe…"></textarea>
-          <div class="h-ctl">
-            <span class="h-hint">Lue au prochain tour disponible.</span>
-            <button class="h-snd" onclick="hSendInstruction()" aria-label="Envoyer">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7"/></svg>
-            </button>
-          </div>
+          <button class="h-snd" onclick="hSendInstruction()" aria-label="Envoyer">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7"/></svg>
+          </button>
+        </div>
+        <div class="h-ctl">
+          <span class="h-hint">Lue au prochain tour disponible.</span>
         </div>
       </div>
     </div>

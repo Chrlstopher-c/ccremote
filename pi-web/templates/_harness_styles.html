@@ -527,3 +527,52 @@
   .h-blk.err { border-color: var(--err-soft); background: #FDF6F5; }
   .h-err { color: var(--err); font-size: 12px; }
   .h-card > .h-case-body .h-blk { max-height: 340px; overflow: auto; white-space: pre; }
+
+  /* ===== alignement sur les valeurs relevées dans le DOM de référence =====
+     Trois choses que j'avais prises à l'envers, corrigées d'après le markup réel
+     de la vue Claude Code (01/08). */
+
+  /* ☠ Le message opérateur est à GAUCHE, pas à droite : `justify-start` dans le
+     markup de référence. C'est la différence entre un chat (bulles alternées) et
+     un journal de session (tout aligné, une seule colonne de lecture). */
+  .h-op { justify-content: flex-start; padding: 14px 18px 22px 18px; }
+  .h-op .b { max-width: 75%; border-radius: 18px; padding: 12px 16px; font-size: 15px; }
+
+  /* ☠ Header aligné à GAUCHE et compact (32 px de haut dans la référence), pas
+     un titre centré : le centrage est un motif d'app mobile, la vue Claude Code
+     garde l'identité à gauche et les actions à droite. */
+  .h-mhead { padding: 8px 14px; min-height: 40px; }
+  .h-mhead .ttl { text-align: left; }
+  .h-mhead .t1 { font-size: 14px; }
+  .h-mhead .t2 { justify-content: flex-start; font-size: 12px; }
+
+  /* ☠ Chevron à 14 px et collé (gap serré) — mesuré `--class-base-icon: 14px`
+     et `gap-g1` sur la valise de référence. */
+  .h-case { gap: 5px; font-size: 14.5px; }
+  .h-case .cv { width: 14px; height: 14px; }
+
+  /* ☠ Les pilules du composer n'ont PAS de fond au repos : `bg-[var(--fill-
+     uncontained-default)]` est transparent, le fond n'arrive qu'au survol. Un
+     fond permanent en fait des boutons lourds là où ce sont des réglages. */
+  [data-view="harness-orchestrateur"] .composer-foot .pill,
+  [data-view="harness-orchestrateur"] .composer-foot select,
+  [data-view="harness-orchestrateur"] .composer-foot button { background: transparent; }
+  [data-view="harness-orchestrateur"] .composer-foot .pill:hover,
+  [data-view="harness-orchestrateur"] .composer-foot button:hover { background: var(--bg-3); }
+
+  /* ☠ Les actions d'un message n'apparaissent qu'au SURVOL (`opacity-0
+     group-hover/msg:opacity-100`). Toujours visibles, elles font du bruit sous
+     chaque réponse. */
+  .h-acts { opacity: 0; transition: opacity .15s ease; }
+  .h-say-wrap:hover .h-acts, .h-acts:focus-within { opacity: 1; }
+
+  /* Cartes d'alerte : 480 px et un liseré d'1 px en ombre, pas une bordure. */
+  .h-perm { max-width: 480px; border: none; box-shadow: 0 0 0 1px var(--line); }
+  .h-box { position: relative; padding: 12px 46px 12px 16px; }
+  .h-box .h-snd { position: absolute; right: 9px; bottom: 9px; width: 30px; height: 30px; }
+  .h-ctl { display: flex; align-items: center; gap: 10px; padding: 5px 4px 0; }
+  .h-ctl .h-hint { font-size: 11px; color: var(--ink-3); }
+  .h-say-wrap { position: relative; }
+  .h-acts { display: flex; gap: 14px; padding: 0 18px 4px; color: var(--ink-3); margin-top: -14px; }
+  .h-acts button { padding: 2px; border-radius: 6px; }
+  .h-acts button:hover { color: var(--ink); background: var(--bg-3); }

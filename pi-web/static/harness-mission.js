@@ -11,7 +11,12 @@ function hParoleTemplate(ev) {
   if (hEstMessageHarness(ev.text)) {
     return `<div class="h-harness">${hMarkdown(ev.text.replace(/^\[HARNESS\]\s*/, ''))}</div>`;
   }
-  return `<div class="h-say">${hMarkdown(ev.text)}</div>`;
+  // ☠ Enveloppé : les actions ne se révèlent qu'au survol du message (comme la
+  // référence), et il leur faut donc un parent commun pour porter le `:hover`.
+  return `<div class="h-say-wrap"><div class="h-say">${hMarkdown(ev.text)}</div>
+    <div class="h-acts"><button onclick="hCopierParole(this)" title="Copier">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M6 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V6"/></svg>
+    </button></div></div>`;
 }
 
 function hOperateurTemplate(ev) {
@@ -254,3 +259,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+
+/** Copie le texte rendu de la parole survolée. */
+async function hCopierParole(bouton) {
+  const say = bouton.closest('.h-say-wrap')?.querySelector('.h-say');
+  if (!say) return;
+  try {
+    await navigator.clipboard.writeText(say.innerText.trim());
+    showToast('Copié', 'ok');
+  } catch {
+    showToast('Copie refusée par le navigateur', 'warn');
+  }
+}
