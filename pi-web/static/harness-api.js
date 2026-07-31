@@ -150,6 +150,11 @@ const HarnessAPI = (() => {
     },
     async markAllNotificationsRead() { return ecrireReel('/notifications/read-all', {}); },
 
+    // Fenêtre d'autonomie d'un fil (migration 15). `start`/`end` à null = retrait.
+    async setAutonomie(conversationId, start, end, goal) {
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(conversationId)}/autonomie`, { start, end, goal });
+    },
+
     // H-61 : mandats en attente d'autorisation humaine — RÉEL.
     async getPropositions() { return lireReel('/orchestrator/propositions'); },
     async approveMandat(id) { return ecrireReel(`/orchestrator/propositions/${encodeURIComponent(id)}/approve`, {}); },

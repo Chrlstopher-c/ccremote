@@ -92,8 +92,32 @@
           <h1 class="serif text-[17px] font-medium leading-none" style="color: var(--ink);">Orchestrateur</h1>
           <div class="text-[11px] mt-1" style="color: var(--ink-3);">Session Agent SDK · MCP de contrôle du parc</div>
         </div>
+        <button onclick="hOuvrirAutonomie()" class="ml-auto text-[11.5px] px-2.5 py-1.5 rounded-md hover:bg-black/5 flex items-center gap-1.5" style="color: var(--ink-2);" title="Déléguer une plage de travail à ce fil">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <span id="hAutonomieLabel">Autonomie</span>
+        </button>
         <div class="orch-stats" id="hOrchStats"></div>
       </header>
+      <!-- ☠ Plage DATÉE, pas « mode nuit » : une deadline explicite est ce qui
+           fait arbitrer l'orchestrateur entre lancer une équipe de plus et
+           consolider. Un simple interrupteur ne lui apprendrait rien du temps. -->
+      <div id="hAutonomiePanneau" class="px-4 lg:px-7 pt-3" style="display:none;">
+        <div class="rounded-lg border px-3.5 py-3" style="border-color: var(--line); background: var(--bg-2);">
+          <div class="text-[12.5px] font-medium mb-2" style="color: var(--ink);">Déléguer une plage de travail à ce fil</div>
+          <div class="text-[11px] mb-2.5" style="color: var(--ink-3);">Pendant la plage, les mandats de cette conversation démarrent sans ton clic, et l'échéance sert de deadline à l'orchestrateur.</div>
+          <div class="flex flex-wrap gap-2 items-end">
+            <label class="text-[11px]" style="color: var(--ink-2);">Début<br><input type="datetime-local" id="hAutoDebut" class="mt-1 px-2 py-1.5 rounded-md text-[12px]" style="background: var(--bg-3); color: var(--ink); border: 1px solid var(--line);"></label>
+            <label class="text-[11px]" style="color: var(--ink-2);">Fin<br><input type="datetime-local" id="hAutoFin" class="mt-1 px-2 py-1.5 rounded-md text-[12px]" style="background: var(--bg-3); color: var(--ink); border: 1px solid var(--line);"></label>
+            <label class="text-[11px] flex-1 min-w-[200px]" style="color: var(--ink-2);">Objectif de la plage<br><input type="text" id="hAutoObjectif" placeholder="ce qui doit être fait et testé d'ici l'échéance" class="mt-1 w-full px-2 py-1.5 rounded-md text-[12px]" style="background: var(--bg-3); color: var(--ink); border: 1px solid var(--line);"></label>
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button onclick="hPoserAutonomie()" class="btn btn-accent text-[12px]">Déléguer</button>
+            <button onclick="hRetirerAutonomie()" class="btn btn-ghost text-[12px]">Retirer</button>
+            <button onclick="hOuvrirAutonomie()" class="btn btn-ghost text-[12px] ml-auto">Fermer</button>
+          </div>
+          <div id="hAutoRetour" class="text-[11px] mt-2" style="color: var(--ink-3);"></div>
+        </div>
+      </div>
       <div class="px-4 lg:px-7 pt-3" id="hLinkBannerWrap">
         <div class="harness-linkbanner" id="hLinkBanner">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 19.36"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
