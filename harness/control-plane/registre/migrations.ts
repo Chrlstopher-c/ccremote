@@ -595,6 +595,26 @@ ALTER TABLE conversation_evenement_v5 RENAME TO conversation_evenement;
 CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
 `;
 
+
+/**
+ * Résultats d'appels d'outils (2026-08-01).
+ *
+ * `☠` Le fil montrait ce que le lead LANÇAIT, jamais ce que ça donnait : le
+ * collecteur ignorait purement les messages `user` du SDK, qui portent les
+ * `tool_result`. On lisait la question sans jamais la réponse.
+ *
+ * `outil_id` est le `tool_use_id` du SDK — la SEULE clé qui relie un appel à son
+ * résultat, puisqu'ils arrivent dans deux messages distincts et que plusieurs
+ * appels peuvent tourner de front. Indexé pour que l'appariement, qui se fait à
+ * chaque balayage, reste un point d'index et non un balayage de table.
+ */
+const MIGRATION_18 = `
+ALTER TABLE activite_mission ADD COLUMN outil_id TEXT;
+ALTER TABLE activite_mission ADD COLUMN resultat TEXT;
+ALTER TABLE activite_mission ADD COLUMN resultat_erreur INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_activite_outil_id ON activite_mission(outil_id);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -613,6 +633,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 15, nom: 'autonomie-fenetre-et-origine-approbation', sql: MIGRATION_15 },
   { version: 16, nom: 'rappels-programmes', sql: MIGRATION_16 },
   { version: 17, nom: 'evenement-notification', sql: MIGRATION_17 },
+  { version: 18, nom: 'resultat-outil', sql: MIGRATION_18 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

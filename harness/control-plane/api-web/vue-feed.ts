@@ -30,6 +30,16 @@ export interface FeedEventApi {
   readonly pending?: boolean;
   readonly resolved?: string;
   readonly path?: string;
+  /**
+   * Sortie de l'outil, tronquée à la source (6 000 caractères).
+   *
+   * `☠` Absent tant que le résultat n'est pas revenu — et c'est une information
+   * en soi : un appel sans sortie est un appel encore en vol, ou un worker mort
+   * entre l'appel et sa réponse. L'interface distingue les deux cas, elle
+   * n'affiche jamais un vide qui ressemblerait à « pas de sortie ».
+   */
+  readonly result?: string;
+  readonly resultError?: boolean;
 }
 
 /** Le contrat impose `HH:MM:SS` — pas une date complète. */
@@ -75,6 +85,7 @@ export function construireFeed(
       text: a.texte,
       ...(a.outil !== null ? { tool: a.outil } : {}),
       ...(a.type !== 'texte' ? { nature: a.type } : {}),
+      ...(a.resultat ? { result: a.resultat, resultError: a.resultatErreur === true } : {}),
     });
   }
 

@@ -50,12 +50,19 @@ function hCorpsOutil(ev) {
   const c = hParseOutil(ev.text);
   const bloc = (titre, valeur) => (valeur
     ? `<div class="h-lbl">${titre}</div><div class="h-blk">${escapeHtml(valeur)}</div>` : '');
+  // ☠ La sortie DISTINGUE trois cas : revenue, en erreur, ou pas encore là.
+  // Rendre un cadre vide quand rien n'est revenu laisserait croire que l'outil
+  // n'a rien produit, alors qu'il tourne peut-être encore.
+  const sortie = ev.result
+    ? `<div class="h-lbl">Output${ev.resultError ? ' <span class="h-err">erreur</span>' : ''}</div>`
+      + `<div class="h-blk${ev.resultError ? ' err' : ''}">${escapeHtml(ev.result)}</div>`
+    : '<div class="h-note">Sortie non revenue — appel encore en vol, ou worker arrêté entre l’appel et sa réponse.</div>';
   return (c.description && c.command ? `<div class="h-step-desc">${escapeHtml(c.description)}</div>` : '')
     + bloc('Command', c.command)
     + bloc('File', c.file_path || c.path || c.notebook_path)
     + bloc('Pattern', c.pattern) + bloc('Query', c.query)
     + bloc('URL', c.url) + bloc('Prompt', c.prompt)
-    + `<div class="h-note">Relevé à ${escapeHtml(ev.ts)}. Le harness journalise l’appel, pas son résultat (H-45).</div>`;
+    + sortie;
 }
 
 // ------------------------------------------------------------------ détails

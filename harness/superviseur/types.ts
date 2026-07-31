@@ -287,6 +287,25 @@ export interface TelemetrieWorker {
     readonly survenuA: number;
     readonly type: NatureActivite;
     readonly outil?: string;
+    /**
+     * Identifiant SDK de l'appel (`tool_use_id`). `☠` C'est la SEULE clé qui
+     * relie un appel à son résultat : le SDK les livre dans deux messages
+     * distincts (`assistant` puis `user`), et rien d'autre ne permet de dire
+     * quel résultat appartient à quel appel quand plusieurs tournent de front.
+     */
+    readonly outilId?: string;
+  }[];
+  /**
+   * Résultats d'outils relevés depuis le dernier passage, appariés par
+   * `outilId`. `☠` Transportés à part des activités : un résultat arrive APRÈS
+   * son appel, souvent après un balayage — les fondre dans la même liste
+   * obligerait à retenir l'appel côté PC en attendant, et un worker qui meurt
+   * entre les deux perdrait les deux.
+   */
+  readonly resultatsEnAttente: readonly {
+    readonly outilId: string;
+    readonly resultat: string;
+    readonly estErreur: boolean;
   }[];
   /**
    * Sous-agents de la mission, lus sur le DISQUE (`sous-agents-disque.ts`).

@@ -58,7 +58,8 @@ interface Etat {
   contexteVentilation: readonly PosteContexte[] | null;
   derniereActivite: string | null;
   /** Activités produites, en attente de rapatriement vers le Pi. Vidée à chaque relevé. */
-  activitesEnAttente: { texte: string; survenuA: number; type: NatureActivite; outil?: string }[];
+  activitesEnAttente: { texte: string; survenuA: number; type: NatureActivite; outil?: string; outilId?: string }[];
+  resultatsEnAttente: { outilId: string; resultat: string; estErreur: boolean }[];
   /**
    * Dernier relevé disque des sous-agents. `☠` Posé de l'extérieur (le
    * collecteur ne lit pas le disque), et NON drainant contrairement aux
@@ -117,6 +118,62 @@ interface PriseActivite {
   readonly texte: string;
   readonly type: NatureActivite;
   readonly outil?: string;
+  readonly outilId?: string;
+}
+
+/** Un résultat d'outil, apparié plus tard à son appel par `outilId`. */
+interface PriseResultat {
+  readonly outilId: string;
+  readonly resultat: string;
+  readonly estErreur: boolean;
+}
+
+/**
+ * Taille retenue d'un résultat d'outil.
+ *
+ * `☠` Borné, et haut : un `Read` renvoie un fichier entier, un `Bash` peut
+ * cracher des mégaoctets. Sans borne, une seule mission remplirait la base du
+ * Pi — qui tient sur une carte SD. 6 000 caractères couvrent la quasi-totalité
+ * des sorties utiles ; au-delà, la troncature est ANNONCÉE dans le texte, jamais
+ * silencieuse : un opérateur qui lit une sortie coupée sans le savoir en tire
+ * des conclusions fausses.
+ */
+const RESULTAT_MAX = 6000;
+
+/** Aplatit le contenu d'un `tool_result` : chaîne, ou blocs typés. */
+function texteResultat(contenu: unknown): string {
+  if (typeof contenu === 'string') return contenu;
+  if (!Array.isArray(contenu)) return '';
+  return (contenu as { type?: string; text?: string }[])
+    .filter((b) => b.type === 'text' && typeof b.text === 'string')
+    .map((b) => b.text as string)
+    .join('\n');
+}
+
+/**
+ * Extrait les résultats d'outils d'un message `user`.
+ *
+ * `☠` Ces messages étaient purement IGNORÉS : le collecteur ne traitait que
+ * `assistant`, `system` et `result`. On voyait donc CE QUE le lead lançait, mais
+ * jamais ce que ça avait donné — l'écran montrait la question, jamais la réponse.
+ */
+function prisesResultat(message: SDKMessage): readonly PriseResultat[] {
+  if (message.type !== 'user') return [];
+  const contenu = (message as { message?: { content?: unknown } }).message?.content;
+  if (!Array.isArray(contenu)) return [];
+  const prises: PriseResultat[] = [];
+  for (const bloc of contenu as { type?: string; tool_use_id?: string; content?: unknown; is_error?: boolean }[]) {
+    if (bloc.type !== 'tool_result' || typeof bloc.tool_use_id !== 'string') continue;
+    const brut = texteResultat(bloc.content).trim();
+    if (brut.length === 0) continue;
+    const coupe = brut.length > RESULTAT_MAX;
+    prises.push({
+      outilId: bloc.tool_use_id,
+      resultat: coupe ? `${brut.slice(0, RESULTAT_MAX)}\n\n[… sortie tronquée à ${RESULTAT_MAX} caractères]` : brut,
+      estErreur: bloc.is_error === true,
+    });
+  }
+  return prises;
 }
 
 /**
@@ -130,7 +187,7 @@ function prisesAssistant(message: SDKMessage): readonly PriseActivite[] {
   const contenu = (message as { message?: { content?: unknown } }).message?.content;
   if (!Array.isArray(contenu)) return [];
   const prises: PriseActivite[] = [];
-  for (const bloc of contenu as { type?: string; text?: string; thinking?: string; name?: string; input?: unknown }[]) {
+  for (const bloc of contenu as { type?: string; text?: string; thinking?: string; name?: string; input?: unknown; id?: string }[]) {
     if (bloc.type === 'text' && typeof bloc.text === 'string' && bloc.text.trim().length > 0) {
       // JAMAIS tronqué — c'est le livrable.
       prises.push({ texte: bloc.text.trim(), type: 'texte' });
@@ -138,7 +195,12 @@ function prisesAssistant(message: SDKMessage): readonly PriseActivite[] {
       prises.push({ texte: bloc.thinking.trim().slice(0, REFLEXION_MAX), type: 'reflexion' });
     } else if (bloc.type === 'tool_use' && typeof bloc.name === 'string') {
       const resume = resumerEntreeOutil(bloc.input);
-      prises.push({ texte: resume.length > 0 ? resume : bloc.name, type: 'outil', outil: bloc.name });
+      prises.push({
+        texte: resume.length > 0 ? resume : bloc.name,
+        type: 'outil',
+        outil: bloc.name,
+        ...(typeof bloc.id === 'string' ? { outilId: bloc.id } : {}),
+      });
     }
   }
   return prises;
@@ -166,6 +228,7 @@ export class CollecteurTelemetrie {
       contexteVentilation: null,
       derniereActivite: null,
       activitesEnAttente: [],
+      resultatsEnAttente: [],
       sousAgents: [],
       tachesFond: [],
       quotaSature: false,
@@ -238,7 +301,11 @@ export class CollecteurTelemetrie {
     return [...this.#par.entries()].map(([missionId, e]) => {
       const activites = e.activitesEnAttente;
       e.activitesEnAttente = [];
-      return { missionId, ...e, activitesEnAttente: activites };
+      // `☠` Drainé comme les activités : ce qui est rendu ne repassera pas. Le
+      // laisser en place ferait réappliquer les mêmes résultats à chaque passage.
+      const resultats = e.resultatsEnAttente;
+      e.resultatsEnAttente = [];
+      return { missionId, ...e, activitesEnAttente: activites, resultatsEnAttente: resultats };
     });
   }
 
@@ -284,6 +351,17 @@ export class CollecteurTelemetrie {
       // Le modèle résolu n'est connu qu'ici : le CLI peut résoudre un alias
       // (`opus`) vers un identifiant précis, et c'est celui-là qui compte.
       if (typeof sonde.model === 'string') etat.modeleResolu = sonde.model;
+      return;
+    }
+
+    // `☠` Les messages `user` portent les `tool_result`. Placé AVANT la branche
+    // `assistant` sans lui être lié : un résultat ne change ni l'état SDK ni le
+    // coût, il complète un appel déjà journalisé.
+    if (sonde.type === 'user') {
+      for (const r of prisesResultat(message)) {
+        etat.resultatsEnAttente.push(r);
+        if (etat.resultatsEnAttente.length > FILE_ACTIVITE_MAX) etat.resultatsEnAttente.shift();
+      }
       return;
     }
 

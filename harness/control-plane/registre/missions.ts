@@ -449,15 +449,37 @@ export class DepotMissions {
     survenuA: number = Date.now(),
     type: NatureActiviteMission = 'texte',
     outil: string | null = null,
+    outilId: string | null = null,
   ): void {
     executer(
       'missions.ajouterActivite',
       () => {
         this.db
-          .query('INSERT INTO activite_mission (mission_id, texte, survenu_a, type, outil) VALUES (?, ?, ?, ?, ?)')
-          .run(missionId, texte, survenuA, type, outil);
+          .query('INSERT INTO activite_mission (mission_id, texte, survenu_a, type, outil, outil_id) VALUES (?, ?, ?, ?, ?, ?)')
+          .run(missionId, texte, survenuA, type, outil, outilId);
       },
       { missionId, type },
+    );
+  }
+
+  /**
+   * Attache une sortie à l'appel d'outil qui l'a produite.
+   *
+   * `☠` Apparié par `outil_id`, jamais par « la dernière activité » : plusieurs
+   * appels peuvent être en vol simultanément et leurs résultats reviennent dans
+   * un ordre quelconque. Rend `false` si l'appel est inconnu — cas réel après une
+   * purge ou un worker relancé, et qui ne doit rien casser.
+   */
+  public poserResultatOutil(missionId: string, outilId: string, resultat: string, estErreur: boolean): boolean {
+    return executer(
+      'missions.poserResultatOutil',
+      () => {
+        const r = this.db
+          .query('UPDATE activite_mission SET resultat = ?, resultat_erreur = ? WHERE mission_id = ? AND outil_id = ?')
+          .run(resultat, estErreur ? 1 : 0, missionId, outilId);
+        return r.changes > 0;
+      },
+      { missionId, outilId },
     );
   }
 
@@ -473,9 +495,12 @@ export class DepotMissions {
       'missions.activites',
       () => {
         const lignes = this.db
-          .query<{ texte: string; survenu_a: number; type: string; outil: string | null }, [string, number]>(
-            `SELECT texte, survenu_a, type, outil FROM (
-               SELECT texte, survenu_a, type, outil, id FROM activite_mission
+          .query<{ texte: string; survenu_a: number; type: string; outil: string | null;
+                   outil_id: string | null; resultat: string | null; resultat_erreur: number },
+                 [string, number]>(
+            `SELECT texte, survenu_a, type, outil, outil_id, resultat, resultat_erreur FROM (
+               SELECT texte, survenu_a, type, outil, outil_id, resultat, resultat_erreur, id
+                 FROM activite_mission
                 WHERE mission_id = ? ORDER BY survenu_a DESC, id DESC LIMIT ?
              ) ORDER BY survenu_a, id`,
           )
@@ -485,6 +510,9 @@ export class DepotMissions {
           texte: l.texte,
           survenuA: l.survenu_a,
           type: l.type as NatureActiviteMission,
+          outilId: l.outil_id,
+          resultat: l.resultat,
+          resultatErreur: Number(l.resultat_erreur ?? 0) === 1,
           outil: l.outil,
         }));
       },

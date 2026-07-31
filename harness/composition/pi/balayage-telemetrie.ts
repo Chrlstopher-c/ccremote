@@ -114,7 +114,15 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   // ces entrées ne repasseront pas. Les ignorer, comme c'était le cas jusqu'au
   // 23/07, laissait l'opérateur avec « les états et compteurs » et rien d'autre.
   for (const a of t.activitesEnAttente) {
-    registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA, a.type, a.outil ?? null);
+    registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA, a.type, a.outil ?? null, a.outilId ?? null);
+  }
+
+  // `☠` APRÈS les activités du même passage, jamais avant : un appel et son
+  // résultat peuvent arriver dans le même relevé, et apparier avant d'avoir
+  // inséré l'appel ne trouverait rien à mettre à jour — le résultat serait perdu
+  // sans la moindre erreur.
+  for (const r of t.resultatsEnAttente) {
+    registre.missions.poserResultatOutil(t.missionId, r.outilId, r.resultat, r.estErreur);
   }
 
   // `☠` Écrit à CHAQUE passage, même identique : `poserSousAgents` remplace,

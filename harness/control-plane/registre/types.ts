@@ -134,6 +134,11 @@ export type NatureActiviteMission = 'texte' | 'reflexion' | 'outil';
 
 export interface ActiviteMission {
   readonly texte: string;
+  /** `tool_use_id` du SDK — la clé qui relie l'appel à son résultat. */
+  readonly outilId?: string | null;
+  /** Sortie de l'outil, tronquée à la source. `null` tant qu'elle n'est pas revenue. */
+  readonly resultat?: string | null;
+  readonly resultatErreur?: boolean;
   readonly survenuA: number;
   readonly type: NatureActiviteMission;
   /** Nom de l'outil, renseigné seulement pour `type: 'outil'`. */

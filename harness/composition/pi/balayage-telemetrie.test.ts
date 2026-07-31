@@ -17,6 +17,7 @@ const RELEVE: TelemetrieWorker = {
   contexteVentilation: [{ nom: 'Messages', tokens: 10_326, differe: false }],
   derniereActivite: null,
   activitesEnAttente: [],
+  resultatsEnAttente: [],
   sousAgents: [],
   tachesFond: [],
   quotaSature: false,
