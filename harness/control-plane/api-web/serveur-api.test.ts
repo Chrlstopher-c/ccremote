@@ -10,6 +10,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { demarrerServeurApiWeb, type ServeurApiWeb } from './index.ts';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
+import { ErreurMandatDejaTranche } from '../orchestrateur/dispatch-mandat.ts';
 
 let registre: Registre;
 let serveur: ServeurApiWeb | null = null;
@@ -544,5 +545,59 @@ describe('rappels — vus et pilotés depuis l’interface', () => {
     const id = semerRappel();
     pcOnline = false;
     expect(await agir('conv-a', id, 'pause')).toBe(200);
+  });
+});
+
+/**
+ * `☠` Prod, 01/08 : un mandat auto-approuvé à 21:10:58, puis approuvé d'un clic
+ * à 21:11:14 sur une carte d'écran restée périmée. Le control plane rendait un
+ * 500 « échec interne du harness » — alors que l'équipe TOURNAIT. Un conflit
+ * d'état n'est pas une panne : il se distingue au code de retour, et le message
+ * doit dire où regarder.
+ */
+describe('approbation d’un mandat déjà tranché', () => {
+  function demarrerAvecMandats(erreur: Error): ServeurApiWeb {
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => true,
+      maintenant: () => MAINTENANT,
+      mandats: {
+        enAttente: () => [],
+        refuser: () => false,
+        approuver: async () => { throw erreur; },
+      },
+    });
+    return serveur;
+  }
+
+  async function approuver(): Promise<{ statut: number; corps: Record<string, unknown> }> {
+    const rep = await fetch(`http://127.0.0.1:${serveur?.port}/api/harness/orchestrator/propositions/p-1/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    return { statut: rep.status, corps: (await rep.json()) as Record<string, unknown> };
+  }
+
+  test('☠ répond 409, jamais 500 — et dit que l’équipe est lancée', async () => {
+    demarrerAvecMandats(new ErreurMandatDejaTranche('approuvee', 'm-1'));
+    const { statut, corps } = await approuver();
+    expect(statut).toBe(409);
+    expect(String(corps['error'])).toContain('Parc');
+  });
+
+  test('un mandat refusé donne aussi 409, avec son propre motif', async () => {
+    demarrerAvecMandats(new ErreurMandatDejaTranche('refusee', null));
+    const { statut, corps } = await approuver();
+    expect(statut).toBe(409);
+    expect(String(corps['error'])).toContain('refusee');
+  });
+
+  test('☠ une VRAIE panne reste un 500 — le 409 ne doit rien avaler d’autre', async () => {
+    // Sans ce test, élargir le rattrapage masquerait les pannes réelles : c'est
+    // précisément ce qu'on reproche au comportement qu'on corrige.
+    demarrerAvecMandats(new Error('le PC a explosé'));
+    expect((await approuver()).statut).toBe(500);
   });
 });

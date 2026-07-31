@@ -41,7 +41,7 @@ import {
   type ConstruireSessionConversation,
 } from '../../control-plane/orchestrateur/gestionnaire-conversations.ts';
 import { randomUUID } from 'node:crypto';
-import { dispatcherMandat } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
+import { dispatcherMandat, ErreurMandatDejaTranche } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
 import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
@@ -230,7 +230,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   ): Promise<{ readonly missionId: string; readonly detail: string }> {
     const p = registre.propositions.lire(id);
     if (p === null) throw new Error('mandat inconnu');
-    if (p.statut !== 'en_attente') throw new Error(`mandat déjà ${p.statut}`);
+    if (p.statut !== 'en_attente') throw new ErreurMandatDejaTranche(p.statut, p.missionId);
     const r = await dispatcherMandat(p, {
       registre,
       demarreur: clientSuperviseurPc,

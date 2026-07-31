@@ -182,6 +182,16 @@ async function hApprouverMandat(id) {
   showToast('Autorisation transmise — création de l\'équipe…', 'accent');
   const r = await HarnessAPI.approveMandat(id);
   if (!r.ok) {
+    // ☠ Ne PAS réarmer les boutons quand le mandat a déjà été tranché : le
+    // clic suivant échouerait exactement pareil. Mesuré le 01/08 — mandat
+    // auto-approuvé, carte restée vivante, clic 16 s trop tard. On tamponne
+    // ce qui s'est réellement passé au lieu de proposer de recommencer.
+    if (hMandatDejaTranche(r.erreur)) {
+      hTamponMandat(id, 'Déjà autorisée — équipe lancée', 'var(--ok)');
+      showToast(r.erreur, 'warn');
+      if (typeof hRenderParc === 'function') hRenderParc();
+      return;
+    }
     if (carte) carte.classList.remove('resolved');
     showToast(r.erreur || 'Dispatch impossible', 'warn');
     return;
@@ -191,6 +201,48 @@ async function hApprouverMandat(id) {
   // l'effet, le détail technique reste dans les logs.
   showToast('Équipe lancée — visible dans le Parc', 'ok');
   if (typeof hRenderParc === 'function') hRenderParc();
+}
+
+/**
+ * Retire ses boutons à toute carte de mandat qui n'est plus en attente.
+ *
+ * ☠ La carte était un instantané figé. `hOrch.mandats` n'était rechargé que
+ * lorsqu'un NOUVEAU mandat apparaissait dans le fil — jamais quand un mandat
+ * existant changeait d'état. Or le harness auto-approuve : mesuré le 01/08, une
+ * fenêtre d'1,5 s entre la création et l'approbation automatique, le sondage est
+ * tombé dedans, et l'écran a gardé pendant seize secondes un bouton « Autoriser
+ * et lancer » sur une équipe déjà partie. Un bouton doit disparaître quand la
+ * décision qu'il propose n'existe plus.
+ */
+const HMANDAT_RELANCES_MAX = 5;
+const HMANDAT_RELANCE_MS = 4000;
+
+async function hRafraichirMandats(restantes = HMANDAT_RELANCES_MAX) {
+  const cartes = [...document.querySelectorAll('[id^="hMandate_"]')].filter((c) => !c.classList.contains('resolved'));
+  if (cartes.length === 0) return;
+  const props = await HarnessAPI.getPropositions();
+  if (props.erreur) return; // control plane muet : on ne tranche rien sur une absence
+  const enAttente = new Set((props.data || []).map((p) => p.id));
+  hOrch.mandats = {};
+  for (const p of (props.data || [])) hOrch.mandats[p.id] = p;
+  let vivantes = 0;
+  for (const carte of cartes) {
+    const id = carte.id.slice('hMandate_'.length);
+    if (enAttente.has(id)) { vivantes += 1; continue; }
+    hTamponMandat(id, 'Déjà tranchée — voir le Parc', 'var(--ink-3)');
+  }
+  // ☠ Relance BORNÉE : l'auto-approbation peut tomber après la fin du tour, et
+  // le sondage du fil, lui, s'arrête là. Sans ces quelques passages la carte
+  // resterait vivante pour toujours. Bornée, parce qu'une carte légitimement en
+  // attente du clic de Chris ne doit pas faire tourner une boucle sans fin.
+  if (vivantes > 0 && restantes > 1) {
+    setTimeout(() => { void hRafraichirMandats(restantes - 1); }, HMANDAT_RELANCE_MS);
+  }
+}
+
+/** Le refus du serveur dit-il « c'était déjà tranché » ? (409 côté control plane) */
+function hMandatDejaTranche(message) {
+  return /déjà (été )?(autorisé|approuv|refus|tranché)/i.test(String(message || ''));
 }
 
 async function hRefuserMandat(id) {
@@ -610,6 +662,10 @@ async function hPollNow() {
   else {
     hStopPoll(); hShowTyping(false); hOrch.cur = null;
     hLoadConvList(); // fin de tour : titres/ordre/contexte à jour
+    // ☠ Après le tour, pas pendant : c'est APRÈS que le harness a eu le temps
+    // d'auto-approuver. Pendant la génération, une proposition tout juste posée
+    // apparaîtrait comme « déjà tranchée » entre deux sondages.
+    void hRafraichirMandats();
   }
 }
 

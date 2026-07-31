@@ -357,6 +357,31 @@ export class ErreurProjetOccupe extends Error {
   }
 }
 
+/**
+ * Le mandat a déjà été tranché — approuvé automatiquement, approuvé ailleurs, ou
+ * refusé. Erreur NOMMÉE pour la même raison que la précédente : l'appelant doit
+ * pouvoir en faire un refus lisible plutôt qu'un 500 anonyme.
+ *
+ * `☠` Mesuré en prod le 01/08 : mandat auto-approuvé 1,5 s après sa création,
+ * puis approuvé d'un clic 16 s plus tard sur une carte d'écran restée périmée.
+ * L'`Error` nue remontait en 500 « échec interne du harness » — alors que
+ * l'équipe TOURNAIT. Le message dit maintenant ce qui s'est passé et où
+ * regarder : c'est exactement ce qui manque à un opérateur devant une erreur.
+ */
+export class ErreurMandatDejaTranche extends Error {
+  constructor(
+    readonly statut: string,
+    readonly missionId: string | null,
+  ) {
+    super(
+      statut === 'approuvee'
+        ? 'ce mandat a déjà été autorisé — l’équipe est lancée, elle est visible dans le Parc'
+        : `ce mandat a déjà été ${statut} — il n’y a plus rien à décider dessus`,
+    );
+    this.name = 'ErreurMandatDejaTranche';
+  }
+}
+
 export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
   // `☠` Rotation (H-53) : `listerDisponibles()` exclut les comptes marqués
   // `rejected` par le balayage de télémétrie. C'est ici que la bascule se fait —

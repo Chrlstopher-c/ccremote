@@ -23,7 +23,7 @@ import type { Server } from 'bun';
 import type { Registre } from '../registre/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
 import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
-import { ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
+import { ErreurMandatDejaTranche, ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
 import { versNotificationApi } from './vue-notifications.ts';
@@ -307,6 +307,11 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
       // control plane » : l'opérateur a cliqué trois fois sans jamais savoir
       // pourquoi rien ne partait (prod, 23/07). 409 + le motif exact.
       if (erreur instanceof ErreurProjetOccupe) throw new ErreurApi(409, erreur.message);
+      // `☠` Même famille, deuxième occurrence (prod, 01/08) : le mandat a été
+      // tranché entre l'affichage de la carte et le clic — auto-approbation, ou
+      // approbation depuis un autre écran. Un geste arrivé trop tard, pas une
+      // panne ; le dire évite de faire douter d'une équipe qui tourne.
+      if (erreur instanceof ErreurMandatDejaTranche) throw new ErreurApi(409, erreur.message);
       throw erreur;
     }
   }

@@ -33,9 +33,14 @@ async function hRenderAgentDetail(missionId, agentId) {
 
   // H-72.4 mesuré : le flux best-effort peut livrer 0 ligne pour un sous-agent sain.
   // On l'affiche honnêtement plutôt que de laisser croire à un flux complet.
+  // ☠ Le MÊME rendu que le lead, par le même code — pas une copie. Cette page
+  // appelait `hFeedItemTemplate`, disparu à la refonte de la page mission : la
+  // vue tombait sur une ReferenceError et rendait une page blanche, sans que
+  // rien n'échoue ailleurs. Passer par `hCorpsFil` fait de « même niveau de
+  // détail que le lead » (H-72) une conséquence du code plutôt qu'une promesse.
   const feedNote = a.feedUnavailable
     ? `<div class="empty-state"><div class="t">Détail temps réel indisponible</div><div class="s">Le flux best-effort n'a rien livré pour cet agent (mesuré H-72.4 : 0 à 4 lignes sur 5 agents, d'une exécution à l'autre, même sur session saine). L'agent existe et travaille — seul son détail en direct manque ici.</div></div>`
-    : (a.feed.map(hFeedItemTemplate).join('') || '<div class="empty-state"><div class="s">Aucun évènement encore.</div></div>');
+    : hCorpsFil({ feed: a.feed || [] });
 
   document.getElementById('hAgentBody').innerHTML = `
     ${hPcAbsentBanner('ce sous-agent')}
@@ -52,7 +57,7 @@ async function hRenderAgentDetail(missionId, agentId) {
       </div>
     </div>
     <div class="card" style="padding:14px;">
-      <div class="sec-title">Travail en temps réel <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${a.feed.length} évènements</span></div>
+      <div class="sec-title">Travail en temps réel <span class="badge" style="background:var(--bg-2);color:var(--ink-3);">${(a.feed || []).length} évènements</span></div>
       <div class="feed-scroll" id="hAgentFeedScroll">${feedNote}</div>
       <div style="font-size:10px;color:var(--ink-3);margin-top:8px;line-height:1.5;">
         Flux directement depuis la source vers cette vue — il ne transite jamais par le contexte de l'orchestrateur maître ni d'un autre agent (H-45, H-72.1).

@@ -63,3 +63,16 @@ export function introuvable(quoi: string): ErreurApi {
 export function requeteInvalide(detail: string): ErreurApi {
   return new ErreurApi(400, detail);
 }
+
+/**
+ * L'état a bougé sous la requête — le geste n'était pas illégitime, il est
+ * simplement arrivé trop tard.
+ *
+ * `☠` Mesuré le 01/08 : un mandat auto-approuvé à 21:10:58, puis approuvé d'un
+ * clic à 21:11:14, remontait en 500 « échec interne du harness ». Un conflit
+ * d'état présenté comme une panne fait douter de ce qui vient de RÉUSSIR
+ * — l'équipe tournait — et noie les vraies pannes dans le journal d'erreurs.
+ */
+export function conflit(detail: string): ErreurApi {
+  return new ErreurApi(409, detail);
+}
