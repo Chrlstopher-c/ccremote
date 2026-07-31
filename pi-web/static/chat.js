@@ -19,7 +19,13 @@ chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shift
 document.getElementById('sendBtn').addEventListener('click', sendMessage);
 document.querySelectorAll('.suggestion').forEach(b => b.addEventListener('click', () => { chatInput.value = b.textContent; chatInput.focus(); chatInput.dispatchEvent(new Event('input')); }));
 
-document.getElementById('newChatBtn').addEventListener('click', () => {
+/**
+ * ☠ Fonction nommée, plus un écouteur sur un bouton précis : trois appelants
+ * passaient par `getElementById('newChatBtn').click()`, si bien que retirer ce
+ * bouton de la barre latérale coupait la création de conversation partout — et
+ * l'`addEventListener` non gardé aurait abandonné la suite de ce module.
+ */
+function hNouveauChat() {
   if (state.currentConvId) persistCurrentConversation();
   state.chatHistory = [];
   state.currentConvId = null;
@@ -28,7 +34,7 @@ document.getElementById('newChatBtn').addEventListener('click', () => {
   renderConversationList();
   refreshContextUsage();
   showToast('Nouvelle conversation créée', 'ok');
-});
+}
 
 function scrollBottom() { setTimeout(() => { messagesEl.scrollTop = messagesEl.scrollHeight; }, 50); }
 

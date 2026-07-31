@@ -178,7 +178,7 @@ function hNouveauFil() {
     hNewConversation();
     return;
   }
-  document.getElementById('newChatBtn')?.click();
+  hNouveauChat();
 }
 
 /** Après création d'un fil, on entre dedans : créer sans ouvrir n'a pas de sens. */
