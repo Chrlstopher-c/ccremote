@@ -7,16 +7,16 @@
 
 ### 🎯 EN COURS — priorités à la reprise (31/07)
 
-- [ ] **Observer la croissance de l'epoch 1 → 2.** Le correctif (`bb80c8f`) est validé en prod :
-      mission `0ecc40eb` porte `epoch=1`, les précédentes `0`. Mais l'INCRÉMENT lui-même n'a pas
-      encore été vu — cette mission a écrit 1 parce que les autres étaient à 0 (`max(0,0)+1`).
-      Le prochain dispatch sur `/mnt/projects/agora` doit donner **2**. S'il redonne 1, un autre
-      chemin recrée les missions et le défaut n'est pas là où on croit.
-- [ ] **Surveiller la sonde de quotas.** Elle réécrit les deux comptes (429 retombé), mais l'écart
-      observé entre deux mesures est de **5 min au lieu des 2 attendues** (période 60 s × 2 comptes
-      en rotation) : certaines passes échouent encore. Si l'écart reste supérieur à la période, il
-      faut un **backoff explicite sur 429**, pas seulement un espacement. Mesure :
-      `SELECT compte_id, observe_a FROM quota_compte` sur le Pi, deux relevés espacés.
+- [x] ~~**Observer la croissance de l'epoch 1 → 2.**~~ Établi le 31/07 sans attendre un dispatch,
+      en vérifiant la SOURCE plutôt que l'effet : un seul chemin crée les missions
+      (`dispatch-mandat.ts:211`), `epoch=1` est écrit en base, `MAX(epoch)` sur la prod rend 1 pour
+      agora — le prochain dispatch calculera 2. Au passage, `707931c` a fermé la version longue
+      durée du même défaut : le maximum se lisait sur `listerRecentes()` (fenêtre de 200, tous
+      projets), donc l'epoch d'un projet peu actif serait REDESCENDU passé 200 missions au total,
+      rouvrant la collision M-11. Requête dédiée non bornée, test validé dans les deux sens.
+- [x] ~~**Surveiller la sonde de quotas.**~~ Clos le 31/07 : relevé prod à 09:19 → compte-a observé
+      à 09:19:26, compte-b à 09:18:26, **60 s d'écart exact**. La rotation tourne à la période
+      nominale, le 429 chronique est résorbé, pas de backoff nécessaire.
 - [ ] **Mode rapide et ultracode : jamais exercés.** `fastMode` est exposé par `/modeles` (seul
       Opus 5 le déclare) et les cases existent à l'écran — leur effet réel n'a jamais été vérifié.
 - [ ] **(E-bis) Revoir les AUTRES opt-in de `deploy-harness-pi.sh`** — le script réécrit `.env` en
