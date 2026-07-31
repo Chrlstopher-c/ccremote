@@ -73,7 +73,11 @@ describe('surface d’outils (A.2.2)', () => {
   // partis avec le bus d'escalade le 2026-07-31 — aucune demande ne l'a jamais
   // atteint, le classifieur du lead tranche seul (H-40). Ce test est le garde-fou
   // de la surface : un outil qui réapparaît sans décision doit le faire échouer.
-  test('expose exactement les 20 outils spécifiés — ni plus, ni moins', () => {
+  //   `nommer_fil` (2026-08-01) — le titre restait « Nouvelle conversation »
+  //     jusqu'à ce que Chris le change à la main, donc en pratique jamais : une
+  //     liste de fils tous homonymes. L'outil porte SA propre garde — une seule
+  //     fois par session, sauf demande explicite de Chris (`titre-fil.ts`).
+  test('expose exactement les 21 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -97,6 +101,7 @@ describe('surface d’outils (A.2.2)', () => {
         'reprendre_rappel',
         'modifier_rappel',
         'supprimer_rappel',
+        'nommer_fil',
       ].sort(),
     );
   });

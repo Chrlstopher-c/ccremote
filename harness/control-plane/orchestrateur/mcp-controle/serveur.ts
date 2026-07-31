@@ -44,6 +44,7 @@ import {
   reprendreRappel,
   supprimerRappel,
 } from './outils-rappels.ts';
+import { nommerFil } from './outils-fil.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type {
   ArreteurMission,
@@ -399,6 +400,40 @@ function outilsRappels(deps: DependancesServeurControle) {
   ];
 }
 
+/**
+ * Groupe « fil » — l'orchestrateur nomme la conversation où il parle (migration 19).
+ *
+ * `☠` La garde n'est PAS dans la description de l'outil : elle est dans
+ * `titre-fil.ts`, et l'outil refuse. Une consigne de prompt tient trente tours,
+ * pas trois cents — et le jour où elle lâche, le fil que Chris cherchait dans sa
+ * liste a changé de nom sans que personne l'ait décidé.
+ */
+function outilsFil(deps: DependancesServeurControle) {
+  return [
+    tool(
+      'nommer_fil',
+      'Donne son titre à CETTE conversation. À appeler une seule fois, quand tu réponds au ' +
+        'deuxième message de Chris : le sujet est alors établi. Ce titre reste celui du fil pour ' +
+        'toute la session — tu ne le changes plus de ton propre chef, même si tu en trouves un ' +
+        'meilleur. Si Chris te demande explicitement de renommer le fil, rappelle cet outil avec ' +
+        '`demande_par_chris: true` : sa demande passe toujours.',
+      {
+        titre: z
+          .string()
+          .describe('Trois à six mots qui disent le sujet du fil. Pas de guillemets, pas de phrase.'),
+        demande_par_chris: z
+          .boolean()
+          .optional()
+          .describe('true UNIQUEMENT si Chris vient de demander ce renommage. Jamais de ta propre initiative.'),
+      },
+      async ({ titre, demande_par_chris }) =>
+        protege('nommer_fil', () =>
+          nommerFil(deps.registre, deps.conversationId ?? null, titre, demande_par_chris === true),
+        ),
+    ),
+  ];
+}
+
 function outilsBudget(deps: DependancesServeurControle) {
   return [
     tool(
@@ -532,6 +567,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsCycleVie(deps),
     ...outilsBudget(deps),
     ...outilsRappels(deps),
+    ...outilsFil(deps),
     ...outilsContexte(deps),
     ...outilsExploration(deps),
     ...outilsRecherche(deps),

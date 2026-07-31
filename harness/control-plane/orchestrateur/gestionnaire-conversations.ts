@@ -26,6 +26,7 @@ import type { Conversation, EvenementConversation, Registre } from '../registre/
 import type { StockageIdentite } from './processus/index.ts';
 import type { PoigneeOrchestrateur } from './processus/index.ts';
 import { CollecteurConversation, type BlocPartiel } from './collecteur-conversation.ts';
+import { consigneNommage, normaliserTitre, TITRE_PAR_DEFAUT, type SourceTitre } from './titre-fil.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'gestionnaire-conversations' });
@@ -211,15 +212,23 @@ export class GestionnaireConversations {
   }
 
   creer(titre?: string): Conversation {
-    const propre = (titre ?? '').trim();
-    const libelle = propre.length > 0 ? propre.slice(0, 120) : 'Nouvelle conversation';
-    return this.registre.conversations.creer({ id: randomUUID(), titre: libelle });
+    const propre = normaliserTitre(titre ?? '');
+    const libelle = propre.length > 0 ? propre : TITRE_PAR_DEFAUT;
+    const conv = this.registre.conversations.creer({ id: randomUUID(), titre: libelle });
+    // Un titre donné à la création vient d'un humain : il verrouille d'emblée.
+    if (propre.length > 0) this.registre.conversations.renommer(conv.id, libelle, 'manuel');
+    return conv;
   }
 
-  renommer(id: string, titre: string): boolean {
-    const propre = titre.trim();
+  /**
+   * `source` par défaut à `'manuel'` : cette méthode est l'entrée de l'interface,
+   * donc d'un humain. Le nommage automatique passe par l'outil MCP `nommer_fil`,
+   * qui porte sa propre garde.
+   */
+  renommer(id: string, titre: string, source: SourceTitre = 'manuel'): boolean {
+    const propre = normaliserTitre(titre);
     if (propre.length === 0) return false;
-    return this.registre.conversations.renommer(id, propre.slice(0, 120));
+    return this.registre.conversations.renommer(id, propre, source);
   }
 
   /** Archive le fil ET ferme sa session si elle tourne. */
@@ -303,7 +312,22 @@ export class GestionnaireConversations {
     }
     session.collecteur.marquerEnvoi();
     session.collecteur.poserModeleEffort(modele, effort);
-    await session.poignee.entree.envoyerOperateur(propre);
+    await session.poignee.entree.envoyerOperateur(this.#avecConsigneNommage(id, conv, propre));
+  }
+
+  /**
+   * Joint au message le rappel de nommage, tant que le fil n'a pas de titre.
+   *
+   * `☠` Uniquement sur ce qui part au SDK — l'évènement écrit au registre reste
+   * le texte exact de Chris, sinon l'écran lui montrerait des mots qu'il n'a pas
+   * tapés (H-66). Le rappel s'éteint tout seul dès que le titre existe.
+   */
+  #avecConsigneNommage(id: string, conv: Conversation, propre: string): string {
+    const consigne = consigneNommage({
+      source: conv.titreSource,
+      messagesOperateur: this.registre.conversations.evenements(id).filter((e) => e.type === 'operateur').length,
+    });
+    return consigne === null ? propre : `${propre}\n\n${consigne}`;
   }
 
   /**

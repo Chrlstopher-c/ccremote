@@ -15,6 +15,7 @@ import type { Conversation, EvenementConversation, TypeEvenementConversation } f
 interface LigneConversation {
   id: string;
   titre: string;
+  titre_source: string;
   session_id: string | null;
   statut: string;
   cree_a: number;
@@ -42,6 +43,8 @@ function versConversation(l: LigneConversation): Conversation {
   return {
     id: l.id,
     titre: l.titre,
+    // as : colonne alimentée uniquement par `renommer`, dont le paramètre est typé.
+    titreSource: l.titre_source as Conversation['titreSource'],
     sessionId: l.session_id,
     // as : colonne sous CHECK IN ('active','archivee').
     statut: l.statut as Conversation['statut'],
@@ -129,16 +132,27 @@ export class DepotConversations {
     });
   }
 
-  public renommer(id: string, titre: string, maintenant: number = Date.now()): boolean {
+  /**
+   * `☠` La source est écrite dans le MÊME `UPDATE` que le titre. Deux écritures
+   * séparées laisseraient une fenêtre où un fil porte un titre choisi sans que
+   * rien n'enregistre qui l'a choisi — et c'est exactement cette information qui
+   * autorise ou refuse le nommage suivant.
+   */
+  public renommer(
+    id: string,
+    titre: string,
+    source: Conversation['titreSource'] = 'manuel',
+    maintenant: number = Date.now(),
+  ): boolean {
     return executer(
       'conversations.renommer',
       () => {
         const res = this.db
-          .query('UPDATE conversation SET titre = ?, maj_a = ? WHERE id = ?')
-          .run(titre, maintenant, id);
+          .query('UPDATE conversation SET titre = ?, titre_source = ?, maj_a = ? WHERE id = ?')
+          .run(titre, source, maintenant, id);
         return res.changes > 0;
       },
-      { id },
+      { id, source },
     );
   }
 

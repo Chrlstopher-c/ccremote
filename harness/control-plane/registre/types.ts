@@ -282,6 +282,8 @@ export type StatutConversation = 'active' | 'archivee';
 export interface Conversation {
   readonly id: string;
   readonly titre: string;
+  /** D'où vient ce titre, donc qui peut le changer — voir `orchestrateur/titre-fil.ts`. */
+  readonly titreSource: 'defaut' | 'auto' | 'manuel';
   readonly sessionId: string | null;
   readonly statut: StatutConversation;
   readonly creeA: number;

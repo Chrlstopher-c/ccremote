@@ -122,7 +122,27 @@ describe('GestionnaireConversations', () => {
     await gest.envoyer(conv.id, 'un');
     await gest.envoyer(conv.id, 'deux');
     expect(appels).toBe(1);
-    expect(sess.envoyes).toEqual(['un', 'deux']);
+    // ☠ Le premier message part nu, le second porte le rappel de nommage : le fil
+    // est encore anonyme et c'est le moment où la règle s'applique. Le rappel est
+    // JOINT, jamais substitué — ce que Chris a tapé reste en tête du message.
+    expect(sess.envoyes[0]).toBe('un');
+    expect(sess.envoyes[1]?.startsWith('deux')).toBe(true);
+    expect(sess.envoyes[1]).toContain('nommer_fil');
+    // Et l'écran, lui, ne voit que les mots de Chris (H-66).
+    const ecrits = gest.detail(conv.id)?.evenements.filter((e) => e.type === 'operateur').map((e) => e.contenu);
+    expect(ecrits).toEqual(['un', 'deux']);
+  });
+
+  test('☠ un fil déjà nommé ne reçoit plus le rappel', async () => {
+    // Un rappel qui survivrait au nommage pousserait au renommage à chaque tour —
+    // l'exact contraire de « ce titre ne bouge plus de la session ».
+    const sess = fausseSession('sess-1');
+    const gest = new GestionnaireConversations(registre, async () => sess.poignee);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, 'un');
+    gest.renommer(conv.id, 'Sujet arrêté');
+    await gest.envoyer(conv.id, 'deux');
+    expect(sess.envoyes[1]).toBe('deux');
   });
 
   test('contextePct reflète la sentinelle quand la session est active', async () => {

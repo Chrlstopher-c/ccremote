@@ -615,6 +615,21 @@ ALTER TABLE activite_mission ADD COLUMN resultat_erreur INTEGER NOT NULL DEFAULT
 CREATE INDEX IF NOT EXISTS idx_activite_outil_id ON activite_mission(outil_id);
 `;
 
+/**
+ * D'où vient le titre d'un fil, donc qui a le droit de le changer ensuite.
+ * `defaut` = jamais nommé · `auto` = l'orchestrateur l'a nommé une fois ·
+ * `manuel` = un humain l'a posé.
+ *
+ * `☠` Les fils existants qui ne portent plus le libellé par défaut passent en
+ * `manuel` : ils ont forcément été renommés à la main, puisque l'orchestrateur
+ * n'avait pas encore d'outil pour le faire. Les laisser en `defaut` autoriserait
+ * un nommage automatique à écraser un titre choisi par Chris.
+ */
+const MIGRATION_19 = `
+ALTER TABLE conversation ADD COLUMN titre_source TEXT NOT NULL DEFAULT 'defaut';
+UPDATE conversation SET titre_source = 'manuel' WHERE titre <> 'Nouvelle conversation';
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -634,6 +649,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 16, nom: 'rappels-programmes', sql: MIGRATION_16 },
   { version: 17, nom: 'evenement-notification', sql: MIGRATION_17 },
   { version: 18, nom: 'resultat-outil', sql: MIGRATION_18 },
+  { version: 19, nom: 'source-titre-conversation', sql: MIGRATION_19 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(
