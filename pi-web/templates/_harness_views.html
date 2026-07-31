@@ -53,6 +53,21 @@
       <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6" id="hAgentBody"></div>
     </div>
 
+    <!-- ============ VIEW: HARNESS — NOTIFICATIONS ============ -->
+    <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-notifications">
+      <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">
+        <button class="sidebarToggle lg:hidden p-1.5 -ml-1.5 rounded-md hover:bg-black/5">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="color: var(--ink);"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <div class="min-w-0">
+          <h1 class="serif text-[17px] font-medium leading-none" style="color: var(--ink);">Notifications</h1>
+          <div class="text-[11px] mt-1" style="color: var(--ink-3);">Ce que le parc a fait pendant qu'on regardait ailleurs · cliquer ouvre le fil d'origine</div>
+        </div>
+        <button onclick="hNotifToutLire()" class="ml-auto text-[11.5px] px-2.5 py-1.5 rounded-md hover:bg-black/5" style="color: var(--ink-2);">Tout marquer lu</button>
+      </header>
+      <div class="max-w-3xl mx-auto w-full px-4 lg:px-7 py-6 space-y-2" id="hNotifsBody"></div>
+    </div>
+
     <!-- ============ VIEW: HARNESS — COMPTES & QUOTAS ============ -->
     <div class="view flex-1 flex-col overflow-y-auto" data-view="harness-comptes">
       <header class="flex items-center gap-3 px-4 lg:px-7 py-3 lg:py-3.5 border-b sticky top-0 z-10" style="border-color: var(--line); background: var(--bg);">

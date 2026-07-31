@@ -375,6 +375,24 @@ function hBlocNode(type, contenu, live) {
     d.append(s2, b);
     return d;
   }
+  // ☠ Un fait du harness, JAMAIS une bulle d'opérateur (H-66). Le rendre comme
+  // un message de Chris ferait croire, en relisant le fil, qu'il a demandé ce
+  // que le harness a annoncé tout seul. Repliable : c'est un prompt complet,
+  // utile à consulter, encombrant à laisser ouvert.
+  //
+  // ☠ Ce bloc n'est pas cosmétique — sans lui, `hBlocNode` rend `null` sur un
+  // type qu'il ne connaît pas et `hAppendEvent` jette l'évènement en silence.
+  // La notification serait remise à l'orchestrateur, agirait sur lui, et
+  // n'apparaîtrait nulle part à l'écran.
+  if (type === 'notification') {
+    const d = document.createElement('details');
+    d.className = 'orch-compact';
+    const s3 = document.createElement('summary');
+    s3.textContent = 'Notification du harness — ' + String(contenu).split('\n')[0].replace('[HARNESS] ', '').slice(0, 90);
+    const b3 = document.createElement('div'); b3.className = 'think-body'; b3.textContent = contenu;
+    d.append(s3, b3);
+    return d;
+  }
   return null;
 }
 

@@ -136,6 +136,20 @@ const HarnessAPI = (() => {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/compact`, {});
     },
 
+    // ☠ RÉEL depuis le 01/08 — le canal asynchrone (migration 14). Rend aussi
+    // le compteur de non-lues : le badge ne doit PAS se déduire de la longueur
+    // de la liste, qui est plafonnée côté serveur et mentirait au-delà.
+    async getNotifications() {
+      const r = await lireReel('/notifications');
+      if (r.erreur) return { notifications: [], unread: 0, erreur: r.erreur };
+      const d = r.data || {};
+      return { notifications: Array.isArray(d.notifications) ? d.notifications : [], unread: d.unread || 0 };
+    },
+    async markNotificationRead(id) {
+      return ecrireReel(`/notifications/${encodeURIComponent(id)}/read`, {});
+    },
+    async markAllNotificationsRead() { return ecrireReel('/notifications/read-all', {}); },
+
     // H-61 : mandats en attente d'autorisation humaine — RÉEL.
     async getPropositions() { return lireReel('/orchestrator/propositions'); },
     async approveMandat(id) { return ecrireReel(`/orchestrator/propositions/${encodeURIComponent(id)}/approve`, {}); },

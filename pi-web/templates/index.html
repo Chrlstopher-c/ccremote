@@ -181,6 +181,10 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
         Parc <span id="hNavCountParc" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--bg-3); color: var(--ink-3);">0</span>
       </button>
+      <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="harness-notifications" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Notifications <span id="hNavCountNotifs" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--bg-3); color: var(--ink-3); display:none;">0</span>
+      </button>
       <button class="nav-item w-full text-left px-2.5 py-1.5 rounded-md text-[13px] flex items-center gap-2.5" data-view="harness-comptes" style="color: var(--ink-2);">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Comptes &amp; quotas
@@ -465,6 +469,7 @@
 <script src="/static/harness-agent.js?v={{ v }}"></script>
 <script src="/static/harness-comptes.js?v={{ v }}"></script>
 <script src="/static/harness-orchestrateur.js?v={{ v }}"></script>
+<script src="/static/harness-notifications.js?v={{ v }}"></script>
 <script src="/static/harness-safety.js?v={{ v }}"></script>
 </body>
 </html>

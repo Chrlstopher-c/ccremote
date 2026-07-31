@@ -387,3 +387,79 @@ describe('API web — modèle et raisonnement d’une conversation (23/07)', () 
     expect(recus[0]?.choix).toEqual({ modele: 'claude-sonnet-5', effort: 'medium' });
   });
 });
+
+/**
+ * `☠` Ces routes existent parce qu'une fonctionnalité écrite mais branchée sur
+ * rien est le défaut le plus cher de ce dépôt (neuf occurrences). Le banc part
+ * donc du VRAI serveur et d'un vrai `fetch` : il prouve le câblage, pas la
+ * fonction.
+ */
+describe('notifications — le canal asynchrone est réellement servi', () => {
+  function semerNotification(lue = false): string {
+    const missionId = semerMission();
+    const n = registre.notifications.creer({
+      id: 'notif-1',
+      type: 'equipe_terminee',
+      missionId,
+      conversationId: 'conv-a',
+      titre: 'Équipe terminée — Câbler l’API',
+      corps: 'ccremote · 0,42 $ · 12 min',
+    });
+    if (lue) registre.notifications.marquerLue(n.id);
+    return n.id;
+  }
+
+  test('GET /notifications rend la liste et le compteur de non-lues', async () => {
+    semerNotification();
+    const { statut, corps } = await lire('/notifications');
+    expect(statut).toBe(200);
+    const data = corps['data'] as { notifications: unknown[]; unread: number };
+    expect(data.notifications).toHaveLength(1);
+    expect(data.unread).toBe(1);
+  });
+
+  test('la carte porte le fil d’origine — sans lui le clic ne mène nulle part', async () => {
+    semerNotification();
+    const { corps } = await lire('/notifications');
+    const data = corps['data'] as { notifications: { conversationId: string; delivered: boolean }[] };
+    expect(data.notifications[0]?.conversationId).toBe('conv-a');
+    // `☠` « lu » et « transmis » restent deux faits séparés jusqu'au bout de la
+    // chaîne : les fondre effacerait ce que Chris regarde pour savoir si son
+    // orchestrateur est au courant.
+    expect(data.notifications[0]?.delivered).toBe(false);
+  });
+
+  test('POST /notifications/:id/read marque lue, et le compteur suit', async () => {
+    const id = semerNotification();
+    const s = serveur ?? demarrer();
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness/notifications/${id}/read`, { method: 'POST' });
+    expect(rep.status).toBe(200);
+    expect(registre.notifications.nombreNonLues()).toBe(0);
+  });
+
+  test('marquer lue deux fois n’est pas une erreur (deux onglets ouverts)', async () => {
+    const id = semerNotification(true);
+    const s = serveur ?? demarrer();
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness/notifications/${id}/read`, { method: 'POST' });
+    expect(rep.status).toBe(200);
+    expect(((await rep.json()) as { marquee: boolean }).marquee).toBe(false);
+  });
+
+  test('POST /notifications/read-all vide le compteur', async () => {
+    semerNotification();
+    const s = serveur ?? demarrer();
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness/notifications/read-all`, { method: 'POST' });
+    expect(rep.status).toBe(200);
+    expect(registre.notifications.nombreNonLues()).toBe(0);
+  });
+
+  test('PC éteint : les notifications restent servies (H-75)', async () => {
+    semerNotification();
+    pcOnline = false;
+    const { statut, corps } = await lire('/notifications');
+    expect(statut).toBe(200);
+    // Elles vivent sur le Pi : un PC absent ne doit rien masquer — c'est
+    // précisément la nuit qu'on vient les lire.
+    expect((corps['data'] as { notifications: unknown[] }).notifications).toHaveLength(1);
+  });
+});

@@ -26,6 +26,7 @@ import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
 import { ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
+import { versNotificationApi } from './vue-notifications.ts';
 import { MODELES } from '../../shared/modeles-claude.ts';
 import { traiterEcriture, type OrdresVersPc, type OrchestrateurConversation } from './ecritures.ts';
 import {
@@ -235,6 +236,17 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     });
   }
 
+  if (chemin === '/notifications') {
+    // `☠` `conversationId` est rendu tel quel : c'est lui qui fait du clic sur
+    // une notification une redirection vers le BON fil. Sans lui, l'interface
+    // n'aurait qu'un texte à afficher et Chris devrait retrouver la
+    // conversation lui-même — la moitié de l'intérêt de la fonctionnalité.
+    return enveloppe(pcOnline, {
+      notifications: deps.registre.notifications.recentes().map(versNotificationApi),
+      unread: deps.registre.notifications.nombreNonLues(),
+    });
+  }
+
   if (chemin === '/health') {
     return { ok: true, pcOnline };
   }
@@ -283,6 +295,21 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
       if (erreur instanceof ErreurProjetOccupe) throw new ErreurApi(409, erreur.message);
       throw erreur;
     }
+  }
+
+  // `☠` Comme les mandats, AVANT le filtre `/orchestrator/conversations` : ces
+  // routes ne touchent pas le PC et ne doivent pas dépendre de son état.
+  if (chemin === '/notifications/read-all') {
+    const marquees = deps.registre.notifications.toutMarquerLu();
+    return { ok: true, effet: `${marquees} notification(s) marquée(s) lue(s)`, marquees };
+  }
+  const luNotif = chemin.match(/^\/notifications\/([^/]+)\/read$/);
+  if (luNotif?.[1] !== undefined) {
+    const id = decodeURIComponent(luNotif[1]);
+    // Déjà lue ⇒ succès, pas une erreur : deux onglets ouverts sur la même
+    // notification produiraient sinon une alerte pour un non-événement.
+    const marquee = deps.registre.notifications.marquerLue(id);
+    return { ok: true, effet: marquee ? 'notification marquée lue' : 'notification déjà lue', marquee };
   }
 
   if (!chemin.startsWith('/orchestrator/conversations')) return null;
