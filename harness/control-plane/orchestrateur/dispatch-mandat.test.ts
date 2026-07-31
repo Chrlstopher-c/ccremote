@@ -197,10 +197,13 @@ describe('☠ l’accès du mandat est un DROIT posé sur le worker, pas une phr
     }
   });
 
-  test('`lecture` refuse RÉELLEMENT les outils d’écriture, Bash compris', async () => {
+  test('`lecture` refuse RÉELLEMENT les outils d’écriture de fichiers', async () => {
     const { denis, prompt } = await dispatcher('lecture');
     for (const outil of OUTILS_ECRITURE) expect(denis).toContain(outil);
     expect(prompt).toContain('LECTURE SEULE');
+    // ☠ Bash reste ouvert même en lecture (décision Chris, 31/07) : explorer au
+    // shell est le mode de travail normal d'un agent d'exploration.
+    expect(denis).not.toContain('Bash');
   });
 
   test('`ecriture` n’ajoute rien au plancher — une équipe de modification travaille', async () => {
@@ -213,7 +216,7 @@ describe('☠ l’accès du mandat est un DROIT posé sur le worker, pas une phr
   test('☠ un accès ABSENT ou illisible retombe sur la lecture — jamais sur l’écriture', async () => {
     for (const valeur of [undefined, '', 'admin', 'lecture+']) {
       const { denis, prompt } = await dispatcher(valeur);
-      expect(denis).toContain('Bash');
+      expect(denis).toContain('Write');
       expect(prompt).toContain('LECTURE SEULE');
       registre.etats.appliquerEtatHarness(
         registre.missions.listerActives()[0]?.id ?? '',

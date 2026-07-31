@@ -45,7 +45,7 @@ export function construireMandatPropose(
     // `☠` L'accès figure dans le TEXTE soumis à l'opérateur : H-61 veut une
     // autorisation éclairée, et « lecture seule » ou « écriture » est ce qui
     // change le plus la portée de ce qu'il approuve d'un clic.
-    `Accès accordé : ${acces === 'lecture' ? 'LECTURE SEULE (Write, Edit, NotebookEdit et Bash refusés)' : 'lecture et écriture'}`,
+    `Accès accordé : ${acces === 'lecture' ? 'LECTURE SEULE (Write, Edit et NotebookEdit refusés ; Bash reste ouvert pour explorer)' : 'lecture et écriture'}`,
     `Critère d'arrêt : ${critereArret ?? '⚠ non fourni — à compléter avant approbation'}`,
     ...CLAUSES_FIXES,
   ];

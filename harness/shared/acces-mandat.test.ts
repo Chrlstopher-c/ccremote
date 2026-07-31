@@ -8,13 +8,20 @@ import {
 } from './acces-mandat.ts';
 
 describe('accès d’un mandat — un droit, pas une phrase', () => {
-  test('☠ `lecture` refuse Bash — sans quoi les trois autres refus sont décoratifs', () => {
+  test('`lecture` refuse les outils d’écriture de fichiers', () => {
     const refuses = outilsRefusesPour('lecture');
-    expect(refuses).toContain('Bash');
-    // `sed -i`, `tee`, `> fichier`, `git checkout` : un shell ouvert contourne
-    // Write/Edit sans effort. Le test existe pour qu'un « assouplissement »
-    // futur de cette liste échoue bruyamment.
     for (const outil of ['Write', 'Edit', 'NotebookEdit']) expect(refuses).toContain(outil);
+  });
+
+  test('☠ `lecture` LAISSE Bash — décision de Chris, pas un oubli', () => {
+    // « Lecture seule » borne l'écriture de FICHIERS, pas l'exécution de
+    // commandes : un agent d'exploration travaille au shell (`rg`, `git log`,
+    // `find`) et l'en priver le rend infirme, pas sûr. Une écriture reste
+    // possible via `sed -i` ou `> fichier`, mais elle ne peut alors pas être
+    // accidentelle — et le plancher de déni (H-41) couvre le catastrophique.
+    // Ce test existe pour qu'un « durcissement » futur échoue bruyamment et
+    // aille relire le motif plutôt que de le redécouvrir.
+    expect(outilsRefusesPour('lecture')).not.toContain('Bash');
   });
 
   test('`ecriture` n’ajoute AUCUN refus — le plancher reste seul maître', () => {

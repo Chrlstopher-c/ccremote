@@ -29,23 +29,26 @@ export const ACCES_DEFAUT: AccesMandat = 'lecture';
 /**
  * Outils refusés à une équipe en lecture seule.
  *
- * `☠` `Bash` EN FAIT PARTIE, et ce n'est pas négociable : un `Bash` ouvert rend
- * les trois autres décoratifs (`sed -i`, `tee`, `> fichier`, `git checkout`…).
- * Un « lecture seule » qui laisse passer un shell n'est pas un droit restreint,
- * c'est une convention avec une étape de plus. L'exploration reste entière par
- * `Read`, `Glob`, `Grep`, `WebSearch`/`WebFetch`, plus les outils MCP du harness
- * (`explorer_projets`, `lire_fichier`) qui sont en lecture par construction.
+ * `☠` `Bash` N'EN FAIT PAS PARTIE, et c'est un choix explicite de Chris
+ * (2026-07-31), pris en connaissance du trade-off — ne pas le « corriger ».
+ *
+ * L'argument, dans ses termes : « lecture seule » borne l'ÉCRITURE DE FICHIERS,
+ * pas l'exécution de commandes. Un agent d'exploration travaille massivement au
+ * shell (`rg`, `git log`, `find`, `ls`, `wc`) et c'est souvent le meilleur outil
+ * pour ça ; le priver de `Bash` ne le rend pas plus sûr, il le rend infirme.
+ *
+ * Oui, un `Bash` ouvert permet techniquement d'écrire (`sed -i`, `tee`,
+ * `> fichier`). La nuance qui rend le choix défendable : par ce chemin, une
+ * écriture ne peut pas être ACCIDENTELLE — il faut l'avoir voulue, formulée et
+ * exécutée. Ce que ce mode empêche, c'est le dérapage d'un agent qui « corrige
+ * en passant » ce qu'il vient de lire, pas la malveillance d'un agent décidé.
+ * Et les commandes réellement catastrophiques restent couvertes par le plancher
+ * de déni (H-41), inconditionnel et posé sur tout dispatch, accès quel qu'il soit.
  *
  * `MultiEdit` est déprécié côté SDK : le citer ne coûte rien et couvre les CLI
  * plus anciens, où il existe encore. Un nom d'outil inconnu est inerte.
  */
-export const OUTILS_ECRITURE: readonly string[] = [
-  'Write',
-  'Edit',
-  'MultiEdit',
-  'NotebookEdit',
-  'Bash',
-];
+export const OUTILS_ECRITURE: readonly string[] = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 
 /** Formes qu'un modèle écrit spontanément pour désigner un accès. */
 const SYNONYMES: Readonly<Record<string, AccesMandat>> = {
@@ -99,7 +102,7 @@ export function outilsRefusesPour(acces: AccesMandat): readonly string[] {
 export function messageAccesInconnu(demande: string): string {
   return (
     `accès « ${demande} » inconnu — valeurs acceptées : ${ACCES_MANDAT.join(', ')}. ` +
-    '`lecture` refuse Write, Edit, NotebookEdit et Bash au worker ; ' +
-    '`ecriture` ne laisse que le plancher de déni (H-41).'
+    '`lecture` refuse Write, Edit et NotebookEdit au worker (Bash reste ouvert : ' +
+    'explorer au shell est légitime) ; `ecriture` ne laisse que le plancher de déni (H-41).'
   );
 }

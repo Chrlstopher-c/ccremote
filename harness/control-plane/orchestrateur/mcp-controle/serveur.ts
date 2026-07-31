@@ -183,9 +183,10 @@ function outilsCycleVie(deps: DependancesServeurControle) {
       "Propose une nouvelle équipe sur un projet, avec un mandat. NE CRÉE RIEN : " +
         "H-61 — la création exige une autorisation humaine explicite, présentée par l'UI. " +
         "`acces` est un DROIT RÉEL, pas une consigne rédigée : `lecture` fait refuser Write, " +
-        'Edit, NotebookEdit et Bash par le harness lui-même. Choisis `lecture` pour une équipe ' +
-        "qui explore, audite ou rend un rapport ; `ecriture` seulement si elle doit modifier le " +
-        'projet. `perimetre` reste la description en clair du cadre, il ne donne aucun droit. ' +
+        "Edit et NotebookEdit par le harness lui-même — Bash reste ouvert, explorer au shell " +
+        "est légitime. Choisis `lecture` pour une équipe qui explore, audite ou rend un rapport ; " +
+        "`ecriture` dès qu'elle doit modifier le projet. `perimetre` reste la description en " +
+        'clair du cadre, il ne donne aucun droit. ' +
         "`modele` et `effort` : ne les renseigne QUE si l'opérateur a précisé lesquels. " +
         'Laissés vides, le lead démarre sur les défauts du harness (Opus 5, effort high).',
       {

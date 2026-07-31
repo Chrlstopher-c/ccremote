@@ -119,8 +119,10 @@ export function composerPromptInitial(p: Proposition, acces: AccesMandat): strin
   // budget à retenter des outils qu'on lui a dit d'utiliser.
   const ligneAcces =
     acces === 'lecture'
-      ? 'Accès : LECTURE SEULE. Write, Edit, NotebookEdit et Bash te sont refusés par le harness — ' +
-        'inutile de les tenter. Rends tes conclusions par écrit.'
+      ? 'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
+        'inutile de les tenter. Bash reste disponible : explore librement au shell ' +
+        '(rg, git log, find…), mais n’écris pas de fichier par ce biais — ce mandat ne ' +
+        'te demande pas de modifier le projet. Rends tes conclusions par écrit.'
       : 'Accès : lecture et écriture, dans les limites du plancher de déni.';
   return [
     `Mandat autorisé par l'opérateur.`,
