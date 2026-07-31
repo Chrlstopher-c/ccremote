@@ -39,8 +39,6 @@
       Le total reste la référence ; la ventilation sert à voir *où* ça part, pas à refaire l'addition.
 - [ ] **Dette : `superviseur-workers.ts` à 710 lignes** (limite 500), signalé par l'agent du
       chantier F, non traité — violation préexistante, découpe hors scope à l'époque.
-- [ ] **Dette : `deniedToolPatterns: []` au dispatch** — « lecture seule » reste une consigne de
-      mandat, pas un verrou. Le plancher de déni est vide.
 
 ### ⚠️ À SAVOIR AVANT DE TOUCHER AU HARNESS (31/07)
 
@@ -50,8 +48,11 @@
 - **SDK épinglé 0.3.220** (CLI embarqué 2.1.220). La liste de `supportedModels()` dépend de CETTE
   version, pas du compte. Tout changement de SDK ⇒ repasser `acceptation/modeles-effort-reel.ts` et
   réaligner `shared/modeles-claude.ts`.
-- **31 tests rouges PRÉEXISTANTS** sur `projets/` et `validation-proprietes/`, stables depuis des
-  jours. Baseline : 1093 tests, 1062 verts.
+- **La suite est VERTE : 1037 tests, 0 échec.** Les 31 rouges « préexistants » ne l'étaient pas :
+  ils dépendaient du scratchpad d'une session Claude Code disparue (corrigé le 31/07, `0383baa`).
+  Tout rouge est désormais un vrai signal — un test crée ce qu'il valide, sous `os.tmpdir()`.
+- **Le bus d'escalade n'existe plus** (31/07). Ne pas rouvrir le sujet en croyant à un oubli de
+  câblage : c'est une décision, motivée par une mesure. Voir `pi-web/CONTRAT-API-HARNESS.md`.
 
 ### ✅ TERMINÉ — session du 31/07 (matin)
 
@@ -93,9 +94,9 @@
       sur une mission réelle — alors qu'elle tombait au token près en mesure locale. À mesurer sur
       deux relevés successifs d'une même session vivante. **Le total reste la référence** en
       attendant ; la ventilation sert à voir *où* ça part, pas à refaire l'addition.
-- [ ] **(E) Dettes ouvertes** — `deniedToolPatterns: []` au dispatch (« lecture seule » n'est qu'une
-      consigne au modèle, pas un verrou) · index de rotation du master **en mémoire** (repart sur le
-      compte A même saturé après un redémarrage) · `harness-orchestrateur.js` ~640 lignes.
+- [ ] **(E) Dettes ouvertes** — index de rotation du master **en mémoire** (repart sur le compte A
+      même saturé après un redémarrage) · `harness-orchestrateur.js` ~640 lignes.
+      *(`deniedToolPatterns: []` : corrigé le 31/07, voir plus haut.)*
 
 ### ✅ TERMINÉ — session du 23/07 (journée)
 
