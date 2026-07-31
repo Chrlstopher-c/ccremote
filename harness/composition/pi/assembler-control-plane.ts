@@ -54,6 +54,7 @@ import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
 import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
 import { demarrerBalayageRappels, type BalayageRappels } from './balayage-rappels.ts';
+import { demarrerBalayageCloture, type BalayageCloture } from './balayage-cloture.ts';
 import { choisirCompteDisponible } from './choix-compte-orchestrateur.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
@@ -113,6 +114,7 @@ export interface ControlPlanePiAssemble {
   readonly balayageTelemetrie: BalayageTelemetrie;
   readonly balayageQuotas: BalayageQuotas;
   readonly balayageRappels: BalayageRappels;
+  readonly balayageCloture: BalayageCloture;
 }
 
 /**
@@ -459,6 +461,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     },
   });
 
+  // `☠` Quatrième boucle, et elle existe parce que RIEN ne clôturait une équipe
+  // au repos : `idle` ne change pas l'état harness, `en_cours` occupe le projet
+  // (H-56), donc un lead ayant parfaitement travaillé verrouillait son projet
+  // jusqu'à un clic humain. Mesuré le 01/08 sur `/mnt/projects/echohub` : équipe
+  // idle depuis 16 min, parc vide à l'écran, dispatch suivant refusé.
+  const balayageCloture = demarrerBalayageCloture({ registre, arreteur: clientSuperviseurPc });
+
   log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
 
   return {
@@ -470,5 +479,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     balayageTelemetrie,
     balayageQuotas,
     balayageRappels,
+    balayageCloture,
   };
 }

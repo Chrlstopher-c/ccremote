@@ -60,7 +60,17 @@ export function redigerFinEquipe(mission: Mission, maintenant: number = Date.now
       `Lis son rapport avec rapport_equipe("${mission.id}") AVANT de conclure quoi que ce soit — ` +
       "« terminée » signifie que le lead a fini de parler, pas que l'objectif est atteint. " +
       'Puis décide : le mandat est-il rempli, faut-il une équipe de suite, ou une vérification ? ' +
-      "Si tu proposes un nouveau mandat, dis-le à Chris ; s'il n'y a rien à faire, une ligne suffit.",
+      "Si tu proposes un nouveau mandat, dis-le à Chris ; s'il n'y a rien à faire, une ligne suffit.\n\n" +
+      // `☠` SANS CE PARAGRAPHE, l'orchestrateur n'a aucun moyen de savoir qu'il
+      // vient d'hériter d'un verrou. Il lisait le rapport, répondait « bien
+      // reçu », et le projet restait occupé — dispatch suivant refusé par H-56
+      // sur un parc qui n'affiche pourtant aucune équipe active (mesuré le 01/08).
+      `ATTENTION — cette équipe OCCUPE ENCORE « ${mission.projet} » : tant qu'elle est ouverte, ` +
+      'aucune autre équipe ne peut démarrer sur ce projet (H-56). Deux gestes possibles, ' +
+      "choisis-en un maintenant : lui réinjecter du travail avec envoyer_message_equipe " +
+      `si son mandat mérite d'être prolongé, ou la fermer avec arreter_equipe("${mission.id}") ` +
+      'pour libérer le projet. Ne rien faire la laisse au repos — le harness finira par la ' +
+      'clore seul, mais après un délai qui bloque tout dispatch entre-temps.',
   };
 }
 

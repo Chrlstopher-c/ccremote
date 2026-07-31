@@ -82,7 +82,7 @@ describe('le type TypeScript et le CHECK SQL disent la même chose', () => {
     for (const type of TOUS_LES_TYPES) {
       registre.conversations.ajouterEvenement({ conversationId: 'conv-1', type, contenu: type });
     }
-    const relus = registre.conversations.evenements('conv-1', 0);
+    const relus = registre.conversations.evenements('conv-1');
     expect(relus.map((e) => e.type)).toEqual([...TOUS_LES_TYPES]);
   });
 
