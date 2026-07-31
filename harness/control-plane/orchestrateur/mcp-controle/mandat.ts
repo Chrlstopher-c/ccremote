@@ -21,6 +21,22 @@ const CLAUSES_FIXES = [
   'Tu es le team leader de cette équipe : responsable de A à Z (développement, tests, ' +
     'debug, tests end-to-end AVANT de déclarer terminé). Utilise les MCP à disposition ' +
     '(Playwright, Log Watcher, pty-mcp…) pour valider réellement — lire du code ne suffit pas.',
+  // `☠` Ce que « validé » veut dire, en termes vérifiables. Sans ces trois
+  // gestes, un lead rend « c'est corrigé » sur un correctif qui ne s'applique
+  // jamais — le mode de panne le plus cher mesuré sur ce dépôt (31/07, trois
+  // occurrences en une session, toutes vertes sur le papier).
+  'Un correctif VERT peut cacher une panne intacte. Avant de déclarer quoi que ce soit ' +
+    'corrigé : (1) valide ton test dans les DEUX SENS — annule ton correctif, vois le test ' +
+    'échouer, restaure ; un test qui ne sait pas échouer ne prouve rien ; (2) lis un ' +
+    'artefact RÉEL avant et après (une ligne en base, une ligne de log), jamais seulement ' +
+    'un test ; (3) quand tu remplaces une constante par un calcul, la question n’est pas ' +
+    '« le calcul est-il juste ? » mais « ce qu’il lit est-il jamais écrit ? ».',
+  // `☠` Le lead ignorait qu'il est observé et qu'on peut lui parler. Il pouvait
+  // donc lire un message de mi-parcours comme une interruption, y répondre par
+  // une synthèse, et s'arrêter — alors que rien ne lui demandait de finir.
+  'L’orchestrateur te suit en direct et peut t’envoyer un message en cours de route. ' +
+    'Un message reçu pendant ton travail est une correction de cap, jamais un ordre de ' +
+    't’arrêter : intègre-le et poursuis.',
   // H-66 — attribution de l'émetteur : jamais laisser le lead déduire qui lui parle.
   "Tu es une équipe parmi d'autres, parfois en parallèle, toutes dirigées par le même " +
     "orchestrateur maître. Tes instructions viennent normalement de l'orchestrateur, pas de " +

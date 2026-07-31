@@ -112,36 +112,178 @@ export class ErreurModeleInconnu extends Error {
  * Compose le premier message du lead. `☠` Jamais vide : un flux d'entrée
  * silencieux n'émet jamais `init`, et le worker resterait muet (piège H-60).
  */
-export function composerPromptInitial(p: Proposition, acces: AccesMandat): string {
-  const critere = p.critereArret ?? 'non fixé — rends la main dès que l’objectif est atteint';
-  // `☠` L'accès est ANNONCÉ au lead en plus d'être appliqué, et il vient du MÊME
-  // calcul que les refus d'outils (paramètre, jamais relu depuis `p`) : deux
-  // lectures indépendantes finiraient par diverger, et le lead brûlerait son
-  // budget à retenter des outils qu'on lui a dit d'utiliser.
-  const ligneAcces =
-    acces === 'lecture'
-      ? 'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
+/**
+ * `☠` LE bloc que le lead ignorait, et qui décide de tout depuis le 01/08.
+ *
+ * `rapport_equipe` ne rend PAS une synthèse construite : il rend le DERNIER BLOC
+ * TEXTE que le lead a produit, tel quel. Et depuis que la fin d'une équipe
+ * notifie l'orchestrateur, ce bloc est lu automatiquement pour décider de la
+ * suite — relancer, enchaîner, ou rendre la main à Chris.
+ *
+ * Autrement dit : un lead qui termine par « Voilà, c'est fait ✅ » ne laisse rien
+ * d'exploitable, et la décision suivante se prend sur du vide. Le défaut est
+ * symétrique de celui corrigé sur l'orchestrateur toute la journée du 01/08 —
+ * une information écrite d'un côté, jamais dite à l'autre.
+ */
+const BLOC_RAPPORT = [
+  'TON DERNIER MESSAGE EST TON RAPPORT — ce n’est pas une formule.',
+  'Le harness ne construit aucune synthèse : il transmet littéralement le dernier bloc de',
+  'texte que tu écris, et l’orchestrateur décide de la suite dessus, souvent sans qu’un',
+  'humain le relise. « C’est fait » ne lui apprend rien et lui fait relancer une équipe',
+  'pour rien. Termine donc TOUJOURS par un bloc qui contient, dans cet ordre :',
+  '  1. le critère d’arrêt est-il atteint — oui, non, ou partiellement, et pourquoi ;',
+  '  2. ce que tu as changé, fichier par fichier, sans raconter ta démarche ;',
+  '  3. ce que tu as VÉRIFIÉ et comment (commande lancée, résultat obtenu) — pas',
+  '     « les tests passent », mais ce que tu as exécuté et ce qu’il a rendu ;',
+  '  4. ce qui reste ouvert, et les questions que tu n’as pas pu trancher.',
+].join('\n');
+
+/**
+ * `☠` Un message peut arriver PENDANT le travail (`envoyer_a_equipe`, H-67). Le
+ * lead ne le savait pas : il pouvait le lire comme une interruption à laquelle
+ * répondre puis s'arrêter, alors que c'est une correction de cap à intégrer.
+ */
+const BLOC_MESSAGES = [
+  'L’orchestrateur peut t’écrire pendant que tu travailles. Ce n’est jamais un ordre',
+  'de t’arrêter : c’est une précision ou une correction de cap. Intègre-la et poursuis',
+  'ton mandat — ne réponds pas par un rapport de fin à un message de milieu de course.',
+  'Il te regarde aussi en direct (tes dernières lignes) : dis en une phrase ce que tu',
+  'fais quand tu changes de piste, c’est ce qui lui évite de te relancer à tort.',
+].join('\n');
+
+/**
+ * `☠` Dit explicitement, parce que demander est le réflexe par défaut d'un agent :
+ * personne ne lit ce flux pendant que l'équipe travaille. Un lead qui « attend
+ * confirmation » brûle son budget à ne rien faire.
+ */
+/**
+ * H-66 — attribution de l'émetteur. `☠` Vivait dans `CLAUSES_FIXES`, qui ne
+ * partait nulle part : le lead ne pouvait donc PAS distinguer une instruction de
+ * l'orchestrateur d'une parole de Chris, et faisait porter à l'un les décisions
+ * de l'autre.
+ */
+const BLOC_ATTRIBUTION = [
+  'Tu es une équipe parmi d’autres, parfois en parallèle, toutes dirigées par le même',
+  'orchestrateur maître. Tes instructions viennent normalement de LUI, pas de l’humain.',
+  'L’opérateur peut aussi te parler directement — ces messages-là sont identifiés comme',
+  'tels. Ne jamais attribuer à l’opérateur une instruction venue de l’orchestrateur.',
+].join('\n');
+
+/**
+ * `☠` Les trois gestes qui séparent un correctif prouvé d'un correctif décoré.
+ * Mesuré sur ce dépôt le 31/07 : trois pannes en une session, toutes VERTES sur
+ * le papier, toutes causées par l'absence d'un de ces trois gestes.
+ */
+const BLOC_VALIDATION = [
+  'UN CORRECTIF VERT PEUT CACHER UNE PANNE INTACTE. Avant de déclarer corrigé :',
+  '  · valide ton test dans les DEUX SENS — annule ton correctif, vois le test échouer,',
+  '    restaure. Un test qui ne sait pas échouer ne prouve rien, il décore ;',
+  '  · lis un artefact RÉEL avant et après (une ligne en base, une ligne de log), jamais',
+  '    seulement un test qui passe ;',
+  '  · quand tu remplaces une constante par un calcul, la question n’est pas « le calcul',
+  '    est-il juste ? » mais « ce qu’il lit est-il jamais écrit ? » ;',
+  '  · si un symptôme survit à ta correction, compare sa SIGNATURE avant/après. Identique,',
+  '    c’est une réfutation : la variable que tu as changée n’est pas la cause.',
+].join('\n');
+
+const BLOC_AUTONOMIE = [
+  'Tu décides seul, de bout en bout. Personne ne lit ce fil pendant que tu travailles :',
+  'aucune question posée ici n’atteindra un humain, et l’outil pour en poser une ne t’est',
+  'pas fourni. Tes sous-agents te demandent, TOI tu tranches. Si un choix te dépasse',
+  'vraiment, prends l’option la plus réversible, poursuis, et écris la question dans ton',
+  'rapport final — c’est là qu’elle sera lue, et elle deviendra un autre mandat.',
+].join('\n');
+
+/** Ce que l'accès autorise, annoncé au lead en plus d'être appliqué. */
+function ligneAcces(acces: AccesMandat): string {
+  // `☠` Vient du MÊME calcul que les refus d'outils (paramètre, jamais relu
+  // depuis `p`) : deux lectures indépendantes finiraient par diverger, et le
+  // lead brûlerait son budget à retenter des outils qu'on lui a dit d'utiliser.
+  return acces === 'lecture'
+    ? 'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
         'inutile de les tenter. Bash reste disponible : explore librement au shell ' +
         '(rg, git log, find…), mais n’écris pas de fichier par ce biais — ce mandat ne ' +
         'te demande pas de modifier le projet. Rends tes conclusions par écrit.'
-      : 'Accès : lecture et écriture, dans les limites du plancher de déni.';
+    : 'Accès : lecture et écriture, dans les limites du plancher de déni.';
+}
+
+/**
+ * `☠` Le budget est ANNONCÉ. Il coupe la session quand il est atteint, sans
+ * préavis et sans que le lead comprenne pourquoi : un mandat interrompu à
+ * mi-chemin ressemble à un crash, et la relance repart sur les mêmes rails pour
+ * se faire couper au même endroit.
+ */
+function ligneBudget(budgetUsd: number): string {
+  const montant = budgetUsd > 0 ? budgetUsd : BUDGET_DEFAUT_USD;
+  return (
+    `Budget : ${montant.toFixed(2)} $. Au-delà, ta session est coupée net, où que tu en sois. ` +
+    'Dimensionne ton travail en conséquence : mieux vaut un rapport honnête à mi-parcours ' +
+    'qu’un chantier tranché en deux par le plafond.'
+  );
+}
+
+/**
+ * Le RÔLE et les règles permanentes du lead — ce qui part en `systemPrompt`.
+ *
+ * `☠` LA distinction qui manquait, et elle est mécanique, pas stylistique : le
+ * `systemPrompt` survit à la compaction, le premier message NON. Or les workers
+ * tournent avec `autoCompactEnabled: true` — sur un mandat long, le lead
+ * compacte et perd son premier message. Tout ce qui vivait uniquement là
+ * disparaissait donc au moment précis où il en avait le plus besoin : la règle
+ * du rapport, son accès, son budget, son critère d'arrêt. Il ne lui restait que
+ * `mandate: p.objectif` — une ligne.
+ *
+ * `☠` Deuxième moitié du même défaut : les CLAUSES_FIXES de
+ * `mcp-controle/mandat.ts` (H-52 validation réelle, H-66 attribution) ne sont
+ * jamais parties au worker. Elles ne servaient qu'à composer le texte AFFICHÉ à
+ * Chris sur la carte d'autorisation. Dixième occurrence du motif « écrit,
+ * testé, branché sur rien » — et cette fois sur deux règles H.
+ *
+ * Règle qui en découle : tout ce qui doit rester vrai au tour 50 va ICI. Le
+ * premier message ne porte que l'amorce.
+ */
+export function composerMandatSysteme(p: Proposition, acces: AccesMandat): string {
+  const critere = p.critereArret ?? 'non fixé — rends la main dès que l’objectif est atteint';
   return [
-    `Mandat autorisé par l'opérateur.`,
-    ``,
-    `Projet : ${p.projet}`,
+    'Tu es le team leader d’une équipe ccremote, responsable de A à Z : conception,',
+    'développement, tests, debug, validation end-to-end AVANT de déclarer terminé.',
+    'Utilise les MCP à disposition (Playwright, Log Watcher, pty-mcp…) pour valider',
+    'réellement — lire du code ne suffit pas.',
+    '',
+    `TON MANDAT — projet ${p.projet}`,
     `Objectif : ${p.objectif}`,
     `Critère d'arrêt : ${critere}`,
-    `Périmètre : ${p.perimetre}`,
-    ligneAcces,
+    `Périmètre : ${p.perimetre} (interdiction de sortir du worktree)`,
+    ligneAcces(acces),
+    ligneBudget(p.budgetMaxUsd),
+    '',
+    BLOC_AUTONOMIE,
+    '',
+    BLOC_ATTRIBUTION,
+    '',
+    BLOC_MESSAGES,
+    '',
+    BLOC_VALIDATION,
+    '',
+    BLOC_RAPPORT,
+  ].join('\n');
+}
+
+/**
+ * Le premier message. `☠` Jamais vide : un flux d'entrée silencieux n'émet
+ * jamais `init`, et le worker resterait muet (piège H-60). Court par
+ * conception — tout ce qui compte vit dans le `systemPrompt`, qui lui survivra
+ * à la compaction.
+ */
+export function composerPromptInitial(p: Proposition, acces: AccesMandat): string {
+  return [
+    `Mandat autorisé par l'opérateur — projet ${p.projet}.`,
     ``,
-    // `☠` Dit explicitement, parce que demander est le réflexe par défaut d'un
-    // agent : personne ne lit ce flux pendant que l'équipe travaille. Un lead
-    // qui « attend confirmation » brûle son budget à ne rien faire.
-    `Tu décides seul, de bout en bout. Personne ne lit ce fil pendant que tu travailles : ` +
-      `aucune question posée ici n'atteindra un humain, et l'outil pour en poser une ne ` +
-      `t'est pas fourni. Tes sous-agents te demandent, TOI tu tranches. Si un choix te ` +
-      `dépasse vraiment, prends l'option la plus réversible, poursuis, et écris la question ` +
-      `dans ton rapport final — c'est là qu'elle sera lue, et elle deviendra un autre mandat.`,
+    `Objectif : ${p.objectif}`,
+    ligneAcces(acces),
+    ``,
+    `Le cadre complet (critère d'arrêt, périmètre, budget, forme du rapport attendu) est`,
+    `dans tes instructions système : relis-les, elles restent valables jusqu'au bout.`,
     ``,
     `Commence par établir l'état des lieux avant de modifier quoi que ce soit.`,
   ].join('\n');
@@ -303,7 +445,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     parametres: {
       sessionId,
       cwd,
-      mandate: p.objectif,
+      // `☠` Le RÔLE et les règles permanentes, pas seulement l'objectif. Ce
+      // champ devient le `systemPrompt` du worker : c'est la SEULE partie qui
+      // survit à sa compaction. Avant, il portait une ligne — et un lead qui
+      // compactait perdait son critère d'arrêt, son accès, son budget et la
+      // forme du rapport attendu, au tour précis où il en avait besoin.
+      mandate: composerMandatSysteme(p, acces),
       deniedToolPatterns: composerDenis(acces, deps.deniedToolPatterns),
       maxBudgetUsd: p.budgetMaxUsd > 0 ? p.budgetMaxUsd : BUDGET_DEFAUT_USD,
       model: modele,
