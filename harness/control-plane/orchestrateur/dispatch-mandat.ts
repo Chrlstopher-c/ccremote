@@ -459,7 +459,24 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     },
   };
 
-  const { detail } = await deps.demarreur.demarrer(demande);
+  let detail: string;
+  try {
+    ({ detail } = await deps.demarreur.demarrer(demande));
+  } catch (erreur) {
+    // `☠` ROLLBACK. Panne mesurée en prod le 2026-08-01 : la mission est
+    // inscrite AVANT le démarrage (à dessein — sinon un worker vivant serait
+    // inconnu du Pi, panne #11), mais rien ne la retirait quand le démarrage
+    // échouait. Elle restait donc `planifiee`, donc ACTIVE au sens de H-56, et
+    // occupait le projet POUR TOUJOURS : le second clic de l'opérateur se
+    // heurtait à « une équipe est déjà active sur ce projet » devant un parc
+    // vide. Un échec doit rendre le projet, sinon le premier raté le condamne.
+    deps.registre.etats.appliquerEtatHarness(missionId, 'echec_definitif', {
+      raisonTerminale: 'demarrage_refuse',
+      motif: erreur instanceof Error ? erreur.message.slice(0, 300) : String(erreur),
+    });
+    log.error({ err: erreur, missionId, projet: p.projet }, 'démarrage refusé — mission close, projet libéré');
+    throw erreur;
+  }
   // `☠` L'état n'est avancé qu'APRÈS un démarrage confirmé : une mission laissée
   // `planifiee` alors que le worker tourne serait une équipe fantôme, et
   // l'inverse ferait croire à une équipe vivante qui n'existe pas.

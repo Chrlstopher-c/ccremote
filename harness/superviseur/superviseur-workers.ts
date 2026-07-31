@@ -43,7 +43,9 @@ import { lireJetonsComptes } from './jetons-comptes.ts';
 import { lireSousAgents } from './sous-agents-disque.ts';
 import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
-import { explorerProjets, type ResultatExploration } from './exploration-projets.ts';
+import { estDansRacine, explorerProjets, type ResultatExploration } from './exploration-projets.ts';
+import { existsSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { rechercherDansProjets, type ResultatRecherche } from './recherche-projets.ts';
 import { lireFichier, type ResultatLectureFichier } from './lecture-fichier.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
@@ -185,6 +187,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   async demarrer(demande: DemandeDemarrage): Promise<WorkerHandle> {
     const log = missionLogger(demande.missionId);
     this.#arbitrerFencingWorktree(demande, log);
+    this.#assurerWorktree(demande.spec.cwd, log);
     const entree = new GenerateurEntree({ sessionId: demande.spec.sessionId });
     await entree.envoyer(demande.promptInitial);
 
@@ -203,6 +206,51 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     log.info({ sessionId: handle.sessionId, epoch: demande.epoch }, 'worker démarré et enregistré (B.1.4)');
     void this.#surveillerResultats(demande.missionId, handle);
     return handle;
+  }
+
+  /**
+   * Garantit que le worktree existe AVANT le spawn.
+   *
+   * `☠` Panne mesurée en prod le 2026-08-01, au premier mandat de création de
+   * projet. L'orchestrateur avait proposé « créer de zéro le projet lumen » —
+   * un mandat parfaitement légitime — et `/mnt/projects/lumen` n'existait pas.
+   * `spawn` échoue alors en ENOENT, et le SDK rend un diagnostic ENTIÈREMENT
+   * FAUX : « binary exists but failed to launch … musl vs glibc », alors que le
+   * binaire est sain et se lance à la main. Deux heures de fausse piste
+   * possibles pour un répertoire manquant.
+   *
+   * `☠` On CRÉE plutôt que de refuser, et seulement SOUS LA RACINE des projets :
+   * c'est exactement ce qu'un mandat de création demande, et le confinement
+   * empêche qu'un chemin fantaisiste fasse naître un répertoire n'importe où sur
+   * le disque. Hors racine, on refuse avec un message qui nomme la cause — pas
+   * celui du SDK.
+   */
+  #assurerWorktree(cwd: string, log: ReturnType<typeof missionLogger>): void {
+    if (existsSync(cwd)) return;
+
+    // Hors racine : on ne crée rien — un chemin fantaisiste ne doit pas faire
+    // naître un répertoire n'importe où sur le disque. `☠` On ne LÈVE pas non
+    // plus : le spawn tranchera. Lever ici rendrait impossible tout worktree
+    // fictif, ce dont dépendent les bancs qui n'atteignent jamais le spawn.
+    // Ce que ce log garantit, c'est que la VRAIE cause figure au journal juste
+    // avant le diagnostic trompeur du SDK — c'est tout ce qu'on lui demande.
+    if (!estDansRacine(resolve(this.#racineProjets), resolve(cwd))) {
+      log.warn(
+        { cwd, racineProjets: this.#racineProjets },
+        'worktree inexistant et hors du répertoire de projets — non créé ; si le spawn échoue, ' +
+          'la cause est CE chemin, pas la libc du binaire Claude Code',
+      );
+      return;
+    }
+
+    try {
+      mkdirSync(cwd, { recursive: true });
+      log.info({ cwd }, 'worktree créé pour ce mandat — le projet n’existait pas encore');
+    } catch (erreur) {
+      // Droits, disque plein, chemin occupé par un fichier : on le dit, et on
+      // laisse le spawn échouer avec sa propre erreur plutôt que de masquer.
+      log.error({ err: erreur, cwd }, 'création du worktree impossible — le spawn va échouer');
+    }
   }
 
   // -- InventairePc (B.1.4 : « inventaire() fait autorité ») -----------------
