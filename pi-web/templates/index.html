@@ -185,6 +185,10 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Orchestrateur
       </button>
+      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="chat-fils" style="color: var(--ink-2);">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Agent IA
+      </button>
       <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="harness-parc" style="color: var(--ink-2);">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
         Parc <span id="hNavCountParc" class="ml-auto text-[10px] px-1.5 py-0.5 rounded-full" style="background: var(--bg-3); color: var(--ink-3);">0</span>
@@ -193,12 +197,6 @@
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         Comptes &amp; quotas
       </button>
-
-
-      <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="chat-fils" style="color: var(--ink-2);">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Agent IA
-      </button>
       <button class="nav-item w-full text-left px-2.5 py-[5px] rounded-md text-[12.5px] flex items-center gap-2.5" data-view="sessions" style="color: var(--ink-2);">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         Sessions Claude Code
@@ -206,16 +204,20 @@
       </button>
     </nav>
 
-    <!-- Collé au bas de la zone variable : les quotas sont ce qu'on consulte
-         avant de lancer, pas ce qu'on parcourt en naviguant. -->
-    <div class="mini-gauges" id="hMiniGauges"></div>
 
 
     <!-- ☠ Lien et pied dans UN SEUL bloc poussé en bas par `margin-top: auto`.
          Séparés, le lien suivait immédiatement la zone variable : quand « Plus »
          la masquait, il remontait coller sous le menu — au milieu de l'écran,
          loin du pied avec lequel il forme une paire. -->
+    <!-- ☠ Quotas, lien et pied dans le MÊME bloc, poussé par `margin-top: auto`.
+         Les quotas étaient dehors : tant qu'une zone variable les précédait, elle
+         les repoussait vers le bas — en la supprimant, plus rien ne les poussait
+         et ils remontaient se coller sous la navigation. Un élément n'est pas
+         « en bas » parce qu'on l'écrit en dernier, mais parce que quelque chose
+         l'y pousse. -->
     <div class="sb-bas">
+      <div class="mini-gauges" id="hMiniGauges"></div>
     <!-- ☠ La carte CPU/RAM/uptime qui vivait ici est partie : quatre chiffres
            qui bougent en permanence dans une colonne de navigation, c'est du
            mouvement continu en périphérie du regard, pour une information qu'on
