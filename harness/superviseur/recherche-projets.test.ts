@@ -58,9 +58,10 @@ describe('trouver', () => {
 
 describe('refus', () => {
   test('sans chemin : on exige un projet, et on dit lequel chercher', async () => {
-    // `☠` Mesuré le 01/08 : `rg` sur /mnt/projects dépasse deux minutes même en
-    // excluant node_modules et .git. Un défaut « toute la racine » aurait rendu
-    // un timeout — ni réponse, ni refus compréhensible — au premier usage naturel.
+    // `☠` Mesuré le 01/08, chrono en main : `rg` sur /mnt/projects (248 Go,
+    // 74 projets) met 21 min 55 s, node_modules et .git déjà exclus. Un défaut
+    // « toute la racine » aurait rendu un timeout — ni réponse, ni refus
+    // compréhensible — au premier usage naturel.
     const r = await rechercherDansProjets(racine, 'cible');
     expect(r.occurrences).toHaveLength(0);
     expect(r.note).toContain('précise le projet');

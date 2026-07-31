@@ -128,9 +128,11 @@ export async function rechercherDansProjets(
   const aiguille = motif.trim();
   if (aiguille.length === 0) return refus(motif, base, 'motif vide — rien à chercher');
 
-  // `☠` Un PROJET est exigé, jamais la racine entière. Mesuré le 01/08 : `rg`
-  // sur `/mnt/projects` dépasse deux minutes même en excluant node_modules, .git
-  // et les répertoires de build — le volume est simplement trop grand. Une
+  // `☠` Un PROJET est exigé, jamais la racine entière. MESURÉ le 01/08, chrono
+  // en main : `rg` sur `/mnt/projects` (248 Go, 74 projets) met **21 min 55 s**,
+  // node_modules et .git déjà exclus. Et c'est de l'I/O, pas du calcul —
+  // 4,8 s de CPU utilisateur pour 22 min de temps réel : aucune optimisation de
+  // motif n'y changera quoi que ce soit. Une
   // recherche globale n'échouerait pas franchement, elle rendrait un timeout,
   // c'est-à-dire le pire des résultats : ni réponse, ni refus compréhensible.
   // Autoriser un défaut « toute la racine » aurait fait de l'outil une déception

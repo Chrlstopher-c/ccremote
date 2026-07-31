@@ -354,7 +354,7 @@ function outilsRecherche(deps: DependancesServeurControle) {
         'connais pas, cherche plutôt que de lire des fichiers au hasard. `motif` est une ' +
         'expression régulière (ripgrep), casse ignorée si tu écris en minuscules. ' +
         '`chemin` est OBLIGATOIRE : on cherche dans UN projet, la racine entière est trop ' +
-        "vaste (mesuré : plus de deux minutes). Si tu ne sais pas encore lequel, appelle " +
+        "vaste (mesuré : 22 minutes sur 248 Go). Si tu ne sais pas encore lequel, appelle " +
         "d'abord `explorer_projets`. Résultats bornés à 40 : si la note dit que c'est " +
         "tronqué, affine le motif — n'essaie pas d'en obtenir plus.",
       {
