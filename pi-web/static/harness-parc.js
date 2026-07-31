@@ -76,7 +76,7 @@ async function hRenderParc() {
 
   if (landingM.length) { html += `<div class="sec-title">En atterrissage <span class="badge" style="background:var(--warn);color:#fff;">${landingM.length}</span></div>`; html += landingM.map(hMcardTemplate).join(''); }
   if (actM.length) { html += `<div class="sec-title" style="margin-top:22px;">Demande votre arbitrage <span class="badge" style="background:var(--accent);color:#fff;">${actM.length}</span></div>`; html += actM.map(hMcardTemplate).join(''); }
-  else if (!landingM.length) html += `<div class="empty-state card" style="margin-bottom:16px;"><div class="t">Rien n'attend ton arbitrage</div><div class="s">Le lead de chaque équipe arbitre seul tant que ça reste dans son plancher de permissions.</div></div>`;
+  else if (!landingM.length) html += `<div class="empty-state card" style="margin-bottom:16px;"><div class="t">Aucune équipe bloquée</div><div class="s">Chaque lead décide seul, de bout en bout — tu n'arbitres rien pendant qu'une équipe travaille. Ce que tu as accordé, tu l'as accordé à l'approbation du mandat.</div></div>`;
 
   html += `<div class="sec-title" style="margin-top:22px;">En cours</div>`;
   html += runM.length ? runM.map(hMcardTemplate).join('') : `<div class="empty-state card"><div class="t">Aucune mission en cours</div></div>`;

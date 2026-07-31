@@ -22,6 +22,7 @@ import {
   ACCES_DEFAUT,
   estAccesMandat,
   outilsRefusesPour,
+  OUTILS_INTERACTION_HUMAINE,
   type AccesMandat,
 } from '../../shared/acces-mandat.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
@@ -133,6 +134,15 @@ export function composerPromptInitial(p: Proposition, acces: AccesMandat): strin
     `Périmètre : ${p.perimetre}`,
     ligneAcces,
     ``,
+    // `☠` Dit explicitement, parce que demander est le réflexe par défaut d'un
+    // agent : personne ne lit ce flux pendant que l'équipe travaille. Un lead
+    // qui « attend confirmation » brûle son budget à ne rien faire.
+    `Tu décides seul, de bout en bout. Personne ne lit ce fil pendant que tu travailles : ` +
+      `aucune question posée ici n'atteindra un humain, et l'outil pour en poser une ne ` +
+      `t'est pas fourni. Tes sous-agents te demandent, TOI tu tranches. Si un choix te ` +
+      `dépasse vraiment, prends l'option la plus réversible, poursuis, et écris la question ` +
+      `dans ton rapport final — c'est là qu'elle sera lue, et elle deviendra un autre mandat.`,
+    ``,
     `Commence par établir l'état des lieux avant de modifier quoi que ce soit.`,
   ].join('\n');
 }
@@ -167,9 +177,18 @@ function prochainEpoch(registre: Registre, projet: string): number {
  * d'écraser `~/.ssh` ou les identifiants OAuth du poste.
  *
  * L'accès s'ajoute par-dessus, il ne remplace jamais le plancher.
+ *
+ * `☠` Les outils d'interaction humaine sont refusés INCONDITIONNELLEMENT, comme
+ * le plancher : personne ne regarde le flux d'une équipe qui travaille, une
+ * question posée là n'atteint aucun humain.
  */
 function composerDenis(acces: AccesMandat, supplementaires?: readonly string[]): readonly string[] {
-  return [...PLANCHER_DENI_SDK, ...outilsRefusesPour(acces), ...(supplementaires ?? [])];
+  return [
+    ...PLANCHER_DENI_SDK,
+    ...OUTILS_INTERACTION_HUMAINE,
+    ...outilsRefusesPour(acces),
+    ...(supplementaires ?? []),
+  ];
 }
 
 /**

@@ -60,10 +60,6 @@ const HarnessMock = (() => {
         { ts: nowMinus(52), type: 'permission', auto: true, tool: 'Read', text: 'Lecture de schema.sql — autorisée (auto)' },
         { ts: nowMinus(40), type: 'permission', auto: true, tool: 'Grep', text: 'Recherche des écritures product_stock — autorisée (auto)' },
         { ts: nowMinus(19), type: 'activity', tool: '', text: "Sous-agent db-migration : le chemin CSV n'écrit jamais product_stock, confirmé." },
-        { ts: nowMinus(6), type: 'permission', auto: false, pending: true, tool: 'Bash',
-          text: 'Appliquer une migration SQL qui réécrit product_stock directement sur la base du Pi.',
-          why: "commande d'écriture sur un chemin hors du worktree de la mission (plancher de déni C.1.3).",
-          path: '/home/pi/stockiop-ops/data/stockiop.db' },
       ],
     },
     {

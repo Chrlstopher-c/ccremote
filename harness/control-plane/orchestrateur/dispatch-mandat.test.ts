@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
-import { OUTILS_ECRITURE } from '../../shared/acces-mandat.ts';
+import { OUTILS_ECRITURE, OUTILS_INTERACTION_HUMAINE } from '../../shared/acces-mandat.ts';
 import { dispatcherMandat, ErreurProjetOccupe, type DependancesDispatch } from './dispatch-mandat.ts';
 
 let registre: Registre;
@@ -206,11 +206,25 @@ describe('☠ l’accès du mandat est un DROIT posé sur le worker, pas une phr
     expect(denis).not.toContain('Bash');
   });
 
-  test('`ecriture` n’ajoute rien au plancher — une équipe de modification travaille', async () => {
+  test('`ecriture` n’ajoute aucun refus d’écriture — une équipe de modification travaille', async () => {
     const { denis, prompt } = await dispatcher('ecriture');
     for (const outil of OUTILS_ECRITURE) expect(denis).not.toContain(outil);
-    expect(denis).toEqual([...PLANCHER_DENI_SDK]);
+    expect(denis).toEqual([...PLANCHER_DENI_SDK, ...OUTILS_INTERACTION_HUMAINE]);
     expect(prompt).toContain('lecture et écriture');
+  });
+
+  test('☠ aucune équipe ne peut interroger un humain, quel que soit son accès', async () => {
+    // Personne ne regarde le flux d'une équipe qui travaille : une question
+    // posée là n'atteint personne. Ce qu'un lead ne sait pas trancher, il
+    // l'écrit dans son rapport — l'orchestrateur en fera un nouveau mandat.
+    for (const acces of ['lecture', 'ecriture']) {
+      const { denis } = await dispatcher(acces);
+      for (const outil of OUTILS_INTERACTION_HUMAINE) expect(denis).toContain(outil);
+      registre.etats.appliquerEtatHarness(
+        registre.missions.listerActives()[0]?.id ?? '',
+        'terminee',
+      );
+    }
   });
 
   test('☠ un accès ABSENT ou illisible retombe sur la lecture — jamais sur l’écriture', async () => {

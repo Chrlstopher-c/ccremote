@@ -313,9 +313,21 @@ describe('intégration — câblage réel dans WorkerSpec / Options (workers/, M
     expect(options.disallowedTools).toEqual([...PLANCHER_DENI_SDK]);
   });
 
-  test('le mode de permission composé est bien celui de production — jamais bypass (H-40, H-42)', () => {
+  // `☠` RENVERSEMENT ASSUMÉ de H-40/H-42 (décision Chris, 2026-07-31). Ce test
+  // exigeait `auto` et interdisait le bypass, à une époque où un classifieur
+  // pouvait encore escalader vers un humain. Le bus d'escalade a été retiré : un
+  // refus du classifieur ne mènerait plus nulle part, l'équipe attendrait un
+  // verdict que personne ne peut rendre. Le produit vise l'autonomie — Chris
+  // décide à l'approbation du mandat, plus jamais action par action.
+  //
+  // Ce qui borne l'équipe ne dépend PAS du mode, et c'est mesuré, pas déduit :
+  // `acceptation/bypass-denis-reel.ts` prouve sur un worker réel que Write/Edit
+  // sont retirés de la liste d'outils et qu'une règle scopée refuse toujours.
+  test('le mode de permission composé est celui de l’autonomie, avec son drapeau obligatoire', () => {
     const { options } = composeWorkerOptions(spec(), MODEL);
-    expect(options.permissionMode).toBe('auto');
-    expect(options.permissionMode).not.toBe('bypassPermissions');
+    expect(options.permissionMode).toBe('bypassPermissions');
+    // Dépareillés, le SDK ignore le mode et le worker attend une invite que plus
+    // personne ne peut lui rendre — l'invariant de composition l'interdit.
+    expect(options.allowDangerouslySkipPermissions).toBe(true);
   });
 });

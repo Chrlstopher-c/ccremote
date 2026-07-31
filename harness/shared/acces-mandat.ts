@@ -50,6 +50,27 @@ export const ACCES_DEFAUT: AccesMandat = 'lecture';
  */
 export const OUTILS_ECRITURE: readonly string[] = ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'];
 
+/**
+ * Outils par lesquels une équipe demanderait quelque chose à un humain. Refusés
+ * à TOUTE équipe, quel que soit son accès.
+ *
+ * `☠` Le produit vise l'autonomie : Chris décide en amont, à l'approbation du
+ * mandat (H-61), et plus jamais action par action. Personne ne regarde le flux
+ * d'une équipe en train de travailler — une question posée là n'atteint aucun
+ * humain.
+ *
+ * `☠` `AskUserQuestion` est une exception C.1.2 : elle atteint `canUseTool` même
+ * sous une règle d'allow, y compris en `bypassPermissions`. Notre `canUseTool`
+ * refuse (fail-closed), donc rien ne se bloquait — mais le lead y perdait un
+ * tour et un aller-retour de budget. La retirer de sa liste d'outils lui évite
+ * d'essayer : ce qu'il ne sait pas trancher, il l'écrit dans son rapport, et
+ * c'est l'orchestrateur qui en fait un nouveau mandat.
+ *
+ * Mesuré le 2026-07-31 : l'outil figurait bien dans la liste annoncée à un
+ * worker réel (`acceptation/bypass-denis-reel.ts`).
+ */
+export const OUTILS_INTERACTION_HUMAINE: readonly string[] = ['AskUserQuestion'];
+
 /** Formes qu'un modèle écrit spontanément pour désigner un accès. */
 const SYNONYMES: Readonly<Record<string, AccesMandat>> = {
   lecture: 'lecture',

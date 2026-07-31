@@ -92,7 +92,23 @@ export function composeWorkerOptions(
   const options: Options = {
     ...identiteSession,
     cwd: spec.cwd,
-    permissionMode: 'auto',
+    // `☠` `bypassPermissions` et NON `auto` (décision Chris, 2026-07-31) : aucune
+    // autorisation ne doit jamais remonter à un humain. Le produit vise
+    // l'autonomie — Chris décide en amont, à l'approbation du MANDAT (H-61), et
+    // plus jamais action par action. En `auto`, un classifieur pouvait encore
+    // refuser et bloquer une équipe sur une décision que personne n'arbitrait
+    // plus depuis le retrait du bus d'escalade : une équipe morte en attente
+    // d'un verdict qui ne viendrait jamais.
+    //
+    // `☠` Ce qui borne une équipe ne dépend PAS du mode : `disallowedTools` est
+    // documenté « removed from the model's context and cannot be used, even if
+    // they would otherwise be allowed ». Les outils n'existent pas pour le
+    // modèle, ce n'est pas une invite qu'on saute. Mesuré sur un worker réel —
+    // voir `acceptation/bypass-denis-reel.ts`, à repasser à tout changement de SDK.
+    permissionMode: 'bypassPermissions',
+    // Exigé par le SDK dès que le mode est `bypassPermissions` : garde-fou
+    // volontaire, pour que le contournement soit un choix écrit et jamais un défaut.
+    allowDangerouslySkipPermissions: true,
     disallowedTools: [...spec.deniedToolPatterns],
     maxBudgetUsd: spec.maxBudgetUsd,
     model: model.resolved,
@@ -112,8 +128,10 @@ export function composeWorkerOptions(
     abortController,
     env: buildWorkerEnv(spec),
     stderr: buildStderrSink(spec),
-    // H-73.1 : fourni quel que soit permissionMode — pas un arbitre (le classifieur
-    // tranche seul en 'auto', H-64), seul récepteur de redélivrance après coupure.
+    // `☠` Fourni quel que soit `permissionMode`, et jamais appelé : en
+    // `bypassPermissions` rien ne demande d'autorisation. Il subsiste parce que
+    // le SDK lève « canUseTool callback is not provided » s'il doit redélivrer
+    // une demande en attente — quinze lignes contre un worker cassé.
     canUseTool: buildCanUseTool(spec),
     // H-74 (5e occurrence) : le port d'audit était construit mais jamais branché
     // ici — angle mort total sur PreToolUse en permissionMode 'auto' (C.1.1, H-64).
@@ -155,6 +173,16 @@ export function assertOptionsInvariants(options: Options): void {
       "hooks est absent : l'audit des permissions (C.5, M-22) ne serait jamais branché sur ce " +
         "worker — 5e occurrence mesurée de H-74. buildAuditHooks() doit toujours rendre un objet, " +
         'même vide sur panne du port ; un `undefined` ici est un défaut de composition, pas un état normal.',
+    );
+  }
+  // `☠` Le SDK exige que les deux réglages aillent ensemble. Dépareillés, le mode
+  // demandé n'est pas appliqué et le worker attend une invite que plus personne ne
+  // peut lui rendre : bloqué sans message. Vérifié à la composition, pas au premier
+  // outil refusé en production.
+  if (options.permissionMode === 'bypassPermissions' && options.allowDangerouslySkipPermissions !== true) {
+    throw new OptionsCompositionError(
+      'permissionMode et allowDangerouslySkipPermissions dépareillés : le SDK les exige ensemble, ' +
+        'sinon le mode est ignoré et le worker reste en attente indéfinie.',
     );
   }
 }

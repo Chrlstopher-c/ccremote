@@ -77,7 +77,11 @@ describe('composeWorkerOptions', () => {
     const { options } = composeWorkerOptions(spec(), MODEL);
     expect(options.sessionId).toBe('11111111-2222-3333-4444-555555555555');
     expect(options.cwd).toBe('/tmp/worktree-alpha');
-    expect(options.permissionMode).toBe('auto');
+    // `☠` Autonomie (décision Chris, 31/07) : aucune autorisation ne remonte
+    // jamais à un humain. Les deux réglages vont ensemble — le SDK ignore le
+    // mode si le drapeau manque, et l'invariant de composition l'interdit.
+    expect(options.permissionMode).toBe('bypassPermissions');
+    expect(options.allowDangerouslySkipPermissions).toBe(true);
     expect(options.disallowedTools).toEqual(['Bash(rm -rf /*)']);
     expect(options.maxBudgetUsd).toBe(25);
     expect(options.model).toBe('claude-sonnet-4-6');
@@ -197,9 +201,13 @@ describe('composeWorkerOptions', () => {
     expect(options.abortController).toBe(abortController);
   });
 
-  test('☠ H-73.1 preuve (a) : canUseTool est toujours fourni, y compris en permissionMode "auto"', () => {
+  test('☠ canUseTool est fourni même quand rien ne peut l’appeler', () => {
+    // Il n'arbitre plus rien : en `bypassPermissions` aucune autorisation n'est
+    // demandée. Il subsiste parce que le SDK lève « canUseTool callback is not
+    // provided » s'il doit redélivrer une demande en attente — quinze lignes
+    // contre un worker cassé par une exception après reconnexion.
     const { options } = composeWorkerOptions(spec(), MODEL);
-    expect(options.permissionMode).toBe('auto');
+    expect(options.permissionMode).toBe('bypassPermissions');
     expect(typeof options.canUseTool).toBe('function');
   });
 
