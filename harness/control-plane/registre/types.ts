@@ -419,6 +419,41 @@ export interface Notification {
   readonly echecRemise: string | null;
 }
 
+/**
+ * Un rappel programmé sur une conversation (migration 16).
+ *
+ * `☠` Appartient à UN fil et n'en sort jamais. C'est ce qui permet d'en avoir
+ * plusieurs, indépendants, sans qu'un rappel de veille technique réveille le fil
+ * où tourne un chantier de production.
+ */
+/**
+ * `☠` ÉNUMÉRÉ, pas un booléen. « en pause » et « terminé » sont deux choses
+ * différentes : la première se reprend, la seconde jamais. Un seul bit ferait
+ * ressusciter des one-shots déjà tirés au premier « reprends ce rappel ».
+ */
+export type EtatRappel = 'actif' | 'en_pause' | 'termine';
+
+export interface Rappel {
+  readonly id: string;
+  readonly conversationId: string;
+  /** Nom court, pour que l'orchestrateur et l'écran désignent le même objet. */
+  readonly libelle: string;
+  /** Ce qui est injecté dans le fil au déclenchement — rédigé comme une consigne. */
+  readonly consigne: string;
+  /** Échéance ABSOLUE. Jamais un délai : un délai repart de zéro à chaque boot. */
+  readonly prochaineA: number;
+  /** `null` ⇒ rappel unique. Renseigné ⇒ récurrent. */
+  readonly periodeMs: number | null;
+  readonly etat: EtatRappel;
+  readonly declenchements: number;
+  /** Plafond de tirs, `null` = sans limite (borné par ailleurs à la création). */
+  readonly maxDeclenchements: number | null;
+  readonly dernierDeclenchementA: number | null;
+  /** Dernier report ou échec, en clair. N'empêche jamais un tir ultérieur. */
+  readonly derniereErreur: string | null;
+  readonly creeA: number;
+}
+
 /** Vue « où en est ce que j'ai demandé hier soir ? » (F2.0.1). */
 export interface AvancementLot {
   readonly lot: Lot;

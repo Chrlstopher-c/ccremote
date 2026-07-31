@@ -496,6 +496,57 @@ ALTER TABLE conversation ADD COLUMN autonomie_objectif TEXT;
 ALTER TABLE proposition ADD COLUMN origine_approbation TEXT;
 `;
 
+/**
+ * Les rappels programmés — l'orchestrateur peut enfin agir sur le TEMPS.
+ *
+ * `☠` Jusqu'ici il ne pouvait réagir qu'à deux choses : un message de Chris, et
+ * la fin d'une équipe. Rien ne lui permettait de dire « refais ça dans dix
+ * minutes ». Une consigne comme « toutes les 10 min, une synthèse des sorties IA
+ * françaises » était donc structurellement impossible, quelle que soit sa bonne
+ * volonté : il n'a aucune horloge, et sa session ne tourne même pas entre deux
+ * messages.
+ *
+ * `conversation_id` NOT NULL, et c'est le cœur du modèle : un rappel appartient
+ * à UN fil. Plusieurs rappels par conversation, indépendants les uns des autres,
+ * et aucun ne fuit vers une autre conversation. Sans cette clé, un rappel posé
+ * dans un fil de veille technique réveillerait le fil où tourne un chantier de
+ * production.
+ *
+ * `periode_ms` NULL = rappel unique (one-shot) ; renseigné = récurrent. Les deux
+ * partagent tout le reste — un one-shot est un récurrent qui se désactive après
+ * son premier tir, pas un autre objet.
+ *
+ * `☠` `etat` est un ÉNUMÉRÉ, pas un booléen `actif`. Un booléen ne sait pas
+ * distinguer « en pause, reprends-moi plus tard » de « terminé, n'y reviens
+ * jamais » — et cette distinction est tout l'intérêt d'une pause. Avec un seul
+ * bit, reprendre un rappel épuisé et reprendre un rappel suspendu deviennent le
+ * même geste, et l'orchestrateur ressusciterait des one-shots déjà tirés.
+ *
+ * `prochaine_a` porte l'échéance ABSOLUE, jamais un délai : un délai relatif se
+ * décale à chaque redémarrage du Pi, et un rappel de 10 minutes qui repart de
+ * zéro à chaque déploiement ne se déclenche jamais.
+ */
+const MIGRATION_16 = `
+CREATE TABLE rappel (
+  id                       TEXT PRIMARY KEY,
+  conversation_id          TEXT NOT NULL,
+  libelle                  TEXT NOT NULL,
+  consigne                 TEXT NOT NULL,
+  prochaine_a              INTEGER NOT NULL,
+  periode_ms               INTEGER,
+  etat                     TEXT NOT NULL DEFAULT 'actif'
+                             CHECK (etat IN ('actif', 'en_pause', 'termine')),
+  declenchements           INTEGER NOT NULL DEFAULT 0,
+  max_declenchements       INTEGER,
+  dernier_declenchement_a  INTEGER,
+  derniere_erreur          TEXT,
+  cree_a                   INTEGER NOT NULL
+);
+
+CREATE INDEX idx_rappel_echeance ON rappel(etat, prochaine_a);
+CREATE INDEX idx_rappel_conversation ON rappel(conversation_id, etat);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -512,6 +563,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 13, nom: 'acces-mandat', sql: MIGRATION_13 },
   { version: 14, nom: 'notifications-canal-asynchrone', sql: MIGRATION_14 },
   { version: 15, nom: 'autonomie-fenetre-et-origine-approbation', sql: MIGRATION_15 },
+  { version: 16, nom: 'rappels-programmes', sql: MIGRATION_16 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

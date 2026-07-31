@@ -79,6 +79,12 @@ async function main(): Promise<void> {
     log.info({ signal }, 'arrêt du process Pi demandé');
     assemble.serveurApiWeb.arreter();
     assemble.serveurLien.arreter();
+    // `☠` Les trois balayages sont arrêtés AVANT les sessions : un rappel qui
+    // tirerait pendant la fermeture réveillerait un fil qu'on est en train de
+    // fermer, et le tir serait compté sans avoir été livré.
+    assemble.balayageRappels.arreter();
+    assemble.balayageTelemetrie.arreter();
+    assemble.balayageQuotas.arreter();
     assemble.gestionnaireConversations?.fermerTout();
     process.exit(0);
   };

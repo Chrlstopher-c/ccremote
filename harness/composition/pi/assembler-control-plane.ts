@@ -53,6 +53,7 @@ import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
 import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
+import { demarrerBalayageRappels, type BalayageRappels } from './balayage-rappels.ts';
 import { choisirCompteDisponible } from './choix-compte-orchestrateur.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
@@ -111,6 +112,7 @@ export interface ControlPlanePiAssemble {
   readonly gestionnaireConversations: GestionnaireConversations | null;
   readonly balayageTelemetrie: BalayageTelemetrie;
   readonly balayageQuotas: BalayageQuotas;
+  readonly balayageRappels: BalayageRappels;
 }
 
 /**
@@ -441,6 +443,22 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   const balayageQuotas = demarrerBalayageQuotas({ registre, source: clientSuperviseurPc });
   void balayageQuotas.passer();
 
+  // `☠` Troisième boucle, indépendante des deux autres : un rappel doit tirer
+  // PC éteint et sans qu'aucune session ne tourne — c'est précisément son objet.
+  // Elle réveille donc le fil, contrairement aux notifications de fin d'équipe
+  // qui, elles, attendent une raison. Ici la raison est l'échéance elle-même.
+  const balayageRappels = demarrerBalayageRappels({
+    registre,
+    reveil: {
+      remettre: async (id, texte) => {
+        if (conversationsPourNotifications === null) {
+          throw new Error('orchestrateur non assemblé — aucun fil à réveiller');
+        }
+        await conversationsPourNotifications.remettreNotification(id, texte);
+      },
+    },
+  });
+
   log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
 
   return {
@@ -451,5 +469,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     gestionnaireConversations,
     balayageTelemetrie,
     balayageQuotas,
+    balayageRappels,
   };
 }

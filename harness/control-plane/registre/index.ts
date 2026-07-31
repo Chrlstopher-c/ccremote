@@ -13,6 +13,7 @@ import { DepotComptes } from './comptes.ts';
 import { DepotConversations } from './conversations.ts';
 import { DepotPropositions } from './propositions.ts';
 import { DepotNotifications } from './notifications.ts';
+import { DepotRappels } from './rappels.ts';
 import { DepotEtats } from './etats.ts';
 import { DepotLots } from './lots.ts';
 import { DepotMissions } from './missions.ts';
@@ -34,6 +35,8 @@ export type {
   Lot,
   Mission,
   Notification,
+  Rappel,
+  EtatRappel,
   TypeNotification,
   OrigineApprobation,
   OrigineTransition,
@@ -53,6 +56,8 @@ export { DepotConversations } from './conversations.ts';
 export { DepotPropositions } from './propositions.ts';
 export type { CreationProposition } from './propositions.ts';
 export { DepotNotifications } from './notifications.ts';
+export { DepotRappels } from './rappels.ts';
+export type { CreationRappel } from './rappels.ts';
 export type { CreationNotification } from './notifications.ts';
 export type { AjoutEvenement, CreationConversation } from './conversations.ts';
 export { ETATS_HARNESS_ACTIFS, ETATS_HARNESS_TERMINAUX } from './types.ts';
@@ -76,6 +81,7 @@ export class Registre {
   public readonly conversations: DepotConversations;
   public readonly propositions: DepotPropositions;
   public readonly notifications: DepotNotifications;
+  public readonly rappels: DepotRappels;
 
   private readonly db: Database;
 
@@ -89,6 +95,7 @@ export class Registre {
     this.conversations = new DepotConversations(db);
     this.propositions = new DepotPropositions(db);
     this.notifications = new DepotNotifications(db);
+    this.rappels = new DepotRappels(db);
   }
 
   public get version(): number {

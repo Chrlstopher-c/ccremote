@@ -36,6 +36,14 @@ import {
   relancerEquipe,
 } from './outils-cycle-vie.ts';
 import { definirBudget } from './outils-budget.ts';
+import {
+  listerRappels,
+  mettreRappelEnPause,
+  modifierRappel,
+  programmerRappel,
+  reprendreRappel,
+  supprimerRappel,
+} from './outils-rappels.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type {
   ArreteurMission,
@@ -296,6 +304,101 @@ function outilsCycleVie(deps: DependancesServeurControle) {
   ];
 }
 
+/**
+ * Groupe « rappels » — l'orchestrateur agit sur le temps (migration 16).
+ *
+ * `☠` `deps.conversationId` vient de la CLOSURE du serveur, jamais d'un
+ * paramètre du modèle : il ne peut donc pas viser le rappel d'un autre fil, même
+ * en devinant son identifiant.
+ */
+function outilsRappels(deps: DependancesServeurControle) {
+  const fil = (): string | null => deps.conversationId ?? null;
+  const idRappel = z.string().describe('Identifiant du rappel, tel que rendu par `mes_rappels`.');
+  return [
+    tool(
+      'programmer_rappel',
+      "Programme un rappel sur CETTE conversation : à l'échéance, la consigne t'est réinjectée " +
+        'et tu reprends la main tout seul. C’est le seul moyen dont tu disposes d’agir dans le ' +
+        'temps — sans rappel, tu ne peux réagir qu’à un message de Chris ou à la fin d’une ' +
+        "équipe. Tu peux en poser plusieurs, ils sont indépendants. La consigne est injectée " +
+        'TELLE QUELLE : écris-la comme une instruction que tu te donnes à toi-même, pas comme ' +
+        'un titre. Période minimum 5 min — chaque tir réveille une session et coûte du quota.',
+      {
+        libelle: z.string().describe('Nom court, pour t’y retrouver et pour l’écran de Chris.'),
+        consigne: z.string().describe('Ce qui te sera réinjecté au déclenchement, mot pour mot.'),
+        periodeMinutes: z
+          .number()
+          .positive()
+          .nullable()
+          .describe('Récurrence en minutes (min. 5). `null` pour un rappel unique.'),
+        premierTirDansMinutes: z
+          .number()
+          .positive()
+          .nullable()
+          .optional()
+          .describe('Délai avant le premier tir. Absent ⇒ une période complète.'),
+        maxDeclenchements: z.number().int().positive().nullable().optional().describe('Plafond de tirs.'),
+      },
+      async ({ libelle, consigne, periodeMinutes, premierTirDansMinutes, maxDeclenchements }) =>
+        protege('programmer_rappel', () =>
+          programmerRappel(deps.registre, fil(), {
+            libelle,
+            consigne,
+            periodeMinutes,
+            premierTirDansMinutes,
+            maxDeclenchements,
+          }),
+        ),
+    ),
+    tool(
+      'mes_rappels',
+      'Tes rappels sur cette conversation : cadence, prochain tir, nombre de tirs, incidents. ' +
+        'Consulte-les avant d’en poser un nouveau — tu en as peut-être déjà un qui couvre le sujet.',
+      {},
+      async () => protege('mes_rappels', () => listerRappels(deps.registre, fil())),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'mettre_rappel_en_pause',
+      'Suspend un rappel sans le perdre : consigne, cadence et historique sont conservés, et ' +
+        '`reprendre_rappel` le relance. À préférer à la suppression dès que la consigne pourrait ' +
+        'resservir.',
+      { id: idRappel },
+      async ({ id }) => protege('mettre_rappel_en_pause', () => mettreRappelEnPause(deps.registre, fil(), id)),
+    ),
+    tool(
+      'reprendre_rappel',
+      'Relance un rappel en pause. Le cycle repart de maintenant : les tirs manqués pendant la ' +
+        'pause ne sont pas rattrapés. Un rappel terminé ne se reprend jamais.',
+      { id: idRappel },
+      async ({ id }) => protege('reprendre_rappel', () => reprendreRappel(deps.registre, fil(), id)),
+    ),
+    tool(
+      'modifier_rappel',
+      'Change le libellé, la consigne ou la cadence d’un rappel. Les champs omis ne bougent pas, ' +
+        'et le compteur de tirs comme la prochaine échéance sont conservés — corriger une phrase ' +
+        'ne relance pas le cycle.',
+      {
+        id: idRappel,
+        libelle: z.string().optional(),
+        consigne: z.string().optional(),
+        periodeMinutes: z.number().positive().nullable().optional().describe('Nouvelle cadence (min. 5).'),
+      },
+      async ({ id, libelle, consigne, periodeMinutes }) =>
+        protege('modifier_rappel', () =>
+          modifierRappel(deps.registre, fil(), id, { libelle, consigne, periodeMinutes }),
+        ),
+    ),
+    tool(
+      'supprimer_rappel',
+      'Supprime définitivement un rappel. Irréversible — préfère `mettre_rappel_en_pause` si la ' +
+        'consigne pourrait resservir.',
+      { id: idRappel },
+      async ({ id }) => protege('supprimer_rappel', () => supprimerRappel(deps.registre, fil(), id)),
+    ),
+  ];
+}
+
 function outilsBudget(deps: DependancesServeurControle) {
   return [
     tool(
@@ -428,6 +531,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsInspection(deps),
     ...outilsCycleVie(deps),
     ...outilsBudget(deps),
+    ...outilsRappels(deps),
     ...outilsContexte(deps),
     ...outilsExploration(deps),
     ...outilsRecherche(deps),

@@ -66,11 +66,14 @@ describe('surface d’outils (A.2.2)', () => {
   //   `carburant_parc` — l'autonomie était aveugle : quarante équipes lançables
   //     sans jamais savoir qu'on est à 95 % de la fenêtre 5 h. Les données
   //     existaient depuis le 23/07 ; personne ne les consultait.
+  //   les six outils de RAPPEL — il ne pouvait réagir qu'à un message de Chris
+  //     ou à la fin d'une équipe. Aucun moyen de dire « refais ça dans 10 min » :
+  //     il n'a pas d'horloge, et sa session ne tourne même pas entre deux tours.
   // ☠ Et non 13/14 : `permissions_en_attente` et `repondre_permission` sont
   // partis avec le bus d'escalade le 2026-07-31 — aucune demande ne l'a jamais
   // atteint, le classifieur du lead tranche seul (H-40). Ce test est le garde-fou
   // de la surface : un outil qui réapparaît sans décision doit le faire échouer.
-  test('expose exactement les 14 outils spécifiés — ni plus, ni moins', () => {
+  test('expose exactement les 20 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -88,6 +91,12 @@ describe('surface d’outils (A.2.2)', () => {
         'arreter_equipe',
         'relancer_equipe',
         'definir_budget',
+        'programmer_rappel',
+        'mes_rappels',
+        'mettre_rappel_en_pause',
+        'reprendre_rappel',
+        'modifier_rappel',
+        'supprimer_rappel',
       ].sort(),
     );
   });
