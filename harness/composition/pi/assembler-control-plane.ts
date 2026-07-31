@@ -26,7 +26,7 @@
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
 import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
-import { deciderAutorisation } from '../../control-plane/autonomie/index.ts';
+import { deciderAutorisation, fenetreOuverte } from '../../control-plane/autonomie/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
@@ -412,7 +412,25 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     signalerFinEquipe: async (missionId) => {
       const mission = registre.missions.lire(missionId);
       if (mission === null) return;
-      await notifications.signaler('equipe_terminee', mission);
+      // `☠` LE câblage qui manquait. `reveiller` existait, était testé, et
+      // n'était passé par PERSONNE — le motif « écrit, testé, branché sur rien »,
+      // commis le jour même où on le documentait. Conséquence réelle : pendant
+      // une fenêtre d'autonomie, session endormie, une fin d'équipe ne réveillait
+      // pas l'orchestrateur. La plage déléguée s'arrêtait donc à la première
+      // équipe, sans erreur, sans trace — exactement le silence qu'on cherche à
+      // supprimer depuis ce matin.
+      const conv =
+        mission.conversationId === null ? null : registre.conversations.lire(mission.conversationId);
+      const reveiller =
+        conv !== null &&
+        fenetreOuverte({
+          approbationHumaineAnterieure: false,
+          autoApprouveesDeja: 0,
+          fenetreDebut: conv.autonomieDebut,
+          fenetreFin: conv.autonomieFin,
+          maintenant: Date.now(),
+        });
+      await notifications.signaler('equipe_terminee', mission, { reveiller });
     },
   });
 
