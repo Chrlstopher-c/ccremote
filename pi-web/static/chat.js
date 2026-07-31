@@ -183,7 +183,7 @@ function renderConversationList() {
     return;
   }
   el.innerHTML = list.map(c => `
-    <div class="conv-item group w-full px-2.5 py-1.5 rounded-md text-[12.5px] flex items-center justify-between gap-1.5 cursor-pointer ${c.id === state.currentConvId ? 'nav-item active' : ''}" data-id="${c.id}" style="color: var(--ink-2);">
+    <div class="conv-item group w-full px-2.5 py-1.5 rounded-md text-[12.5px] flex items-center justify-between gap-1.5 cursor-pointer ${c.id === state.currentConvId ? 'nav-item active' : ''}" data-id="${c.id}" data-k="chat:${c.id}" data-menu="chat" style="color: var(--ink-2);">
       <span class="truncate">${escapeHtml(c.title)}</span>
       <button class="conv-delete shrink-0 p-0.5 rounded hover:bg-black/10 opacity-0 group-hover:opacity-100" data-id="${c.id}" title="Supprimer">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: var(--ink-3);"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

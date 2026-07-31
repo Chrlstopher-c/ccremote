@@ -554,11 +554,17 @@
   /* ☠ Les pilules du composer n'ont PAS de fond au repos : `bg-[var(--fill-
      uncontained-default)]` est transparent, le fond n'arrive qu'au survol. Un
      fond permanent en fait des boutons lourds là où ce sont des réglages. */
+  /* ☠ `:not(.composer-send)` — sans lui, ce sélecteur (0-2-1) écrasait
+     `.composer-send` (0-1-0) et rendait le bouton d'envoi INVISIBLE : fond
+     transparent, icône crème sur fond crème. Un sélecteur d'ambiance écrit pour
+     une famille d'éléments (les pilules de réglage) attrape tout ce qui partage
+     leur balise — le voisin qui n'est pas de la famille doit être exclu
+     nommément, pas espéré différent. */
   [data-view="harness-orchestrateur"] .composer-foot .pill,
   [data-view="harness-orchestrateur"] .composer-foot select,
-  [data-view="harness-orchestrateur"] .composer-foot button { background: transparent; }
+  [data-view="harness-orchestrateur"] .composer-foot button:not(.composer-send) { background: transparent; }
   [data-view="harness-orchestrateur"] .composer-foot .pill:hover,
-  [data-view="harness-orchestrateur"] .composer-foot button:hover { background: var(--bg-3); }
+  [data-view="harness-orchestrateur"] .composer-foot button:not(.composer-send):hover { background: var(--bg-3); }
 
   /* ☠ Les actions d'un message n'apparaissent qu'au SURVOL (`opacity-0
      group-hover/msg:opacity-100`). Toujours visibles, elles font du bruit sous
@@ -694,3 +700,21 @@
   .h-liste .conv-item { padding: 12px 14px !important; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); font-size: 14.5px !important; }
   .h-liste .conv-item:hover { border-color: var(--line-2); background: var(--bg-2); }
+
+  /* ===== menu contextuel (clic droit / appui long) ===== */
+  /* ☠ `position: fixed` et pas `absolute` : les listes vivent dans des conteneurs
+     qui défilent, un menu ancré au document glisserait avec le contenu. */
+  .h-ctx { position: fixed; z-index: 60; min-width: 208px; padding: 5px;
+    border-radius: 12px; border: 1px solid var(--line);
+    background: var(--card); box-shadow: 0 12px 32px rgba(31,30,29,.16);
+    animation: ctxIn .11s ease-out; }
+  @keyframes ctxIn { from { opacity: 0; transform: scale(.97) translateY(-3px); } to { opacity: 1; transform: none; } }
+  .h-ctx-item { display: block; width: 100%; text-align: left; padding: 7px 10px;
+    border-radius: 8px; font-size: 13px; color: var(--ink-2); background: transparent; }
+  .h-ctx-item:hover:not([disabled]) { background: var(--bg-2); color: var(--ink); }
+  .h-ctx-item[disabled] { opacity: .38; cursor: default; }
+  .h-ctx-item.danger { color: var(--err); }
+  .h-ctx-item.danger:hover:not([disabled]) { background: var(--err-soft); color: var(--err); }
+  .h-ctx-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+  /* Un objet manipulable ne doit pas partir en sélection de texte sous l'appui long. */
+  [data-menu] { -webkit-touch-callout: none; }

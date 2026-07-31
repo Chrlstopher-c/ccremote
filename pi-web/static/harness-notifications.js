@@ -49,8 +49,8 @@ function hNotifCarte(n) {
       : '<span style="color: var(--warn, var(--ink-3));">· en attente de réveil</span>';
 
   return `
-    <div class="hnotif-card rounded-lg border px-3.5 py-3 flex gap-3" data-notif="${hEchappe(n.id)}"
-         data-conv="${hEchappe(n.conversationId || '')}"
+    <div class="hnotif-card rounded-lg border px-3.5 py-3 flex gap-3" data-menu="notif" data-notif="${hEchappe(n.id)}"
+         data-conv="${hEchappe(n.conversationId || '')}" data-k="notif:${hEchappe(n.id)}"
          style="border-color: var(--line); background: ${fond}; ${cliquable}">
       <div style="color: ${couleur}; flex-shrink:0; margin-top:1px;">${hNotifIcone(n.type)}</div>
       <div class="min-w-0 flex-1">

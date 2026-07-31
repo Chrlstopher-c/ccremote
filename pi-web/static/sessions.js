@@ -23,7 +23,7 @@ async function renderSessions() {
     return;
   }
   list.innerHTML = sessions.map(s => `
-    <div class="rounded-xl border p-4 lift" style="border-color: var(--line); background: var(--card);">
+    <div class="rounded-xl border p-4 lift" data-menu="session" data-name="${escapeHtml(s.name)}" data-k="sess:${escapeHtml(s.name)}" style="border-color: var(--line); background: var(--card);">
       <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2.5">
           <span class="w-2 h-2 rounded-full ${s.attached ? 'dot-live' : ''}" style="background: ${s.attached ? 'var(--ok)' : 'var(--ink-3)'};"></span>

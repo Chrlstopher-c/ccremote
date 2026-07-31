@@ -148,7 +148,8 @@ function hRenderFils() {
   }
   el.innerHTML = items.map((c) => {
     const ctx = typeof c.contextPct === 'number' ? `contexte ${c.contextPct} %` : 'contexte non mesuré';
-    return `<button class="h-fil" onclick="hOuvrirFil('${c.id}')">
+    return `<button class="h-fil" onclick="hOuvrirFil('${c.id}')"
+      data-k="fil:${escapeHtml(c.id)}" data-menu="fil" data-id="${escapeHtml(c.id)}" data-titre="${escapeHtml(c.titre)}">
       <span class="h-fil-dot" style="background:${c.active ? 'var(--ok)' : 'var(--line-2)'}"></span>
       <span class="h-fil-txt">
         <span class="h-fil-t">${escapeHtml(c.titre)}</span>

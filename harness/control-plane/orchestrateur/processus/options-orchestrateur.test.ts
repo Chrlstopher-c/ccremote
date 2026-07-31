@@ -14,6 +14,7 @@ import {
   OUTILS_INTERDITS_ORCHESTRATEUR,
   OUTILS_ORCHESTRATEUR,
 } from './options-orchestrateur.ts';
+import { MANDAT_ORCHESTRATEUR } from './mandat.ts';
 import type { DecisionDemarrage } from './identite.ts';
 
 let registre: Registre;
@@ -69,6 +70,20 @@ describe('composerOptionsOrchestrateur — acceptation (a)', () => {
     const options = composerOptionsOrchestrateur({ decision: decisionFroide, serveurControle: creerServeurMcpControle(depsServeur) });
     const truque = { ...options, tools: [...OUTILS_ORCHESTRATEUR, 'Bash'] };
     expect(() => assertInvariantsOrchestrateur(truque)).toThrow(OptionsOrchestrateurError);
+  });
+
+  test('☠ tout outil que le mandat annonce est réellement dans tools', () => {
+    // Le mandat promettait « tu as la RECHERCHE WEB (WebSearch, WebFetch) »
+    // alors que l'allowlist ne les contenait pas : le modèle ne voyait pas les
+    // outils et rendait un « je ne peux pas » que rien n'expliquait — aucune
+    // erreur, nulle part. Ce test relit le prompt et exige que chaque outil
+    // qu'il nomme existe pour de vrai.
+    const options = composerOptionsOrchestrateur({ decision: decisionFroide, serveurControle: creerServeurMcpControle(depsServeur) });
+    const tools = options.tools as string[];
+    const candidats = ['WebSearch', 'WebFetch', 'Read', 'Grep', 'Glob', 'AskUserQuestion'];
+    const annonces = candidats.filter((nom) => MANDAT_ORCHESTRATEUR.includes(nom));
+    expect(annonces.length).toBeGreaterThan(0);
+    for (const nom of annonces) expect(tools).toContain(nom);
   });
 
   test('☠ disallowedTools amputé (sans Write) lève à l’assertion', () => {

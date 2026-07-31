@@ -25,8 +25,17 @@ export const MODELE_ORCHESTRATEUR = 'opus';
  * c'est le mécanisme natif de désambiguïsation (A.3.2), pas une réimplémentation
  * maison. `Read`/`Grep`/`Glob` sont « le jeu minimal de lecture locale » d'A.1.1
  * — utile pour consulter un mandat ou une note, jamais pour agir sur un projet.
+ *
+ * `☠` `WebSearch`/`WebFetch` manquaient alors que `MANDAT_ORCHESTRATEUR` annonce
+ * en toutes lettres « tu as la RECHERCHE WEB ». Une capacité promise dans le
+ * prompt et absente de l'allowlist ne produit pas une erreur lisible : le modèle
+ * ne voit tout simplement pas l'outil, et rend un « je ne peux pas » que rien
+ * n'explique. Le prompt et `tools` décrivent la même chose — ils changent
+ * ensemble ou ils mentent. Ces deux outils lisent, ils n'agissent pas :
+ * l'acceptation (a) (ni Bash, ni Write, ni Edit) reste entière.
  */
-export const OUTILS_ORCHESTRATEUR: readonly string[] = ['Read', 'Grep', 'Glob', 'AskUserQuestion'];
+export const OUTILS_ORCHESTRATEUR: readonly string[] =
+  ['Read', 'Grep', 'Glob', 'AskUserQuestion', 'WebSearch', 'WebFetch'];
 
 /** Défense en profondeur — mêmes noms qu'absents de `OUTILS_ORCHESTRATEUR`, jamais un motif scopé ici : on VEUT amputer la capacité, pas seulement borner un danger (contrairement à H-41/plancher-deni, qui concerne les équipes). */
 export const OUTILS_INTERDITS_ORCHESTRATEUR: readonly string[] = ['Bash', 'Write', 'Edit', 'Agent'];

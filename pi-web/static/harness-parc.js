@@ -36,7 +36,9 @@ function hMcardTemplate(m) {
   else if (m.state === 'echec') footExtra = `<span>${hMoney(m.cost)} — arrêtée par le juge : boucle détectée</span>`;
   else footExtra = `<span>${hMoney(m.cost)}</span><span class="divider-dot"></span><span>terminée il y a ${m.doneAgo || '—'}</span>`;
 
-  return `<button class="${cls.join(' ')}" onclick="hOpenMission('${m.id}')">
+  return `<button class="${cls.join(' ')}" onclick="hOpenMission('${m.id}')"
+    data-k="mission:${hEchappe(m.id)}" data-menu="mission" data-id="${hEchappe(m.id)}"
+    data-etat="${hEchappe(m.state)}" data-titre="${hEchappe(m.title)}">
     ${actStrip}
     <div class="row1">
       <span class="sdot ${dotLive}" style="background:${dotColor};"></span>
@@ -83,19 +85,13 @@ async function hRenderParc() {
   html += `<div class="sec-title" style="margin-top:22px;">Au repos et arrêtées</div>`;
   html += restM.length ? restM.map(hMcardTemplate).join('') : `<div class="empty-state card"><div class="t">Rien au repos</div></div>`;
 
-  // ☠ N'écrire QUE si le rendu diffère. Réassigner un innerHTML identique
-  // détruit et recrée tous les nœuds — invisible sur un clic, très visible sur
-  // une boucle de 4 s (clignotement, sélection de texte perdue).
-  const corps = document.getElementById('hParcBody');
-  if (corps.innerHTML !== html) corps.innerHTML = html;
+  // ☠ Patch ciblé, pas réécriture : le garde « html différent » ne servait à rien
+  // ici, puisqu'un seul « il y a 4 min » qui bouge sur une carte suffisait à
+  // réécrire tout le corps — donc à rejouer l'animation d'entrée de TOUTES les
+  // cartes, en boucle, toutes les 4 s. Voir `harness-patch.js`.
+  hPatcher(document.getElementById('hParcBody'), html);
   hRenderTeamTree(missions);
   hRenderQuotaStrip();
-}
-
-/** ☠ Écrit seulement si le contenu change — voir hRenderParc : un innerHTML
- *  identique réassigné recrée quand même tous les nœuds, et ça se voit en boucle. */
-function hEcrireSiDifferent(el, html) {
-  if (el && el.innerHTML !== html) el.innerHTML = html;
 }
 
 async function hRenderTeamTree(missionsMaybe) {

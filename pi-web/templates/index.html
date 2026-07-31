@@ -459,6 +459,11 @@
 <div id="toasts" class="fixed bottom-5 right-5 z-[60] space-y-2"></div>
 
 <script src="/static/core.js?v={{ v }}"></script>
+<!-- ☠ Avant tout rendu : `hPatcher` est appelé par les vues qui se rafraîchissent
+     en boucle, et `hEchappe` par les dialogues. Aucun de ces modules ne rend quoi
+     que ce soit au chargement — seul l'ordre de DÉFINITION compte. -->
+<script src="/static/harness-patch.js?v={{ v }}"></script>
+<script src="/static/harness-dialogue.js?v={{ v }}"></script>
 <script src="/static/sidebar.js?v={{ v }}"></script>
 <script src="/static/chat.js?v={{ v }}"></script>
 <script src="/static/sessions.js?v={{ v }}"></script>
@@ -487,5 +492,8 @@
 <script src="/static/harness-autonomie.js?v={{ v }}"></script>
 <script src="/static/harness-rappels.js?v={{ v }}"></script>
 <script src="/static/harness-safety.js?v={{ v }}"></script>
+<!-- Clic droit : le moteur d'abord, les menus ensuite (ils l'appellent au chargement). -->
+<script src="/static/harness-menu-contextuel.js?v={{ v }}"></script>
+<script src="/static/harness-menus.js?v={{ v }}"></script>
 </body>
 </html>

@@ -259,7 +259,7 @@ async function hOpenConversation(id) {
 // qui permet au bloc partiel de grandir en place, token après token.
 function hEnsureAssistant(chat) {
   if (hOrch.cur && hOrch.cur.isConnected) return hOrch.cur;
-  const a = document.createElement('div'); a.className = 'bubble-a msg-wrap';
+  const a = document.createElement('div'); a.className = 'bubble-a msg-wrap'; a.dataset.menu = 'parole';
   // Copie tout le texte rendu du groupe (hors réflexion repliée et outils).
   // ☠ `.h-say` depuis le passage au vocabulaire de la page mission : le sélecteur
   // `.md` seul ne trouvait plus rien et le bouton copiait une chaîne vide.
@@ -404,6 +404,7 @@ function hBlocNode(type, contenu, live) {
 function hBulleOperateur(texte) {
   const u = document.createElement('div');
   u.className = 'bubble-u msg-wrap';
+  u.dataset.menu = 'parole';
   const t = document.createElement('span');
   t.textContent = texte;
   u.append(t, hBoutonCopier(() => texte));
