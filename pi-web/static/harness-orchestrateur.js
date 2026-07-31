@@ -312,32 +312,17 @@ function hBlocNode(type, contenu, live) {
       d.querySelector('.think-body > div').textContent = contenu;
       return d;
     }
-    const b = document.createElement('button');
-    b.className = 'h-case';
-    b.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>
-      <span class="lb"></span><span class="cv">›</span>`;
-    b.querySelector('.lb').textContent = String(contenu).replace(/\s+/g, ' ').trim();
-    b.addEventListener('click', () => HSheets.ouvrir({
-      titre: 'Thought process',
-      html: `<div class="h-think">${hMarkdown(contenu)}</div>`,
-    }));
-    return b;
+    const cle = HValise.enregistrer(() => `<div class="h-think">${hMarkdown(contenu)}</div>`);
+    return HValise.noeud(String(contenu).replace(/\s+/g, ' ').trim(), cle,
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>');
   }
   if (type === 'outil') {
-    // ☠ Une carte par appel d'outil noyait le fil : sur un tour d'orchestrateur,
-    // les outils sont l'essentiel du volume et l'accessoire du sens. Une ligne,
-    // et le chemin complet dans la feuille pour savoir d'où vient l'outil MCP.
-    const b = document.createElement('button');
-    b.className = 'h-case';
-    b.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l5 5-5 5M12 17h8"/></svg>
-      <span class="lb"></span><span class="cv">›</span>`;
-    b.querySelector('.lb').textContent = `Called ${hToolLabel(contenu)}`;
-    b.addEventListener('click', () => HSheets.ouvrir({
-      titre: hToolLabel(contenu),
-      html: `<div class="h-lbl">Outil appelé</div><div class="h-blk">${escapeHtml(contenu)}</div>`
-        + '<div class="h-note">Le harness journalise l’appel, pas son résultat (H-45).</div>',
-    }));
-    return b;
+    // ☠ Une carte par appel noyait le fil : sur un tour d'orchestrateur les
+    // outils sont l'essentiel du volume et l'accessoire du sens.
+    const cle = HValise.enregistrer(() =>
+      `<div class="h-lbl">Outil appelé</div><div class="h-blk">${escapeHtml(contenu)}</div>`
+      + '<div class="h-note">Le harness journalise l’appel, pas son résultat (H-45).</div>');
+    return HValise.noeud(`Called ${hToolLabel(contenu)}`, cle);
   }
   if (type === 'erreur') {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;

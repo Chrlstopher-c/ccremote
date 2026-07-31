@@ -23,8 +23,8 @@ const H_ICO_HORLOGE =
   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>';
 
 function hValiseOutilsTemplate(seg, index) {
-  return `<button class="h-case" onclick="hOuvrirValise(${index})">
-    <span class="lb">${escapeHtml(hLibelleValise(seg.items))}</span>${H_ICO_CHEVRON}</button>`;
+  const cle = HValise.enregistrer(() => hCorpsValiseOutils(index));
+  return HValise.html(hLibelleValise(seg.items), cle);
 }
 
 /**
@@ -34,8 +34,8 @@ function hValiseOutilsTemplate(seg, index) {
  */
 function hValisePenseesTemplate(seg, index) {
   const apercu = seg.items[0].text.replace(/\s+/g, ' ').trim();
-  return `<button class="h-case" onclick="hOuvrirValise(${index})">${H_ICO_HORLOGE}
-    <span class="lb">${escapeHtml(apercu)}</span>${H_ICO_CHEVRON}</button>`;
+  const cle = HValise.enregistrer(() => `<div class="h-think">${seg.items.map((e) => hMarkdown(e.text)).join('')}</div>`);
+  return HValise.html(apercu, cle, H_ICO_HORLOGE);
 }
 
 /**
@@ -48,8 +48,8 @@ function hPermissionTemplate(ev) {
   const commande = c.command || c.file_path || c.path || ev.text;
   if (!ev.pending) {
     const issue = ev.resolved || (ev.auto ? 'résolue par le lead' : 'traitée');
-    return `<button class="h-case" onclick="hVoirPermission(${JSON.stringify(escapeHtml(ev.text)).replace(/"/g, '&quot;')})">
-      <span class="lb">${escapeHtml(ev.tool || 'Outil')} · ${escapeHtml(issue)}</span>${H_ICO_CHEVRON}</button>`;
+    const cle = HValise.enregistrer(() => `<div class="h-blk">${escapeHtml(commande)}</div>`);
+    return HValise.html(`${ev.tool || 'Outil'} · ${issue}`, cle);
   }
   return `<div class="h-perm">
     <div class="ph"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v5M12 17h.01"/><circle cx="12" cy="12" r="9.5"/></svg>

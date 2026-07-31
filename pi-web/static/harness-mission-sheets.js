@@ -24,57 +24,38 @@ function hVerbeAffiche(outil) {
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
-function hOuvrirValise(index) {
+/**
+ * Corps déplié d'une valise d'outils : une carte par appel, chacune ouvrant
+ * sa commande et ses arguments. ☠ En place dans le fil, jamais en feuille —
+ * c'est ce que fait la vue Claude Code, et ça garde la lecture continue.
+ */
+function hCorpsValiseOutils(index) {
   const seg = hSegmentsCourants[index];
-  if (!seg) return;
-  if (seg.genre === 'pensees') {
-    const html = `<div class="h-think">${seg.items.map((e) => hMarkdown(e.text)).join('')}</div>`;
-    HSheets.ouvrir({ titre: 'Thought process', html });
-    return;
-  }
-  const lignes = seg.items.map((ev, i) => {
+  if (!seg) return '';
+  return seg.items.map((ev) => {
     const c = hParseOutil(ev.text);
     const chemin = c.file_path || c.path || c.notebook_path;
-    const mono = chemin ? ' mono' : '';
-    const arg = escapeHtml(chemin ? chemin.split('/').pop() : hResumeOutil(ev));
-    return `<button class="h-step" onclick="hOuvrirOutil(${index},${i})">
-      <span class="si">${hIconeOutil(ev.tool)}</span>
-      <span class="sv"><b>${escapeHtml(hVerbeAffiche(ev.tool))}</b> <span class="${mono}">${arg}</span></span>
-    </button>`;
+    const titre = `${hVerbeAffiche(ev.tool)} ${chemin ? chemin.split('/').pop() : hResumeOutil(ev)}`;
+    const cle = HValise.enregistrer(() => hCorpsOutil(ev));
+    return HValise.carte(titre, cle, !!chemin);
   }).join('');
-  HSheets.ouvrir({ titre: hLibelleValise(seg.items), html: lignes });
 }
 
 /**
- * Détail d'un appel. ☠ On ne rend que les champs RÉELLEMENT relevés par le PC
- * (`CHAMPS_OUTIL` de `collecteur-telemetrie.ts`) — le résultat de l'outil n'est
- * pas capté, et fabriquer une section « Output » vide serait un mensonge poli.
+ * ☠ On ne rend que les champs RÉELLEMENT relevés par le PC (`CHAMPS_OUTIL` de
+ * `collecteur-telemetrie.ts`). Le résultat de l'outil n'est pas capté : afficher
+ * une section « Output » vide serait un mensonge poli.
  */
-function hOuvrirOutil(indexSeg, indexOutil) {
-  const seg = hSegmentsCourants[indexSeg];
-  const ev = seg && seg.items[indexOutil];
-  if (!ev) return;
+function hCorpsOutil(ev) {
   const c = hParseOutil(ev.text);
   const bloc = (titre, valeur) => (valeur
     ? `<div class="h-lbl">${titre}</div><div class="h-blk">${escapeHtml(valeur)}</div>` : '');
-  const html =
-    (c.description ? `<div class="h-step-desc">${escapeHtml(c.description)}</div>` : '') +
-    bloc('Command', c.command) +
-    bloc('File', c.file_path || c.path || c.notebook_path) +
-    bloc('Pattern', c.pattern) +
-    bloc('Query', c.query) +
-    bloc('URL', c.url) +
-    bloc('Prompt', c.prompt) +
-    `<div class="h-note">Relevé à ${escapeHtml(ev.ts)}. Le harness journalise l’appel, pas son résultat (H-45).</div>`;
-  HSheets.ouvrir({
-    titre: ev.tool || 'Outil',
-    html,
-    retour: () => hOuvrirValise(indexSeg),
-  });
-}
-
-function hVoirPermission(texte) {
-  HSheets.ouvrir({ titre: 'Autorisation', html: `<div class="h-blk">${texte}</div>` });
+  return (c.description && c.command ? `<div class="h-step-desc">${escapeHtml(c.description)}</div>` : '')
+    + bloc('Command', c.command)
+    + bloc('File', c.file_path || c.path || c.notebook_path)
+    + bloc('Pattern', c.pattern) + bloc('Query', c.query)
+    + bloc('URL', c.url) + bloc('Prompt', c.prompt)
+    + `<div class="h-note">Relevé à ${escapeHtml(ev.ts)}. Le harness journalise l’appel, pas son résultat (H-45).</div>`;
 }
 
 // ------------------------------------------------------------------ détails
