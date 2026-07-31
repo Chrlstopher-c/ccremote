@@ -26,11 +26,21 @@ const log = compositionLogger.child({ composant: 'balayage-quotas' });
 
 /**
  * `☠` Assez court pour que l'écran soit « à la seconde » à l'échelle d'une
- * fenêtre de 5 h, assez long pour ne pas marteler l'API. Deux requêtes GET
- * toutes les 20 s ne coûtent NI token NI process — c'est ce qui a permis de
- * quitter les 10 min de la sonde SDK.
+ * fenêtre de 5 h, assez long pour ne pas marteler l'API. Aucune de ces requêtes
+ * ne coûte NI token NI process — c'est ce qui a permis de quitter les 10 min de
+ * la sonde SDK.
+ *
+ * `☠` C'était 20 s, et l'endpoint nous a mis en 429 CHRONIQUE : à raison de
+ * deux comptes × deux endpoints, on émettait 12 requêtes/minute en continu,
+ * 24 h/24, depuis le 24/07. Combiné à la rotation (un compte par passe) et à
+ * l'abandon de `/profile`, une minute nous met à ~1 requête/minute — douze fois
+ * moins. Chaque compte reste mesuré toutes les deux minutes, ce qui est
+ * largement « temps réel » face à des fenêtres de 5 h et 7 jours.
+ *
+ * La leçon vaut au-delà des quotas : sonder plus souvent n'informe pas plus
+ * quand la source rationne — ça finit par ne plus informer du tout.
  */
-export const PERIODE_SONDE_QUOTAS_HTTP_MS = 20_000;
+export const PERIODE_SONDE_QUOTAS_HTTP_MS = 60_000;
 
 /** Les jetons sont relevés bien plus rarement que les quotas : ils vivent ~8 h. */
 export const PERIODE_RELEVE_JETONS_MS = 300_000;
