@@ -25,6 +25,7 @@ import {
   rapportEquipe,
   suivreEquipe,
   autonomieDuFil,
+  carburantParc,
   listerProjets,
 } from './outils-inspection.ts';
 import {
@@ -191,6 +192,17 @@ function outilsInspection(deps: DependancesServeurControle) {
         'contrainte réelle — arbitre entre lancer une équipe de plus et consolider.',
       {},
       async () => protege('mon_autonomie', () => autonomieDuFil(deps.registre, deps.conversationId ?? null)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'carburant_parc',
+      "Où en est le quota de chaque compte, et ce que ça implique pour ta prochaine " +
+        'décision. À consulter AVANT de proposer un mandat quand tu travailles en ' +
+        "autonomie, et dès qu'une équipe se termine. Une équipe lancée à 95 % de la " +
+        'fenêtre 5 h sera coupée en route, et une équipe coupée a coûté tout ce ' +
+        "qu'elle a consommé pour rien. L'outil te rend un conseil explicite : suis-le.",
+      {},
+      async () => protege('carburant_parc', () => carburantParc(deps.registre)),
       { annotations: { readOnlyHint: true } },
     ),
     tool('lister_projets', 'Projets connus et leur worktree.', {}, async () =>

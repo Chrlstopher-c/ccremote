@@ -317,3 +317,100 @@ export function autonomieDuFil(
     return echecInattendu(intention, erreur);
   }
 }
+
+/**
+ * Seuils d'utilisation à partir desquels le carburant change la conduite.
+ *
+ * `☠` En POURCENTAGE, jamais en dollars (H-70, mesuré) : sur abonnement, les
+ * champs `*_dollars` de l'API d'usage sont `null`. Un arbitrage bâti dessus
+ * verrait 0 % en permanence et laisserait saturer la fenêtre sans prévenir.
+ */
+const CARBURANT_TENDU_PCT = 75;
+const CARBURANT_CRITIQUE_PCT = 90;
+
+/** Délai relatif lisible — « 42 min », « 3 h 20 », « expirée ». */
+function delaiLisible(resetMs: number | null, maintenant: number): string {
+  if (resetMs === null) return 'reset inconnu';
+  const restant = resetMs - maintenant;
+  if (restant <= 0) return 'fenêtre expirée';
+  const minutes = Math.round(restant / 60_000);
+  if (minutes < 60) return `reset dans ${minutes} min`;
+  return `reset dans ${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
+}
+
+/**
+ * `☠` La CONSIGNE, pas seulement la mesure. Un pourcentage brut ne fait rien
+ * changer à la conduite d'un modèle : il faut lui dire ce que ce chiffre
+ * implique pour sa prochaine décision. C'est la différence entre une jauge et
+ * un arbitrage.
+ */
+function conseilCarburant(pireUtil: number, compteSain: boolean): string {
+  if (!compteSain) {
+    return (
+      'AUCUN compte disponible : tous saturés. Ne lance rien — un dispatch ' +
+      "échouera ou basculera en surcoût payant. Attends le reset le plus proche, " +
+      'et dis-le à Chris plutôt que de réessayer en boucle.'
+    );
+  }
+  if (pireUtil >= CARBURANT_CRITIQUE_PCT) {
+    return (
+      `Carburant CRITIQUE (${pireUtil} %). Ne lance plus de nouvelle équipe : ` +
+      'termine et consolide ce qui tourne. Une équipe démarrée maintenant sera ' +
+      'coupée en cours de route, et une équipe coupée coûte tout ce qu’elle a ' +
+      'consommé pour rien.'
+    );
+  }
+  if (pireUtil >= CARBURANT_TENDU_PCT) {
+    return (
+      `Carburant TENDU (${pireUtil} %). Préfère un mandat court et bien borné à ` +
+      'un gros chantier. Si l’objectif demande une grosse équipe, attends le reset ' +
+      'et occupe la fenêtre avec un travail plus léger qui sert le même but.'
+    );
+  }
+  return `Carburant CONFORTABLE (${pireUtil} %). Rien ne t’empêche de lancer.`;
+}
+
+/**
+ * Où en est le carburant du parc — et ce que ça implique pour la suite.
+ *
+ * `☠` Sans cet outil, l'autonomie est aveugle : l'orchestrateur pouvait lancer
+ * quarante équipes dans sa fenêtre sans jamais savoir qu'il était à 95 % de sa
+ * fenêtre 5 h. Les données existaient (`balayage-quotas` tourne depuis le 23/07,
+ * les jauges sont à l'écran) — il n'avait ni moyen de les lire ni raison de s'en
+ * servir. Une mesure que personne ne consulte ne protège de rien.
+ */
+export function carburantParc(registre: Registre, maintenant: number = Date.now()): ContratRetour {
+  const intention = 'état du carburant du parc';
+  try {
+    const comptes = registre.comptes.lister();
+    if (comptes.length === 0) return applique(intention, 'aucun compte enregistré au registre.');
+
+    const disponibles = new Set(registre.comptes.listerDisponibles(maintenant).map((c) => c.id));
+    let pireUtil = 0;
+    const lignes: string[] = [];
+
+    for (const compte of comptes) {
+      const quotas = registre.comptes.listerQuotas(compte.id);
+      const cinqH = quotas.find((q) => q.typeFenetre === 'five_hour');
+      const septJ = quotas.find((q) => q.typeFenetre === 'seven_day');
+      const util = cinqH?.utilisation ?? null;
+      if (util !== null && util > pireUtil && disponibles.has(compte.id)) pireUtil = util;
+      const etat = disponibles.has(compte.id) ? 'disponible' : 'ÉCARTÉ (saturé)';
+      const details = [
+        `5 h : ${util === null ? 'non mesuré' : `${util} %`} · ${delaiLisible(cinqH?.resetA ?? null, maintenant)}`,
+        `7 j : ${septJ?.utilisation === null || septJ === undefined ? 'non mesuré' : `${septJ.utilisation} %`}`,
+      ];
+      // `☠` Le surcoût est distinct du statut : `rejected` NE COUPE PAS la
+      // session (H-63.1, mesuré), elle continue en `extra_usage` PAYANT. Taire
+      // ce cas ferait dépenser de l'argent réel sans que personne ne le sache.
+      if (cinqH?.utiliseOverage === true) details.push('⚠ EN SURCOÛT PAYANT');
+      lignes.push(`${compte.id} — ${etat} · ${details.join(' · ')}`);
+    }
+
+    lignes.push('', conseilCarburant(pireUtil, disponibles.size > 0));
+    return applique(intention, lignes.join('\n'));
+  } catch (erreur) {
+    journal.error({ err: erreur }, 'carburantParc en échec');
+    return echecInattendu(intention, erreur);
+  }
+}

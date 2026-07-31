@@ -63,11 +63,14 @@ describe('surface d’outils (A.2.2)', () => {
   //     synthèse, alors qu'`envoyer_a_equipe` existe et n'interrompt rien.
   //   `mon_autonomie` — il ne peut pas DEVINER ce qu'il a le droit de lancer :
   //     la fenêtre vit au registre et son prompt est écrit une fois pour toutes.
+  //   `carburant_parc` — l'autonomie était aveugle : quarante équipes lançables
+  //     sans jamais savoir qu'on est à 95 % de la fenêtre 5 h. Les données
+  //     existaient depuis le 23/07 ; personne ne les consultait.
   // ☠ Et non 13/14 : `permissions_en_attente` et `repondre_permission` sont
   // partis avec le bus d'escalade le 2026-07-31 — aucune demande ne l'a jamais
   // atteint, le classifieur du lead tranche seul (H-40). Ce test est le garde-fou
   // de la surface : un outil qui réapparaît sans décision doit le faire échouer.
-  test('expose exactement les 13 outils spécifiés — ni plus, ni moins', () => {
+  test('expose exactement les 14 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -76,6 +79,7 @@ describe('surface d’outils (A.2.2)', () => {
         'rapport_equipe',
         'suivre_equipe',
         'mon_autonomie',
+        'carburant_parc',
         'lister_projets',
         'historique_equipe',
         'creer_equipe',
@@ -94,7 +98,7 @@ describe('surface d’outils (A.2.2)', () => {
   });
 
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
-    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'mon_autonomie', 'lister_projets', 'historique_equipe'];
+    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'mon_autonomie', 'carburant_parc', 'lister_projets', 'historique_equipe'];
     const outils = construireOutilsControle(deps);
     for (const nom of inspection) {
       const outil = outils.find((o) => o.name === nom);
