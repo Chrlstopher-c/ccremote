@@ -150,6 +150,20 @@ const HarnessAPI = (() => {
     },
     async markAllNotificationsRead() { return ecrireReel('/notifications/read-all', {}); },
 
+    // Rappels d'un fil (migration 16) — RÉEL. La création et la rédaction des
+    // consignes appartiennent à l'orchestrateur : l'écran voit et contrôle.
+    async getRappels(conversationId) {
+      const r = await lireReel(`/orchestrator/conversations/${encodeURIComponent(conversationId)}/rappels`);
+      if (r.erreur) return { rappels: [], erreur: r.erreur };
+      return { rappels: Array.isArray(r.data) ? r.data : [] };
+    },
+    async actionRappel(conversationId, rappelId, action) {
+      return ecrireReel(
+        `/orchestrator/conversations/${encodeURIComponent(conversationId)}/rappels/${encodeURIComponent(rappelId)}/${action}`,
+        {},
+      );
+    },
+
     // Fenêtre d'autonomie d'un fil (migration 15). `start`/`end` à null = retrait.
     async setAutonomie(conversationId, start, end, goal) {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(conversationId)}/autonomie`, { start, end, goal });

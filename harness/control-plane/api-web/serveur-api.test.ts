@@ -463,3 +463,86 @@ describe('notifications — le canal asynchrone est réellement servi', () => {
     expect((corps['data'] as { notifications: unknown[] }).notifications).toHaveLength(1);
   });
 });
+
+/**
+ * `☠` Le canal des rappels traverse trois frontières (registre → route → écran)
+ * et chacune peut mentir en silence : une action qui « réussit » sans rien faire
+ * laisserait Chris croire qu'il a coupé un rappel qui continue de tirer. Ces
+ * tests partent du VRAI serveur, pas du dépôt.
+ */
+describe('rappels — vus et pilotés depuis l’interface', () => {
+  function semerRappel(conversationId = 'conv-a'): string {
+    const id = `rap-${conversationId}`;
+    registre.rappels.creer({
+      id,
+      conversationId,
+      libelle: 'veille IA',
+      consigne: 'résume les sorties françaises depuis le dernier tir',
+      prochaineA: MAINTENANT + 600_000,
+      periodeMs: 600_000,
+    });
+    return id;
+  }
+
+  async function agir(conv: string, rappel: string, action: string): Promise<number> {
+    const s = serveur ?? demarrer();
+    const rep = await fetch(
+      `http://127.0.0.1:${s.port}/api/harness/orchestrator/conversations/${conv}/rappels/${rappel}/${action}`,
+      { method: 'POST' },
+    );
+    return rep.status;
+  }
+
+  test('GET rend les rappels du fil, consigne entière comprise', async () => {
+    semerRappel();
+    const { statut, corps } = await lire('/orchestrator/conversations/conv-a/rappels');
+    expect(statut).toBe(200);
+    const data = corps['data'] as { label: string; instruction: string; everyMinutes: number }[];
+    expect(data).toHaveLength(1);
+    // `☠` La consigne ENTIÈRE : c'est ce que l'orchestrateur recevra mot pour
+    // mot. Un libellé seul ne dit rien de ce qui sera réellement injecté.
+    expect(data[0]?.instruction).toContain('sorties françaises');
+    expect(data[0]?.everyMinutes).toBe(10);
+  });
+
+  test('un fil ne voit jamais les rappels d’un autre', async () => {
+    semerRappel('conv-a');
+    semerRappel('conv-b');
+    const { corps } = await lire('/orchestrator/conversations/conv-a/rappels');
+    expect(corps['data']).toHaveLength(1);
+  });
+
+  test('pause puis reprise, par la route réelle', async () => {
+    const id = semerRappel();
+    expect(await agir('conv-a', id, 'pause')).toBe(200);
+    expect(registre.rappels.lire(id)?.etat).toBe('en_pause');
+    expect(await agir('conv-a', id, 'resume')).toBe(200);
+    expect(registre.rappels.lire(id)?.etat).toBe('actif');
+  });
+
+  test('une action sur le rappel d’un AUTRE fil est refusée en 409', async () => {
+    const id = semerRappel('conv-a');
+    // `☠` L'isolation tient jusqu'à la route : un identifiant deviné ne doit
+    // pas permettre d'éteindre le rappel d'une autre conversation.
+    expect(await agir('conv-b', id, 'pause')).toBe(409);
+    expect(registre.rappels.lire(id)?.etat).toBe('actif');
+  });
+
+  test('une action sans effet répond 409, jamais un succès muet', async () => {
+    const id = semerRappel();
+    // Reprendre un rappel qui n'est pas en pause ne fait rien : le dire.
+    expect(await agir('conv-a', id, 'resume')).toBe(409);
+  });
+
+  test('suppression réelle', async () => {
+    const id = semerRappel();
+    expect(await agir('conv-a', id, 'delete')).toBe(200);
+    expect(registre.rappels.lire(id)).toBeNull();
+  });
+
+  test('PC éteint : les rappels restent pilotables (H-75)', async () => {
+    const id = semerRappel();
+    pcOnline = false;
+    expect(await agir('conv-a', id, 'pause')).toBe(200);
+  });
+});

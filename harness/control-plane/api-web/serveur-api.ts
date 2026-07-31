@@ -27,6 +27,7 @@ import { ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
 import { versNotificationApi } from './vue-notifications.ts';
+import { versRappelApi } from './vue-rappels.ts';
 import { MODELES } from '../../shared/modeles-claude.ts';
 import { traiterEcriture, type OrdresVersPc, type OrchestrateurConversation } from './ecritures.ts';
 import {
@@ -147,6 +148,19 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
   const maintenant = deps.maintenant?.() ?? Date.now();
   const pcOnline = deps.pcEnLigne();
   const plafond = deps.plafondRelances ?? PLAFOND_RELANCES_DEFAUT;
+
+  // `☠` AVANT `routerLectureConversation`, et le test qui suit l'a prouvé : ce
+  // sous-routeur commence par `if (deps.conversations === undefined) return null`
+  // et rend donc 404 sur un déploiement sans gestionnaire de conversations. Les
+  // rappels vivent dans le REGISTRE, pas dans une session — exactement le piège
+  // déjà documenté pour les mandats, reproduit une seconde fois.
+  const rappels = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/rappels$/);
+  if (rappels?.[1] !== undefined) {
+    // Bornée au fil demandé : même isolation que côté MCP, portée par la requête
+    // et non par une vérification qu'un futur chemin pourrait contourner.
+    const liste = deps.registre.rappels.duFil(decodeURIComponent(rappels[1]), true);
+    return enveloppe(pcOnline, liste.map(versRappelApi));
+  }
 
   const conversation = routerLectureConversation(chemin, url, deps, pcOnline);
   if (conversation !== null) return conversation;
@@ -295,6 +309,38 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
       if (erreur instanceof ErreurProjetOccupe) throw new ErreurApi(409, erreur.message);
       throw erreur;
     }
+  }
+
+  // Rappels d'un fil (migration 16) — pause, reprise, suppression depuis l'écran.
+  // `☠` La CRÉATION et la MODIFICATION de consigne n'ont volontairement pas de
+  // route : la consigne est un texte réinjecté à l'orchestrateur, qui doit
+  // pouvoir l'exploiter sans contexte. C'est lui qui la rédige, avec ses outils.
+  // L'écran donne la visibilité et le contrôle, pas la plume.
+  const rappelAction = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/rappels\/([^/]+)\/(pause|resume|delete)$/);
+  if (rappelAction?.[1] !== undefined && rappelAction[2] !== undefined && rappelAction[3] !== undefined) {
+    const conversationId = decodeURIComponent(rappelAction[1]);
+    const rappelId = decodeURIComponent(rappelAction[2]);
+    const depot = deps.registre.rappels;
+    // Le type vient du motif de la route, pas d'un cast de confort : les trois
+    // valeurs sont celles de la regex, il n'y en a pas d'autre possible.
+    const action = rappelAction[3] as 'pause' | 'resume' | 'delete';
+    const fait =
+      action === 'pause'
+        ? depot.mettreEnPause(rappelId, conversationId)
+        : action === 'resume'
+          ? depot.reprendre(rappelId, conversationId)
+          : depot.supprimer(rappelId, conversationId);
+    // `☠` 409 et non 200 : un « rien n'a changé » rendu comme un succès ferait
+    // croire à Chris qu'il a coupé un rappel qui continue de tirer.
+    if (!fait) {
+      throw new ErreurApi(409, `rappel introuvable dans ce fil, ou état incompatible avec « ${action} »`);
+    }
+    const effets = {
+      pause: 'rappel en pause — consigne et historique conservés',
+      resume: 'rappel repris — le cycle repart de maintenant',
+      delete: 'rappel supprimé définitivement',
+    } as const;
+    return { ok: true, effet: effets[action] };
   }
 
   // Fenêtre d'autonomie d'un fil (migration 15) — pose ou retrait.
