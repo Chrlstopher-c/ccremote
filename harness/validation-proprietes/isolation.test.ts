@@ -24,13 +24,17 @@
  * mécaniquement indépendante de cette dette.
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { creerRacineTemporaire } from '../test-harness/racine-temporaire.ts';
 import { chargerProjets } from '../projets/chargeur-projets.ts';
 import { InterrogateurGitFactice } from '../projets/git-projet-factice.ts';
 import type { ConfigProjetBrute } from '../projets/types.ts';
 import { arbitrerFencing, type DetenteurEpoch } from '../superviseur/fencing-epoch.ts';
 
-const DEPOT = '/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/projets-tests/depot-git';
+const TMP = creerRacineTemporaire('ccremote-isolation-');
+const DEPOT = TMP.sousRepertoire('depot-git');
+
+afterAll(() => TMP.nettoyer());
 
 function brute(id: string, surcharge: Partial<ConfigProjetBrute> = {}): ConfigProjetBrute {
   return { id, cheminDepot: DEPOT, brancheDefaut: 'main', budgetMaxUsd: 40, modeleDefaut: 'sonnet', ...surcharge };

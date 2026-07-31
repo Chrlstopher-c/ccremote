@@ -21,8 +21,10 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { startWorker } from '../workers/index.ts'
 import { PLANCHER_DENI_SDK } from '../plancher-deni/index.ts'
 import { ouvrirSessionStore } from '../control-plane/session-store/index.ts'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-const RACINE = `/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/worker-${Date.now()}`
+const RACINE = join(tmpdir(), `ccremote-worker-${Date.now()}`)
 const COMPTE = process.env['COMPTE'] ?? 'compte-a'
 const SESSION_ID = crypto.randomUUID()
 

@@ -24,13 +24,23 @@
  * déposé est testée ici, jamais sa création applicative.
  */
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { creerRacineTemporaire } from '../test-harness/racine-temporaire.ts';
 import { chargerProjets, InterrogateurGitReel } from '../projets/index.ts';
 import { listerProjets } from '../control-plane/orchestrateur/mcp-controle/outils-inspection.ts';
 
-const RACINE = '/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/m53-modularite';
-const CONFIG = `${RACINE}/config`;
+const TMP = creerRacineTemporaire('ccremote-modularite-');
+const RACINE = TMP.racine;
+const CONFIG = TMP.sousRepertoire('config');
+
+// `☠` Les dépôts sont créés ICI : `validerConfigProjet` vérifie qu'un
+// `cheminDepot` existe réellement sur le disque. Ils vivaient jusqu'ici dans un
+// scratchpad de session créé à la main — le jour où la session a disparu, tout
+// ce fichier est passé au rouge sans qu'une ligne de code produit ne bouge.
+for (const depot of ['repo-alpha', 'repo-beta', 'repo-gamma']) TMP.sousRepertoire(depot);
+
+afterAll(() => TMP.nettoyer());
 
 async function ecrireProjet(nomFichier: string, contenu: Record<string, unknown>): Promise<void> {
   await writeFile(`${CONFIG}/${nomFichier}`, JSON.stringify(contenu), 'utf-8');

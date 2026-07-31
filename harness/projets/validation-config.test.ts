@@ -3,19 +3,22 @@
  *
  * `☠ CASSE` visé : un projet invalide doit être écarté **entièrement** —
  * `config === null` dès qu'un seul contrôle échoue, jamais une forme partielle.
- * Chemins réels utilisés uniquement sous le scratchpad de session (répertoires
- * créés par cette mission), jamais sur un dépôt réel du poste.
+ * Chemins réels créés PAR ce fichier sous une racine temporaire unique, jamais
+ * sur un dépôt réel du poste — voir `test-harness/racine-temporaire.ts`.
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { creerRacineTemporaire } from '../test-harness/racine-temporaire.ts';
 import { SEUIL_ALERTE_MOTIFS_SUPPLEMENTAIRES_PROJET, validerConfigProjet } from './validation-config.ts';
 import { InterrogateurGitFactice } from './git-projet-factice.ts';
 import type { ConfigProjetBrute } from './types.ts';
 
-const RACINE = '/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/projets-tests';
-const DEPOT_GIT = `${RACINE}/depot-git`;
-const DEPOT_NON_GIT = `${RACINE}/depot-non-git`;
-const FICHIER_PAS_DOSSIER = `${RACINE}/fichier-pas-dossier-cible`;
+const TMP = creerRacineTemporaire('ccremote-validation-config-');
+const DEPOT_GIT = TMP.sousRepertoire('depot-git');
+const DEPOT_NON_GIT = TMP.sousRepertoire('depot-non-git');
+const FICHIER_PAS_DOSSIER = TMP.fichier('fichier-pas-dossier-cible');
+
+afterAll(() => TMP.nettoyer());
 
 function git(options: { depots?: string[]; branches?: [string, string[]][] } = {}): InterrogateurGitFactice {
   return new InterrogateurGitFactice({

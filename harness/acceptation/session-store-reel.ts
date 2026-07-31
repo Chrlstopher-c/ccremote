@@ -13,8 +13,10 @@
  */
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ouvrirSessionStore } from '../control-plane/session-store/index.ts'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-const BASE = `/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/store-reel-${Date.now()}.sqlite`
+const BASE = join(tmpdir(), `ccremote-store-reel-${Date.now()}.sqlite`)
 const COMPTE = process.env['COMPTE'] ?? 'compte-a'
 
 interface Appel {

@@ -20,6 +20,8 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { ouvrirRegistre } from '../control-plane/registre/index.ts'
 import { creerServeurMcpControle, UTILISATION_PARC_DESACTIVEE } from '../control-plane/orchestrateur/mcp-controle/index.ts'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   demarrerOrchestrateur,
   JournalIncidentsMemoire,
@@ -27,7 +29,7 @@ import {
   OUTILS_INTERDITS_ORCHESTRATEUR,
 } from '../control-plane/orchestrateur/processus/index.ts'
 
-const RACINE = `/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/orch-${Date.now()}`
+const RACINE = join(tmpdir(), `ccremote-orch-${Date.now()}`)
 const COMPTE = process.env['COMPTE'] ?? 'compte-a'
 
 function horodate(m: string): void {

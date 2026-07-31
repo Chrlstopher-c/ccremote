@@ -20,8 +20,10 @@ import {
   InterrogateurGitReel,
 } from '../projets/index.ts'
 import type { ConfigProjet } from '../projets/index.ts'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-const RACINE = `/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/wt-${Date.now()}`
+const RACINE = join(tmpdir(), `ccremote-wt-${Date.now()}`)
 const DEPOT = `${RACINE}/depot`
 const WORKTREES = `${RACINE}/worktrees`
 

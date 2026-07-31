@@ -12,12 +12,16 @@
  * cette mission (jamais un dépôt réel du poste).
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { creerRacineTemporaire } from '../test-harness/racine-temporaire.ts';
 import { chargerProjets } from './chargeur-projets.ts';
 import { InterrogateurGitFactice } from './git-projet-factice.ts';
 import type { ConfigProjetBrute } from './types.ts';
 
-const DEPOT_GIT = '/tmp/claude-1000/-home-trinity/c97df358-b841-4cbd-abe9-02ef3a090c67/scratchpad/projets-tests/depot-git';
+const TMP = creerRacineTemporaire('ccremote-chargeur-projets-');
+const DEPOT_GIT = TMP.sousRepertoire('depot-git');
+
+afterAll(() => TMP.nettoyer());
 
 function depsAvecFichiers(fichiers: Record<string, string>): {
   interrogateurGit: InterrogateurGitFactice;
