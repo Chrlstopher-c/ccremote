@@ -27,7 +27,6 @@ beforeEach(() => {
     // Désactivation explicite du plafond de parc (H-74), jamais une omission.
     utilisationParc: UTILISATION_PARC_DESACTIVEE,
     configPlafondParc: {},
-    escalades: { enAttente: () => [], repondre: () => true },
     cibles: { cible: () => null },
     arreteur: { arreter: async () => {} },
     relanceur: { relancer: async () => {} },

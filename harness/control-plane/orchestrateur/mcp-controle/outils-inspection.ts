@@ -17,7 +17,7 @@ import {
 import type { Mission, Registre } from '../../registre/index.ts';
 import { applique, echecInattendu } from './contrat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
-import type { ContratRetour, LecteurEscalades } from './types.ts';
+import type { ContratRetour } from './types.ts';
 
 function resumerMission(m: Mission): string {
   return `${m.id} · ${m.nom} · projet=${m.projet} · harness=${m.etatHarness} · sdk=${m.etatSdk ?? 'inconnu'}`;
@@ -203,18 +203,3 @@ export function rapportEquipe(registre: Registre, designation: string): ContratR
   }
 }
 
-/** `permissions_en_attente` (A.2.2) — ce qui bloque, et depuis quand. Délègue à C. */
-export function permissionsEnAttente(escalades: LecteurEscalades): ContratRetour {
-  const intention = 'lister les permissions en attente';
-  try {
-    const enAttente = escalades.enAttente();
-    if (enAttente.length === 0) return applique(intention, 'aucune escalade en attente');
-    const resume = enAttente
-      .map((d) => `${d.requestId} · ${d.outil} · équipe=${d.idWorker} · depuis=${d.enAttenteDepuisA ?? '?'}`)
-      .join(' | ');
-    return applique(intention, resume);
-  } catch (erreur) {
-    journal.error({ err: erreur }, 'permissions_en_attente en échec');
-    return echecInattendu(intention, erreur);
-  }
-}

@@ -7,10 +7,13 @@
  * lien unique, deux familles de messages qui n'existaient pas dans D.1 :
  *
  *  - `controle_requete` / `controle_reponse` (D.3, Pi→PC) : ce que portait
- *    jusqu'ici `superviseur/canal-controle.ts` sur son propre canal JSON ;
- *  - `permission_demande` / `permission_verdict` (H-73.1, PC→Pi) : le rappel
- *    qui n'avait AUCUN canal réel avant cette mission (voir
- *    `composition/bus-permissions/port-colocalise.ts`, limite documentée).
+ *    jusqu'ici `superviseur/canal-controle.ts` sur son propre canal JSON.
+ *
+ * `☠` Ce lien portait aussi `permission_demande` / `permission_verdict`,
+ * retirés le 2026-07-31 avec le bus d'escalade : en `permissionMode: 'auto'`
+ * le SDK n'appelle jamais `canUseTool`, donc aucune demande n'a jamais
+ * transité. Le trajet complet était bâti, câblé des deux côtés, et n'a rien
+ * porté depuis le premier jour.
  *
  * `☠` LIMITE ASSUMÉE (voir rapport de mission, section « ce qui ne s'assemble
  * pas ») : ceci réutilise les tags `STDIN`/`STDOUT` de `trame.ts`, nommés et
@@ -25,14 +28,11 @@
  */
 
 import type { RequeteControle, ReponseControle } from '../../superviseur/index.ts';
-import type { DemandeCanUseTool, VerdictCanUseTool } from '../../workers/types.ts';
 import type { Tuyau } from '../../transport/contrat.ts';
 
 export type EnveloppeLien =
   | { readonly kind: 'controle_requete'; readonly id: string; readonly requete: RequeteControle }
-  | { readonly kind: 'controle_reponse'; readonly id: string; readonly reponse: ReponseControle }
-  | { readonly kind: 'permission_demande'; readonly id: string; readonly demande: DemandeCanUseTool }
-  | { readonly kind: 'permission_verdict'; readonly id: string; readonly verdict: VerdictCanUseTool };
+  | { readonly kind: 'controle_reponse'; readonly id: string; readonly reponse: ReponseControle };
 
 const encodeur = new TextEncoder();
 const decodeur = new TextDecoder();

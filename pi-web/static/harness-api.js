@@ -10,10 +10,10 @@
 // basculement silencieux ferait croire à des données vraies là où il n'y en a
 // pas, ce qui est la pire des deux situations.
 //
-//   RÉEL   — getMissions, getMission, getEscalades, getAccounts, getLinkStatus
+//   RÉEL   — getMissions, getMission, getAccounts, getLinkStatus
 //            servis par le control plane (Bun) via /api/harness/*, relayé par
 //            pi-web qui porte l'authentification.
-//   RÉEL   — écritures : resolveEscalade, terminateMission, pauseMission,
+//   RÉEL   — écritures : terminateMission, pauseMission,
 //            resumeMission, sendMissionInstruction, emergencyStop. Elles
 //            traversent le lien vers le PC. Un échec renvoie { erreur } et DOIT
 //            être affiché : un ordre non transmis cru transmis est le pire cas.
@@ -102,7 +102,6 @@ const HarnessAPI = (() => {
 
     async getMission(id) { return lireReel(`/missions/${encodeURIComponent(id)}`); },
 
-    async getEscalades() { return lireReel('/escalades'); },
 
     async getAccounts() { return lireReel('/accounts'); },
 
@@ -256,18 +255,6 @@ const HarnessAPI = (() => {
     async resumeGlobal() { return withPc(() => ({ paused: false })); },
 
     /* ---- ÉCRITURES RÉELLES ---- */
-
-    // ☠ Le motif d'un refus est RÉINJECTÉ à l'agent via son requestId — c'est ce
-    // qui lui permet de repartir sur une autre voie. Le serveur refuse un
-    // « refuse » sans motif ; on ne contourne pas ici.
-    async resolveEscalade(escId, verdict, reason) {
-      const r = await ecrireReel(`/escalades/${encodeURIComponent(escId)}/resolve`, { verdict, reason });
-      if (!r.ok) return { erreur: r.erreur };
-      // Retrait local de la file : le serveur fait autorité, on reflète.
-      const idx = db.escalades.findIndex((e) => e.id === escId);
-      if (idx !== -1) db.escalades.splice(idx, 1);
-      return { ok: true };
-    },
 
     async terminateMission(id) {
       const r = await ecrireReel(`/missions/${encodeURIComponent(id)}/terminate`, {});

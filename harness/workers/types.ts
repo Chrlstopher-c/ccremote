@@ -97,8 +97,6 @@ export interface WorkerSpec {
   readonly spawnProcess?: (options: SpawnOptions) => SpawnedProcess;
   /** Capture stderr — seul canal de diagnostic (B.2.3). */
   readonly onStderr?: (data: string) => void;
-  /** Port de redélivrance vers le bus de permissions (H-73.1). Absent ⇒ refus par défaut. */
-  readonly portBusPermissions?: PortBusPermissions;
   /**
    * Port vers le collecteur d'audit des permissions (C.5, M-22) — usine appelée
    * une fois à la composition (`workers/audit-hooks.ts`), qui rend les hooks
@@ -125,45 +123,6 @@ export interface WorkerSpec {
  * missions distinctes.
  */
 export type PortAuditPermissions = () => Partial<Record<HookEvent, HookCallbackMatcher[]>>;
-
-/**
- * Ce que porte une demande atteignant `canUseTool` (H-73.1) : redélivrance après
- * coupure, ou l'une des trois exceptions C.1.2 qui traversent `permissionMode: 'auto'`.
- */
-export interface DemandeCanUseTool {
-  readonly requestId: string;
-  readonly outil: string;
-  /**
-   * `☠` Les paramètres d'appel de l'outil. Sans eux, un arbitre ne peut pas
-   * décider : « Bash » n'est pas une demande, `Bash({ command: 'rm -rf …' })`
-   * en est une. Le plancher de déni (C.1.3) et l'audit (C.5) travaillent tous
-   * deux sur le contenu de l'appel, jamais sur le seul nom de l'outil.
-   * `unknown` et non `any` : la forme dépend de l'outil, c'est à l'arbitre de
-   * la restreindre.
-   */
-  readonly input: unknown;
-  readonly decisionReason?: string;
-  readonly blockedPath?: string;
-  readonly agentId?: string;
-}
-
-/**
- * Mirroir intentionnel de `control-plane/bus-permissions/types.ts` (`Verdict`) —
- * dupliqué plutôt qu'importé : `workers/` ne doit pas dépendre de `control-plane/`
- * en dur (H-73.1 point 3, code-standards.md : import ne traversant pas la frontière
- * de domaine sans passer par un port).
- */
-export type VerdictCanUseTool =
-  | { readonly behavior: 'allow'; readonly updatedInput?: Readonly<Record<string, unknown>> }
-  | { readonly behavior: 'deny'; readonly message: string; readonly interrupt?: boolean };
-
-/**
- * Port injecté vers la machine à états du bus de permissions (M-21,
- * `control-plane/bus-permissions/machine-etats.ts`). L'assemblage réel (quelle
- * instance, quel canal humain derrière) se fait hors de `workers/` — voir
- * `workers/can-use-tool.ts` pour le comportement par défaut en son absence.
- */
-export type PortBusPermissions = (demande: DemandeCanUseTool) => Promise<VerdictCanUseTool>;
 
 /** Poignée rendue par le démarrage. L'annonce au Pi appartient à l'appelant. */
 export interface WorkerHandle {

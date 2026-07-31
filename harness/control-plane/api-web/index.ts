@@ -14,7 +14,6 @@ export type { Enveloppe } from './enveloppe.ts';
 export { ErreurApi } from './enveloppe.ts';
 export type { MissionApi, EtatMissionApi } from './vue-missions.ts';
 export type { OrdresVersPc } from './ecritures.ts';
-export type { EscaladeApi } from './vue-escalades.ts';
 export type { AccountApi, FenetreApi } from './vue-comptes.ts';
 export type {
   ConversationApi,

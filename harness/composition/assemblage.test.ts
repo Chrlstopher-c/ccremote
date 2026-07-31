@@ -22,14 +22,11 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ouvrirRegistre } from '../control-plane/registre/index.ts';
-import { MachineEtatsDemandes } from '../control-plane/bus-permissions/index.ts';
 import { proposerCreationEquipe } from '../control-plane/orchestrateur/mcp-controle/outils-cycle-vie.ts';
 import { CanalControle, PersistanceRegistreSqlite, SuperviseurWorkers } from '../superviseur/index.ts';
 import { CompteurRelances } from '../relance/compteur-relances.ts';
 import { creerJugeHaiku } from '../anti-boucle/index.ts';
-import { buildCanUseTool } from '../workers/can-use-tool.ts';
 import { creerLecteurUtilisationParc } from './pi/port-utilisation-parc.ts';
-import { creerPortBusPermissionsColocalise } from './bus-permissions/port-colocalise.ts';
 import { construireWorkerSpec } from './pc/construire-worker-spec.ts';
 import { assemblerSuperviseurPc } from './pc/assembler-superviseur.ts';
 import { demarrerServeurLienPc } from './pi/serveur-lien-pc.ts';
@@ -62,59 +59,6 @@ describe('assemblage — plafond de parc (G.1.3, H-74 occurrence n°2)', () => {
     const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => 'prop-test' });
 
     expect(retour.effet).toBe('differe');
-  });
-});
-
-describe('assemblage — bus de permissions vers canUseTool (H-73.1)', () => {
-  test('un WorkerSpec composé réémet le VRAI verdict déjà tranché par la machine à états', async () => {
-    const machine = new MachineEtatsDemandes();
-    machine.recevoir({ requestId: 'req-1', idWorker: 'worker-1', outil: 'Bash' });
-    machine.escalader('req-1');
-    machine.repondre('req-1', { behavior: 'allow' });
-
-    const port = creerPortBusPermissionsColocalise(machine, { idWorker: 'worker-1', budgetMs: 500, intervalleScrutationMs: 20 });
-    const spec = construireWorkerSpec(
-      { sessionId: 'req-1-session', cwd: '/tmp', mandate: 'test', deniedToolPatterns: [], maxBudgetUsd: 1 },
-      port,
-      () => ({}),
-    );
-    const canUseTool = buildCanUseTool(spec);
-
-    const resultat = await canUseTool('Bash', {}, { requestId: 'req-1', toolUseID: 'tu-1', decisionReason: undefined, blockedPath: undefined, agentID: undefined } as never);
-
-    expect(resultat?.behavior).toBe('allow');
-  });
-
-  test('une demande jamais vue AVANT reste refusée par défaut, jamais autorisée par erreur (biais de sûreté)', async () => {
-    const machine = new MachineEtatsDemandes();
-    const port = creerPortBusPermissionsColocalise(machine, { idWorker: 'worker-2', budgetMs: 100, intervalleScrutationMs: 20 });
-    const spec = construireWorkerSpec(
-      { sessionId: 'req-2-session', cwd: '/tmp', mandate: 'test', deniedToolPatterns: [], maxBudgetUsd: 1 },
-      port,
-      () => ({}),
-    );
-    const canUseTool = buildCanUseTool(spec);
-
-    const resultat = await canUseTool('Bash', {}, { requestId: 'req-2', toolUseID: 'tu-2', decisionReason: undefined, blockedPath: undefined, agentID: undefined } as never);
-
-    expect(resultat?.behavior).toBe('deny');
-    // Preuve que le VRAI bus a été atteint (message distinct de « aucun port câblé »).
-    expect((resultat as { message: string }).message).toContain('délai imparti');
-  });
-
-  test("SANS port câblé, le refus par défaut mentionne explicitement l'absence de câblage (jamais un faux succès)", async () => {
-    const spec = {
-      sessionId: 'req-3-session',
-      cwd: '/tmp',
-      mandate: 'test',
-      deniedToolPatterns: [],
-      maxBudgetUsd: 1,
-      portAuditPermissions: () => ({}),
-    };
-    const canUseTool = buildCanUseTool(spec);
-    const resultat = await canUseTool('Bash', {}, { requestId: 'req-3', toolUseID: 'tu-3', decisionReason: undefined, blockedPath: undefined, agentID: undefined } as never);
-    expect(resultat?.behavior).toBe('deny');
-    expect((resultat as { message: string }).message).toContain('Aucun port');
   });
 });
 
@@ -203,7 +147,6 @@ describe('assemblage — l’interface sait que le PC est éteint (H-75)', () =>
    */
   test('pcOnline suit l’état RÉEL du lien, pas un drapeau — vérifié en connectant un vrai client', async () => {
     const registre = ouvrirRegistre({ chemin: ':memory:' });
-    const escalades = new MachineEtatsDemandes();
     const secret = 'secret-assemblage-suffisamment-long';
 
     const serveurLien = demarrerServeurLienPc({ port: 0, hostname: '127.0.0.1', secret });
@@ -213,7 +156,6 @@ describe('assemblage — l’interface sait que le PC est éteint (H-75)', () =>
     const api = demarrerServeurApiWeb({
       port: 0,
       registre,
-      escalades,
       pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
     });
 

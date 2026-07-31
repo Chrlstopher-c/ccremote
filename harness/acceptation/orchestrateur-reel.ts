@@ -54,7 +54,6 @@ const serveurControle = creerServeurMcpControle({
   // d'utilisation réelle — l'omettre serait un oubli, le dire est un choix.
   utilisationParc: UTILISATION_PARC_DESACTIVEE,
   configPlafondParc: {},
-  escalades: { enAttente: () => [], repondre: () => false },
   cibles: portMort,
   arreteur: portMort,
   relanceur: portMort,

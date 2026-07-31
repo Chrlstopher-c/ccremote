@@ -21,11 +21,9 @@
 
 import type { Server } from 'bun';
 import type { Registre } from '../registre/index.ts';
-import type { MachineEtatsDemandes } from '../bus-permissions/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
 import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
 import { ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
-import { versEscaladeApi } from './vue-escalades.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
 import { MODELES } from '../../shared/modeles-claude.ts';
@@ -45,7 +43,6 @@ const PLAFOND_RELANCES_DEFAUT = 3;
 
 export interface DependancesApiWeb {
   readonly registre: Registre;
-  readonly escalades: MachineEtatsDemandes;
   /** Le lien réel vers le PC — source unique de `pcOnline` (H-75). */
   readonly pcEnLigne: () => boolean;
   /**
@@ -169,7 +166,7 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     // `☠` Une mission inconnue avec le PC EN LIGNE est un vrai 404 ; le PC
     // absent ne doit jamais transformer « inconnue » en « peut-être plus tard ».
     if (trouvee === null) throw introuvable('mission');
-    const feed = construireFeed(deps.registre, trouvee.id, deps.escalades);
+    const feed = construireFeed(deps.registre, trouvee.id);
     return enveloppe(
       pcOnline,
       versMissionApi(trouvee, plafond, maintenant, feed, deps.registre.missions.sousAgents(trouvee.id)),
@@ -190,11 +187,6 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
       pcOnline,
       versSubagentDetailApi(trouve, deps.registre.missions.activitesSousAgent(missionId, agentId)),
     );
-  }
-
-  if (chemin === '/escalades') {
-    const file = deps.escalades.enAttente().map((d) => versEscaladeApi(d, maintenant));
-    return enveloppe(pcOnline, file);
   }
 
   if (chemin === '/accounts') {
@@ -366,7 +358,6 @@ async function routerEcriture(chemin: string, req: Request, deps: DependancesApi
     // Corps vide ou illisible : accepté, la plupart des ordres n'en ont pas.
   }
   const resultat = await traiterEcriture(chemin, corps, {
-    escalades: deps.escalades,
     pc: deps.pc,
     orchestrateur: deps.orchestrateur,
   });

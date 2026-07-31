@@ -46,7 +46,6 @@ export {
   etatEquipe,
   listerProjets,
   historiqueEquipe,
-  permissionsEnAttente,
 } from './outils-inspection.ts';
 export {
   proposerCreationEquipe,
@@ -55,16 +54,14 @@ export {
   arreterEquipe,
   relancerEquipe,
 } from './outils-cycle-vie.ts';
-export { repondrePermission, definirBudget } from './outils-arbitrage.ts';
+export { definirBudget } from './outils-budget.ts';
 
 export type {
-  ArbitreEscalade,
   ArreteurMission,
   CibleEquipe,
   ContratRetour,
   DefinisseurBudget,
   EffetOutil,
-  LecteurEscalades,
   RelanceurMission,
   RepertoireCibles,
 } from './types.ts';

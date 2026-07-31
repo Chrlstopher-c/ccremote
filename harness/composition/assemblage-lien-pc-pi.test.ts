@@ -7,7 +7,7 @@
  * l'autre) — même esprit que `transport/lien-websocket.test.ts`, mais les
  * DEUX pairs sont simulés simultanément ici (le fichier de `transport/` ne
  * teste qu'un seul bout). Ce que ce fichier prouve : le multiplexage
- * `controle_requete`/`permission_demande` sur l'unique lien, PAS le réseau ni
+ * `controle_requete` sur l'unique lien, PAS le réseau ni
  * `Bun.serve({ websocket })` (`serveur-lien-pc.ts`) — ceux-là appartiennent à
  * la validation réelle du parent (voir rapport de mission).
  */
@@ -17,7 +17,6 @@ import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { MachineEtatsDemandes } from '../control-plane/bus-permissions/index.ts';
 import { ouvrirRegistre } from '../control-plane/registre/index.ts';
 import {
   construireOutilsControle,
@@ -28,9 +27,7 @@ import { CompteurRelances } from '../relance/compteur-relances.ts';
 import { SuperviseurWorkers, type PortSuperviseurControle } from '../superviseur/index.ts';
 import { LienWebSocket, type WebSocketLike } from '../transport/lien-websocket.ts';
 import { cablerRecepteurControlePc } from './pc/canal-controle-recepteur.ts';
-import { creerPortBusPermissionsDistant } from './pc/port-bus-permissions-distant.ts';
 import { ClientSuperviseurPc } from './pi/client-superviseur-pc.ts';
-import { cablerPermissionVerdictDistant } from './pi/permission-verdict-distant.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './pi/reconciliation-sur-rattachement.ts';
 
 type Ecouteur<T> = (ev: T) => void;
@@ -129,53 +126,6 @@ describe('assemblage — canal de contrôle multiplexé sur le lien unique (H-75
   });
 });
 
-describe('assemblage — bus de permissions distant sur le lien unique (H-73.1 fermé pour de vrai, H-75)', () => {
-  test('verdict déjà tranché par la machine à états : réémis immédiatement au PC via le lien', async () => {
-    const { pi, pc } = creerPaireLiens();
-    await Promise.all([pi.connecter(), pc.connecter()]);
-
-    const machine = new MachineEtatsDemandes();
-    machine.recevoir({ requestId: 'req-1', idWorker: 'pc', outil: 'Bash' });
-    machine.escalader('req-1');
-    machine.repondre('req-1', { behavior: 'allow' });
-
-    cablerPermissionVerdictDistant(machine, pi);
-    const port = creerPortBusPermissionsDistant(pc, { timeoutMs: 2000 });
-
-    const verdict = await port({ requestId: 'req-1', outil: 'Bash', input: {} });
-    expect(verdict.behavior).toBe('allow');
-  });
-
-  test('escalade fraîche : le port attend le verdict humain, appliqué APRÈS coup sur la machine côté Pi', async () => {
-    const { pi, pc } = creerPaireLiens();
-    await Promise.all([pi.connecter(), pc.connecter()]);
-
-    const machine = new MachineEtatsDemandes();
-    cablerPermissionVerdictDistant(machine, pi, { intervalleScrutationMs: 5, budgetMs: 500 });
-    const port = creerPortBusPermissionsDistant(pc, { timeoutMs: 2000 });
-
-    const promesseVerdict = port({ requestId: 'req-2', outil: 'Bash', input: {} });
-    // Laisse la demande atteindre le Pi et s'escalader avant de répondre.
-    await laisserPasserLesMicrotaches(10);
-    machine.repondre('req-2', { behavior: 'deny', message: 'refusé par un humain' });
-
-    const verdict = await promesseVerdict;
-    expect(verdict.behavior).toBe('deny');
-  });
-
-  test('aucun verdict humain dans le budget côté Pi : le PC reçoit un refus explicite, jamais un blocage indéfini', async () => {
-    const { pi, pc } = creerPaireLiens();
-    await Promise.all([pi.connecter(), pc.connecter()]);
-
-    const machine = new MachineEtatsDemandes();
-    cablerPermissionVerdictDistant(machine, pi, { intervalleScrutationMs: 5, budgetMs: 30 });
-    const port = creerPortBusPermissionsDistant(pc, { timeoutMs: 2000 });
-
-    const verdict = await port({ requestId: 'req-3', outil: 'Bash', input: {} });
-    expect(verdict.behavior).toBe('deny');
-  });
-});
-
 /**
  * `☠` Test d'ASSEMBLAGE de `lire_fichier`, sur le modèle de
  * `superviseur/exploration-cablage.test.ts` mais poussé aux QUATRE couches :
@@ -237,7 +187,6 @@ async function chaineComplete(racineProjets: string): Promise<{
   const deps: DependancesServeurControle = {
     registre,
     repertoireProjets: racineProjets,
-    escalades: { enAttente: () => [], repondre: () => true },
     cibles: { cible: () => null },
     arreteur: { arreter: async () => {} },
     relanceur: { relancer: async () => {} },

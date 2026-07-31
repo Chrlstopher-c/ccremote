@@ -54,10 +54,9 @@ function switchView(view) {
   if (view === 'settings') { renderClaudeAccounts(); refreshQuotaUsage(); refreshContextUsage(); }
   // ---- harness (orchestrateur + équipes) — voir static/harness-*.js ----
   if (view === 'harness-parc') hRenderParc();
-  if (view === 'harness-escalades') hRenderEscalades();
   if (view === 'harness-comptes') hRenderComptes();
   if (view === 'harness-orchestrateur') hInitOrchestrateur();
-  // ☠ Le parc, les escalades, les comptes et le détail d'une mission se
+  // ☠ Le parc, les comptes et le détail d'une mission se
   // rafraîchissent d'eux-mêmes désormais (voir harness-parc.js) : sans ça, il
   // fallait recharger la page pour voir bouger quoi que ce soit, et une équipe
   // terminée restait affichée « en cours » (23/07).

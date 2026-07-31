@@ -40,7 +40,6 @@ beforeEach(() => {
   deps = {
     registre,
     repertoireProjets: '/tmp/mcp-controle-projets-inexistant',
-    escalades: { enAttente: () => [], repondre: () => true },
     cibles: { cible: () => null },
     arreteur: { arreter: async () => {} },
     relanceur: { relancer: async () => {} },
@@ -58,7 +57,11 @@ afterEach(() => {
 });
 
 describe('surface d’outils (A.2.2)', () => {
-  test('expose exactement les 12 outils spécifiés — ni plus, ni moins', () => {
+  // ☠ 11 et non 13 : `permissions_en_attente` et `repondre_permission` sont
+  // partis avec le bus d'escalade le 2026-07-31 — aucune demande ne l'a jamais
+  // atteint, le classifieur du lead tranche seul (H-40). Ce test est le garde-fou
+  // de la surface : un outil qui réapparaît sans décision doit le faire échouer.
+  test('expose exactement les 11 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -67,13 +70,11 @@ describe('surface d’outils (A.2.2)', () => {
         'rapport_equipe',
         'lister_projets',
         'historique_equipe',
-        'permissions_en_attente',
         'creer_equipe',
         'envoyer_a_equipe',
         'interrompre_equipe',
         'arreter_equipe',
         'relancer_equipe',
-        'repondre_permission',
         'definir_budget',
       ].sort(),
     );
@@ -85,7 +86,7 @@ describe('surface d’outils (A.2.2)', () => {
   });
 
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
-    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'lister_projets', 'historique_equipe', 'permissions_en_attente'];
+    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'lister_projets', 'historique_equipe'];
     const outils = construireOutilsControle(deps);
     for (const nom of inspection) {
       const outil = outils.find((o) => o.name === nom);

@@ -24,7 +24,6 @@ import {
   listerEquipes,
   rapportEquipe,
   listerProjets,
-  permissionsEnAttente,
 } from './outils-inspection.ts';
 import {
   arreterEquipe,
@@ -33,15 +32,13 @@ import {
   proposerCreationEquipe,
   relancerEquipe,
 } from './outils-cycle-vie.ts';
-import { definirBudget, repondrePermission } from './outils-arbitrage.ts';
+import { definirBudget } from './outils-budget.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type {
-  ArbitreEscalade,
   ArreteurMission,
   ConfigPlafondParc,
   ContratRetour,
   DefinisseurBudget,
-  LecteurEscalades,
   LecteurUtilisationParc,
   EnregistreurProposition,
   ExplorateurProjets,
@@ -53,7 +50,6 @@ import type {
 export interface DependancesServeurControle {
   readonly registre: Registre;
   readonly repertoireProjets: string;
-  readonly escalades: LecteurEscalades & ArbitreEscalade;
   readonly cibles: RepertoireCibles;
   readonly arreteur: ArreteurMission;
   readonly relanceur: RelanceurMission;
@@ -177,9 +173,6 @@ function outilsInspection(deps: DependancesServeurControle) {
         protege('historique_equipe', () => historiqueEquipe(deps.registre, equipe, limite)),
       { annotations: { readOnlyHint: true } },
     ),
-    tool('permissions_en_attente', 'Ce qui bloque en escalade, et depuis quand.', {}, async () =>
-      protege('permissions_en_attente', () => permissionsEnAttente(deps.escalades)),
-    { annotations: { readOnlyHint: true } }),
   ];
 }
 
@@ -248,26 +241,8 @@ function outilsCycleVie(deps: DependancesServeurControle) {
   ];
 }
 
-function outilsArbitrage(deps: DependancesServeurControle) {
+function outilsBudget(deps: DependancesServeurControle) {
   return [
-    tool(
-      'repondre_permission',
-      "Verdict humain sur une demande ESCALADÉE (H-47). N'arbitre jamais le régime nominal " +
-        "(permissionMode: 'auto', H-40) — seulement ce que le classifieur a refusé.",
-      {
-        requestId: z.string(),
-        behavior: z.enum(['allow', 'deny']),
-        message: z.string().optional(),
-      },
-      async ({ requestId, behavior, message }) =>
-        protege('repondre_permission', () =>
-          repondrePermission(
-            deps.escalades,
-            requestId,
-            behavior === 'allow' ? { behavior: 'allow' } : { behavior: 'deny', message: message ?? 'refusé' },
-          ),
-        ),
-    ),
     tool(
       'definir_budget',
       "Plafond `maxBudgetUsd` d'une équipe — filet de dernier recours (H-68), pas l'anti-boucle.",
@@ -364,7 +339,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
   return [
     ...outilsInspection(deps),
     ...outilsCycleVie(deps),
-    ...outilsArbitrage(deps),
+    ...outilsBudget(deps),
     ...outilsContexte(deps),
     ...outilsExploration(deps),
     ...outilsLectureFichier(deps),

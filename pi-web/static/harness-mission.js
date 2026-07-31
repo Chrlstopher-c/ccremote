@@ -94,7 +94,6 @@ async function hRenderMissionDetail(id) {
   } else if (m.state === 'requires_action') {
     bandeau += `<div class="card msg-in" style="border-color:var(--accent);background:var(--accent-soft);padding:13px 14px;margin-bottom:16px;">
       <div style="font-size:12px;font-weight:600;color:var(--accent-2);text-transform:uppercase;letter-spacing:.04em;">Bloquée depuis ${m.blockedSince}</div>
-      <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn btn-accent" style="flex:1;" onclick="hGoto('harness-escalades')">Arbitrer</button></div>
     </div>`;
   }
 

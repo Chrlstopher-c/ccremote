@@ -13,7 +13,6 @@
  * d'évènements de contrôle, jamais un transcript.
  */
 
-import type { DemandePermission } from '../bus-permissions/index.ts';
 import type { Registre, Transition } from '../registre/index.ts';
 
 export interface FeedEventApi {
@@ -54,43 +53,12 @@ function versEvenementTransition(t: Transition): FeedEventApi {
 }
 
 /**
- * `☠` Le contrat l'exige explicitement : TOUTE décision d'autorisation apparaît
- * ici, y compris celles que le lead a tranchées seul (H-64). C'est la trace
- * d'audit — le volume est voulu, pas un défaut à filtrer.
- */
-function versEvenementPermission(d: DemandePermission): FeedEventApi {
-  const permis = d.verdict === null ? null : d.verdict.behavior === 'allow';
-  // `☠` `resolue_auto` : le lead a tranché SEUL (H-64). C'est justement ce que
-  // l'opérateur ne verrait nulle part ailleurs — l'omettre viderait l'audit de
-  // son intérêt.
-  const auto = d.etat === 'resolue_auto';
-  return {
-    ts: horodatage(d.enAttenteDepuisA ?? d.recueA),
-    type: 'permission',
-    text: `${d.outil}${d.blockedPath !== undefined ? ` sur ${d.blockedPath}` : ''}${
-      d.decisionReason !== undefined ? ` — ${d.decisionReason}` : ''
-    }`,
-    tool: d.outil,
-    ...(d.etat === 'en_attente' ? { pending: true } : {}),
-    ...(auto ? { auto: true } : {}),
-    ...(permis !== null ? { resolved: permis ? 'autorisée' : 'refusée' } : {}),
-    ...(d.blockedPath !== undefined ? { path: d.blockedPath } : {}),
-  };
-}
-
-export interface SourceDemandes {
-  /** Demandes connues pour un worker donné, en attente ou déjà tranchées. */
-  parWorker(idWorker: string): readonly DemandePermission[];
-}
-
-/**
  * Fil complet d'une mission, du plus ancien au plus récent — l'interface fait
  * défiler vers le bas.
  */
 export function construireFeed(
   registre: Registre,
   missionId: string,
-  demandes?: SourceDemandes,
   limite = 200,
 ): readonly FeedEventApi[] {
   const evenements: FeedEventApi[] = registre.etats
@@ -110,9 +78,6 @@ export function construireFeed(
     });
   }
 
-  if (demandes !== undefined) {
-    for (const d of demandes.parWorker(missionId)) evenements.push(versEvenementPermission(d));
-  }
 
   // Tri sur l'horodatage textuel : format fixe `HH:MM:SS`, donc l'ordre
   // lexicographique EST l'ordre chronologique sur une même journée.

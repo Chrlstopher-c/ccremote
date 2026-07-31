@@ -10,7 +10,6 @@
  * poli.
  */
 
-import type { MachineEtatsDemandes, Verdict } from '../bus-permissions/index.ts';
 import { ErreurApi, requeteInvalide } from './enveloppe.ts';
 
 /** Ce que le PC sait faire, vu du control plane. Sous-ensemble volontaire. */
@@ -36,23 +35,8 @@ export interface OrchestrateurConversation {
 }
 
 export interface DependancesEcritures {
-  readonly escalades: MachineEtatsDemandes;
   readonly pc: OrdresVersPc;
   readonly orchestrateur?: OrchestrateurConversation;
-}
-
-function verdictDepuis(corps: Record<string, unknown>): Verdict {
-  const decision = corps['verdict'];
-  if (decision === 'autorise') return { behavior: 'allow' };
-  if (decision !== 'refuse') throw requeteInvalide("verdict attendu : 'autorise' ou 'refuse'");
-  const motif = corps['reason'];
-  // `☠` Le motif n'est pas un commentaire : il est RÉINJECTÉ à l'agent, c'est
-  // ce qui lui permet de repartir sur une autre voie plutôt que de se cogner à
-  // la même porte. Un refus sans motif laisse l'agent sans issue.
-  if (typeof motif !== 'string' || motif.trim().length === 0) {
-    throw requeteInvalide('un refus doit porter un motif — il est réinjecté à l’agent, pas seulement journalisé');
-  }
-  return { behavior: 'deny', message: motif, interrupt: true };
 }
 
 export interface ResultatEcriture {
@@ -71,17 +55,6 @@ export async function traiterEcriture(
   corps: Record<string, unknown>,
   deps: DependancesEcritures,
 ): Promise<ResultatEcriture | null> {
-  const escalade = chemin.match(/^\/escalades\/([^/]+)\/resolve$/);
-  if (escalade?.[1] !== undefined) {
-    const requestId = decodeURIComponent(escalade[1]);
-    const accepte = deps.escalades.repondre(requestId, verdictDepuis(corps));
-    // `false` = demande inconnue, déjà répondue, ou caduque. Ne JAMAIS le
-    // maquiller en succès : l'opérateur croirait avoir débloqué un agent qui
-    // attend toujours.
-    if (!accepte) throw new ErreurApi(409, 'escalade déjà résolue, caduque ou inconnue — aucun verdict appliqué');
-    return { ok: true, effet: 'verdict transmis à l’agent' };
-  }
-
   const terminer = chemin.match(/^\/missions\/([^/]+)\/terminate$/);
   if (terminer?.[1] !== undefined) {
     await deps.pc.arreter(decodeURIComponent(terminer[1]));

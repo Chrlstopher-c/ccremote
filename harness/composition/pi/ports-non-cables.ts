@@ -20,10 +20,8 @@
  */
 
 import type {
-  ArbitreEscalade,
   CibleEquipe,
   DefinisseurBudget,
-  LecteurEscalades,
   RepertoireCibles,
 } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
@@ -46,5 +44,3 @@ export const BUDGET_NON_CABLE: DefinisseurBudget = {
     throw new Error('definir_budget : aucun canal réel vers une session déjà démarrée (voir ports-non-cables.ts)');
   },
 };
-
-export interface EscaladesLocales extends LecteurEscalades, ArbitreEscalade {}

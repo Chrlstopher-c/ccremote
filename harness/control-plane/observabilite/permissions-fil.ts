@@ -4,11 +4,14 @@
  *
  * H-64, mots de Chris : « c'est le leader qui gère [...] il faudrait plutôt
  * les logger quand on affiche la discussion en question ». Modèle retenu :
- *  - le fil de la mission porte TOUTES les autorisations, y compris
- *    auto-résolues par le lead (`estRequiresAction: false`) ;
- *  - seule une demande réellement ESCALADÉE à l'humain (bus-permissions,
- *    état `en_attente`) porte `estRequiresAction: true` — c'est le SEUL signal
- *    qui doit attirer l'œil (H-40 : le lead arbitre le reste en silence).
+ *  - le fil de la mission porte TOUTES les autorisations, toutes tranchées par
+ *    le lead lui-même (H-40).
+ *
+ * `☠` `estRequiresAction` valait `true` pour une demande escaladée à l'humain.
+ * Le bus d'escalade a été retiré le 2026-07-31 (aucune demande n'y est jamais
+ * arrivée : en `permissionMode: 'auto'` le SDK n'appelle pas `canUseTool`), donc
+ * plus rien ne peut porter ce marqueur. Il reste dans le type d'évènement, à
+ * `false` — le retirer changerait un contrat d'affichage pour rien.
  *
  * Source d'exhaustivité : `EnregistrementAudit` (`audit-permissions`, C.1.1,
  * `PreToolUse`) — ne réimplémente pas la collecte, la met simplement en forme
@@ -16,23 +19,14 @@
  */
 
 import type { EnregistrementAudit } from '../audit-permissions/index.ts';
-import type { DemandePermission } from '../bus-permissions/index.ts';
 import { RACINE_FLUX } from './types.ts';
 import type { EvenementFilMission, EvenementPermissionFil } from './types.ts';
 
-/**
- * Construit les entrées « permission » du fil à partir de la trace d'audit
- * exhaustive, en marquant `estRequiresAction` d'après l'ensemble (généralement
- * petit, H-40) des demandes réellement en attente humaine.
- */
+/** Construit les entrées « permission » du fil à partir de la trace d'audit. */
 export function evenementsPermissionsFil(
   audit: readonly EnregistrementAudit[],
-  enAttenteHumaine: readonly DemandePermission[],
 ): readonly EvenementFilMission[] {
-  const idsEnAttente = new Set(enAttenteHumaine.map((d) => d.requestId));
-  return audit
-    .filter((e) => e.verdict !== 'indetermine' || idsEnAttente.has(e.toolUseId))
-    .map((e) => construireEvenement(e, idsEnAttente.has(e.toolUseId)));
+  return audit.filter((e) => e.verdict !== 'indetermine').map((e) => construireEvenement(e, false));
 }
 
 function construireEvenement(e: EnregistrementAudit, estRequiresAction: boolean): EvenementPermissionFil {

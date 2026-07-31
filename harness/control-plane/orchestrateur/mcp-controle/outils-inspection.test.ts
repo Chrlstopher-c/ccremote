@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import type { InterrogateurGit } from '../../../projets/index.ts';
-import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, permissionsEnAttente, rapportEquipe } from './outils-inspection.ts';
-import type { LecteurEscalades } from './types.ts';
+import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, rapportEquipe } from './outils-inspection.ts';
 
 const GIT_FACTICE_NON_GIT: InterrogateurGit = {
   estDepotGit: async () => false,
@@ -129,20 +128,6 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     expect(resultat.etat).toContain('[harness] planifiee → en_cours (dispatch initial)');
   });
 
-  test('permissions_en_attente : aucune escalade', () => {
-    const escalades: LecteurEscalades = { enAttente: () => [] };
-    const resultat = permissionsEnAttente(escalades);
-    expect(resultat.etat).toBe('aucune escalade en attente');
-  });
-
-  test('permissions_en_attente : résume les demandes en file', () => {
-    const escalades: LecteurEscalades = {
-      enAttente: () => [{ requestId: 'r-1', outil: 'Bash', idWorker: 'm-1', enAttenteDepuisA: 42 }],
-    };
-    const resultat = permissionsEnAttente(escalades);
-    expect(resultat.etat).toContain('r-1');
-    expect(resultat.etat).toContain('Bash');
-  });
 });
 
 describe('rapport_equipe — ce que l’équipe a écrit', () => {

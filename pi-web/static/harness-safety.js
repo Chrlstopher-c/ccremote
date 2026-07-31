@@ -60,7 +60,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeView = document.querySelector('.view.active')?.dataset.view;
     if (activeView === 'harness-parc') hRenderParc();
     if (activeView === 'harness-mission' && HarnessState.selectedMissionId) hRenderMissionDetail(HarnessState.selectedMissionId);
-    if (activeView === 'harness-escalades') hRenderEscalades();
     if (activeView === 'harness-comptes') hRenderComptes();
     showToast(up ? 'PC de retour — reconnexion propre (H-75)' : 'PC absent — état normal affiché, pas une erreur (H-75)', up ? 'ok' : 'warn');
   });

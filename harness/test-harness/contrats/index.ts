@@ -20,13 +20,6 @@ export type {
   SuperviseurWorkers,
 } from './superviseur.ts';
 export type {
-  BusPermissions,
-  DemandePermission,
-  EntreeDemande,
-  EtatDemande,
-  Verdict,
-} from './permissions.ts';
-export type {
   EntreeSession,
   MessageMiroirErreur,
   StoreObservable,

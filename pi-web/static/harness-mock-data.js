@@ -43,7 +43,7 @@ const HarnessMock = (() => {
       model: 'claude-opus-4-8', epoch: 4, retries: '1 / 3', sessionId: 'ses_8f31c2…a04',
       mandate: { but: "Rétablir la cohérence de product_stock entre création produit, import CSV et transferts inter-dépôts.",
         critere: "Un transfert inter-dépôts réussit sur un produit créé par chacun des trois chemins, tests E2E passants." },
-      blockedSince: '6 min', escaladeId: 'esc1', landing: null,
+      blockedSince: '6 min', landing: null,
       subagents: [
         { id: 'a1', name: 'db-migration', role: 'sous-agent', status: 'actif',
           action: "Confirme que le chemin CSV n'écrit jamais product_stock — prépare le correctif de schéma.",
@@ -140,16 +140,8 @@ const HarnessMock = (() => {
     return d.toTimeString().slice(0, 8);
   }
 
-  const escalades = [
-    { id: 'esc1', missionId: 'm1', title: 'Désync multi-dépôts', sub: "stockiop-ops · wt/fix-multidepot · agent db-migration",
-      age: '6 min', old: false, tool: 'Bash',
-      phrase: 'Appliquer une migration SQL qui réécrit product_stock directement sur la base de production hébergée sur le Pi.',
-      why: "commande d'écriture sur un chemin hors du worktree de la mission (plancher de déni C.1.3).",
-      path: '/home/pi/stockiop-ops/data/stockiop.db', suggestions: ["rediriger vers l'instance de recette", 'dry-run d\'abord'] },
-  ];
-
   const proposals = [];
 
-  return { uid, models, accounts, missions, escalades, proposals, get nextAccount() { return nextAccount; },
+  return { uid, models, accounts, missions, proposals, get nextAccount() { return nextAccount; },
     set nextAccount(v) { nextAccount = v; }, newInspection };
 })();

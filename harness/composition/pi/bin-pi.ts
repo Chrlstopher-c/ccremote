@@ -90,7 +90,7 @@ async function main(): Promise<void> {
   // API) tiennent le process vivant. Rien à consommer ici.
   log.info(
     { avecOrchestrateur },
-    'control plane Pi en service — parc, escalades et pilotage actifs ; conversations à la demande',
+    'control plane Pi en service — parc et pilotage actifs ; conversations à la demande',
   );
 }
 

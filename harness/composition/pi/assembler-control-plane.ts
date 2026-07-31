@@ -13,13 +13,9 @@
  *  - réconciliation (M-30) branchée sur un VRAI canal réseau vers le PC
  *    (`ClientSuperviseurPc`), au lieu de rester un contrat sans appelant
  *    (TODO.md, « ports non implémentés ») ;
- *  - bus de permissions (M-21) partagé entre la réconciliation et le serveur
- *    MCP de contrôle — une seule instance, jamais deux machines à états qui
- *    divergeraient silencieusement.
  *
  * `☠ H-75` — le Pi HÉBERGE désormais le lien (`serveur-lien-pc.ts`), le PC
- * INITIE (`composition/pc/client-lien-pi.ts`). `ClientSuperviseurPc` et
- * `permission-verdict-distant.ts` partagent la MÊME instance de
+ * INITIE (`composition/pc/client-lien-pi.ts`). Une seule instance de
  * `LienWebSocket` (`serveurLien.lien`) — jamais deux liens, conformément au
  * mandat (« un seul lien, décidé par l'opérateur »). La réconciliation
  * `'reconnexion'` (epoch incrémenté à chaque rattachement, D.2.3) est câblée
@@ -29,7 +25,6 @@
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
-import { MachineEtatsDemandes } from '../../control-plane/bus-permissions/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
@@ -49,7 +44,6 @@ import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
-import { cablerPermissionVerdictDistant } from './permission-verdict-distant.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
@@ -94,7 +88,7 @@ export interface OptionsAssemblageControlPlanePi {
   /**
    * Démarre la session orchestrateur maître. `☠` Par défaut FAUX : cette
    * session consomme du quota en continu et exige des credentials Claude
-   * valides sur le Pi. Le reste du control plane — parc, escalades, pilotage,
+   * valides sur le Pi. Le reste du control plane — parc, pilotage,
    * lien vers le PC — n'en dépend en RIEN : l'opérateur pilote ses missions
    * même sans elle. La coupler d'office rendrait tout le produit tributaire
    * d'un `/login` sur le Pi.
@@ -104,7 +98,6 @@ export interface OptionsAssemblageControlPlanePi {
 
 export interface ControlPlanePiAssemble {
   readonly registre: Registre;
-  readonly machineEtatsDemandes: MachineEtatsDemandes;
   readonly clientSuperviseurPc: ClientSuperviseurPc;
   readonly serveurLien: ServeurLienPc;
   readonly serveurApiWeb: ServeurApiWeb;
@@ -118,16 +111,15 @@ export interface ControlPlanePiAssemble {
   readonly balayageQuotas: BalayageQuotas;
 }
 
-function construireDependancesReconciliation(client: ClientSuperviseurPc, machine: MachineEtatsDemandes): DependancesReconciliation {
-  return {
-    inventairePc: client,
-    reinitialisateur: client,
-    busPermissions: {
-      redelivrer: (entree): void => {
-        machine.redelivrer(entree);
-      },
-    },
-  };
+/**
+ * `☠` `busPermissions` n'est PLUS fourni : le bus d'escalade a été retiré le
+ * 2026-07-31 (aucune demande n'y est jamais arrivée — en `permissionMode: 'auto'`
+ * le SDK n'appelle pas `canUseTool`). La réconciliation gère déjà ce cas : une
+ * demande que le SDK dit en attente est tracée `permission_orpheline`, motif
+ * `bus_permissions_non_cable`. Elle CONSTATE, elle ne prétend pas redélivrer.
+ */
+function construireDependancesReconciliation(client: ClientSuperviseurPc): DependancesReconciliation {
+  return { inventairePc: client, reinitialisateur: client };
 }
 
 /**
@@ -138,7 +130,6 @@ function construireDependancesReconciliation(client: ClientSuperviseurPc, machin
  */
 export async function assemblerControlPlanePi(options: OptionsAssemblageControlPlanePi): Promise<ControlPlanePiAssemble> {
   const registre = ouvrirRegistre({ chemin: options.cheminRegistreDb });
-  const machineEtatsDemandes = new MachineEtatsDemandes();
 
   // `☠` Les comptes sont garantis ICI, dans la connexion du service lui-même,
   // idempotent à chaque démarrage. Un script d'enregistrement séparé écrivait
@@ -166,7 +157,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   });
 
   const clientSuperviseurPc = new ClientSuperviseurPc(serveurLien.lien);
-  cablerPermissionVerdictDistant(machineEtatsDemandes, serveurLien.lien);
 
   /**
    * `☠` Le serveur de contrôle est construit PAR CONVERSATION : l'outil
@@ -180,7 +170,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     creerServeurMcpControle({
       registre,
       repertoireProjets: options.repertoireProjets,
-      escalades: machineEtatsDemandes,
       cibles: CIBLES_NON_CABLEES,
       arreteur: clientSuperviseurPc,
       relanceur: clientSuperviseurPc,
@@ -194,9 +183,9 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :
-  // elle ne dépend que du client PC et de la machine d'escalades (tous deux déjà
-  // construits), et elle doit être prête si une connexion PC arrive.
-  const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc, machineEtatsDemandes);
+  // elle ne dépend que du client PC (déjà construit), et elle doit être prête si
+  // une connexion PC arrive.
+  const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc);
   declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
 
   // `☠` Multi-sessions (type ChatGPT) : le gestionnaire construit une session par
@@ -279,7 +268,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   } else {
     log.warn(
       {},
-      'control plane assemblé SANS orchestrateur (avecOrchestrateur absent) — parc, escalades et pilotage opérationnels ; conversations désactivées (501)',
+      'control plane assemblé SANS orchestrateur (avecOrchestrateur absent) — parc et pilotage opérationnels ; conversations désactivées (501)',
     );
   }
 
@@ -289,7 +278,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   const serveurApiWeb = demarrerServeurApiWeb({
     port: options.portApiWeb,
     registre,
-    escalades: machineEtatsDemandes,
     pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
     // `☠` Les ordres partent par le MÊME lien que le reste (H-75, un seul
     // lien). `arretUrgence` n'est pas exposé par `ClientSuperviseurPc` : le
@@ -345,7 +333,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
 
   return {
     registre,
-    machineEtatsDemandes,
     clientSuperviseurPc,
     serveurLien,
     serveurApiWeb,

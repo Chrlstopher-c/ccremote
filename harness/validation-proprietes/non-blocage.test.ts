@@ -60,7 +60,6 @@ beforeEach(() => {
     // Désactivation explicite du plafond de parc (H-74), jamais une omission.
     utilisationParc: UTILISATION_PARC_DESACTIVEE,
     configPlafondParc: {},
-    escalades: { enAttente: () => [], repondre: () => true },
     // Port mort : jamais résolu — c'est le cas visé (worker éteint, lien coupé).
     cibles: { cible: () => ({ envoyerMessage: () => jamais(), interrupt: () => jamais() }) },
     arreteur: { arreter: () => jamais() },

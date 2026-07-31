@@ -15,7 +15,6 @@
 
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { FileEntreeCiblee, SourceInterruption } from '../../../pause/index.ts';
-import type { Verdict } from '../../bus-permissions/index.ts';
 import type { ConfigPlafondParc, RelevePourPlafond } from '../../../budgets/index.ts';
 import type { AccesMandat } from '../../../shared/acces-mandat.ts';
 
@@ -70,21 +69,6 @@ export interface ArreteurMission {
 /** Port de relance après crash (B, `resume`, A.2.2). */
 export interface RelanceurMission {
   relancer(missionId: string, sessionId: string): Promise<void>;
-}
-
-/** Sous-ensemble de `MachineEtatsDemandes` (C) dont l'arbitrage délégué a besoin. */
-export interface ArbitreEscalade {
-  repondre(requestId: string, verdict: Verdict): boolean;
-}
-
-/** Sous-ensemble de `MachineEtatsDemandes` (C) dont l'inspection a besoin. */
-export interface LecteurEscalades {
-  enAttente(): ReadonlyArray<{
-    readonly requestId: string;
-    readonly outil: string;
-    readonly idWorker: string;
-    readonly enAttenteDepuisA: number | null;
-  }>;
 }
 
 /** Port de garde-fou (G) — plafond par mission, filet de dernier recours (H-68). */

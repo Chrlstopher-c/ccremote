@@ -54,14 +54,10 @@ function hMcardTemplate(m) {
 async function hRenderParc() {
   const res = await HarnessAPI.getMissions();
   const missions = res.data || [];
-  const escRes = await HarnessAPI.getEscalades();
-  const escalades = escRes.data || [];
   const c = hMissionCounts(missions);
 
   document.getElementById('hParcSub').textContent = `${missions.length} missions · ${new Set(missions.map((m) => m.project)).size} projets · 1 mission active par projet (H-56)`;
   document.getElementById('hNavCountParc').textContent = missions.length;
-  document.getElementById('hNavCountEsc').textContent = escalades.length;
-  document.getElementById('hNavCountEsc').classList.toggle('alert', escalades.length > 0);
 
   const landingM = missions.filter((m) => m.landing && m.landing.active);
   const actM = missions.filter((m) => m.state === 'requires_action' && !(m.landing && m.landing.active));
@@ -200,7 +196,6 @@ let hVueEnCours = false;
 
 const HVUES_RAFRAICHIES = {
   'harness-parc': () => hRenderParc(),
-  'harness-escalades': () => hRenderEscalades(),
   'harness-comptes': () => hRenderComptes(),
   // ☠ Mise à jour CIBLÉE, jamais un rendu complet : la saisie en cours, les blocs
   // dépliés et la position de lecture doivent survivre. Repli sur un rendu franc
