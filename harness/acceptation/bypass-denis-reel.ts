@@ -74,7 +74,7 @@ const poignee = await startWorker(
     maxBudgetUsd: 1,
     model: 'sonnet',
     configDir: `/home/trinity/.claude-comptes/${COMPTE}`,
-    portAuditPermissions: () => ({}),
+    mcpServers: {}, portAuditPermissions: () => ({}),
   },
   CONSIGNE,
 )

@@ -122,6 +122,16 @@ export function composeWorkerOptions(
     // `☠` Modèle ET effort sont POSÉS, jamais laissés au défaut du CLI : un lead
     // qui raisonne au niveau minimal échoue lentement, sans que rien ne le dise.
     settings: { autoCompactEnabled: true, ...(spec.effortLevel ? { effortLevel: spec.effortLevel } : {}) },
+    // `☠` Les serveurs MCP sont TRANSMIS, jamais supposés hérités du poste.
+    // L'en-tête de ce fichier a longtemps posé qu'ils « appartiennent au PC » et
+    // arrivent par `settingSources` : c'était vrai en intention et faux en
+    // chemin. `settingSources` charge `settings.json` ; les serveurs MCP vivent
+    // dans `.claude.json`, que `CLAUDE_CONFIG_DIR` remplace par celui du compte
+    // isolé — vide. Relevé le 01/08 : `mcpServers: []` sur les deux comptes,
+    // alors que le mandat système ordonne au lead d'utiliser Playwright et Log
+    // Watcher. Onzième « écrit, testé, branché sur rien », et celui-ci durait
+    // depuis l'origine.
+    mcpServers: { ...spec.mcpServers },
     includePartialMessages: true,
     forwardSubagentText: true,
     agentProgressSummaries: true,
@@ -173,6 +183,20 @@ export function assertOptionsInvariants(options: Options): void {
       "hooks est absent : l'audit des permissions (C.5, M-22) ne serait jamais branché sur ce " +
         "worker — 5e occurrence mesurée de H-74. buildAuditHooks() doit toujours rendre un objet, " +
         'même vide sur panne du port ; un `undefined` ici est un défaut de composition, pas un état normal.',
+    );
+  }
+  // `☠` `mcpServers` doit être POSÉ, même vide. Non pas parce qu'un objet vide
+  // vaudrait mieux que rien — il ne vaut rien — mais parce qu'un `undefined`
+  // ici est indiscernable d'un poste sans MCP, et c'est exactement sous ce
+  // masque que le défaut a vécu depuis l'origine du harness : le lead recevait
+  // l'ordre d'utiliser Playwright, n'avait aucun outil, se rabattait sur le
+  // shell, et personne n'a jamais vu passer d'erreur. Le champ est obligatoire
+  // dans `WorkerSpec` ; cet invariant garde le point d'assemblage.
+  if (options.mcpServers === undefined) {
+    throw new OptionsCompositionError(
+      'mcpServers absent des options : une équipe sans serveurs MCP travaille quand même — ' +
+        'au shell, sur beaucoup plus de tours, et sans rien signaler. Passer {} explicitement ' +
+        'si le poste n’en déclare aucun (workers/mcp-du-poste.ts).',
     );
   }
   // `☠` Le SDK exige que les deux réglages aillent ensemble. Dépareillés, le mode

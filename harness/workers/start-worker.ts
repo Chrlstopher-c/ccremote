@@ -60,6 +60,12 @@ export function readCapabilities(init: SDKSystemMessage): WorkerCapabilities {
     advertised: [...(init.capabilities ?? [])],
     claudeCodeVersion: init.claude_code_version,
     tools: [...init.tools],
+    // `☠` Lu, pas déduit — et lu même si le champ manque : sur une équipe qui
+    // travaille sans MCP, c'est la seule trace qui permette de le CONSTATER.
+    // Le défaut d'origine (aucune équipe n'a jamais eu de serveur MCP depuis
+    // l'origine du harness) a survécu neuf jours précisément parce que rien,
+    // nulle part, ne rendait cette absence lisible.
+    mcpServers: (init.mcp_servers ?? []).map((s) => ({ name: s.name, status: String(s.status) })),
     model: init.model,
     sessionId: init.session_id,
   };

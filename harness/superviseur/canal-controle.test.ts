@@ -37,7 +37,7 @@ function demandeTransportable(): DemandeDemarrageTransportable {
 /** Réassemblage côté PC : les ports sont injectés ICI, jamais transportés. */
 function assembleurFactice(parametres: ParametresSpecTransportables): WorkerSpec {
   // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
-  return { ...parametres, portAuditPermissions: () => ({}) };
+  return { ...parametres, mcpServers: {}, portAuditPermissions: () => ({}) };
 }
 
 function demande(): DemandeDemarrage {
@@ -49,7 +49,7 @@ function demande(): DemandeDemarrage {
       cwd: '/tmp/worktree-alpha',
       mandate: 'team leader',
       // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
-      portAuditPermissions: () => ({}),
+      mcpServers: {}, portAuditPermissions: () => ({}),
       deniedToolPatterns: [],
       maxBudgetUsd: 25,
     },

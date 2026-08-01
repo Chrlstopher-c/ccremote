@@ -21,6 +21,7 @@ import type { FileEntreeCiblee, RegistrePauseAdapter, SourceInterruption } from 
 function capacites(advertised: readonly string[]): WorkerCapabilities {
   return {
     advertised,
+    mcpServers: [],
     claudeCodeVersion: '2.1.217',
     tools: [],
     model: 'claude-sonnet-4-6',

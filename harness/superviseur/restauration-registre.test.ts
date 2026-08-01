@@ -15,7 +15,7 @@ function specFactice(): WorkerSpec {
   // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
   return {
     sessionId: 'sess-legitime', cwd: '/worktrees/alpha', mandate: 'lead',
-    deniedToolPatterns: [], maxBudgetUsd: 25, portAuditPermissions: () => ({}),
+    deniedToolPatterns: [], maxBudgetUsd: 25, mcpServers: {}, portAuditPermissions: () => ({}),
   };
 }
 

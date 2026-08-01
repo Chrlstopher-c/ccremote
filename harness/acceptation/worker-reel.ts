@@ -55,7 +55,7 @@ const poignee = await startWorker(
     cwd: RACINE,
     mandate: MANDAT,
     // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
-    portAuditPermissions: () => ({}),
+    mcpServers: {}, portAuditPermissions: () => ({}),
     deniedToolPatterns: [...PLANCHER_DENI_SDK, 'Bash(echo SONDE-REFUS*)'],
     maxBudgetUsd: 5,
     model: 'sonnet',

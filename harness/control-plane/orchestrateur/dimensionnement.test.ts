@@ -24,6 +24,7 @@ import { describe, expect, test } from 'bun:test';
 import { composerMandatSysteme } from './dispatch-mandat.ts';
 import { MANDAT_ORCHESTRATEUR } from './processus/mandat.ts';
 import { normaliserModele } from '../../shared/modeles-claude.ts';
+import { MCP_EQUIPE } from '../../workers/mcp-du-poste.ts';
 import type { Proposition } from '../registre/index.ts';
 
 const MANDAT: Proposition = {
@@ -97,6 +98,44 @@ describe('ce que le lead doit savoir pour ne pas payer le prix fort', () => {
     // `☠` Même raison que le rapport et le budget : le premier message NE survit
     // PAS à une compaction, et un lead compacté relance des sous-agents.
     expect(mandatSysteme).toContain('DIMENSIONNE TES SOUS-AGENTS');
+  });
+});
+
+/**
+ * `☠` LE test d'assemblage, celui qui manquait deux fois. Le 01/08 au matin, le
+ * mandat de l'orchestrateur annonçait `WebSearch` absent de son allowlist. Le
+ * même jour, on découvrait que le mandat du lead lui ordonnait d'utiliser
+ * Playwright alors qu'aucune équipe n'a jamais eu un seul serveur MCP.
+ *
+ * Deux surfaces différentes, un seul défaut : un prompt qui promet une capacité
+ * que rien ne fournit. Un modèle ne peut pas s'en apercevoir — il essaie, échoue,
+ * contourne, et brûle des tours à le faire.
+ */
+describe('☠ tout outil NOMMÉ au lead doit exister réellement', () => {
+  test('chaque serveur MCP cité dans le mandat est bien transmis aux équipes', () => {
+    // On lit les serveurs cités sous la forme `mcp__<serveur>__*` dans le prompt,
+    // et on exige que chacun figure dans la liste réellement transmise.
+    const cites = [...mandatSysteme.matchAll(/mcp__([a-z-]+)__/g)].map((m) => m[1]);
+    expect(cites.length).toBeGreaterThan(0);
+    for (const serveur of cites) {
+      expect(MCP_EQUIPE).toContain(serveur as string);
+    }
+  });
+
+  test('les serveurs transmis qui servent la validation E2E sont bien annoncés', () => {
+    // L'inverse du test précédent : un outil fourni mais jamais nommé est un
+    // outil que le lead n'utilisera pas — payé, et inutile.
+    for (const serveur of ['codeindex', 'playwright', 'log-watcher']) {
+      expect(mandatSysteme).toContain(`mcp__${serveur}__`);
+    }
+  });
+
+  test('☠ l’écriture en mémoire sémantique est cadrée par H-66', () => {
+    // Elle est PARTAGÉE avec l'humain et les autres équipes. Une équipe qui y
+    // attribue à Chris une décision de l'orchestrateur pose un faux qui lui
+    // survit — H-66 appliqué à un support persistant.
+    expect(mandatSysteme).toContain('PARTAGÉE');
+    expect(mandatSysteme).toContain('n’attribue JAMAIS');
   });
 });
 

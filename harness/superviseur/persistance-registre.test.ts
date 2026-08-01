@@ -17,7 +17,7 @@ function specFactice(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     cwd: '/tmp/worktree-alpha',
     mandate: 'team leader',
     // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
-    portAuditPermissions: () => ({}),
+    mcpServers: {}, portAuditPermissions: () => ({}),
     deniedToolPatterns: [],
     maxBudgetUsd: 25,
     ...overrides,

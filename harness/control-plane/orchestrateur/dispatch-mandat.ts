@@ -178,6 +178,38 @@ const BLOC_ATTRIBUTION = [
 ].join('\n');
 
 /**
+ * `☠` Les outils que l'équipe a RÉELLEMENT depuis le 01/08 — et qu'elle n'avait
+ * jamais eus auparavant.
+ *
+ * Relevé ce jour-là : `mcpServers: []` dans le config dir de chaque compte.
+ * Aucune équipe n'a jamais disposé d'un seul serveur MCP depuis l'origine du
+ * harness, alors que son mandat lui ordonnait déjà d'utiliser Playwright pour
+ * valider. Corrigé (`workers/mcp-du-poste.ts`) et vérifié sur un worker réel :
+ * l'équipe appelle `mcp__codeindex__…` et obtient une réponse, un témoin sans
+ * transmission répond « aucun serveur CodeIndex n'est monté ici ».
+ *
+ * `☠` Les nommer un par un n'est pas de la décoration : un outil qu'un modèle
+ * ne sait pas qu'il possède n'existe pas pour lui. Le lead se rabattait sur le
+ * shell — beaucoup plus de tours, et les tours sont ce qu'on paie.
+ */
+const BLOC_OUTILS = [
+  'TES OUTILS — tu en as plus que tu ne crois, sers-t’en avant de tâtonner au shell.',
+  '  · CodeIndex (`mcp__codeindex__*`) — AVANT toute exploration manuelle d’un projet.',
+  '    `query_project` et `search_functions` remplacent cinq à dix lectures de fichiers.',
+  '  · Playwright (`mcp__playwright__*`) — le navigateur réel : naviguer, cliquer, remplir,',
+  '    lire les erreurs console, capturer. C’est LUI qui valide une interface, pas la relecture.',
+  '  · Log Watcher (`mcp__log-watcher__*`) — démarre les processus (`process_start`) et relis',
+  '    leurs erreurs (`process_get_errors`). Ne laisse jamais un serveur tourner sans surveillance.',
+  '  · pty-mcp (`mcp__pty-mcp__*`) — pour tout ce qui est interactif en terminal.',
+  '  · Mémoire sémantique (`mcp__semantic-memory__*`) — le contexte durable du projet.',
+  '',
+  '`☠` La mémoire sémantique est PARTAGÉE avec l’humain et avec les autres équipes.',
+  'Tu peux y lire librement. Si tu y écris, écris dans le projet sur lequel tu travailles,',
+  'jamais dans son profil personnel, et n’attribue JAMAIS à l’humain une décision qui vient',
+  'de l’orchestrateur ou de toi — une mémoire fausse survit longtemps à l’équipe qui l’a posée.',
+].join('\n');
+
+/**
  * `☠` LE défaut de coût, mesuré le 01/08 sur la production.
  *
  * Le site lumen a coûté **52,93 $ en six vagues**, aucune sous 3,85 $. Cause
@@ -314,6 +346,8 @@ export function composerMandatSysteme(p: Proposition, acces: AccesMandat): strin
     ligneBudget(p.budgetMaxUsd),
     '',
     BLOC_AUTONOMIE,
+    '',
+    BLOC_OUTILS,
     '',
     BLOC_DIMENSIONNEMENT,
     '',

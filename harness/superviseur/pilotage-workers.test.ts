@@ -25,6 +25,7 @@ import type { DemandeDemarrage } from './types.ts';
  */
 const CAPACITES: WorkerCapabilities = {
   advertised: [CAPACITE_RECU_INTERRUPTION],
+  mcpServers: [],
   claudeCodeVersion: '2.0.0',
   tools: [],
   model: 'claude-sonnet-4-6',
@@ -95,7 +96,7 @@ function demande(): DemandeDemarrage {
       mandate: 'mandat de banc',
       deniedToolPatterns: [],
       maxBudgetUsd: 10,
-      portAuditPermissions: () => ({}),
+      mcpServers: {}, portAuditPermissions: () => ({}),
     },
   };
 }

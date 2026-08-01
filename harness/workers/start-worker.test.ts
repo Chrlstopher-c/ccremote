@@ -65,7 +65,7 @@ function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     mandate: 'team leader',
     deniedToolPatterns: ['Bash(rm -rf /*)'],
     maxBudgetUsd: 25,
-    portAuditPermissions: () => ({}),
+    mcpServers: {}, portAuditPermissions: () => ({}),
     ...overrides,
   };
 }

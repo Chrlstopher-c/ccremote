@@ -22,7 +22,7 @@ import { SuperviseurWorkers, type DemarrerWorkerFn } from './superviseur-workers
 import type { DemandeDemarrage } from './types.ts';
 
 function capacites(overrides: Partial<WorkerCapabilities> = {}): WorkerCapabilities {
-  return { advertised: [], claudeCodeVersion: '2.1.217', tools: ['Bash'], model: 'claude-sonnet-4-6', sessionId: 's', ...overrides };
+  return { advertised: [], claudeCodeVersion: '2.1.217', tools: ['Bash'], mcpServers: [], model: 'claude-sonnet-4-6', sessionId: 's', ...overrides };
 }
 
 function fakeQuery(
@@ -59,7 +59,7 @@ function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     cwd: '/tmp/worktree-alpha',
     mandate: 'team leader',
     // Audit inactif EXPLICITEMENT sur cette doublure (H-74) : jamais une omission.
-    portAuditPermissions: () => ({}),
+    mcpServers: {}, portAuditPermissions: () => ({}),
     deniedToolPatterns: ['Bash(rm -rf /*)'],
     maxBudgetUsd: 25,
     ...overrides,

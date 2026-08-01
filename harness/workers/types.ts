@@ -7,6 +7,7 @@
 import type {
   HookCallbackMatcher,
   HookEvent,
+  McpServerConfig,
   Options,
   Query,
   SDKUserMessage,
@@ -65,6 +66,17 @@ export interface WorkerCapabilities {
   /** Informatif uniquement. Interdit d'en dériver une capacité (panne #37). */
   readonly claudeCodeVersion: string;
   readonly tools: readonly string[];
+  /**
+   * Serveurs MCP annoncés par le CLI (`SDKSystemMessage.mcp_servers`), avec leur
+   * état à l'init.
+   *
+   * `☠` À l'init, ils sont normalement TOUS en `pending` : la connexion stdio
+   * lance un processus par serveur et n'est pas finie quand l'init part. Leurs
+   * outils ne figurent donc PAS dans `tools` — un banc qui a conclu l'inverse le
+   * 01/08 a déclaré rouge une correction qui marchait. Cette liste sert à
+   * constater la TRANSMISSION ; l'usage réel se constate sur un appel d'outil.
+   */
+  readonly mcpServers: readonly { readonly name: string; readonly status: string }[];
   readonly model: string;
   readonly sessionId: string;
 }
@@ -91,6 +103,21 @@ export interface WorkerSpec {
   readonly agentTeams?: boolean;
   /** Variables additionnelles ; fusionnées **au-dessus** de `process.env`. */
   readonly extraEnv?: Readonly<Record<string, string>>;
+  /**
+   * Serveurs MCP mis à disposition de l'équipe (`workers/mcp-du-poste.ts`).
+   *
+   * `☠` OBLIGATOIRE, jamais optionnel — même raison que `portAuditPermissions`
+   * juste en dessous, et même défaut à l'origine. Relevé le 01/08 :
+   * `mcpServers: []` dans le config dir de CHAQUE compte, alors que le mandat
+   * système ordonne au lead d'utiliser Playwright et Log Watcher pour valider.
+   * Les équipes n'en ont jamais eu un seul depuis l'origine du harness.
+   *
+   * L'optionalité était le défaut lui-même : un champ qu'on peut omettre finit
+   * omis, et une équipe sans outils travaille quand même — plus mal, plus
+   * longtemps, plus cher, et sans que rien ne le signale. Un objet VIDE reste
+   * permis (poste sans MCP), mais il doit être écrit.
+   */
+  readonly mcpServers: Readonly<Record<string, McpServerConfig>>;
   /** Adaptateur de miroir vers le Pi (E.3). Best-effort par conception (H-15). */
   readonly sessionStore?: Options['sessionStore'];
   /** Point d'extension distant (B.2.1). Absent ⇒ spawn local intégré du SDK. */

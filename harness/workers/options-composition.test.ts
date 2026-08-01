@@ -30,6 +30,9 @@ function spec(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
     mandate: 'Tu es team leader. Critère d’arrêt : les tests E2E passent.',
     deniedToolPatterns: ['Bash(rm -rf /*)'],
     maxBudgetUsd: 25,
+    // ☠ Vide par DÉFAUT, jamais absent : c'est le cas « poste sans MCP ». Les
+    // tests qui portent sur la transmission le surchargent explicitement.
+    mcpServers: {},
     portAuditPermissions: () => ({}),
     ...overrides,
   };
@@ -113,7 +116,17 @@ describe('composeWorkerOptions', () => {
     // vit dans les fichiers de settings, sdk.d.ts ~L5117, un mécanisme distinct
     // à base de commandes shell) mais le câblage structurel de l'audit de
     // permissions du harness lui-même (C.5, M-22) — voir le test dédié plus bas.
-    for (const key of ['mcpServers', 'agents', 'plugins', 'thinking', 'effort', 'allowedTools']) {
+    // `☠` `mcpServers` a été RETIRÉ de cette liste le 01/08 — renversement
+    // assumé, sur mesure, à ne pas « rétablir » en croyant à une régression.
+    // La doctrine « les MCP appartiennent au PC » restait juste ; sa voie de
+    // transmission n'existait pas. `settingSources` charge `settings.json`,
+    // alors que les serveurs MCP vivent dans `.claude.json` — le fichier que
+    // `CLAUDE_CONFIG_DIR` remplace justement par celui du compte isolé, vide.
+    // Relevé sur les deux comptes : `mcpServers: []`. Aucune équipe n'a jamais
+    // eu Playwright ni CodeIndex, alors que son mandat lui ordonnait de s'en
+    // servir. Le poste reste la SOURCE (`workers/mcp-du-poste.ts` lit sa
+    // config) ; ce qui change, c'est que la transmission est écrite.
+    for (const key of ['agents', 'plugins', 'thinking', 'effort', 'allowedTools']) {
       expect(options).not.toHaveProperty(key);
     }
   });

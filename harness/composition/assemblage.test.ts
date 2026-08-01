@@ -88,7 +88,7 @@ describe('assemblage — persistance et restauration du registre PC (dette n°1,
       vivant: true,
       spec: {
         sessionId: 'session-fantome', cwd: '/tmp/worktree-fantome', mandate: '',
-        deniedToolPatterns: [], maxBudgetUsd: 1, portAuditPermissions: () => ({}),
+        deniedToolPatterns: [], maxBudgetUsd: 1, mcpServers: {}, portAuditPermissions: () => ({}),
       },
     });
     persistance.fermer();
