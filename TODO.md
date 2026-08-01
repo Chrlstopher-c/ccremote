@@ -72,6 +72,36 @@
       tranchée.
 - [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
       visuel, branché sur le vrai back, ne contraint rien en amont.
+### ✅ Fausse saturation de compte — corrigée le 01/08
+
+Chris demande « où en est StockIOP ? », obtient une bonne réponse, et voit
+« **Compte saturé — bascule sur le compte de repli. Renvoie ton message.** »
+avec un compte à **35 %** de sa fenêtre de 5 h. Le compte maître a réellement
+tourné, la session a été fermée.
+
+`☠` Cause, relue en base (conversation `aa66c851`, bloc de 2003 caractères) :
+l'orchestrateur décrivait StockIOP — « *Production readiness bouclée (**rate
+limiting**, security headers, structlog…)* ». Le détecteur de saturation lit le
+texte que le modèle produit LUI-MÊME comme un signal de contrôle. Sur un projet
+dont le sujet est justement les quotas d'API, il se déclenche tout seul.
+
+- [x] **`/rate limit/i` retiré** — motif SPÉCULATIF, jamais vu dans une annonce
+      réelle du CLI, et la tournure la plus banale du métier. C'est exactement ce
+      que l'en-tête de `shared/saturation-compte.ts` interdisait déjà.
+- [x] **Portée bornée** — une annonce du CLI est un bloc COURT et autonome (les
+      deux vraies faisaient 102 caractères, message entier). Au-delà de 400, on
+      est dans de la prose QUI PARLE de limites. Un bloc persisté est un bloc
+      complet : le streaming n'écrit qu'à `content_block_stop`.
+- [x] **Signature machine** `cc_cli_limit_message` — relevée sur les deux vraies
+      saturations (23/07, 27/07). Émise par le CLI, jamais écrite par un modèle :
+      elle court-circuite toutes les autres règles, quelle que soit la longueur.
+- [x] Reproduit en production APRÈS correctif, même tournure, réponse plus
+      longue encore : zéro saturation.
+
+`☠` Asymétrie des coûts, qui fixe le sens du filtre : une détection manquée coûte
+un message à renvoyer, avec l'annonce du CLI sous les yeux. Un faux positif TUE la
+session, fait tourner le compte maître et fait réécrire l'opérateur.
+
 ### ✅ DEUX machines de travail simultanées (PC + VPS) — LIVRÉ le 01/08
 
 Demandé par Chris le 01/08 : faire cohabiter le PC et le VPS pour départager les
