@@ -72,6 +72,23 @@
       tranchée.
 - [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
       visuel, branché sur le vrai back, ne contraint rien en amont.
+### 🔜 CHANTIER SUIVANT — DEUX machines de travail simultanées (PC + VPS)
+
+**Tout le contexte d'exécution est dans `harness/CHANTIER-MULTI-MACHINES.md`** —
+écrit pour être lu par une session neuve, sans rien connaître de la session du 01/08.
+
+Demandé par Chris le 01/08 : faire cohabiter le PC et le VPS pour départager les
+tâches (StockIOP sur le VPS, le reste sur le PC), avec choix de la machine à la
+création d'une conversation.
+
+`☠` Le lien est aujourd'hui **structurellement mono-machine** : une connexion
+authentifiée évince la précédente. C'est écrit dans `serveur-lien-pc.ts` et c'est
+aussi la cause de la **dette n°6** (1268 évictions). Les deux se corrigent avec la
+même brique : donner une IDENTITÉ aux superviseurs.
+
+Décisions arbitrées : la conversation choisit la machine, le projet vérifie ·
+machine fixée à la création, non modifiable · H-56 reste global.
+
 ### ⚡ CHANTIER VPS — le verrou technique est levé (01/08)
 
 - [x] **Le lien traverse Cloudflare Tunnel** — `lien.exemple.com` → `localhost:8721`.
