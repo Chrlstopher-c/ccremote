@@ -41,6 +41,17 @@ fi
 COMPTES=$(ssh "$CIBLE" "ls -d \$HOME/.claude-comptes/*/ 2>/dev/null | xargs -n1 basename | paste -sd,")
 echo "  comptes présents : $COMPTES"
 
+# ☠ `/mnt/projects` est la racine EN DUR du superviseur
+# (`superviseur-workers.ts` : `deps.racineProjets ?? '/mnt/projects'`), et les
+# mandats portent des chemins ABSOLUS (`/mnt/projects/lumen`). Elle doit donc
+# être identique sur toutes les machines de travail : la rendre configurable
+# casserait tout mandat déjà émis. Absente, `explorer_projets` répond « le
+# chemin n'existe pas » — mesuré en prod juste après la bascule.
+echo "→ Racine des projets"
+ssh "$CIBLE" "test -d /mnt/projects || sudo mkdir -p /mnt/projects && sudo chown \$(id -u):\$(id -g) /mnt/projects" 2>/dev/null \
+  || echo "  ⚠ /mnt/projects non créé (sudo requis) — les équipes ne trouveront aucun projet"
+echo "  $(ssh "$CIBLE" 'ls -d /mnt/projects 2>/dev/null || echo ABSENTE')"
+
 echo "→ Envoi des sources du harness"
 ssh "$CIBLE" "mkdir -p $DISTANT/harness"
 # ☠ Même exclusion que pour le Pi : le registre est en WAL, et `--delete`
