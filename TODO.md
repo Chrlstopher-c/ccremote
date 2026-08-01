@@ -16,6 +16,35 @@
       l'écran. Reste l'arrêt d'urgence, réel, désormais seul et en pleine largeur. La pause par
       MISSION, elle, a toujours été réelle et ne bouge pas.
 
+### ✅ LIVRÉ LE 01/08 — session « coût & outillage des équipes »
+
+- [x] **Aucune équipe n'avait UN SEUL serveur MCP** — depuis l'origine du harness.
+      `mcpServers: []` dans le config dir de chaque compte, alors que le mandat leur ordonnait
+      d'utiliser Playwright pour valider. 11ᵉ « écrit, testé, branché sur rien », la plus longue.
+      Corrigé + banc réel : l'équipe appelle `mcp__codeindex__…`, le témoin répond « aucun
+      serveur monté ici ». `☠` Piège de mesure payé : la 1ʳᵉ version du banc a déclaré ROUGE une
+      correction qui marchait — à l'init les serveurs sont tous `pending`, leurs outils NE PEUVENT
+      PAS être dans `capabilities.tools`.
+- [x] **Dimensionnement des modèles** — le prompt INTERDISAIT à l'orchestrateur d'arbitrer
+      (« laisse `modele` vide », « ne choisis JAMAIS un modèle inférieur »). Il obéissait, et l'a
+      confirmé mot pour mot au banc. Le lead ignorait que `AgentInput.model` omis fait HÉRITER du
+      parent : un lead Opus lançait trois sous-agents Opus. Mesures : 6,40 $/équipe Opus contre
+      0,67 $/équipe Sonnet, lumen = 52,93 $ en six vagues.
+- [x] **Résultats des appels d'outils** (migration 21) + **timeline** à la Claude Code
+      (une étape = une ligne de 32 px, « Terminé » à la reprise de parole).
+      `☠` H-45 était mal invoquée : elle protège le CONTEXTE de l'orchestrateur des sous-agents,
+      pas l'affichage de ses propres appels.
+- [x] **Valise qui ne se repliait pas** — `.h-case-body[hidden]` et `.h-case-wrap > .h-case-body`
+      à spécificité ÉGALE (0,2,0), seul l'ordre tranchait. Même famille que le bouton d'envoi.
+- [x] **Config des comptes symétrique et vérifiable** — `reference/` manquait sur les DEUX comptes,
+      `settings.json` (donc les hooks) sur compte-b seulement : une équipe n'avait pas les mêmes
+      capacités selon le compte tiré par la rotation. Script idempotent + contrôle au pré-vol.
+- [x] **`CLAUDE-equipe.md`** — le lead chargeait le CLAUDE.md du poste, qui s'adresse à un agent
+      conversant avec Chris. Dérivé : standards et réflexes gardés, relation retirée.
+- [x] **Banc de pilotage** (`harness/pilotage/`) — conduire la prod depuis une session de code,
+      par les MÊMES routes que l'interface. C'est lui qui a permis toutes les mesures ci-dessus.
+- [x] **`suivre_equipes`** (22ᵉ outil) + **planification préalable** au prompt.
+
 ### 🎯 À LA REPRISE (01/08)
 
 - [ ] **Inspection à la demande sur une équipe VIVANTE** — livrée et déployée le 01/08, mais le
@@ -43,6 +72,14 @@
       tranchée.
 - [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
       visuel, branché sur le vrai back, ne contraint rien en amont.
+- [ ] **PROCHAIN CHANTIER — remplacer le PC par le VPS OVH** (annoncé par Chris le 01/08).
+      Le PC éteint = plus rien ne tourne ; le VPS est allumé en permanence.
+      `☠` Le VPS (vps.exemple, `ssh vps`) n'est **PAS sur le même réseau** que le Pi, alors que
+      le lien Pi↔PC n'a jamais été éprouvé ailleurs qu'en LAN direct — le tunnel Cloudflare reste
+      la seule voie et n'a jamais été traversé. C'est le vrai risque de ce chantier, pas le portage.
+- [ ] **Résumé de séquence en tête de timeline** (« Fichier créé, lu un fichier ») — vu sur la
+      capture de Chris, pas encore fait. Les étapes et le « Terminé » le sont.
+- [ ] **Fluidité des pages Mission / Agent** — la timeline ne couvre que la vue Orchestrateur.
 
 ### ✅ LIVRÉ LE 01/08 — session du soir
 
