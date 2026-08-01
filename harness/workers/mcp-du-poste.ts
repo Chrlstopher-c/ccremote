@@ -49,6 +49,33 @@ import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
  */
 export const MCP_EQUIPE: readonly string[] = ['semantic-memory', 'codeindex', 'playwright', 'log-watcher', 'pty-mcp'];
 
+/**
+ * `☠ LA MÉMOIRE EST EN LECTURE SEULE POUR TOUT CCREMOTE.` Règle posée par Chris
+ * le 2026-08-01 : « la lecture seule doit être pour tout le travail depuis
+ * ccremote, le MCP lui-même doit permettre tout ».
+ *
+ * Le danger est précis et il faut le voir : la source lue ici est le
+ * `~/.claude.json` DU POSTE — c'est-à-dire, sur le PC, la configuration
+ * personnelle de Chris, qui porte le jeton COMPLET. Recopier cette entrée telle
+ * quelle donnerait à chaque équipe le droit d'écrire dans sa mémoire
+ * personnelle. Le harness impose donc le point d'accès en LECTURE, il ne
+ * transmet pas ce qu'il a trouvé.
+ *
+ * `☠` Et si l'environnement ne fournit pas de point d'accès en lecture, la
+ * mémoire est RETIRÉE de la boîte à outils plutôt que passée en écriture. Une
+ * équipe sans mémoire travaille moins bien ; une équipe qui peut réécrire la
+ * mémoire de Chris est un problème d'une autre nature (H-66 : la parole d'une
+ * équipe n'est pas la sienne).
+ */
+const NOM_MEMOIRE = 'semantic-memory';
+
+function memoireEnLecture(): McpServerConfig | null {
+  const url = process.env['CCREMOTE_MEMOIRE_URL_LECTURE'];
+  const jeton = process.env['CCREMOTE_MEMOIRE_JETON_LECTURE'];
+  if (url === undefined || url.length === 0 || jeton === undefined || jeton.length === 0) return null;
+  return { type: 'http', url, headers: { Authorization: `Bearer ${jeton}` } } as unknown as McpServerConfig;
+}
+
 /** Où le poste déclare ses serveurs. Injectable pour les tests. */
 export function cheminConfigPoste(): string {
   return join(homedir(), '.claude.json');
@@ -86,6 +113,13 @@ export function resoudreMcpEquipe(chemin: string = cheminConfigPoste()): Resolut
   const serveurs: Record<string, McpServerConfig> = {};
   const manquants: string[] = [];
   for (const nom of MCP_EQUIPE) {
+    if (nom === NOM_MEMOIRE) {
+      // `☠` JAMAIS ce que le poste déclare — voir `memoireEnLecture`.
+      const lecture = memoireEnLecture();
+      if (lecture === null) manquants.push(nom);
+      else serveurs[nom] = lecture;
+      continue;
+    }
     const config = declares[nom];
     if (config === undefined) manquants.push(nom);
     else serveurs[nom] = config;

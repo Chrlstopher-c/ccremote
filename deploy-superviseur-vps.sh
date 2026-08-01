@@ -139,6 +139,9 @@ echo "→ Environnement (umask 077)"
 HOSTNAME_DISTANT="$(ssh "$CIBLE" hostname)"
 MACHINE_ID="${CCREMOTE_VPS_MACHINE_ID:-$(printf '%s' "$HOSTNAME_DISTANT" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._-' '-' | cut -c1-63)}"
 echo "  identité de machine : $MACHINE_ID"
+MEMOIRE_URL_LECTURE="${CCREMOTE_MEMOIRE_URL_LECTURE:-https://memoire.exemple.com/lecture/mcp}"
+MEMOIRE_JETON_LECTURE="${CCREMOTE_MEMOIRE_JETON_LECTURE:-$(cat "$HOME/.config/semantic-memory/token-lecture" 2>/dev/null)}"
+[ -n "$MEMOIRE_JETON_LECTURE" ] || echo "  ⚠ jeton de lecture de la mémoire absent — les équipes du VPS n'auront PAS la mémoire" 
 # ☠ Le secret passe par stdin, jamais en argument : `ps` est lisible par tous.
 ssh "$CIBLE" "mkdir -p \$HOME/.config/ccremote && umask 077 && cat > \$HOME/.config/ccremote/pc.env" <<EOF
 PATH=/home/ubuntu/.bun/bin:/usr/local/bin:/usr/bin:/bin
@@ -152,6 +155,13 @@ CCREMOTE_LIEN_SECRET=$CCREMOTE_LIEN_SECRET
 # (Sans accents ni antiquotes : ce bloc part dans un heredoc NON quote, ou une
 #  antiquote serait executee — defaut mesure le 01/08, hostname() evalue.)
 CCREMOTE_MACHINE_ID=$MACHINE_ID
+# Memoire semantique : point d'acces en LECTURE SEULE pour les equipes.
+# Regle posee par Chris le 01/08 : tout le travail depuis ccremote lit la
+# memoire, seules ses sessions personnelles l'ecrivent (H-66). Absent, la
+# memoire est RETIREE de la boite a outils des equipes plutot que passee en
+# ecriture (voir harness/workers/mcp-du-poste.ts).
+CCREMOTE_MEMOIRE_URL_LECTURE=$MEMOIRE_URL_LECTURE
+CCREMOTE_MEMOIRE_JETON_LECTURE=$MEMOIRE_JETON_LECTURE
 EOF
 ssh "$CIBLE" "mkdir -p \$HOME/.local/share/ccremote"
 

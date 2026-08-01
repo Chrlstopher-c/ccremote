@@ -26,6 +26,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -60,9 +61,19 @@ function postePropose(noms: readonly string[]): string {
 
 describe('ce que le poste met à disposition d’une équipe', () => {
   test('les serveurs attendus sont lus depuis la config du poste', () => {
+    // `☠ RENVERSEMENT ASSUMÉ (01/08)` — `semantic-memory` n'est PLUS pris chez le
+    // poste. Sa configuration y porte le jeton COMPLET de Chris ; la recopier
+    // donnerait l'écriture à chaque équipe. Le harness impose le point d'accès en
+    // lecture depuis l'environnement (voir le bloc de tests dédié en fin de
+    // fichier). Un test qui l'attendrait de nouveau ici signalerait que la
+    // mémoire est repassée en écriture, pas une régression de lecture.
+    const attendus = MCP_EQUIPE.filter((n) => n !== 'semantic-memory');
     const r = resoudreMcpEquipe(postePropose(MCP_EQUIPE));
-    expect(Object.keys(r.serveurs).sort()).toEqual([...MCP_EQUIPE].sort());
-    expect(r.manquants).toEqual([]);
+    expect(Object.keys(r.serveurs).sort()).toEqual([...attendus].sort());
+    // `semantic-memory` est signalée manquante tant que l'environnement ne
+    // fournit pas de point d'accès en LECTURE — c'est l'absence dite, jamais
+    // subie, et c'est le comportement voulu.
+    expect(r.manquants).toEqual(['semantic-memory']);
   });
 
   test('☠ tout ce que le poste déclare n’est PAS transmis — la liste est nommée', () => {
@@ -123,5 +134,58 @@ describe('la transmission jusqu’aux options du worker', () => {
     const sansMcp = { ...options };
     delete (sansMcp as { mcpServers?: unknown }).mcpServers;
     expect(() => assertOptionsInvariants(sansMcp)).toThrow(/mcpServers absent/);
+  });
+});
+
+// ------------------------------------------- mémoire sémantique en LECTURE SEULE
+
+describe('mémoire sémantique — lecture seule pour tout ccremote (01/08)', () => {
+  const POSTE_AVEC_JETON_COMPLET = {
+    mcpServers: {
+      'semantic-memory': {
+        type: 'http',
+        url: 'https://memoire.example/complet/mcp',
+        headers: { Authorization: 'Bearer JETON-COMPLET-DE-CHRIS' },
+      },
+      playwright: { type: 'stdio', command: '/bin/true', args: [] },
+    },
+  };
+
+  function ecrire(contenu: unknown): string {
+    const chemin = join(tmpdir(), `mcp-poste-${randomUUID()}.json`);
+    writeFileSync(chemin, JSON.stringify(contenu));
+    return chemin;
+  }
+
+  test('☠ le jeton COMPLET du poste n’est JAMAIS transmis à une équipe', () => {
+    // La source lue est le `~/.claude.json` du poste — sur le PC, la config
+    // personnelle de Chris, qui porte le jeton d'écriture. La recopier donnerait
+    // à chaque équipe le droit de réécrire sa mémoire (H-66).
+    process.env['CCREMOTE_MEMOIRE_URL_LECTURE'] = 'https://memoire.example/lecture/mcp';
+    process.env['CCREMOTE_MEMOIRE_JETON_LECTURE'] = 'JETON-LECTURE';
+    const r = resoudreMcpEquipe(ecrire(POSTE_AVEC_JETON_COMPLET));
+    const memoire = JSON.stringify(r.serveurs['semantic-memory']);
+    expect(memoire).toContain('/lecture/mcp');
+    expect(memoire).toContain('JETON-LECTURE');
+    expect(memoire).not.toContain('JETON-COMPLET-DE-CHRIS');
+    expect(memoire).not.toContain('/complet/');
+  });
+
+  test('☠ sans point d’accès en lecture, la mémoire est RETIRÉE — jamais passée en écriture', () => {
+    // Une équipe sans mémoire travaille moins bien. Une équipe qui peut
+    // réécrire la mémoire de Chris est un problème d'une autre nature.
+    delete process.env['CCREMOTE_MEMOIRE_URL_LECTURE'];
+    delete process.env['CCREMOTE_MEMOIRE_JETON_LECTURE'];
+    const r = resoudreMcpEquipe(ecrire(POSTE_AVEC_JETON_COMPLET));
+    expect(r.serveurs['semantic-memory']).toBeUndefined();
+    // Et l'absence est DITE, jamais subie.
+    expect(r.manquants).toContain('semantic-memory');
+  });
+
+  test('les autres serveurs restent bien ceux du poste', () => {
+    process.env['CCREMOTE_MEMOIRE_URL_LECTURE'] = 'https://memoire.example/lecture/mcp';
+    process.env['CCREMOTE_MEMOIRE_JETON_LECTURE'] = 'JETON-LECTURE';
+    const r = resoudreMcpEquipe(ecrire(POSTE_AVEC_JETON_COMPLET));
+    expect(r.serveurs['playwright']).toEqual({ type: 'stdio', command: '/bin/true', args: [] } as never);
   });
 });
