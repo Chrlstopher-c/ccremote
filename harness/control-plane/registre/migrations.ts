@@ -650,6 +650,31 @@ ALTER TABLE mission ADD COLUMN inspection_a INTEGER;
 ALTER TABLE mission ADD COLUMN inspection_decision TEXT;
 `;
 
+/**
+ * Les appels d'outils de l'orchestrateur portent enfin leur RÉSULTAT.
+ *
+ * `☠` Jusqu'ici le fil affichait « Outil appelé : lire_fichier », suivi de la
+ * mention « Le harness journalise l'appel, pas son résultat (H-45) ». Chris l'a
+ * dit sans détour le 01/08 : montrer l'outil sans son résultat ne sert à rien.
+ * Il a raison, et **H-45 était mal invoquée ici**. Cette règle interdit au flux
+ * détaillé des SOUS-AGENTS de traverser le CONTEXTE de l'orchestrateur. Or ce
+ * qu'on affiche là, ce sont les résultats de SES PROPRES appels : il les a déjà
+ * dans son contexte, forcément, puisque c'est lui qui les a lancés. Les montrer
+ * à l'écran ne lui ajoute pas un octet. La clause protégeait donc quelque chose
+ * qui n'était pas en jeu, au prix d'un fil illisible.
+ *
+ * `tool_use_id` est une COLONNE et non une correspondance en mémoire : l'appel
+ * et son résultat sont deux messages SDK distincts, séparés par l'exécution de
+ * l'outil. Une map en mémoire ne survivrait pas à un redémarrage du control
+ * plane, et les résultats en vol seraient perdus sans laisser de trace.
+ */
+const MIGRATION_21 = `
+ALTER TABLE conversation_evenement ADD COLUMN tool_use_id TEXT;
+ALTER TABLE conversation_evenement ADD COLUMN detail TEXT;
+ALTER TABLE conversation_evenement ADD COLUMN resultat TEXT;
+CREATE INDEX idx_conv_evt_tool ON conversation_evenement(tool_use_id);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -671,6 +696,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 18, nom: 'resultat-outil', sql: MIGRATION_18 },
   { version: 19, nom: 'source-titre-conversation', sql: MIGRATION_19 },
   { version: 20, nom: 'verdict-inspection-mission', sql: MIGRATION_20 },
+  { version: 21, nom: 'resultats-outils-conversation', sql: MIGRATION_21 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

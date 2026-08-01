@@ -501,8 +501,18 @@
   .h-case .cv { flex: 0 0 auto; transition: transform .18s ease; opacity: .75; }
   .h-case.ouvert .cv { transform: rotate(90deg); }
   .h-case:hover { color: var(--ink-2); }
-  .h-case-body[hidden] { display: none; }
   .h-case-wrap > .h-case-body { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+  /* ☠ APRÈS `.h-case-wrap > .h-case-body`, jamais avant : les deux sélecteurs ont
+     la MÊME spécificité (0,2,0 — deux classes de chaque côté), donc seul l'ordre
+     de déclaration tranche. Placée en premier, comme elle l'était, `display:none`
+     perdait contre `display:flex` et l'attribut `hidden` ne cachait plus rien :
+     la valise se repliait (le chevron tournait bien) mais son contenu restait à
+     l'écran. Invisible avant le premier clic — le corps est vide tant qu'il n'a
+     pas été rempli — le défaut ne se voyait donc qu'au REPLI. `!important`
+     verrouille la propriété contre toute règle de mise en page ajoutée plus bas :
+     `hidden` est un ÉTAT, pas une suggestion de style. Même famille que le bouton
+     d'envoi invisible du 01/08 — une spécificité qu'on n'avait pas comptée. */
+  .h-case-body[hidden] { display: none !important; }
 
   /* une étape = une carte, dépliable à son tour */
   .h-card { border: 1px solid var(--line); border-radius: 11px; background: var(--card); overflow: hidden; }

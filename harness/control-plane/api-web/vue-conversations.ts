@@ -21,6 +21,16 @@ export interface EvenementApi {
    */
   readonly model: string | null;
   readonly effort: string | null;
+  /**
+   * Appels d'outils uniquement (migration 21) : ce que l'appel a demandé, et ce
+   * qu'il a rendu.
+   *
+   * `☠` `resultat: null` veut dire « pas encore revenu », JAMAIS « vide ».
+   * L'écran doit afficher « en attente » — un outil présenté comme ayant répondu
+   * du vide est un mensonge plus coûteux que l'absence d'information.
+   */
+  readonly detail: string | null;
+  readonly resultat: string | null;
 }
 
 export interface ConversationApi {
@@ -108,7 +118,16 @@ export interface PortConversations {
 }
 
 export function versEvenementApi(ev: EvenementConversation): EvenementApi {
-  return { seq: ev.seq, type: ev.type, contenu: ev.contenu, at: ev.creeA, model: ev.modele, effort: ev.effort };
+  return {
+    seq: ev.seq,
+    type: ev.type,
+    contenu: ev.contenu,
+    at: ev.creeA,
+    model: ev.modele,
+    effort: ev.effort,
+    detail: ev.detail,
+    resultat: ev.resultat,
+  };
 }
 
 export function versConversationApi(entree: {

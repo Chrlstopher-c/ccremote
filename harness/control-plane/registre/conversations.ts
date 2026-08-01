@@ -37,6 +37,9 @@ interface LigneEvenement {
   cree_a: number;
   modele: string | null;
   effort: string | null;
+  tool_use_id: string | null;
+  detail: string | null;
+  resultat: string | null;
 }
 
 function versConversation(l: LigneConversation): Conversation {
@@ -70,6 +73,9 @@ function versEvenement(l: LigneEvenement): EvenementConversation {
     creeA: l.cree_a,
     modele: l.modele,
     effort: l.effort,
+    toolUseId: l.tool_use_id,
+    detail: l.detail,
+    resultat: l.resultat,
   };
 }
 
@@ -85,6 +91,10 @@ export interface AjoutEvenement {
   /** Ce qui a produit CET évènement — jamais réécrit si le fil change de modèle ensuite. */
   readonly modele?: string | null;
   readonly effort?: string | null;
+  /** Appels d'outils uniquement — sert à apparier le résultat qui arrivera après. */
+  readonly toolUseId?: string | null;
+  /** Paramètres de l'appel, déjà bornés par `resultats-outils.ts`. */
+  readonly detail?: string | null;
 }
 
 export class DepotConversations {
@@ -285,8 +295,9 @@ export class DepotConversations {
         this.db.transaction(() => {
           const res = this.db
             .query(
-              `INSERT INTO conversation_evenement (conversation_id, type, contenu, cree_a, modele, effort)
-               VALUES (?, ?, ?, ?, ?, ?)`,
+              `INSERT INTO conversation_evenement
+                 (conversation_id, type, contenu, cree_a, modele, effort, tool_use_id, detail)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             )
             .run(
               ajout.conversationId,
@@ -295,6 +306,8 @@ export class DepotConversations {
               maintenant,
               ajout.modele ?? null,
               ajout.effort ?? null,
+              ajout.toolUseId ?? null,
+              ajout.detail ?? null,
             );
           this.db.query('UPDATE conversation SET maj_a = ? WHERE id = ?').run(maintenant, ajout.conversationId);
           return {
@@ -305,9 +318,64 @@ export class DepotConversations {
             creeA: maintenant,
             modele: ajout.modele ?? null,
             effort: ajout.effort ?? null,
+            toolUseId: ajout.toolUseId ?? null,
+            detail: ajout.detail ?? null,
+            // `☠` Toujours `null` à l'insertion : le résultat d'un outil n'existe
+            // pas encore quand l'appel est écrit. Il arrive au message suivant et
+            // se pose par `completerResultatOutil`.
+            resultat: null,
           };
         })(),
       { conversationId: ajout.conversationId, type: ajout.type },
+    );
+  }
+
+  /**
+   * Pose le résultat d'un appel d'outil déjà persisté, retrouvé par son
+   * `tool_use_id`. Rend `true` si une ligne a été complétée.
+   *
+   * `☠` Appariement par IDENTIFIANT, jamais par ordre d'arrivée : un tour peut
+   * lancer plusieurs outils en parallèle, et leurs résultats reviennent dans
+   * l'ordre où ils finissent. Apparier par position produirait des couples faux
+   * — pire qu'une absence, parce que crédibles.
+   *
+   * `☠` Le `AND resultat IS NULL` n'est pas décoratif : sans lui, un résultat
+   * rejoué (reprise de session, redélivrance du SDK) écraserait le premier. On
+   * garde ce qui a été observé en premier.
+   */
+  /**
+   * Pose les PARAMÈTRES d'un appel déjà persisté.
+   *
+   * `☠` Séparé de l'insertion parce que les deux moments sont séparés dans le
+   * flux : `content_block_start` annonce l'outil et son `id` — ce qui permet de
+   * l'afficher en direct pendant la génération — mais son `input` n'arrive
+   * qu'ensuite, par deltas JSON, et n'est complet qu'au message assistant final.
+   * Attendre l'input pour écrire l'appel ferait disparaître le « défilé » des
+   * outils que l'opérateur regarde pendant que ça travaille.
+   */
+  public completerDetailOutil(toolUseId: string, detail: string): boolean {
+    return executer(
+      'conversations.completerDetailOutil',
+      () => {
+        const res = this.db
+          .query('UPDATE conversation_evenement SET detail = ? WHERE tool_use_id = ? AND detail IS NULL')
+          .run(detail, toolUseId);
+        return res.changes > 0;
+      },
+      { toolUseId },
+    );
+  }
+
+  public completerResultatOutil(toolUseId: string, resultat: string): boolean {
+    return executer(
+      'conversations.completerResultatOutil',
+      () => {
+        const res = this.db
+          .query('UPDATE conversation_evenement SET resultat = ? WHERE tool_use_id = ? AND resultat IS NULL')
+          .run(resultat, toolUseId);
+        return res.changes > 0;
+      },
+      { toolUseId },
     );
   }
 

@@ -387,6 +387,17 @@ export interface EvenementConversation {
    */
   readonly modele: string | null;
   readonly effort: string | null;
+  /**
+   * Appels d'outils uniquement (migration 21) — l'identifiant qui apparie
+   * l'appel à son résultat, et ce que l'appel a demandé puis obtenu.
+   *
+   * `☠` `resultat` reste `null` tant que l'outil n'a pas répondu : c'est un état
+   * NORMAL pendant l'exécution, pas une absence de donnée. L'interface doit le
+   * lire comme « en cours », jamais comme « vide ».
+   */
+  readonly toolUseId: string | null;
+  readonly detail: string | null;
+  readonly resultat: string | null;
 }
 
 /**

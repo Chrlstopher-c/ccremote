@@ -347,7 +347,41 @@ function hPeindreTexte(noeud, contenu, live) {
  * `☠` Réutilise les classes du chat (`.think`, `.tool`, `.md`, `.codeblock`) —
  * même ADN visuel, une seule définition à maintenir.
  */
-function hBlocNode(type, contenu, live) {
+/**
+ * Range sur le nœud ce que l'appel a demandé et ce qu'il a rendu.
+ * ☠ Rappelé à chaque rafraîchissement : c'est le seul chemin par lequel un
+ * résultat arrivé APRÈS l'appel rejoint sa valise.
+ */
+function hMajOutil(noeud, ev) {
+  if (!noeud || !ev) return;
+  if (ev.detail) noeud.dataset.detail = ev.detail;
+  if (ev.resultat !== null && ev.resultat !== undefined) noeud.dataset.resultat = ev.resultat;
+  // Si la valise est déjà ouverte, on repeint son corps sur-le-champ.
+  const corps = noeud.querySelector(':scope > .h-case-body');
+  if (corps && !corps.hidden && corps.dataset.rempli) corps.innerHTML = hCorpsOutilOrch(noeud);
+}
+
+/**
+ * Corps d'une valise d'outil : les paramètres, puis le résultat.
+ * ☠ `resultat` absent veut dire « pas encore revenu », jamais « vide ». On le
+ * DIT — un outil présenté comme ayant répondu du vide est un mensonge plus
+ * coûteux que l'absence d'information.
+ */
+function hCorpsOutilOrch(noeud) {
+  const d = noeud.dataset || {};
+  const parts = [`<div class="h-lbl">Outil appelé</div><div class="h-blk">${escapeHtml(d.outil || '')}</div>`];
+  if (d.detail) parts.push(`<div class="h-lbl">Paramètres</div><div class="h-blk">${escapeHtml(d.detail)}</div>`);
+  if (d.resultat === undefined) {
+    parts.push('<div class="h-note">Résultat en attente — l’outil n’a pas encore répondu.</div>');
+  } else {
+    const echec = d.resultat.startsWith('[ÉCHEC DE L’OUTIL]');
+    parts.push(`<div class="h-lbl">${echec ? 'Échec' : 'Résultat'}</div>`);
+    parts.push(`<div class="h-blk"${echec ? ' style="color:var(--err);"' : ''}>${escapeHtml(d.resultat)}</div>`);
+  }
+  return parts.join('');
+}
+
+function hBlocNode(type, contenu, live, extra) {
   if (type === 'texte') {
     // ☠ Même corps que la page mission : serif, pleine largeur, aucun fond.
     // C'est ce que l'orchestrateur DIT — la seule chose qu'on vient lire.
@@ -379,11 +413,20 @@ function hBlocNode(type, contenu, live) {
   }
   if (type === 'outil') {
     // ☠ Une carte par appel noyait le fil : sur un tour d'orchestrateur les
-    // outils sont l'essentiel du volume et l'accessoire du sens.
-    const cle = HValise.enregistrer(() =>
-      `<div class="h-lbl">Outil appelé</div><div class="h-blk">${escapeHtml(contenu)}</div>`
-      + '<div class="h-note">Le harness journalise l’appel, pas son résultat (H-45).</div>');
-    return HValise.noeud(`Called ${hToolLabel(contenu)}`, cle);
+    // outils sont l'essentiel du volume et l'accessoire du sens. D'où la valise
+    // repliée — mais elle contient désormais le RÉSULTAT, pas une excuse.
+    //
+    // ☠ Le contenu est lu à l'OUVERTURE (`hCorpsOutilOrch(noeud)`), jamais figé
+    // à la création. C'est ce qui permet au résultat d'apparaître : il arrive au
+    // message SUIVANT l'appel, et la garde d'idempotence de `hAppendEvent`
+    // interdit de reposer le nœud. Une closure capturant l'état du moment
+    // afficherait « en cours » pour toujours.
+    const noeud = HValise.noeud(`Called ${hToolLabel(contenu)}`, '');
+    noeud.dataset.outil = contenu;
+    hMajOutil(noeud, extra);
+    const bouton = noeud.querySelector('[data-valise]');
+    if (bouton) bouton.dataset.valise = HValise.enregistrer(() => hCorpsOutilOrch(noeud));
+    return noeud;
   }
   if (type === 'erreur') {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
@@ -486,7 +529,14 @@ function hAppendEvent(ev) {
   const chat = document.getElementById('hChatBody');
   const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
   // Garde d'idempotence : un événement déjà posé n'est jamais reposé.
-  if (ev.seq !== undefined && chat.querySelector(`[data-seq="${ev.seq}"]`)) return;
+  // ☠ SAUF pour un outil : son résultat arrive au message SUIVANT l'appel, donc
+  // le même `seq` revient enrichi. Sortir sec ici, c'était n'afficher jamais
+  // aucun résultat — le défaut qu'on vient précisément de corriger côté serveur.
+  const dejaPose = ev.seq !== undefined ? chat.querySelector(`[data-seq="${ev.seq}"]`) : null;
+  if (dejaPose) {
+    if (ev.type === 'outil') hMajOutil(dejaPose, ev);
+    return;
+  }
 
   if (ev.type === 'operateur') {
     // ☠ La bulle a pu être posée en optimiste à l'envoi : on l'ADOPTE (on lui
@@ -517,7 +567,7 @@ function hAppendEvent(ev) {
     chat.appendChild(noeud); hOrch.cur = null; return;
   }
 
-  const noeud = hBlocNode(ev.type, ev.contenu, false);
+  const noeud = hBlocNode(ev.type, ev.contenu, false, ev);
   if (!noeud) return;
   if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
   const groupe = hEnsureAssistant(chat);

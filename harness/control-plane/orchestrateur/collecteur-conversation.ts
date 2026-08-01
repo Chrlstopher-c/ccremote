@@ -26,6 +26,7 @@ import { annonceSaturation } from '../../shared/saturation-compte.ts';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { DepotConversations } from '../registre/index.ts';
 import type { TypeEvenementConversation } from '../registre/index.ts';
+import { appelsDe, resultatsDe } from './resultats-outils.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'collecteur-conversation' });
@@ -51,20 +52,35 @@ export interface BlocPartiel {
 interface SondeStream {
   readonly event?: {
     readonly type?: string;
-    readonly content_block?: { readonly type?: string; readonly name?: string };
+    readonly content_block?: { readonly type?: string; readonly name?: string; readonly id?: string };
     readonly delta?: { readonly type?: string; readonly text?: string; readonly thinking?: string };
   };
 }
 
-/** Extrait les blocs typés d'un message assistant COMPLET (régime sans partiels). */
-function blocsAssistant(message: SDKMessage): { type: TypeEvenementConversation; contenu: string }[] {
+interface BlocPersistable {
+  readonly type: TypeEvenementConversation;
+  readonly contenu: string;
+  /** Appels d'outils uniquement — clé d'appariement avec le résultat à venir. */
+  readonly toolUseId?: string | null;
+  readonly detail?: string | null;
+}
+
+/**
+ * Extrait les blocs typés d'un message assistant COMPLET (régime sans partiels).
+ *
+ * `☠` UNE seule passe, dans l'ordre du message. Une première version traitait les
+ * appels d'outils dans une boucle séparée : les outils remontaient alors en tête
+ * du fil, avant les réflexions qui les avaient motivés. Un fil réordonné se relit
+ * comme un raisonnement qui n'a jamais eu lieu.
+ */
+function blocsAssistant(message: SDKMessage): BlocPersistable[] {
   if (message.type !== 'assistant') return [];
   const contenu = (message as { message?: { content?: unknown } }).message?.content;
   if (typeof contenu === 'string') {
     return contenu.trim().length > 0 ? [{ type: 'texte', contenu }] : [];
   }
   if (!Array.isArray(contenu)) return [];
-  const sortie: { type: TypeEvenementConversation; contenu: string }[] = [];
+  const sortie: BlocPersistable[] = [];
   for (const brut of contenu as BlocContenu[]) {
     if (brut.type === 'text' && typeof brut.text === 'string' && brut.text.length > 0) {
       sortie.push({ type: 'texte', contenu: brut.text });
@@ -73,7 +89,13 @@ function blocsAssistant(message: SDKMessage): { type: TypeEvenementConversation;
     } else if (brut.type === 'redacted_thinking') {
       sortie.push({ type: 'reflexion', contenu: '[réflexion masquée par le modèle]' });
     } else if (brut.type === 'tool_use' && typeof brut.name === 'string') {
-      sortie.push({ type: 'outil', contenu: brut.name });
+      const [appel] = appelsDe({ message: { content: [brut] } });
+      sortie.push({
+        type: 'outil',
+        contenu: brut.name,
+        toolUseId: appel?.toolUseId ?? null,
+        detail: appel?.detail ?? null,
+      });
     }
   }
   return sortie;
@@ -184,9 +206,24 @@ export class CollecteurConversation {
         return;
       }
       if (message.type === 'assistant') {
-        // `☠` Déjà persisté bloc par bloc pendant le streaming : ne pas doubler.
+        // `☠` Les PARAMÈTRES d'appel ne sont complets qu'ici : pendant le
+        // streaming, `content_block_start` donne le nom et l'id, l'`input`
+        // n'arrive qu'ensuite par deltas. On complète donc l'appel déjà écrit,
+        // sans le dupliquer.
+        this.#completerAppels(message);
+        // `☠` Le reste a déjà été persisté bloc par bloc : ne pas doubler.
         if (this.#streameCeTour) return;
-        for (const bloc of blocsAssistant(message)) this.#persister(bloc.type, bloc.contenu);
+        for (const bloc of blocsAssistant(message)) {
+          this.#persister(bloc.type, bloc.contenu, bloc.toolUseId ?? null, bloc.detail ?? null);
+        }
+        return;
+      }
+      // `☠` Les `tool_result` arrivent dans des messages de type `user` — c'est
+      // ainsi que l'API modélise le retour d'un outil. Un collecteur qui ne
+      // regardait que les messages `assistant` ne pouvait STRUCTURELLEMENT pas
+      // les voir : c'est pourquoi aucun résultat n'a jamais été capté.
+      if (message.type === 'user') {
+        this.#completerResultats(message);
         return;
       }
       if (message.type === 'system') {
@@ -235,7 +272,13 @@ export class CollecteurConversation {
       // génération » que l'opérateur voit défiler.
       if (type === 'outil') {
         const nom = evenement.content_block?.name;
-        if (typeof nom === 'string' && nom.length > 0) this.#persister('outil', nom);
+        // `☠` L'`id` est capté ICI, seul endroit où il transite pendant le
+        // streaming. Sans lui, l'appel est écrit sans clé d'appariement et son
+        // résultat, qui arrive au message suivant, n'a plus rien à rejoindre.
+        const id = evenement.content_block?.id;
+        if (typeof nom === 'string' && nom.length > 0) {
+          this.#persister('outil', nom, typeof id === 'string' ? id : null);
+        }
         return;
       }
       this.#partiel = { type, contenu: '' };
@@ -285,7 +328,52 @@ export class CollecteurConversation {
     this.#persister('resultat', '');
   }
 
-  #persister(type: TypeEvenementConversation, contenu: string): void {
+  /**
+   * Complète les paramètres des appels déjà écrits pendant le streaming.
+   * `☠` Ne lève jamais : un détail manquant dégrade l'affichage, il ne doit
+   * jamais interrompre la boucle de lecture du fil.
+   */
+  #completerAppels(message: SDKMessage): void {
+    if (this.#muet) return;
+    for (const appel of appelsDe(message)) {
+      // Sans identifiant, rien à compléter : l'appel reste affiché tel quel.
+      if (appel.toolUseId === null || appel.detail.length === 0) continue;
+      try {
+        this.depot.completerDetailOutil(appel.toolUseId, appel.detail);
+      } catch (erreur) {
+        log.error({ err: erreur, toolUseId: appel.toolUseId }, 'échec d’écriture du détail d’un appel');
+      }
+    }
+  }
+
+  /**
+   * Pose le résultat de chaque outil retourné, apparié par `tool_use_id`.
+   *
+   * `☠` Un résultat sans appel correspondant est IGNORÉ en silence, et c'est
+   * voulu : il vient d'un tour antérieur à la migration 21, ou d'un tour interne
+   * qui n'écrit rien dans le fil. En fabriquer un serait pire que l'absence.
+   */
+  #completerResultats(message: SDKMessage): void {
+    if (this.#muet) return;
+    for (const resultat of resultatsDe(message)) {
+      try {
+        // `☠` L'échec est MARQUÉ dans le contenu : sans ça, un outil qui a
+        // planté s'affiche comme un outil qui a répondu, et on relit le fil en
+        // croyant que l'information a bien été obtenue.
+        const marque = resultat.erreur ? `[ÉCHEC DE L’OUTIL]\n${resultat.contenu}` : resultat.contenu;
+        this.depot.completerResultatOutil(resultat.toolUseId, marque);
+      } catch (erreur) {
+        log.error({ err: erreur, toolUseId: resultat.toolUseId }, 'échec d’écriture du résultat d’un outil');
+      }
+    }
+  }
+
+  #persister(
+    type: TypeEvenementConversation,
+    contenu: string,
+    toolUseId: string | null = null,
+    detail: string | null = null,
+  ): void {
     // `☠` Mesuré le 23/07 : la limite N'ARRIVE PAS en message système, mais en
     // TEXTE ASSISTANT (« You've hit your monthly spend limit … »). Ne la chercher
     // que dans les messages système, c'était ne jamais la voir.
@@ -304,6 +392,8 @@ export class CollecteurConversation {
         contenu,
         modele: this.#modele,
         effort: this.#effort,
+        toolUseId,
+        detail,
       });
     } catch (erreur) {
       log.error({ err: erreur, conversationId: this.conversationId, type }, 'échec de persistance d’un événement');
