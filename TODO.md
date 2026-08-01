@@ -45,6 +45,17 @@
       par les MÊMES routes que l'interface. C'est lui qui a permis toutes les mesures ci-dessus.
 - [x] **`suivre_equipes`** (22ᵉ outil) + **planification préalable** au prompt.
 
+### 🎯 À LA REPRISE — priorités données par Chris le 01/08 au soir
+
+1. **Ton test bout en bout** (ci-dessous) — c'est le seul qui manque, et il n'appartient qu'à toi.
+   Fil NEUF obligatoire : le prompt système a changé, une conversation reprise ne le charge pas.
+2. **L'anti-boucle sur le coût live** — `verifierEtJuger` ne se déclenche que sur `SDKResultMessage`.
+   Une équipe qui travaille 15 min sur une instruction n'est pas inspectée PENDANT. Le coût est
+   pourtant relevé en continu. Chemin de contrôle ⇒ mesurer sur une vraie équipe longue d'abord.
+3. **Arbitrage attendu** : créer/supprimer un projet depuis l'orchestrateur. Proposition —
+   création libre, suppression réservée à un clic humain, jamais auto-approuvable (mode de panne
+   du `rm -rf sessions/*` d'agora, irrécupérable).
+
 ### 🎯 À LA REPRISE (01/08)
 
 - [ ] **Inspection à la demande sur une équipe VIVANTE** — livrée et déployée le 01/08, mais le
@@ -181,6 +192,13 @@ vérifie · machine fixée à la création, non modifiable · H-56 reste global.
 - [ ] **Résumé de séquence en tête de timeline** (« Fichier créé, lu un fichier ») — vu sur la
       capture de Chris, pas encore fait. Les étapes et le « Terminé » le sont.
 - [ ] **Fluidité des pages Mission / Agent** — la timeline ne couvre que la vue Orchestrateur.
+- [ ] **Aligner Bun** : 1.3.13 sur le PC contre 1.3.14 sur le VPS. Sans conséquence connue, mais
+      deux runtimes qui divergent finissent par produire un bug qui n'existe que d'un côté.
+- [ ] **`semantic-memory` et `codeindex` absents du VPS** — `semantic-memory` est désormais résolu
+      par le harness (point d'accès distant en lecture), donc réglé. `codeindex` reste absent :
+      CUDA, pas de GPU sur le VPS. Faisable en CPU, chantier à part.
+- [ ] **Aucune surveillance du service de mémoire** — s'il tombe, les équipes perdent l'outil sans
+      qu'aucune jauge ne le dise.
 
 ### ✅ LIVRÉ LE 01/08 — session du soir
 

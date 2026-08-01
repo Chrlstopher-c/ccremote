@@ -6,8 +6,57 @@
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 01/08** : EN PRODUCTION, **1123 tests / 1123 verts**, typecheck propre, SDK épinglé
-**0.3.220**, schéma du registre en **version 15**. Trois services actifs, `pcOnline: true`.
+**État au 01/08 (soir)** : EN PRODUCTION, **1365 tests / 1365 verts**, typecheck propre, SDK
+épinglé **0.3.220**, schéma du registre en **version 22**.
+
+### `☠` DEUX MACHINES DE TRAVAIL SIMULTANÉES — le changement structurant du 01/08
+
+Le lien Pi↔machine ne tenait qu'UN emplacement : toute connexion authentifiée évinçait la
+précédente, d'où qu'elle vienne. C'était aussi la cause de la **dette n°6** (1268 évictions au banc
+du 22/07), et la raison pour laquelle le PC devait être ÉTEINT pour laisser vivre le VPS.
+
+| Machine | Identité | Rôle | Projets |
+|---|---|---|---|
+| Pi (`pi.exemple`) | — | Control plane, héberge le lien | — |
+| PC de Chris | `trinityarch` | Machine de travail | tous sauf `stockiop` |
+| VPS OVH | `vps-e411b5c7` | Machine de travail | `stockiop` (`/mnt/projects` → `~/dev`) |
+
+Chaque machine s'annonce par l'en-tête `x-ccremote-machine` et possède **son propre lien** : le
+supersede ne joue plus qu'à identité ÉGALE (deux process d'une même machine — reprise après crash,
+voulu). Identité absente ⇒ **4403 terminal**, jamais un nom de repli.
+
+`☠` **ORDRE DE DÉPLOIEMENT NON NÉGOCIABLE** : les MACHINES DE TRAVAIL d'abord, le Pi ensuite. Un Pi
+neuf refuse en 4403 tout client qui n'envoie pas encore l'en-tête.
+
+**Preuve mesurée, pas déduite** : `2272d6f2` (trinityarch · vitrail) et `41e06128` (vps · stockiop)
+ont eu **3 s d'exécution en parallèle**, de 13:09:15 à 13:09:18. Zéro supersede depuis la bascule.
+
+### `☠` LA MÉMOIRE SÉMANTIQUE EST DISTANTE, ET EN LECTURE SEULE POUR LE HARNESS
+
+Elle vit sur le Pi (`memoire.exemple.com`). **Tout ccremote lit, rien n'écrit** —
+orchestrateur compris (décision de Chris, H-66 : la parole d'une équipe n'est pas la sienne).
+
+`☠` Le piège : `resoudreMcpEquipe()` lit le `~/.claude.json` DU POSTE, qui sur le PC est la config
+personnelle de Chris avec le jeton COMPLET. Le harness **impose** le point d'accès en lecture depuis
+`CCREMOTE_MEMOIRE_URL_LECTURE` / `_JETON_LECTURE` ; sans elles, la mémoire est RETIRÉE de la boîte à
+outils plutôt que passée en écriture.
+
+### Autres correctifs du 01/08 (soir)
+
+- **Fausse saturation de compte** : `annonceSaturation` s'appliquait au texte que le modèle produit
+  lui-même. L'orchestrateur écrivant « Production readiness bouclée (rate limiting…) » se déclarait
+  saturé, sur un compte à 35 %. `/rate limit/i` retiré (motif spéculatif), portée bornée à
+  400 caractères, signature machine `cc_cli_limit_message` qui court-circuite.
+- **Comptes découverts sur le disque** : `CCREMOTE_PC_COMPTES` figeait la liste au déploiement — un
+  compte authentifié plus tard restait inutilisable (pré-vol en échec). Le superviseur scanne
+  désormais `~/.claude-comptes` au démarrage.
+- **H-44 rendue effective** : le Pi envoyait au VPS les CHEMINS de comptes du PC. Seule l'identité
+  traverse, la machine réécrit le chemin.
+- **Métriques par machine** : « État du système » affiche une carte par machine (CPU, mémoire,
+  disque, GPU, équipes portées), via le lien du harness et non plus un WebSocket LAN propre au PC.
+  La température venait de `thermal_zone0` = `acpitz` : **16,8 °C affichés pour un CPU à 72,75 °C**.
+- **Pied de sidebar** : il affichait « PC en ligne » EN DUR (`hApplyLinkVisuals(true)` au
+  chargement, jamais rebranchée). Il sonde maintenant `/machines` toutes les 10 s.
 
 ### Ce qui a changé le 01/08 — le harness devient réellement autonome
 
