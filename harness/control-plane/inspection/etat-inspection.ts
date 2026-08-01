@@ -66,3 +66,34 @@ export function libelleInspection(etat: EtatInspection): string | null {
   if (etat.decision === 'decline') return 'boucle — poursuite assumée';
   return 'boucle — décision attendue';
 }
+
+/**
+ * La forme rendue à l'interface. `☠` UNE seule conversion, partagée par la vue
+ * de lecture (`vue-missions.ts`) et par les routes d'écriture (`ecritures.ts`).
+ *
+ * Elles avaient chacune la leur : la lecture rendait `lastVerdict`, l'écriture
+ * rendait `verdict`. L'écran lisait `lastVerdict` sur la réponse de la route et
+ * affichait « Juge d'inspection : undefined » — le verdict était juste, il se
+ * perdait entre deux noms. Deux formes pour un même objet finissent toujours par
+ * diverger ; la seule parade est qu'il n'y en ait qu'une.
+ */
+export interface InspectionApi {
+  readonly lastVerdict: VerdictInspection | null;
+  readonly lastAt: number | null;
+  readonly motif: string | null;
+  readonly decision: DecisionInspection | null;
+  /** Dérivé ici, pour que l'écran n'ait pas à le recalculer — ni à se tromper. */
+  readonly attendArbitrage: boolean;
+  readonly libelle: string | null;
+}
+
+export function versInspectionApi(etat: EtatInspection): InspectionApi {
+  return {
+    lastVerdict: etat.verdict,
+    lastAt: etat.a,
+    motif: etat.motif,
+    decision: etat.decision,
+    attendArbitrage: attendArbitrage(etat),
+    libelle: libelleInspection(etat),
+  };
+}

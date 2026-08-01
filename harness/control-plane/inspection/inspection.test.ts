@@ -10,7 +10,14 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
-import { attendArbitrage, decisionInitiale, libelleInspection, verdictArbitrable } from './etat-inspection.ts';
+import {
+  attendArbitrage,
+  decisionInitiale,
+  INSPECTION_VIERGE,
+  libelleInspection,
+  verdictArbitrable,
+  versInspectionApi,
+} from './etat-inspection.ts';
 import { ErreurInspection, ServiceInspection } from './service-inspection.ts';
 
 let registre: Registre;
@@ -148,5 +155,35 @@ describe('quand le juge est injoignable', () => {
     // Et surtout : rien n'est écrit. Un verdict fabriqué sur une panne de lien
     // ferait laisser tourner l'équipe précisément quand on doutait d'elle.
     expect(registre.missions.exiger('m-1').inspection.verdict).toBeNull();
+  });
+});
+
+/**
+ * `☠` LE test qui manquait. Le juge rendait un verdict juste, l'écran affichait
+ * « Juge d'inspection : undefined » : la route d'écriture rendait `verdict`, la
+ * vue de lecture rendait `lastVerdict`, et le front lisait le second sur la
+ * première. Deux formes pour un même objet, chacune correcte de son côté.
+ */
+describe('la forme rendue à l’interface est UNIQUE', () => {
+  test('☠ les champs sont ceux que l’écran lit, sur les deux chemins', () => {
+    const api = versInspectionApi({ verdict: 'boucle', motif: 'trois fois le même test', a: 42, decision: 'en_attente' });
+    expect(Object.keys(api).sort()).toEqual(
+      ['attendArbitrage', 'decision', 'lastAt', 'lastVerdict', 'libelle', 'motif'],
+    );
+    expect(api.lastVerdict).toBe('boucle');
+    expect(api.lastAt).toBe(42);
+  });
+
+  test('l’écran n’a pas à recalculer l’arbitrage — il est dérivé ici', () => {
+    expect(versInspectionApi({ verdict: 'boucle', motif: null, a: 1, decision: 'en_attente' }).attendArbitrage).toBe(true);
+    expect(versInspectionApi({ verdict: 'boucle', motif: null, a: 1, decision: 'decline' }).attendArbitrage).toBe(false);
+    expect(versInspectionApi({ verdict: 'progres', motif: null, a: 1, decision: null }).attendArbitrage).toBe(false);
+  });
+
+  test('une inspection jamais lancée rend des champs nuls, jamais absents', () => {
+    const api = versInspectionApi(INSPECTION_VIERGE);
+    expect(api.lastVerdict).toBeNull();
+    expect(api.libelle).toBeNull();
+    expect(api.attendArbitrage).toBe(false);
   });
 });

@@ -190,7 +190,11 @@ async function hRunInspection(id) {
   const insp = res.inspection || {};
   const v = insp.lastVerdict;
 
-  if (v !== 'boucle') {
+  // ☠ On se fie à `attendArbitrage`, dérivé côté serveur, jamais à une
+  // comparaison locale sur le verdict : lui seul sait si la décision est encore
+  // ouverte. Recalculer ici ferait redemander l'arbitrage d'une boucle déjà
+  // tranchée.
+  if (!insp.attendArbitrage) {
     showToast(`Juge d'inspection : ${v} — ${insp.motif || 'sans détail'}`, v === 'progres' ? 'ok' : 'warn');
     void hRafraichirApresInspection(id);
     return;

@@ -12,7 +12,7 @@
 
 import { ErreurApi, requeteInvalide } from './enveloppe.ts';
 import { ErreurInspection, type ServiceInspection } from '../inspection/service-inspection.ts';
-import type { DecisionInspection, EtatInspection } from '../inspection/etat-inspection.ts';
+import { versInspectionApi, type DecisionInspection, type InspectionApi } from '../inspection/etat-inspection.ts';
 
 /** Ce que le PC sait faire, vu du control plane. Sous-ensemble volontaire. */
 export interface OrdresVersPc {
@@ -53,8 +53,12 @@ export interface ResultatEcriture {
   readonly effet: string;
   /** Renseigné pour un aller-retour de conversation orchestrateur. */
   readonly reply?: string;
-  /** Renseigné par les routes d'inspection — l'état à afficher, verdict ET décision. */
-  readonly inspection?: EtatInspection;
+  /**
+   * Renseigné par les routes d'inspection. `☠` MÊME forme que la vue de lecture
+   * (`versInspectionApi`) : elles divergeaient, l'écran lisait `lastVerdict` sur
+   * une réponse qui portait `verdict`, et affichait « undefined ».
+   */
+  readonly inspection?: InspectionApi;
 }
 
 /**
@@ -71,7 +75,7 @@ export async function traiterEcriture(
     if (deps.inspection === undefined) throw new ErreurApi(501, 'inspection non câblée sur ce déploiement');
     try {
       const etat = await deps.inspection.inspecter(decodeURIComponent(inspecter[1]));
-      return { ok: true, effet: `verdict : ${etat.verdict}`, inspection: etat };
+      return { ok: true, effet: `verdict : ${etat.verdict}`, inspection: versInspectionApi(etat) };
     } catch (erreur) {
       // `☠` Une équipe introuvable ou un verdict aberrant est une erreur
       // MÉTIER, pas une panne : 409 + le motif, jamais un 500 anonyme.
@@ -92,7 +96,7 @@ export async function traiterEcriture(
       return {
         ok: true,
         effet: decision === 'confirme' ? 'équipe arrêtée sur verdict de boucle' : 'poursuite assumée malgré le verdict',
-        inspection: etat,
+        inspection: versInspectionApi(etat),
       };
     } catch (erreur) {
       if (erreur instanceof ErreurInspection) throw new ErreurApi(409, erreur.message);

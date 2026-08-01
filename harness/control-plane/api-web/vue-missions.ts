@@ -28,7 +28,7 @@
 import type { ActiviteSousAgentMission, EtatHarness, Mission, SousAgentMission } from '../registre/index.ts';
 import { ageLisible } from './duree.ts';
 import type { FeedEventApi } from './vue-feed.ts';
-import { attendArbitrage, libelleInspection } from '../inspection/etat-inspection.ts';
+import { versInspectionApi, type InspectionApi } from '../inspection/etat-inspection.ts';
 
 /** États d'affichage du contrat — vocabulaire de l'interface, pas du domaine. */
 export type EtatMissionApi = 'requires_action' | 'running' | 'idle' | 'paused' | 'echec' | 'terminee';
@@ -77,15 +77,7 @@ export interface MissionApi {
    * rendait le verdict invisible dès le rafraîchissement suivant. Il est
    * désormais persisté (migration 20) et lu ici.
    */
-  readonly inspection: {
-    readonly lastVerdict: string | null;
-    readonly lastAt: number | null;
-    readonly motif: string | null;
-    readonly decision: string | null;
-    /** L'équipe attend-elle un arbitrage ? Dérivé, pour que l'écran n'ait pas à le recalculer. */
-    readonly attendArbitrage: boolean;
-    readonly libelle: string | null;
-  };
+  readonly inspection: InspectionApi;
   /** Libellés d'ancienneté — dérivés de la VRAIE date de transition, pas inventés. */
   readonly blockedSince: string | null;
   readonly pausedAgo: string | null;
@@ -243,14 +235,7 @@ export function versMissionApi(
     retries: `${mission.compteurRelances} / ${plafondRelances}`,
     sessionId: mission.sessionId,
     mandate: { but: mission.mandat ?? '', critere: mission.critereArret ?? '' },
-    inspection: {
-      lastVerdict: mission.inspection.verdict,
-      lastAt: mission.inspection.a,
-      motif: mission.inspection.motif,
-      decision: mission.inspection.decision,
-      attendArbitrage: attendArbitrage(mission.inspection),
-      libelle: libelleInspection(mission.inspection),
-    },
+    inspection: versInspectionApi(mission.inspection),
     // Transitoires d'interface, sans source côté serveur — jamais devinés.
     freshlyDispatched: false,
     ultracode: false,
