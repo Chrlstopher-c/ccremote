@@ -448,7 +448,9 @@ function hMajOutil(ligne, ev) {
   const lbl = ligne.querySelector('.tc-lbl');
   if (lbl) lbl.textContent = hOutilLisible(ligne.dataset.outil || '', ligne.dataset.detail);
   const corps = ligne.querySelector('.tc-corps');
-  if (corps && !corps.hidden) corps.innerHTML = hCorpsOutilOrch(ligne);
+  if (corps && corps.classList.contains('ouvert')) {
+    corps.querySelector('.tc-in').innerHTML = hCorpsOutilOrch(ligne);
+  }
   hMajResumeGroupe(ligne);
 }
 
@@ -495,8 +497,11 @@ function hCloreGroupeOutils(groupeAssistant) {
 function hCreerGroupeOutils() {
   const g = document.createElement('div');
   g.className = 'tc';
+  // ☠ `.tc-in` n'est pas décoratif : la grille anime `grid-template-rows`, et
+  // c'est l'enfant qui porte `overflow: hidden` et la bordure. Sans lui, le
+  // contenu déborde pendant la transition et le cadre reste visible fermé.
   g.innerHTML = `<button class="tc-tete"><span class="tc-res"></span>${HValise.CHEVRON}</button>`
-    + '<div class="tc-carte" hidden></div>';
+    + '<div class="tc-carte"><div class="tc-in"></div></div>';
   return g;
 }
 
@@ -511,8 +516,8 @@ function hAjouterLigneOutil(groupeAssistant, contenu, ev) {
   ligne.className = 'tc-ligne';
   ligne.dataset.outil = contenu;
   ligne.innerHTML = `<button class="tc-btn"><span class="tc-lbl"></span>${HValise.CHEVRON}</button>`
-    + '<div class="tc-corps" hidden></div>';
-  groupe.querySelector('.tc-carte').appendChild(ligne);
+    + '<div class="tc-corps"><div class="tc-in"></div></div>';
+  groupe.querySelector('.tc-carte > .tc-in').appendChild(ligne);
   hMajOutil(ligne, ev || {});
   return ligne;
 }
@@ -523,7 +528,11 @@ document.addEventListener('click', (e) => {
   const tete = e.target.closest('.tc-tete');
   if (tete) {
     const carte = tete.parentElement.querySelector('.tc-carte');
-    if (carte) { carte.hidden = !carte.hidden; tete.classList.toggle('ouvert', !carte.hidden); }
+    if (carte) {
+      const ouvrir = !carte.classList.contains('ouvert');
+      carte.classList.toggle('ouvert', ouvrir);
+      tete.classList.toggle('ouvert', ouvrir);
+    }
     return;
   }
   const btn = e.target.closest('.tc-btn');
@@ -531,11 +540,11 @@ document.addEventListener('click', (e) => {
   const ligne = btn.closest('.tc-ligne');
   const corps = ligne && ligne.querySelector('.tc-corps');
   if (!corps) return;
-  const ouvrir = corps.hidden;
+  const ouvrir = !corps.classList.contains('ouvert');
   // Rempli à l'OUVERTURE, jamais figé à la création : le résultat peut arriver
   // après, et un contenu construit d'avance afficherait « en attente » à jamais.
-  if (ouvrir) corps.innerHTML = hCorpsOutilOrch(ligne);
-  corps.hidden = !ouvrir;
+  if (ouvrir) corps.querySelector('.tc-in').innerHTML = hCorpsOutilOrch(ligne);
+  corps.classList.toggle('ouvert', ouvrir);
   btn.classList.toggle('ouvert', ouvrir);
 });
 

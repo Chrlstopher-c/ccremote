@@ -535,10 +535,23 @@
   .tc-tete .tc-n { color: var(--ink-3); }
   .tc-tete .cv { flex: 0 0 auto; opacity: .6; transition: transform .18s ease; }
   .tc-tete.ouvert .cv { transform: rotate(90deg); }
-  /* La carte : un seul cadre pour tout le groupe, lignes séparées par un filet. */
-  .tc-carte { margin-top: 8px; border: 1px solid var(--line); border-radius: 11px;
-    background: var(--card); overflow: hidden; }
-  .tc-carte[hidden] { display: none !important; }
+  /* ☠ Ouverture ANIMÉE par `grid-template-rows: 0fr → 1fr`. C'est la seule
+     technique qui anime une hauteur INCONNUE sans JavaScript : `height: auto`
+     n'est pas interpolable, et mesurer au clic pour poser un `max-height` en
+     pixels casse dès que le contenu change (un résultat qui arrive après coup,
+     précisément notre cas). L'enfant porte `overflow: hidden`, sinon le contenu
+     déborde pendant la transition au lieu d'être révélé. */
+  .tc-carte { display: grid; grid-template-rows: 0fr; margin-top: 0; opacity: 0;
+    transition: grid-template-rows .28s cubic-bezier(.22,.61,.36,1),
+                margin-top .28s cubic-bezier(.22,.61,.36,1), opacity .18s ease; }
+  .tc-carte.ouvert { grid-template-rows: 1fr; margin-top: 8px; opacity: 1; }
+  /* ☠ `box-shadow: inset` et NON `border` : une bordure occupe de la hauteur, et
+     à l'état fermé la carte mesurait donc 2 px au lieu de 0 — un liseré fantôme
+     sous chaque résumé. Mesuré. L'ombre interne dessine le même cadre sans
+     contribuer à la boîte. */
+  .tc-carte > .tc-in { overflow: hidden; min-height: 0; border-radius: 11px;
+    background: var(--card); box-shadow: inset 0 0 0 1px var(--line); }
+  .tc-carte:not(.ouvert) > .tc-in { box-shadow: none; background: none; }
   .tc-ligne + .tc-ligne { border-top: 1px solid var(--line); }
   .tc-ligne > .tc-btn { display: flex; align-items: center; gap: 7px; width: 100%;
     padding: 9px 13px; font-size: 13.5px; color: var(--ink-3); background: none; border: none;
@@ -549,8 +562,12 @@
   .tc-btn.ouvert .cv { transform: rotate(90deg); }
   /* Un échec se voit AVANT d'ouvrir : sinon il se lit comme un appel réussi. */
   .tc-ligne.err > .tc-btn { color: var(--err); }
-  .tc-corps { padding: 0 13px 12px; }
-  .tc-corps[hidden] { display: none !important; }
+  /* Même technique pour le détail d'une ligne. */
+  .tc-corps { display: grid; grid-template-rows: 0fr; opacity: 0;
+    transition: grid-template-rows .24s cubic-bezier(.22,.61,.36,1), opacity .16s ease; }
+  .tc-corps.ouvert { grid-template-rows: 1fr; opacity: 1; }
+  .tc-corps > .tc-in { overflow: hidden; min-height: 0; padding: 0 13px; }
+  .tc-corps.ouvert > .tc-in { padding-bottom: 12px; }
   .tc-cmd { display: flex; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
     color: var(--ink-2); margin-bottom: 8px; }
   .tc-cmd .tc-inv { color: var(--ink-3); user-select: none; }
@@ -562,6 +579,11 @@
     font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.55; color: var(--ink-3); }
   .tc-sortie.err { color: var(--err); }
   .tc-attente { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
+  /* ☠ Une préférence système, pas une option : qui demande moins de mouvement
+     doit obtenir l'ouverture instantanée, pas une version plus lente. */
+  @media (prefers-reduced-motion: reduce) {
+    .tc-carte, .tc-corps, .tc-tete .cv, .tc-btn .cv { transition: none !important; }
+  }
 
   /* une étape = une carte, dépliable à son tour */
   .h-card { border: 1px solid var(--line); border-radius: 11px; background: var(--card); overflow: hidden; }
