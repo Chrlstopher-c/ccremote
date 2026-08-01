@@ -77,7 +77,14 @@ describe('surface d’outils (A.2.2)', () => {
   //     jusqu'à ce que Chris le change à la main, donc en pratique jamais : une
   //     liste de fils tous homonymes. L'outil porte SA propre garde — une seule
   //     fois par session, sauf demande explicite de Chris (`titre-fil.ts`).
-  test('expose exactement les 21 outils spécifiés — ni plus, ni moins', () => {
+  //   `suivre_equipes` (2026-08-01, au PLURIEL) — constat d'usage de Chris :
+  //     l'orchestrateur se posait des RAPPELS toutes les 5 à 30 min pour aller
+  //     regarder ses équipes une par une. Le rappel n'était pas un contournement
+  //     mais un comblement : `suivre_equipe` ne prend qu'une équipe, donc trois
+  //     équipes en vol coûtaient trois appels et trois allers-retours de
+  //     contexte. Le budget de lignes y est RÉPARTI, jamais multiplié — quatre
+  //     transcrits entiers satureraient le contexte qu'on cherche à préserver.
+  test('expose exactement les 22 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -85,6 +92,7 @@ describe('surface d’outils (A.2.2)', () => {
         'etat_equipe',
         'rapport_equipe',
         'suivre_equipe',
+        'suivre_equipes',
         'mon_autonomie',
         'carburant_parc',
         'lister_projets',
@@ -131,7 +139,7 @@ describe('surface d’outils (A.2.2)', () => {
   });
 
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
-    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'mon_autonomie', 'carburant_parc', 'lister_projets', 'historique_equipe'];
+    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'suivre_equipes', 'mon_autonomie', 'carburant_parc', 'lister_projets', 'historique_equipe'];
     const outils = construireOutilsControle(deps);
     for (const nom of inspection) {
       const outil = outils.find((o) => o.name === nom);

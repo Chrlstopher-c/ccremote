@@ -264,6 +264,53 @@ export function suivreEquipe(registre: Registre, designation: string, lignes?: n
 }
 
 /**
+ * Suivi de PLUSIEURS équipes en un seul appel.
+ *
+ * `☠` Demandé par Chris le 01/08 sur un constat d'usage : l'orchestrateur se
+ * posait des rappels toutes les 5 à 30 minutes pour aller regarder ses équipes
+ * une par une. Le rappel n'était pas un contournement, c'était un COMBLEMENT —
+ * son prompt lui dit de surveiller, jamais avec quelle cadence, et
+ * `suivre_equipe` ne prend qu'une équipe. Trois équipes en vol coûtaient trois
+ * appels, donc trois allers-retours de contexte.
+ *
+ * `☠` Le budget de lignes est RÉPARTI sur les équipes demandées, jamais multiplié
+ * par leur nombre : lire quatre transcrits entiers saturerait le contexte de
+ * l'orchestrateur, et un orchestrateur saturé oublie sa mission. Une équipe
+ * introuvable ne fait pas échouer les autres — elle est signalée à sa ligne.
+ */
+export function suivreEquipes(registre: Registre, designations: readonly string[], lignes?: number): ContratRetour {
+  const intention = `suivi de ${designations.length} équipe(s)`;
+  if (designations.length === 0) {
+    return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe désignée' };
+  }
+  try {
+    const total = Math.min(Math.max(Math.trunc(lignes ?? SUIVI_LIGNES_DEFAUT), 1), SUIVI_LIGNES_MAX);
+    // Plancher de 3 : chaque équipe doit dire quelque chose, même quand on en
+    // demande beaucoup d'un coup.
+    const parEquipe = Math.max(3, Math.floor(total / designations.length));
+    const blocs: string[] = [];
+    for (const designation of designations) {
+      const resolution = resoudreMission(registre, designation);
+      if (!('trouve' in resolution)) {
+        blocs.push(`— ${designation} : aucune équipe ne correspond à cette désignation.`);
+        continue;
+      }
+      const mission = resolution.trouve;
+      const activites = registre.missions.activites(mission.id, parEquipe);
+      blocs.push(
+        activites.length === 0
+          ? `— ${resumerMission(mission)} — aucune activité rapatriée pour le moment.`
+          : [`— ${resumerMission(mission)} · ${activites.length} ligne(s)`, ...activites.map(resumerActivite)].join('\n'),
+      );
+    }
+    return applique(intention, blocs.join('\n\n'));
+  } catch (erreur) {
+    journal.error({ err: erreur, designations }, 'suivre_equipes en échec');
+    return echecInattendu(intention, erreur);
+  }
+}
+
+/**
  * Ce que l'orchestrateur sait de sa propre autonomie.
  *
  * `☠` Il ne peut PAS le déduire : la fenêtre vit dans le registre, et son

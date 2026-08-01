@@ -24,6 +24,7 @@ import {
   listerEquipes,
   rapportEquipe,
   suivreEquipe,
+  suivreEquipes,
   autonomieDuFil,
   carburantParc,
   listerProjets,
@@ -199,6 +200,22 @@ function outilsInspection(deps: DependancesServeurControle) {
         lignes: z.number().int().positive().optional().describe('Défaut 10, maximum 200.'),
       },
       async ({ equipe, lignes }) => protege('suivre_equipe', () => suivreEquipe(deps.registre, equipe, lignes)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'suivre_equipes',
+      'Comme `suivre_equipe`, mais sur PLUSIEURS équipes en un seul appel — ' +
+        'préfère-le dès que tu en surveilles deux ou plus : un appel au lieu de trois, ' +
+        'et une vue comparable au même instant. Le budget de lignes est RÉPARTI entre ' +
+        'les équipes demandées, jamais multiplié : quatre transcrits entiers satureraient ' +
+        'ton contexte. Une équipe introuvable est signalée sans faire échouer les autres. ' +
+        'Tu n’as pas besoin de te poser un rappel pour surveiller : appelle cet outil ' +
+        'quand tu veux savoir, et enchaîne.',
+      {
+        equipes: z.array(z.string()).min(1).describe('Identifiants, noms ou projets des équipes.'),
+        lignes: z.number().int().positive().optional().describe('Budget TOTAL réparti entre elles. Défaut 10, maximum 200.'),
+      },
+      async ({ equipes, lignes }) => protege('suivre_equipes', () => suivreEquipes(deps.registre, equipes, lignes)),
       { annotations: { readOnlyHint: true } },
     ),
     tool(

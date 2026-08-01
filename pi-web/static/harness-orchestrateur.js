@@ -414,6 +414,28 @@ function hCorpsOutilOrch(noeud) {
   return parts.join('');
 }
 
+/**
+ * Clôt une séquence d'outils par la ligne « Terminé ».
+ *
+ * ☠ Appelée à DEUX moments, et le premier est celui qui compte : quand l'agent
+ * reprend la parole en texte après avoir utilisé des outils. C'est là que la
+ * séquence se termine réellement — attendre la fin du tour laisserait le filet
+ * courir sous la réponse, comme si les outils tournaient encore pendant qu'on
+ * lit. Le second moment est la fin de tour, pour un tour qui s'achève sur un
+ * outil sans reprise de parole.
+ *
+ * Idempotente : une séquence déjà close n'est jamais re-close, et un groupe sans
+ * aucun outil n'en reçoit pas.
+ */
+function hCloreTimeline(groupe) {
+  if (!groupe || !groupe.querySelector('.tl-row') || groupe.querySelector('.tl-fin-row')) return;
+  const fin = document.createElement('div');
+  fin.className = 'tl-row tl-fin-row';
+  fin.innerHTML = `<div class="tl-gut"><div class="tl-ico">${H_ICO_FIN}</div></div>`
+    + '<div class="tl-main"><div class="tl-fin">Terminé</div></div>';
+  groupe.appendChild(fin);
+}
+
 /** Ouvre ou referme le détail d'une étape. Délégué depuis `document`. */
 function hBasculerEtape(bouton) {
   const ligne = bouton.closest('.tl-row');
@@ -601,17 +623,9 @@ function hAppendEvent(ev) {
     chat.appendChild(u); hOrch.cur = null; return;
   }
   if (ev.type === 'resultat') {
-    // ☠ Clôture VISUELLE d'une séquence d'outils, à l'image de la timeline de
-    // Claude Code : sans elle, le filet vertical s'arrête dans le vide et rien
-    // ne distingue « la séquence est finie » de « la suite arrive ». Posée
-    // seulement s'il y a eu des outils, et jamais deux fois.
-    if (hOrch.cur && hOrch.cur.querySelector('.tl-row') && !hOrch.cur.querySelector('.tl-fin-row')) {
-      const fin = document.createElement('div');
-      fin.className = 'tl-row tl-fin-row';
-      fin.innerHTML = `<div class="tl-gut"><div class="tl-ico">${H_ICO_FIN}</div></div>`
-        + '<div class="tl-main"><div class="tl-fin">Terminé</div></div>';
-      hOrch.cur.appendChild(fin);
-    }
+    // Fin de tour : on clôt une séquence encore ouverte (cas d'un tour qui se
+    // termine sur un outil, sans reprise de parole).
+    hCloreTimeline(hOrch.cur);
     hOrch.cur = null; return; // le prochain bloc ouvre un nouveau groupe
   }
 
@@ -632,6 +646,12 @@ function hAppendEvent(ev) {
   if (!noeud) return;
   if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
   const groupe = hEnsureAssistant(chat);
+  // ☠ L'agent reprend la parole ⇒ la séquence d'outils est FINIE. C'est ici que
+  // « Terminé » a sa place, pas à la fin du tour : attendre laisserait le filet
+  // courir sous la réponse, comme si les outils tournaient encore pendant qu'on
+  // la lit. Une réflexion, elle, ne clôt rien — penser entre deux outils est le
+  // cours normal d'une séquence.
+  if (ev.type === 'texte') hCloreTimeline(groupe);
   // ☠ L'attribution est portée par l'ÉVÈNEMENT, pas par l'état courant du
   // sélecteur : relire un fil où l'on a changé de modèle doit montrer ce qui a
   // réellement produit CHAQUE réponse, pas le dernier réglage en date.
@@ -708,7 +728,13 @@ function hRenderPartiel(partiel) {
   if (!noeud) return;
   noeud.dataset.ptype = partiel.type;
   noeud.dataset.pcontenu = partiel.contenu;
-  hEnsureAssistant(chat).appendChild(noeud);
+  const groupe = hEnsureAssistant(chat);
+  // ☠ EN DIRECT aussi : dès le premier caractère de la réponse, la séquence
+  // d'outils qui précède est finie. Sans ça, « Terminé » n'apparaîtrait qu'à la
+  // fin du tour et on lirait la réponse avec un filet encore ouvert au-dessus —
+  // exactement l'ambiguïté que cette ligne existe pour lever.
+  if (partiel.type === 'texte') hCloreTimeline(groupe);
+  groupe.appendChild(noeud);
   hOrch.partielEl = noeud;
 }
 
