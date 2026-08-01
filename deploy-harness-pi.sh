@@ -96,6 +96,59 @@ echo "→ Service systemd"
 scp $SSH_OPTS /mnt/projects/ccremote/harness/composition/deploiement/ccremote-harness.service "$TARGET:/tmp/"
 ssh $SSH_OPTS "$TARGET" "sudo mv /tmp/ccremote-harness.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable ccremote-harness && sudo systemctl restart ccremote-harness"
 
+# ── Exposition du lien par Cloudflare Tunnel ────────────────────────────────
+#
+# ☠ Le lien Pi↔PC n'avait JAMAIS été traversé hors du LAN : le banc du 22/07
+# tournait en réseau local direct. Cette règle est ce qui permet à un superviseur
+# hébergé AILLEURS — le VPS OVH, qui n'est pas sur le réseau du Pi — de s'y
+# rattacher.
+#
+# ☠ Exposer un canal de contrôle sur Internet ne se fait QUE parce que son
+# authentification a été conçue pour ça : secret partagé en en-tête
+# `Authorization: Bearer` — jamais en paramètre d'URL, précisément pour ne pas
+# finir dans les access logs de Cloudflare — comparé en temps constant, et
+# fermeture terminale 4401 sur échec (`composition/lien-pc-pi/secret.ts`).
+# Ne JAMAIS rétrograder ce point sans revoir cette exposition.
+#
+# ☠ Idempotent, et cloudflared n'est redémarré QUE si la règle change : un
+# redémarrage coupe quelques secondes tous les autres tunnels du Pi (StockIOP,
+# CRM, license-server…).
+# ☠ INCIDENT PAYÉ ICI le 01/08 : ce port était lu depuis `$CCREMOTE_LIEN_PORT`,
+# qui n'existe QUE dans le heredoc du `.env` distant — jamais comme variable de
+# ce shell. La règle écrite valait donc `service: http://localhost:` sans port,
+# YAML invalide, et cloudflared a refusé de démarrer : TOUS les tunnels du Pi
+# sont tombés d'un coup (CRM, license-server, le site, ccremote). Une variable
+# vide dans un fichier de config ne produit pas une config dégradée, elle
+# produit un service mort. D'où la valeur explicite ici, et le garde-fou
+# ci-dessous qui refuse d'écrire quoi que ce soit sans port.
+LIEN_PORT=8721
+if [ -z "$LIEN_PORT" ]; then
+  echo "✗ port du lien vide — écriture de l'ingress refusée (cf. incident du 01/08)" >&2
+  exit 78
+fi
+LIEN_SUBDOMAIN="${CCREMOTE_LIEN_SUBDOMAIN:-lien.exemple.com}"
+echo "→ Exposition du lien ($LIEN_SUBDOMAIN → localhost:$LIEN_PORT)"
+REGLE_LIEN=$(ssh $SSH_OPTS "$TARGET" "sudo python3 -c \"
+cfg = open('/etc/cloudflared/config.yml').read()
+rule = '''    - hostname: $LIEN_SUBDOMAIN
+      service: http://localhost:$LIEN_PORT
+'''
+if '$LIEN_SUBDOMAIN' not in cfg:
+    ancre = '    - hostname: exemple.com\n      service:'
+    cfg = cfg.replace(ancre, rule + ancre, 1)
+    open('/etc/cloudflared/config.yml', 'w').write(cfg)
+    print('ajoutee')
+else:
+    print('deja-presente')
+\"")
+echo "  $REGLE_LIEN"
+if echo "$REGLE_LIEN" | grep -q "ajoutee"; then
+  TUNNEL_ID=$(ssh $SSH_OPTS "$TARGET" "grep -oP '(?<=tunnel: )\S+' /etc/cloudflared/config.yml | head -1")
+  ssh $SSH_OPTS "$TARGET" "cloudflared tunnel route dns $TUNNEL_ID $LIEN_SUBDOMAIN 2>&1 || true"
+  ssh $SSH_OPTS "$TARGET" "sudo systemctl restart cloudflared"
+  echo "  cloudflared redémarré (règle nouvelle)"
+fi
+
 echo "→ Vérification"
 sleep 4
 ssh $SSH_OPTS "$TARGET" "systemctl is-active ccremote-harness && curl -sf -m 5 http://127.0.0.1:8722/api/harness/health && echo"
