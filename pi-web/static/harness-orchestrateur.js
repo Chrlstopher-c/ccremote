@@ -771,76 +771,11 @@ function hUpdateModelHint() {
   else hint.textContent = `Niveaux de raisonnement pour ${mo.label} : ${mo.effort.map((e) => HARNESS_EFFORT_LABEL[e]).join(' · ')}. Change à chaud, sans redémarrer la session.`;
 }
 
-// ============ Mandat (H-61) — encore mock, DOM du fil courant ============
-function hIsTestable(txt) {
-  if (!txt) return false;
-  const t = txt.trim();
-  if (t.length < 20) return false;
-  return /(réussit|réussissent|passent|passe|atteint|observ|mesur|zéro|détecte|confirmé|sans erreur|tests? e2e|au moins|identique|contient les mêmes|rejeté|accepté|\d)/i.test(t);
-}
-async function hSubmitMandate() {
-  const projet = document.getElementById('hFProjet').value;
-  const but = document.getElementById('hFBut').value.trim();
-  const critere = document.getElementById('hFCritere').value.trim();
-  const perimetre = document.getElementById('hFPerimetre').value.trim();
-  const budget = parseFloat(document.getElementById('hFBudget').value) || 12;
-  if (!hIsTestable(critere)) {
-    document.getElementById('hFCritereField').classList.add('has-error');
-    const err = document.getElementById('hFCritereError');
-    err.textContent = "Refusé au dispatch — critère d'arrêt non testable. Formule un état vérifiable, pas une intention.";
-    err.classList.add('show');
-    return;
-  }
-  document.getElementById('hFCritereField').classList.remove('has-error');
-  document.getElementById('hFCritereError').classList.remove('show');
-  closeModal('modalHMandat');
-  const res = await HarnessAPI.proposeMandate({ projet, but, critere, perimetre, budget });
-  hGoto('harness-orchestrateur');
-  hAppendProposalToChat(res.data);
-  showToast('Mandat transmis — en attente de ton autorisation', 'accent');
-}
-function hAppendProposalToChat(p) {
-  const chat = document.getElementById('hChatBody');
-  const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
-  const u = document.createElement('div'); u.className = 'bubble-u'; u.textContent = `Lance une mission sur ${p.projet}.`; chat.appendChild(u);
-  const a = document.createElement('div'); a.className = 'bubble-a';
-  a.innerHTML = `<p style="margin:0 0 4px;">Je ne crée rien seul (H-61). Voici le mandat proposé — ton autorisation dispatche l'équipe.</p>
-    <div class="mandate-card" id="hMandate_${p.id}">
-      <div class="mh2">Proposition de mandat</div>
-      <div class="mb">
-        <div class="mrow"><div class="k">Projet</div><div class="v mono">${escapeHtml(p.projet)}</div></div>
-        <div class="mrow"><div class="k">But</div><div class="v">${escapeHtml(p.but)}</div></div>
-        <div class="mrow"><div class="k">Critère d'arrêt</div><div class="v">${escapeHtml(p.critere)}</div></div>
-        <div class="mrow"><div class="k">Budget</div><div class="v mono">${hMoney(p.budget)} (indicatif)</div></div>
-      </div>
-      <div class="macts">
-        <button class="btn btn-accent" onclick="hApproveProposal('${p.id}')">Autoriser</button>
-        <button class="btn btn-ghost" style="color:var(--err);border-color:var(--err-soft);" onclick="hRejectProposal('${p.id}')">Refuser</button>
-      </div>
-    </div>`;
-  chat.appendChild(a);
-  hScrollChat();
-}
-function hStampProposal(id, label, color) {
-  const card = document.getElementById('hMandate_' + id);
-  if (!card) return;
-  card.classList.add('resolved');
-  const stamp = document.createElement('div');
-  stamp.className = 'verdict-stamp'; stamp.style.color = color;
-  stamp.textContent = label + ' à ' + new Date().toTimeString().slice(0, 8);
-  card.appendChild(stamp);
-}
-async function hApproveProposal(id) {
-  await HarnessAPI.approveProposal(id);
-  hStampProposal(id, 'Autorisée', 'var(--ok)');
-  hRenderParc();
-  showToast('Mission dispatchée — visible dans le Parc', 'ok');
-}
-async function hRejectProposal(id) {
-  await HarnessAPI.rejectProposal(id);
-  hStampProposal(id, 'Refusée — aucune équipe créée', 'var(--err)');
-  showToast('Proposition refusée', 'warn');
-}
+// ☠ Le formulaire de mandat MANUEL a été supprimé le 01/08. Il écrivait dans la
+// base de démonstration : aucune route serveur, aucune équipe jamais créée par
+// ce chemin. Le seul chemin réel est la conversation avec l'orchestrateur — il
+// propose, l'humain autorise (H-61). Les cartes de mandat du fil, elles, sont
+// réelles : voir `hApprouverMandat` / `hRefuserMandat`, à ne pas confondre.
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hSelModel').addEventListener('change', (e) => {
@@ -858,11 +793,4 @@ document.addEventListener('DOMContentLoaded', () => {
   zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); hSendOrchMessage(); } });
   // Le champ grandit avec le texte, jusqu'au plafond fixé en CSS (max-height).
   zone.addEventListener('input', () => { zone.style.height = 'auto'; zone.style.height = zone.scrollHeight + 'px'; });
-  document.getElementById('hBtnNewMission').addEventListener('click', () => {
-    if (!HarnessAPI._isPcOnline()) { showToast('PC absent — impossible de dispatcher pour l\'instant', 'warn'); return; }
-    document.getElementById('hFCritereField').classList.remove('has-error');
-    document.getElementById('hFCritereError').classList.remove('show');
-    openModal('modalHMandat');
-  });
-  document.getElementById('hBtnSubmitMandate').addEventListener('click', hSubmitMandate);
 });

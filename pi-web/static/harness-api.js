@@ -27,7 +27,6 @@
 const HarnessAPI = (() => {
   const db = HarnessMock;
   let pcOnline = true; // ☠ démo uniquement — le réel vient du lien Pi↔PC
-  let orchCtx = 23; // ☠ démo uniquement — en réel, getContextUsage() du SDK (mesuré, jamais estimé)
 
   function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
@@ -210,10 +209,6 @@ const HarnessAPI = (() => {
       return { contextPct: d.contextPct ?? null, active: !!d.active, windowResetLabel: null, costWindow: null };
     },
 
-    async compactOrchestratorContext() {
-      return withPc(() => { orchCtx = Math.max(4, Math.round(orchCtx * 0.28)); return { contextPct: orchCtx }; });
-    },
-
     // ☠ RÉEL : le message part vers la session orchestrateur sur le Pi et
     // attend SA réponse. Un échec (501 session inactive, timeout) renvoie
     // { erreur } — jamais une réponse fabriquée comme le faisait la démo.
@@ -223,45 +218,11 @@ const HarnessAPI = (() => {
       return { reply: r.reply ?? r.effet };
     },
 
-    async proposeMandate(fields) {
-      return withPc(() => {
-        const p = { id: db.uid('prop'), ...fields, status: 'pending' };
-        db.proposals.push(p);
-        return p; // effet: 'differe' — aucune équipe créée ici (H-61)
-      });
-    },
-
-    async approveProposal(id) {
-      return withPc(() => {
-        const p = db.proposals.find((x) => x.id === id);
-        if (!p || p.status !== 'pending') return null;
-        p.status = 'approved';
-        const account = db.accounts[db.nextAccount].status === 'allowed' ? db.nextAccount : (db.nextAccount === 1 ? 2 : 1);
-        const missionId = db.uid('m');
-        const mission = {
-          id: missionId, title: p.but.length > 60 ? p.but.slice(0, 60) + '…' : p.but, project: p.projet,
-          worktree: 'wt/' + missionId, branch: 'auto/' + missionId, account, state: 'running', ctx: 2, cost: 0,
-          inspection: db.newInspection(null, null), team: 'lead — équipe en constitution', model: 'claude-opus-4-8',
-          epoch: 1, retries: '0 / 3', sessionId: 'ses_' + missionId + '…new', freshlyDispatched: true, subagents: [],
-          landing: null, mandate: { but: p.but, critere: p.critere },
-          feed: [{ ts: new Date().toTimeString().slice(0, 8), type: 'system', tool: 'dispatch',
-            text: `Mission autorisée par l'opérateur — équipe en cours de constitution sur compte #${account}.` }],
-        };
-        db.missions.push(mission);
-        return mission;
-      });
-    },
-
-    async rejectProposal(id) {
-      return withPc(() => {
-        const p = db.proposals.find((x) => x.id === id);
-        if (p && p.status === 'pending') p.status = 'refused';
-        return p || null;
-      });
-    },
-
-
-
+    /* ☠ `proposeMandate` / `approveProposal` / `rejectProposal` SUPPRIMÉES le
+       01/08 avec le formulaire de mandat manuel : elles écrivaient dans la base
+       de démonstration, aucune route serveur n'existait. Le seul chemin réel de
+       création d'équipe passe par l'orchestrateur (H-61 : il propose, l'humain
+       autorise) — voir `approveMandat` / `rejectMandat`, qui sont réels. */
 
     /**
      * ☠ Était une MAQUETTE : elle tapait dans `harness-mock-data.js` et tirait

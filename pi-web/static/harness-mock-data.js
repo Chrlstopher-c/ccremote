@@ -136,8 +136,7 @@ const HarnessMock = (() => {
     return d.toTimeString().slice(0, 8);
   }
 
-  const proposals = [];
 
-  return { uid, models, accounts, missions, proposals, get nextAccount() { return nextAccount; },
+  return { uid, models, accounts, missions, get nextAccount() { return nextAccount; },
     set nextAccount(v) { nextAccount = v; }, newInspection };
 })();
