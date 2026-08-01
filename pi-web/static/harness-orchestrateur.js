@@ -373,20 +373,57 @@ function hOutilLisible(nom, detail) {
 }
 
 /**
+ * Familles d'outils, pour résumer un groupe en langage naturel.
+ * ☠ L'ordre compte : le premier motif qui matche gagne. `suivre_equipe` doit
+ * donc être testé avant le motif générique `equipe`, sinon un suivi se lirait
+ * comme une action sur le parc.
+ */
+const H_FAMILLES = [
+  { re: /^(lister_equipes|etat_equipe|rapport_equipe|suivre_equipes?|carburant_parc|historique_equipe|mon_autonomie)$/, verbe: 'Consulté', quoi: 'le parc' },
+  { re: /^(lister_projets|explorer_projets|rechercher_projets|lire_fichier)$/, verbe: 'Exploré', quoi: 'les projets' },
+  { re: /^creer_equipe$/, verbe: 'Proposé', quoi: 'un mandat' },
+  { re: /^(envoyer_a_equipe|interrompre_equipe|arreter_equipe|relancer_equipe|definir_budget)$/, verbe: 'Agi', quoi: 'sur une équipe' },
+  { re: /^(programmer_rappel|mes_rappels|modifier_rappel|supprimer_rappel|mettre_rappel_en_pause|reprendre_rappel)$/, verbe: 'Géré', quoi: 'les rappels' },
+  { re: /^nommer_fil$/, verbe: 'Nommé', quoi: 'ce fil' },
+  { re: /^(WebSearch|WebFetch)$/, verbe: 'Cherché', quoi: 'sur le web' },
+  { re: /^(Read|Grep|Glob)$/, verbe: 'Lu', quoi: 'des fichiers' },
+];
+
+/** Accord du complément quand une famille est appelée plusieurs fois. */
+function hFamilleDe(nom) {
+  const court = hToolLabel(nom);
+  return H_FAMILLES.find((f) => f.re.test(court)) ?? { verbe: 'Utilisé', quoi: 'un outil' };
+}
+
+/**
  * Résumé d'un groupe — la seule ligne visible au repos.
- * ☠ Construit sur les libellés RÉELS, jamais sur un compteur seul : « 5 appels
- * d'outils » n'apprend rien, alors que « Lister equipes, Carburant parc + 3 »
- * dit ce que l'orchestrateur est allé chercher.
+ *
+ * ☠ Résumé SÉMANTIQUE, pas un compteur : « 5 appels d'outils » n'apprend rien.
+ * On dit ce qui a été fait, par famille — « Consulté le parc, proposé un
+ * mandat » — avec le verbe en avant et le complément en retrait, comme dans le
+ * rendu de Claude. Le détail exact reste à un clic.
+ *
+ * ☠ Les échecs sont comptés à part et signalés : un échec doit se voir AVANT
+ * d'ouvrir la carte, sinon il se lit comme un appel réussi.
  */
 function hResumeGroupe(carte) {
   const lignes = [...carte.querySelectorAll('.tc-ligne')];
-  const noms = [...new Set(lignes.map((l) => hOutilLisible(l.dataset.outil || '', l.dataset.detail)))];
   const echecs = lignes.filter((l) => l.classList.contains('err')).length;
-  const tete = noms.slice(0, 2).join(', ');
-  const reste = noms.length > 2 ? ` <span class="tc-n">+ ${noms.length - 2}</span>` : '';
-  const nb = lignes.length > 1 ? ` <span class="tc-n">· ${lignes.length} appels</span>` : '';
+  // Regroupe par famille en PRÉSERVANT l'ordre d'appel : c'est l'ordre dans
+  // lequel l'orchestrateur a travaillé, et il raconte quelque chose.
+  const parFamille = [];
+  for (const ligne of lignes) {
+    const f = hFamilleDe(ligne.dataset.outil || '');
+    const vu = parFamille.find((x) => x.verbe === f.verbe && x.quoi === f.quoi);
+    if (vu) vu.n += 1;
+    else parFamille.push({ ...f, n: 1 });
+  }
+  const morceaux = parFamille.map((f) => {
+    const comp = f.n > 1 ? `${f.quoi} <span class="tc-n">(${f.n}×)</span>` : f.quoi;
+    return `<span class="tc-v">${escapeHtml(f.verbe)}</span> <span class="tc-n">${comp}</span>`;
+  });
   const err = echecs > 0 ? ` <span style="color:var(--err);">· ${echecs} en échec</span>` : '';
-  return escapeHtml(tete) + reste + nb + err;
+  return morceaux.join('<span class="tc-n">, </span>') + err;
 }
 
 /** Réécrit le résumé du groupe qui contient cette ligne. */

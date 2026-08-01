@@ -529,6 +529,9 @@
     transition: color .15s ease; }
   .tc-tete:hover { color: var(--ink); }
   .tc-tete .tc-res { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* Le VERBE porte le sens, le complément reste en retrait — même hiérarchie
+     que le rendu de Claude : on lit l'action d'un coup d'œil, le détail ensuite. */
+  .tc-tete .tc-v { color: var(--ink-2); }
   .tc-tete .tc-n { color: var(--ink-3); }
   .tc-tete .cv { flex: 0 0 auto; opacity: .6; transition: transform .18s ease; }
   .tc-tete.ouvert .cv { transform: rotate(90deg); }
