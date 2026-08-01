@@ -278,14 +278,10 @@ const HarnessAPI = (() => {
       return ecrireReel(`/missions/${encodeURIComponent(id)}/inspect/decision`, { decision });
     },
 
-    /* ---- H-57 : deux commandes séparées, jamais confondues ---- */
-    async pauseGlobal() {
-      return withPc(() => {
-        db.missions.forEach((m) => { if (['running', 'requires_action'].includes(m.state)) m._pausedByGlobal = m.state; });
-        return { paused: true };
-      });
-    },
-    async resumeGlobal() { return withPc(() => ({ paused: false })); },
+    /* ☠ `pauseGlobal` / `resumeGlobal` SUPPRIMÉES le 01/08. Elles n'ont jamais
+       rien mis en pause : aucune route serveur n'existait, la fonction marquait
+       un champ sur la base de démonstration. Seul l'arrêt d'urgence est réel.
+       La pause par MISSION (`pauseMission`), elle, l'a toujours été. */
 
     /* ---- ÉCRITURES RÉELLES ---- */
 

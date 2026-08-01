@@ -43,22 +43,6 @@
 </div>
 
 <!-- ====== MODALE HARNESS : pause globale (H-57) ====== -->
-<div id="modalHPause" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
-  <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden" style="border-color: var(--line); background: var(--card);">
-    <div class="px-6 pt-5 pb-4">
-      <h3 id="hPauseTitle" class="serif text-[16px] font-medium mb-2" style="color: var(--ink);">Mettre tout le parc en pause</h3>
-      <p id="hPauseDesc" class="text-[12.5px] leading-relaxed" style="color: var(--ink-2);"></p>
-      <div class="mt-3 p-3 rounded-lg text-[11.5px] leading-relaxed" style="background: var(--warn-soft); color: #8A6A12;">
-        <strong>Ce que la pause ne fait pas</strong> — les processus lancés en arrière-plan par les agents (serveurs de dev, builds, watchers) continuent de tourner. Les arrêter relève du superviseur, pas de ce bouton.
-      </div>
-    </div>
-    <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
-      <button class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium" data-close-modal>Annuler</button>
-      <button id="hBtnConfirmPause" class="btn-primary rounded-lg px-4 py-2 text-[12.5px] font-medium">Mettre en pause</button>
-    </div>
-  </div>
-</div>
-
 <!-- ====== MODALE HARNESS : arrêt d'urgence (H-57 — geste armé, pas un clic) ====== -->
 <div id="modalHStop" class="fixed inset-0 z-50 hidden items-center justify-center modal-backdrop">
   <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden" style="border-color: var(--err); background: var(--card);">

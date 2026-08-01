@@ -1,18 +1,24 @@
-// ============ HARNESS — barre de sûreté (H-57) + lien Pi↔PC + démarrage ============
-// PAUSE GLOBALE et ARRÊT D'URGENCE sont deux commandes séparées, jamais confondues
-// (H-57). Elles ne passent jamais par l'orchestrateur (H-57 ☠).
+// ============ HARNESS — barre de sûreté + lien Pi↔PC + démarrage ============
+//
+// ☠ La PAUSE GLOBALE a été SUPPRIMÉE le 01/08, pas désactivée. Elle n'a jamais
+// rien mis en pause : `pauseGlobal()` marquait un champ sur la base de
+// démonstration en mémoire et rendait `{ paused: true }` ; aucune route serveur
+// n'a jamais existé. Le bouton s'allumait, la modale décrivait précisément ce
+// que la pause faisait et ne faisait pas, et les workers continuaient.
+//
+// Un contrôle de sûreté qui ment est PIRE que son absence : on croit le parc
+// arrêté, donc on ne fait pas le geste qui l'arrêterait vraiment. Le laisser
+// grisé « en attendant » aurait gardé la même promesse à l'écran. L'arrêt
+// d'urgence, lui, est réel (`/safety/emergency-stop`) — c'est la seule commande
+// de sûreté du produit, et elle ne passe jamais par l'orchestrateur (H-57 ☠).
 
+// ☠ Pleine largeur et libellé depuis qu'il est SEUL : le carré de 54 px se
+// justifiait à côté de la pause, il ne se lit plus tout seul dans une barre vide.
 const HARNESS_SAFETY_HTML = `
-  <button class="btnPause">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-    <span class="pauseLabel">PAUSE GLOBALE</span>
-  </button>
-  <div class="safety-gap"></div>
   <button class="btnStop" title="Arrêt d'urgence">
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#B5524A" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+    <span>ARRÊT D'URGENCE</span>
   </button>`;
-
-let hParcPaused = false;
 
 function hInitSafetyBars() {
   document.querySelectorAll('.harness-safety-bar').forEach((b) => { b.innerHTML = HARNESS_SAFETY_HTML; });
@@ -36,14 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
   hInitSafetyBars();
 
   document.addEventListener('click', (e) => {
-    if (e.target.closest('.btnPause')) {
-      if (!HarnessAPI._isPcOnline()) { showToast('PC absent — la pause n\'atteindrait pas les workers', 'warn'); return; }
-      document.getElementById('hPauseTitle').textContent = hParcPaused ? 'Reprendre le parc' : 'Mettre tout le parc en pause';
-      document.getElementById('hPauseDesc').innerHTML = hParcPaused
-        ? 'Les files d\'entrée retenues seront relâchées et les missions reprendront leur tour.'
-        : 'Les missions actives seront interrompues sur leur tour en cours. <strong>Les sessions restent vivantes, le contexte est intégralement préservé.</strong> Reprise instantanée.';
-      openModal('modalHPause');
-    }
     if (e.target.closest('.btnStop')) {
       if (!HarnessAPI._isPcOnline()) { showToast('PC absent — l\'arrêt n\'atteindrait pas les workers', 'warn'); return; }
       hResetArm();
@@ -51,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.getElementById('hBtnConfirmPause').addEventListener('click', hDoPause);
   hWireEmergencyStop();
 
   // ---- simulateurs de démo, panneau Paramètres (jamais en production réelle) ----
@@ -68,15 +65,6 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast(up ? 'PC de retour — reconnexion propre (H-75)' : 'PC absent — état normal affiché, pas une erreur (H-75)', up ? 'ok' : 'warn');
   });
 });
-
-async function hDoPause() {
-  closeModal('modalHPause');
-  hParcPaused = !hParcPaused;
-  if (hParcPaused) await HarnessAPI.pauseGlobal(); else await HarnessAPI.resumeGlobal();
-  document.querySelectorAll('.btnPause').forEach((b) => b.classList.toggle('engaged', hParcPaused));
-  document.querySelectorAll('.pauseLabel').forEach((l) => l.textContent = hParcPaused ? 'REPRENDRE LE PARC' : 'PAUSE GLOBALE');
-  showToast(hParcPaused ? 'Parc en pause — sessions vivantes, contexte intégralement préservé' : 'Parc repris — files relâchées', hParcPaused ? 'warn' : 'ok');
-}
 
 /* ---- arrêt d'urgence : geste armé (maintien 1,5 s), jamais un simple clic ---- */
 function hWireEmergencyStop() {

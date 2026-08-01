@@ -5,7 +5,34 @@
 
 **Contexte complet : `harness/REPRISE.md`.**
 
+### ✅ DÉFAUT DE SÛRETÉ — trouvé ET fermé le 01/08 au soir
+
+- [x] **La PAUSE GLOBALE était une maquette, elle est SUPPRIMÉE** (décision de Chris, 01/08).
+      `pauseGlobal()` marquait un champ sur la base de démonstration et rendait `{ paused: true }` ;
+      aucune route serveur n'a jamais existé. Le bouton s'allumait, la modale décrivait ce que la
+      pause faisait et ne faisait pas, et les workers continuaient. **Un contrôle de sûreté qui
+      ment est pire que son absence** : on croit le parc arrêté, donc on ne fait pas le geste qui
+      l'arrêterait vraiment. Supprimée plutôt que grisée — grisée, elle aurait gardé sa promesse à
+      l'écran. Reste l'arrêt d'urgence, réel, désormais seul et en pleine largeur. La pause par
+      MISSION, elle, a toujours été réelle et ne bouge pas.
+
 ### 🎯 À LA REPRISE (01/08)
+
+- [ ] **Inspection à la demande sur une équipe VIVANTE** — livrée et déployée le 01/08, mais le
+      seul chemin jamais exercé est celui d'une équipe close (verdict « incertain, rien à
+      inspecter »). Restent à voir en vrai : un verdict rendu sur de vrais tours, le bandeau rouge
+      du Parc, et la boîte confirmer / décliner sur une `boucle`.
+- [ ] **L'anti-boucle n'inspecte toujours QUE sur `result`.** Le coût est désormais relevé en
+      continu (mesuré : 1,02 → 1,82 $ pendant un tour `running`), mais `verifierEtJuger` reste
+      déclenché par un `SDKResultMessage`. Une équipe qui travaille 15 min sur une seule
+      instruction n'est donc pas inspectée PENDANT ce temps — seulement à la fin, en rattrapant
+      d'un coup tous les paliers franchis. Le brancher sur le coût live est un changement de
+      chemin de contrôle : à faire sur mesure réelle, jamais sur déduction.
+- [ ] **Formulaire de mandat manuel** — `proposeMandate` / `approveProposal` / `rejectProposal`
+      tapent encore dans la maquette. À ne pas confondre avec `approveMandat` / `rejectMandat`,
+      qui sont réels et servent aux cartes du fil.
+- [ ] **`compactOrchestratorContext`** — maquette. La compaction réelle par fil
+      (`compactConversation`) existe et fonctionne ; celle-ci est un reste.
 
 - [ ] **Test bout en bout par Chris** — nouvelle conversation orchestrateur (PAS un resume : le
       prompt système a changé six fois le 01/08, seule une session neuve le charge). Scénario :
@@ -22,6 +49,32 @@
       tranchée.
 - [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
       visuel, branché sur le vrai back, ne contraint rien en amont.
+
+### ✅ LIVRÉ LE 01/08 — session du soir
+
+- [x] **Clic droit dans toute l'app** — menu contextuel délégué, appui long sur mobile, dialogues
+      à la charte. Six genres : fil, conversation, mission, notification, session, message. Le
+      menu natif reste intact partout où aucune cible n'est reconnue.
+- [x] **Rechargement silencieux** (`hPatcher`) — le Parc réécrivait tout son corps dès qu'un « il
+      y a 4 min » bougeait, rejouant 26 animations toutes les 4 s. Mesuré : 26 cartes sur 26
+      survivent maintenant à 3-4 cycles.
+- [x] **Recherche web de l'orchestrateur** — le mandat annonçait `WebSearch`/`WebFetch`, absents
+      de l'allowlist `tools`. Capacité promise, jamais branchée. Test qui relit le prompt et exige
+      que chaque outil nommé existe. Validé par Chris.
+- [x] **Nommage automatique des fils** (migration 19) — au 2ᵉ message, verrouillé pour la session,
+      renommable à la main ou sur demande explicite dans la conversation. Validé bout en bout.
+- [x] **Plafond d'équipe 12 → 250 $, DÉRIVÉ de l'échelle anti-boucle.** Le plafond valait la
+      valeur du premier palier : l'équipe mourait à l'instant précis où le juge devait la
+      regarder, et les huit paliers suivants étaient inatteignables.
+- [x] **Coût relevé en cours de tour** — il ne se lisait que sur `result` (fin de tour) : une
+      équipe de 15 min affichait 0,00 $ tout du long. Validé par Chris (0,66 $ en direct).
+- [x] **Inspection à la demande** (migration 20) — le bouton tapait dans la maquette et tirait son
+      verdict avec `Math.random()`. Chemin réel de bout en bout + arbitrage confirmer / décliner.
+- [x] **Page sous-agent blanche** — `hFeedItemTemplate` disparu à la refonte ; passe par
+      `hCorpsFil`, le rendu du lead.
+- [x] **Mandat déjà tranché → 409** au lieu de 500 « échec interne », carte qui se retire ses
+      boutons quand la décision n'existe plus.
+- [x] Bouton d'envoi invisible (spécificité CSS), bouton « Nouvelle conversation » retiré.
 
 ### ✅ LIVRÉ LE 01/08
 
