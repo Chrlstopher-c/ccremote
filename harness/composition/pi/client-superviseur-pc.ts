@@ -59,6 +59,7 @@ import type {
   TelemetrieWorker,
   JetonCompte,
 } from '../../superviseur/index.ts';
+import type { MetriquesHote } from '../../superviseur/metriques-hote.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
 import type { ResultatRecherche } from '../../superviseur/recherche-projets.ts';
 import type { ResultatLectureFichier } from '../../superviseur/lecture-fichier.ts';
@@ -175,6 +176,21 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     } catch (erreur) {
       log.debug({ err: erreur }, 'jetons du PC indisponibles — les derniers connus restent en vigueur');
       return [];
+    }
+  }
+
+  /**
+   * Ce que CETTE machine dit d'elle-même. `☠` Machine absente ⇒ `null`, jamais
+   * un objet à zéros : « 0 % de CPU » et « je n'ai pas pu mesurer » mènent à des
+   * lectures opposées, et c'est sur ces chiffres qu'on décide où lancer.
+   */
+  async metriquesHote(): Promise<MetriquesHote | null> {
+    try {
+      const reponse = await this.#appeler({ type: 'metriques_hote' });
+      return reponse.metriquesHote ?? null;
+    } catch (erreur) {
+      log.debug({ err: erreur }, 'métriques de la machine indisponibles — traitées comme absentes');
+      return null;
     }
   }
 

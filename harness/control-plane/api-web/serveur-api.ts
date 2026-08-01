@@ -29,6 +29,12 @@ import {
   ErreurProjetOccupe,
 } from '../orchestrateur/dispatch-mandat.ts';
 import { ErreurRoutageMachine } from '../../shared/routage-machine.ts';
+// `☠` Import de TYPE uniquement. `api-web` ne dépend d'aucun module de
+// `superviseur/` à l'exécution — ce serait franchir une frontière de domaine.
+// Le relevé est produit par la machine et ne fait que TRAVERSER cette couche :
+// le retyper ici en `Record<string, unknown>` ferait perdre au front la garantie
+// que ce qu'il lit est ce que la machine a mesuré.
+import type { MetriquesHote } from '../../superviseur/metriques-hote.ts';
 import type { ServiceInspection } from '../inspection/service-inspection.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
@@ -62,6 +68,15 @@ export interface DependancesApiWeb {
    */
   readonly machines?: () => readonly MachineApi[];
   /**
+   * Relevé matériel de CHAQUE machine en ligne, demandé sur le lien du harness.
+   *
+   * `☠` Fonction ASYNCHRONE et route SÉPARÉE de `/machines` : ce relevé fait un
+   * aller-retour par machine (jusqu'à Cloudflare pour le VPS), alors que
+   * `/machines` sert le sélecteur de fil et doit rester instantané. Les fondre
+   * ferait payer une latence réseau à l'ouverture d'une conversation.
+   */
+  readonly metriquesMachines?: () => Promise<readonly MetriquesMachineApi[]>;
+  /**
    * Ordres vers le PC. Absent ⇒ les routes d'écriture répondent 501 plutôt que
    * d'accepter un ordre qui ne partirait nulle part.
    */
@@ -85,6 +100,19 @@ export interface DependancesApiWeb {
   readonly orchestrateurContexteRatio?: () => number | null;
   readonly maintenant?: () => number;
   readonly plafondRelances?: number;
+}
+
+/**
+ * Métriques d'une machine, telles que l'interface les voit.
+ *
+ * `☠` `metriques: null` signifie « pas pu mesurer », JAMAIS « tout à zéro ».
+ * Une machine éteinte reste dans la liste avec `enLigne: false` : la retirer
+ * ferait disparaître de l'écran une machine sur laquelle des missions vivent.
+ */
+export interface MetriquesMachineApi {
+  readonly id: string;
+  readonly enLigne: boolean;
+  readonly metriques: MetriquesHote | null;
 }
 
 /** Une machine de travail, telle que l'interface la voit. */
@@ -543,6 +571,14 @@ export function demarrerServeurApiWeb(options: OptionsServeurApiWeb): ServeurApi
           const conversation = await routerEcritureConversation(chemin, req, options);
           if (conversation !== null) return json(conversation);
           return json(await routerEcriture(chemin, req, options));
+        }
+        // `☠` Route ASYNCHRONE, traitée avant le routeur synchrone : elle
+        // interroge chaque machine sur le lien. La faire passer par `router()`
+        // aurait imposé de rendre tout le routage de lecture asynchrone pour un
+        // seul chemin.
+        if (chemin === '/machines/metriques') {
+          const releves = (await options.metriquesMachines?.()) ?? [];
+          return json(enveloppe(options.pcEnLigne(), releves));
         }
         return json(router(chemin, url, options));
       } catch (erreur) {

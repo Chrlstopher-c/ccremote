@@ -124,6 +124,14 @@ const HarnessAPI = (() => {
 
     /** Machines de travail connues du Pi, en ligne ou non (migration 22). */
     async getMachines() { return lireReel('/machines'); },
+
+    /**
+     * Relevé matériel PAR MACHINE, sur le lien du harness.
+     * ☠ Route séparée de `/machines` à dessein : celle-ci fait un aller-retour
+     * par machine (jusqu'à Cloudflare pour le VPS), alors que `/machines` sert
+     * le sélecteur de fil et doit rester instantané.
+     */
+    async getMachineMetrics() { return lireReel('/machines/metriques'); },
     async sendConversationMessage(id, text, choix) {
       // ☠ NON bloquant : le serveur enfile puis rend la main, la réponse arrive
       // en streaming via getConversationEvents. On ne fabrique jamais de réponse.

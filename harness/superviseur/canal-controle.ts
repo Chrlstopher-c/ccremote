@@ -34,6 +34,7 @@ import type { ResultatExploration } from './exploration-projets.ts';
 import type { ResultatLectureFichier } from './lecture-fichier.ts';
 import type { ResultatRecherche } from './recherche-projets.ts';
 import type { JetonCompte } from './sonde-quotas-http.ts';
+import { releverMetriquesHote, type MetriquesHote } from './metriques-hote.ts';
 import type { WorkerSpec } from '../workers/index.ts';
 
 /**
@@ -112,6 +113,14 @@ export type OperationControle =
    * refresh token ne traverse jamais le lien.
    */
   | { readonly type: 'jetons' }
+  /**
+   * Lecture pure : ce que la MACHINE sait dire d'elle-même (charge, mémoire,
+   * disque, GPU). `☠` Relevé sur place et transporté par ce lien, plutôt que par
+   * un serveur de métriques propre à chaque machine : le lien est déjà
+   * authentifié et déjà multi-machines, une machine qui se rattache apporte donc
+   * ses chiffres sans aucune configuration réseau supplémentaire.
+   */
+  | { readonly type: 'metriques_hote' }
   /** Lecture pure : parcourir l'arborescence des projets, qui vit sur le PC. */
   | { readonly type: 'explorer_projets'; readonly chemin?: string }
   /**
@@ -161,6 +170,7 @@ type OperationMutative = Exclude<
   | { readonly type: 'inventaire' }
   | { readonly type: 'telemetrie' }
   | { readonly type: 'jetons' }
+  | { readonly type: 'metriques_hote' }
   | { readonly type: 'explorer_projets' }
   | { readonly type: 'lire_fichier' }
   | { readonly type: 'rechercher_projets' }
@@ -189,6 +199,8 @@ export interface ReponseControle {
   readonly telemetrie?: readonly TelemetrieWorker[];
   /** Présent uniquement pour `jetons` — lecture pure, hors cache d'idempotence. */
   readonly jetons?: readonly JetonCompte[];
+  /** Présent uniquement pour `metriques_hote` — lecture pure, hors cache. */
+  readonly metriquesHote?: MetriquesHote;
   /** Présent uniquement pour `explorer_projets`. */
   readonly explorationProjets?: ResultatExploration;
   /** Présent uniquement pour `lire_fichier`. */
@@ -292,6 +304,12 @@ export class CanalControle {
       const verdict = await this.#superviseur.inspecter?.(requete.operation.missionId);
       if (verdict === undefined) return { ok: false, effet: 'refuse', detail: 'inspection non câblée sur ce superviseur' };
       return { ok: true, effet: 'applique', inspection: verdict };
+    }
+
+    if (requete.operation.type === 'metriques_hote') {
+      // `☠` Relevé À CHAQUE appel, jamais mis en cache : une charge CPU est un
+      // rapport entre deux instants, un cache la figerait sur une valeur morte.
+      return { ok: true, effet: 'applique', metriquesHote: await releverMetriquesHote() };
     }
 
     if (requete.operation.type === 'jetons') {

@@ -20,59 +20,14 @@
              même question — « est-ce que je peux lancer une équipe maintenant ? ».
              Les séparer obligeait à ouvrir deux écrans pour y répondre. -->
         <div id="pcQuotas"></div>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">CPU</div>
-            <div class="flex items-end gap-1.5"><span id="pcCpuVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">%</span></div>
-          </div>
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Mémoire</div>
-            <div class="flex items-end gap-1.5"><span id="pcRamVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
-            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcRamBar" class="h-full rounded-full" style="background: var(--accent); width: 0%; transition: width 0.5s;"></div></div>
-          </div>
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Temp. CPU</div>
-            <div class="flex items-end gap-1.5"><span id="pcTempVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span><span class="text-[13px] mb-0.5" style="color: var(--ink-3);">°C</span></div>
-          </div>
-          <div class="rounded-xl border p-4" style="border-color: var(--line); background: var(--card);">
-            <div class="text-[10.5px] uppercase tracking-wider mb-1" style="color: var(--ink-3);">Disque</div>
-            <div class="flex items-end gap-1.5"><span id="pcDiskVal" class="serif text-[28px] font-medium leading-none" style="color: var(--ink);">—</span></div>
-            <div class="mt-2 h-1.5 rounded-full overflow-hidden" style="background: var(--bg-3);"><div id="pcDiskBar" class="h-full rounded-full" style="background: var(--accent); width: 0%;"></div></div>
-          </div>
-        </div>
 
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">GPU</h3>
-            <span id="pcGpuTemp" class="text-[11px] mono" style="color: var(--ink-3);">—</span>
-          </div>
-          <div class="grid grid-cols-2 gap-6">
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Utilisation</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuUtil" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">%</span></div>
-            </div>
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Mémoire</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="pcGpuMem" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-xl border p-5" style="border-color: var(--line); background: var(--card);">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="serif text-[15px] font-medium" style="color: var(--ink);">Réseau</h3>
-          </div>
-          <div class="grid grid-cols-2 gap-6">
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Envoi</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="netUp" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
-            </div>
-            <div>
-              <div class="text-[11px]" style="color: var(--ink-3);">Réception</div>
-              <div class="flex items-baseline gap-1.5 mt-1"><span id="netDown" class="serif text-[22px] font-medium" style="color: var(--ink);">—</span><span class="text-[12px]" style="color: var(--ink-3);">KB/s</span></div>
-            </div>
-          </div>
-        </div>
+        <!-- ☠ UNE CARTE PAR MACHINE DE TRAVAIL (01/08). Les quatre tuiles fixes
+             CPU/Mémoire/Temp/Disque qui vivaient ici ne décrivaient qu'UNE
+             machine — celle joignable en LAN — et n'avaient plus de sens dès
+             qu'il y en a eu deux. Le rendu est en JS parce que le nombre de
+             machines n'est pas connu à l'écriture du gabarit : il dépend de
+             qui s'est rattaché au Pi. -->
+        <div id="pcMachines" class="space-y-4"></div>
       </div>
     </div>
 

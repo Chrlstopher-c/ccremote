@@ -488,6 +488,18 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     pcEnLigne: () => parc.auMoinsUneEnLigne(),
     machines: () =>
       serveurLien.machines().map((m) => ({ id: m.machineId, enLigne: m.enLigne, supersedes: m.supersedes })),
+    // `☠` Interrogées EN PARALLÈLE et jamais en série : deux allers-retours dont
+    // l'un traverse Cloudflare additionneraient leurs latences, et la page
+    // rafraîchirait au rythme de la machine la plus lente. Une machine hors
+    // ligne n'est pas interrogée du tout — elle apparaît avec `metriques: null`.
+    metriquesMachines: async () =>
+      Promise.all(
+        serveurLien.machines().map(async (m) => ({
+          id: m.machineId,
+          enLigne: m.enLigne,
+          metriques: m.enLigne ? ((await parc.pour(m.machineId)?.metriquesHote()) ?? null) : null,
+        })),
+      ),
     // `☠` Les ordres partent par le MÊME lien que le reste (H-75, un seul
     // lien). `arretUrgence` n'est pas exposé par `ClientSuperviseurPc` : le
     // chemin G.4 passe par le canal de contrôle et n'a pas encore de méthode
