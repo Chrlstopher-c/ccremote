@@ -178,6 +178,54 @@ const BLOC_ATTRIBUTION = [
 ].join('\n');
 
 /**
+ * `☠` LE défaut de coût, mesuré le 01/08 sur la production.
+ *
+ * Le site lumen a coûté **52,93 $ en six vagues**, aucune sous 3,85 $. Cause
+ * lue dans le SDK, pas déduite : `AgentInput.model` est OPTIONNEL et
+ * « if omitted, inherits from the parent ». Un lead Opus 5 qui lance trois
+ * sous-agents sans rien préciser lance donc trois Opus 5 — et rien, nulle part,
+ * ne le lui disait. Moyenne mesurée : 6,40 $ par mission Opus contre 0,67 $ par
+ * mission Sonnet.
+ *
+ * `☠` Les valeurs sont des ALIAS (`sonnet`, `opus`, `haiku`, `fable`), jamais des
+ * identifiants complets. Écrire `claude-sonnet-5` ici est le défaut du 31/07 sous
+ * une autre forme — une chaîne plausible refusée par l'outil.
+ *
+ * `☠` La contrepartie est nommée, sinon la consigne se retourne : Sonnet rend
+ * plus souvent un travail non vérifié. La parade n'est PAS une relecture Opus
+ * systématique (qui réintroduirait le coût qu'on retire) mais une PREUVE
+ * MÉCANIQUE, qui ne coûte aucun token.
+ */
+const BLOC_DIMENSIONNEMENT = [
+  'DIMENSIONNE TES SOUS-AGENTS — c’est toi qui paies, et par défaut tu paies le prix fort.',
+  'L’outil Task accepte un paramètre `model`. OMIS, le sous-agent HÉRITE DE TON MODÈLE :',
+  'trois sous-agents lancés sans rien préciser par un lead Opus, ce sont trois Opus en',
+  'parallèle. Mesuré le 01/08 : un site vitrine a coûté 52,93 $ de cette façon.',
+  '',
+  'Valeurs acceptées — des alias, jamais un identifiant complet : `sonnet`, `opus`, `haiku`.',
+  '',
+  '  · `sonnet` — TON DÉFAUT. Tout ce qui est cadré : écrire du code sur une spec établie,',
+  '    appliquer un correctif décrit, écrire des tests, refactorer, explorer une base,',
+  '    rédiger de la doc, brancher une API connue. C’est la majorité d’un mandat.',
+  '  · `opus` — RÉSERVÉ à deux choses, et tu dois pouvoir dire laquelle : la profondeur de',
+  '    raisonnement (architecture non triviale, diagnostic d’un défaut qui résiste, arbitrage',
+  '    aux conséquences lointaines) et la création (direction artistique, motion design,',
+  '    tout ce qui doit aller loin plutôt que rendre une idée plate).',
+  '  · `haiku` — mécanique et volumineux : renommage massif, extraction, tri, relevé.',
+  '',
+  'Le vrai critère n’est pas la difficulté ressentie, c’est : « ai-je déjà tranché comment',
+  'faire ? » Si oui, c’est de l’exécution — `sonnet`. Si la décision fait partie du travail,',
+  'c’est `opus`. Quand tu hésites, prends `sonnet` et garde la main pour vérifier.',
+  '',
+  'CE QUE TU DOIS À UN RENDU DE SOUS-AGENT — surtout `sonnet`, qui déclare plus souvent',
+  'terminé un travail qu’il n’a pas vérifié. N’accepte JAMAIS un rendu sur sa parole :',
+  'exige une PREUVE MÉCANIQUE et lis-la toi-même. Une commande et sa sortie (`tsc`, les',
+  'tests, le linter), un fichier relu, une page ouverte. Cela ne coûte aucun token de',
+  'modèle et attrape ce qu’une relecture manquerait. Ne repasse derrière avec un sous-agent',
+  '`opus` que si la preuve mécanique est impossible — c’est le second filet, pas le premier.',
+].join('\n');
+
+/**
  * `☠` Les trois gestes qui séparent un correctif prouvé d'un correctif décoré.
  * Mesuré sur ce dépôt le 31/07 : trois pannes en une session, toutes VERTES sur
  * le papier, toutes causées par l'absence d'un de ces trois gestes.
@@ -266,6 +314,8 @@ export function composerMandatSysteme(p: Proposition, acces: AccesMandat): strin
     ligneBudget(p.budgetMaxUsd),
     '',
     BLOC_AUTONOMIE,
+    '',
+    BLOC_DIMENSIONNEMENT,
     '',
     BLOC_ATTRIBUTION,
     '',

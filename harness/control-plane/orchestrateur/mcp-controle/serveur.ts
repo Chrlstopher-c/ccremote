@@ -250,8 +250,12 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         "est légitime. Choisis `lecture` pour une équipe qui explore, audite ou rend un rapport ; " +
         "`ecriture` dès qu'elle doit modifier le projet. `perimetre` reste la description en " +
         'clair du cadre, il ne donne aucun droit. ' +
-        "`modele` et `effort` : ne les renseigne QUE si l'opérateur a précisé lesquels. " +
-        'Laissés vides, le lead démarre sur les défauts du harness (Opus 5, effort high).',
+        '`modele` : TU ARBITRES, ce n’est pas à l’opérateur de le dire. `claude-sonnet-5` ' +
+        'pour un mandat d’EXÉCUTION (cadrage posé : écrire, corriger, tester, explorer, ' +
+        'documenter) — le cas le plus fréquent. `claude-opus-5` pour un mandat de CONCEPTION ' +
+        '(direction artistique, motion design, architecture non triviale, défaut qui résiste). ' +
+        'Mesuré le 01/08 : 6,40 $ par équipe Opus contre 0,67 $ par équipe Sonnet. Laissé vide, ' +
+        'le harness retombe sur Opus 5 — un défaut prudent, pas un choix : annonce le tien.',
       {
         projet: z.string(),
         objectif: z.string(),
