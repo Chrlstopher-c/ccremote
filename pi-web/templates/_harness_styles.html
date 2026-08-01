@@ -514,38 +514,51 @@
      d'envoi invisible du 01/08 — une spécificité qu'on n'avait pas comptée. */
   .h-case-body[hidden] { display: none !important; }
 
-  /* ── Timeline d'appels d'outils ────────────────────────────────────────────
-     ☠ Remplace les gros blocs « Outil appelé / Résultat » qui empilaient du JSON
-     brut en pleine largeur : sur un tour d'orchestrateur les outils sont
-     l'essentiel du volume et l'accessoire du sens. Ici une étape = UNE LIGNE
-     (gouttière de 20 px, filet continu, libellé tronqué), et le détail ne
-     s'ouvre que si on le demande. Le filet est porté par chaque ligne plutôt que
-     par un pseudo-élément du conteneur : les étapes arrivent une par une pendant
-     la génération, et un trait calculé sur la hauteur du parent sauterait à
-     chaque ajout. */
-  .tl { margin: 2px 0; }
-  .tl-row { display: flex; flex-direction: row; align-items: stretch; }
-  .tl-gut { width: 20px; flex: 0 0 20px; display: flex; flex-direction: column; align-items: center; }
-  .tl-ico { display: flex; align-items: center; justify-content: center; height: 26px; color: var(--ink-3); }
-  .tl-ico svg { width: 15px; height: 15px; }
-  /* Le filet descend sous l'icône et rejoint l'étape suivante. */
-  .tl-fil { width: 1px; flex: 1 1 auto; background: var(--line-2, var(--line)); min-height: 6px; }
-  .tl-row:last-child .tl-fil { background: transparent; }
-  .tl-main { flex: 1; min-width: 0; }
-  .tl-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 8px;
-    font-size: 13.5px; color: var(--ink-3); background: none; border: none; border-radius: 7px;
+  /* ── Groupe d'appels d'outils ──────────────────────────────────────────────
+     ☠ Trois rendus successifs le 01/08, et seul le dernier tient. D'abord des
+     blocs pleine largeur empilant du JSON brut — illisibles. Puis une timeline à
+     filet vertical — compacte, mais une ligne par appel reste une ligne de bruit
+     par appel. Le rendu retenu (celui de Claude) résout le vrai problème : les
+     appels consécutifs sont REGROUPÉS sous un seul résumé, et la carte ne
+     s'ouvre que si on veut le détail. Sur un tour à huit outils, on lit une
+     ligne au lieu de huit. */
+  .tc { margin: 4px 0; }
+  /* Résumé du groupe : c'est la SEULE chose visible au repos. */
+  .tc-tete { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 0;
+    font-size: 14px; color: var(--ink-3); background: none; border: none; text-align: left;
+    transition: color .15s ease; }
+  .tc-tete:hover { color: var(--ink); }
+  .tc-tete .tc-res { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tc-tete .tc-n { color: var(--ink-3); }
+  .tc-tete .cv { flex: 0 0 auto; opacity: .6; transition: transform .18s ease; }
+  .tc-tete.ouvert .cv { transform: rotate(90deg); }
+  /* La carte : un seul cadre pour tout le groupe, lignes séparées par un filet. */
+  .tc-carte { margin-top: 8px; border: 1px solid var(--line); border-radius: 11px;
+    background: var(--card); overflow: hidden; }
+  .tc-carte[hidden] { display: none !important; }
+  .tc-ligne + .tc-ligne { border-top: 1px solid var(--line); }
+  .tc-ligne > .tc-btn { display: flex; align-items: center; gap: 7px; width: 100%;
+    padding: 9px 13px; font-size: 13.5px; color: var(--ink-3); background: none; border: none;
     text-align: left; transition: color .15s ease, background .15s ease; }
-  .tl-btn:hover { color: var(--ink); background: var(--bg-2); }
-  .tl-btn .tl-txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tl-btn .cv { flex: 0 0 auto; opacity: .55; transition: transform .18s ease; }
-  .tl-btn.ouvert .cv { transform: rotate(90deg); }
-  .tl-row.err .tl-ico, .tl-row.err .tl-btn { color: var(--err); }
-  /* Corps déplié : décalé sous le libellé, jamais sous la gouttière. */
-  .tl-det { padding: 2px 8px 10px; }
-  .tl-det[hidden] { display: none !important; }
-  .tl-det .h-lbl { margin-top: 8px; }
-  .tl-det .h-blk { max-height: 320px; overflow: auto; }
-  .tl-fin { font-size: 13px; color: var(--ink-3); padding: 4px 8px; }
+  .tc-ligne > .tc-btn:hover { color: var(--ink); background: var(--bg-2); }
+  .tc-btn .tc-lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tc-btn .cv { flex: 0 0 auto; opacity: .5; transition: transform .18s ease; }
+  .tc-btn.ouvert .cv { transform: rotate(90deg); }
+  /* Un échec se voit AVANT d'ouvrir : sinon il se lit comme un appel réussi. */
+  .tc-ligne.err > .tc-btn { color: var(--err); }
+  .tc-corps { padding: 0 13px 12px; }
+  .tc-corps[hidden] { display: none !important; }
+  .tc-cmd { display: flex; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
+    color: var(--ink-2); margin-bottom: 8px; }
+  .tc-cmd .tc-inv { color: var(--ink-3); user-select: none; }
+  .tc-cmd pre { margin: 0; white-space: pre-wrap; word-break: break-word; min-width: 0; }
+  /* ☠ Plafond de 400 px avec défilement PROPRE : une sortie d'outil peut faire
+     des milliers de lignes, et la laisser pousser le fil ferait perdre la
+     réponse qui suit — c'est le défaut qu'on corrigeait au départ. */
+  .tc-sortie { max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+    font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.55; color: var(--ink-3); }
+  .tc-sortie.err { color: var(--err); }
+  .tc-attente { font-size: 12.5px; color: var(--ink-3); font-style: italic; }
 
   /* une étape = une carte, dépliable à son tour */
   .h-card { border: 1px solid var(--line); border-radius: 11px; background: var(--card); overflow: hidden; }

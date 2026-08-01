@@ -347,21 +347,18 @@ function hPeindreTexte(noeud, contenu, live) {
  * `☠` Réutilise les classes du chat (`.think`, `.tool`, `.md`, `.codeblock`) —
  * même ADN visuel, une seule définition à maintenir.
  */
-// ── Timeline d'appels d'outils ───────────────────────────────────────────────
-// ☠ Une étape = UNE LIGNE. La version précédente empilait « Outil appelé » et
-// « Résultat » en gros blocs pleine largeur : le JSON brut d'un `lister_equipes`
-// occupait tout l'écran et noyait ce que l'orchestrateur avait à dire. Sur un
-// tour, les outils sont l'essentiel du volume et l'accessoire du sens — d'où la
-// ligne compacte, et le détail seulement sur demande.
-
-const H_ICO_OUTIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1 5 5L20 12l-8 8-3-3 8-8Z"/><path d="m9 15-4.5 4.5"/><circle cx="5" cy="19" r="1.6"/></svg>';
-const H_ICO_FIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></svg>';
-const H_ICO_ERR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.1"/></svg>';
+// ── Groupe d'appels d'outils ────────────────────────────────────────────────
+// ☠ Troisième rendu en un jour, et seul celui-ci tient. D'abord des blocs pleine
+// largeur empilant du JSON brut — illisibles. Puis une timeline à filet vertical
+// — compacte, mais une ligne de bruit par appel quand même. Le rendu retenu
+// (celui de Claude) traite le vrai problème : les appels CONSÉCUTIFS sont
+// regroupés sous un seul résumé, et la carte ne s'ouvre que si on veut le
+// détail. Sur un tour à huit outils, on lit une ligne au lieu de huit.
 
 /**
  * Libellé humain d'un appel. `☠` `mcp__ccremote-controle__lister_equipes` ne dit
- * rien à la lecture : on garde le verbe, et le nom technique reste visible dans
- * le détail pour qui le cherche.
+ * rien à la lecture : on garde le verbe, et le nom technique reste dans le
+ * détail pour qui le cherche.
  */
 function hOutilLisible(nom, detail) {
   const court = hToolLabel(nom).replace(/_/g, ' ');
@@ -376,79 +373,133 @@ function hOutilLisible(nom, detail) {
 }
 
 /**
- * Range sur le nœud ce que l'appel a demandé et ce qu'il a rendu, puis repeint.
- * ☠ Rappelé à chaque rafraîchissement : c'est le SEUL chemin par lequel un
- * résultat arrivé après l'appel rejoint sa ligne.
+ * Résumé d'un groupe — la seule ligne visible au repos.
+ * ☠ Construit sur les libellés RÉELS, jamais sur un compteur seul : « 5 appels
+ * d'outils » n'apprend rien, alors que « Lister equipes, Carburant parc + 3 »
+ * dit ce que l'orchestrateur est allé chercher.
  */
-function hMajOutil(noeud, ev) {
-  if (!noeud || !ev) return;
-  if (ev.detail) noeud.dataset.detail = ev.detail;
-  if (ev.resultat !== null && ev.resultat !== undefined) noeud.dataset.resultat = ev.resultat;
-  const echec = (noeud.dataset.resultat || '').startsWith('[ÉCHEC DE L’OUTIL]');
-  noeud.classList.toggle('err', echec);
-  const ico = noeud.querySelector('.tl-ico');
-  if (ico) ico.innerHTML = echec ? H_ICO_ERR : H_ICO_OUTIL;
-  const txt = noeud.querySelector('.tl-txt');
-  if (txt) txt.textContent = hOutilLisible(noeud.dataset.outil || '', noeud.dataset.detail);
-  const det = noeud.querySelector('.tl-det');
-  if (det && !det.hidden) det.innerHTML = hCorpsOutilOrch(noeud);
+function hResumeGroupe(carte) {
+  const lignes = [...carte.querySelectorAll('.tc-ligne')];
+  const noms = [...new Set(lignes.map((l) => hOutilLisible(l.dataset.outil || '', l.dataset.detail)))];
+  const echecs = lignes.filter((l) => l.classList.contains('err')).length;
+  const tete = noms.slice(0, 2).join(', ');
+  const reste = noms.length > 2 ? ` <span class="tc-n">+ ${noms.length - 2}</span>` : '';
+  const nb = lignes.length > 1 ? ` <span class="tc-n">· ${lignes.length} appels</span>` : '';
+  const err = echecs > 0 ? ` <span style="color:var(--err);">· ${echecs} en échec</span>` : '';
+  return escapeHtml(tete) + reste + nb + err;
+}
+
+/** Réécrit le résumé du groupe qui contient cette ligne. */
+function hMajResumeGroupe(ligne) {
+  const groupe = ligne.closest('.tc');
+  const carte = groupe && groupe.querySelector('.tc-carte');
+  const res = groupe && groupe.querySelector('.tc-res');
+  if (carte && res) res.innerHTML = hResumeGroupe(carte);
 }
 
 /**
- * Détail d'une étape : le nom technique, les paramètres, puis le résultat.
- * ☠ `resultat` absent veut dire « pas encore revenu », jamais « vide ». On le
- * DIT — un outil présenté comme ayant répondu du vide est un mensonge plus
+ * Range sur la ligne ce que l'appel a demandé et ce qu'il a rendu, puis repeint.
+ * ☠ Rappelé à chaque rafraîchissement : c'est le SEUL chemin par lequel un
+ * résultat arrivé APRÈS l'appel rejoint sa ligne — la garde d'idempotence de
+ * `hAppendEvent` interdit de reposer le nœud.
+ */
+function hMajOutil(ligne, ev) {
+  if (!ligne || !ev) return;
+  if (ev.detail) ligne.dataset.detail = ev.detail;
+  if (ev.resultat !== null && ev.resultat !== undefined) ligne.dataset.resultat = ev.resultat;
+  ligne.classList.toggle('err', (ligne.dataset.resultat || '').startsWith('[ÉCHEC DE L’OUTIL]'));
+  const lbl = ligne.querySelector('.tc-lbl');
+  if (lbl) lbl.textContent = hOutilLisible(ligne.dataset.outil || '', ligne.dataset.detail);
+  const corps = ligne.querySelector('.tc-corps');
+  if (corps && !corps.hidden) corps.innerHTML = hCorpsOutilOrch(ligne);
+  hMajResumeGroupe(ligne);
+}
+
+/**
+ * Détail d'une ligne : les paramètres en « commande », puis la sortie.
+ * ☠ `resultat` absent veut dire « pas encore revenu », jamais « vide » : on le
+ * DIT. Un outil présenté comme ayant répondu du vide est un mensonge plus
  * coûteux que l'absence d'information.
  */
-function hCorpsOutilOrch(noeud) {
-  const d = noeud.dataset || {};
-  const parts = [`<div class="h-lbl">Outil</div><div class="h-blk">${escapeHtml(d.outil || '')}</div>`];
-  if (d.detail) parts.push(`<div class="h-lbl">Paramètres</div><div class="h-blk">${escapeHtml(d.detail)}</div>`);
+function hCorpsOutilOrch(ligne) {
+  const d = ligne.dataset || {};
+  const parts = [
+    `<div class="tc-cmd"><span class="tc-inv">$</span><pre>${escapeHtml(d.outil || '')}`
+    + (d.detail ? ` ${escapeHtml(d.detail)}` : '') + '</pre></div>',
+  ];
   if (d.resultat === undefined) {
-    parts.push('<div class="h-note">Résultat en attente — l’outil n’a pas encore répondu.</div>');
+    parts.push('<div class="tc-attente">Résultat en attente — l’outil n’a pas encore répondu.</div>');
   } else {
     const echec = d.resultat.startsWith('[ÉCHEC DE L’OUTIL]');
-    parts.push(`<div class="h-lbl">${echec ? 'Échec' : 'Résultat'}</div>`);
-    parts.push(`<div class="h-blk"${echec ? ' style="color:var(--err);"' : ''}>${escapeHtml(d.resultat)}</div>`);
+    parts.push(`<div class="tc-sortie${echec ? ' err' : ''}" tabindex="0" role="group" aria-label="Sortie de l’outil">${escapeHtml(d.resultat)}</div>`);
   }
   return parts.join('');
 }
 
 /**
- * Clôt une séquence d'outils par la ligne « Terminé ».
- *
- * ☠ Appelée à DEUX moments, et le premier est celui qui compte : quand l'agent
- * reprend la parole en texte après avoir utilisé des outils. C'est là que la
- * séquence se termine réellement — attendre la fin du tour laisserait le filet
- * courir sous la réponse, comme si les outils tournaient encore pendant qu'on
- * lit. Le second moment est la fin de tour, pour un tour qui s'achève sur un
- * outil sans reprise de parole.
- *
- * Idempotente : une séquence déjà close n'est jamais re-close, et un groupe sans
- * aucun outil n'en reçoit pas.
+ * Le groupe ouvert en fin de `groupeAssistant`, ou `null`.
+ * ☠ Un groupe se ferme dès que l'orchestrateur reprend la parole : les appels
+ * d'APRÈS la réponse appartiennent à une autre séquence et ne doivent pas
+ * rejoindre la carte précédente.
  */
-function hCloreTimeline(groupe) {
-  if (!groupe || !groupe.querySelector('.tl-row') || groupe.querySelector('.tl-fin-row')) return;
-  const fin = document.createElement('div');
-  fin.className = 'tl-row tl-fin-row';
-  fin.innerHTML = `<div class="tl-gut"><div class="tl-ico">${H_ICO_FIN}</div></div>`
-    + '<div class="tl-main"><div class="tl-fin">Terminé</div></div>';
-  groupe.appendChild(fin);
+function hGroupeOutilsOuvert(groupeAssistant) {
+  const dernier = groupeAssistant.lastElementChild;
+  return dernier && dernier.classList.contains('tc') && dernier.dataset.clos !== '1' ? dernier : null;
 }
 
-/** Ouvre ou referme le détail d'une étape. Délégué depuis `document`. */
-function hBasculerEtape(bouton) {
-  const ligne = bouton.closest('.tl-row');
-  const det = ligne && ligne.querySelector('.tl-det');
-  if (!det) return;
-  const ouvrir = det.hidden;
-  if (ouvrir) det.innerHTML = hCorpsOutilOrch(ligne);
-  det.hidden = !ouvrir;
-  bouton.classList.toggle('ouvert', ouvrir);
+/** Ferme le groupe d'outils courant — appelé dès que l'agent reprend la parole. */
+function hCloreGroupeOutils(groupeAssistant) {
+  if (!groupeAssistant) return;
+  const ouvert = hGroupeOutilsOuvert(groupeAssistant);
+  if (ouvert) ouvert.dataset.clos = '1';
 }
+
+/** Crée la coquille d'un groupe : le résumé cliquable et sa carte repliée. */
+function hCreerGroupeOutils() {
+  const g = document.createElement('div');
+  g.className = 'tc';
+  g.innerHTML = `<button class="tc-tete"><span class="tc-res"></span>${HValise.CHEVRON}</button>`
+    + '<div class="tc-carte" hidden></div>';
+  return g;
+}
+
+/**
+ * Ajoute une ligne d'outil au groupe courant, en en ouvrant un si besoin.
+ * Rend la ligne créée, pour que l'appelant y pose son `data-seq`.
+ */
+function hAjouterLigneOutil(groupeAssistant, contenu, ev) {
+  const groupe = hGroupeOutilsOuvert(groupeAssistant)
+    || groupeAssistant.appendChild(hCreerGroupeOutils());
+  const ligne = document.createElement('div');
+  ligne.className = 'tc-ligne';
+  ligne.dataset.outil = contenu;
+  ligne.innerHTML = `<button class="tc-btn"><span class="tc-lbl"></span>${HValise.CHEVRON}</button>`
+    + '<div class="tc-corps" hidden></div>';
+  groupe.querySelector('.tc-carte').appendChild(ligne);
+  hMajOutil(ligne, ev || {});
+  return ligne;
+}
+
+// ☠ Délégation unique sur le document : les cartes sont recréées à chaque rendu
+// du fil, et rebrancher un écouteur par nœud fuirait à chaque passage.
 document.addEventListener('click', (e) => {
-  const b = e.target.closest('.tl-btn');
-  if (b) hBasculerEtape(b);
+  const tete = e.target.closest('.tc-tete');
+  if (tete) {
+    const carte = tete.parentElement.querySelector('.tc-carte');
+    if (carte) { carte.hidden = !carte.hidden; tete.classList.toggle('ouvert', !carte.hidden); }
+    return;
+  }
+  const btn = e.target.closest('.tc-btn');
+  if (!btn) return;
+  const ligne = btn.closest('.tc-ligne');
+  const corps = ligne && ligne.querySelector('.tc-corps');
+  if (!corps) return;
+  const ouvrir = corps.hidden;
+  // Rempli à l'OUVERTURE, jamais figé à la création : le résultat peut arriver
+  // après, et un contenu construit d'avance afficherait « en attente » à jamais.
+  if (ouvrir) corps.innerHTML = hCorpsOutilOrch(ligne);
+  corps.hidden = !ouvrir;
+  btn.classList.toggle('ouvert', ouvrir);
 });
 
 function hBlocNode(type, contenu, live, extra) {
@@ -481,23 +532,10 @@ function hBlocNode(type, contenu, live, extra) {
     return HValise.noeud(String(contenu).replace(/\s+/g, ' ').trim(), cle,
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>');
   }
-  if (type === 'outil') {
-    // ☠ Le contenu du détail est construit à l'OUVERTURE, jamais figé à la
-    // création : le résultat arrive au message SUIVANT l'appel, et la garde
-    // d'idempotence de `hAppendEvent` interdit de reposer le nœud. Une closure
-    // capturant l'état du moment afficherait « en attente » pour toujours.
-    const ligne = document.createElement('div');
-    ligne.className = 'tl-row';
-    ligne.dataset.outil = contenu;
-    ligne.innerHTML = `
-      <div class="tl-gut"><div class="tl-ico">${H_ICO_OUTIL}</div><div class="tl-fil"></div></div>
-      <div class="tl-main">
-        <button class="tl-btn"><span class="tl-txt"></span>${HValise.CHEVRON}</button>
-        <div class="tl-det" hidden></div>
-      </div>`;
-    hMajOutil(ligne, extra);
-    return ligne;
-  }
+  // ☠ `outil` n'a PAS de cas ici : une ligne d'outil n'est pas un bloc autonome,
+  // elle rejoint la carte du groupe courant (`hAjouterLigneOutil`). Le rendre
+  // ici produirait un nœud isolé, hors carte — c'est la différence entre huit
+  // lignes en vrac et un groupe qui se replie d'un clic.
   if (type === 'erreur') {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
     return e;
@@ -625,7 +663,7 @@ function hAppendEvent(ev) {
   if (ev.type === 'resultat') {
     // Fin de tour : on clôt une séquence encore ouverte (cas d'un tour qui se
     // termine sur un outil, sans reprise de parole).
-    hCloreTimeline(hOrch.cur);
+    hCloreGroupeOutils(hOrch.cur);
     hOrch.cur = null; return; // le prochain bloc ouvre un nouveau groupe
   }
 
@@ -642,20 +680,30 @@ function hAppendEvent(ev) {
     chat.appendChild(noeud); hOrch.cur = null; return;
   }
 
-  const noeud = hBlocNode(ev.type, ev.contenu, false, ev);
-  if (!noeud) return;
-  if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
   const groupe = hEnsureAssistant(chat);
-  // ☠ L'agent reprend la parole ⇒ la séquence d'outils est FINIE. C'est ici que
-  // « Terminé » a sa place, pas à la fin du tour : attendre laisserait le filet
-  // courir sous la réponse, comme si les outils tournaient encore pendant qu'on
-  // la lit. Une réflexion, elle, ne clôt rien — penser entre deux outils est le
-  // cours normal d'une séquence.
-  if (ev.type === 'texte') hCloreTimeline(groupe);
   // ☠ L'attribution est portée par l'ÉVÈNEMENT, pas par l'état courant du
   // sélecteur : relire un fil où l'on a changé de modèle doit montrer ce qui a
   // réellement produit CHAQUE réponse, pas le dernier réglage en date.
   hMarquerAttribution(groupe, ev);
+
+  // ☠ Un outil n'est pas un bloc autonome : il rejoint la CARTE du groupe
+  // courant, qui se replie d'un clic. C'est ce qui fait qu'un tour à huit appels
+  // se lit sur une ligne au lieu de huit.
+  if (ev.type === 'outil') {
+    const ligne = hAjouterLigneOutil(groupe, ev.contenu, ev);
+    if (ev.seq !== undefined) ligne.dataset.seq = ev.seq;
+    return;
+  }
+
+  const noeud = hBlocNode(ev.type, ev.contenu, false, ev);
+  if (!noeud) return;
+  if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
+  // ☠ L'agent reprend la parole ⇒ la séquence d'outils est FINIE : le groupe se
+  // ferme, et les appels d'APRÈS ouvriront leur propre carte. Sans ça, tout un
+  // tour finirait dans une carte unique et le résumé ne voudrait plus rien dire.
+  // Une réflexion, elle, ne clôt rien — penser entre deux outils est le cours
+  // normal d'une séquence.
+  if (ev.type === 'texte') hCloreGroupeOutils(groupe);
   hInsererDansGroupe(groupe, noeud);
 }
 
@@ -733,7 +781,7 @@ function hRenderPartiel(partiel) {
   // d'outils qui précède est finie. Sans ça, « Terminé » n'apparaîtrait qu'à la
   // fin du tour et on lirait la réponse avec un filet encore ouvert au-dessus —
   // exactement l'ambiguïté que cette ligne existe pour lever.
-  if (partiel.type === 'texte') hCloreTimeline(groupe);
+  if (partiel.type === 'texte') hCloreGroupeOutils(groupe);
   groupe.appendChild(noeud);
   hOrch.partielEl = noeud;
 }
