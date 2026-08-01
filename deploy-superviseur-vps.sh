@@ -41,16 +41,32 @@ fi
 COMPTES=$(ssh "$CIBLE" "ls -d \$HOME/.claude-comptes/*/ 2>/dev/null | xargs -n1 basename | paste -sd,")
 echo "  comptes présents : $COMPTES"
 
+# ── Racine des projets ──────────────────────────────────────────────────────
+#
 # ☠ `/mnt/projects` est la racine EN DUR du superviseur
 # (`superviseur-workers.ts` : `deps.racineProjets ?? '/mnt/projects'`), et les
-# mandats portent des chemins ABSOLUS (`/mnt/projects/lumen`). Elle doit donc
-# être identique sur toutes les machines de travail : la rendre configurable
-# casserait tout mandat déjà émis. Absente, `explorer_projets` répond « le
-# chemin n'existe pas » — mesuré en prod juste après la bascule.
-echo "→ Racine des projets"
-ssh "$CIBLE" "test -d /mnt/projects || sudo mkdir -p /mnt/projects && sudo chown \$(id -u):\$(id -g) /mnt/projects" 2>/dev/null \
-  || echo "  ⚠ /mnt/projects non créé (sudo requis) — les équipes ne trouveront aucun projet"
-echo "  $(ssh "$CIBLE" 'ls -d /mnt/projects 2>/dev/null || echo ABSENTE')"
+# mandats portent des chemins ABSOLUS (`/mnt/projects/stockiop`). Elle doit donc
+# porter le même nom sur toutes les machines de travail : la rendre configurable
+# casserait tout mandat déjà émis. Absente, `explorer_projets` répond « chemin
+# inexistant » — mesuré en production juste après la bascule.
+#
+# ☠ Sur le VPS c'est un LIEN vers `~/dev`, jamais un dossier à part : les
+# projets y sont des clones git sur lesquels on travaille, à CÔTÉ de `~/prod`
+# qui sert le trafic réel. Deux copies d'un même projet au même endroit finiraient
+# par se confondre, et une équipe autonome écrirait dans la production.
+#
+# ☠ Le lien ne casse pas le confinement : `explorerProjets` compare des chemins
+# résolus lexicalement (les cibles restent sous `/mnt/projects/`), et
+# `lecture-fichier.ts` applique `realpathSync` à la racine ET à la cible — les
+# deux se résolvent alors vers `~/dev`. Vérifié en réel après la bascule.
+RACINE_DEV="${CCREMOTE_VPS_RACINE_DEV:-/home/ubuntu/dev}"
+echo "→ Racine des projets (/mnt/projects → $RACINE_DEV)"
+ssh "$CIBLE" "mkdir -p '$RACINE_DEV'; \
+  if [ -L /mnt/projects ]; then :; \
+  elif [ -d /mnt/projects ]; then sudo rmdir /mnt/projects 2>/dev/null || { echo '  ⚠ /mnt/projects est un dossier NON vide — laissé tel quel'; exit 0; }; fi; \
+  [ -e /mnt/projects ] || sudo ln -s '$RACINE_DEV' /mnt/projects" 2>/dev/null \
+  || echo "  ⚠ lien non posé (sudo requis) — les équipes ne trouveront aucun projet"
+echo "  $(ssh "$CIBLE" 'ls -ld /mnt/projects 2>/dev/null | sed "s/.*ubuntu //" || echo ABSENTE')"
 
 echo "→ Envoi des sources du harness"
 ssh "$CIBLE" "mkdir -p $DISTANT/harness"
