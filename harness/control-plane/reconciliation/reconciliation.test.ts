@@ -93,8 +93,8 @@ function deps(overrides: Partial<DependancesReconciliation> = {}): DependancesRe
   };
 }
 
-function creerMission(id: string, projet: string, sessionId: string | null = null): void {
-  registre.missions.creer({ id, lotId: 'lot-1', nom: id, projet, compteId: 'compte1' });
+function creerMission(id: string, projet: string, sessionId: string | null = null, machine: string | null = null): void {
+  registre.missions.creer({ id, lotId: 'lot-1', nom: id, projet, compteId: 'compte1', machine });
   if (sessionId) registre.missions.attacherSession(id, sessionId);
 }
 
@@ -360,5 +360,72 @@ describe('déclencheurs', () => {
     const journal3 = new JournalFactice();
     await reconcilier(registre, deps(), 'periodique', { journal: journal3 });
     expect(journal3.contient('pi_redemarre')).toBe(false);
+  });
+});
+
+
+// ------------------------------------------------------- périmètre (migration 22)
+
+describe('périmètre par machine de travail — le garde-fou du multi-machines', () => {
+  test('☠ une équipe VIVANTE sur une autre machine n’est PAS marquée fantôme', async () => {
+    // Le défaut que ce test interdit est le plus grave de tout le chantier
+    // multi-machines : l'inventaire d'une machine ne rapporte QUE ses workers.
+    // Sans périmètre, l'équipe du VPS est « absente du PC » — donc terminée —
+    // au premier rattachement du PC, en plein travail, sans un mot.
+    creerMission('m-pc', 'projet-pc', 'sess-pc', 'trinityarch');
+    creerMission('m-vps', 'projet-vps', 'sess-vps', 'vps');
+    // Le PC se rattache : il ne voit que SON worker.
+    inventairePc.definir([{ sessionId: 'sess-pc', worktree: '/wt/pc', epoch: 0, vivant: true }]);
+
+    const rapport = await reconcilier(
+      registre,
+      deps({ concerne: (m) => m.machine === 'trinityarch' }),
+      'reconnexion',
+      { journal },
+    );
+
+    expect(rapport.fantomes).toEqual([]);
+    expect(registre.missions.exiger('m-vps').etatHarness).not.toBe('terminee');
+  });
+
+  test('dans son périmètre, un fantôme reste un fantôme', async () => {
+    // La contre-épreuve du test précédent : le périmètre ne doit pas devenir une
+    // amnistie générale. Une mission de CETTE machine, absente de SON inventaire,
+    // est morte — et le reste.
+    creerMission('m-pc', 'projet-pc', 'sess-pc', 'trinityarch');
+    inventairePc.definir([]);
+
+    const rapport = await reconcilier(
+      registre,
+      deps({ concerne: (m) => m.machine === 'trinityarch' }),
+      'reconnexion',
+      { journal },
+    );
+
+    expect(rapport.fantomes).toEqual(['m-pc']);
+  });
+
+  test('☠ une mission SANS machine connue est rapportée hors périmètre, jamais tue', async () => {
+    // Personne ne la réconciliera : elle occupe son projet (H-56) jusqu'à un
+    // arrêt explicite. Le taire ferait chercher longtemps pourquoi le dispatch
+    // suivant est refusé devant un parc qui paraît vide.
+    creerMission('m-ancienne', 'projet-x', 'sess-x', null);
+    inventairePc.definir([]);
+
+    const rapport = await reconcilier(registre, deps({ concerne: (m) => m.machine === 'vps' }), 'reconnexion', {
+      journal,
+    });
+
+    expect(rapport.horsPerimetre).toEqual(['m-ancienne']);
+    expect(rapport.fantomes).toEqual([]);
+    expect(registre.missions.exiger('m-ancienne').etatHarness).not.toBe('terminee');
+  });
+
+  test('sans périmètre (mono-machine, bancs), le comportement d’origine est intact', async () => {
+    creerMission('m-1', 'projet-alpha', 'sess-1', null);
+    inventairePc.definir([]);
+    const rapport = await reconcilier(registre, deps(), 'demarrage', { journal });
+    expect(rapport.fantomes).toEqual(['m-1']);
+    expect(rapport.horsPerimetre).toEqual([]);
   });
 });

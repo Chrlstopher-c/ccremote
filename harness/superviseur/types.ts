@@ -55,7 +55,24 @@ export interface ParametresSpecTransportables {
    * donc à `xhigh` en le disant.
    */
   readonly effortLevel?: 'low' | 'medium' | 'high' | 'xhigh';
+  /**
+   * Répertoire de configuration du compte Claude, TEL QUE LE PI LE CONNAÎT.
+   *
+   * `☠` Ce chemin est celui d'UNE machine, et le Pi n'en tient qu'une liste
+   * (`CCREMOTE_PI_COMPTES`). Depuis le multi-machines (01/08), il peut donc
+   * désigner un répertoire qui n'existe pas là où le worker démarre : mesuré en
+   * réel le jour même — un mandat routé vers le VPS portait
+   * `/home/trinity/.claude-comptes/compte-a`, un chemin du PC. La machine de
+   * travail le REMPLACE par le sien quand elle connaît `compteId` — c'est H-44
+   * (« le poste possède sa configuration ») rendue effective, au lieu d'être
+   * seulement écrite.
+   */
   readonly configDir?: string;
+  /**
+   * Identifiant du compte Claude retenu par le Pi. `☠` C'est l'identité, la
+   * seule chose portable d'une machine à l'autre — le chemin, lui, ne l'est pas.
+   */
+  readonly compteId?: string;
   readonly agentTeams?: boolean;
   readonly extraEnv?: Readonly<Record<string, string>>;
 }

@@ -71,3 +71,68 @@ function hInvite(titre, valeurInitiale = '', valider = 'Renommer') {
 function hConfirmer(titre, texte, valider = 'Supprimer') {
   return hDialogue({ titre, texte, valider, danger: true });
 }
+
+// ============ Choix de machine de travail (migration 22) ============
+//
+// ☠ Pourquoi un dialogue plutôt qu'un réglage global : la machine est fixée à la
+// CRÉATION du fil et ne change plus ensuite (arbitré le 01/08 — une équipe ne
+// doit pas changer de machine au milieu d'un chantier). Un réglage global se
+// serait fatalement désynchronisé du fil en cours ; ici la question est posée
+// une fois, au seul moment où la réponse a un effet.
+//
+// ☠ Une machine HORS LIGNE reste listée mais non sélectionnable. La masquer
+// laisserait croire qu'elle n'existe pas ; l'offrir produirait un fil qu'aucun
+// mandat ne pourrait servir.
+
+/**
+ * Demande sur quelle machine ouvrir un fil.
+ * Résout : l'identifiant choisi · `''` si une seule machine (aucune question
+ * posée, rien à trancher) · `null` si annulé.
+ */
+function hChoisirMachine(machines) {
+  const enLigne = (machines || []).filter((m) => m.enLigne);
+  // ☠ Zéro ou une machine ⇒ AUCUNE question. Un dialogue à un seul bouton n'est
+  // pas un choix, c'est un clic de plus — et le routage tranche seul quand il
+  // n'y a pas d'ambiguïté (`parc-superviseurs.ts#resoudre`).
+  if (enLigne.length <= 1) return Promise.resolve('');
+
+  return new Promise((resoudre) => {
+    hFermerDialogue();
+    const hote = document.createElement('div');
+    hote.id = H_DIALOGUE_ID;
+    hote.className = 'fixed inset-0 z-50 flex items-center justify-center modal-backdrop';
+    const lignes = (machines || []).map((m) => `
+      <button class="h-machine-opt w-full text-left rounded-lg border px-3 py-2.5 mb-2 flex items-center gap-2.5"
+              data-machine="${hEchappe(m.id)}" ${m.enLigne ? '' : 'disabled'}
+              style="border-color: var(--line); background: var(--bg); color: var(--ink); ${m.enLigne ? '' : 'opacity:.45;cursor:not-allowed;'}">
+        <span class="dot" style="background: ${m.enLigne ? 'var(--ok)' : 'var(--ink-3, #888)'};"></span>
+        <span class="flex-1 text-[13px]">${hEchappe(m.id)}</span>
+        <span class="text-[11px]" style="color: var(--ink-2);">${m.enLigne ? 'en ligne' : 'hors ligne'}</span>
+      </button>`).join('');
+
+    hote.innerHTML = `
+      <div class="modal-in rounded-2xl border w-full max-w-sm mx-4 overflow-hidden"
+           style="border-color: var(--line); background: var(--card);">
+        <div class="px-6 pt-5 pb-4">
+          <h3 class="serif text-[16px] font-medium mb-2" style="color: var(--ink);">Sur quelle machine ?</h3>
+          <p class="text-[12.5px] leading-relaxed mb-3" style="color: var(--ink-2);">
+            Les équipes de ce fil tourneront là-bas, sur les projets présents là-bas. Le choix est définitif pour ce fil.
+          </p>
+          ${lignes}
+        </div>
+        <div class="px-6 py-4 flex justify-end gap-2" style="background: var(--bg);">
+          <button id="hDialogueAnnuler" class="btn-ghost rounded-lg px-4 py-2 text-[12.5px] font-medium">Annuler</button>
+        </div>
+      </div>`;
+    document.body.appendChild(hote);
+
+    const rendre = (valeur) => { hFermerDialogue(); resoudre(valeur); };
+    hote.querySelectorAll('.h-machine-opt').forEach((b) => {
+      if (b.disabled) return;
+      b.addEventListener('click', () => rendre(b.dataset.machine));
+    });
+    document.getElementById('hDialogueAnnuler').addEventListener('click', () => rendre(null));
+    hote.addEventListener('mousedown', (e) => { if (e.target === hote) rendre(null); });
+    hote.addEventListener('keydown', (e) => { if (e.key === 'Escape') rendre(null); });
+  });
+}

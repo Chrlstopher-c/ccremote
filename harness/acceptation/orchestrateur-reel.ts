@@ -63,12 +63,15 @@ const serveurControle = creerServeurMcpControle({
 })
 
 /** Inventaire PC vide : réaliste au tout premier démarrage, rien à réconcilier. */
-const reconciliation = {
-  inventairePc: { inventaire: async () => [], tuerSansPreavis: async () => {} },
-  // Aucune session vivante à rattacher au premier démarrage : `reinitialize` n'est
-  // jamais atteint ici. Le vrai test de D.2.4 est celui de la réconciliation (M-30).
-  reinitialisateur: { reinitialiser: async () => ({ demandesEnAttente: [] }) },
-}
+// `☠ V2 (migration 22)` — un périmètre PAR machine de travail, fourni à la demande.
+const reconciliation = () => [
+  {
+    inventairePc: { inventaire: async () => [], tuerSansPreavis: async () => {} },
+    // Aucune session vivante à rattacher au premier démarrage : `reinitialize` n'est
+    // jamais atteint ici. Le vrai test de D.2.4 est celui de la réconciliation (M-30).
+    reinitialisateur: { reinitialiser: async () => ({ demandesEnAttente: [] }) },
+  },
+]
 
 const stockageIdentite = {
   lire: (): string | null => null,

@@ -67,7 +67,17 @@ export interface DependancesDemarrageOrchestrateur {
   readonly serveurControle: McpServerConfig;
   readonly nomServeurControle?: string;
   readonly registre: Registre;
-  readonly reconciliation: DependancesReconciliation;
+  /**
+   * Périmètres de réconciliation du moment — UN PAR MACHINE de travail en ligne
+   * (migration 22).
+   *
+   * `☠ V2` — c'est une FONCTION, pas une valeur figée : les machines vont et
+   * viennent, et un jeu de dépendances capturé à l'assemblage ignorerait toute
+   * machine apparue depuis. C'est aussi une LISTE : réconcilier toutes les
+   * missions contre l'inventaire d'une seule machine terminerait en « fantômes »
+   * les équipes de toutes les autres.
+   */
+  readonly reconciliation: () => readonly DependancesReconciliation[];
   readonly incidents: JournalIncidentsOrchestrateur;
   readonly cwd?: string;
   readonly configDir?: string;
@@ -162,8 +172,17 @@ async function demarrerSessionChaude(
 
 async function reconcilierAuDemarrage(deps: DependancesDemarrageOrchestrateur, journal: typeof journalDefaut): Promise<void> {
   try {
-    const rapport = await reconcilier(deps.registre, deps.reconciliation, 'demarrage');
-    journal.info({ rapport }, 'réconciliation de démarrage terminée (A.4.2)');
+    const perimetres = deps.reconciliation();
+    if (perimetres.length === 0) {
+      // `☠` Dit, jamais tu : aucune machine en ligne au démarrage est un état
+      // nominal (H-75), mais il faut savoir que la passe n'a rien couvert.
+      journal.info({}, 'réconciliation de démarrage sans objet — aucune machine de travail en ligne (H-75)');
+      return;
+    }
+    for (const perimetre of perimetres) {
+      const rapport = await reconcilier(deps.registre, perimetre, 'demarrage');
+      journal.info({ rapport }, 'réconciliation de démarrage terminée pour une machine (A.4.2)');
+    }
   } catch (erreur) {
     // `☠` Ne bloque jamais la mise en ligne du bras droit (H-62) — mais une
     // réconciliation en échec au boot est en soi une alarme : loggée `error`,

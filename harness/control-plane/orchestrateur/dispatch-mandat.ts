@@ -39,6 +39,28 @@ export interface DemarreurEquipe {
 export interface DependancesDispatch {
   readonly registre: Registre;
   readonly demarreur: DemarreurEquipe;
+  /**
+   * Machine de travail où cette équipe va RÉELLEMENT tourner (migration 22).
+   *
+   * `☠` Résolue par l'appelant AVANT d'arriver ici — c'est la composition, seule
+   * à connaître le parc, qui sait quel `demarreur` correspond à quelle machine.
+   * Les deux vont ENSEMBLE : écrire une machine et démarrer sur une autre
+   * produirait une équipe qu'aucun ordre d'arrêt ne pourrait plus atteindre.
+   * `null` reste accepté pour les chemins qui n'ont pas de parc (bancs, tests,
+   * restauration) — la mission n'est alors routable que sans ambiguïté.
+   */
+  readonly machine?: string | null;
+  /**
+   * Vérifie que le projet EXISTE sur la machine visée. Absent ⇒ aucune
+   * vérification (bancs, tests).
+   *
+   * `☠` Sans lui, un mandat visant `stockiop` depuis un fil du PC part quand
+   * même : le worker démarre dans un cwd inexistant, et l'échec arrive bien plus
+   * loin, sous une forme qui ne nomme pas sa cause. Le refus doit tomber ICI,
+   * avant la première écriture (`code-standards.md` : « valider avant la
+   * première écriture, pas au point d'usage »).
+   */
+  readonly verifierProjet?: (chemin: string) => Promise<VerificationProjet>;
   /** Racine des projets sur le PC — le worktree en dérive. */
   readonly repertoireProjets: string;
   /** Motifs d'outils refusés d'office (plancher de déni, H-41). */
@@ -460,6 +482,43 @@ export class ErreurProjetOccupe extends Error {
  * l'équipe TOURNAIT. Le message dit maintenant ce qui s'est passé et où
  * regarder : c'est exactement ce qui manque à un opérateur devant une erreur.
  */
+/**
+ * Le projet visé n'existe pas sur la machine choisie pour ce fil.
+ *
+ * `☠` Le message NOMME la machine et le chemin cherché. L'appelant est
+ * l'orchestrateur — un modèle : un refus nu le laisse réémettre le même mandat
+ * au tour suivant, tandis qu'un refus qui dit « stockiop n'est pas sur
+ * trinityarch » le fait changer de machine ou de projet immédiatement
+ * (`rules/code-standards.md`, « Model output is untrusted input »).
+ */
+export class ErreurProjetAbsentDeLaMachine extends Error {
+  constructor(
+    readonly projet: string,
+    readonly machine: string,
+    readonly chemin: string,
+    /** Ce que la machine a réellement répondu — jamais reformulé en « absent ». */
+    readonly note?: string,
+  ) {
+    super(
+      `le projet « ${projet} » n'est pas exploitable sur la machine « ${machine} » (cherché : ${chemin}${note === undefined || note === '' ? '' : ` — ${note}`}) — choisir une autre machine pour ce fil, ou un projet présent sur celle-ci`,
+    );
+    this.name = 'ErreurProjetAbsentDeLaMachine';
+  }
+}
+
+/**
+ * Verdict de présence d'un projet sur une machine.
+ *
+ * `☠` `note` porte la RAISON telle que la machine l'a donnée — « chemin
+ * inexistant », « répertoire illisible », « machine injoignable ». La réduire à
+ * un booléen ferait annoncer « projet absent » alors que la vraie cause est un
+ * lien coupé, et l'opérateur chercherait au mauvais endroit.
+ */
+export interface VerificationProjet {
+  readonly present: boolean;
+  readonly note?: string;
+}
+
 export class ErreurMandatDejaTranche extends Error {
   constructor(
     readonly statut: string,
@@ -529,6 +588,19 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   // rejeter. Deux valeurs calculées séparément divergeraient de la même façon.
   const epoch = prochainEpoch(deps.registre, p.projet);
 
+  // `☠` AVANT la première écriture, jamais au point d'usage. Un mandat qui vise
+  // un projet absent de la machine choisie doit être refusé net : laisser passer
+  // produirait un worker démarré dans un cwd inexistant, une mission inscrite au
+  // registre, et un échec surgissant beaucoup plus loin sous une forme qui ne
+  // nomme pas sa cause. Un demi-enregistrement suivi d'un dispatch raté est pire
+  // qu'un refus propre — il laisse un état à réconcilier.
+  if (deps.verifierProjet !== undefined) {
+    const verdict = await deps.verifierProjet(cwd);
+    if (!verdict.present) {
+      throw new ErreurProjetAbsentDeLaMachine(p.projet, deps.machine ?? '(non précisée)', cwd, verdict.note);
+    }
+  }
+
   deps.registre.lots.creer({ id: lotId, intention: p.objectif, origine: 'orchestrateur' });
   deps.registre.missions.creer({
     id: missionId,
@@ -553,6 +625,11 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     // savait à qui rendre compte. C'est ce chaînon qui permet à une fin d'équipe
     // de revenir dans la conversation qui l'a demandée (migration 14).
     conversationId: p.conversationId,
+    // `☠` Écrite ICI, à partir de la machine réellement retenue, et solidaire du
+    // `demarreur` que la composition a choisi pour elle. Sans cette colonne, un
+    // ordre d'arrêt ne saurait plus à qui s'adresser dès que deux machines
+    // tournent (migration 22).
+    machine: deps.machine ?? null,
   });
 
   const demande: DemandeDemarrageTransportable = {
@@ -573,6 +650,10 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       model: modele,
       effortLevel: effort,
       configDir: compte.configDir,
+      // `☠` L'IDENTITÉ du compte accompagne son chemin : c'est la seule des deux
+      // qui traverse les machines. La machine de travail réécrit le chemin avec
+      // le sien (H-44) — sans cet identifiant elle ne pourrait pas.
+      compteId: compte.id,
     },
   };
 

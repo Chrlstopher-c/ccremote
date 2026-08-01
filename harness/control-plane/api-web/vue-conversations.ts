@@ -48,6 +48,12 @@ export interface ConversationApi {
    */
   readonly model: string | null;
   readonly effort: string | null;
+  /**
+   * Machine de travail du fil (migration 22). `null` ⇒ fil antérieur au
+   * sélecteur : l'interface l'affiche comme « non précisée », jamais comme une
+   * machine par défaut qui n'a jamais été choisie.
+   */
+  readonly machine: string | null;
 }
 
 export interface DetailConversationApi extends ConversationApi {
@@ -82,8 +88,12 @@ export interface PortConversations {
     readonly active: boolean;
     readonly contextePct: number | null;
     readonly compactions: number;
+    readonly machine: string | null;
   }[];
-  creer(titre?: string): { readonly id: string; readonly titre: string; readonly creeA: number; readonly majA: number };
+  creer(
+    titre?: string,
+    machine?: string | null,
+  ): { readonly id: string; readonly titre: string; readonly creeA: number; readonly majA: number };
   renommer(id: string, titre: string): boolean;
   archiver(id: string): boolean;
   detail(id: string): {
@@ -140,6 +150,7 @@ export function versConversationApi(entree: {
   readonly compactions?: number;
   readonly modele?: string | null;
   readonly effort?: string | null;
+  readonly machine?: string | null;
 }): ConversationApi {
   return {
     id: entree.id,
@@ -151,6 +162,7 @@ export function versConversationApi(entree: {
     compactions: entree.compactions ?? 0,
     model: entree.modele ?? null,
     effort: entree.effort ?? null,
+    machine: entree.machine ?? null,
   };
 }
 

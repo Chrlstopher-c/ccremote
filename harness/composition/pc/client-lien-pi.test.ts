@@ -42,7 +42,7 @@ describe('client du lien Pi — le backoff doit réellement monter', () => {
     const port = portLibreEtMort();
     const etatsVus: string[] = [];
 
-    client = creerClientLienPi({ urlPi: `ws://127.0.0.1:${port}/`, secret: SECRET });
+    client = creerClientLienPi({ urlPi: `ws://127.0.0.1:${port}/`, secret: SECRET, machineId: 'banc-client' });
     void client.connecter();
 
     // Échantillonner serré : le défaut d'origine faisait clignoter « ouvert »
@@ -62,7 +62,7 @@ describe('client du lien Pi — le backoff doit réellement monter', () => {
 
   test('☠ un échec ne planifie qu’UNE reconnexion — `error` puis `close` n’en font pas deux', async () => {
     const port = portLibreEtMort();
-    client = creerClientLienPi({ urlPi: `ws://127.0.0.1:${port}/`, secret: SECRET });
+    client = creerClientLienPi({ urlPi: `ws://127.0.0.1:${port}/`, secret: SECRET, machineId: 'banc-client' });
     void client.connecter();
 
     // Sur 2 s, le backoff (500, 1000, 2000…) autorise au plus 3-4 tentatives.
@@ -85,6 +85,7 @@ describe('client du lien Pi — le refus d’authentification reste TERMINAL', (
     client = creerClientLienPi({
       urlPi: `ws://127.0.0.1:${serveur.port}/`,
       secret: 'mauvais-secret',
+      machineId: 'banc-client',
       surFermetureTerminale: (f) => fermetures.push(f.code),
     });
     void client.connecter();

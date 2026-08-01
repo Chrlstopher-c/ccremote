@@ -151,6 +151,8 @@ export interface EntreeListeConversation {
   readonly active: boolean;
   readonly contextePct: number | null;
   readonly compactions: number;
+  /** Machine de travail du fil (migration 22) — `null` avant le sélecteur. */
+  readonly machine: string | null;
 }
 
 export class ConversationIntrouvableError extends Error {
@@ -211,10 +213,16 @@ export class GestionnaireConversations {
     return this.registre.conversations.lister().map((c) => this.#entreeListe(c));
   }
 
-  creer(titre?: string): Conversation {
+  /**
+   * `machine` : la machine de travail du fil (migration 22). `☠` Fixée ICI et
+   * jamais après — arbitré avec Chris le 01/08 : une équipe ne doit pas changer
+   * de machine au milieu d'un chantier. Absente ⇒ `null`, et le routage ne
+   * tranchera qu'en l'absence d'ambiguïté.
+   */
+  creer(titre?: string, machine?: string | null): Conversation {
     const propre = normaliserTitre(titre ?? '');
     const libelle = propre.length > 0 ? propre : TITRE_PAR_DEFAUT;
-    const conv = this.registre.conversations.creer({ id: randomUUID(), titre: libelle });
+    const conv = this.registre.conversations.creer({ id: randomUUID(), titre: libelle, machine: machine ?? null });
     // Un titre donné à la création vient d'un humain : il verrouille d'emblée.
     if (propre.length > 0) this.registre.conversations.renommer(conv.id, libelle, 'manuel');
     return conv;
@@ -469,6 +477,7 @@ export class GestionnaireConversations {
       active: this.#sessions.has(conv.id),
       contextePct: this.#contextePct(conv.id),
       compactions: conv.compactions,
+      machine: conv.machine,
     };
   }
 

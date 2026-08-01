@@ -129,8 +129,21 @@ export class ClientPilote {
     return this.appeler(`/orchestrator/conversations/${encodeURIComponent(conversationId)}`, 'GET');
   }
 
-  async creerConversation(titre?: string): Promise<{ readonly conversation: ResumeConversation }> {
-    return this.appeler('/orchestrator/conversations', 'POST', titre === undefined ? {} : { titre });
+  async creerConversation(
+    titre?: string,
+    machine?: string,
+  ): Promise<{ readonly conversation: ResumeConversation }> {
+    const corps: Record<string, string> = {};
+    if (titre !== undefined) corps['titre'] = titre;
+    // `☠` Envoyée seulement si choisie : le serveur valide contre les machines
+    // connues et refuse une chaîne vide. Absente ⇒ le routage tranche seul.
+    if (machine !== undefined && machine !== '') corps['machine'] = machine;
+    return this.appeler('/orchestrator/conversations', 'POST', corps);
+  }
+
+  /** Machines de travail connues du Pi, en ligne ou non (migration 22). */
+  async machines(): Promise<Enveloppe<readonly { readonly id: string; readonly enLigne: boolean; readonly supersedes: number }[]>> {
+    return this.appeler('/machines', 'GET');
   }
 
   /**
@@ -160,7 +173,11 @@ export class ClientPilote {
   }
 
   async trancherMandat(propositionId: string, decision: 'approve' | 'reject'): Promise<unknown> {
-    return this.appeler(`/orchestrator/mandates/${encodeURIComponent(propositionId)}/${decision}`, 'POST', {});
+    // `☠` `/propositions/`, jamais `/mandates/`. Le banc portait le second
+    // depuis sa création : jamais exercé, donc jamais démenti — la commande
+    // `autoriser` répondait 404 sur une route qui n'existe pas. Treizième
+    // occurrence du motif maison, cette fois dans l'outil censé le détecter.
+    return this.appeler(`/orchestrator/propositions/${encodeURIComponent(propositionId)}/${decision}`, 'POST', {});
   }
 
   async inspecter(missionId: string): Promise<unknown> {

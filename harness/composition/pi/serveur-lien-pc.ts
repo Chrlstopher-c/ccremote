@@ -14,12 +14,21 @@
  * vraie fermeture terminale, classée par sa propre taxonomie, PAS retentée en
  * boucle par le transport — exactement l'exigence du mandat.
  *
- * `☠` V1 — un seul PC (H-56 : une mission active par projet ne change rien à
- * ça, c'est structurel). Une nouvelle connexion authentifiée alors qu'une
- * précédente est vivante est traitée comme un remplacement (supersede) : la
- * plus récente gagne, l'ancienne est fermée (code 1000, non taxonomique) —
- * ce qui déclenche côté PC le chemin de reprise TRANSITOIRE déjà existant de
- * `LienWebSocket`, jamais un second mécanisme.
+ * `☠ V2 (2026-08-01) — PLUSIEURS MACHINES DE TRAVAIL`. La V1 ne tenait qu'un
+ * seul emplacement : toute connexion authentifiée évinçait la précédente, d'où
+ * qu'elle vienne. Cohabiter était donc structurellement impossible, et deux
+ * superviseurs simultanés se chassaient en boucle (dette n°6, 1268 évictions
+ * mesurées le 22/07). Chaque connexion s'annonce désormais avec une IDENTITÉ
+ * (`lien-pc-pi/identite-machine.ts`), et le parc tient un lien PAR machine
+ * (`parc-liens-machines.ts`) : le supersede ne joue plus qu'à identité ÉGALE —
+ * deux process d'une même machine, c'est-à-dire une reprise après crash.
+ *
+ * `☠` Identité absente ou malformée ⇒ connexion REFUSÉE (4403, terminal). Un
+ * repli du genre « anonyme » ferait cohabiter deux machines sous un même nom et
+ * ramènerait la tempête sans qu'on la voie. Conséquence de déploiement, à
+ * respecter : déployer d'abord les MACHINES DE TRAVAIL (le client envoie
+ * l'en-tête, un Pi ancien l'ignore), le Pi ensuite. L'ordre inverse refuse tous
+ * les clients anciens jusqu'à leur mise à jour — bruyamment, mais réellement.
  *
  * Réutilise `LienWebSocket` SYMÉTRIQUEMENT (voir `DECISION-TRANSPORT.md`,
  * tête de fichier de `lien-websocket.ts`) : sur ce process, `connecter()` ne
@@ -45,15 +54,28 @@
  */
 
 import type { Server, ServerWebSocket } from 'bun';
-import { LienWebSocket, type WebSocketLike } from '../../transport/lien-websocket.ts';
+import type { LienWebSocket, WebSocketLike } from '../../transport/lien-websocket.ts';
 import type { HorlogeTransport } from '../../transport/horloge-transport.ts';
 import { compositionLogger } from '../logger.ts';
 import { extraireSecret, secretValide } from '../lien-pc-pi/secret.ts';
+import { extraireMachineId } from '../lien-pc-pi/identite-machine.ts';
+import { ParcLiensMachines, type EtatMachineLien } from './parc-liens-machines.ts';
 
 const log = compositionLogger.child({ composant: 'serveur-lien-pc' });
 
+/**
+ * `☠` Code de fermeture 4403 (« rejet permanent » dans la taxonomie du
+ * transport, `transport/lien-websocket.ts`) pour une identité absente ou
+ * malformée. Un code hors table serait classé INCONNU, donc TRANSITOIRE, donc
+ * retenté sans fin par le client : le refus deviendrait un martèlement muet.
+ * On n'invente pas de code — on réutilise celui que la taxonomie sait classer.
+ */
+const CODE_IDENTITE_REFUSEE = 4403;
+
 interface DonneesWs {
   readonly authentifie: boolean;
+  /** `null` ⇒ client trop ancien ou identité malformée : refus terminal. */
+  readonly machineId: string | null;
 }
 
 type Ecouteur<T> = (ev: T) => void;
@@ -102,19 +124,32 @@ export interface OptionsServeurLienPc {
   readonly hostname?: string;
   readonly secret: string;
   readonly horloge?: HorlogeTransport;
-  /** Appelé à chaque connexion PC authentifiée acceptée (H-75 : point d'accroche de la réconciliation sur rattachement). */
-  readonly surConnexionAcceptee?: () => void;
+  /**
+   * Appelé à chaque connexion authentifiée acceptée, AVEC l'identité de la
+   * machine (H-75 : point d'accroche de la réconciliation sur rattachement).
+   * `☠` L'identité est ici obligatoire : réconcilier « le PC » sans savoir
+   * lequel marquerait fantômes les missions de toutes les autres machines.
+   */
+  readonly surConnexionAcceptee?: (machineId: string) => void;
+  /** Voir `OptionsParcLiensMachines.surNouvelleMachine` — synchrone, avant rattachement. */
+  readonly surNouvelleMachine?: (machineId: string, lien: LienWebSocket) => void;
 }
 
 export interface ServeurLienPc {
-  readonly lien: LienWebSocket;
+  /** Le lien d'une machine donnée, ou `null` si elle ne s'est jamais présentée. */
+  lienPour(machineId: string): LienWebSocket | null;
+  /** Toutes les machines connues depuis le démarrage, en ligne ou non (H-75). */
+  machines(): readonly EtatMachineLien[];
+  machinesEnLigne(): readonly string[];
   /** Port réellement écouté — utile quand `options.port` vaut 0 (attribution noyau). */
   readonly port: number;
   /**
-   * Nombre d'évictions réelles (deux PC connectés en même temps). Doit rester à
-   * 0 en exploitation nominale, y compris après une nuit d'extinction du PC :
-   * c'est ce qui distingue une reconnexion légitime d'un vrai doublon. Exposé
-   * pour être observable côté control plane, pas seulement journalisé.
+   * Nombre d'évictions réelles. `☠` Depuis la V2, une éviction ne peut plus
+   * venir que d'un DOUBLON DE PROCESS SUR UNE MÊME MACHINE — deux machines
+   * distinctes cohabitent. Doit rester à 0 en exploitation nominale, y compris
+   * après une nuit d'extinction : c'est ce qui distingue une reconnexion
+   * légitime d'un vrai doublon. Exposé pour être observable côté control plane,
+   * pas seulement journalisé.
    */
   supersedes(): number;
   arreter(): void;
@@ -137,103 +172,59 @@ async function attendreLienOuvert(lien: LienWebSocket): Promise<boolean> {
   return lien.etat() === 'ouvert';
 }
 
-/** File à un seul emplacement (v1, un seul PC) : la connexion la plus récente non encore consommée. */
-class FileConnexionUnique {
-  #enFile: AdaptateurServerWebSocket | null = null;
-  #enAttente: ((ws: WebSocketLike) => void) | null = null;
-  #actif: AdaptateurServerWebSocket | null = null;
-  #supersedes = 0;
-
-  get supersedes(): number {
-    return this.#supersedes;
-  }
-
-  /**
-   * `☠ TROUVÉ EN RELECTURE (2026-07-22)` — sans cet oubli explicite, `#actif`
-   * gardait éternellement la connexion de la veille. Conséquence sur LE
-   * scénario nominal (« j'éteins le PC le soir, je le rallume le lendemain,
-   * tout se reconnecte tout seul ») : chaque reconnexion légitime du matin
-   * était journalisée en `warn` comme un supersede, et fermait une socket déjà
-   * morte. Mesuré : re-fermer une socket close est un no-op en Bun, donc la
-   * reconnexion fonctionnait — mais l'alarme « deux PC connectés » se
-   * déclenchait tous les matins, ce qui la rend invisible le jour où elle est
-   * vraie. Un garde-fou qui crie tout le temps ne garde plus rien.
-   */
-  oublier(adaptateur: AdaptateurServerWebSocket): void {
-    if (this.#actif === adaptateur) this.#actif = null;
-    if (this.#enFile === adaptateur) this.#enFile = null;
-  }
-
-  /** Accepte une connexion authentifiée. Évince l'actif s'il y en a un (supersede). */
-  accepter(adaptateur: AdaptateurServerWebSocket): void {
-    if (this.#actif !== null) {
-      this.#supersedes += 1;
-      log.warn({}, 'nouvelle connexion PC authentifiée alors qu une précédente est vivante — supersede (v1, un seul PC)');
-      this.#actif.close(1000, 'remplacée par une connexion plus récente');
-    }
-    if (this.#enAttente !== null) {
-      const resolveur = this.#enAttente;
-      this.#enAttente = null;
-      this.#actif = adaptateur;
-      resolveur(adaptateur);
-      return;
-    }
-    this.#enFile = adaptateur;
-    this.#actif = adaptateur;
-  }
-
-  /** Le `ConnecteurWebSocket` fourni à `LienWebSocket` — attend la prochaine connexion. */
-  connecter(): Promise<WebSocketLike> {
-    return new Promise((resolve) => {
-      if (this.#enFile !== null) {
-        const ws = this.#enFile;
-        this.#enFile = null;
-        resolve(ws);
-        return;
-      }
-      this.#enAttente = resolve;
-    });
-  }
-}
-
 /**
- * Démarre le point d'écoute Pi et construit le `LienWebSocket` symétrique par-dessus.
- * `☠` Ne jamais journaliser `req.url` en clair (porte le secret, `?secret=…`).
+ * Démarre le point d'écoute Pi et construit UN `LienWebSocket` symétrique PAR
+ * MACHINE identifiée (voir `parc-liens-machines.ts`).
+ * `☠` Ne jamais journaliser `req.url` en clair (l'URL ne porte plus le secret,
+ * mais rien ne garantit qu'un paramètre sensible ne s'y glissera pas).
  */
 export function demarrerServeurLienPc(options: OptionsServeurLienPc): ServeurLienPc {
-  const file = new FileConnexionUnique();
-  // Association ws réel ⇒ adaptateur : `ws.data` est figé à l'upgrade (typé
-  // `DonneesWs`, `authentifie` seulement) — pas d'endroit propre où loger
-  // l'adaptateur dessus sans le muter. Une Map évite ce contournement.
-  const adaptateurs = new WeakMap<ServerWebSocket<DonneesWs>, AdaptateurServerWebSocket>();
-
-  const lien = new LienWebSocket({
-    connecter: () => file.connecter(),
+  const parc = new ParcLiensMachines({
     horloge: options.horloge,
-    modeIntegrite: 'perte_silencieuse',
+    surNouvelleMachine: options.surNouvelleMachine,
   });
+  // Association ws réel ⇒ adaptateur : `ws.data` est figé à l'upgrade — pas
+  // d'endroit propre où loger l'adaptateur dessus sans le muter. Une Map évite
+  // ce contournement.
+  const adaptateurs = new WeakMap<ServerWebSocket<DonneesWs>, AdaptateurServerWebSocket>();
 
   const server: Server<DonneesWs> = Bun.serve<DonneesWs>({
     port: options.port,
     hostname: options.hostname,
     fetch(req, srv): Response | undefined {
       const authentifie = secretValide(extraireSecret(req), options.secret);
-      if (srv.upgrade(req, { data: { authentifie } })) return undefined;
-      return new Response('lien Pi↔PC : WebSocket uniquement', { status: 400 });
+      // `☠` L'identité est lue ICI, à l'upgrade, et figée dans `ws.data` : c'est
+      // le seul instant où la requête HTTP existe encore. La relire plus tard
+      // serait impossible — et la déduire serait pire.
+      const machineId = extraireMachineId(req);
+      if (srv.upgrade(req, { data: { authentifie, machineId } })) return undefined;
+      return new Response('lien Pi↔machine de travail : WebSocket uniquement', { status: 400 });
     },
     websocket: {
       open(ws): void {
         if (!ws.data.authentifie) {
-          log.error({}, 'connexion PC refusée — secret absent ou invalide (fermeture terminale 4401, D.2.1)');
+          log.error({}, 'connexion refusée — secret absent ou invalide (fermeture terminale 4401, D.2.1)');
           ws.close(4401, 'authentification refusée');
+          return;
+        }
+        const machineId = ws.data.machineId;
+        if (machineId === null) {
+          // `☠` Jamais d'identité de repli. Deux machines sous un même nom
+          // rétabliraient la tempête d'évictions en la rendant invisible.
+          log.error(
+            {},
+            'connexion refusée — identité de machine absente ou invalide (en-tête x-ccremote-machine). Client trop ancien ? Fermeture terminale 4403',
+          );
+          ws.close(CODE_IDENTITE_REFUSEE, 'identité de machine absente ou invalide');
           return;
         }
         const adaptateur = new AdaptateurServerWebSocket(ws);
         adaptateurs.set(ws, adaptateur);
-        file.accepter(adaptateur);
-        log.info({}, 'connexion PC authentifiée acceptée');
+        parc.accepter(machineId, adaptateur);
+        log.info({ machineId }, 'connexion authentifiée acceptée');
+        const lien = parc.lienPour(machineId);
         // `☠ TROUVÉ EN PRODUCTION (2026-07-22)` — ce rappel ne doit PAS partir
-        // ici. `file.accepter()` résout la promesse de `connecter()`, mais
+        // ici. `accepter()` résout la promesse de `connecter()`, mais
         // `LienWebSocket` ne branche réellement la socket qu'à la reprise de son
         // `await`, donc APRÈS ce bloc synchrone. Appelé tout de suite, le
         // déclencheur lançait la réconciliation sur un lien dont `#ws` valait
@@ -241,12 +232,16 @@ export function demarrerServeurLienPc(options: OptionsServeurLienPc): ServeurLie
         // silence par `#envoyer`, et le corrélateur expirait 10 s plus tard.
         // Déterministe, à chaque rattachement — invisible en local parce que
         // rien n'avait jamais émis de requête de contrôle en réel.
+        if (lien === null) return;
         void attendreLienOuvert(lien).then((ouvert) => {
           if (!ouvert) {
-            log.error({}, 'lien toujours pas ouvert après acceptation — réconciliation NON déclenchée (jamais en silence)');
+            log.error(
+              { machineId },
+              'lien toujours pas ouvert après acceptation — réconciliation NON déclenchée (jamais en silence)',
+            );
             return;
           }
-          options.surConnexionAcceptee?.();
+          options.surConnexionAcceptee?.(machineId);
         });
       },
       message(ws, data): void {
@@ -258,27 +253,31 @@ export function demarrerServeurLienPc(options: OptionsServeurLienPc): ServeurLie
         // Oublier AVANT de distribuer : `distribuerFermeture` réveille
         // `LienWebSocket`, qui replanifie une reconnexion et peut rappeler
         // `connecter()` — la file doit déjà être propre à cet instant.
-        file.oublier(adaptateur);
+        if (ws.data.machineId !== null) parc.oublier(ws.data.machineId, adaptateur);
         adaptateur.distribuerFermeture(code, reason);
       },
     },
   });
 
-  void lien.connecter();
   // Le port RÉELLEMENT écouté, jamais celui demandé : avec `port: 0` (banc),
   // journaliser la demande ne dit rien d'où joindre le serveur. `undefined`
   // n'arrive que sur socket UNIX — impossible ici, et si ça arrivait un jour ce
   // serait un échec bruyant plutôt qu'un 0 trompeur (H-74, point 2).
   const portEcoute = server.port;
   if (portEcoute === undefined) throw new Error('serveur de lien Pi↔PC démarré sans port TCP — configuration inattendue');
-  log.info({ port: portEcoute, hostname: options.hostname }, 'serveur de lien Pi↔PC démarré (H-75 — le Pi héberge, le PC initie)');
+  log.info(
+    { port: portEcoute, hostname: options.hostname },
+    'serveur de lien Pi↔machines démarré (H-75 — le Pi héberge, les machines de travail initient)',
+  );
 
   return {
-    lien,
+    lienPour: (machineId): LienWebSocket | null => parc.lienPour(machineId),
+    machines: (): readonly EtatMachineLien[] => parc.machines(),
+    machinesEnLigne: (): readonly string[] => parc.machinesEnLigne(),
     port: portEcoute,
-    supersedes: (): number => file.supersedes,
+    supersedes: (): number => parc.supersedes(),
     arreter: (): void => {
-      lien.fermer();
+      parc.fermer();
       server.stop(true);
     },
   };

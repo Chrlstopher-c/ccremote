@@ -58,13 +58,16 @@ function hRenderConvBar(list, erreur) {
   // ☠ `contextPct` est VOLONTAIREMENT hors signature : il bouge à chaque mesure,
   // et l'inclure faisait réécrire la barre en boucle — donc clignoter les
   // pastilles et casser toute sélection de texte en cours.
-  const sig = JSON.stringify([hOrch.convId, list.map((c) => [c.id, c.titre, c.active])]);
+  const sig = JSON.stringify([hOrch.convId, list.map((c) => [c.id, c.titre, c.active, c.machine])]);
   if (sig === hOrch.barreSig) return;
   hOrch.barreSig = sig;
   const chips = list.map((c) => {
     const active = c.id === hOrch.convId;
     const ctx = (typeof c.contextPct === 'number') ? ` · contexte ${c.contextPct} %` : '';
-    return `<div class="conv-chip ${active ? 'active' : ''}" onclick="hOpenConversation('${c.id}')" title="${escapeHtml(c.titre)}${ctx}">
+    // ☠ La machine apparaît dans l'infobulle plutôt que sur la pastille : elle
+    // ne change jamais, et l'écrire en clair mangerait la largeur du titre.
+    const mach = c.machine ? ` · machine ${c.machine}` : '';
+    return `<div class="conv-chip ${active ? 'active' : ''}" onclick="hOpenConversation('${c.id}')" title="${escapeHtml(c.titre)}${ctx}${escapeHtml(mach)}">
       ${c.active ? '<span class="dot"></span>' : ''}
       <span class="lbl">${escapeHtml(c.titre)}</span>
       ${active ? `<span class="x" onclick="event.stopPropagation();hArchiveConversation('${c.id}')">×</span>` : ''}
@@ -74,7 +77,21 @@ function hRenderConvBar(list, erreur) {
 }
 
 async function hNewConversation() {
-  const r = await HarnessAPI.createConversation();
+  // ☠ La machine est demandée AVANT la création, jamais après : elle est fixée à
+  // la création du fil et n'est plus modifiable (arbitré le 01/08). La question
+  // ne se pose que si plusieurs machines sont en ligne — `hChoisirMachine` rend
+  // `''` sans rien afficher dans le cas contraire.
+  let machine = '';
+  try {
+    const rm = await HarnessAPI.getMachines();
+    machine = await hChoisirMachine((rm && rm.data) || []);
+  } catch (e) {
+    // Une liste de machines indisponible ne doit pas empêcher d'ouvrir un fil :
+    // le routage tranchera, ou refusera en le disant.
+    machine = '';
+  }
+  if (machine === null) return; // annulé
+  const r = await HarnessAPI.createConversation(undefined, machine);
   if (!r.ok || !r.conversation) { showToast(r.erreur || 'Création impossible', 'warn'); return; }
   await hLoadConvList();
   await hOpenConversation(r.conversation.id);

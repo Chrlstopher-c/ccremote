@@ -72,7 +72,7 @@ export function explorerProjets(racine: string, demande?: string): ResultatExplo
     return { racine: base, chemin: base, entrees: [], note: `chemin hors de ${base} — refusé` };
   }
   try {
-    if (!existsSync(cible)) return { racine: base, chemin: cible, entrees: [], note: 'chemin inexistant sur le PC' };
+    if (!existsSync(cible)) return { racine: base, chemin: cible, entrees: [], note: 'chemin inexistant sur cette machine' };
     const noms = readdirSync(cible).filter((n) => !n.startsWith('.')).sort();
     const tronque = noms.length > MAX_ENTREES;
     const entrees: EntreeProjet[] = [];
@@ -99,6 +99,6 @@ export function explorerProjets(racine: string, demande?: string): ResultatExplo
     };
   } catch (erreur) {
     log.error({ err: erreur, cible }, 'exploration impossible');
-    return { racine: base, chemin: cible, entrees: [], note: 'répertoire illisible sur le PC' };
+    return { racine: base, chemin: cible, entrees: [], note: 'répertoire illisible sur cette machine' };
   }
 }

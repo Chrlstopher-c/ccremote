@@ -56,8 +56,8 @@ export class DepotMissions {
                id, lot_id, nom, projet, worktree, branche, session_id, compte_id,
                mandat, critere_arret, modele_demande, modele_resolu,
                etat_sdk, etat_sdk_maj_a, etat_harness, etat_harness_maj_a,
-               budget_max_usd, cree_a, epoch, conversation_id
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?)`,
+               budget_max_usd, cree_a, epoch, conversation_id, machine
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             creation.id,
@@ -83,6 +83,10 @@ export class DepotMissions {
             // n'a jamais rien demandé, et lui ferait porter une équipe qu'elle
             // n'a pas créée.
             creation.conversationId ?? null,
+            // `☠` La machine où l'équipe tourne (migration 22). Absente ⇒ `null`,
+            // et le routage refusera plutôt que de deviner dès que deux machines
+            // sont en ligne — voir `parc-superviseurs.ts#resoudre`.
+            creation.machine ?? null,
           );
         return this.exiger(creation.id);
       },

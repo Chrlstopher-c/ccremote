@@ -38,9 +38,9 @@ const serveur = demarrerServeurLienPc({
   port,
   hostname: '0.0.0.0',
   secret,
-  surConnexionAcceptee: () => {
+  surConnexionAcceptee: (machineId) => {
     rattachements += 1;
-    noter(`rattachement n°${rattachements} accepté`);
+    noter(`rattachement n°${rattachements} accepté (machine ${machineId})`);
   },
 });
 
@@ -50,15 +50,21 @@ Bun.serve({
   port: portEtat,
   hostname: '0.0.0.0',
   fetch(): Response {
+    // `☠` Le banc regarde désormais UNE machine nommée : depuis la V2, il y a un
+    // lien par identité, et « l'état du lien » sans dire lequel n'existe plus.
+    const machineObservee = process.env['BANC_MACHINE_OBSERVEE'] ?? serveur.machinesEnLigne()[0] ?? '';
+    const lien = serveur.lienPour(machineObservee);
     return Response.json({
-      etatLien: serveur.lien.etat(),
+      machineObservee,
+      machines: serveur.machines(),
+      etatLien: lien?.etat() ?? 'aucune machine connue',
       rattachements,
       // `☠` LE compteur du test : il doit rester à 0 sur une reconnexion
       // légitime. Non nul ⇒ le Pi prend le retour du PC pour un second PC.
       supersedes: serveur.supersedes(),
-      rattachementsTransport: serveur.lien.rattachements(),
-      remonteesTransitoires: serveur.lien.remonteesTransitoires(),
-      coupuresSilencieuses: serveur.lien.coupuresSilencieusesDetectees(),
+      rattachementsTransport: lien?.rattachements() ?? 0,
+      remonteesTransitoires: lien?.remonteesTransitoires() ?? 0,
+      coupuresSilencieuses: lien?.coupuresSilencieusesDetectees() ?? 0,
       journal: journal.slice(-30),
     });
   },

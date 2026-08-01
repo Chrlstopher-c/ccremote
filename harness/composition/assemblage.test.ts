@@ -31,6 +31,7 @@ import { construireWorkerSpec } from './pc/construire-worker-spec.ts';
 import { assemblerSuperviseurPc } from './pc/assembler-superviseur.ts';
 import { demarrerServeurLienPc } from './pi/serveur-lien-pc.ts';
 import { demarrerServeurApiWeb } from '../control-plane/api-web/index.ts';
+import { entetesMachine } from './lien-pc-pi/identite-machine.ts';
 import { entetesAuth } from './lien-pc-pi/secret.ts';
 
 function dossierTemporaire(prefixe: string): string {
@@ -73,7 +74,7 @@ describe('assemblage — persistance et restauration du registre PC (dette n°1,
     const secretLienPi = 'secret-test';
 
     // « Instance précédente » : démarre, puis s'arrête (le process meurt sans se désenregistrer).
-    const premiere = assemblerSuperviseurPc({ cheminRegistrePersistance, urlPi, secretLienPi });
+    const premiere = assemblerSuperviseurPc({ cheminRegistrePersistance, urlPi, secretLienPi, machineId: 'banc-assemblage' });
     premiere.arreter();
 
     // Simule un enregistrement laissé vivant par le process précédent, disparu du process courant.
@@ -95,7 +96,7 @@ describe('assemblage — persistance et restauration du registre PC (dette n°1,
 
     // « Nouvelle instance » : SANS ce câblage de composition (avant cette mission), ce
     // fantôme aurait été invisible — le registre en mémoire serait reparti vide.
-    const deuxieme = assemblerSuperviseurPc({ cheminRegistrePersistance, urlPi, secretLienPi });
+    const deuxieme = assemblerSuperviseurPc({ cheminRegistrePersistance, urlPi, secretLienPi, machineId: 'banc-assemblage' });
     try {
       const inventaire = deuxieme.superviseur.inventaire();
       expect(inventaire.some((w) => w.sessionId === 'session-fantome' && w.vivant)).toBe(true);
@@ -153,10 +154,13 @@ describe('assemblage — l’interface sait que le PC est éteint (H-75)', () =>
     // Exactement l'expression de `assembler-control-plane.ts` — si elle change
     // là-bas sans changer ici, ce test cesse de prouver quoi que ce soit :
     // c'est pourquoi il construit les deux serveurs plutôt que d'en simuler un.
+    // `☠ V2` — « au moins une machine en ligne », la sémantique qu'a désormais
+    // `pcOnline` : un lien nommé ne dit plus rien à lui seul.
     const api = demarrerServeurApiWeb({
       port: 0,
       registre,
-      pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
+      pcEnLigne: () => serveurLien.machinesEnLigne().length > 0,
+      machines: () => serveurLien.machines().map((m) => ({ id: m.machineId, enLigne: m.enLigne, supersedes: m.supersedes })),
     });
 
     const etat = async (): Promise<boolean> => {
@@ -166,7 +170,9 @@ describe('assemblage — l’interface sait que le PC est éteint (H-75)', () =>
 
     expect(await etat()).toBe(false); // PC éteint : le régime nominal de la nuit
 
-    const pc = new WebSocket(`ws://127.0.0.1:${serveurLien.port}/`, { headers: entetesAuth(secret) } as never);
+    const pc = new WebSocket(`ws://127.0.0.1:${serveurLien.port}/`, {
+      headers: { ...entetesAuth(secret), ...entetesMachine('banc-assemblage') },
+    } as never);
     await new Promise<void>((r) => pc.addEventListener('open', () => r()));
     await new Promise<void>((r) => setTimeout(r, 100));
 

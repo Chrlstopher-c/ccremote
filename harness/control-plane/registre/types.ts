@@ -224,6 +224,15 @@ export interface Mission {
    * notification sans destinataire à réveiller.
    */
   readonly conversationId: string | null;
+  /**
+   * Machine de travail où cette équipe tourne RÉELLEMENT (migration 22).
+   *
+   * `☠` Écrite au dispatch, à partir de la machine effectivement utilisée. Sans
+   * elle, un ordre d'arrêt, une relance ou un suivi ne savent à qui s'adresser
+   * dès que deux machines tournent. `null` ⇒ mission antérieure au 01/08 : ne se
+   * route qu'en l'absence d'ambiguïté (une seule machine en ligne).
+   */
+  readonly machine: string | null;
   readonly creeA: number;
   readonly demarreeA: number | null;
   readonly termineeA: number | null;
@@ -242,6 +251,8 @@ export interface CreationMission {
   readonly critereArret?: string | null;
   readonly modeleDemande?: string | null;
   readonly modeleResolu?: string | null;
+  /** Machine de travail visée — voir `Mission.machine`. */
+  readonly machine?: string | null;
   readonly budgetMaxUsd?: number | null;
   /**
    * Epoch de fencing (M-11) réellement envoyé au PC pour ce dispatch.
@@ -318,6 +329,14 @@ export interface Conversation {
   readonly autonomieDebut: number | null;
   readonly autonomieFin: number | null;
   readonly autonomieObjectif: string | null;
+  /**
+   * Machine de travail choisie à la CRÉATION du fil (migration 22).
+   *
+   * `☠` Non modifiable ensuite, décision arbitrée avec Chris le 01/08 : une
+   * équipe ne doit pas changer de machine au milieu d'un chantier. `null` ⇒ fil
+   * antérieur au sélecteur : se résout seulement s'il n'y a aucune ambiguïté.
+   */
+  readonly machine: string | null;
 }
 
 export type TypeEvenementConversation =

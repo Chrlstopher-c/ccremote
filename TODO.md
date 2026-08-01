@@ -72,22 +72,54 @@
       tranchée.
 - [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
       visuel, branché sur le vrai back, ne contraint rien en amont.
-### 🔜 CHANTIER SUIVANT — DEUX machines de travail simultanées (PC + VPS)
-
-**Tout le contexte d'exécution est dans `harness/CHANTIER-MULTI-MACHINES.md`** —
-écrit pour être lu par une session neuve, sans rien connaître de la session du 01/08.
+### ✅ DEUX machines de travail simultanées (PC + VPS) — LIVRÉ le 01/08
 
 Demandé par Chris le 01/08 : faire cohabiter le PC et le VPS pour départager les
 tâches (StockIOP sur le VPS, le reste sur le PC), avec choix de la machine à la
-création d'une conversation.
+création d'une conversation. Contexte et méthode : `harness/CHANTIER-MULTI-MACHINES.md`.
 
-`☠` Le lien est aujourd'hui **structurellement mono-machine** : une connexion
-authentifiée évince la précédente. C'est écrit dans `serveur-lien-pc.ts` et c'est
-aussi la cause de la **dette n°6** (1268 évictions). Les deux se corrigent avec la
-même brique : donner une IDENTITÉ aux superviseurs.
+**En production.** Le PC et le VPS travaillent désormais EN
+MÊME TEMPS. Preuve mesurée sur le registre du Pi, pas déduite :
+`2272d6f2` (trinityarch · vitrail) et `41e06128` (vps-e411b5c7 · stockiop) ont
+**3 s d'exécution en parallèle**, de 13:09:15 à 13:09:18, chacune sur son dépôt.
 
-Décisions arbitrées : la conversation choisit la machine, le projet vérifie ·
-machine fixée à la création, non modifiable · H-56 reste global.
+Décisions arbitrées, tenues : la conversation choisit la machine, le projet
+vérifie · machine fixée à la création, non modifiable · H-56 reste global.
+
+- [x] **Identité de machine sur le lien** — en-tête `x-ccremote-machine`, jamais dans l'URL (même
+      raison que le secret : les access logs de Cloudflare). Identité absente ou malformée ⇒ **4403
+      terminal**, jamais un nom de repli — un repli partagé ramènerait la tempête sans qu'on la voie.
+      `☠` Ordre de déploiement : les MACHINES d'abord, le Pi ensuite. L'inverse refuse tous les
+      clients anciens jusqu'à leur mise à jour.
+- [x] **Un lien et un `ClientSuperviseurPc` par machine** (`parc-liens-machines.ts`,
+      `parc-superviseurs.ts`). Trois familles de routage, à ne pas confondre : par MISSION (arrêt,
+      relance, instruction, inspection) · par CONVERSATION (exploration, lecture, dispatch) ·
+      GLOBAL agrégé (télémétrie, jetons).
+- [x] **Réconciliation PAR MACHINE, avec périmètre** (`DependancesReconciliation.concerne`).
+      `☠` LE garde-fou du chantier : l'inventaire d'une machine ne rapporte QUE ses workers. Sans
+      périmètre, l'équipe du VPS est « absente du PC » — donc marquée fantôme et terminée — au
+      premier rattachement du PC, en plein travail, sans un mot. Test validé dans les deux sens.
+- [x] **Migration 22** — `conversation.machine`, `mission.machine`. Écrite AU DISPATCH, jamais
+      déduite après coup. Aucun rattrapage rétroactif : zéro mission active mesurée au moment de
+      migrer (36 missions, toutes terminales).
+- [x] **Refus au dispatch d'un projet absent de la machine visée**, AVANT la première écriture.
+      Vérifié en réel : `/mnt/projects/lumen` depuis un fil VPS ⇒ 409 avec la raison, **aucune
+      mission créée**, projet libre.
+      `☠` Le critère n'est PAS « aucune note » : `explorerProjets` en pose une aussi sur une
+      TRONCATURE, donc un gros dépôt aurait été déclaré absent.
+- [x] **Sélecteur de machine à la création d'un fil** — dialogue à la charte, machines hors ligne
+      listées mais non sélectionnables, aucune question posée quand il n'y a rien à trancher.
+      Machine affichée sur la carte du Parc et en infobulle de la pastille de fil.
+- [x] **H-44 rendue effective** — `☠` défaut trouvé PAR le banc, pas par lecture. Le Pi ne tient
+      qu'UNE liste de comptes (`CCREMOTE_PI_COMPTES`, les chemins du PC) : routé vers le VPS, un
+      mandat portait `/home/trinity/.claude-comptes/compte-a`, inexistant là-bas. Le VPS était
+      **structurellement incapable de lancer une équipe**. Seule l'IDENTITÉ du compte traverse
+      désormais ; la machine réécrit le chemin avec le sien.
+- [x] **Trois refus métier remontaient en 500 « erreur interne »** — projet absent, machine hors
+      ligne. Le mécanisme du refus marchait, sa TRANSMISSION n'existait pas : le message actionnable
+      restait dans le journal du Pi. Troisième fois sur cette même frontière (après H-56 le 23/07).
+- [x] **Bug du banc de pilotage** — `autoriser` tapait `/orchestrator/mandates/`, la route est
+      `/orchestrator/propositions/`. Jamais exercée depuis sa création, donc jamais démentie.
 
 ### ⚡ CHANTIER VPS — le verrou technique est levé (01/08)
 
@@ -99,18 +131,23 @@ machine fixée à la création, non modifiable · H-56 reste global.
       le tunnel actif (`388bc072`, « portfolio ») appartient à l'ANCIEN compte Cloudflare.
 - [x] **Bun 1.3.14 + Claude Code 2.1.220** installés sur le VPS (`unzip` était absent, ajouté).
       Version identique à celle qu'épingle le SDK — à ne pas laisser diverger.
-- [ ] `⛔` **BLOQUANT — login Claude sur le VPS** : action humaine (OAuth). Sans compte
-      authentifié, aucun worker ne peut démarrer là-bas.
-      `ssh vps` puis `CLAUDE_CONFIG_DIR=~/.claude-comptes/compte-a ~/.bun/bin/claude` → `/login`.
-- [ ] **Les serveurs MCP n'existent pas sur le VPS.** `resoudreMcpEquipe()` lit la config du
+- [x] **Login Claude sur le VPS** — fait par Chris le 01/08 (`compte-a`). `compte-b` reste non
+      authentifié là-bas : **aucune rotation possible sur le VPS**, une saturation y est terminale.
+- [x] **Serveurs MCP portés sur le VPS** (`deploy-mcp-vps.sh`) — playwright, log-watcher, pty.
+      `☠` `mcp==1.27.1` ÉPINGLÉ : pip avait pris la 2.0.0, dont l'API a changé — les trois serveurs
+      plantaient au démarrage et le worker rapportait « outil introuvable », pas « serveur mort ».
+      Manquent volontairement : `semantic-memory` (5,3 Go, à trancher), `codeindex` (CUDA).
+- [ ] ~~**Les serveurs MCP n'existent pas sur le VPS.**~~ `resoudreMcpEquipe()` lit la config du
       poste : sur le VPS elle sera vide, et les équipes y repartiraient SANS outils — le défaut
       corrigé aujourd'hui, revenu par la porte du portage. Le pré-vol le signalera (warn), mais
       il faut porter playwright / codeindex / semantic-memory / log-watcher / pty-mcp.
-- [ ] **Où vivent les projets sur le VPS ?** `~/projets` est créé, vide. Décision à prendre :
-      quels projets migrer, et faut-il un accès git commun.
-- [ ] `⚠` **Ne JAMAIS laisser deux superviseurs connectés en même temps** — la tempête
-      d'évictions (dette n°6, 1268 évictions mesurées) n'est toujours pas corrigée. Arrêter
-      `ccremote-pc` sur le PC AVANT de démarrer celui du VPS.
+- [x] **Racine des projets du VPS** — `/mnt/projects` est un LIEN vers `~/dev` (clones git de
+      travail), à côté de `~/prod` qui sert le trafic réel. `stockiop` cloné. Reste à décider quels
+      autres projets y cloner.
+- [x] ~~`⚠` **Ne JAMAIS laisser deux superviseurs connectés en même temps**~~ — **levé le 01/08**,
+      c'était l'objet du chantier. Le garde-fou de `deploy-superviseur-vps.sh --demarrer` est retiré.
+      `☠` Ce qui RESTE vrai : deux process sur la MÊME machine s'évincent toujours (voulu). On ne
+      lance pas deux fois `ccremote-pc` sur un même hôte.
 - [ ] **Résumé de séquence en tête de timeline** (« Fichier créé, lu un fichier ») — vu sur la
       capture de Chris, pas encore fait. Les étapes et le « Terminé » le sont.
 - [ ] **Fluidité des pages Mission / Agent** — la timeline ne couvre que la vue Orchestrateur.
@@ -323,10 +360,13 @@ machine fixée à la création, non modifiable · H-56 reste global.
 5. ~~Exercer le lien entre deux vraies machines~~ — **fait le 2026-07-22**, 2 défauts trouvés et
    corrigés (`3ff794c`). Restent non éprouvés : le passage par **Cloudflare Tunnel** (banc en LAN
    direct) et un **vrai redémarrage machine** (le `boot_id` n'a jamais changé pendant le banc).
-6. `⚠` **Tempête d'évictions à deux clients PC** — découverte au banc, NON corrigée. Deux process
-   PC simultanés se chassent en boucle : **1268 évictions** observées. Le `supersede` n'a aucun
-   amortissement (ni délai, ni identité de client). **Priorité montée** : le service PC tourne
-   désormais sous systemd, où un `restart` qui chevauche l'ancien process suffit à la déclencher.
+6. ~~`⚠` **Tempête d'évictions à deux clients PC**~~ — **FERMÉE le 2026-08-01**. Cause : le serveur
+   du lien ne tenait QU'UN emplacement, donc toute connexion authentifiée évinçait la précédente,
+   d'où qu'elle vienne (1268 évictions au banc du 22/07). Chaque machine s'annonce maintenant avec
+   une IDENTITÉ (`composition/lien-pc-pi/identite-machine.ts`) et possède son propre lien
+   (`parc-liens-machines.ts`) : le `supersede` ne joue plus qu'à identité **égale** — c'est-à-dire
+   deux process d'une même machine, ce qui reste voulu (reprise après crash).
+   Mesuré en production : deux machines connectées en continu, **0 supersede**.
 7. Puis le reste des dettes ci-dessous.
 
 ## 🚀 EN PRODUCTION depuis le 2026-07-22

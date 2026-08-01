@@ -23,7 +23,12 @@ import type { Server } from 'bun';
 import type { Registre } from '../registre/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
 import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
-import { ErreurMandatDejaTranche, ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
+import {
+  ErreurMandatDejaTranche,
+  ErreurProjetAbsentDeLaMachine,
+  ErreurProjetOccupe,
+} from '../orchestrateur/dispatch-mandat.ts';
+import { ErreurRoutageMachine } from '../../shared/routage-machine.ts';
 import type { ServiceInspection } from '../inspection/service-inspection.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
@@ -46,8 +51,16 @@ const PLAFOND_RELANCES_DEFAUT = 3;
 
 export interface DependancesApiWeb {
   readonly registre: Registre;
-  /** Le lien réel vers le PC — source unique de `pcOnline` (H-75). */
+  /** Le lien réel vers les machines de travail — source unique de `pcOnline` (H-75). */
   readonly pcEnLigne: () => boolean;
+  /**
+   * Les machines de travail connues du Pi, en ligne ou non (migration 22).
+   *
+   * `☠` Absent ⇒ liste vide, jamais une machine fabriquée : c'est le cas des
+   * déploiements et des bancs mono-machine, où l'interface doit simplement ne
+   * proposer aucun choix plutôt qu'un choix inventé.
+   */
+  readonly machines?: () => readonly MachineApi[];
   /**
    * Ordres vers le PC. Absent ⇒ les routes d'écriture répondent 501 plutôt que
    * d'accepter un ordre qui ne partirait nulle part.
@@ -72,6 +85,14 @@ export interface DependancesApiWeb {
   readonly orchestrateurContexteRatio?: () => number | null;
   readonly maintenant?: () => number;
   readonly plafondRelances?: number;
+}
+
+/** Une machine de travail, telle que l'interface la voit. */
+export interface MachineApi {
+  readonly id: string;
+  readonly enLigne: boolean;
+  /** Évictions observées sur CETTE machine — doit rester à 0 (voir `serveur-lien-pc.ts`). */
+  readonly supersedes: number;
 }
 
 export interface OptionsServeurApiWeb extends DependancesApiWeb {
@@ -163,6 +184,14 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     // et non par une vérification qu'un futur chemin pourrait contourner.
     const liste = deps.registre.rappels.duFil(decodeURIComponent(rappels[1]), true);
     return enveloppe(pcOnline, liste.map(versRappelApi));
+  }
+
+  // `☠` AVANT les routes de conversation, comme les rappels : le sous-routeur
+  // ci-dessous court-circuite tout dès qu'aucun gestionnaire n'est assemblé. Les
+  // machines vivent dans le LIEN, pas dans une session — les y enterrer
+  // rendrait le sélecteur vide sur un déploiement sans orchestrateur.
+  if (chemin === '/machines') {
+    return enveloppe(pcOnline, deps.machines?.() ?? []);
   }
 
   const conversation = routerLectureConversation(chemin, url, deps, pcOnline);
@@ -315,6 +344,15 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
       // approbation depuis un autre écran. Un geste arrivé trop tard, pas une
       // panne ; le dire évite de faire douter d'une équipe qui tourne.
       if (erreur instanceof ErreurMandatDejaTranche) throw new ErreurApi(409, erreur.message);
+      // `☠` Même famille, TROISIÈME occurrence (prod, 01/08, banc multi-machines).
+      // « Ce projet n'est pas sur cette machine » et « cette machine est hors
+      // ligne » sont des refus PARFAITEMENT connus, produits exprès avant toute
+      // écriture. Sortis en 500 « erreur interne », ils envoyaient chercher une
+      // panne du control plane là où il n'y avait qu'un mandat mal adressé — et
+      // le message actionnable, écrit pour être lu, restait dans le journal du
+      // Pi. Le mécanisme du refus marchait ; sa TRANSMISSION n'existait pas.
+      if (erreur instanceof ErreurProjetAbsentDeLaMachine) throw new ErreurApi(409, erreur.message);
+      if (erreur instanceof ErreurRoutageMachine) throw new ErreurApi(409, erreur.message);
       throw erreur;
     }
   }
@@ -399,7 +437,18 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
   if (chemin === '/orchestrator/conversations') {
     const corps = await lireCorps(req);
     const titre = typeof corps['titre'] === 'string' ? corps['titre'] : undefined;
-    const creee = conv.creer(titre);
+    // `☠` La machine est VALIDÉE contre les machines réellement connues, jamais
+    // prise telle quelle : elle vient du navigateur, finit en clé de routage et
+    // en colonne SQL. Une valeur inconnue ferait un fil irroutable, refusé
+    // seulement au premier mandat — bien trop tard pour être compris.
+    const machineDemandee = typeof corps['machine'] === 'string' ? corps['machine'] : undefined;
+    const connues = (deps.machines?.() ?? []).map((m) => m.id);
+    if (machineDemandee !== undefined && machineDemandee !== '' && !connues.includes(machineDemandee)) {
+      throw requeteInvalide(
+        `machine « ${machineDemandee} » inconnue — machines disponibles : ${connues.length === 0 ? 'aucune' : connues.join(', ')}`,
+      );
+    }
+    const creee = conv.creer(titre, machineDemandee ?? null);
     return { ok: true, effet: 'conversation créée', conversation: versConversationApi({ ...creee, active: false, contextePct: null }) };
   }
 

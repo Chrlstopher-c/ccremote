@@ -27,6 +27,7 @@ import { LienWebSocket } from '../../transport/lien-websocket.ts';
 import type { FermetureTerminale } from '../../transport/contrat.ts';
 import { compositionLogger } from '../logger.ts';
 import { entetesAuth, urlSansSecret } from '../lien-pc-pi/secret.ts';
+import { entetesMachine, normaliserMachineId } from '../lien-pc-pi/identite-machine.ts';
 import { creerHorlogeAvecGigue } from './horloge-avec-gigue.ts';
 
 const log = compositionLogger.child({ composant: 'client-lien-pi' });
@@ -35,6 +36,16 @@ export interface OptionsClientLienPi {
   /** `ws://` ou `wss://` du Pi, SANS le secret (ajouté ici). */
   readonly urlPi: string;
   readonly secret: string;
+  /**
+   * Identité de CETTE machine de travail, annoncée au Pi à chaque upgrade.
+   *
+   * `☠` C'est elle qui permet à plusieurs machines de cohabiter : côté Pi, le
+   * supersede ne joue qu'à identité égale. Deux machines qui s'annonceraient
+   * sous le même nom se chasseraient en boucle sans que rien ne le dise —
+   * exactement la dette n°6. Elle est donc validée au démarrage (`bin-pc.ts`),
+   * jamais devinée ici.
+   */
+  readonly machineId: string;
   /** Callback appelé sur toute fermeture TERMINALE (H-75 : jamais retentée en interne). */
   readonly surFermetureTerminale?: (fermeture: FermetureTerminale) => void;
 }
@@ -117,7 +128,17 @@ function connecterQuandVraimentOuvert(
 
 export function creerClientLienPi(options: OptionsClientLienPi): LienWebSocket {
   const urlJournalisable = urlSansSecret(options.urlPi);
-  const entetes = entetesAuth(options.secret);
+  // `☠` Revalidée ici plutôt que supposée propre : ce module est aussi appelé
+  // par les bancs et par `assembler-superviseur.ts`. Une identité refusée par
+  // le Pi produit une fermeture 4403 terminale — mieux vaut échouer au
+  // démarrage, avec la valeur fautive sous les yeux, qu'après un aller-retour.
+  const machineId = normaliserMachineId(options.machineId);
+  if (machineId === null) {
+    throw new Error(
+      `identité de machine invalide : « ${options.machineId} ». Attendu : minuscules, chiffres, « . _ - », 63 caractères max, commençant par une lettre ou un chiffre`,
+    );
+  }
+  const entetes = { ...entetesAuth(options.secret), ...entetesMachine(machineId) };
 
   // Indirection par référence mutable : le connecteur doit pouvoir remettre au
   // lien une fermeture terminale, mais le lien n'existe pas encore quand on
@@ -148,6 +169,9 @@ export function creerClientLienPi(options: OptionsClientLienPi): LienWebSocket {
     options.surFermetureTerminale?.(fermeture);
   });
 
-  log.info({ url: urlJournalisable }, 'client du lien Pi↔PC démarré — connexion sortante vers le Pi (H-75)');
+  log.info(
+    { url: urlJournalisable, machineId },
+    'client du lien Pi↔machine démarré — connexion sortante vers le Pi (H-75)',
+  );
   return lien;
 }

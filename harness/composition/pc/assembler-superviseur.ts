@@ -40,6 +40,8 @@ export interface OptionsAssemblageSuperviseurPc {
   /** `ws://` ou `wss://` du Pi, SANS le secret (voir `client-lien-pi.ts`). */
   readonly urlPi: string;
   readonly secretLienPi: string;
+  /** Identité de cette machine de travail, annoncée au Pi — voir `client-lien-pi.ts`. */
+  readonly machineId: string;
   readonly plafondRelancesDefaut?: number;
   /** H-75 : une fermeture terminale (secret invalide, epoch dépassé) n'est jamais retentée en interne — voir `client-lien-pi.ts`. */
   readonly surFermetureTerminale?: (fermeture: FermetureTerminale) => void;
@@ -87,6 +89,7 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
   const lien = creerClientLienPi({
     urlPi: options.urlPi,
     secret: options.secretLienPi,
+    machineId: options.machineId,
     surFermetureTerminale: options.surFermetureTerminale,
   });
   // `☠` L'assembleur est LE point où un worker reçoit son port d'audit. Le Pi
@@ -96,10 +99,17 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
   // rend l'oubli impossible.
   const recepteurControle = cablerRecepteurControlePc(superviseur, lien, {
     assemblerSpec: (parametres) =>
-      construireWorkerSpec(parametres, () => {
-        const collecteur = new CollecteurAuditPermissions();
-        return creerHooksAuditPermissions(collecteur);
-      }),
+      construireWorkerSpec(
+        parametres,
+        () => {
+          const collecteur = new CollecteurAuditPermissions();
+          return creerHooksAuditPermissions(collecteur);
+        },
+        // ☠ Les comptes de CETTE machine (H-44). Sans eux, un mandat routé vers
+        // une autre machine que celle dont le Pi tient la liste démarre sur un
+        // répertoire inexistant — mesuré le 01/08 sur le VPS.
+        options.comptesASonder ?? [],
+      ),
   });
   void lien.connecter();
 

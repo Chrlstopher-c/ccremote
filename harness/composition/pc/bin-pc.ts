@@ -33,8 +33,10 @@
 /** `EX_CONFIG` (sysexits.h) — l'environnement est faux, pas le code. */
 const CODE_SORTIE_CONFIG = 78;
 
+import { hostname } from 'node:os';
 import { assemblerSuperviseurPc } from './assembler-superviseur.ts';
 import { EnvManquantError, envObligatoire } from '../env.ts';
+import { normaliserMachineId } from '../lien-pc-pi/identite-machine.ts';
 import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'bin-pc' });
@@ -45,6 +47,18 @@ function main(): void {
   // `☠` Jamais de valeur par défaut (H-74, point 2) : un secret manquant doit
   // arrêter le démarrage bruyamment, jamais tourner sans authentification.
   const secretLienPi = envObligatoire('CCREMOTE_LIEN_SECRET');
+  // `☠` Identité de CETTE machine. Le défaut `hostname()` est délibéré et sûr :
+  // il est déjà distinct sur chaque machine réelle (`TrinityArch`,
+  // `vps-e411b5c7`), donc l'ajout d'une machine ne demande AUCUNE configuration
+  // — la voie d'échec serait qu'un opérateur oublie de la fixer et que deux
+  // machines s'annoncent pareil. Le seul cas où deux hostnames coïncident est
+  // une machine clonée ; la variable est là pour ça, jamais pour l'usage courant.
+  const machineId = normaliserMachineId(process.env['CCREMOTE_MACHINE_ID'] ?? hostname());
+  if (machineId === null) {
+    throw new EnvManquantError(
+      'CCREMOTE_MACHINE_ID invalide (et hostname() inutilisable) — attendu : minuscules, chiffres, « . _ - », 63 caractères max',
+    );
+  }
   // `☠` Les comptes vivent ICI, sur le PC : seul ce process peut mesurer leurs
   // fenêtres de rate limit. Même format que côté Pi (`id=configDir,…`) pour
   // qu'un opérateur n'ait pas deux syntaxes à retenir.
@@ -58,6 +72,7 @@ function main(): void {
     cheminRegistrePersistance,
     urlPi,
     secretLienPi,
+    machineId,
     comptesASonder,
     // `☠` Fermeture terminale (ex. secret invalide) : jamais de reconnexion
     // interne — H-75. On arrête le PROCESS ; systemd décide seul de la suite,
@@ -79,7 +94,7 @@ function main(): void {
   process.on('SIGINT', () => arreterProprement('SIGINT'));
   process.on('SIGTERM', () => arreterProprement('SIGTERM'));
 
-  log.info({ urlPi }, 'process PC démarré — connexion sortante vers le Pi (H-75)');
+  log.info({ urlPi, machineId }, 'process machine de travail démarré — connexion sortante vers le Pi (H-75)');
 }
 
 try {

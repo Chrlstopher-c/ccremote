@@ -675,6 +675,31 @@ ALTER TABLE conversation_evenement ADD COLUMN resultat TEXT;
 CREATE INDEX idx_conv_evt_tool ON conversation_evenement(tool_use_id);
 `;
 
+/**
+ * Deux machines de travail simultanées : il faut désormais dire LAQUELLE.
+ *
+ * `☠` `mission.machine` n'est pas un confort d'affichage, c'est la condition
+ * pour pouvoir ARRÊTER une équipe. Sans elle, un ordre d'arrêt ne sait à quelle
+ * machine s'adresser : soit on le diffuse à toutes — et on tue potentiellement
+ * une session homonyme ailleurs —, soit on ne l'envoie nulle part. Elle est
+ * écrite AU DISPATCH, à partir de la machine réellement utilisée, jamais
+ * déduite après coup : une déduction se tromperait précisément le jour où les
+ * deux machines tournent.
+ *
+ * `☠` `NULL` = « non précisée », état légitime : toutes les conversations et
+ * missions antérieures au 01/08 le portent. Il ne se résout qu'en l'ABSENCE
+ * d'ambiguïté — une seule machine en ligne (`composition/pi/parc-
+ * superviseurs.ts#resoudre`). Aucun rattrapage rétroactif n'est tenté ici :
+ * mesuré sur le registre du Pi au moment d'écrire cette migration, ZÉRO mission
+ * était active (36 missions, toutes terminales). Rien de vivant n'a donc besoin
+ * d'être routé, et inventer une valeur pour l'historique serait une fabrication.
+ */
+const MIGRATION_22 = `
+ALTER TABLE conversation ADD COLUMN machine TEXT;
+ALTER TABLE mission ADD COLUMN machine TEXT;
+CREATE INDEX idx_mission_machine ON mission(machine);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -697,6 +722,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 19, nom: 'source-titre-conversation', sql: MIGRATION_19 },
   { version: 20, nom: 'verdict-inspection-mission', sql: MIGRATION_20 },
   { version: 21, nom: 'resultats-outils-conversation', sql: MIGRATION_21 },
+  { version: 22, nom: 'machine-de-travail', sql: MIGRATION_22 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

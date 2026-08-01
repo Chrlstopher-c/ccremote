@@ -122,6 +122,15 @@ ssh "$CIBLE" "cd $DISTANT/harness/config-equipe && chmod +x installer-config-com
   for c in \$(ls \$HOME/.claude-comptes); do ./installer-config-compte.sh \$c || true; done" || true
 
 echo "→ Environnement (umask 077)"
+# ☠ Normalisée comme côté code (`identite-machine.ts`) : minuscules, et
+# uniquement ce que le motif accepte. Une identité refusée par le Pi produirait
+# une fermeture 4403 terminale, donc un service qui redémarre en boucle.
+# ☠ Le hostname est capturé AVANT la transformation : `$(...)` ne retire le saut
+# de ligne final qu'à la fin de la substitution — appliqué dans le pipe, `tr -c`
+# le convertissait d'abord en « - » et produisait `vps-e411b5c7-` (mesuré).
+HOSTNAME_DISTANT="$(ssh "$CIBLE" hostname)"
+MACHINE_ID="${CCREMOTE_VPS_MACHINE_ID:-$(printf '%s' "$HOSTNAME_DISTANT" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._-' '-' | cut -c1-63)}"
+echo "  identité de machine : $MACHINE_ID"
 # ☠ Le secret passe par stdin, jamais en argument : `ps` est lisible par tous.
 LISTE_COMPTES=$(ssh "$CIBLE" "ls -d \$HOME/.claude-comptes/*/ 2>/dev/null | while read d; do printf '%s=%s,' \"\$(basename \$d)\" \"\${d%/}\"; done | sed 's/,\$//'")
 ssh "$CIBLE" "mkdir -p \$HOME/.config/ccremote && umask 077 && cat > \$HOME/.config/ccremote/pc.env" <<EOF
@@ -130,6 +139,13 @@ CCREMOTE_PC_REGISTRE_DB=/home/ubuntu/.local/share/ccremote/registre-pc.db
 CCREMOTE_LIEN_URL_PI=$URL_PI
 CCREMOTE_LIEN_SECRET=$CCREMOTE_LIEN_SECRET
 CCREMOTE_PC_COMPTES=$LISTE_COMPTES
+# Identite de cette machine sur le lien (V2 du 01/08). Le defaut cote code est
+# le hostname, deja distinct partout — elle est FIXEE ici pour qu'un changement
+# de hostname ne fasse pas apparaitre une nouvelle machine, laissant les
+# missions en cours pointer vers une identite que plus personne ne porte.
+# (Sans accents ni antiquotes : ce bloc part dans un heredoc NON quote, ou une
+#  antiquote serait executee — defaut mesure le 01/08, hostname() evalue.)
+CCREMOTE_MACHINE_ID=$MACHINE_ID
 EOF
 ssh "$CIBLE" "mkdir -p \$HOME/.local/share/ccremote"
 
@@ -145,9 +161,8 @@ ssh "$CIBLE" "loginctl enable-linger ubuntu 2>/dev/null || true"
 if [ "$DEMARRER" -eq 0 ]; then
   echo ""
   echo "✓ Superviseur déployé sur le VPS — NON démarré (défaut volontaire)."
-  echo "  ⚠ Un second superviseur connecté déclenche la tempête d'évictions (dette n°6)."
-  echo "  Pour basculer :  systemctl --user stop ccremote-pc   (sur le PC)"
-  echo "                   ./deploy-superviseur-vps.sh --demarrer"
+  echo "  Depuis la V2 (01/08), il peut tourner EN MÊME TEMPS que celui du PC."
+  echo "  Pour l'activer :  ./deploy-superviseur-vps.sh --demarrer"
   exit 0
 fi
 
@@ -156,12 +171,17 @@ fi
 # superviseur vit. Deux clients simultanés produisent une éviction en boucle
 # (1268 observées), et le symptôme — des workers qui meurent sans raison — ne
 # ressemble PAS à sa cause.
-echo "→ Vérification qu'aucun autre superviseur ne tourne"
-if systemctl --user is-active ccremote-pc >/dev/null 2>&1; then
-  echo "✗ le superviseur du PC tourne encore — démarrage refusé." >&2
-  echo "  systemctl --user stop ccremote-pc   puis relancer ce script." >&2
-  exit 75
-fi
+# ☠ GARDE-FOU LEVÉ le 2026-08-01, et c'était l'objet du chantier multi-machines.
+# Il interdisait deux superviseurs simultanés parce que le Pi ne tenait QU'UN
+# emplacement de connexion : la seconde évinçait la première, en boucle (dette
+# n°6, 1268 évictions mesurées le 22/07). Depuis la V2, chaque machine s'annonce
+# avec une identité et possède son propre lien — le supersede ne joue plus qu'à
+# identité ÉGALE, c'est-à-dire deux process d'une même machine.
+#
+# ☠ Ce qui RESTE vrai, et qui ne doit pas être perdu : deux process sur LA MÊME
+# machine s'évincent toujours. C'est voulu (reprise après crash), mais ça veut
+# dire qu'on ne lance pas deux fois `ccremote-pc` sur un même hôte.
+echo "→ Cohabitation : le Pi accepte plusieurs machines identifiées (V2, 01/08)"
 
 echo "→ Démarrage du superviseur sur le VPS"
 ssh "$CIBLE" "systemctl --user enable --now ccremote-pc && sleep 6 && systemctl --user is-active ccremote-pc"

@@ -61,7 +61,7 @@ function hMcardTemplate(m) {
       <span class="sdot ${dotLive}" style="background:${dotColor};"></span>
       <div style="min-width:0;flex:1;">
         <div class="title">${escapeHtml(m.title)}</div>
-        <div class="proj"><span>${m.project}</span><span class="divider-dot"></span><span>${m.worktree}</span><span class="divider-dot"></span><span>compte #${m.account}</span></div>
+        <div class="proj"><span>${m.project}</span><span class="divider-dot"></span><span>${m.worktree}</span><span class="divider-dot"></span><span>compte #${m.account}</span>${m.machine ? `<span class="divider-dot"></span><span>${m.machine}</span>` : ''}</div>
       </div>
       ${(!isAct && !isLanding) ? `<span class="badge" style="${HARNESS_STATE_BADGE[m.state]}">${HARNESS_STATE_LABEL[m.state]}</span>` : ''}
     </div>

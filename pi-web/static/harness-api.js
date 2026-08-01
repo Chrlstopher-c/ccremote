@@ -112,7 +112,18 @@ const HarnessAPI = (() => {
     async getConversationEvents(id, since) {
       return lireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/events?since=${since | 0}`);
     },
-    async createConversation(titre) { return ecrireReel('/orchestrator/conversations', titre ? { titre } : {}); },
+    async createConversation(titre, machine) {
+      // ☠ `machine` n'est envoyée que si elle a été RÉELLEMENT choisie : une
+      // chaîne vide serait refusée par le serveur, qui valide contre les
+      // machines connues. Absente ⇒ le routage tranche seul, sans ambiguïté.
+      const corps = {};
+      if (titre) corps.titre = titre;
+      if (machine) corps.machine = machine;
+      return ecrireReel('/orchestrator/conversations', corps);
+    },
+
+    /** Machines de travail connues du Pi, en ligne ou non (migration 22). */
+    async getMachines() { return lireReel('/machines'); },
     async sendConversationMessage(id, text, choix) {
       // ☠ NON bloquant : le serveur enfile puis rend la main, la réponse arrive
       // en streaming via getConversationEvents. On ne fabrique jamais de réponse.

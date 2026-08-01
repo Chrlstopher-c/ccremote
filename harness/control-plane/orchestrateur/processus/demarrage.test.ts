@@ -106,8 +106,13 @@ afterEach(() => {
   registre.fermer();
 });
 
-function reconciliationVide(): DependancesReconciliation {
-  return { inventairePc: new InventairePcVide(), reinitialisateur: new ReinitialisateurMuet() };
+/**
+ * `☠ V2 (migration 22)` — `reconciliation` est un FOURNISSEUR de périmètres, un
+ * par machine de travail en ligne, évalué à chaque démarrage. Une valeur figée
+ * ignorerait toute machine apparue depuis l'assemblage.
+ */
+function reconciliationVide(): () => readonly DependancesReconciliation[] {
+  return () => [{ inventairePc: new InventairePcVide(), reinitialisateur: new ReinitialisateurMuet() }];
 }
 
 describe('demarrerOrchestrateur — ne bloque jamais', () => {
@@ -171,7 +176,7 @@ describe('demarrerOrchestrateur — réconciliation au boot (A.4.2)', () => {
       verificateurSessionExistante: VERIFICATEUR_INCONNU,
       serveurControle: creerServeurMcpControle(depsServeur),
       registre,
-      reconciliation: { inventairePc: inventaire, reinitialisateur: new ReinitialisateurMuet() },
+      reconciliation: () => [{ inventairePc: inventaire, reinitialisateur: new ReinitialisateurMuet() }],
       incidents: new JournalIncidentsMemoire(),
       demarrerChaud: async (): Promise<WarmQuery> => ({ query: () => query, close: () => {} }) as unknown as WarmQuery,
     });
@@ -191,7 +196,7 @@ describe('demarrerOrchestrateur — réconciliation au boot (A.4.2)', () => {
       verificateurSessionExistante: VERIFICATEUR_INCONNU,
       serveurControle: creerServeurMcpControle(depsServeur),
       registre,
-      reconciliation: { inventairePc: inventaireEnEchec, reinitialisateur: new ReinitialisateurMuet() },
+      reconciliation: () => [{ inventairePc: inventaireEnEchec, reinitialisateur: new ReinitialisateurMuet() }],
       incidents: new JournalIncidentsMemoire(),
       demarrerChaud: async (): Promise<WarmQuery> => ({ query: () => query, close: () => {} }) as unknown as WarmQuery,
     });

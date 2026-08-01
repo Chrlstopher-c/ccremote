@@ -84,6 +84,24 @@ export interface DependancesReconciliation {
   readonly busPermissions?: RedelivranceBusPermissions;
   readonly libererWorktree?: LibererWorktree;
   readonly compteurRelances?: RemiseAZeroRelances;
+  /**
+   * Périmètre de la passe : quelles missions actives cet inventaire est-il en
+   * droit de juger ? Absent ⇒ toutes (mono-machine, bancs, tests).
+   *
+   * `☠` INDISPENSABLE dès qu'il y a plus d'une machine de travail (migration
+   * 22). `inventairePc` ne rapporte que les workers de SA machine : sans ce
+   * filtre, toute mission vivant ailleurs serait « absente du PC », donc
+   * marquée FANTÔME et terminée — y compris une équipe en plein travail sur une
+   * autre machine. Le rapport nomme les missions écartées faute de machine
+   * connue, pour que l'exclusion ne soit jamais silencieuse.
+   */
+  readonly concerne?: (mission: MissionReconciliable) => boolean;
+}
+
+/** Ce que le périmètre a besoin de connaître d'une mission — rien de plus. */
+export interface MissionReconciliable {
+  readonly id: string;
+  readonly machine: string | null;
 }
 
 export interface RapportReconciliation {
@@ -95,4 +113,12 @@ export interface RapportReconciliation {
   readonly reinitialisationsReussies: readonly string[];
   readonly reinitialisationsEchouees: readonly string[];
   readonly permissionsOrphelines: readonly string[];
+  /**
+   * Missions actives écartées du périmètre faute de machine connue (`machine`
+   * à `NULL`, antérieures à la migration 22). `☠` Rapportées explicitement :
+   * une mission que PERSONNE ne réconcilie resterait active pour toujours et
+   * occuperait son projet (H-56). Le silence sur ce point serait exactement le
+   * motif « l'absence ne dit rien » que ce dépôt paie régulièrement.
+   */
+  readonly horsPerimetre: readonly string[];
 }

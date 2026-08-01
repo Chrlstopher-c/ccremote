@@ -104,6 +104,7 @@ export interface LigneMission {
   compteur_relances: number;
   derniere_raison_terminale: string | null;
   conversation_id: string | null;
+  machine: string | null;
   cree_a: number;
   demarree_a: number | null;
   terminee_a: number | null;
@@ -204,6 +205,7 @@ export function versMission(l: LigneMission): Mission {
     compteurRelances: l.compteur_relances,
     derniereRaisonTerminale: l.derniere_raison_terminale,
     conversationId: l.conversation_id,
+    machine: l.machine,
     creeA: l.cree_a,
     demarreeA: l.demarree_a,
     termineeA: l.terminee_a,

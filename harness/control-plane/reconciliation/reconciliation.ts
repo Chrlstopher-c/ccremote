@@ -49,6 +49,7 @@ class Compteurs {
   readonly reinitialisationsReussies: string[] = [];
   readonly reinitialisationsEchouees: string[] = [];
   readonly permissionsOrphelines: string[] = [];
+  readonly horsPerimetre: string[] = [];
 
   figer(): RapportReconciliation {
     return {
@@ -60,6 +61,7 @@ class Compteurs {
       reinitialisationsReussies: this.reinitialisationsReussies,
       reinitialisationsEchouees: this.reinitialisationsEchouees,
       permissionsOrphelines: this.permissionsOrphelines,
+      horsPerimetre: this.horsPerimetre,
     };
   }
 }
@@ -89,7 +91,14 @@ export async function reconcilier(
     await traiterMissionsActives(registre, deps, declencheur, parSession, compteurs, journal);
     await traiterOrphelins(registre, deps, declencheur, inventaire, compteurs, journal);
 
-    return compteurs.figer();
+    const rapport = compteurs.figer();
+    if (rapport.horsPerimetre.length > 0) {
+      logger.warn(
+        { missions: rapport.horsPerimetre },
+        'missions actives SANS machine connue — aucune passe ne les réconciliera ; elles occupent leur projet (H-56) jusqu’à un arrêt explicite',
+      );
+    }
+    return rapport;
   } catch (cause) {
     logger.error({ declencheur, err: cause }, 'échec de la réconciliation');
     throw cause;
@@ -106,6 +115,19 @@ async function traiterMissionsActives(
 ): Promise<void> {
   for (const mission of registre.missions.listerActives()) {
     if (mission.sessionId === null) continue; // pas encore spawnée : rien à réconcilier
+
+    // `☠` PÉRIMÈTRE (migration 22). Cet inventaire ne rapporte que les workers
+    // d'UNE machine : juger une mission d'ailleurs sur son silence reviendrait à
+    // terminer une équipe en plein travail. Une machine éteinte est nominale
+    // (H-75) — pas une preuve de mort.
+    if (deps.concerne !== undefined && !deps.concerne(mission)) {
+      // Une mission sans machine connue n'est réconciliée par PERSONNE : dit ici
+      // plutôt que tu, sinon elle occupe son projet (H-56) sans que rien
+      // n'explique pourquoi le dispatch suivant est refusé.
+      if (mission.machine === null) compteurs.horsPerimetre.push(mission.id);
+      continue;
+    }
+
     const worker = parSession.get(mission.sessionId);
 
     if (worker === undefined || !worker.vivant) {

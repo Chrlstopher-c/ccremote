@@ -9,6 +9,7 @@
  * martèlement.
  */
 
+import { hostname } from 'node:os';
 import { creerClientLienPi } from '../composition/pc/client-lien-pi.ts';
 import { envObligatoire } from '../composition/env.ts';
 
@@ -20,6 +21,7 @@ const secret = envObligatoire('CCREMOTE_LIEN_SECRET');
 const lien = creerClientLienPi({
   urlPi,
   secret,
+  machineId: process.env['CCREMOTE_MACHINE_ID'] ?? hostname(),
   surFermetureTerminale: (fermeture): void => {
     console.log(`[banc-pc] fermeture TERMINALE ${fermeture.code} — ${fermeture.raison}`);
     console.log(`[banc-pc] sortie ${CODE_SORTIE_CONFIG} (configuration), aucune reconnexion interne`);

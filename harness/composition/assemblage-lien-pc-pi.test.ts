@@ -288,10 +288,14 @@ describe('assemblage — réconciliation câblée sur CHAQUE rattachement (H-75,
     // en registre factice ⇒ rapport vide, mais l'appel lui-même doit avoir lieu.
     const declencheur = creerDeclencheurReconciliationSurRattachement(
       { missions: { listerActives: () => [] } } as never,
-      depsFactice as never,
+      // `☠ V2` — fournisseur PAR MACHINE : le déclencheur reçoit désormais
+      // l'identité de la machine qui vient de se rattacher, et va chercher SON
+      // périmètre. Capturer des dépendances une fois ignorerait toute machine
+      // apparue après l'assemblage.
+      () => depsFactice as never,
     );
     void registreFactice;
-    declencheur();
+    declencheur('banc-machine');
     await laisserPasserLesMicrotaches(5);
     appels.push('tic-passe'); // si `declencheur()` avait levé de façon non catchée, ce point ne serait jamais atteint.
     expect(appels).toEqual(['tic-passe']);

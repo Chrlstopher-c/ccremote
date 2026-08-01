@@ -69,7 +69,7 @@ function refus(racine: string, chemin: string, note: string): ResultatLectureFic
 function resoudreFichier(base: string, demande: string): { readonly chemin: string } | { readonly note: string } {
   const lexical = resoudreDansRacine(base, demande);
   if (lexical === null) return { note: `chemin hors de ${base} — refusé` };
-  if (!existsSync(lexical)) return { note: 'fichier inexistant sur le PC' };
+  if (!existsSync(lexical)) return { note: 'fichier inexistant sur cette machine' };
   const physique = realpathSync(lexical);
   // `☠` La note ne répète PAS le chemin physique visé : le refus doit dire que
   // la cible sort de la racine, pas révéler où elle mène.
@@ -135,6 +135,6 @@ export function lireFichier(racine: string, demande: string): ResultatLectureFic
     return decoder(base, resolution.chemin, infos.size);
   } catch (erreur) {
     log.error({ err: erreur, demande }, 'lecture de fichier impossible');
-    return refus(base, base, 'fichier illisible sur le PC');
+    return refus(base, base, 'fichier illisible sur cette machine');
   }
 }

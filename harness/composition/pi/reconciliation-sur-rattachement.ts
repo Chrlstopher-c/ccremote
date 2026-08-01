@@ -46,10 +46,31 @@ const log = compositionLogger.child({ composant: 'reconciliation-sur-rattachemen
  * connexion entrante ne doit jamais attendre la fin de la réconciliation
  * pour être considérée établie.
  */
-export function creerDeclencheurReconciliationSurRattachement(registre: Registre, deps: DependancesReconciliation): () => void {
-  return (): void => {
+export function creerDeclencheurReconciliationSurRattachement(
+  registre: Registre,
+  // `☠ V2 (2026-08-01)` — les dépendances sont résolues PAR MACHINE, à chaque
+  // rattachement, jamais capturées une fois. Une machine peut se présenter pour
+  // la première fois bien après le démarrage du Pi : des dépendances figées à
+  // l'assemblage ne la connaîtraient pas, et sa toute première réconciliation —
+  // celle qui adopte ou solde ce qui tournait avant — n'aurait jamais lieu.
+  reconciliationDe: (machineId: string) => DependancesReconciliation | null,
+): (machineId: string) => void {
+  return (machineId: string): void => {
+    const deps = reconciliationDe(machineId);
+    if (deps === null) {
+      log.error(
+        { machineId },
+        'rattachement d’une machine sans dépendances de réconciliation — passe NON exécutée (jamais en silence)',
+      );
+      return;
+    }
     void reconcilier(registre, deps, 'reconnexion')
-      .then((rapport) => log.info({ rapport }, 'réconciliation exécutée sur rattachement du PC (H-75)'))
-      .catch((erreur: unknown) => log.error({ err: erreur }, 'réconciliation en échec sur rattachement du PC — rattachement conservé, prochain tic la retentera'));
+      .then((rapport) => log.info({ machineId, rapport }, 'réconciliation exécutée sur rattachement d’une machine (H-75)'))
+      .catch((erreur: unknown) =>
+        log.error(
+          { err: erreur, machineId },
+          'réconciliation en échec sur rattachement — rattachement conservé, prochain tic la retentera',
+        ),
+      );
   };
 }

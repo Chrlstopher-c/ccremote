@@ -52,6 +52,8 @@ export interface MissionApi {
   readonly worktree: string;
   readonly branch: string;
   readonly account: string;
+  /** Machine de travail où l'équipe tourne (migration 22). `null` avant la V2. */
+  readonly machine: string | null;
   readonly state: EtatMissionApi;
   readonly ctx: number;
   /**
@@ -222,6 +224,7 @@ export function versMissionApi(
     worktree: mission.worktree ?? '',
     branch: mission.branche ?? '',
     account: mission.compteId,
+    machine: mission.machine,
     state,
     ctx: pourcentageContexte(mission),
     ctxDetail: mission.contexteVentilation ?? [],

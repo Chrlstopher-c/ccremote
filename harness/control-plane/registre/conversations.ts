@@ -24,6 +24,7 @@ interface LigneConversation {
   resume_contexte: string | null;
   modele: string | null;
   effort: string | null;
+  machine: string | null;
   autonomie_debut: number | null;
   autonomie_fin: number | null;
   autonomie_objectif: string | null;
@@ -57,6 +58,7 @@ function versConversation(l: LigneConversation): Conversation {
     resumeContexte: l.resume_contexte,
     modele: l.modele,
     effort: l.effort,
+    machine: l.machine,
     autonomieDebut: l.autonomie_debut,
     autonomieFin: l.autonomie_fin,
     autonomieObjectif: l.autonomie_objectif,
@@ -82,6 +84,13 @@ function versEvenement(l: LigneEvenement): EvenementConversation {
 export interface CreationConversation {
   readonly id: string;
   readonly titre: string;
+  /**
+   * Machine de travail du fil (migration 22). `☠` Fixée ICI et jamais après :
+   * une équipe ne change pas de machine au milieu d'un chantier (arbitré avec
+   * Chris le 01/08). Absente ⇒ `null`, résolu plus tard seulement s'il n'y a
+   * aucune ambiguïté (`composition/pi/parc-superviseurs.ts#resoudre`).
+   */
+  readonly machine?: string | null;
 }
 
 export interface AjoutEvenement {
@@ -109,8 +118,10 @@ export class DepotConversations {
       'conversations.creer',
       () => {
         this.db
-          .query('INSERT INTO conversation (id, titre, session_id, statut, cree_a, maj_a) VALUES (?, ?, NULL, ?, ?, ?)')
-          .run(creation.id, creation.titre, 'active', maintenant, maintenant);
+          .query(
+            'INSERT INTO conversation (id, titre, session_id, statut, cree_a, maj_a, machine) VALUES (?, ?, NULL, ?, ?, ?, ?)',
+          )
+          .run(creation.id, creation.titre, 'active', maintenant, maintenant, creation.machine ?? null);
         const conv = this.lire(creation.id);
         if (!conv) throw new Error(`conversation « ${creation.id} » introuvable après écriture`);
         return conv;

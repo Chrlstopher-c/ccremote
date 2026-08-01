@@ -63,9 +63,21 @@ async function cmdConversations(): Promise<void> {
   console.log(`— ${data.length} fils`);
 }
 
-async function cmdOuvrir(titre: string | undefined): Promise<void> {
-  const r = await client().creerConversation(titre);
+async function cmdOuvrir(titre: string | undefined, machine: string | undefined): Promise<void> {
+  const r = await client().creerConversation(titre, machine);
   console.log(r.conversation.id);
+}
+
+async function cmdMachines(): Promise<void> {
+  const { data } = await client().machines();
+  if (data === null || data.length === 0) {
+    console.log('aucune machine de travail connue du Pi');
+    return;
+  }
+  for (const m of data) {
+    const alerte = m.supersedes > 0 ? `  ⚠ ${m.supersedes} éviction(s)` : '';
+    console.log(`${m.enLigne ? '●' : '○'} ${m.id}${alerte}`);
+  }
 }
 
 /**
@@ -123,7 +135,8 @@ const AIDE = `pilote — banc de contrôle du harness (prod)
 
   sante                        état du harness et du lien PC
   conversations                fils de l'orchestrateur
-  ouvrir [titre]               nouveau fil, rend son id
+  machines                     machines de travail connues, en ligne ou non
+  ouvrir [titre] [machine]     nouveau fil, rend son id
   dire <convId> <message>      envoie et ATTEND la fin du tour
   lire <convId> [n=30]         n derniers évènements d'un fil
   parc                         équipes, états, coûts, modèles
@@ -139,7 +152,8 @@ async function principal(): Promise<void> {
   switch (commande) {
     case 'sante': return cmdSante();
     case 'conversations': return cmdConversations();
-    case 'ouvrir': return cmdOuvrir(args[0]);
+    case 'machines': return cmdMachines();
+    case 'ouvrir': return cmdOuvrir(args[0], args[1]);
     case 'dire': {
       if (args[0] === undefined || args[1] === undefined) throw new ErreurPilote('usage : dire <convId> <message>');
       return cmdDire(args[0], args.slice(1).join(' '));

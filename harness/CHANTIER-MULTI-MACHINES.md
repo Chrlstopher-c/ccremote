@@ -1,6 +1,11 @@
 # Chantier — deux machines de travail simultanées (PC + VPS)
 
-> **But de ce document** : contenir TOUT le contexte nécessaire à l'exécution, pour
+> **✅ EXÉCUTÉ ET EN PRODUCTION le 2026-08-01.** Ce document reste comme trace de
+> la préparation et de la méthode ; l'état livré est en §9, et ce que le plan
+> n'avait PAS vu en §10. Le reste décrit la situation d'AVANT — le lire comme un
+> historique, pas comme l'état courant.
+
+> **But d'origine** : contenir TOUT le contexte nécessaire à l'exécution, pour
 > qu'une session neuve puisse attaquer sans rien connaître de la session du 01/08.
 > Écrit après mesure sur le code et sur la production, jamais de mémoire.
 
@@ -198,10 +203,14 @@ CCREMOTE_LIEN_SECRET="$(cat ~/.ccremote-lien-secret)" ./deploy-superviseur-vps.s
 ./deploy-mcp-vps.sh
 ```
 
-`☠` `deploy-superviseur-vps.sh --demarrer` **refuse** de démarrer si `ccremote-pc`
-tourne sur le PC. **Ce garde-fou devra être levé à la fin de ce chantier** — c'est
-précisément ce qu'il rend possible. Ne pas le retirer avant que la brique 1 soit
-prouvée en réel.
+`☠` ~~`deploy-superviseur-vps.sh --demarrer` refuse de démarrer si `ccremote-pc`
+tourne sur le PC.~~ **Garde-fou LEVÉ le 01/08**, après preuve en réel de la brique 1.
+Ce qui RESTE vrai : deux process sur la MÊME machine s'évincent toujours (voulu,
+c'est la reprise après crash) — on ne lance pas deux fois `ccremote-pc` sur un hôte.
+
+`☠` **ORDRE DE DÉPLOIEMENT, non négociable** : les MACHINES DE TRAVAIL d'abord
+(le client envoie l'en-tête d'identité, un Pi ancien l'ignore), le Pi ensuite.
+L'ordre inverse refuse tous les clients anciens en 4403 jusqu'à leur mise à jour.
 
 ### Vérifier / lire
 
@@ -261,3 +270,80 @@ transmission n'existait pas.** Vérifier systématiquement le point de CONSOMMAT
       de `deploy-superviseur-vps.sh --demarrer` levé.
 - [ ] Suite verte (référence : 1305 tests), typecheck propre.
 - [ ] Documentation à jour : `TODO.md`, et dette n°6 marquée **fermée**.
+
+
+---
+
+## 9. Ce qui a été livré (2026-08-01)
+
+Suite : **1343 tests, 0 échec**, typecheck propre. Schéma **v22** appliqué en prod.
+
+| Case de la §8 | État | Preuve |
+|---|---|---|
+| PC et VPS connectés en même temps | ✅ | `GET /machines` → les deux `enLigne: true`, en continu |
+| Zéro supersede entre machines distinctes | ✅ | journal du Pi : `grep -c supersede` = **0** sur toute la bascule |
+| Conversation créée avec choix de machine, persisté | ✅ | `conversation.machine` en base pour les deux fils de test |
+| Une équipe VPS sur `stockiop` ET une équipe PC en même temps | ✅ | `2272d6f2` (trinityarch) ∩ `41e06128` (vps) : **3 s en parallèle**, 13:09:15→13:09:18 |
+| Ordres atteignant la bonne machine | ✅ | 6 équipes lancées, alternées, chacune avec sa `machine` correcte au registre |
+| Mandat visant un projet absent ⇒ refusé, message actionnable | ✅ | `lumen` depuis un fil VPS ⇒ **409** avec la raison, **aucune mission créée** |
+| `ccremote-pc` réactivé sur le PC, garde-fou levé | ✅ | `systemctl --user enable --now`, garde-fou retiré de `deploy-superviseur-vps.sh` |
+| Suite verte, typecheck propre | ✅ | 1305 → **1343** |
+| TODO à jour, dette n°6 fermée | ✅ | `TODO.md` §6 |
+
+### Fichiers réellement touchés (au-delà du plan)
+
+- `composition/lien-pc-pi/identite-machine.ts` **(nouveau)** — fichier SÉPARÉ de `secret.ts`,
+  contrairement au plan : une identité n'est pas un secret (elle est journalisée, affichée,
+  écrite en base) et les mélanger inviterait à traiter l'une avec les précautions de l'autre.
+- `composition/pi/parc-liens-machines.ts` **(nouveau)** — un lien par identité.
+- `composition/pi/parc-superviseurs.ts` **(nouveau)** — le routage, et les trois familles.
+- `shared/routage-machine.ts` **(nouveau)** — l'erreur descend dans `shared/` pour que l'API web
+  puisse la reconnaître sans importer la composition (le sens de dépendance serait inversé).
+
+---
+
+## 10. Ce que le plan n'avait PAS vu
+
+Trois défauts trouvés **par le banc en réel**, aucun par lecture. C'est la valeur
+de la méthode §7 — et la raison de ne jamais conclure sur un plan seul.
+
+1. **`☠` H-44 n'était pas tenue : le VPS ne pouvait PAS lancer d'équipe.** Le Pi ne tient qu'UNE
+   liste de comptes (`CCREMOTE_PI_COMPTES`, les chemins du PC) et l'envoyait telle quelle. Routé
+   vers le VPS, un mandat portait `/home/trinity/.claude-comptes/compte-a` — inexistant là-bas ; le
+   pré-vol refusait de spawner (`machine_claude_md_missing`). Bruyant, donc pas silencieux, mais
+   **structurel** : aucune équipe n'aurait jamais démarré sur le VPS. Correctif : seule l'IDENTITÉ
+   du compte traverse, la machine réécrit le chemin avec le sien (`construire-worker-spec.ts`).
+   *Leçon : un chemin absolu ne traverse pas une frontière de machine. Ne transporter que des
+   identités.*
+
+2. **`☠` Trois refus métier sortaient en `500 erreur interne`.** Le refus « projet absent de cette
+   machine » fonctionnait parfaitement — levé avant la première écriture, message actionnable,
+   projet libéré — et son message restait dans le journal du Pi pendant que l'opérateur lisait
+   « erreur interne du control plane ». **Le mécanisme marchait, sa transmission n'existait pas.**
+   Troisième occurrence sur cette même frontière (après H-56 le 23/07, mandat déjà tranché le 01/08).
+   *Leçon : un refus n'est fini que quand son MESSAGE arrive à l'appelant. Tester la frontière HTTP,
+   pas la fonction.*
+
+3. **`☠` Le banc de pilotage lui-même appelait une route inexistante.** `autoriser` tapait
+   `/orchestrator/mandates/…` au lieu de `/orchestrator/propositions/…`. Écrit la veille, jamais
+   exercé, donc jamais démenti — treizième « écrit, testé, branché sur rien », cette fois dans
+   l'outil censé les détecter.
+   *Leçon : l'instrument de mesure a besoin d'être mesuré aussi.*
+
+### Deux pièges de mesure payés dans la journée
+
+- **`explorerProjets` pose une note aussi sur une TRONCATURE**, pas seulement sur un chemin absent.
+  Le critère naïf « aucune note ⇒ existe » aurait déclaré absent tout dépôt de plus de 200 entrées.
+  Le critère mesuré est : répertoire vide **et** note posée.
+- **Une antiquote dans un heredoc `<<EOF` non quoté est EXÉCUTÉE.** `# le défaut est `hostname()``
+  dans un commentaire de `.env` a lancé la commande et écrit une valeur vide. Un commentaire n'est
+  un commentaire que dans le langage de destination.
+
+### Reste ouvert
+
+- `compte-b` non authentifié sur le VPS ⇒ **aucune rotation possible là-bas** ; une saturation y est
+  terminale.
+- Un même compte Claude déclaré sur deux machines partage ses fenêtres de rate limit. L'agrégat n'en
+  retient qu'un relevé et le DIT (`warn`) — mais rien n'empêche encore les deux machines de tirer
+  dessus en même temps.
+- `semantic-memory` (5,3 Go) et `codeindex` (CUDA) non portés sur le VPS.

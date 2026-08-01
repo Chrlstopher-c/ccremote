@@ -14,13 +14,25 @@
  *    (`ClientSuperviseurPc`), au lieu de rester un contrat sans appelant
  *    (TODO.md, « ports non implémentés ») ;
  *
- * `☠ H-75` — le Pi HÉBERGE désormais le lien (`serveur-lien-pc.ts`), le PC
- * INITIE (`composition/pc/client-lien-pi.ts`). Une seule instance de
- * `LienWebSocket` (`serveurLien.lien`) — jamais deux liens, conformément au
- * mandat (« un seul lien, décidé par l'opérateur »). La réconciliation
+ * `☠ H-75` — le Pi HÉBERGE le lien (`serveur-lien-pc.ts`), les machines de
+ * travail INITIENT (`composition/pc/client-lien-pi.ts`). La réconciliation
  * `'reconnexion'` (epoch incrémenté à chaque rattachement, D.2.3) est câblée
- * sur CHAQUE connexion PC acceptée, pas seulement au démarrage du Pi — voir
+ * sur CHAQUE connexion acceptée, pas seulement au démarrage du Pi — voir
  * `reconciliation-sur-rattachement.ts`.
+ *
+ * `☠ V2 (2026-08-01) — PLUSIEURS MACHINES DE TRAVAIL.` Ce fichier tenait UN
+ * `ClientSuperviseurPc` qu'il passait à ses six consommateurs : « le PC » était
+ * un singulier de fait, et il n'existait nulle part où poser la question
+ * « lequel ? ». Il tient maintenant un `ParcSuperviseurs`
+ * (`parc-superviseurs.ts`), un client par machine identifiée, construit à la
+ * PREMIÈRE connexion de chacune. Ce qui change en pratique : le PC de Chris et
+ * le VPS OVH peuvent travailler EN MÊME TEMPS sur des projets différents, là où
+ * l'un devait être éteint pour laisser vivre l'autre.
+ *
+ * `☠` Le client d'une machine est construit dans `surNouvelleMachine`, de façon
+ * SYNCHRONE et AVANT le rattachement de sa connexion : `ClientSuperviseurPc`
+ * s'abonne au tuyau du lien dans son constructeur, et la première chose qui
+ * circule au rattachement est justement la réconciliation.
  */
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
@@ -48,6 +60,7 @@ import { ServiceInspection } from '../../control-plane/inspection/index.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
+import { creerAgregatParc, ParcSuperviseurs } from './parc-superviseurs.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
@@ -104,7 +117,8 @@ export interface OptionsAssemblageControlPlanePi {
 
 export interface ControlPlanePiAssemble {
   readonly registre: Registre;
-  readonly clientSuperviseurPc: ClientSuperviseurPc;
+  /** Les machines de travail rattachées, et le routage vers chacune (V2). */
+  readonly parcSuperviseurs: ParcSuperviseurs;
   readonly serveurLien: ServeurLienPc;
   readonly serveurApiWeb: ServeurApiWeb;
   /**
@@ -125,9 +139,23 @@ export interface ControlPlanePiAssemble {
  * le SDK n'appelle pas `canUseTool`). La réconciliation gère déjà ce cas : une
  * demande que le SDK dit en attente est tracée `permission_orpheline`, motif
  * `bus_permissions_non_cable`. Elle CONSTATE, elle ne prétend pas redélivrer.
+ *
+ * `☠ V2` — les dépendances sont construites PAR MACHINE, avec son propre client
+ * et un périmètre borné à SES missions. Une réconciliation qui agrégerait
+ * l'inventaire de toutes les machines conclurait « fantôme » pour chaque mission
+ * vivant sur une machine hors ligne, et la terminerait — alors qu'une machine
+ * éteinte est un état parfaitement nominal (H-75). Le périmètre est donc la
+ * pièce qui rend la réconciliation multi-machines sûre, pas un détail.
  */
-function construireDependancesReconciliation(client: ClientSuperviseurPc): DependancesReconciliation {
-  return { inventairePc: client, reinitialisateur: client };
+function construireDependancesReconciliation(
+  client: ClientSuperviseurPc,
+  machineId: string,
+): DependancesReconciliation {
+  return {
+    inventairePc: client,
+    reinitialisateur: client,
+    concerne: (mission) => mission.machine === machineId,
+  };
 }
 
 /**
@@ -151,20 +179,69 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     }
   }
 
-  // `☠` Le déclencheur de réconciliation est câblé APRÈS `dependancesReconciliation`
-  // (qui a besoin de `clientSuperviseurPc`), mais `demarrerServeurLienPc` doit
-  // recevoir le callback AVANT qu'une connexion n'arrive. Indirection par
-  // référence mutable : `serveurLien.lien` existe dès la construction, seule
-  // l'affectation du déclencheur est différée de quelques lignes.
-  let declencheurReconciliation: (() => void) | null = null;
+  // `☠` Le déclencheur de réconciliation est câblé APRÈS le parc (il a besoin du
+  // registre et des clients), mais `demarrerServeurLienPc` doit recevoir les
+  // callbacks AVANT qu'une connexion n'arrive. Indirection par référence
+  // mutable : seules les affectations sont différées de quelques lignes.
+  let declencheurReconciliation: ((machineId: string) => void) | null = null;
+  let parcSuperviseurs: ParcSuperviseurs | null = null;
+
   const serveurLien = demarrerServeurLienPc({
     port: options.portLienPc,
     hostname: options.hostnameLienPc,
     secret: options.secretLienPc,
-    surConnexionAcceptee: () => declencheurReconciliation?.(),
+    // `☠` Un client PAR MACHINE, construit à sa première connexion. Synchrone et
+    // avant le rattachement : `ClientSuperviseurPc` s'abonne au tuyau dans son
+    // constructeur, et ce qui circule en premier au rattachement est justement
+    // la réconciliation.
+    surNouvelleMachine: (machineId, lien) => parcSuperviseurs?.enregistrer(machineId, new ClientSuperviseurPc(lien)),
+    surConnexionAcceptee: (machineId) => declencheurReconciliation?.(machineId),
   });
 
-  const clientSuperviseurPc = new ClientSuperviseurPc(serveurLien.lien);
+  const parc = new ParcSuperviseurs({
+    registre,
+    // `☠` Branché sur l'ÉTAT RÉEL du lien de cette machine, jamais sur un
+    // drapeau tenu à la main : c'est ce qui fait que l'interface dit « machine
+    // éteinte » parce qu'elle l'est, et non parce qu'un booléen a été oublié.
+    enLigne: (machineId) => serveurLien.lienPour(machineId)?.etat() === 'ouvert',
+  });
+  parcSuperviseurs = parc;
+  const agregatParc = creerAgregatParc(parc);
+
+  /**
+   * Ordres portés par une MISSION : ils partent vers la machine où l'équipe
+   * tourne réellement (`mission.machine`).
+   *
+   * `☠` Machine hors ligne ⇒ `ErreurRoutageMachine` remontée telle quelle, avec
+   * la liste des machines. Un ordre d'arrêt silencieusement perdu est pire que
+   * pas d'ordre du tout : l'opérateur croit l'équipe coupée et elle continue de
+   * dépenser.
+   */
+  const versMission = {
+    arreter: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.arreter(missionId),
+    relancer: async (missionId: string, sessionId: string): Promise<void> =>
+      parc.pourMission(missionId).client.relancer(missionId, sessionId),
+    envoyerInstruction: async (missionId: string, texte: string): Promise<{ readonly detail: string }> =>
+      parc.pourMission(missionId).client.envoyerInstruction(missionId, texte),
+    mettreEnPause: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.mettreEnPause(missionId),
+    reprendre: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.reprendre(missionId),
+    inspecter: async (missionId: string): Promise<{ readonly verdict: string; readonly motif: string }> =>
+      parc.pourMission(missionId).client.inspecter(missionId),
+  };
+
+  /**
+   * La machine d'un fil donné. Hors fil (chemins de service, bancs), on retombe
+   * sur la résolution sans ambiguïté du parc.
+   *
+   * `☠` LÈVE plutôt que de choisir au hasard quand deux machines sont en ligne
+   * et qu'aucune n'est précisée : lire l'arborescence de la mauvaise machine
+   * ferait cadrer un mandat sur des fichiers qui n'existent pas là où l'équipe
+   * tournera — et l'erreur n'apparaîtrait qu'au démarrage du worker.
+   */
+  const machineDuFil = (conversationId: string | undefined): ClientSuperviseurPc =>
+    conversationId === undefined
+      ? parc.resoudre(null, 'opération hors conversation').client
+      : parc.pourConversation(conversationId).client;
 
   /**
    * `☠` Le serveur de contrôle est construit PAR CONVERSATION : l'outil
@@ -185,29 +262,40 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       conversationId,
       repertoireProjets: options.repertoireProjets,
       cibles: CIBLES_NON_CABLEES,
-      arreteur: clientSuperviseurPc,
-      relanceur: clientSuperviseurPc,
+      arreteur: versMission,
+      relanceur: versMission,
       budget: BUDGET_NON_CABLE,
       utilisationParc: creerLecteurUtilisationParc(registre),
       configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
       compacteurContexte: compacteur,
       propositions,
-      explorateurProjets: { explorerProjets: (chemin) => clientSuperviseurPc.explorerProjets(chemin) },
-      lecteurFichier: { lireFichier: (chemin) => clientSuperviseurPc.lireFichier(chemin) },
+      // `☠` Les projets sont ceux de LA MACHINE DU FIL, pas d'une machine par
+      // défaut. Deux machines n'hébergent pas les mêmes dépôts (le VPS a
+      // `stockiop`, le PC a tout le reste) : explorer la mauvaise ferait cadrer
+      // un mandat sur une arborescence qui n'existe pas là où l'équipe tournera.
+      explorateurProjets: { explorerProjets: (chemin) => machineDuFil(conversationId).explorerProjets(chemin) },
+      lecteurFichier: { lireFichier: (chemin) => machineDuFil(conversationId).lireFichier(chemin) },
       // `☠` Câblé le jour même où l'outil existe. Le motif « écrit, testé,
       // branché sur rien » a coûté neuf fois à ce dépôt, dont deux fois sur ces
       // mêmes ports projets (23/07) — l'orchestrateur voyait l'arborescence sans
       // pouvoir en lire une ligne, puis lisait sans pouvoir chercher.
       chercheurProjets: {
-        rechercherProjets: (motif, chemin, max) => clientSuperviseurPc.rechercherProjets(motif, chemin, max),
+        rechercherProjets: (motif, chemin, max) => machineDuFil(conversationId).rechercherProjets(motif, chemin, max),
       },
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :
-  // elle ne dépend que du client PC (déjà construit), et elle doit être prête si
-  // une connexion PC arrive.
-  const dependancesReconciliation = construireDependancesReconciliation(clientSuperviseurPc);
-  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, dependancesReconciliation);
+  // elle ne dépend que du parc (déjà construit), et elle doit être prête si une
+  // connexion arrive.
+  //
+  // `☠ V2` — une passe PAR MACHINE, avec l'inventaire de cette machine et un
+  // périmètre borné à ses missions. Agréger conclurait « fantôme » pour toute
+  // mission vivant sur une machine hors ligne, et la terminerait.
+  const reconciliationDe = (machineId: string): DependancesReconciliation | null => {
+    const client = parc.pour(machineId);
+    return client === null ? null : construireDependancesReconciliation(client, machineId);
+  };
+  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, reconciliationDe);
 
   // `☠` Multi-sessions (type ChatGPT) : le gestionnaire construit une session par
   // conversation À LA DEMANDE. Aucune session au boot — le quota ne brûle que
@@ -233,9 +321,32 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     const p = registre.propositions.lire(id);
     if (p === null) throw new Error('mandat inconnu');
     if (p.statut !== 'en_attente') throw new ErreurMandatDejaTranche(p.statut, p.missionId);
+    // `☠` LA machine du fil qui a proposé ce mandat. Résolue AVANT toute
+    // écriture : si elle est hors ligne ou ambiguë, le mandat est refusé en
+    // clair plutôt que de partir sur une machine choisie au hasard. Le
+    // `demarreur` et la colonne `machine` viennent de la MÊME résolution — les
+    // dissocier produirait une équipe qu'aucun arrêt ne pourrait atteindre.
+    const cible =
+      p.conversationId === null
+        ? parc.resoudre(null, `mandat ${id}`)
+        : parc.pourConversation(p.conversationId);
     const r = await dispatcherMandat(p, {
       registre,
-      demarreur: clientSuperviseurPc,
+      demarreur: cible.client,
+      machine: cible.machineId,
+      // Confinement inchangé : `explorerProjets` compare des chemins résolus, on
+      // ne fait ici que demander « ce chemin existe-t-il, là-bas ? ».
+      //
+      // `☠` Le critère n'est PAS « aucune note » — lu dans
+      // `superviseur/exploration-projets.ts`, une note est aussi posée sur une
+      // TRONCATURE (« 300 entrées, 200 rendues ». Un gros dépôt aurait donc été
+      // déclaré absent. Le critère mesuré est : répertoire vide ET note posée.
+      // Une troncature implique toujours au moins une entrée.
+      verifierProjet: async (chemin: string) => {
+        const exploration = await cible.client.explorerProjets(chemin);
+        const note = exploration.note ?? '';
+        return { present: exploration.entrees.length > 0 || note === '', note };
+      },
       repertoireProjets: options.repertoireProjets,
     });
     // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
@@ -333,7 +444,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
           conversationId,
         ),
         registre,
-        reconciliation: dependancesReconciliation,
+        // `☠` Évalué À CHAQUE démarrage de session, jamais capturé : une machine
+        // apparue depuis l'assemblage doit être couverte.
+        reconciliation: () =>
+          parc
+            .clientsEnLigne()
+            .map(({ machineId }) => reconciliationDe(machineId))
+            .filter((d): d is DependancesReconciliation => d !== null),
         incidents: new JournalIncidentsFichier(options.cheminIncidentsOrchestrateur),
         cwd: options.cwdOrchestrateur,
         configDir: comptesMaster[indexMaster] ?? options.configDirOrchestrateur,
@@ -364,23 +481,29 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   const serveurApiWeb = demarrerServeurApiWeb({
     port: options.portApiWeb,
     registre,
-    pcEnLigne: () => serveurLien.lien.etat() === 'ouvert',
+    // `☠` « Au moins une machine de travail joignable » — la sémantique a changé
+    // avec la V2, pas le contrat H-75 : l'absence reste un état, jamais une
+    // erreur HTTP. `machines` porte le détail par machine, `pcOnline` reste le
+    // drapeau global dont dépend tout l'affichage existant.
+    pcEnLigne: () => parc.auMoinsUneEnLigne(),
+    machines: () =>
+      serveurLien.machines().map((m) => ({ id: m.machineId, enLigne: m.enLigne, supersedes: m.supersedes })),
     // `☠` Les ordres partent par le MÊME lien que le reste (H-75, un seul
     // lien). `arretUrgence` n'est pas exposé par `ClientSuperviseurPc` : le
     // chemin G.4 passe par le canal de contrôle et n'a pas encore de méthode
     // ici — l'omettre fait répondre 501, jamais un faux succès.
     pc: {
-      arreter: (missionId) => clientSuperviseurPc.arreter(missionId),
-      envoyerInstruction: (missionId, texte) => clientSuperviseurPc.envoyerInstruction(missionId, texte),
-      mettreEnPause: (missionId) => clientSuperviseurPc.mettreEnPause(missionId),
-      reprendre: (missionId) => clientSuperviseurPc.reprendre(missionId),
+      arreter: (missionId) => versMission.arreter(missionId),
+      envoyerInstruction: (missionId, texte) => versMission.envoyerInstruction(missionId, texte),
+      mettreEnPause: (missionId) => versMission.mettreEnPause(missionId),
+      reprendre: (missionId) => versMission.reprendre(missionId),
     },
     // Inspection à la demande (H-68) : le juge vit sur le PC, le verdict et sa
     // décision vivent au registre. `☠` Le même `clientSuperviseurPc` sert à
     // interroger ET à arrêter — un verdict confirmé doit couper par le chemin
     // d'arrêt éprouvé, jamais par une seconde implémentation.
-    inspection: new ServiceInspection(registre, clientSuperviseurPc, {
-      arreter: (missionId) => clientSuperviseurPc.arreter(missionId),
+    inspection: new ServiceInspection(registre, versMission, {
+      arreter: (missionId) => versMission.arreter(missionId),
     }),
     conversations: gestionnaireConversations ?? undefined,
     mandats: {
@@ -420,8 +543,18 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
 
   const balayageTelemetrie = demarrerBalayageTelemetrie({
     registre,
-    source: clientSuperviseurPc,
-    reconcilier: () => reconcilier(registre, dependancesReconciliation, 'reconnexion'),
+    // `☠` Agrégée sur les machines EN LIGNE. Une machine éteinte n'apporte rien
+    // et ne doit pas faire échouer le relevé des autres (H-75).
+    source: agregatParc,
+    // `☠` Une passe PAR MACHINE, chacune bornée à SES missions. Une passe
+    // globale sur l'inventaire d'une seule machine terminerait en « fantômes »
+    // toutes les équipes des autres.
+    reconcilier: async () => {
+      for (const { machineId } of parc.clientsEnLigne()) {
+        const deps = reconciliationDe(machineId);
+        if (deps !== null) await reconcilier(registre, deps, 'reconnexion');
+      }
+    },
     signalerFinEquipe: async (missionId) => {
       const mission = registre.missions.lire(missionId);
       if (mission === null) return;
@@ -451,7 +584,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // sans le PC et sans lancer la moindre session. C'est ce qui fait tenir des
   // jauges vivantes PC ÉTEINT, là où la sonde SDK côté PC les figeait dès
   // l'extinction — et avec 10 min de retard même PC allumé (23/07).
-  const balayageQuotas = demarrerBalayageQuotas({ registre, source: clientSuperviseurPc });
+  const balayageQuotas = demarrerBalayageQuotas({ registre, source: agregatParc });
   void balayageQuotas.passer();
 
   // `☠` Troisième boucle, indépendante des deux autres : un rappel doit tirer
@@ -475,13 +608,16 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // (H-56), donc un lead ayant parfaitement travaillé verrouillait son projet
   // jusqu'à un clic humain. Mesuré le 01/08 sur `/mnt/projects/echohub` : équipe
   // idle depuis 16 min, parc vide à l'écran, dispatch suivant refusé.
-  const balayageCloture = demarrerBalayageCloture({ registre, arreteur: clientSuperviseurPc });
+  const balayageCloture = demarrerBalayageCloture({ registre, arreteur: versMission });
 
-  log.info({ avecOrchestrateur: options.avecOrchestrateur === true }, 'control plane Pi assemblé');
+  log.info(
+    { avecOrchestrateur: options.avecOrchestrateur === true, machines: parc.machinesConnues() },
+    'control plane Pi assemblé (V2 — plusieurs machines de travail)',
+  );
 
   return {
     registre,
-    clientSuperviseurPc,
+    parcSuperviseurs: parc,
     serveurLien,
     serveurApiWeb,
     gestionnaireConversations,
