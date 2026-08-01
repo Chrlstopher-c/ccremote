@@ -131,3 +131,22 @@ describe('ServiceInspection — arbitrer', () => {
     expect(arrets).toEqual([]);
   });
 });
+
+describe('quand le juge est injoignable', () => {
+  test('☠ c’est une erreur MÉTIER, pas une panne du control plane', async () => {
+    // Mesuré en prod le 01/08 : le PC ne répondait pas dans les 10 s du
+    // corrélateur, et la route rendait « erreur interne du control plane ».
+    // L'opérateur ne savait ni ce qui s'était passé, ni s'il pouvait réessayer.
+    const s = new ServiceInspection(
+      registre,
+      { inspecter: async () => { throw new Error('aucune réponse corrélée reçue dans le délai imparti'); } },
+      { arreter: async () => {} },
+    );
+    const promesse = s.inspecter('m-1');
+    await expect(promesse).rejects.toThrow(ErreurInspection);
+    await expect(promesse).rejects.toThrow('délai imparti');
+    // Et surtout : rien n'est écrit. Un verdict fabriqué sur une panne de lien
+    // ferait laisser tourner l'équipe précisément quand on doutait d'elle.
+    expect(registre.missions.exiger('m-1').inspection.verdict).toBeNull();
+  });
+});

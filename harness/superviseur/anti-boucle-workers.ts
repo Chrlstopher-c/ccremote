@@ -346,6 +346,19 @@ export class CablageAntiBoucle {
   async inspecterMaintenant(missionId: string): Promise<VerdictJuge> {
     const log = missionLogger(missionId);
     const etat = this.#etats.pour(missionId);
+    // `☠` Refus AVANT d'appeler le juge quand il n'y a rien à juger : sur une
+    // équipe terminée (ou jamais observée par ce process), `tours` est vide et
+    // le juge serait payé pour statuer sur du néant — avec le risque qu'il
+    // réponde « progrès » faute de signal, ce qui vaut acquittement. Mesuré en
+    // prod le 01/08, sur une mission déjà close.
+    if (etat.tours.length === 0) {
+      return {
+        verdict: 'incertain',
+        motif:
+          'aucun tour observé pour cette équipe — elle est terminée, ou son travail a eu lieu avant le '
+          + 'dernier démarrage du superviseur. Il n’y a rien à inspecter.',
+      };
+    }
     const signaux = extraireSignaux(etat.tours.map(versResumeTour));
     log.info({ tours: etat.tours.length, coutCumuleUsd: etat.coutCumuleUsd }, 'inspection demandée par l’opérateur (H-68)');
     try {

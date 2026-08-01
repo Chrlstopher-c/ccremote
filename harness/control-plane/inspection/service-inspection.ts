@@ -64,7 +64,18 @@ export class ServiceInspection {
   async inspecter(missionId: string): Promise<EtatInspection> {
     const mission = this.registre.missions.lire(missionId);
     if (mission === null) throw new ErreurInspection('équipe introuvable');
-    const rendu = await this.juge.inspecter(missionId);
+    // `☠` Le juge vit sur le PC : lien coupé, délai dépassé, opération refusée —
+    // autant de conditions MÉTIER, pas de pannes du control plane. Sans ce
+    // rattrapage elles remontaient en 500 « erreur interne » (mesuré le 01/08),
+    // et l'opérateur ne savait ni ce qui s'était passé ni s'il pouvait réessayer.
+    let rendu: { readonly verdict: string; readonly motif: string };
+    try {
+      rendu = await this.juge.inspecter(missionId);
+    } catch (erreur) {
+      throw new ErreurInspection(
+        `le juge n’a pas pu être interrogé : ${erreur instanceof Error ? erreur.message : String(erreur)}`,
+      );
+    }
     const verdict = verdictValide(rendu.verdict);
     // `☠` Écrit AVANT de rendre la main : si l'appelant tombe entre les deux, le
     // verdict est déjà lisible dans le Parc. L'inverse le perdrait en silence,

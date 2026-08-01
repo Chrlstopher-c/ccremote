@@ -82,6 +82,16 @@ export interface OptionsClientSuperviseurPc {
 
 const TIMEOUT_MS_DEFAUT = 10_000;
 
+/**
+ * Délai propre à `inspecter`. `☠` Toutes les autres opérations du canal sont des
+ * lectures locales — inventaire, télémétrie, jetons — et 10 s y sont largement
+ * confortables. L'inspection est la PREMIÈRE qui déclenche un appel de modèle
+ * côté PC : mesuré en prod le 01/08, elle dépassait systématiquement le délai
+ * commun, donc échouait en 500 sur le chemin parfaitement sain. Un budget de
+ * latence hérité d'opérations locales ne s'applique pas à un appel distant.
+ */
+const TIMEOUT_INSPECTION_MS = 90_000;
+
 function versDescripteurs(reponse: ReponseControle): readonly DescripteurWorkerPc[] {
   return reponse.inventaire ?? [];
 }
@@ -123,9 +133,9 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     this.#correlateur.resoudre(enveloppe.id, enveloppe.reponse);
   }
 
-  async #appeler(operation: OperationControle): Promise<ReponseControle> {
+  async #appeler(operation: OperationControle, timeoutMs?: number): Promise<ReponseControle> {
     const id = this.#correlateur.nouvelId();
-    const attente = this.#correlateur.attendre(id, this.#timeoutMs);
+    const attente = this.#correlateur.attendre(id, timeoutMs ?? this.#timeoutMs);
     envoyerEnveloppe(this.lien.versPi(), { kind: 'controle_requete', id, requete: { opId: id, operation } });
     return attente;
   }
@@ -178,7 +188,7 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
    * assez d'elle pour cliquer.
    */
   async inspecter(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }> {
-    const reponse = await this.#appeler({ type: 'inspecter', missionId });
+    const reponse = await this.#appeler({ type: 'inspecter', missionId }, TIMEOUT_INSPECTION_MS);
     if (reponse.inspection === undefined) {
       throw new Error(reponse.detail ?? 'le PC n’a rendu aucun verdict d’inspection');
     }
