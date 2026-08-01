@@ -34,20 +34,80 @@ const TERMINEES_VISIBLES = 15;
  * — constaté le 23/07. Une équipe qui vient de se terminer est précisément celle
  * dont on veut le bilan.
  */
-export function listerEquipes(registre: Registre): ContratRetour {
+export type EtatListe = 'actives' | 'terminees' | 'toutes';
+export type PorteeListe = 'fil' | 'parc';
+
+export interface OptionsListe {
+  readonly etat?: EtatListe;
+  readonly portee?: PorteeListe;
+  readonly limite?: number;
+  /** Le fil qui appelle — sert la portée `fil`. Absent ⇒ portée `parc` forcée. */
+  readonly conversationId?: string | null;
+}
+
+/**
+ * `☠` Les équipes ACTIVES ne sont JAMAIS filtrées par fil, quelle que soit la
+ * portée demandée — et ce n'est pas un oubli.
+ *
+ * Constat de Chris le 01/08 : « c'est une nouvelle discussion, c'est censé être
+ * individuel ». Vrai pour l'HISTORIQUE, faux pour le vivant. Le parc est une
+ * ressource partagée : H-56 n'autorise qu'une équipe active par projet, le
+ * plafond de parc et la fenêtre de quota sont communs à tous les fils. Un
+ * orchestrateur qui ne verrait pas l'équipe lancée depuis un AUTRE fil
+ * proposerait un mandat sur un projet déjà occupé — refusé en 409 après coup,
+ * ou pire, il conclurait que le projet est libre et le dirait à Chris.
+ *
+ * Le cloisonnement porte donc sur ce qui est du bruit (l'historique des autres
+ * fils), jamais sur ce qui engage une décision (ce qui tourne en ce moment).
+ */
+function resumerCourt(m: Mission): string {
+  // Nom tronqué : sur une liste, le mandat entier de quinze équipes est un pavé
+  // que personne ne lit — et qui coûte du contexte à chaque appel.
+  const nom = m.nom.length > 46 ? `${m.nom.slice(0, 46)}…` : m.nom;
+  return `${m.id.slice(0, 8)} · ${nom} · ${m.projet.split('/').pop() ?? m.projet} · ${m.etatHarness}`;
+}
+
+export function listerEquipes(registre: Registre, options: OptionsListe = {}): ContratRetour {
+  const etat = options.etat ?? 'toutes';
+  const portee = options.conversationId == null ? 'parc' : (options.portee ?? 'fil');
+  const limite = Math.min(Math.max(Math.trunc(options.limite ?? TERMINEES_VISIBLES), 1), 50);
+  const intention = `lister les équipes (${etat}, ${portee})`;
   try {
     const recentes = registre.missions.listerRecentes(200);
     const actives = new Set(registre.missions.listerActives().map((m) => m.id));
-    const vivantes = recentes.filter((m) => actives.has(m.id));
-    const terminees = recentes.filter((m) => !actives.has(m.id)).slice(0, TERMINEES_VISIBLES);
-    const parties = [
-      vivantes.length === 0 ? 'aucune équipe active' : `actives: ${vivantes.map(resumerMission).join(' | ')}`,
-      ...(terminees.length > 0 ? [`terminées récentes: ${terminees.map(resumerMission).join(' | ')}`] : []),
-    ];
-    return applique('lister les équipes', parties.join(' — '));
+    const parties: string[] = [];
+
+    if (etat !== 'terminees') {
+      // Toujours TOUT le parc — voir le commentaire ci-dessus.
+      const vivantes = recentes.filter((m) => actives.has(m.id));
+      parties.push(
+        vivantes.length === 0
+          ? 'aucune équipe active sur le parc'
+          : `actives (tout le parc): ${vivantes.map(resumerMission).join(' | ')}`,
+      );
+    }
+
+    if (etat !== 'actives') {
+      const closes = recentes.filter((m) => !actives.has(m.id));
+      const retenues = portee === 'fil' ? closes.filter((m) => m.conversationId === options.conversationId) : closes;
+      const visibles = retenues.slice(0, limite);
+      if (visibles.length === 0) {
+        parties.push(
+          portee === 'fil'
+            ? 'aucune équipe terminée dans CE fil (portee="parc" pour voir tout l’historique)'
+            : 'aucune équipe terminée',
+        );
+      } else {
+        const cadre = portee === 'fil' ? 'terminées dans ce fil' : 'terminées (tout le parc)';
+        const reste = retenues.length > visibles.length ? ` (+${retenues.length - visibles.length} plus anciennes)` : '';
+        parties.push(`${cadre}: ${visibles.map(resumerCourt).join(' | ')}${reste}`);
+      }
+    }
+
+    return applique(intention, parties.join(' — '));
   } catch (erreur) {
-    journal.error({ err: erreur }, 'lister_equipes en échec');
-    return echecInattendu('lister les équipes', erreur);
+    journal.error({ err: erreur, etat, portee }, 'lister_equipes en échec');
+    return echecInattendu(intention, erreur);
   }
 }
 

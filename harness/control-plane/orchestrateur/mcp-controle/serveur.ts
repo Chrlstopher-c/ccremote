@@ -166,9 +166,27 @@ export async function protege(nom: string, action: () => Promise<ContratRetour> 
 
 function outilsInspection(deps: DependancesServeurControle) {
   return [
-    tool('lister_equipes', 'Liste les équipes actives ET les équipes récemment terminées, avec leurs états.', {}, async () =>
-      protege('lister_equipes', () => listerEquipes(deps.registre)),
-    { annotations: { readOnlyHint: true } }),
+    tool(
+      'lister_equipes',
+      'Les équipes du parc. Par défaut : toutes les actives (du parc ENTIER — le parc est ' +
+        'partagé entre les fils, une seule équipe peut travailler sur un projet à la fois) et ' +
+        'les terminées DE CE FIL uniquement. `portee: "parc"` pour voir aussi l’historique des ' +
+        'autres fils, `etat: "actives"` quand tu veux seulement savoir ce qui tourne — c’est le ' +
+        'cas le plus fréquent et le moins coûteux en contexte.',
+      {
+        etat: z.enum(['actives', 'terminees', 'toutes']).optional().describe('Défaut : toutes.'),
+        portee: z
+          .enum(['fil', 'parc'])
+          .optional()
+          .describe('Défaut : fil. Ne concerne QUE les terminées — les actives sont toujours celles du parc entier.'),
+        limite: z.number().int().positive().optional().describe('Nombre de terminées. Défaut 15, maximum 50.'),
+      },
+      async ({ etat, portee, limite }) =>
+        protege('lister_equipes', () =>
+          listerEquipes(deps.registre, { etat, portee, limite, conversationId: deps.conversationId ?? null }),
+        ),
+      { annotations: { readOnlyHint: true } },
+    ),
     tool(
       'etat_equipe',
       "Détail d'une équipe : tâche, coût, contexte, capacités manquantes. Fonctionne aussi sur une équipe terminée.",

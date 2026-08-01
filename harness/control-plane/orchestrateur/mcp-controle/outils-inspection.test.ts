@@ -32,7 +32,7 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     const resultat = listerEquipes(registre);
     expect(resultat.ok).toBe(true);
     expect(resultat.effet).toBe('applique');
-    expect(resultat.etat).toBe('aucune équipe active');
+    expect(resultat.etat).toContain('aucune équipe active');
   });
 
   test('lister_equipes : résumé sans flux brut (H-45)', () => {
@@ -58,7 +58,7 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     // Sans ce rendu, l'orchestrateur répondait « introuvable » sur une équipe
     // que l'opérateur venait de voir se terminer.
     expect(resultat.etat).toContain('m-fin');
-    expect(resultat.etat).toContain('terminées récentes');
+    expect(resultat.etat).toContain('terminées');
   });
 
   test('☠ etat_equipe accepte le NOM, pas seulement l’identifiant (23/07)', () => {
