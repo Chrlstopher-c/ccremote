@@ -72,11 +72,28 @@
       tranchée.
 - [ ] **Interface « table de jeu »** (AI Town / AgentVerse ?) — repoussé explicitement. Purement
       visuel, branché sur le vrai back, ne contraint rien en amont.
-- [ ] **PROCHAIN CHANTIER — remplacer le PC par le VPS OVH** (annoncé par Chris le 01/08).
-      Le PC éteint = plus rien ne tourne ; le VPS est allumé en permanence.
-      `☠` Le VPS (vps.exemple, `ssh vps`) n'est **PAS sur le même réseau** que le Pi, alors que
-      le lien Pi↔PC n'a jamais été éprouvé ailleurs qu'en LAN direct — le tunnel Cloudflare reste
-      la seule voie et n'a jamais été traversé. C'est le vrai risque de ce chantier, pas le portage.
+### ⚡ CHANTIER VPS — le verrou technique est levé (01/08)
+
+- [x] **Le lien traverse Cloudflare Tunnel** — `lien.exemple.com` → `localhost:8721`.
+      Première traversée hors LAN de toute la vie du projet. Mesuré depuis le VPS : refus 4401
+      côté Pi sur mauvais secret, PC légitime resté connecté. L'ingress est dans
+      `deploy-harness-pi.sh`, donc reproductible.
+      `☠` Router un hostname exige `TUNNEL_ORIGIN_CERT=~/.cloudflared/cert.pem.old-account` :
+      le tunnel actif (`388bc072`, « portfolio ») appartient à l'ANCIEN compte Cloudflare.
+- [x] **Bun 1.3.14 + Claude Code 2.1.220** installés sur le VPS (`unzip` était absent, ajouté).
+      Version identique à celle qu'épingle le SDK — à ne pas laisser diverger.
+- [ ] `⛔` **BLOQUANT — login Claude sur le VPS** : action humaine (OAuth). Sans compte
+      authentifié, aucun worker ne peut démarrer là-bas.
+      `ssh vps` puis `CLAUDE_CONFIG_DIR=~/.claude-comptes/compte-a ~/.bun/bin/claude` → `/login`.
+- [ ] **Les serveurs MCP n'existent pas sur le VPS.** `resoudreMcpEquipe()` lit la config du
+      poste : sur le VPS elle sera vide, et les équipes y repartiraient SANS outils — le défaut
+      corrigé aujourd'hui, revenu par la porte du portage. Le pré-vol le signalera (warn), mais
+      il faut porter playwright / codeindex / semantic-memory / log-watcher / pty-mcp.
+- [ ] **Où vivent les projets sur le VPS ?** `~/projets` est créé, vide. Décision à prendre :
+      quels projets migrer, et faut-il un accès git commun.
+- [ ] `⚠` **Ne JAMAIS laisser deux superviseurs connectés en même temps** — la tempête
+      d'évictions (dette n°6, 1268 évictions mesurées) n'est toujours pas corrigée. Arrêter
+      `ccremote-pc` sur le PC AVANT de démarrer celui du VPS.
 - [ ] **Résumé de séquence en tête de timeline** (« Fichier créé, lu un fichier ») — vu sur la
       capture de Chris, pas encore fait. Les étapes et le « Terminé » le sont.
 - [ ] **Fluidité des pages Mission / Agent** — la timeline ne couvre que la vue Orchestrateur.
