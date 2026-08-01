@@ -514,6 +514,39 @@
      d'envoi invisible du 01/08 — une spécificité qu'on n'avait pas comptée. */
   .h-case-body[hidden] { display: none !important; }
 
+  /* ── Timeline d'appels d'outils ────────────────────────────────────────────
+     ☠ Remplace les gros blocs « Outil appelé / Résultat » qui empilaient du JSON
+     brut en pleine largeur : sur un tour d'orchestrateur les outils sont
+     l'essentiel du volume et l'accessoire du sens. Ici une étape = UNE LIGNE
+     (gouttière de 20 px, filet continu, libellé tronqué), et le détail ne
+     s'ouvre que si on le demande. Le filet est porté par chaque ligne plutôt que
+     par un pseudo-élément du conteneur : les étapes arrivent une par une pendant
+     la génération, et un trait calculé sur la hauteur du parent sauterait à
+     chaque ajout. */
+  .tl { margin: 2px 0; }
+  .tl-row { display: flex; flex-direction: row; align-items: stretch; }
+  .tl-gut { width: 20px; flex: 0 0 20px; display: flex; flex-direction: column; align-items: center; }
+  .tl-ico { display: flex; align-items: center; justify-content: center; height: 26px; color: var(--ink-3); }
+  .tl-ico svg { width: 15px; height: 15px; }
+  /* Le filet descend sous l'icône et rejoint l'étape suivante. */
+  .tl-fil { width: 1px; flex: 1 1 auto; background: var(--line-2, var(--line)); min-height: 6px; }
+  .tl-row:last-child .tl-fil { background: transparent; }
+  .tl-main { flex: 1; min-width: 0; }
+  .tl-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 4px 8px;
+    font-size: 13.5px; color: var(--ink-3); background: none; border: none; border-radius: 7px;
+    text-align: left; transition: color .15s ease, background .15s ease; }
+  .tl-btn:hover { color: var(--ink); background: var(--bg-2); }
+  .tl-btn .tl-txt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-btn .cv { flex: 0 0 auto; opacity: .55; transition: transform .18s ease; }
+  .tl-btn.ouvert .cv { transform: rotate(90deg); }
+  .tl-row.err .tl-ico, .tl-row.err .tl-btn { color: var(--err); }
+  /* Corps déplié : décalé sous le libellé, jamais sous la gouttière. */
+  .tl-det { padding: 2px 8px 10px; }
+  .tl-det[hidden] { display: none !important; }
+  .tl-det .h-lbl { margin-top: 8px; }
+  .tl-det .h-blk { max-height: 320px; overflow: auto; }
+  .tl-fin { font-size: 13px; color: var(--ink-3); padding: 4px 8px; }
+
   /* une étape = une carte, dépliable à son tour */
   .h-card { border: 1px solid var(--line); border-radius: 11px; background: var(--card); overflow: hidden; }
   .h-card-hd { display: flex; align-items: center; gap: 8px; width: 100%; padding: 11px 14px;

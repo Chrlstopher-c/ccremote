@@ -65,6 +65,37 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * Ce qu'un `CLAUDE_CONFIG_DIR` d'équipe doit contenir pour qu'un lead soit
+ * réellement outillé.
+ *
+ * `☠` Isoler un compte isole AUSSI toute sa configuration : ni CLAUDE.md, ni
+ * skills, ni règles, ni settings. Le harness compense par des liens posés à la
+ * main — et « à la main » est le défaut. Relevé le 01/08 : `reference/` manquait
+ * sur les DEUX comptes (alors que CLAUDE.md et les règles y renvoient
+ * nommément), et `settings.json` — donc les hooks — sur `compte-b` seulement.
+ * Comme la rotation multi-comptes est automatique, une équipe n'avait pas les
+ * mêmes capacités selon le compte tiré, et rien ne le disait nulle part.
+ *
+ * `plugins/` en est volontairement absent : c'est de l'ÉTAT par compte, pas un
+ * réglage partageable. Voir `config-equipe/installer-config-compte.sh`.
+ */
+const ELEMENTS_CONFIG_COMPTE: readonly string[] = ['CLAUDE.md', 'rules', 'reference', 'skills', 'settings.json'];
+
+/**
+ * Liste ce qui manque au répertoire de config d'un compte. Tableau vide si
+ * aucun `configDir` n'est imposé : on est alors sur la config du poste, hors
+ * sujet ici.
+ */
+export async function elementsConfigManquants(configDir?: string): Promise<readonly string[]> {
+  if (configDir === undefined) return [];
+  const absents: string[] = [];
+  for (const nom of ELEMENTS_CONFIG_COMPTE) {
+    if (!(await exists(join(configDir, nom)))) absents.push(nom);
+  }
+  return absents;
+}
+
 /** Chemin du CLAUDE.md machine pour le répertoire de config visé. */
 export function machineClaudeMdPath(configDir?: string): string {
   const base = configDir ?? process.env['CLAUDE_CONFIG_DIR'] ?? join(homedir(), '.claude');
@@ -151,6 +182,14 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightRepo
     failures.push({ code: 'machine_claude_md_missing', detail: `${machinePath} introuvable ou illisible.` });
   }
 
+  // `☠` Relevé APRÈS le calcul de `ok` : cet écart n'empêche pas de travailler,
+  // il dégrade. Une équipe sans `reference/` ni skills produit un travail moins
+  // bon, pas un travail faux — refuser de spawner pour ça immobiliserait le parc
+  // pour un lien manquant. Ce qui était inacceptable, c'est que personne ne
+  // puisse le CONSTATER : c'est ce qui a permis à l'écart entre les deux comptes
+  // de vivre neuf jours.
+  const manquants = await elementsConfigManquants(input.configDir);
+
   const report: PreflightReport = {
     ok: failures.length === 0,
     cwd: input.cwd,
@@ -160,6 +199,12 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightRepo
     effectiveModel: cascade.effectiveModel,
     failures,
   };
+  if (manquants.length > 0) {
+    workerLogger.warn(
+      { configDir: input.configDir, manquants, code: 'config_compte_incomplete' },
+      'config du compte incomplète — l’équipe démarre DÉGRADÉE (voir config-equipe/installer-config-compte.sh)',
+    );
+  }
   workerLogger.info({ preflight: report }, report.ok ? 'pré-vol config OK' : 'pré-vol config en échec');
   return report;
 }

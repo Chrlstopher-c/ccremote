@@ -37,6 +37,18 @@ export type PreflightFailureCode =
   | 'project_source_missing'
   | 'settings_cascade_empty'
   | 'machine_claude_md_missing'
+  /**
+   * Un élément de configuration attendu manque au `CLAUDE_CONFIG_DIR` du compte.
+   *
+   * `☠` NON bloquant, à dessein — c'est un avertissement dans le rapport, pas un
+   * refus de spawn : une équipe sans `reference/` travaille moins bien, elle ne
+   * travaille pas faux. Ce qui était inacceptable, c'est de ne pas le SAVOIR.
+   * Relevé le 01/08 : `reference/` manquait sur les deux comptes et
+   * `settings.json` (donc les hooks) sur `compte-b` seulement — une équipe
+   * n'avait donc pas les mêmes capacités selon le compte tiré par la rotation,
+   * et rien nulle part ne le disait.
+   */
+  | 'config_compte_incomplete'
   | 'resolve_settings_failed';
 
 export interface PreflightFailure {

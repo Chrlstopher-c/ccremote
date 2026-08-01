@@ -347,29 +347,62 @@ function hPeindreTexte(noeud, contenu, live) {
  * `☠` Réutilise les classes du chat (`.think`, `.tool`, `.md`, `.codeblock`) —
  * même ADN visuel, une seule définition à maintenir.
  */
+// ── Timeline d'appels d'outils ───────────────────────────────────────────────
+// ☠ Une étape = UNE LIGNE. La version précédente empilait « Outil appelé » et
+// « Résultat » en gros blocs pleine largeur : le JSON brut d'un `lister_equipes`
+// occupait tout l'écran et noyait ce que l'orchestrateur avait à dire. Sur un
+// tour, les outils sont l'essentiel du volume et l'accessoire du sens — d'où la
+// ligne compacte, et le détail seulement sur demande.
+
+const H_ICO_OUTIL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 1 5 5L20 12l-8 8-3-3 8-8Z"/><path d="m9 15-4.5 4.5"/><circle cx="5" cy="19" r="1.6"/></svg>';
+const H_ICO_FIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.2 2.4 2.4 4.6-4.9"/></svg>';
+const H_ICO_ERR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.2v.1"/></svg>';
+
 /**
- * Range sur le nœud ce que l'appel a demandé et ce qu'il a rendu.
- * ☠ Rappelé à chaque rafraîchissement : c'est le seul chemin par lequel un
- * résultat arrivé APRÈS l'appel rejoint sa valise.
+ * Libellé humain d'un appel. `☠` `mcp__ccremote-controle__lister_equipes` ne dit
+ * rien à la lecture : on garde le verbe, et le nom technique reste visible dans
+ * le détail pour qui le cherche.
+ */
+function hOutilLisible(nom, detail) {
+  const court = hToolLabel(nom).replace(/_/g, ' ');
+  const titre = court.charAt(0).toUpperCase() + court.slice(1);
+  if (!detail) return titre;
+  // Un premier paramètre parlant vaut mieux qu'un JSON tronqué au hasard.
+  try {
+    const o = JSON.parse(detail);
+    const cle = ['projet', 'chemin', 'missionId', 'equipe', 'query', 'titre'].find((k) => typeof o[k] === 'string');
+    return cle ? `${titre} · ${String(o[cle]).split('/').pop()}` : titre;
+  } catch { return titre; }
+}
+
+/**
+ * Range sur le nœud ce que l'appel a demandé et ce qu'il a rendu, puis repeint.
+ * ☠ Rappelé à chaque rafraîchissement : c'est le SEUL chemin par lequel un
+ * résultat arrivé après l'appel rejoint sa ligne.
  */
 function hMajOutil(noeud, ev) {
   if (!noeud || !ev) return;
   if (ev.detail) noeud.dataset.detail = ev.detail;
   if (ev.resultat !== null && ev.resultat !== undefined) noeud.dataset.resultat = ev.resultat;
-  // Si la valise est déjà ouverte, on repeint son corps sur-le-champ.
-  const corps = noeud.querySelector(':scope > .h-case-body');
-  if (corps && !corps.hidden && corps.dataset.rempli) corps.innerHTML = hCorpsOutilOrch(noeud);
+  const echec = (noeud.dataset.resultat || '').startsWith('[ÉCHEC DE L’OUTIL]');
+  noeud.classList.toggle('err', echec);
+  const ico = noeud.querySelector('.tl-ico');
+  if (ico) ico.innerHTML = echec ? H_ICO_ERR : H_ICO_OUTIL;
+  const txt = noeud.querySelector('.tl-txt');
+  if (txt) txt.textContent = hOutilLisible(noeud.dataset.outil || '', noeud.dataset.detail);
+  const det = noeud.querySelector('.tl-det');
+  if (det && !det.hidden) det.innerHTML = hCorpsOutilOrch(noeud);
 }
 
 /**
- * Corps d'une valise d'outil : les paramètres, puis le résultat.
+ * Détail d'une étape : le nom technique, les paramètres, puis le résultat.
  * ☠ `resultat` absent veut dire « pas encore revenu », jamais « vide ». On le
  * DIT — un outil présenté comme ayant répondu du vide est un mensonge plus
  * coûteux que l'absence d'information.
  */
 function hCorpsOutilOrch(noeud) {
   const d = noeud.dataset || {};
-  const parts = [`<div class="h-lbl">Outil appelé</div><div class="h-blk">${escapeHtml(d.outil || '')}</div>`];
+  const parts = [`<div class="h-lbl">Outil</div><div class="h-blk">${escapeHtml(d.outil || '')}</div>`];
   if (d.detail) parts.push(`<div class="h-lbl">Paramètres</div><div class="h-blk">${escapeHtml(d.detail)}</div>`);
   if (d.resultat === undefined) {
     parts.push('<div class="h-note">Résultat en attente — l’outil n’a pas encore répondu.</div>');
@@ -380,6 +413,21 @@ function hCorpsOutilOrch(noeud) {
   }
   return parts.join('');
 }
+
+/** Ouvre ou referme le détail d'une étape. Délégué depuis `document`. */
+function hBasculerEtape(bouton) {
+  const ligne = bouton.closest('.tl-row');
+  const det = ligne && ligne.querySelector('.tl-det');
+  if (!det) return;
+  const ouvrir = det.hidden;
+  if (ouvrir) det.innerHTML = hCorpsOutilOrch(ligne);
+  det.hidden = !ouvrir;
+  bouton.classList.toggle('ouvert', ouvrir);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.tl-btn');
+  if (b) hBasculerEtape(b);
+});
 
 function hBlocNode(type, contenu, live, extra) {
   if (type === 'texte') {
@@ -412,21 +460,21 @@ function hBlocNode(type, contenu, live, extra) {
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>');
   }
   if (type === 'outil') {
-    // ☠ Une carte par appel noyait le fil : sur un tour d'orchestrateur les
-    // outils sont l'essentiel du volume et l'accessoire du sens. D'où la valise
-    // repliée — mais elle contient désormais le RÉSULTAT, pas une excuse.
-    //
-    // ☠ Le contenu est lu à l'OUVERTURE (`hCorpsOutilOrch(noeud)`), jamais figé
-    // à la création. C'est ce qui permet au résultat d'apparaître : il arrive au
-    // message SUIVANT l'appel, et la garde d'idempotence de `hAppendEvent`
-    // interdit de reposer le nœud. Une closure capturant l'état du moment
-    // afficherait « en cours » pour toujours.
-    const noeud = HValise.noeud(`Called ${hToolLabel(contenu)}`, '');
-    noeud.dataset.outil = contenu;
-    hMajOutil(noeud, extra);
-    const bouton = noeud.querySelector('[data-valise]');
-    if (bouton) bouton.dataset.valise = HValise.enregistrer(() => hCorpsOutilOrch(noeud));
-    return noeud;
+    // ☠ Le contenu du détail est construit à l'OUVERTURE, jamais figé à la
+    // création : le résultat arrive au message SUIVANT l'appel, et la garde
+    // d'idempotence de `hAppendEvent` interdit de reposer le nœud. Une closure
+    // capturant l'état du moment afficherait « en attente » pour toujours.
+    const ligne = document.createElement('div');
+    ligne.className = 'tl-row';
+    ligne.dataset.outil = contenu;
+    ligne.innerHTML = `
+      <div class="tl-gut"><div class="tl-ico">${H_ICO_OUTIL}</div><div class="tl-fil"></div></div>
+      <div class="tl-main">
+        <button class="tl-btn"><span class="tl-txt"></span>${HValise.CHEVRON}</button>
+        <div class="tl-det" hidden></div>
+      </div>`;
+    hMajOutil(ligne, extra);
+    return ligne;
   }
   if (type === 'erreur') {
     const e = document.createElement('div'); e.className = 'orch-err'; e.textContent = contenu;
@@ -552,7 +600,20 @@ function hAppendEvent(ev) {
     if (ev.seq !== undefined) u.dataset.seq = ev.seq;
     chat.appendChild(u); hOrch.cur = null; return;
   }
-  if (ev.type === 'resultat') { hOrch.cur = null; return; } // fin de tour : le prochain bloc ouvre un groupe
+  if (ev.type === 'resultat') {
+    // ☠ Clôture VISUELLE d'une séquence d'outils, à l'image de la timeline de
+    // Claude Code : sans elle, le filet vertical s'arrête dans le vide et rien
+    // ne distingue « la séquence est finie » de « la suite arrive ». Posée
+    // seulement s'il y a eu des outils, et jamais deux fois.
+    if (hOrch.cur && hOrch.cur.querySelector('.tl-row') && !hOrch.cur.querySelector('.tl-fin-row')) {
+      const fin = document.createElement('div');
+      fin.className = 'tl-row tl-fin-row';
+      fin.innerHTML = `<div class="tl-gut"><div class="tl-ico">${H_ICO_FIN}</div></div>`
+        + '<div class="tl-main"><div class="tl-fin">Terminé</div></div>';
+      hOrch.cur.appendChild(fin);
+    }
+    hOrch.cur = null; return; // le prochain bloc ouvre un nouveau groupe
+  }
 
   // La compaction est une césure du fil, pas une parole de l'orchestrateur :
   // posée au niveau de la conversation, elle referme le groupe en cours.
