@@ -33,15 +33,16 @@
 /** `EX_CONFIG` (sysexits.h) — l'environnement est faux, pas le code. */
 const CODE_SORTIE_CONFIG = 78;
 
-import { hostname } from 'node:os';
+import { homedir, hostname } from 'node:os';
 import { assemblerSuperviseurPc } from './assembler-superviseur.ts';
 import { EnvManquantError, envObligatoire } from '../env.ts';
 import { normaliserMachineId } from '../lien-pc-pi/identite-machine.ts';
+import { comptesDeLaMachine, racineComptesParDefaut } from './decouverte-comptes.ts';
 import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'bin-pc' });
 
-function main(): void {
+async function main(): Promise<void> {
   const cheminRegistrePersistance = envObligatoire('CCREMOTE_PC_REGISTRE_DB');
   const urlPi = envObligatoire('CCREMOTE_LIEN_URL_PI');
   // `☠` Jamais de valeur par défaut (H-74, point 2) : un secret manquant doit
@@ -59,14 +60,18 @@ function main(): void {
       'CCREMOTE_MACHINE_ID invalide (et hostname() inutilisable) — attendu : minuscules, chiffres, « . _ - », 63 caractères max',
     );
   }
-  // `☠` Les comptes vivent ICI, sur le PC : seul ce process peut mesurer leurs
-  // fenêtres de rate limit. Même format que côté Pi (`id=configDir,…`) pour
-  // qu'un opérateur n'ait pas deux syntaxes à retenir.
-  const comptesASonder = (process.env['CCREMOTE_PC_COMPTES'] ?? '')
-    .split(',')
-    .map((paire) => paire.trim())
-    .filter((paire) => paire.includes('='))
-    .map((paire) => ({ id: paire.slice(0, paire.indexOf('=')), configDir: paire.slice(paire.indexOf('=') + 1) }));
+  // `☠` Les comptes vivent ICI, sur la machine de travail : seul ce process peut
+  // mesurer leurs fenêtres de rate limit, et lui seul sait où ils se trouvent
+  // CHEZ LUI (H-44).
+  //
+  // `☠ MESURÉ LE 01/08` — ils étaient lus d'une variable écrite au déploiement.
+  // Un compte authentifié APRÈS le dernier déploiement restait inconnu : sonde
+  // aveugle, et surtout répertoire non résolu, donc équipe refusée au pré-vol.
+  // Le disque est désormais la source ; la variable reste une surcharge.
+  const comptesASonder = await comptesDeLaMachine(
+    process.env['CCREMOTE_COMPTES_RACINE'] ?? racineComptesParDefaut(homedir()),
+    process.env['CCREMOTE_PC_COMPTES'],
+  );
 
   const assemble = assemblerSuperviseurPc({
     cheminRegistrePersistance,
@@ -94,11 +99,19 @@ function main(): void {
   process.on('SIGINT', () => arreterProprement('SIGINT'));
   process.on('SIGTERM', () => arreterProprement('SIGTERM'));
 
-  log.info({ urlPi, machineId }, 'process machine de travail démarré — connexion sortante vers le Pi (H-75)');
+  log.info(
+    { urlPi, machineId, comptes: comptesASonder.map((c) => c.id) },
+    'process machine de travail démarré — connexion sortante vers le Pi (H-75)',
+  );
+  if (comptesASonder.length === 0) {
+    // `☠` Dit, jamais tu : sans compte, cette machine répond à l'inventaire et
+    // explore des projets, mais AUCUNE équipe ne pourra y démarrer.
+    log.error({ machineId }, 'AUCUN compte Claude authentifié sur cette machine — aucune équipe ne pourra y démarrer');
+  }
 }
 
 try {
-  main();
+  await main();
 } catch (erreur) {
   // Une variable d'environnement manquante est une erreur de configuration,
   // pas un plantage — `systemctl status` doit permettre de les distinguer sans

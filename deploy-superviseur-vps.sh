@@ -122,6 +122,14 @@ ssh "$CIBLE" "cd $DISTANT/harness/config-equipe && chmod +x installer-config-com
   for c in \$(ls \$HOME/.claude-comptes); do ./installer-config-compte.sh \$c || true; done" || true
 
 echo "→ Environnement (umask 077)"
+# ☠ `CCREMOTE_PC_COMPTES` N'EST PLUS ÉCRITE, et c'est le correctif. Elle figeait
+# la liste des comptes AU MOMENT DU DÉPLOIEMENT : un compte authentifié plus tard
+# restait inconnu du superviseur — sonde de quotas aveugle, et surtout repertoire
+# non résolu (H-44), donc equipe refusee au pre-vol. Mesure le 01/08 sur
+# compte-b du VPS, connecte et pourtant inutilisable. Le superviseur decouvre
+# desormais ses comptes sur le disque a chaque demarrage
+# (`composition/pc/decouverte-comptes.ts`) ; la variable reste une surcharge
+# manuelle pour une installation atypique.
 # ☠ Normalisée comme côté code (`identite-machine.ts`) : minuscules, et
 # uniquement ce que le motif accepte. Une identité refusée par le Pi produirait
 # une fermeture 4403 terminale, donc un service qui redémarre en boucle.
@@ -132,13 +140,11 @@ HOSTNAME_DISTANT="$(ssh "$CIBLE" hostname)"
 MACHINE_ID="${CCREMOTE_VPS_MACHINE_ID:-$(printf '%s' "$HOSTNAME_DISTANT" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._-' '-' | cut -c1-63)}"
 echo "  identité de machine : $MACHINE_ID"
 # ☠ Le secret passe par stdin, jamais en argument : `ps` est lisible par tous.
-LISTE_COMPTES=$(ssh "$CIBLE" "ls -d \$HOME/.claude-comptes/*/ 2>/dev/null | while read d; do printf '%s=%s,' \"\$(basename \$d)\" \"\${d%/}\"; done | sed 's/,\$//'")
 ssh "$CIBLE" "mkdir -p \$HOME/.config/ccremote && umask 077 && cat > \$HOME/.config/ccremote/pc.env" <<EOF
 PATH=/home/ubuntu/.bun/bin:/usr/local/bin:/usr/bin:/bin
 CCREMOTE_PC_REGISTRE_DB=/home/ubuntu/.local/share/ccremote/registre-pc.db
 CCREMOTE_LIEN_URL_PI=$URL_PI
 CCREMOTE_LIEN_SECRET=$CCREMOTE_LIEN_SECRET
-CCREMOTE_PC_COMPTES=$LISTE_COMPTES
 # Identite de cette machine sur le lien (V2 du 01/08). Le defaut cote code est
 # le hostname, deja distinct partout — elle est FIXEE ici pour qu'un changement
 # de hostname ne fasse pas apparaitre une nouvelle machine, laissant les
