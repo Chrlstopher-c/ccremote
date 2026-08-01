@@ -11,6 +11,8 @@
  */
 
 import { ErreurApi, requeteInvalide } from './enveloppe.ts';
+import { ErreurInspection, type ServiceInspection } from '../inspection/service-inspection.ts';
+import type { DecisionInspection, EtatInspection } from '../inspection/etat-inspection.ts';
 
 /** Ce que le PC sait faire, vu du control plane. Sous-ensemble volontaire. */
 export interface OrdresVersPc {
@@ -37,6 +39,13 @@ export interface OrchestrateurConversation {
 export interface DependancesEcritures {
   readonly pc: OrdresVersPc;
   readonly orchestrateur?: OrchestrateurConversation;
+  /**
+   * Inspection à la demande (H-68). `☠` Absent ⇒ 501, jamais un verdict poli :
+   * le bouton « Lancer une inspection » a passé des mois à taper dans les
+   * données de démonstration en tirant son verdict au hasard, sans que rien ne
+   * le signale. Une route à moitié câblée est pire qu'absente.
+   */
+  readonly inspection?: ServiceInspection;
 }
 
 export interface ResultatEcriture {
@@ -44,6 +53,8 @@ export interface ResultatEcriture {
   readonly effet: string;
   /** Renseigné pour un aller-retour de conversation orchestrateur. */
   readonly reply?: string;
+  /** Renseigné par les routes d'inspection — l'état à afficher, verdict ET décision. */
+  readonly inspection?: EtatInspection;
 }
 
 /**
@@ -55,6 +66,40 @@ export async function traiterEcriture(
   corps: Record<string, unknown>,
   deps: DependancesEcritures,
 ): Promise<ResultatEcriture | null> {
+  const inspecter = chemin.match(/^\/missions\/([^/]+)\/inspect$/);
+  if (inspecter?.[1] !== undefined) {
+    if (deps.inspection === undefined) throw new ErreurApi(501, 'inspection non câblée sur ce déploiement');
+    try {
+      const etat = await deps.inspection.inspecter(decodeURIComponent(inspecter[1]));
+      return { ok: true, effet: `verdict : ${etat.verdict}`, inspection: etat };
+    } catch (erreur) {
+      // `☠` Une équipe introuvable ou un verdict aberrant est une erreur
+      // MÉTIER, pas une panne : 409 + le motif, jamais un 500 anonyme.
+      if (erreur instanceof ErreurInspection) throw new ErreurApi(409, erreur.message);
+      throw erreur;
+    }
+  }
+
+  const arbitrer = chemin.match(/^\/missions\/([^/]+)\/inspect\/decision$/);
+  if (arbitrer?.[1] !== undefined) {
+    if (deps.inspection === undefined) throw new ErreurApi(501, 'inspection non câblée sur ce déploiement');
+    const decision = corps['decision'];
+    if (decision !== 'confirme' && decision !== 'decline') {
+      throw requeteInvalide('decision doit valoir « confirme » ou « decline »');
+    }
+    try {
+      const etat = await deps.inspection.trancher(decodeURIComponent(arbitrer[1]), decision as DecisionInspection);
+      return {
+        ok: true,
+        effet: decision === 'confirme' ? 'équipe arrêtée sur verdict de boucle' : 'poursuite assumée malgré le verdict',
+        inspection: etat,
+      };
+    } catch (erreur) {
+      if (erreur instanceof ErreurInspection) throw new ErreurApi(409, erreur.message);
+      throw erreur;
+    }
+  }
+
   const terminer = chemin.match(/^\/missions\/([^/]+)\/terminate$/);
   if (terminer?.[1] !== undefined) {
     await deps.pc.arreter(decodeURIComponent(terminer[1]));

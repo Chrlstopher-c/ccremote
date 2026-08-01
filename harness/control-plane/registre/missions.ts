@@ -10,6 +10,7 @@
 import type { Database } from 'bun:sqlite';
 import { executer } from './journal.ts';
 import { versMission, type LigneMission } from './lignes.ts';
+import { decisionInitiale, type DecisionInspection, type VerdictInspection } from '../inspection/etat-inspection.ts';
 import {
   ETATS_HARNESS_ACTIFS,
   type CreationMission,
@@ -279,6 +280,49 @@ export class DepotMissions {
         return this.exiger(id);
       },
       { id },
+    );
+  }
+
+  /**
+   * Enregistre un verdict d'inspection (H-68) et ouvre sa décision si besoin.
+   *
+   * `☠` Verdict et décision sont écrits dans le MÊME `UPDATE`. Séparés, une
+   * `boucle` pourrait exister une fraction de seconde sans `en_attente` — donc
+   * s'afficher comme déjà tranchée sur un Parc rafraîchi entre les deux.
+   */
+  public poserInspection(
+    id: string,
+    verdict: VerdictInspection,
+    motif: string,
+    maintenant: number = Date.now(),
+  ): Mission {
+    return executer(
+      'missions.poserInspection',
+      () => {
+        this.db
+          .query(
+            'UPDATE mission SET inspection_verdict = ?, inspection_motif = ?, inspection_a = ?, inspection_decision = ? WHERE id = ?',
+          )
+          .run(verdict, motif, maintenant, decisionInitiale(verdict), id);
+        return this.exiger(id);
+      },
+      { id, verdict },
+    );
+  }
+
+  /**
+   * Tranche une inspection en attente. `☠` Ne touche PAS au verdict : ce qui a
+   * été détecté reste vrai après la décision — c'est la trace de ce que
+   * l'opérateur savait au moment où il a choisi de poursuivre.
+   */
+  public trancherInspection(id: string, decision: DecisionInspection): Mission {
+    return executer(
+      'missions.trancherInspection',
+      () => {
+        this.db.query('UPDATE mission SET inspection_decision = ? WHERE id = ?').run(decision, id);
+        return this.exiger(id);
+      },
+      { id, decision },
     );
   }
 

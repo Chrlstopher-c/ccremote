@@ -168,6 +168,23 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     }
   }
 
+  /**
+   * Demande au juge H-68 un avis sur-le-champ à propos d'une équipe.
+   *
+   * `☠` LÈVE quand le PC est absent, au lieu de rendre un verdict par défaut.
+   * Tout le reste de ce client se replie en silence — c'est correct pour une
+   * jauge qui vieillit, jamais pour un avis. Un « progrès » fabriqué sur une
+   * panne de lien ferait laisser tourner l'équipe précisément quand on doutait
+   * assez d'elle pour cliquer.
+   */
+  async inspecter(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }> {
+    const reponse = await this.#appeler({ type: 'inspecter', missionId });
+    if (reponse.inspection === undefined) {
+      throw new Error(reponse.detail ?? 'le PC n’a rendu aucun verdict d’inspection');
+    }
+    return reponse.inspection;
+  }
+
   /** Parcourt l'arborescence des projets du PC. PC absent ⇒ note explicite, jamais une liste vide muette. */
   async explorerProjets(chemin?: string): Promise<ResultatExploration> {
     try {

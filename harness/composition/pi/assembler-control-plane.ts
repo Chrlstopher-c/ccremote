@@ -44,6 +44,7 @@ import { randomUUID } from 'node:crypto';
 import { dispatcherMandat, ErreurMandatDejaTranche } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
 import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
 import { PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
+import { ServiceInspection } from '../../control-plane/inspection/index.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
@@ -374,6 +375,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       mettreEnPause: (missionId) => clientSuperviseurPc.mettreEnPause(missionId),
       reprendre: (missionId) => clientSuperviseurPc.reprendre(missionId),
     },
+    // Inspection à la demande (H-68) : le juge vit sur le PC, le verdict et sa
+    // décision vivent au registre. `☠` Le même `clientSuperviseurPc` sert à
+    // interroger ET à arrêter — un verdict confirmé doit couper par le chemin
+    // d'arrêt éprouvé, jamais par une seconde implémentation.
+    inspection: new ServiceInspection(registre, clientSuperviseurPc, {
+      arreter: (missionId) => clientSuperviseurPc.arreter(missionId),
+    }),
     conversations: gestionnaireConversations ?? undefined,
     mandats: {
       enAttente: () => registre.propositions.enAttente(),

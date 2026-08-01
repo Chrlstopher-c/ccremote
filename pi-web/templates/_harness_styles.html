@@ -718,3 +718,16 @@
   .h-ctx-sep { height: 1px; margin: 4px 6px; background: var(--line); }
   /* Un objet manipulable ne doit pas partir en sélection de texte sous l'appui long. */
   [data-menu] { -webkit-touch-callout: none; }
+
+  /* ===== état d'inspection (H-68) sur la carte du Parc ===== */
+  /* ☠ Une boucle NON tranchée crie, une boucle assumée reste calme : confondre
+     les deux ferait clignoter une équipe qu'on a délibérément laissée tourner,
+     et une alerte qui crie sans raison est celle qu'on cesse de lire. */
+  .insp-strip { display: flex; align-items: center; gap: 7px; margin: 8px 0 2px;
+    padding: 6px 10px; border-radius: 8px; font-size: 11.5px; font-weight: 500;
+    background: var(--err); color: #fff; }
+  .insp-note { margin: 8px 0 2px; padding: 5px 9px; border-radius: 8px;
+    font-size: 11px; background: var(--bg-2); color: var(--ink-3);
+    border: 1px solid var(--line); display: inline-block; }
+  .insp-note.ok { color: var(--ok); border-color: var(--ok-soft); }
+  .insp-note.coupe { color: var(--err); border-color: var(--err-soft); }

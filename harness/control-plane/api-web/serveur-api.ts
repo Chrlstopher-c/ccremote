@@ -24,6 +24,7 @@ import type { Registre } from '../registre/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
 import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
 import { ErreurMandatDejaTranche, ErreurProjetOccupe } from '../orchestrateur/dispatch-mandat.ts';
+import type { ServiceInspection } from '../inspection/service-inspection.ts';
 import { construireFeed } from './vue-feed.ts';
 import { versAccountApi } from './vue-comptes.ts';
 import { versNotificationApi } from './vue-notifications.ts';
@@ -52,6 +53,8 @@ export interface DependancesApiWeb {
    * d'accepter un ordre qui ne partirait nulle part.
    */
   readonly pc?: OrdresVersPc;
+  /** Inspection à la demande (H-68). Absent ⇒ les routes `/inspect` répondent 501. */
+  readonly inspection?: ServiceInspection;
   /** Conversation avec la session orchestrateur maître (opt-in). */
   readonly orchestrateur?: OrchestrateurConversation;
   /**
@@ -462,6 +465,7 @@ async function routerEcriture(chemin: string, req: Request, deps: DependancesApi
   const resultat = await traiterEcriture(chemin, corps, {
     pc: deps.pc,
     orchestrateur: deps.orchestrateur,
+    inspection: deps.inspection,
   });
   if (resultat === null) throw new ErreurApi(404, `route d'écriture inconnue : ${chemin}`);
   return resultat;

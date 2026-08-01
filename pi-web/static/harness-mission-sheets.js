@@ -130,11 +130,22 @@ function hOuvrirDetails() {
       <button class="h-row" onclick="hOuvrirAgents()">Sous-agents<span class="rv">${(m.subagents || []).length} ›</span></button>
     </div>
     <div class="h-grp">
-      <button class="h-row" ${actif ? '' : 'disabled'} onclick="hRunInspection('${m.id}')">Lancer une inspection</button>
+      <button class="h-row" ${actif ? '' : 'disabled'} onclick="hRunInspection('${m.id}')">Lancer une inspection${hRvInspection(m)}</button>
       <button class="h-row" ${actif ? '' : 'disabled'} onclick="hPauseOneMission('${m.id}')">${m.state === 'paused' ? 'Reprendre' : 'Mettre en pause'}</button>
       <button class="h-row danger" ${actif ? '' : 'disabled'} onclick="hTerminateMission('${m.id}')">Terminer l’équipe</button>
     </div>`;
   HSheets.ouvrir({ titre: 'Détails de la mission', html });
+}
+
+/**
+ * Le dernier verdict, à droite du bouton. ☠ Sans lui, rien ne dit qu'une
+ * inspection a DÉJÀ eu lieu : on la relance pour rien, et on paie un appel au
+ * juge pour réapprendre ce qu'on savait.
+ */
+function hRvInspection(m) {
+  const i = m.inspection || {};
+  if (!i.libelle) return '';
+  return `<span class="rv">${escapeHtml(i.libelle)}</span>`;
 }
 
 function hOuvrirMandat() {

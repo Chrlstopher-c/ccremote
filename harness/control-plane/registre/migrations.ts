@@ -630,6 +630,26 @@ ALTER TABLE conversation ADD COLUMN titre_source TEXT NOT NULL DEFAULT 'defaut';
 UPDATE conversation SET titre_source = 'manuel' WHERE titre <> 'Nouvelle conversation';
 `;
 
+/**
+ * Verdict d'inspection à la demande (H-68) et ce que l'opérateur en a fait.
+ *
+ * `☠` Le verdict était rendu côté PC et perdu aussitôt : `vue-missions.ts`
+ * écrivait `inspection: { lastVerdict: null, lastAt: null }` EN DUR. Un
+ * rafraîchissement de page effaçait donc l'avis qu'on venait de demander — et
+ * le Parc ne pouvait rien en montrer.
+ *
+ * `☠` `inspection_decision` est le cœur : un verdict `boucle` ne coupe pas tout
+ * seul, il ATTEND. `en_attente` → `confirme` (équipe arrêtée) ou `decline`
+ * (équipe poursuivie en connaissance de cause). Sans cette colonne, « j'ai vu
+ * l'alerte et je passe outre » serait indistinguable de « je n'ai pas vu ».
+ */
+const MIGRATION_20 = `
+ALTER TABLE mission ADD COLUMN inspection_verdict TEXT;
+ALTER TABLE mission ADD COLUMN inspection_motif TEXT;
+ALTER TABLE mission ADD COLUMN inspection_a INTEGER;
+ALTER TABLE mission ADD COLUMN inspection_decision TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -650,6 +670,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 17, nom: 'evenement-notification', sql: MIGRATION_17 },
   { version: 18, nom: 'resultat-outil', sql: MIGRATION_18 },
   { version: 19, nom: 'source-titre-conversation', sql: MIGRATION_19 },
+  { version: 20, nom: 'verdict-inspection-mission', sql: MIGRATION_20 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

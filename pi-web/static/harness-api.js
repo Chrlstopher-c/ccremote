@@ -263,19 +263,19 @@ const HarnessAPI = (() => {
 
 
 
+    /**
+     * ☠ Était une MAQUETTE : elle tapait dans `harness-mock-data.js` et tirait
+     * son verdict avec `Math.random()`. Sur une vraie mission, `findMission`
+     * rendait `undefined` et il ne se passait rigoureusement rien — un bouton
+     * qui n'a jamais rien inspecté, sans qu'aucune erreur ne le signale.
+     */
     async runInspection(id) {
-      return withPc(() => {
-        const m = findMission(id);
-        if (!m || ['echec', 'terminee'].includes(m.state)) return null;
-        const verdict = m.ctx >= 80
-          ? (Math.random() < 0.45 ? 'boucle' : (Math.random() < 0.5 ? 'incertain' : 'progres'))
-          : (Math.random() < 0.82 ? 'progres' : 'incertain');
-        m.inspection = db.newInspection(verdict, 'à l\'instant');
-        if (verdict === 'boucle') m.state = 'echec';
-        m.feed.push({ ts: new Date().toTimeString().slice(0, 8), type: 'system', tool: 'inspection',
-          text: `Inspection à ${m.cost.toFixed(2)} $ — verdict ${verdict}.` });
-        return m;
-      });
+      return ecrireReel(`/missions/${encodeURIComponent(id)}/inspect`, {});
+    },
+
+    /** Tranche un verdict de boucle : `confirme` arrête l'équipe, `decline` la laisse tourner. */
+    async decideInspection(id, decision) {
+      return ecrireReel(`/missions/${encodeURIComponent(id)}/inspect/decision`, { decision });
     },
 
     /* ---- H-57 : deux commandes séparées, jamais confondues ---- */

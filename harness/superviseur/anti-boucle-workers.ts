@@ -49,6 +49,7 @@ import {
   type JugeBoucle,
   type OutilAppele,
   type ResumeTour,
+  type VerdictJuge,
 } from '../anti-boucle/index.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
 
@@ -324,6 +325,48 @@ export class CablageAntiBoucle {
     } catch (erreur) {
       log.error({ err: erreur }, 'évaluation anti-boucle en échec — aucune coupure, jamais bloquant (H-68)');
       return null;
+    }
+  }
+
+  /**
+   * Inspection À LA DEMANDE — l'opérateur veut un avis, maintenant.
+   *
+   * `☠` Elle ne coupe JAMAIS, quel que soit le verdict, et ne consomme aucun
+   * palier. Deux raisons également décisives : on clique ce bouton quand on
+   * DOUTE, pas quand on veut tuer — un effet de bord mortel sur un geste de
+   * curiosité est le pire contrat possible ; et consommer un palier ferait
+   * sauter une inspection automatique plus tard, en échange de rien.
+   * L'interface propose l'arrêt sur un verdict `boucle`, l'opérateur confirme.
+   *
+   * `☠` Utilisable PENDANT un tour, précisément là où l'automatique est aveugle :
+   * `etat.tours` est alimenté à CHAQUE message assistant, jamais au seul
+   * `result`. Les signaux sont donc déjà frais — c'est le déclencheur qui
+   * manquait, pas la matière.
+   */
+  async inspecterMaintenant(missionId: string): Promise<VerdictJuge> {
+    const log = missionLogger(missionId);
+    const etat = this.#etats.pour(missionId);
+    const signaux = extraireSignaux(etat.tours.map(versResumeTour));
+    log.info({ tours: etat.tours.length, coutCumuleUsd: etat.coutCumuleUsd }, 'inspection demandée par l’opérateur (H-68)');
+    try {
+      const verdict = await this.#jugeBoucle.juger(signaux, {
+        missionId,
+        // `☠` Le coût courant, pas un palier : aucun n'est franchi ici. Le juge a
+        // besoin d'un nombre pour motiver son prompt, pas d'un seuil fictif qui
+        // lui laisserait croire à un déclenchement automatique.
+        palierUsd: etat.coutCumuleUsd,
+        coutCourantUsd: etat.coutCumuleUsd,
+      });
+      log.info({ verdict: verdict.verdict }, 'inspection à la demande — verdict rendu, aucune coupure');
+      return verdict;
+    } catch (erreur) {
+      // `☠` Un juge injoignable rend « incertain », jamais « progrès » : un avis
+      // rassurant fabriqué sur une panne est pire que pas d'avis du tout.
+      log.error({ err: erreur }, 'inspection à la demande en échec — verdict « incertain » rendu');
+      return {
+        verdict: 'incertain',
+        motif: `le juge n’a pas pu être interrogé : ${erreur instanceof Error ? erreur.message : String(erreur)}`,
+      };
     }
   }
 

@@ -1,5 +1,22 @@
 // ============ HARNESS — vue Parc (missions du parc, arbre d'équipes, jauges) ============
 
+/**
+ * L'état d'inspection sur la carte du Parc.
+ *
+ * ☠ Une boucle NON tranchée crie ; une boucle assumée reste lisible mais calme.
+ * Les confondre ferait clignoter une équipe que Chris a délibérément laissée
+ * tourner — et une alerte qui crie sans raison est celle qu'on cesse de lire.
+ */
+function hBandeauInspection(m) {
+  const i = m.inspection || {};
+  if (!i.libelle) return '';
+  if (i.attendArbitrage) {
+    return `<div class="insp-strip attente"><span class="ripple" style="width:6px;height:6px;border-radius:50%;background:#fff;"></span>${escapeHtml(i.libelle)}</div>`;
+  }
+  const classe = i.lastVerdict === 'progres' ? 'ok' : i.decision === 'confirme' ? 'coupe' : 'note';
+  return `<div class="insp-note ${classe}">${escapeHtml(i.libelle)}</div>`;
+}
+
 function hMissionCounts(missions) {
   const c = { requires_action: 0, running: 0, idle: 0, paused: 0, echec: 0, terminee: 0, landing: 0 };
   missions.forEach((m) => { c[m.state]++; if (m.landing && m.landing.active) c.landing++; });
@@ -49,6 +66,7 @@ function hMcardTemplate(m) {
       ${(!isAct && !isLanding) ? `<span class="badge" style="${HARNESS_STATE_BADGE[m.state]}">${HARNESS_STATE_LABEL[m.state]}</span>` : ''}
     </div>
     <div class="last">${escapeHtml(lastText)}</div>
+    ${hBandeauInspection(m)}
     <div class="foot">${footExtra}</div>
   </button>`;
 }

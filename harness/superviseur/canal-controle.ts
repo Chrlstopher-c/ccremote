@@ -53,6 +53,12 @@ export interface PortSuperviseurControle {
   lireFichier?(chemin: string): ResultatLectureFichier;
   /** Recherche de contenu bornée dans les projets du PC. */
   rechercherProjets?(motif: string, chemin?: string, max?: number): Promise<ResultatRecherche>;
+  /**
+   * Avis du juge H-68 sur-le-champ. Absent ⇒ opération refusée, jamais un
+   * « progrès » par défaut : un avis rassurant fabriqué sur une absence de
+   * câblage est exactement ce qui ferait laisser tourner une équipe en boucle.
+   */
+  inspecter?(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }>;
   arreter(missionId: string): Promise<void>;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
   relancer(missionId: string, sessionId: string): Promise<void>;
@@ -120,6 +126,13 @@ export type OperationControle =
       readonly chemin?: string;
       readonly max?: number;
     }
+  /**
+   * Lecture pure : demander au juge H-68 un avis SUR-LE-CHAMP à propos d'une
+   * équipe. `☠` Ne coupe jamais, et ne consomme aucun palier — c'est le geste
+   * de l'opérateur qui doute, pas une décision. Rangée avec les lectures pour
+   * cette raison : elle observe et rend un verdict, elle ne mute rien.
+   */
+  | { readonly type: 'inspecter'; readonly missionId: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
@@ -151,6 +164,12 @@ type OperationMutative = Exclude<
   | { readonly type: 'explorer_projets' }
   | { readonly type: 'lire_fichier' }
   | { readonly type: 'rechercher_projets' }
+  // `☠` `inspecter` est une LECTURE : elle interroge le juge et rend un verdict,
+  // elle ne coupe rien. La ranger parmi les mutations la ferait passer par le
+  // cache d'idempotence, et le second clic sur « Lancer une inspection »
+  // rendrait le premier verdict — un bouton inerte, exactement le symptôme
+  // qu'on vient de corriger.
+  | { readonly type: 'inspecter' }
 >;
 
 export interface RequeteControle {
@@ -178,6 +197,8 @@ export interface ReponseControle {
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
   /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
   readonly rapportArretUrgence?: RapportArretUrgence;
+  /** Présent uniquement pour `inspecter` — verdict du juge H-68, jamais une décision. */
+  readonly inspection?: { readonly verdict: string; readonly motif: string };
 }
 
 const TAILLE_MAX_CACHE_DEFAUT = 1000;
@@ -262,6 +283,15 @@ export class CanalControle {
 
     if (requete.operation.type === 'telemetrie') {
       return { ok: true, effet: 'applique', telemetrie: (await this.#superviseur.telemetrie?.()) ?? [] };
+    }
+
+    // `☠` Hors cache d'idempotence, comme les autres lectures : un verdict servi
+    // depuis le cache rendrait le bouton « lancer une inspection » inerte au
+    // deuxième clic — précisément le symptôme qu'on vient de corriger.
+    if (requete.operation.type === 'inspecter') {
+      const verdict = await this.#superviseur.inspecter?.(requete.operation.missionId);
+      if (verdict === undefined) return { ok: false, effet: 'refuse', detail: 'inspection non câblée sur ce superviseur' };
+      return { ok: true, effet: 'applique', inspection: verdict };
     }
 
     if (requete.operation.type === 'jetons') {

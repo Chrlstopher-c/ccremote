@@ -366,6 +366,19 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   }
 
   /**
+   * Avis du juge anti-boucle (H-68) demandé par l'opérateur, sur-le-champ.
+   *
+   * `☠` Ne coupe jamais et ne consomme aucun palier — voir
+   * `CablageAntiBoucle.inspecterMaintenant`. L'ancien bouton « Lancer une
+   * inspection » de l'interface tapait dans les données de démonstration et
+   * tirait son verdict au hasard : il n'a jamais rien inspecté (constaté le
+   * 01/08). C'est le premier chemin réel entre ce bouton et le juge.
+   */
+  async inspecter(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }> {
+    return this.#antiBoucle.inspecterMaintenant(missionId);
+  }
+
+  /**
    * Contenu d'un fichier de projet du PC (A.2.2, `lire_fichier`).
    *
    * `☠` Suite directe du défaut ci-dessus : une fois l'arborescence câblée,

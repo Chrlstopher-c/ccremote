@@ -4,6 +4,7 @@
  */
 
 import type { AccesMandat } from '../../shared/acces-mandat.ts';
+import type { EtatInspection } from '../inspection/etat-inspection.ts';
 
 /**
  * États rapportés par le worker (Découverte 2, E.1.1). Autorité : le PC.
@@ -201,6 +202,11 @@ export interface Mission {
   readonly highWaterMark: number;
   readonly budgetMaxUsd: number | null;
   readonly budgetConsommeUsd: number;
+  /**
+   * Dernier verdict d'inspection (H-68) et ce que l'opérateur en a fait.
+   * Cycle de vie et sémantique : `control-plane/inspection/etat-inspection.ts`.
+   */
+  readonly inspection: EtatInspection;
   readonly contexteTokensUtilises: number | null;
   readonly contexteTokensMax: number | null;
   /**

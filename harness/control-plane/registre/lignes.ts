@@ -1,4 +1,5 @@
 /**
+import type { Mission } from './types.ts';
  * Responsabilité : formes brutes des lignes SQLite et conversion vers le domaine.
  * SQLite ne connaît ni booléen ni camelCase — la traduction est isolée ici.
  */
@@ -93,6 +94,10 @@ export interface LigneMission {
   high_water_mark: number;
   budget_max_usd: number | null;
   budget_consomme_usd: number;
+  inspection_verdict: string | null;
+  inspection_motif: string | null;
+  inspection_a: number | null;
+  inspection_decision: string | null;
   contexte_tokens_utilises: number | null;
   contexte_tokens_max: number | null;
   contexte_ventilation: string | null;
@@ -185,6 +190,14 @@ export function versMission(l: LigneMission): Mission {
     highWaterMark: l.high_water_mark,
     budgetMaxUsd: l.budget_max_usd,
     budgetConsommeUsd: l.budget_consomme_usd,
+    // as : colonnes alimentées uniquement par `poserInspection`/`trancherInspection`,
+    // dont les paramètres sont typés — le SQL ne peut y écrire autre chose.
+    inspection: {
+      verdict: l.inspection_verdict as Mission['inspection']['verdict'],
+      motif: l.inspection_motif,
+      a: l.inspection_a,
+      decision: l.inspection_decision as Mission['inspection']['decision'],
+    },
     contexteTokensUtilises: l.contexte_tokens_utilises,
     contexteTokensMax: l.contexte_tokens_max,
     contexteVentilation: lireVentilation(l.contexte_ventilation),

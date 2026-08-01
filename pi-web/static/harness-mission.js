@@ -175,15 +175,42 @@ async function hTerminateMission(id) {
   showToast('Mission terminée — worktree conservé', 'warn');
 }
 
+/**
+ * Lance une inspection réelle et, sur un verdict de boucle, DEMANDE quoi faire.
+ *
+ * ☠ L'inspection ne coupe jamais d'elle-même : on clique ce bouton quand on
+ * doute, pas quand on veut tuer. Décliner est un choix légitime, et il s'écrit —
+ * « j'ai vu et j'assume » ne doit pas se lire comme « je n'ai pas regardé ».
+ */
 async function hRunInspection(id) {
-  const res = await HarnessAPI.runInspection(id);
-  if (!res.data) return;
   HSheets.fermer();
-  hRenderParc();
-  hRenderMissionDetail(id);
-  const v = res.data.inspection.lastVerdict;
-  showToast(v === 'boucle' ? "Juge d'inspection : boucle — mission arrêtée" : `Juge d'inspection : ${v}`,
-    v === 'boucle' ? 'err' : 'ok');
+  showToast('Inspection en cours — le juge examine les derniers tours…', 'accent');
+  const res = await HarnessAPI.runInspection(id);
+  if (!res.ok) { showToast(res.erreur || 'Inspection impossible', 'err'); return; }
+  const insp = res.inspection || {};
+  const v = insp.lastVerdict;
+
+  if (v !== 'boucle') {
+    showToast(`Juge d'inspection : ${v} — ${insp.motif || 'sans détail'}`, v === 'progres' ? 'ok' : 'warn');
+    void hRafraichirApresInspection(id);
+    return;
+  }
+
+  const arreter = await hConfirmer(
+    'Boucle détectée',
+    `${insp.motif || 'Le juge conclut à une boucle.'}\n\nArrêter l’équipe ? Tu peux aussi la laisser continuer — ton choix sera enregistré.`,
+    'Arrêter l’équipe',
+  );
+  const r = await HarnessAPI.decideInspection(id, arreter ? 'confirme' : 'decline');
+  if (!r.ok) { showToast(r.erreur || 'Décision non enregistrée', 'err'); return; }
+  showToast(arreter ? 'Équipe arrêtée sur verdict de boucle' : 'Poursuite assumée — le verdict reste consigné', arreter ? 'err' : 'warn');
+  void hRafraichirApresInspection(id);
+}
+
+/** Les deux vues qui portent l'état d'inspection, remises à jour ensemble. */
+async function hRafraichirApresInspection(id) {
+  if (typeof hRenderParc === 'function') await hRenderParc();
+  await hRenderMissionDetail(id);
 }
 
 async function hCopierId(id) {
