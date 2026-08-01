@@ -28,12 +28,6 @@
       instruction n'est donc pas inspectée PENDANT ce temps — seulement à la fin, en rattrapant
       d'un coup tous les paliers franchis. Le brancher sur le coût live est un changement de
       chemin de contrôle : à faire sur mesure réelle, jamais sur déduction.
-- [ ] **Formulaire de mandat manuel** — `proposeMandate` / `approveProposal` / `rejectProposal`
-      tapent encore dans la maquette. À ne pas confondre avec `approveMandat` / `rejectMandat`,
-      qui sont réels et servent aux cartes du fil.
-- [ ] **`compactOrchestratorContext`** — maquette. La compaction réelle par fil
-      (`compactConversation`) existe et fonctionne ; celle-ci est un reste.
-
 - [ ] **Test bout en bout par Chris** — nouvelle conversation orchestrateur (PAS un resume : le
       prompt système a changé six fois le 01/08, seule une session neuve le charge). Scénario :
       brainstorm → mandat autorisé → `suivre_equipe` pendant le travail → fin d'équipe → il réagit
@@ -75,6 +69,13 @@
 - [x] **Mandat déjà tranché → 409** au lieu de 500 « échec interne », carte qui se retire ses
       boutons quand la décision n'existe plus.
 - [x] Bouton d'envoi invisible (spécificité CSS), bouton « Nouvelle conversation » retiré.
+- [x] **Formulaire de mandat manuel SUPPRIMÉ** (`59d3a89`) — `proposeMandate` / `approveProposal` /
+      `rejectProposal` écrivaient dans la base de démonstration, aucune route serveur n'a jamais
+      existé. Le bouton d'entrée est parti avec : un bouton qui n'ouvre plus rien est le même
+      mensonge sous une autre forme. `☠` Ne pas confondre avec `approveMandat` / `rejectMandat`,
+      qui sont RÉELS et servent aux cartes du fil — noms voisins, chemins opposés.
+- [x] **`compactOrchestratorContext` supprimée** — maquette. La compaction réelle par fil
+      (`compactConversation`) existe et fonctionne. Les `simulate*` restent, ils sont volontaires.
 
 ### ✅ LIVRÉ LE 01/08
 
@@ -138,8 +139,9 @@
       PAS été passées en revue. Même défaut possible : un déploiement de routine qui éteint un réglage.
 - [ ] **(D) Élucider l'écart de ~4 061 tokens** entre `totalTokens` et la somme des postes chargés.
       Le total reste la référence ; la ventilation sert à voir *où* ça part, pas à refaire l'addition.
-- [ ] **Dette : `superviseur-workers.ts` à 710 lignes** (limite 500), signalé par l'agent du
-      chantier F, non traité — violation préexistante, découpe hors scope à l'époque.
+- [ ] **Dette : `superviseur-workers.ts` à 801 lignes** (limite 500) — remonté de 710 le 01/08 avec
+      la sonde de coût et `inspecter()`. `harness-orchestrateur.js` à 796 (était ~640).
+      Deux fichiers qui grossissent à chaque chantier : la découpe n'attendra plus longtemps.
 
 ### ⚠️ À SAVOIR AVANT DE TOUCHER AU HARNESS (31/07)
 
