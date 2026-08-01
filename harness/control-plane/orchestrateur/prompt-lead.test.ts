@@ -16,6 +16,7 @@
 import { describe, expect, test } from 'bun:test';
 import { composerMandatSysteme, composerPromptInitial } from './dispatch-mandat.ts';
 import type { Proposition } from '../registre/index.ts';
+import { PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
 
 const MANDAT: Proposition = {
   id: 'p1',
@@ -85,8 +86,13 @@ describe('ce que le lead doit savoir de son cadre', () => {
 
   test('un budget absent retombe sur le défaut, jamais sur « 0 $ »', () => {
     const prompt = composerMandatSysteme({ ...MANDAT, budgetMaxUsd: 0 }, 'ecriture');
-    expect(prompt).not.toContain('0.00 $');
-    expect(prompt).toContain('12.00 $');
+    // ☠ Ancré sur « Budget : », pas sur « 0.00 $ » seul — la sous-chaîne se
+    // retrouve dans n'importe quel montant rond (« 250.00 $ » la contient), et
+    // l'assertion échouait donc sur un prompt parfaitement correct.
+    expect(prompt).not.toContain('Budget : 0.00 $');
+    // Le montant annoncé au lead est le plafond RÉELLEMENT transmis au SDK :
+    // les deux sortent de `plafondEffectifUsd`, ils ne peuvent plus diverger.
+    expect(prompt).toContain(`Budget : ${PLAFOND_EQUIPE_USD.toFixed(2)} $`);
   });
 
   test('un message en cours de route n’est pas un ordre d’arrêt', () => {

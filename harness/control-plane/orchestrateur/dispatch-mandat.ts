@@ -26,6 +26,7 @@ import {
   type AccesMandat,
 } from '../../shared/acces-mandat.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
+import { PLAFOND_EQUIPE_USD, plafondEffectifUsd } from '../../shared/budget-equipe.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'dispatch-mandat' });
@@ -49,8 +50,15 @@ export interface ResultatDispatch {
   readonly detail: string;
 }
 
-/** Budget par défaut d'une équipe, quand le mandat n'en fixe pas. */
-const BUDGET_DEFAUT_USD = 12;
+/**
+ * Budget par défaut d'une équipe, quand le mandat n'en fixe pas.
+ *
+ * `☠` Valait 12 $ — la valeur exacte du PREMIER palier d'inspection anti-boucle.
+ * L'équipe mourait donc au moment précis où le juge devait la regarder pour la
+ * première fois. Dérivé de l'échelle depuis (`shared/budget-equipe.ts`), pour
+ * que les deux ne puissent plus se croiser en silence.
+ */
+const BUDGET_DEFAUT_USD = PLAFOND_EQUIPE_USD;
 
 /**
  * `☠` Défauts du team leader, POSÉS et non hérités du CLI (décision Chris,
@@ -214,7 +222,7 @@ function ligneAcces(acces: AccesMandat): string {
  * se faire couper au même endroit.
  */
 function ligneBudget(budgetUsd: number): string {
-  const montant = budgetUsd > 0 ? budgetUsd : BUDGET_DEFAUT_USD;
+  const montant = plafondEffectifUsd(budgetUsd);
   return (
     `Budget : ${montant.toFixed(2)} $. Au-delà, ta session est coupée net, où que tu en sois. ` +
     'Dimensionne ton travail en conséquence : mieux vaut un rapport honnête à mi-parcours ' +
@@ -477,7 +485,7 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       // forme du rapport attendu, au tour précis où il en avait besoin.
       mandate: composerMandatSysteme(p, acces),
       deniedToolPatterns: composerDenis(acces, deps.deniedToolPatterns),
-      maxBudgetUsd: p.budgetMaxUsd > 0 ? p.budgetMaxUsd : BUDGET_DEFAUT_USD,
+      maxBudgetUsd: plafondEffectifUsd(p.budgetMaxUsd),
       model: modele,
       effortLevel: effort,
       configDir: compte.configDir,

@@ -270,6 +270,26 @@ export class CollecteurTelemetrie {
     etat.sousAgents = sousAgents;
   }
 
+  /**
+   * Coût relevé EN COURS DE TOUR, par requête de contrôle sur la session vivante.
+   *
+   * `☠` Le coût ne se lisait que sur un message `result`, qui n'arrive qu'à la
+   * FIN d'un tour. Une équipe travaillant quinze minutes sur une seule
+   * instruction n'en produit aucun avant d'avoir fini : l'orchestrateur voyait
+   * 0,00 $ constant pendant tout le travail, et l'anti-boucle — nourri au même
+   * endroit — ne pouvait inspecter personne pendant ce temps. Mesuré le 01/08.
+   *
+   * `☠` Monotone : on ne redescend JAMAIS. Une sonde ratée rend 0, et écrire ce
+   * zéro effacerait un coût réel — puis le lui ferait « refranchir » ses paliers,
+   * donc réinspecter pour rien. Un coût ne décroît pas dans la vraie vie.
+   */
+  poserCout(missionId: string, coutUsd: number): void {
+    const etat = this.#par.get(missionId);
+    if (etat === undefined) return;
+    if (!Number.isFinite(coutUsd) || coutUsd <= etat.coutUsd) return;
+    etat.coutUsd = coutUsd;
+  }
+
   poserContexte(
     missionId: string,
     utilises: number,
@@ -386,7 +406,12 @@ export class CollecteurTelemetrie {
       etat.etatSdk = 'idle';
       // `☠` Valeur ABSOLUE rendue par le SDK, jamais une somme maison : additionner
       // les tours ferait dériver le total dès qu'un message est manqué.
-      if (typeof sonde.total_cost_usd === 'number') etat.coutUsd = sonde.total_cost_usd;
+      // `☠` Monotone, comme la sonde en cours de tour : sur une session reprise le
+      // SDK peut repartir d'un total plus bas, et l'écrire ferait refranchir des
+      // paliers déjà franchis — donc réinspecter une équipe pour rien.
+      if (typeof sonde.total_cost_usd === 'number' && sonde.total_cost_usd > etat.coutUsd) {
+        etat.coutUsd = sonde.total_cost_usd;
+      }
     }
   }
 }

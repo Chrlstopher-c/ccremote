@@ -43,6 +43,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { dispatcherMandat, ErreurMandatDejaTranche } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
 import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
+import { PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
@@ -60,7 +61,7 @@ import { choisirCompteDisponible } from './choix-compte-orchestrateur.ts';
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
 
 /** Budget par défaut d'un mandat proposé — l'orchestrateur n'en fixe pas encore. */
-const BUDGET_MANDAT_DEFAUT_USD = 12;
+const BUDGET_MANDAT_DEFAUT_USD = PLAFOND_EQUIPE_USD;
 
 export interface OptionsAssemblageControlPlanePi {
   readonly cheminRegistreDb: string;

@@ -286,6 +286,23 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       } catch {
         // Session close ou transport fermé : régime nominal, pas une panne.
       }
+      // `☠` Le coût EN COURS DE TOUR. Il ne se lisait que sur un message
+      // `result`, qui n'arrive qu'à la FIN d'un tour : une équipe travaillant
+      // quinze minutes sur une seule instruction affichait 0,00 $ tout du long,
+      // et l'anti-boucle — nourri au même endroit — n'inspectait personne
+      // pendant ce temps (mesuré le 01/08). Même chemin que `getContextUsage()`
+      // juste au-dessus : une requête de contrôle sur la session vivante, dont
+      // on SAIT qu'elle répond en plein tour puisque le contexte, lui, s'affiche.
+      try {
+        const usage = (await e.handle.query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET()) as unknown as {
+          session?: { total_cost_usd?: number };
+        };
+        const cout = usage.session?.total_cost_usd;
+        if (typeof cout === 'number') this.#telemetrie.poserCout(e.missionId, cout);
+      } catch {
+        // Idem : après `result` le transport se ferme et l'appel échoue. Le
+        // dernier coût connu reste en place — jamais une panne.
+      }
       // `☠` Lu sur DISQUE, pas sur le flux : `forwardSubagentText` est non
       // déterministe (H-72.4, 0 à 4 lignes sur 5 sous-agents lancés). Le parc
       // n'affichait donc que « Team leader » sur des équipes qui en avaient cinq.
