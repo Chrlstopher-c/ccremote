@@ -64,7 +64,7 @@ import { creerAgregatParc, ParcSuperviseurs } from './parc-superviseurs.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
-import { BUDGET_NON_CABLE, CIBLES_NON_CABLEES } from './ports-non-cables.ts';
+import { BUDGET_NON_CABLE } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
 import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
@@ -219,12 +219,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
    */
   const versMission = {
     arreter: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.arreter(missionId),
-    relancer: async (missionId: string, sessionId: string): Promise<void> =>
+    relancer: async (missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }> =>
       parc.pourMission(missionId).client.relancer(missionId, sessionId),
     envoyerInstruction: async (missionId: string, texte: string): Promise<{ readonly detail: string }> =>
       parc.pourMission(missionId).client.envoyerInstruction(missionId, texte),
     mettreEnPause: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.mettreEnPause(missionId),
     reprendre: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.reprendre(missionId),
+    interrompre: async (missionId: string): Promise<void> => parc.pourMission(missionId).client.interrompre(missionId),
     inspecter: async (missionId: string): Promise<{ readonly verdict: string; readonly motif: string }> =>
       parc.pourMission(missionId).client.inspecter(missionId),
   };
@@ -261,7 +262,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       // ou rien du tout.
       conversationId,
       repertoireProjets: options.repertoireProjets,
-      cibles: CIBLES_NON_CABLEES,
+      // `☠` Le MÊME chemin que celui qui sert l'interface depuis le 01/08
+      // (`pilotage` sur le canal de contrôle), et non plus un port fantôme :
+      // `envoyer_a_equipe` refusait TOUTES les équipes, vivantes comprises.
+      emetteur: {
+        envoyer: (missionId, texte) => versMission.envoyerInstruction(missionId, texte),
+        interrompre: (missionId) => versMission.interrompre(missionId),
+      },
       arreteur: versMission,
       relanceur: versMission,
       budget: BUDGET_NON_CABLE,

@@ -71,6 +71,11 @@ export interface Pilotage {
   envoyerInstruction(missionId: string, texte: string): Promise<{ readonly retenue: boolean }>;
   mettreEnPause(missionId: string): Promise<{ readonly enPause: true }>;
   reprendre(missionId: string): Promise<{ readonly enAttenteTransmis: number }>;
+  /**
+   * Coupe le tour en cours et rend la main à l'agent — SANS entrer en pause :
+   * ce qui arrive ensuite lui est transmis normalement.
+   */
+  interrompre(missionId: string): Promise<void>;
   enPause(missionId: string): boolean;
 }
 
@@ -112,6 +117,22 @@ export function creerPilotage(resoudre: (missionId: string) => { cible: CibledeP
       await controleur.reprendre();
       missionLogger(missionId).info({ enAttenteTransmis: enAttente }, 'mission reprise, messages retenus transmis');
       return { enAttenteTransmis: enAttente };
+    },
+
+    /**
+     * `☠` Passe par la source d'interruption du worker, PAS par le contrôleur de
+     * pause : interrompre n'est pas mettre en pause. Une mission déjà en pause
+     * n'a rien à couper — l'interruption y est un no-op, dit comme tel plutôt
+     * que réveillant l'agent par un chemin détourné.
+     */
+    async interrompre(missionId): Promise<void> {
+      const { controleur, cible } = obtenir(missionId);
+      if (controleur.enPause) {
+        missionLogger(missionId).info({}, 'interruption ignorée : mission déjà en pause, aucun tour à couper');
+        return;
+      }
+      await cible.source.interrupt();
+      missionLogger(missionId).info({}, 'tour interrompu par le control plane (A.2.2)');
     },
 
     enPause(missionId): boolean {

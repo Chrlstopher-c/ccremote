@@ -90,7 +90,7 @@ describe('assemblage — canal de contrôle multiplexé sur le lien unique (H-75
       demarrer: async () => ({ sessionId: 's1' }),
       arreter: async () => {},
       tuerSansPreavis: () => {},
-      relancer: async () => {},
+      relancer: async () => ({ dejaVivant: false }),
       reinitialiser: async () => ({ demandesEnAttente: [] }),
     };
     cablerRecepteurControlePc(superviseur, pc);
@@ -112,7 +112,7 @@ describe('assemblage — canal de contrôle multiplexé sur le lien unique (H-75
         appelsArretes.push(missionId);
       },
       tuerSansPreavis: () => {},
-      relancer: async () => {},
+      relancer: async () => ({ dejaVivant: false }),
       reinitialiser: async () => ({ demandesEnAttente: [] }),
     };
     cablerRecepteurControlePc(superviseur, pc);
@@ -187,9 +187,9 @@ async function chaineComplete(racineProjets: string): Promise<{
   const deps: DependancesServeurControle = {
     registre,
     repertoireProjets: racineProjets,
-    cibles: { cible: () => null },
+    emetteur: { envoyer: async () => ({ detail: 'transmis' }), interrompre: async () => {} },
     arreteur: { arreter: async () => {} },
-    relanceur: { relancer: async () => {} },
+    relanceur: { relancer: async () => ({ dejaVivant: false }) },
     budget: { definir: async () => {} },
     utilisationParc: { comptesConnus: () => [], releves: () => [] },
     configPlafondParc: {},
@@ -299,5 +299,133 @@ describe('assemblage — réconciliation câblée sur CHAQUE rattachement (H-75,
     await laisserPasserLesMicrotaches(5);
     appels.push('tic-passe'); // si `declencheur()` avait levé de façon non catchée, ce point ne serait jamais atteint.
     expect(appels).toEqual(['tic-passe']);
+  });
+});
+
+/**
+ * `☠` Test d'ASSEMBLAGE de `envoyer_a_equipe` / `interrompre_equipe` — HUITIÈME
+ * occurrence du motif « écrit, testé, branché sur rien », et la plus coûteuse
+ * jusqu'ici : le port `RepertoireCibles` était satisfait sur le Pi par
+ * `CIBLES_NON_CABLEES`, qui rendait toujours `null`. Les deux outils refusaient
+ * donc TOUTES les équipes, avec la raison « introuvable ou plus vivante » —
+ * l'orchestrateur en a conclu que ses équipes étaient mortes et a relancé des
+ * sessions bien vivantes (prod, 02/08).
+ *
+ * Aucun test d'unité ne pouvait le voir : chacun testait sa moitié, et la moitié
+ * Pi était testée AVEC le port mort. Celui-ci part de l'outil que le modèle
+ * appelle et va jusqu'à l'opération reçue par la machine — si un maillon manque,
+ * il tombe.
+ */
+describe('assemblage — envoyer_a_equipe : outil MCP → Pi → lien → machine', () => {
+  async function chaineParole(): Promise<{
+    readonly outil: (nom: string) => HandlerGenerique;
+    readonly recu: { instructions: { missionId: string; texte: string }[]; interruptions: string[] };
+    readonly fermer: () => void;
+  }> {
+    const { pi, pc } = creerPaireLiens();
+    await Promise.all([pi.connecter(), pc.connecter()]);
+
+    const recu = { instructions: [] as { missionId: string; texte: string }[], interruptions: [] as string[] };
+    const superviseur: PortSuperviseurControle = {
+      inventaire: () => [],
+      demarrer: async () => ({ sessionId: 's1' }),
+      arreter: async () => {},
+      tuerSansPreavis: () => {},
+      relancer: async () => ({ dejaVivant: false }),
+      reinitialiser: async () => ({ demandesEnAttente: [] }),
+      pilotage: {
+        envoyerInstruction: async (missionId, texte) => {
+          recu.instructions.push({ missionId, texte });
+          return { retenue: false };
+        },
+        mettreEnPause: async () => ({ enPause: true as const }),
+        reprendre: async () => ({ enAttenteTransmis: 0 }),
+        interrompre: async (missionId) => {
+          recu.interruptions.push(missionId);
+        },
+      },
+    };
+    cablerRecepteurControlePc(superviseur, pc);
+    const client = new ClientSuperviseurPc(pi, { timeoutMs: 2000 });
+
+    const registre = ouvrirRegistre({ chemin: ':memory:' });
+    registre.comptes.enregistrer({ id: 'compte1', configDir: '/tmp/cc-compte1' });
+    registre.lots.creer({ id: 'lot-1', intention: 'assemblage' });
+    registre.missions.creer({
+      id: 'm-vivante',
+      lotId: 'lot-1',
+      nom: 'auth',
+      projet: 'alpha',
+      compteId: 'compte1',
+      sessionId: 'sess-1',
+    });
+    registre.etats.appliquerEtatHarness('m-vivante', 'en_cours', { motif: 'assemblage' });
+
+    const deps: DependancesServeurControle = {
+      registre,
+      repertoireProjets: '/tmp/projets-inexistants',
+      emetteur: {
+        envoyer: (missionId, texte) => client.envoyerInstruction(missionId, texte),
+        interrompre: (missionId) => client.interrompre(missionId),
+      },
+      arreteur: { arreter: async () => {} },
+      relanceur: { relancer: async () => ({ dejaVivant: false }) },
+      budget: { definir: async () => {} },
+      utilisationParc: { comptesConnus: () => [], releves: () => [] },
+      configPlafondParc: {},
+    };
+    const outils = construireOutilsControle(deps);
+    return {
+      outil: (nom) => {
+        const trouve = outils.find((o) => o.name === nom);
+        if (trouve === undefined) throw new Error(`outil "${nom}" absent de la surface MCP — câblage rompu`);
+        return (trouve as unknown as { handler: HandlerGenerique }).handler;
+      },
+      recu,
+      fermer: () => registre.fermer(),
+    };
+  }
+
+  test('☠ le message atteint RÉELLEMENT la machine, préfixe H-66 compris', async () => {
+    const chaine = await chaineParole();
+    try {
+      const contrat = contratDe(
+        await chaine.outil('envoyer_a_equipe')({ missionId: 'm-vivante', message: 'commite avant de rendre la main' }, undefined),
+      );
+      expect(contrat.ok).toBe(true);
+      expect(chaine.recu.instructions).toHaveLength(1);
+      expect(chaine.recu.instructions[0]?.missionId).toBe('m-vivante');
+      expect(chaine.recu.instructions[0]?.texte).toContain('[émetteur:orchestrateur]');
+      expect(chaine.recu.instructions[0]?.texte).toContain('commite avant de rendre la main');
+    } finally {
+      chaine.fermer();
+    }
+  });
+
+  test('interrompre_equipe atteint la machine et coupe le tour', async () => {
+    const chaine = await chaineParole();
+    try {
+      const contrat = contratDe(await chaine.outil('interrompre_equipe')({ missionId: 'm-vivante' }, undefined));
+      expect(contrat.ok).toBe(true);
+      expect(chaine.recu.interruptions).toEqual(['m-vivante']);
+    } finally {
+      chaine.fermer();
+    }
+  });
+
+  test('☠ une machine sans pilotage câblé REFUSE — jamais un « transmis » de politesse', async () => {
+    const { pi, pc } = creerPaireLiens();
+    await Promise.all([pi.connecter(), pc.connecter()]);
+    const sansPilotage: PortSuperviseurControle = {
+      inventaire: () => [],
+      demarrer: async () => ({ sessionId: 's1' }),
+      arreter: async () => {},
+      tuerSansPreavis: () => {},
+      relancer: async () => ({ dejaVivant: false }),
+      reinitialiser: async () => ({ demandesEnAttente: [] }),
+    };
+    cablerRecepteurControlePc(sansPilotage, pc);
+    const client = new ClientSuperviseurPc(pi, { timeoutMs: 2000 });
+    await expect(client.envoyerInstruction('m-1', 'x')).rejects.toThrow(/pilotage/);
   });
 });

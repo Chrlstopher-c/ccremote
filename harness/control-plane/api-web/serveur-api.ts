@@ -520,6 +520,39 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     return { ok: true, effet: 'conversation archivée' };
   }
 
+  // `☠` Rattacher un fil à une machine APRÈS coup. Sans cette route, un fil
+  // ouvert quand une seule machine était en ligne (donc sans machine écrite)
+  // devenait irroutable dès que la seconde s'allumait : plus aucun mandat, plus
+  // aucune lecture de projet, et aucun geste pour s'en sortir depuis
+  // l'interface (prod, 02/08, conversation `af847b10`).
+  const machineFil = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/machine$/);
+  if (machineFil?.[1] !== undefined) {
+    const conversationId = decodeURIComponent(machineFil[1]);
+    const corps = await lireCorps(req);
+    const demandee = typeof corps['machine'] === 'string' ? corps['machine'] : '';
+    const connues = (deps.machines?.() ?? []).map((m) => m.id);
+    if (demandee === '' || !connues.includes(demandee)) {
+      throw requeteInvalide(
+        `machine « ${demandee} » inconnue — machines disponibles : ${connues.length === 0 ? 'aucune' : connues.join(', ')}`,
+      );
+    }
+    const fil = deps.registre.conversations.lire(conversationId);
+    if (fil === null) throw introuvable('conversation');
+    // `☠` L'arbitrage du 01/08 tient ICI, et nulle part ailleurs : une équipe ne
+    // change pas de machine au milieu d'un chantier. Rattacher un fil qui n'en a
+    // pas est toujours permis ; DÉPLACER un fil qui porte une équipe vivante ne
+    // l'est jamais — ses ordres partiraient vers une machine qui n'héberge pas
+    // son worker.
+    const vivantes = deps.registre.missions.listerActives().filter((m) => m.conversationId === conversationId);
+    if (fil.machine !== null && fil.machine !== demandee && vivantes.length > 0) {
+      throw requeteInvalide(
+        `ce fil porte ${vivantes.length} équipe(s) vivante(s) sur « ${fil.machine} » — les arrêter ou attendre leur fin avant de le déplacer`,
+      );
+    }
+    if (!deps.registre.conversations.definirMachine(conversationId, demandee)) throw introuvable('conversation');
+    return { ok: true, effet: `fil rattaché à « ${demandee} »`, machine: demandee };
+  }
+
   throw new ErreurApi(404, `route conversation inconnue : ${chemin}`);
 }
 

@@ -601,3 +601,89 @@ describe('approbation d’un mandat déjà tranché', () => {
     expect((await approuver()).statut).toBe(500);
   });
 });
+
+/**
+ * `☠` Rattachement d'un fil à une machine APRÈS sa création — le seul geste qui
+ * sort un fil de l'impasse « aucune machine précisée et plusieurs sont en
+ * ligne » (prod, 02/08). Banc sur le VRAI serveur : ce qui est vérifié est le
+ * câblage de la route, pas la fonction du dépôt.
+ */
+describe('API web — rattacher un fil à une machine', () => {
+  function demarrerAvecMachines(): ServeurApiWeb {
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      machines: () => [
+        { id: 'trinityarch', enLigne: true, evictions: 0, supersedes: 0 },
+        { id: 'vps', enLigne: true, evictions: 0, supersedes: 0 },
+      ],
+      conversations: {
+        lister: () => [],
+        detail: () => null,
+        evenements: () => null,
+        creer: () => ({ id: 'c1', titre: 't', creeA: MAINTENANT, majA: MAINTENANT }),
+        envoyer: async () => {},
+        renommer: async () => {},
+        archiver: async () => {},
+        compacter: async () => ({ compacte: false, detail: 'rien' }),
+      } as never,
+    });
+    return serveur;
+  }
+
+  async function poser(id: string, machine: string): Promise<{ statut: number; corps: Record<string, unknown> }> {
+    const s = serveur ?? demarrerAvecMachines();
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness/orchestrator/conversations/${id}/machine`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ machine }),
+    });
+    return { statut: rep.status, corps: (await rep.json()) as Record<string, unknown> };
+  }
+
+  test('un fil sans machine est rattaché, et le registre le porte', async () => {
+    demarrerAvecMachines();
+    registre.conversations.creer({ id: 'fil-nu', titre: 'ouvert PC éteint' });
+    const { statut } = await poser('fil-nu', 'vps');
+    expect(statut).toBe(200);
+    expect(registre.conversations.lire('fil-nu')?.machine).toBe('vps');
+  });
+
+  test('☠ une machine inconnue est refusée — jamais un fil irroutable écrit en base', async () => {
+    demarrerAvecMachines();
+    registre.conversations.creer({ id: 'fil-nu', titre: 't' });
+    const { statut, corps } = await poser('fil-nu', 'machine-fantome');
+    expect(statut).toBe(400);
+    expect(String(corps['error'])).toContain('trinityarch');
+    expect(registre.conversations.lire('fil-nu')?.machine).toBeNull();
+  });
+
+  test('☠ déplacer un fil qui porte une équipe VIVANTE est refusé (arbitrage du 01/08)', async () => {
+    demarrerAvecMachines();
+    registre.conversations.creer({ id: 'fil', titre: 't', machine: 'vps' });
+    registre.lots.creer({ id: 'lot-1', intention: 'banc' });
+    registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/a' });
+    registre.missions.creer({
+      id: 'm-viv',
+      lotId: 'lot-1',
+      nom: 'x',
+      projet: 'stockiop',
+      compteId: 'compte-a',
+      conversationId: 'fil',
+    });
+    registre.etats.appliquerEtatHarness('m-viv', 'en_cours', { motif: 'banc' });
+    const { statut, corps } = await poser('fil', 'trinityarch');
+    expect(statut).toBe(400);
+    expect(String(corps['error'])).toContain('vivante');
+    expect(registre.conversations.lire('fil')?.machine).toBe('vps');
+  });
+
+  test('re-poser la MÊME machine reste accepté, même avec une équipe vivante (idempotent)', async () => {
+    demarrerAvecMachines();
+    registre.conversations.creer({ id: 'fil', titre: 't', machine: 'vps' });
+    const { statut } = await poser('fil', 'vps');
+    expect(statut).toBe(200);
+  });
+});

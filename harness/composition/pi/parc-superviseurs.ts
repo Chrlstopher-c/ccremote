@@ -141,11 +141,31 @@ export class ParcSuperviseurs {
     return this.resoudre(mission.machine, `mission ${missionId}`);
   }
 
-  /** La machine choisie à la création d'un fil. Lève si elle est hors ligne. */
+  /**
+   * La machine choisie à la création d'un fil. Lève si elle est hors ligne.
+   *
+   * `☠ ADOPTION` — un fil sans machine (créé quand une seule était en ligne, donc
+   * sans question posée) FIGE son choix implicite dès la première opération.
+   * Sans cela le fil restait `null` indéfiniment et basculait en refus permanent
+   * le jour où la seconde machine s'allumait : ce qui marchait le matin ne
+   * marchait plus l'après-midi, sans qu'aucune action de l'opérateur n'explique
+   * le changement (prod, 02/08, conversation `af847b10`).
+   *
+   * L'adoption n'INVENTE rien : elle écrit la machine que le routage venait déjà
+   * de choisir seul, et seulement quand ce choix était sans ambiguïté.
+   */
   pourConversation(conversationId: string): MachineRoutee {
     const conv = this.options.registre.conversations.lire(conversationId);
     if (conv === null) throw new ErreurRoutageMachine(`conversation ${conversationId} inconnue du registre`);
-    return this.resoudre(conv.machine, `conversation ${conversationId}`);
+    const routee = this.resoudre(conv.machine, `conversation ${conversationId}`);
+    if (conv.machine === null || conv.machine === '') {
+      this.options.registre.conversations.definirMachine(conversationId, routee.machineId);
+      log.info(
+        { conversationId, machineId: routee.machineId },
+        'fil rattaché à sa machine par adoption — seule machine en ligne au moment de la première opération',
+      );
+    }
+    return routee;
   }
 
   #lister(): string {

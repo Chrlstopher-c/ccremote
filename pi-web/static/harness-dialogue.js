@@ -86,15 +86,21 @@ function hConfirmer(titre, texte, valider = 'Supprimer') {
 
 /**
  * Demande sur quelle machine ouvrir un fil.
- * Résout : l'identifiant choisi · `''` si une seule machine (aucune question
- * posée, rien à trancher) · `null` si annulé.
+ * Résout : l'identifiant choisi · l'identifiant de l'unique machine en ligne
+ * (aucune question posée) · `''` si aucune n'est en ligne · `null` si annulé.
+ *
+ * ☠ UNE SEULE MACHINE ⇒ toujours aucune question, mais son identifiant est
+ * RENVOYÉ quand même. Renvoyer `''` laissait le fil sans machine en base, et le
+ * routage tranchait « sans ambiguïté » tant que rien ne changeait — jusqu'à ce
+ * que la seconde machine s'allume : à partir de cet instant, ce fil-là échouait
+ * sur TOUTE opération (prod, 02/08). Le silence de l'interface ne doit pas se
+ * traduire par une absence de décision en base.
  */
 function hChoisirMachine(machines) {
   const enLigne = (machines || []).filter((m) => m.enLigne);
-  // ☠ Zéro ou une machine ⇒ AUCUNE question. Un dialogue à un seul bouton n'est
-  // pas un choix, c'est un clic de plus — et le routage tranche seul quand il
-  // n'y a pas d'ambiguïté (`parc-superviseurs.ts#resoudre`).
-  if (enLigne.length <= 1) return Promise.resolve('');
+  if (enLigne.length === 0) return Promise.resolve('');
+  // ☠ Un dialogue à un seul bouton n'est pas un choix, c'est un clic de plus.
+  if (enLigne.length === 1) return Promise.resolve(enLigne[0].id);
 
   return new Promise((resoudre) => {
     hFermerDialogue();

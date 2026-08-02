@@ -7,10 +7,10 @@
  * ☠ (d) Aucune fonction ici ne laisse une exception s'échapper.
  */
 
-import type { Registre } from '../../registre/index.ts';
-import { construireMessageUtilisateur } from '../entree/index.ts';
+import type { Mission, Registre } from '../../registre/index.ts';
 import { deciderCreationMission } from '../../../budgets/index.ts';
 import { accepte, applique, echecInattendu, refuse } from './contrat.ts';
+import { resoudreMission } from './outils-inspection.ts';
 import { construireMandatPropose } from './mandat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import { avecPlafond } from './plafond.ts';
@@ -19,10 +19,10 @@ import type {
   ArreteurMission,
   ConfigPlafondParc,
   ContratRetour,
+  EmetteurEquipe,
   EnregistreurProposition,
   LecteurUtilisationParc,
   RelanceurMission,
-  RepertoireCibles,
 } from './types.ts';
 
 const RAISON_DELAI = "aucune confirmation du port dans le délai — le lien avec l'équipe est peut-être coupé";
@@ -113,26 +113,83 @@ export function proposerCreationEquipe(
 }
 
 /**
+ * États harness dans lesquels une équipe peut encore ENTENDRE. `en_pause` en
+ * fait partie : le message y est retenu localement et transmis à la reprise
+ * (`superviseur/pilotage-workers.ts`), ce qui est un service rendu, pas un échec.
+ *
+ * `☠` `idle` côté SDK n'est PAS un état mort — c'est l'équipe qui a rendu la
+ * main et attend. C'est même le moment le plus utile pour lui parler : le
+ * message est lu immédiatement au lieu d'attendre la fin d'un tour.
+ */
+const ETATS_JOIGNABLES: readonly string[] = ['en_cours', 'en_pause'];
+
+/**
+ * Résout une équipe DESTINATAIRE et vérifie qu'elle peut encore entendre.
+ *
+ * `☠` Accepte une désignation libre (id, nom, projet) comme `suivre_equipe` :
+ * l'orchestrateur désigne ses équipes par leur nom dans tout le reste de sa
+ * boîte à outils, et se voyait refuser ici pour la seule raison qu'il n'avait
+ * pas recopié un UUID.
+ */
+function destinataire(
+  registre: Registre,
+  designation: string,
+  intention: string,
+): { readonly mission: Mission } | { readonly refus: ContratRetour } {
+  const resolution = resoudreMission(registre, designation);
+  if ('absent' in resolution) return { refus: refuse(intention, 'aucune équipe ne correspond à cette désignation') };
+  if ('ambigu' in resolution) {
+    const noms = resolution.ambigu.map((m) => `${m.nom} (${m.id})`).join(', ');
+    return { refus: refuse(intention, `désignation ambiguë — préciser l'identifiant parmi : ${noms}`) };
+  }
+  const mission = resolution.trouve;
+  if (!ETATS_JOIGNABLES.includes(mission.etatHarness)) {
+    return {
+      refus: refuse(
+        intention,
+        `équipe « ${mission.nom} » en état ${mission.etatHarness} — plus joignable` +
+          (mission.etatHarness === 'terminee' ? ' (son rapport est disponible via rapport_equipe)' : ''),
+      ),
+    };
+  }
+  return { mission };
+}
+
+/**
  * `envoyer_a_equipe` (A.2.2) — met en file, n'interrompt jamais (H-67). Émetteur
  * toujours `orchestrateur` (H-66) : ce chemin est le dispatch normal, jamais une
  * intervention directe de l'opérateur (celle-là passe par l'UI, hors ce module).
+ *
+ * `☠` Le texte porte le préfixe d'émetteur, et la construction du `SDKUserMessage`
+ * appartient à la MACHINE qui héberge le worker (`pilotage-workers.ts`) : ce qui
+ * traverse le lien est du texte, jamais un objet du SDK.
  */
 export async function envoyerAEquipe(
-  repertoire: RepertoireCibles,
-  missionId: string,
+  emetteur: EmetteurEquipe,
+  registre: Registre,
+  designation: string,
   texte: string,
   plafondMs?: number,
 ): Promise<ContratRetour> {
-  const intention = `envoyer un message à ${missionId}`;
+  const intention = `envoyer un message à ${designation}`;
   try {
-    const cible = repertoire.cible(missionId);
-    if (cible === null) return refuse(intention, 'équipe introuvable ou plus vivante');
-    const message = construireMessageUtilisateur(`[émetteur:orchestrateur]\n${texte}`, { sessionId: missionId });
-    const resultat = await avecPlafond(cible.envoyerMessage(message), plafondMs);
+    if (texte.trim().length === 0) return refuse(intention, 'message vide — rien à transmettre');
+    const cible = destinataire(registre, designation, intention);
+    if ('refus' in cible) return cible.refus;
+    const { mission } = cible;
+    const resultat = await avecPlafond(emetteur.envoyer(mission.id, `[émetteur:orchestrateur]\n${texte}`), plafondMs);
     if (resultat.etat === 'delai_depasse') return refuse(intention, RAISON_DELAI);
-    return accepte(intention, missionId, 'message mis en file, lu au prochain tour disponible');
+    // `☠` Le détail vient de la MACHINE (« instruction transmise » / « RETENUE,
+    // mission en pause ») : le rapporter tel quel évite de promettre une lecture
+    // immédiate à un message qui dort jusqu'à la reprise.
+    const detail = resultat.valeur?.detail ?? '';
+    return accepte(
+      intention,
+      mission.id,
+      detail === '' ? 'message mis en file, lu au prochain tour disponible' : detail,
+    );
   } catch (erreur) {
-    journal.error({ err: erreur, missionId }, 'envoyerAEquipe en échec');
+    journal.error({ err: erreur, designation }, 'envoyerAEquipe en échec');
     return echecInattendu(intention, erreur);
   }
 }
@@ -142,17 +199,21 @@ export async function envoyerAEquipe(
  * résout qu'une fois l'interruption effective (B.4) : la résolution EST la
  * confirmation, contrairement aux autres outils de ce fichier — d'où `applique`.
  */
-export async function interrompreEquipe(repertoire: RepertoireCibles, missionId: string): Promise<ContratRetour> {
-  const intention = `interrompre ${missionId}`;
+export async function interrompreEquipe(
+  emetteur: EmetteurEquipe,
+  registre: Registre,
+  designation: string,
+  plafondMs?: number,
+): Promise<ContratRetour> {
+  const intention = `interrompre ${designation}`;
   try {
-    const cible = repertoire.cible(missionId);
-    if (cible === null) return refuse(intention, 'équipe introuvable ou plus vivante');
-    const resultat = await avecPlafond(cible.interrupt());
+    const cible = destinataire(registre, designation, intention);
+    if ('refus' in cible) return cible.refus;
+    const resultat = await avecPlafond(emetteur.interrompre(cible.mission.id), plafondMs);
     if (resultat.etat === 'delai_depasse') return refuse(intention, RAISON_DELAI);
-    const degrade = resultat.valeur === undefined;
-    return applique(intention, degrade ? 'interrompue (reçu dégradé — H-46)' : 'interrompue, reçu confirmé');
+    return applique(intention, 'tour interrompu, reçu confirmé par la machine hôte');
   } catch (erreur) {
-    journal.error({ err: erreur, missionId }, 'interrompreEquipe en échec');
+    journal.error({ err: erreur, designation }, 'interrompreEquipe en échec');
     return echecInattendu(intention, erreur);
   }
 }
@@ -207,6 +268,17 @@ export async function relancerEquipe(relanceur: RelanceurMission, registre: Regi
     if (mission.sessionId === null) return refuse(intention, 'aucune session à reprendre pour cette mission');
     const resultat = await avecPlafond(relanceur.relancer(missionId, mission.sessionId));
     if (resultat.etat === 'delai_depasse') return refuse(intention, RAISON_DELAI);
+    // `☠` La machine dit si elle a RÉELLEMENT relancé. Un worker déjà vivant
+    // (typiquement `idle` : l'équipe a rendu la main et attend) rend la relance
+    // sans effet — l'annoncer « transmise » faisait croire à un réveil qui
+    // n'arrivait jamais, et l'orchestrateur recommençait au lieu de parler.
+    if (resultat.valeur?.dejaVivant === true) {
+      return refuse(
+        intention,
+        "l'équipe est déjà vivante — la relance ne sert qu'après un crash. Pour lui parler : " +
+          'envoyer_a_equipe ; pour couper son tour en cours : interrompre_equipe',
+      );
+    }
     return accepte(intention, missionId, 'relance transmise au superviseur');
   } catch (erreur) {
     journal.error({ err: erreur, missionId }, 'relancerEquipe en échec');

@@ -297,8 +297,10 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     await this.#appeler({ type: 'arreter_worker', missionId });
   }
 
-  async relancer(missionId: string, sessionId: string): Promise<void> {
-    await this.#appeler({ type: 'relancer_worker', missionId, sessionId });
+  async relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }> {
+    const reponse = await this.#appeler({ type: 'relancer_worker', missionId, sessionId });
+    if (!reponse.ok) throw new Error(reponse.detail ?? 'la machine a refusé de relancer la session');
+    return { dejaVivant: reponse.relanceIgnoree === true };
   }
 
   // -- Pilotage d'une mission vivante (A.2.2) ---------------------------------
@@ -306,9 +308,21 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
   // passent jamais par l'orchestrateur : l'opérateur pilote directement, même
   // si la session maître est saturée ou absente.
 
+  /**
+   * `☠` Le refus de la machine est RELEVÉ ici (`reponse.ok`), pas ignoré. Sans
+   * ce test, un superviseur sans pilotage câblé répondait `refuse` et l'appelant
+   * — interface comme orchestrateur — annonçait « instruction transmise ». Même
+   * famille que le port non câblé qui rendait `envoyer_a_equipe` menteur.
+   */
   async envoyerInstruction(missionId: string, texte: string): Promise<{ readonly detail: string }> {
     const reponse = await this.#appeler({ type: 'envoyer_instruction', missionId, texte });
+    if (!reponse.ok) throw new Error(reponse.detail ?? "la machine a refusé de transmettre l'instruction");
     return { detail: reponse.detail ?? '' };
+  }
+
+  async interrompre(missionId: string): Promise<void> {
+    const reponse = await this.#appeler({ type: 'interrompre_worker', missionId });
+    if (!reponse.ok) throw new Error(reponse.detail ?? 'la machine a refusé d’interrompre le tour en cours');
   }
 
   async mettreEnPause(missionId: string): Promise<void> {

@@ -100,6 +100,7 @@ function superviseurFactice(avecArretUrgence = true): PortSuperviseurControle & 
     },
     async relancer(_missionId: string, _sessionId: string) {
       compteurs.relancer += 1;
+      return { dejaVivant: false };
     },
     async reinitialiser(_sessionId: string) {
       compteurs.reinitialiser += 1;

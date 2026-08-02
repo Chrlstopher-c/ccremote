@@ -177,6 +177,37 @@ export class DepotConversations {
     );
   }
 
+  /**
+   * Rattache le fil à une machine de travail.
+   *
+   * `☠ POURQUOI CE SETTER EXISTE, ALORS QUE LA MACHINE EST « FIXÉE À LA CRÉATION »`
+   * — parce que la création peut ne PAS l'avoir fixée. Un fil ouvert alors qu'une
+   * seule machine était en ligne partait avec `machine = null` (l'interface ne
+   * posait aucune question, à raison : un dialogue à un seul bouton n'est pas un
+   * choix). Le routage tranchait ensuite « sans ambiguïté »… jusqu'à ce que la
+   * seconde machine s'allume. À partir de cet instant, TOUT ce fil échouait en
+   * `ErreurRoutageMachine` — mesuré en prod le 02/08 sur la conversation
+   * `af847b10`, deux dispatchs perdus, plus aucun moyen de rattraper depuis
+   * l'interface.
+   *
+   * L'arbitrage du 01/08 (« une équipe ne change pas de machine au milieu d'un
+   * chantier ») est préservé par l'APPELANT, pas ici : l'adoption implicite
+   * n'écrit que ce que le routage avait déjà choisi, et le changement explicite
+   * est refusé par l'API tant qu'une équipe du fil est vivante.
+   */
+  public definirMachine(id: string, machine: string): boolean {
+    return executer(
+      'conversations.definirMachine',
+      () => {
+        // `maj_a` volontairement inchangé : un rattachement technique ne doit pas
+        // faire remonter le fil en tête de liste comme s'il avait été travaillé.
+        const res = this.db.query('UPDATE conversation SET machine = ? WHERE id = ?').run(machine, id);
+        return res.changes > 0;
+      },
+      { id, machine },
+    );
+  }
+
   /** Archivage réversible — l'historique reste, la conversation quitte la liste. */
   public archiver(id: string, maintenant: number = Date.now()): boolean {
     return executer(

@@ -129,6 +129,42 @@ describe('routage par conversation', () => {
     registre.conversations.creer({ id: 'fil', titre: 't', machine: 'vps' });
     expect(registre.conversations.lire('fil')?.machine).toBe('vps');
   });
+
+  test('☠ ADOPTION — un fil sans machine FIGE le choix implicite dès la 1re opération', () => {
+    const { parc } = creerParc('vps');
+    registre.conversations.creer({ id: 'fil-nu', titre: 'ouvert PC éteint' });
+    expect(registre.conversations.lire('fil-nu')?.machine).toBeNull();
+
+    expect(parc.pourConversation('fil-nu').machineId).toBe('vps');
+    expect(registre.conversations.lire('fil-nu')?.machine).toBe('vps');
+  });
+
+  test('☠ LE DÉFAUT DU 02/08 — le fil adopté survit à l’allumage de la 2e machine', () => {
+    const { parc } = creerParc('vps');
+    registre.conversations.creer({ id: 'fil-nu', titre: 'ouvert PC éteint' });
+    // Première opération pendant que le VPS est seul : adoption.
+    parc.pourConversation('fil-nu');
+
+    // Le PC démarre. AVANT le correctif, ce fil basculait ici en refus définitif.
+    parc.enregistrer('trinityarch', clientFactice('trinityarch', []));
+    enLigne.add('trinityarch');
+    expect(parc.pourConversation('fil-nu').machineId).toBe('vps');
+  });
+
+  test('sans adoption possible (deux machines, aucune écrite) ⇒ refus qui NOMME les candidates', () => {
+    const { parc } = creerParc('trinityarch', 'vps');
+    registre.conversations.creer({ id: 'fil-nu', titre: 'ambigu' });
+    expect(() => parc.pourConversation('fil-nu')).toThrow(ErreurRoutageMachine);
+    expect(registre.conversations.lire('fil-nu')?.machine).toBeNull();
+  });
+
+  test('aucune machine en ligne ⇒ refus, et RIEN n’est écrit (pas d’adoption fantôme)', () => {
+    const { parc } = creerParc('vps');
+    enLigne.delete('vps');
+    registre.conversations.creer({ id: 'fil-nu', titre: 'hors ligne' });
+    expect(() => parc.pourConversation('fil-nu')).toThrow(ErreurRoutageMachine);
+    expect(registre.conversations.lire('fil-nu')?.machine).toBeNull();
+  });
 });
 
 describe('relevés globaux (H-75 : une machine éteinte n’est pas une panne)', () => {

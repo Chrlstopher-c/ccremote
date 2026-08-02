@@ -53,6 +53,11 @@ beforeEach(() => {
   registre.lots.creer({ id: 'lot-1', intention: 'non-blocage' });
   registre.missions.creer({ id: 'm-1', lotId: 'lot-1', nom: 'm-1', projet: 'projet-alpha', compteId: 'compte1' });
   registre.missions.attacherSession('m-1', 'sess-1');
+  // `☠` Mission JOIGNABLE : sans cet état, `envoyer_a_equipe` et
+  // `interrompre_equipe` refusent avant même d'atteindre le port, et ce banc
+  // mesurerait la vitesse d'un refus au lieu du non-blocage sur port mort — un
+  // test vert qui ne prouve plus rien.
+  registre.etats.appliquerEtatHarness('m-1', 'en_cours', { motif: 'banc de non-blocage' });
 
   deps = {
     registre,
@@ -61,7 +66,7 @@ beforeEach(() => {
     utilisationParc: UTILISATION_PARC_DESACTIVEE,
     configPlafondParc: {},
     // Port mort : jamais résolu — c'est le cas visé (worker éteint, lien coupé).
-    cibles: { cible: () => ({ envoyerMessage: () => jamais(), interrupt: () => jamais() }) },
+    emetteur: { envoyer: () => jamais(), interrompre: () => jamais() },
     arreteur: { arreter: () => jamais() },
     relanceur: { relancer: () => jamais() },
     budget: { definir: () => jamais() },

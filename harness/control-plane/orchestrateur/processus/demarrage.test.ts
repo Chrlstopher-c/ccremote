@@ -95,9 +95,9 @@ beforeEach(() => {
     // Désactivation explicite du plafond de parc (H-74), jamais une omission.
     utilisationParc: UTILISATION_PARC_DESACTIVEE,
     configPlafondParc: {},
-    cibles: { cible: () => null },
+    emetteur: { envoyer: async () => ({ detail: 'transmis' }), interrompre: async () => {} },
     arreteur: { arreter: async () => {} },
-    relanceur: { relancer: async () => {} },
+    relanceur: { relancer: async () => ({ dejaVivant: false }) },
     budget: { definir: async () => {} },
   };
 });

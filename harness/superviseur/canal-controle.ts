@@ -62,7 +62,7 @@ export interface PortSuperviseurControle {
   inspecter?(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }>;
   arreter(missionId: string): Promise<void>;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
-  relancer(missionId: string, sessionId: string): Promise<void>;
+  relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }>;
   reinitialiser(
     sessionId: string,
   ): Promise<{ readonly demandesEnAttente: readonly DemandeEnAttenteReinitialisation[] }>;
@@ -87,6 +87,7 @@ export interface PortSuperviseurControle {
     envoyerInstruction(missionId: string, texte: string): Promise<{ readonly retenue: boolean }>;
     mettreEnPause(missionId: string): Promise<{ readonly enPause: true }>;
     reprendre(missionId: string): Promise<{ readonly enAttenteTransmis: number }>;
+    interrompre(missionId: string): Promise<void>;
   };
 }
 
@@ -162,7 +163,14 @@ export type OperationControle =
    */
   | { readonly type: 'envoyer_instruction'; readonly missionId: string; readonly texte: string }
   | { readonly type: 'pause_worker'; readonly missionId: string }
-  | { readonly type: 'reprendre_worker'; readonly missionId: string };
+  | { readonly type: 'reprendre_worker'; readonly missionId: string }
+  /**
+   * A.2.2 — couper le tour en cours SANS mettre en pause : l'agent reprend la
+   * main immédiatement et lit ce qui l'attend. `☠` Distinct de `pause_worker`,
+   * qui interrompt AUSSI mais retient tout ce qui arrive ensuite : confondre les
+   * deux ferait dormir une équipe qu'on voulait simplement recadrer.
+   */
+  | { readonly type: 'interrompre_worker'; readonly missionId: string };
 
 /** Toute opération mutative — tout sauf `inventaire` (D.3.2). */
 type OperationMutative = Exclude<
@@ -211,6 +219,12 @@ export interface ReponseControle {
   readonly rapportArretUrgence?: RapportArretUrgence;
   /** Présent uniquement pour `inspecter` — verdict du juge H-68, jamais une décision. */
   readonly inspection?: { readonly verdict: string; readonly motif: string };
+  /**
+   * Présent uniquement pour `relancer_worker`. `☠` `true` = la relance n'a RIEN
+   * fait, le worker était déjà vivant. Sans ce champ, l'appelant ne pouvait pas
+   * distinguer « repartie » de « sans effet » et annonçait la première.
+   */
+  readonly relanceIgnoree?: boolean;
 }
 
 const TAILLE_MAX_CACHE_DEFAUT = 1000;
@@ -357,9 +371,17 @@ export class CanalControle {
         case 'tuer_sans_preavis':
           this.#superviseur.tuerSansPreavis(operation.sessionId);
           return { ok: true, effet: 'applique', detail: `worker tué sans préavis : ${operation.sessionId}` };
-        case 'relancer_worker':
-          await this.#superviseur.relancer(operation.missionId, operation.sessionId);
-          return { ok: true, effet: 'applique', detail: `worker relancé : ${operation.sessionId}` };
+        case 'relancer_worker': {
+          const { dejaVivant } = await this.#superviseur.relancer(operation.missionId, operation.sessionId);
+          return {
+            ok: true,
+            effet: 'applique',
+            relanceIgnoree: dejaVivant,
+            detail: dejaVivant
+              ? `worker déjà vivant, relance sans effet : ${operation.sessionId}`
+              : `worker relancé : ${operation.sessionId}`,
+          };
+        }
         case 'reinitialiser': {
           const resultat = await this.#superviseur.reinitialiser(operation.sessionId);
           return { ok: true, effet: 'applique', demandesEnAttente: resultat.demandesEnAttente };
@@ -399,6 +421,11 @@ export class CanalControle {
           if (this.#superviseur.pilotage === undefined) return REFUS_PILOTAGE;
           const { enAttenteTransmis } = await this.#superviseur.pilotage.reprendre(operation.missionId);
           return { ok: true, effet: 'applique', detail: `mission reprise, ${enAttenteTransmis} message(s) retenu(s) transmis` };
+        }
+        case 'interrompre_worker': {
+          if (this.#superviseur.pilotage === undefined) return REFUS_PILOTAGE;
+          await this.#superviseur.pilotage.interrompre(operation.missionId);
+          return { ok: true, effet: 'applique', detail: `tour interrompu : ${operation.missionId}` };
         }
         default: {
           const exhaustif: never = operation;

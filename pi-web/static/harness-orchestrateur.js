@@ -77,10 +77,12 @@ function hRenderConvBar(list, erreur) {
 }
 
 async function hNewConversation() {
-  // ☠ La machine est demandée AVANT la création, jamais après : elle est fixée à
-  // la création du fil et n'est plus modifiable (arbitré le 01/08). La question
-  // ne se pose que si plusieurs machines sont en ligne — `hChoisirMachine` rend
-  // `''` sans rien afficher dans le cas contraire.
+  // ☠ La machine est demandée AVANT la création : elle est fixée à la création du
+  // fil et ne bouge plus tant qu'il porte une équipe vivante (arbitré le 01/08).
+  // La question n'est POSÉE que si plusieurs machines sont en ligne, mais
+  // `hChoisirMachine` rend quand même l'identifiant de l'unique machine quand il
+  // n'y en a qu'une : un fil créé sans machine devient irroutable dès que la
+  // seconde s'allume (prod, 02/08).
   let machine = '';
   try {
     const rm = await HarnessAPI.getMachines();
@@ -320,6 +322,34 @@ async function hOpenConversation(id) {
   hRenderStats(d);
   hScrollChat();
   if (hOrch.generating) hStartPoll();
+  void hRattacherFilSansMachine(id);
+}
+
+/**
+ * Fil sans machine + plusieurs machines en ligne ⇒ on POSE la question ici,
+ * plutôt que de laisser le fil échouer sur chaque action.
+ *
+ * ☠ Ce cas n'est pas théorique : un fil ouvert la veille, quand seul le VPS
+ * tournait, s'est retrouvé irroutable dès l'allumage du PC — l'orchestrateur
+ * refusait tout dispatch avec « aucune machine précisée et plusieurs sont en
+ * ligne », sans le moindre geste offert pour en sortir (prod, 02/08). La
+ * question est posée UNE fois, à l'ouverture, avant que l'opérateur écrive.
+ */
+async function hRattacherFilSansMachine(id) {
+  const fil = (hOrch.list || []).find((c) => c.id === id);
+  if (!fil || fil.machine) return;
+  let machines = [];
+  try {
+    const rm = await HarnessAPI.getMachines();
+    machines = (rm && rm.data) || [];
+  } catch (e) { return; }
+  if (machines.filter((m) => m.enLigne).length < 2) return; // le routage tranche seul, et l'adoption écrit son choix
+  const choix = await hChoisirMachine(machines);
+  if (!choix || id !== hOrch.convId) return;
+  const r = await HarnessAPI.setConversationMachine(id, choix);
+  if (!r.ok) { showToast(r.erreur || 'Rattachement impossible', 'warn'); return; }
+  await hLoadConvList();
+  showToast(`Fil rattaché à ${choix}`, 'ok');
 }
 
 // ---- rendu incrémental d'un événement (le cœur du streaming) ---------------

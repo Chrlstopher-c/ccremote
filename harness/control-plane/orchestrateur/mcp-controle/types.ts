@@ -56,9 +56,38 @@ export interface ContratRetour {
  */
 export interface CibleEquipe extends FileEntreeCiblee, SourceInterruption {}
 
-/** Résout la cible d'une mission active. `null` = mission inconnue ou plus vivante. */
+/**
+ * Résout la cible d'une mission active. `null` = mission inconnue ou plus vivante.
+ *
+ * `☠` Ce port n'est atteignable QUE depuis la machine qui héberge le worker : il
+ * manipule un `SDKUserMessage` et un `query.interrupt()`, qui ne traversent aucun
+ * lien. Le control plane (Pi) parle aux équipes par `EmetteurEquipe` ci-dessous —
+ * voir le commentaire de ce port pour le défaut que cette distinction répare.
+ */
 export interface RepertoireCibles {
   cible(missionId: string): CibleEquipe | null;
+}
+
+/**
+ * Port de parole vers une équipe VIVANTE, **traversant le lien** (D.3
+ * `envoyer_instruction` / `interrompre_worker`).
+ *
+ * `☠ CE QUE CE PORT RÉPARE` — jusqu'au 02/08, `envoyer_a_equipe` et
+ * `interrompre_equipe` consommaient `RepertoireCibles`, qu'aucune composition du
+ * Pi ne pouvait satisfaire (un `SDKUserMessage` ne se sérialise pas) : la
+ * composition passait `CIBLES_NON_CABLEES`, qui rendait toujours `null`, et
+ * l'outil traduisait ce `null` en « équipe introuvable ou plus vivante ». Refus
+ * CONSTANT, jamais lié à l'état réel de l'équipe — et l'orchestrateur, croyant
+ * ses équipes mortes, tentait des `relancer_equipe` sur des équipes bien vivantes
+ * (mesuré en prod le 02/08 : six occurrences du warn « RepertoireCibles non
+ * câblé »). Le chemin réel existait déjà et servait l'interface depuis le 01/08 :
+ * `pilotage.envoyerInstruction` sur le canal de contrôle.
+ */
+export interface EmetteurEquipe {
+  /** Met en file (H-67) — n'interrompt jamais le tour en cours. */
+  envoyer(missionId: string, texte: string): Promise<{ readonly detail: string }>;
+  /** Coupe le tour en cours (`query.interrupt()` exécuté sur la machine hôte). */
+  interrompre(missionId: string): Promise<void>;
 }
 
 /** Port de fin de vie (F puis B, A.2.2) — libère le worktree, termine le worker. */
@@ -66,9 +95,15 @@ export interface ArreteurMission {
   arreter(missionId: string): Promise<void>;
 }
 
-/** Port de relance après crash (B, `resume`, A.2.2). */
+/**
+ * Port de relance après crash (B, `resume`, A.2.2).
+ *
+ * `☠` `dejaVivant` n'est pas cosmétique : une relance sur un worker vivant est
+ * un no-op, et le taire faisait annoncer « relance transmise » à l'orchestrateur
+ * pour une équipe `idle` que rien ne réveillait.
+ */
 export interface RelanceurMission {
-  relancer(missionId: string, sessionId: string): Promise<void>;
+  relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }>;
 }
 
 /** Port de garde-fou (G) — plafond par mission, filet de dernier recours (H-68). */

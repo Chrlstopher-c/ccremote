@@ -58,13 +58,14 @@ import type {
   ExplorateurProjets,
   LecteurFichierProjet,
   RelanceurMission,
-  RepertoireCibles,
+  EmetteurEquipe,
 } from './types.ts';
 
 export interface DependancesServeurControle {
   readonly registre: Registre;
   readonly repertoireProjets: string;
-  readonly cibles: RepertoireCibles;
+  /** Parole vers une équipe vivante — traverse le lien (voir `EmetteurEquipe`). */
+  readonly emetteur: EmetteurEquipe;
   readonly arreteur: ArreteurMission;
   readonly relanceur: RelanceurMission;
   readonly budget: DefinisseurBudget;
@@ -318,16 +319,24 @@ function outilsCycleVie(deps: DependancesServeurControle) {
     ),
     tool(
       'envoyer_a_equipe',
-      "Transmet une instruction à une équipe. Mise en file (H-67) — n'interrompt jamais le tour en cours.",
-      { missionId: z.string(), message: z.string() },
+      "Transmet une instruction à une équipe VIVANTE — y compris quand elle est `idle` " +
+        "(elle a rendu la main et attend : c'est le moment où elle lit le plus vite). " +
+        "Mise en file (H-67), n'interrompt jamais le tour en cours. Équipe en pause : le " +
+        'message est retenu et transmis à la reprise, ce qui est dit dans la réponse.',
+      {
+        missionId: z.string().describe("Identifiant, nom ou projet de l'équipe."),
+        message: z.string(),
+      },
       async ({ missionId, message }) =>
-        protege('envoyer_a_equipe', () => envoyerAEquipe(deps.cibles, missionId, message)),
+        protege('envoyer_a_equipe', () => envoyerAEquipe(deps.emetteur, deps.registre, missionId, message)),
     ),
     tool(
       'interrompre_equipe',
-      'Stoppe le tour en cours de cette équipe.',
-      { missionId: z.string() },
-      async ({ missionId }) => protege('interrompre_equipe', () => interrompreEquipe(deps.cibles, missionId)),
+      'Stoppe le tour en cours de cette équipe — elle reprend la main aussitôt et lit ' +
+        "ce qui l'attend. Ne la met PAS en pause.",
+      { missionId: z.string().describe("Identifiant, nom ou projet de l'équipe.") },
+      async ({ missionId }) =>
+        protege('interrompre_equipe', () => interrompreEquipe(deps.emetteur, deps.registre, missionId)),
     ),
     tool(
       'arreter_equipe',

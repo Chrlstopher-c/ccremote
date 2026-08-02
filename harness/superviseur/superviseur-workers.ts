@@ -523,11 +523,19 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * est préservé, on continue la même session). Idempotent : si le worker visé
    * est déjà vivant (rejeu, ou double appel), aucun second spawn n'a lieu.
    */
-  async relancer(missionId: string, sessionId: string): Promise<void> {
+  /**
+   * `☠` Le verdict « déjà vivant » est RENDU, plus seulement journalisé en
+   * `debug`. Une relance sur un worker vivant est un no-op légitime (idempotence
+   * après reconnexion), mais l'appelant recevait `void` et annonçait « relance
+   * transmise » : l'orchestrateur croyait réveiller une équipe `idle` alors que
+   * rien ne se passait, et recommençait (défaut relevé par l'orchestrateur
+   * lui-même, 02/08). Pour parler à une équipe vivante : `envoyer_a_equipe`.
+   */
+  async relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }> {
     const existant = this.#registre.parSession(sessionId);
     if (existant !== null && existant.vivant) {
-      missionLogger(missionId).debug({ sessionId }, 'relancer() ignoré : worker déjà vivant (idempotence naturelle)');
-      return;
+      missionLogger(missionId).info({ sessionId }, 'relancer() sans effet : worker déjà vivant (idempotence naturelle)');
+      return { dejaVivant: true };
     }
     if (existant === null) {
       throw new SuperviseurError(`aucun WorkerSpec connu pour relancer la session ${sessionId} (jamais démarrée ici)`);
@@ -546,6 +554,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     });
     missionLogger(missionId).info({ sessionId }, 'worker relancé (resume, B.3.3)');
     void this.#surveillerResultats(missionId, handle);
+    return { dejaVivant: false };
   }
 
   /** Fencing par epoch (D.2.3, panne #2) — implémentation extraite dans `fencing-arbitrage-workers.ts` (dette n°4a). */

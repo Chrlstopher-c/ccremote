@@ -126,6 +126,17 @@ const HarnessAPI = (() => {
     async getMachines() { return lireReel('/machines'); },
 
     /**
+     * Rattache un fil EXISTANT à une machine.
+     * ☠ Seul moyen de récupérer un fil ouvert quand une seule machine était en
+     * ligne : sans machine écrite, il tombe en « aucune machine précisée et
+     * plusieurs sont en ligne » dès que la seconde démarre. Le serveur refuse le
+     * déplacement d'un fil qui porte encore une équipe vivante.
+     */
+    async setConversationMachine(id, machine) {
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/machine`, { machine });
+    },
+
+    /**
      * Relevé matériel PAR MACHINE, sur le lien du harness.
      * ☠ Route séparée de `/machines` à dessein : celle-ci fait un aller-retour
      * par machine (jusqu'à Cloudflare pour le VPS), alors que `/machines` sert

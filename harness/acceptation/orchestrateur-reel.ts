@@ -43,9 +43,10 @@ const incidents = new JournalIncidentsMemoire()
 
 /** Port délibérément MORT : sert à prouver le non-blocage (critère (a) de M-40). */
 const portMort = {
-  cible: () => null,
+  envoyer: (): Promise<{ readonly detail: string }> => new Promise(() => {}),
+  interrompre: (): Promise<void> => new Promise(() => {}),
   arreter: (): Promise<void> => new Promise(() => {}),
-  relancer: (): Promise<void> => new Promise(() => {}),
+  relancer: (): Promise<{ readonly dejaVivant: boolean }> => new Promise(() => {}),
   definir: (): Promise<void> => new Promise(() => {}),
 }
 
@@ -56,7 +57,7 @@ const serveurControle = creerServeurMcpControle({
   // d'utilisation réelle — l'omettre serait un oubli, le dire est un choix.
   utilisationParc: UTILISATION_PARC_DESACTIVEE,
   configPlafondParc: {},
-  cibles: portMort,
+  emetteur: portMort,
   arreteur: portMort,
   relanceur: portMort,
   budget: portMort,

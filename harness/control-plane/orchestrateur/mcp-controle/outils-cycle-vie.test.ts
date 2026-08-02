@@ -3,11 +3,10 @@ import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import { arreterEquipe, envoyerAEquipe, interrompreEquipe, proposerCreationEquipe, relancerEquipe } from './outils-cycle-vie.ts';
 import type {
   ArreteurMission,
-  CibleEquipe,
   ConfigPlafondParc,
+  EmetteurEquipe,
   LecteurUtilisationParc,
   RelanceurMission,
-  RepertoireCibles,
 } from './types.ts';
 import type { RelevePourPlafond } from '../../../budgets/index.ts';
 
@@ -23,13 +22,11 @@ afterEach(() => {
   registre.fermer();
 });
 
-function fabriquerCible(overrides: Partial<CibleEquipe> = {}): CibleEquipe {
-  return {
-    envoyerMessage: async () => {},
-    interrupt: async () => ({ still_queued: [] }),
-    ...overrides,
-  };
-}
+/** Émetteur qui accepte tout sans rien dire de plus — le cas nominal. */
+const EMETTEUR_MUET: EmetteurEquipe = {
+  envoyer: async () => ({ detail: '' }),
+  interrompre: async () => {},
+};
 
 /** Lecteur de test : aucun compte connu ⇒ plafond de parc non contraignant (défaut). */
 const LECTEUR_PERMISSIF: LecteurUtilisationParc = { comptesConnus: () => [], releves: () => [] };
@@ -123,36 +120,105 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
   });
 });
 
+/** Équipe vivante en registre — le cas normal de tout ce bloc. */
+function equipeVivante(id: string, nom = 'auth', projet = 'alpha'): void {
+  registre.missions.creer({ id, lotId: 'lot-1', nom, projet, compteId: 'compte1', sessionId: `sess-${id}` });
+  registre.etats.appliquerEtatHarness(id, 'en_cours', { motif: 'test' });
+}
+
 describe('envoyerAEquipe (H-67 — mise en file, jamais une interruption)', () => {
   test('équipe introuvable ⇒ refus explicite', async () => {
-    const repertoire: RepertoireCibles = { cible: () => null };
-    const resultat = await envoyerAEquipe(repertoire, 'inconnue', 'salut');
+    const resultat = await envoyerAEquipe(EMETTEUR_MUET, registre, 'inconnue', 'salut');
     expect(resultat.ok).toBe(false);
-    expect(resultat.raison).toContain('introuvable');
+    expect(resultat.raison).toContain('aucune équipe');
   });
 
   test("succès ⇒ 'accepte', jamais 'applique' (l’équipe n’a pas encore lu le message)", async () => {
-    let recu: unknown;
-    const cible = fabriquerCible({ envoyerMessage: async (m) => void (recu = m) });
-    const repertoire: RepertoireCibles = { cible: () => cible };
-    const resultat = await envoyerAEquipe(repertoire, 'm-1', 'fais X');
+    equipeVivante('m-1');
+    let recu: string | undefined;
+    const resultat = await envoyerAEquipe(
+      {
+        envoyer: async (_id, t) => {
+          recu = t;
+          return { detail: 'instruction transmise' };
+        },
+        interrompre: async () => {},
+      },
+      registre,
+      'm-1',
+      'fais X',
+    );
     expect(resultat.effet).toBe('accepte');
-    expect(recu).toBeDefined();
+    expect(recu).toContain('fais X');
   });
 
   test('le message porte le préfixe structurel émetteur:orchestrateur (H-66)', async () => {
-    let recu: { message: { content: string } } | undefined;
-    const cible = fabriquerCible({ envoyerMessage: async (m) => void (recu = m as never) });
-    const repertoire: RepertoireCibles = { cible: () => cible };
-    await envoyerAEquipe(repertoire, 'm-1', 'fais X');
-    expect(recu?.message.content).toContain('[émetteur:orchestrateur]');
+    equipeVivante('m-1');
+    let recu: string | undefined;
+    await envoyerAEquipe(
+      {
+        envoyer: async (_id, t) => {
+          recu = t;
+          return { detail: '' };
+        },
+        interrompre: async () => {},
+      },
+      registre,
+      'm-1',
+      'fais X',
+    );
+    expect(recu).toContain('[émetteur:orchestrateur]');
+  });
+
+  test('☠ une équipe `idle` reste JOIGNABLE — c’est le cas d’usage, pas une erreur', async () => {
+    equipeVivante('m-idle');
+    registre.etats.appliquerEtatSdk('m-idle', 'idle');
+    const resultat = await envoyerAEquipe(EMETTEUR_MUET, registre, 'm-idle', 'continue');
+    expect(resultat.ok).toBe(true);
+  });
+
+  test('☠ équipe terminée ⇒ refus qui NOMME la vraie cause (pas « introuvable »)', async () => {
+    registre.missions.creer({ id: 'm-fin', lotId: 'lot-1', nom: 'finie', projet: 'gamma', compteId: 'compte1' });
+    registre.etats.appliquerEtatHarness('m-fin', 'terminee', { motif: 'test' });
+    const resultat = await envoyerAEquipe(EMETTEUR_MUET, registre, 'm-fin', 'salut');
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('terminee');
+  });
+
+  test('désignation libre (nom du projet) acceptée, comme pour suivre_equipe', async () => {
+    equipeVivante('m-2', 'refonte', 'beta');
+    const resultat = await envoyerAEquipe(EMETTEUR_MUET, registre, 'beta', 'continue');
+    expect(resultat.ok).toBe(true);
+    expect(resultat.ref).toBe('m-2');
+  });
+
+  test('le détail rendu par la machine est rapporté tel quel (message RETENU en pause)', async () => {
+    equipeVivante('m-3');
+    const resultat = await envoyerAEquipe(
+      { envoyer: async () => ({ detail: 'instruction retenue — mission en pause' }), interrompre: async () => {} },
+      registre,
+      'm-3',
+      'x',
+    );
+    expect(resultat.etat).toContain('retenue');
+  });
+
+  test('message vide ⇒ refus, rien ne part', async () => {
+    equipeVivante('m-4');
+    const resultat = await envoyerAEquipe(EMETTEUR_MUET, registre, 'm-4', '   ');
+    expect(resultat.ok).toBe(false);
   });
 
   test('☠ (a) un port qui ne répond jamais ⇒ refus rapide, pas de blocage', async () => {
-    const cible = fabriquerCible({ envoyerMessage: () => new Promise(() => {}) });
-    const repertoire: RepertoireCibles = { cible: () => cible };
+    equipeVivante('m-1');
     const debut = Date.now();
-    const resultat = await envoyerAEquipe(repertoire, 'm-1', 'x', 30);
+    const resultat = await envoyerAEquipe(
+      { envoyer: () => new Promise(() => {}), interrompre: async () => {} },
+      registre,
+      'm-1',
+      'x',
+      30,
+    );
     expect(Date.now() - debut).toBeLessThan(500);
     expect(resultat.ok).toBe(false);
   });
@@ -160,18 +226,40 @@ describe('envoyerAEquipe (H-67 — mise en file, jamais une interruption)', () =
 
 describe('interrompreEquipe (B.4)', () => {
   test('résolution du port ⇒ applique (la résolution EST la confirmation)', async () => {
-    const cible = fabriquerCible({ interrupt: async () => ({ still_queued: ['u-1'] }) });
-    const repertoire: RepertoireCibles = { cible: () => cible };
-    const resultat = await interrompreEquipe(repertoire, 'm-1');
+    equipeVivante('m-1');
+    const resultat = await interrompreEquipe(EMETTEUR_MUET, registre, 'm-1');
     expect(resultat.effet).toBe('applique');
   });
 
-  test('reçu dégradé (undefined) ⇒ toujours applique, jamais une erreur (H-46)', async () => {
-    const cible = fabriquerCible({ interrupt: async () => undefined });
-    const repertoire: RepertoireCibles = { cible: () => cible };
-    const resultat = await interrompreEquipe(repertoire, 'm-1');
-    expect(resultat.ok).toBe(true);
-    expect(resultat.etat).toContain('dégradé');
+  test('équipe déjà terminée ⇒ refus explicite, aucun ordre ne part', async () => {
+    registre.missions.creer({ id: 'm-fin', lotId: 'lot-1', nom: 'finie', projet: 'gamma', compteId: 'compte1' });
+    registre.etats.appliquerEtatHarness('m-fin', 'terminee', { motif: 'test' });
+    let appele = false;
+    const resultat = await interrompreEquipe(
+      {
+        envoyer: async () => ({ detail: '' }),
+        interrompre: async () => {
+          appele = true;
+        },
+      },
+      registre,
+      'm-fin',
+    );
+    expect(resultat.ok).toBe(false);
+    expect(appele).toBe(false);
+  });
+
+  test('☠ (a) port muet ⇒ refus rapide, jamais un blocage du tour', async () => {
+    equipeVivante('m-1');
+    const debut = Date.now();
+    const resultat = await interrompreEquipe(
+      { envoyer: async () => ({ detail: '' }), interrompre: () => new Promise(() => {}) },
+      registre,
+      'm-1',
+      30,
+    );
+    expect(Date.now() - debut).toBeLessThan(500);
+    expect(resultat.ok).toBe(false);
   });
 });
 
@@ -204,7 +292,7 @@ describe('arreterEquipe (fin de vie)', () => {
 describe('relancerEquipe (B.3.3, resume)', () => {
   test('aucune session à reprendre ⇒ refus', async () => {
     registre.missions.creer({ id: 'm-7', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
-    const relanceur: RelanceurMission = { relancer: async () => {} };
+    const relanceur: RelanceurMission = { relancer: async () => ({ dejaVivant: false }) };
     const resultat = await relancerEquipe(relanceur, registre, 'm-7');
     expect(resultat.ok).toBe(false);
   });
@@ -218,8 +306,23 @@ describe('relancerEquipe (B.3.3, resume)', () => {
       compteId: 'compte1',
       sessionId: 'session-8',
     });
-    const relanceur: RelanceurMission = { relancer: async () => {} };
+    const relanceur: RelanceurMission = { relancer: async () => ({ dejaVivant: false }) };
     const resultat = await relancerEquipe(relanceur, registre, 'm-8');
     expect(resultat.effet).toBe('accepte');
+  });
+
+  test('☠ worker DÉJÀ VIVANT ⇒ refus qui oriente vers envoyer_a_equipe, jamais un faux « transmise »', async () => {
+    registre.missions.creer({
+      id: 'm-9',
+      lotId: 'lot-1',
+      nom: 'x',
+      projet: 'alpha',
+      compteId: 'compte1',
+      sessionId: 'session-9',
+    });
+    const relanceur: RelanceurMission = { relancer: async () => ({ dejaVivant: true }) };
+    const resultat = await relancerEquipe(relanceur, registre, 'm-9');
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('envoyer_a_equipe');
   });
 });

@@ -40,9 +40,9 @@ beforeEach(() => {
   deps = {
     registre,
     repertoireProjets: '/tmp/mcp-controle-projets-inexistant',
-    cibles: { cible: () => null },
+    emetteur: { envoyer: async () => ({ detail: 'transmis' }), interrompre: async () => {} },
     arreteur: { arreter: async () => {} },
-    relanceur: { relancer: async () => {} },
+    relanceur: { relancer: async () => ({ dejaVivant: false }) },
     budget: { definir: async () => {} },
     utilisationParc: { comptesConnus: () => [], releves: () => [] },
     configPlafondParc: {},
