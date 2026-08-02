@@ -120,6 +120,24 @@ describe('composerOptionsOrchestrateur — désambiguïsation native (d)', () =>
     expect(() => assertInvariantsOrchestrateur(truque)).toThrow(OptionsOrchestrateurError);
   });
 
+  test('le mode est bypassPermissions, apparié à allowDangerouslySkipPermissions', () => {
+    const options = composerOptionsOrchestrateur({ decision: decisionFroide, serveurControle: creerServeurMcpControle(depsServeur) });
+    expect(options.permissionMode).toBe('bypassPermissions');
+    expect(options.allowDangerouslySkipPermissions).toBe(true);
+  });
+
+  test('☠ retour en auto — le classifieur pourrait refuser un dispatch, l’assertion le rejette (2026-08-02)', () => {
+    const options = composerOptionsOrchestrateur({ decision: decisionFroide, serveurControle: creerServeurMcpControle(depsServeur) });
+    const truque = { ...options, permissionMode: 'auto' as const };
+    expect(() => assertInvariantsOrchestrateur(truque)).toThrow(OptionsOrchestrateurError);
+  });
+
+  test('☠ mode et allowDangerouslySkipPermissions dépareillés — le SDK refuserait de démarrer', () => {
+    const options = composerOptionsOrchestrateur({ decision: decisionFroide, serveurControle: creerServeurMcpControle(depsServeur) });
+    const truque = { ...options, allowDangerouslySkipPermissions: false };
+    expect(() => assertInvariantsOrchestrateur(truque)).toThrow(OptionsOrchestrateurError);
+  });
+
   test('☠ AskUserQuestion retiré de tools lève à l’assertion', () => {
     const options = composerOptionsOrchestrateur({ decision: decisionFroide, serveurControle: creerServeurMcpControle(depsServeur) });
     const truque = { ...options, tools: (options.tools as string[]).filter((t) => t !== 'AskUserQuestion') };

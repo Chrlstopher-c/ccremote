@@ -78,7 +78,29 @@ export function composerOptionsOrchestrateur(deps: DependancesOptionsOrchestrate
     ...identite,
     cwd: deps.cwd,
     model: MODELE_ORCHESTRATEUR,
-    permissionMode: 'auto',
+    // `☠` `bypassPermissions` et NON `auto` (décision Chris, 2026-08-02) — même
+    // raison que pour les workers le 31/07, un cran plus haut. MESURÉ le 02/08 à
+    // 12h22 : le classifieur du mode `auto` a refusé un `creer_equipe`
+    // (« Blocked by classifier ») sur un mandat combinant mise en production,
+    // suppression d'un compte en base et déploiement. L'orchestrateur s'est
+    // arrêté net, en pleine fenêtre d'autonomie, sur une décision que plus
+    // personne n'arbitrait — exactement le mode de panne que le retrait du bus
+    // d'escalade rend définitif.
+    //
+    // `☠` Le refus n'est PAS reproductible hors contexte : trois bancs le 02/08
+    // (mandat exact rejoué, écriture distante d'un settings de permissions vers
+    // /tmp puis vers la vraie cible) ont tous passé sans refus. Le classifieur
+    // juge la session, pas l'action — donc une règle `permissions.allow` ne peut
+    // être ni prouvée ni bornée, et seul le mode supprime le mode de panne.
+    //
+    // `☠` Ce qui borne l'orchestrateur ne dépend PAS du mode : sa capacité est
+    // amputée par `tools` (jamais le preset complet) et `disallowedTools` —
+    // ni Bash, ni Write, ni Edit, ni Agent. Sa seule surface d'action reste le
+    // serveur MCP de contrôle. Acceptation (a) intacte.
+    permissionMode: 'bypassPermissions',
+    // Exigé par le SDK dès que le mode est `bypassPermissions` : garde-fou
+    // volontaire, pour que le contournement soit un choix écrit et jamais un défaut.
+    allowDangerouslySkipPermissions: true,
     tools: [...OUTILS_ORCHESTRATEUR],
     disallowedTools: [...OUTILS_INTERDITS_ORCHESTRATEUR],
     mcpServers: { [nomServeur]: deps.serveurControle },
@@ -106,6 +128,7 @@ export function composerOptionsOrchestrateur(deps: DependancesOptionsOrchestrate
  */
 export function assertInvariantsOrchestrateur(options: Options): void {
   assertPasDeToolsDangereux(options);
+  assertModeAutonomeCoherent(options);
   assertAskUserQuestionDisponible(options);
   assertConfigMachineHonoree(options);
   assertServeurControlePresent(options);
@@ -146,9 +169,43 @@ function assertPasDeToolsDangereux(options: Options): void {
 }
 
 /**
+ * Le SDK exige `permissionMode: 'bypassPermissions'` et `allowDangerouslySkipPermissions`
+ * ENSEMBLE — dépareillés, il refuse de démarrer. Même garde que côté workers
+ * (`workers/options-composition.ts`) : le contournement doit être un choix écrit,
+ * jamais un défaut hérité.
+ */
+function assertModeAutonomeCoherent(options: Options): void {
+  if (options.permissionMode !== 'bypassPermissions') {
+    throw new OptionsOrchestrateurError(
+      `permissionMode « ${String(options.permissionMode)} » : l'orchestrateur doit tourner en bypassPermissions — ` +
+        "en 'auto' le classifieur peut refuser un dispatch que plus personne n'arbitre (mesuré le 2026-08-02).",
+    );
+  }
+  if (options.allowDangerouslySkipPermissions !== true) {
+    throw new OptionsOrchestrateurError(
+      'permissionMode et allowDangerouslySkipPermissions dépareillés : le SDK les exige ensemble.',
+    );
+  }
+}
+
+/**
  * A.3.2, `☠` documenté dans 04-arbre-A : `dontAsk` refuse `AskUserQuestion` au lieu
  * de le présenter — une équipe (ou ici l'orchestrateur) dans ce mode ne peut plus
- * désambiguïser. Le mode nominal `'auto'` ne pose pas ce problème.
+ * désambiguïser.
+ *
+ * `☠` CETTE ASSERTION NE PROUVE QUE LA DEMANDE, PAS LA LIVRAISON. Mesuré le
+ * 2026-08-02 (`acceptation/askuserquestion-bypass-reel.ts`) : `AskUserQuestion`
+ * figure bien dans `tools`, l'assertion passe — et le SDK ne le livre PAS. Le
+ * message `init` d'une session composée par ce fichier annonce
+ * `Glob, Grep, Read, WebFetch, WebSearch, mcp__ccremote-controle__*` et rien
+ * d'autre ; le modèle répond « je n'ai pas l'outil AskUserQuestion dans cette
+ * session » et bascule en texte libre. Zéro `tool_use` AskUserQuestion dans
+ * l'intégralité des transcripts de production de l'orchestrateur.
+ *
+ * Le comportement est IDENTIQUE en `auto` et en `bypassPermissions` : le passage
+ * en mode autonome n'y est pour rien, le défaut lui préexiste. A.3.2 reste donc à
+ * rebrancher — piste non explorée : le banc passe un prompt `string`, la
+ * production un flux d'entrée en streaming, ce qui pourrait changer la livraison.
  */
 function assertAskUserQuestionDisponible(options: Options): void {
   const tools = options.tools;
