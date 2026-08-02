@@ -15,9 +15,19 @@ const HValise = (() => {
   const remplisseurs = new Map();
   let sequence = 0;
 
-  /** Enregistre le contenu d'une valise et rend l'identifiant à poser dessus. */
-  function enregistrer(remplir) {
-    const cle = `v${(sequence += 1)}`;
+  /**
+   * Enregistre le contenu d'une valise et rend l'identifiant à poser dessus.
+   *
+   * ☠ `cleStable` n'est pas un confort : sans elle, chaque rendu produit `v1`,
+   * `v2`, `v3`… donc un HTML DIFFÉRENT pour un contenu identique. Un fil qui se
+   * compare à lui-même pour ne remplacer que ce qui a changé (voir
+   * `hMajSegments`) croyait alors tout changé, remplaçait tout, et refermait
+   * chaque valise dépliée — le défaut qu'on corrige. Elle supprime aussi une
+   * fuite : la Map grossissait d'une entrée par valise ET par rafraîchissement,
+   * indéfiniment, sur une page qu'on laisse ouverte des heures.
+   */
+  function enregistrer(remplir, cleStable) {
+    const cle = cleStable === undefined ? `v${(sequence += 1)}` : cleStable;
     remplisseurs.set(cle, remplir);
     return cle;
   }

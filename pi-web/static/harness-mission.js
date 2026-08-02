@@ -28,7 +28,9 @@ const H_ICO_HORLOGE =
   '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>';
 
 function hValiseOutilsTemplate(seg, index) {
-  const cle = HValise.enregistrer(() => hCorpsValiseOutils(index));
+  // ☠ Clé DÉTERMINISTE : le même segment produit le même HTML d'un rendu à
+  // l'autre, sans quoi la comparaison par signature déclare tout modifié.
+  const cle = HValise.enregistrer(() => hCorpsValiseOutils(index), `outils-${index}`);
   return HValise.html(hLibelleValise(seg.items), cle);
 }
 
@@ -39,7 +41,10 @@ function hValiseOutilsTemplate(seg, index) {
  */
 function hValisePenseesTemplate(seg, index) {
   const apercu = seg.items[0].text.replace(/\s+/g, ' ').trim();
-  const cle = HValise.enregistrer(() => `<div class="h-think">${seg.items.map((e) => hMarkdown(e.text)).join('')}</div>`);
+  const cle = HValise.enregistrer(
+    () => `<div class="h-think">${seg.items.map((e) => hMarkdown(e.text)).join('')}</div>`,
+    `pensees-${index}`,
+  );
   return HValise.html(apercu, cle, H_ICO_HORLOGE);
 }
 
@@ -48,12 +53,12 @@ function hValisePenseesTemplate(seg, index) {
  * bloque le travail, et la manquer coûte une équipe arrêtée sans que personne ne
  * le sache. Une fois résolue, elle redevient une ligne grise comme les autres.
  */
-function hPermissionTemplate(ev) {
+function hPermissionTemplate(ev, index) {
   const c = hParseOutil(ev.text);
   const commande = c.command || c.file_path || c.path || ev.text;
   if (!ev.pending) {
     const issue = ev.resolved || (ev.auto ? 'résolue par le lead' : 'traitée');
-    const cle = HValise.enregistrer(() => `<div class="h-blk">${escapeHtml(commande)}</div>`);
+    const cle = HValise.enregistrer(() => `<div class="h-blk">${escapeHtml(commande)}</div>`, `perm-${index}`);
     return HValise.html(`${ev.tool || 'Outil'} · ${issue}`, cle);
   }
   return `<div class="h-perm">
@@ -75,7 +80,7 @@ function hSegmentTemplate(seg, index) {
   if (seg.genre === 'outils') return hValiseOutilsTemplate(seg, index);
   if (seg.genre === 'pensees') return hValisePenseesTemplate(seg, index);
   if (seg.genre === 'operateur') return hOperateurTemplate(seg.ev);
-  if (seg.genre === 'permission') return hPermissionTemplate(seg.ev);
+  if (seg.genre === 'permission') return hPermissionTemplate(seg.ev, index);
   if (seg.genre === 'systeme') return hSystemeTemplate(seg.ev);
   return hParoleTemplate(seg.ev);
 }
@@ -89,6 +94,91 @@ function hCorpsFil(m) {
     return '<div class="h-vide">Rien à afficher pour l’instant — cette équipe n’a encore rien produit.</div>';
   }
   return hSegmentsCourants.map(hSegmentTemplate).join('');
+}
+
+// ============ Rendu INCRÉMENTAL du fil d'une équipe ============
+//
+// ☠ CE QUE CECI REMPLACE — `corps.innerHTML = hCorpsFil(m)` à chaque nouvel
+// événement. Tout le fil était reconstruit : les valises dépliées se refermaient
+// sous les yeux de l'opérateur, et chaque bloc rejouait son animation d'entrée.
+// Sur une équipe bavarde (un événement toutes les quelques secondes), lire un
+// résultat d'outil devenait une course contre le rafraîchissement — mesuré le
+// 02/08 sur la page d'une mission réelle.
+//
+// ☠ La difficulté qui avait fait renoncer à l'incrémental est REELLE et traitée
+// ici : un outil de plus change le libellé de la DERNIÈRE valise (« 6 commandes »
+// → « 7 commandes »). On ne peut donc pas se contenter d'ajouter à la fin. La
+// réponse n'est pas de tout réécrire, c'est de comparer SEGMENT PAR SEGMENT et
+// de ne remplacer que ceux dont le HTML a réellement changé — en pratique le
+// dernier, pendant qu'une équipe travaille.
+
+/** Un segment = un nœud racine, marqué de son index et de sa signature. */
+function hNoeudSegment(html, index) {
+  const hote = document.createElement('div');
+  hote.innerHTML = html;
+  const noeud = hote.firstElementChild;
+  if (!noeud) return null;
+  noeud.dataset.seg = String(index);
+  noeud.dataset.sig = html;
+  return noeud;
+}
+
+/**
+ * Rouvre, sur le nœud neuf, ce qui était déplié sur l'ancien.
+ *
+ * ☠ Ne concerne QUE le segment réellement modifié — typiquement la valise en
+ * cours, celle que l'opérateur vient d'ouvrir pour suivre le travail. La laisser
+ * se refermer parce qu'un outil s'est ajouté dedans est exactement le défaut
+ * qu'on corrige : elle se referme au pire moment, celui où il regarde.
+ */
+function hReprendreOuvertures(ancien, neuf) {
+  const boutonsAnciens = [...ancien.querySelectorAll('[data-valise]')];
+  const boutonsNeufs = [...neuf.querySelectorAll('[data-valise]')];
+  boutonsAnciens.forEach((b, i) => {
+    const corps = b.parentElement && b.parentElement.querySelector(':scope > .h-case-body');
+    if (!corps || corps.hidden) return;
+    const cible = boutonsNeufs[i];
+    if (cible) cible.dataset.rouvrir = '1';
+  });
+}
+
+/**
+ * Met le corps du fil à jour sans jamais toucher aux segments inchangés.
+ * Rend `true` si quelque chose a bougé.
+ */
+function hMajSegments(corps, m) {
+  const segments = hSegmenterFeed(m.feed);
+  hSegmentsCourants = segments;
+  const existants = [...corps.querySelectorAll(':scope > [data-seg]')];
+  let modifie = false;
+
+  segments.forEach((seg, i) => {
+    const html = hSegmentTemplate(seg, i);
+    const ancien = existants[i];
+    // Inchangé : on n'y touche PAS. C'est toute la valeur de cette fonction —
+    // un nœud qu'on ne réécrit pas garde son état déplié et n'anime rien.
+    if (ancien && ancien.dataset.sig === html) return;
+    const neuf = hNoeudSegment(html, i);
+    if (!neuf) return;
+    modifie = true;
+    if (ancien) {
+      hReprendreOuvertures(ancien, neuf);
+      ancien.replaceWith(neuf);
+      neuf.querySelectorAll('[data-valise][data-rouvrir]').forEach((b) => {
+        delete b.dataset.rouvrir;
+        b.click();
+      });
+    } else {
+      corps.appendChild(neuf);
+    }
+  });
+
+  // Segments disparus (compaction du feed côté serveur) : on retire le surplus.
+  existants.slice(segments.length).forEach((n) => {
+    n.remove();
+    modifie = true;
+  });
+  return modifie;
 }
 
 // ------------------------------------------------------------------ rendu
@@ -108,7 +198,15 @@ async function hRenderMissionDetail(id) {
   document.getElementById('hMissionTitle').textContent = m.title;
   document.getElementById('hMissionSub').innerHTML = hSousTitre(m);
 
-  corps.innerHTML = (HarnessAPI._isPcOnline() ? '' : hPcAbsentBanner('cette mission')) + hCorpsFil(m);
+  // ☠ La bannière « PC absent » est posée à part, SANS `data-seg` : le rendu
+  // incrémental ne compte que les segments, et l'y mêler décalerait tous les
+  // index d'un cran dès qu'une machine tombe.
+  corps.innerHTML = HarnessAPI._isPcOnline() ? '' : hPcAbsentBanner('cette mission');
+  if (m.feed.length === 0) {
+    corps.insertAdjacentHTML('beforeend', hCorpsFil(m));
+  } else {
+    hMajSegments(corps, m);
+  }
 
   const dock = document.getElementById('hMissionDock');
   const actif = HarnessAPI._isPcOnline() && !['echec', 'terminee'].includes(m.state);
@@ -262,11 +360,13 @@ async function hMajMissionDetail(id) {
     hMissionRendue.empreinte = empreinte;
   }
 
-  if (m.feed.length !== hMissionRendue.feedLen) {
-    const vue = document.querySelector('[data-view="harness-mission"]');
-    // « Collé en bas » à 80 px près : ne rattraper le défilement que si on suivait.
-    const suivait = vue ? vue.scrollHeight - vue.scrollTop - vue.clientHeight < 80 : true;
-    corps.innerHTML = hCorpsFil(m);
+  // ☠ Comparé SEGMENT PAR SEGMENT, jamais par la longueur du feed : deux
+  // événements peuvent enrichir une valise existante sans en créer de nouvelle
+  // (un résultat d'outil qui rejoint son appel), et le contraire est vrai aussi.
+  const vue = document.querySelector('[data-view="harness-mission"]');
+  // « Collé en bas » à 80 px près : ne rattraper le défilement que si on suivait.
+  const suivait = vue ? vue.scrollHeight - vue.scrollTop - vue.clientHeight < 80 : true;
+  if (hMajSegments(corps, m)) {
     hMissionRendue.feedLen = m.feed.length;
     if (suivait) hDefilerEnBas();
   }

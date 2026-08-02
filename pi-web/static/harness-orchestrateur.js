@@ -15,6 +15,15 @@ let hModelsCache = [];
 const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [], barreSig: '', partielEl: null, mandats: {} };
 const HORCH_KEY = 'ccremote.orch.conv';
 const HORCH_POLL_MS = 400;
+// ☠ LE FIL NE DORT PLUS. Le sondage ne tournait QUE pendant une génération :
+// tout ce que le harness pousse de son propre chef — fin d'équipe, notification
+// remise dans le fil, réveil d'autonomie — n'apparaissait qu'après un
+// rafraîchissement manuel de la page. C'est le défaut le plus visible au
+// quotidien : on regarde un fil qui ne bouge plus alors que l'équipe a rendu.
+// Deux cadences, parce qu'un fil qu'on ne regarde pas n'a pas besoin de la même
+// fraîcheur qu'un fil ouvert sous les yeux.
+const HORCH_VEILLE_MS = 4000;
+const HORCH_VEILLE_CACHEE_MS = 15000;
 
 // ---- cycle de vie de la vue -------------------------------------------------
 async function hInitOrchestrateur() {
@@ -24,6 +33,21 @@ async function hInitOrchestrateur() {
   const cible = (hOrch.list.find((c) => c.id === saved) ? saved : (hOrch.list[0] && hOrch.list[0].id)) || null;
   if (cible) await hOpenConversation(cible);
   else await hNewConversation();
+}
+
+/**
+ * Le fil demandé est-il DÉJÀ à l'écran, avec son contenu ?
+ *
+ * ☠ `switchView` rappelle `hInitOrchestrateur()` à chaque entrée dans la vue.
+ * Sans cette garde, revenir du Parc vidait le chat et le reconstruisait
+ * intégralement : toutes les balises dépliées se refermaient, et le fil rejouait
+ * ses animations d'entrée. Mesuré le 02/08 — un aller-retour Parc → conversation
+ * suffisait à perdre ce qu'on venait d'ouvrir.
+ */
+function hFilDejaAffiche(id) {
+  if (hOrch.convId !== id) return false;
+  const chat = document.getElementById('hChatBody');
+  return !!chat && chat.querySelector('[data-seq]') !== null;
 }
 
 // ☠ Compat : core.js appelait hRenderGauges. On garde le nom mais il route
@@ -285,6 +309,13 @@ function hTamponMandat(id, libelle, couleur) {
 
 // ---- ouverture + rendu complet d'un fil ------------------------------------
 async function hOpenConversation(id) {
+  // ☠ Reprise, pas reconstruction : on reprend le sondage là où il en était.
+  if (hFilDejaAffiche(id)) {
+    hStopPoll();
+    hMajBarreOrch();
+    void hPollNow();
+    return;
+  }
   hStopPoll();
   hOrch.convId = id; hOrch.cursor = 0; hOrch.cur = null; hOrch.partielEl = null;
   localStorage.setItem(HORCH_KEY, id);
@@ -321,7 +352,10 @@ async function hOpenConversation(id) {
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
   hRenderStats(d);
   hScrollChat();
-  if (hOrch.generating) hStartPoll();
+  // ☠ Le sondage démarre TOUJOURS, generation ou pas : c'est lui qui apporte ce
+  // que le harness pousse de lui-même (fin d'équipe, rappel, réveil). Il choisit
+  // sa cadence tout seul — rapide pendant un tour, en veille sinon.
+  hStartPoll();
   void hRattacherFilSansMachine(id);
 }
 
@@ -915,7 +949,14 @@ async function hPollNow() {
   const id = hOrch.convId; if (!id) return;
   const r = await HarnessAPI.getConversationEvents(id, hOrch.cursor);
   if (id !== hOrch.convId) return; // changement de fil pendant l'attente
-  if (r.erreur) { hStopPoll(); return; } // silencieux : un prochain envoi relancera
+  // ☠ Une erreur ne TUE plus la veille : le Pi peut être injoignable trois
+  // secondes (redéploiement, réseau) — s'arrêter là condamnait le fil au
+  // rafraîchissement manuel jusqu'au prochain message envoyé. On réessaie, à
+  // cadence lente, en silence.
+  if (r.erreur) {
+    hOrch.timer = setTimeout(hPollNow, HORCH_VEILLE_CACHEE_MS);
+    return;
+  }
   const d = r.data || {};
   const auBas = hEstEnBas();
   // ☠ Le bloc en cours n'est PLUS détruit à chaque arrivée d'événements : les
@@ -930,21 +971,44 @@ async function hPollNow() {
     for (const p of (props.data || [])) hOrch.mandats[p.id] = p;
     if (id !== hOrch.convId) return;
   }
+  const generaitAvant = hOrch.generating;
+  const nouveauxEvenements = (d.events || []).length;
   (d.events || []).forEach((ev) => { hAppendEvent(ev); hOrch.cursor = ev.seq; });
   hOrch.generating = !!d.generating;
   hRenderPartiel(d.partial || null);
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
   hRenderStats(d);
   if (auBas) hScrollChat();
-  if (hOrch.generating) hOrch.timer = setTimeout(hPollNow, HORCH_POLL_MS);
-  else {
-    hStopPoll(); hShowTyping(false); hOrch.cur = null;
+  if (hOrch.generating) {
+    hOrch.timer = setTimeout(hPollNow, HORCH_POLL_MS);
+    return;
+  }
+  hShowTyping(false);
+  hOrch.cur = null;
+  // ☠ Les effets de FIN DE TOUR ne se déclenchent qu'à la transition, jamais à
+  // chaque battement de veille : rappeler la liste des fils et les mandats
+  // toutes les 4 s ferait clignoter la barre et rejouerait les cartes.
+  if (generaitAvant) {
     hLoadConvList(); // fin de tour : titres/ordre/contexte à jour
     // ☠ Après le tour, pas pendant : c'est APRÈS que le harness a eu le temps
     // d'auto-approuver. Pendant la génération, une proposition tout juste posée
     // apparaîtrait comme « déjà tranchée » entre deux sondages.
     void hRafraichirMandats();
+  } else if (nouveauxEvenements > 0) {
+    // Le harness a parlé tout seul (fin d'équipe, rappel, notification remise) :
+    // la liste porte le contexte et l'ordre des fils, elle doit suivre.
+    hLoadConvList();
   }
+  // ☠ La veille CONTINUE, y compris quand la vue n'est pas active : c'est ce qui
+  // fait qu'on retrouve un fil à jour en y revenant, sans rien rafraîchir.
+  hOrch.timer = setTimeout(hPollNow, hVueOrchVisible() ? HORCH_VEILLE_MS : HORCH_VEILLE_CACHEE_MS);
+}
+
+/** La conversation est-elle sous les yeux de l'opérateur en ce moment ? */
+function hVueOrchVisible() {
+  if (document.hidden) return false;
+  const vue = document.querySelector('.view.active');
+  return !!vue && vue.dataset.view === 'harness-orchestrateur';
 }
 
 /** Ne recolle en bas que si l'opérateur y était déjà — sinon on lui vole sa lecture. */
