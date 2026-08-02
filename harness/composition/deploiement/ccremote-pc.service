@@ -2,10 +2,18 @@
 #
 # Installation (sur le PC) :
 #   mkdir -p ~/.config/systemd/user
-#   cp ccremote-pc.service ~/.config/systemd/user/
+#   sed 's#%h/ccremote/harness#/mnt/projects/ccremote/harness#g' ccremote-pc.service \
+#     > ~/.config/systemd/user/ccremote-pc.service
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now ccremote-pc.service
 #   loginctl enable-linger <utilisateur>   # démarre le service SANS session graphique ouverte
+#
+# `☠` LE `sed` N'EST PAS OPTIONNEL SUR LE PC, et l'oublier casse le service en
+# silence de démarrage : `%h/ccremote` n'existe pas ici, le dépôt vit dans
+# `/mnt/projects/ccremote`. Copié tel quel (ce que disait cette notice avant le
+# 02/08), systemd relance en boucle sur « Module not found » — payé le jour même,
+# en déployant une correction sans rapport. Le déploiement du VPS fait ce même
+# `sed`, mais il est SCRIPTÉ là-bas ; ici l'installation est manuelle.
 #
 # `☠` Ne PAS ajouter de commande d'arrêt qui fait `pkill`/`kill` par motif
 # générique (`bun`, `node`…) — incident réel déjà payé sur ce parc, un motif
@@ -19,6 +27,11 @@
 # clair dans un fichier suivi par git).
 
 [Unit]
+# `☠` ICI, dans [Unit] — pas dans [Service], où systemd l'ignore en le disant
+# (« Unknown key », vu dans le journal du Pi le 02/08). Mal placée, la clé ne
+# désarmait RIEN : un service qui échoue vite cinq fois se serait retrouvé en
+# `failed` définitif, exactement ce que ce réglage existe pour empêcher.
+StartLimitIntervalSec=0
 Description=ccremote — process PC (harness Bun, H-75 : client du lien Pi)
 After=network-online.target
 Wants=network-online.target
@@ -39,7 +52,6 @@ RestartSec=60
 # reconnecte tout seul le lendemain ». Un service arrêté net obligerait à
 # ouvrir un SSH depuis un téléphone — l'erreur coûte bien plus cher dans ce
 # sens que dans l'autre.
-StartLimitIntervalSec=0
 # Backoff de reconnexion RÉSEAU déjà géré par `client-lien-pi.ts` (gigue
 # comprise) — `RestartSec` ne couvre que le redémarrage du PROCESS.
 #

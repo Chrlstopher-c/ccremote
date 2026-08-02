@@ -19,6 +19,11 @@
 # `/login` expiré.
 
 [Unit]
+# `☠` ICI, dans [Unit] — pas dans [Service], où systemd l'ignore en le disant
+# (« Unknown key », vu dans le journal du Pi le 02/08). Mal placée, la clé ne
+# désarmait RIEN : un service qui échoue vite cinq fois se serait retrouvé en
+# `failed` définitif, exactement ce que ce réglage existe pour empêcher.
+StartLimitIntervalSec=0
 Description=ccremote — control plane du harness (Bun, H-75 : le Pi héberge)
 After=network-online.target
 Wants=network-online.target
@@ -33,7 +38,6 @@ Restart=always
 # `☠` 60 s, pas 10 — même raison que côté PC : une configuration fausse doit
 # coûter une tentative par minute, pas six, et se réparer seule dès correction.
 RestartSec=60
-StartLimitIntervalSec=0
 
 # Codes de sortie : 78 = configuration fausse (variable absente), 1 = plantage.
 # `systemctl status ccremote-harness` les distingue sans ouvrir le journal.
