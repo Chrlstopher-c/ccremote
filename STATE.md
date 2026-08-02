@@ -6,9 +6,55 @@
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 02/08** : **1414 tests / 1414 verts**, typecheck propre, SDK épinglé **0.3.220**, schéma
-du registre en **version 23**. `⚠` La prod tourne encore le code du 01/08 : les correctifs du 02/08
-sont commités et testés, **PAS déployés** (décision de Chris — déploiement sur son ordre explicite).
+**État au 02/08 (fin de soirée)** : **1429 tests / 1429 verts**, typecheck propre, SDK épinglé
+**0.3.220**, schéma du registre en **version 23**. **TOUT EST DÉPLOYÉ** — Pi (control plane + web)
+et les deux machines de travail (`trinityarch`, `vps-e411b5c7`), les deux rattachées, zéro
+supersede, zéro erreur au journal. Dernier commit en prod : `4e8df9f`.
+
+### `☠` 02/08 (soir) — « TERMINÉE » ALORS QUE TROIS SOUS-AGENTS TRAVAILLAIENT ENCORE
+
+Le motif le plus cher de la journée, et le plus instructif : **un message du SDK dont on avait
+détourné le sens.**
+
+Un lead lance quatre sous-agents en arrière-plan et rend la main. Le harness sait déjà ne pas
+conclure sur ce `result`-là — il compte les tâches de fond annoncées par `background_tasks_changed`,
+et la garde a tenu (journal du VPS, 16:34:14, quatre tâches vues). Mais le collecteur remettait ce
+compteur à zéro sur chaque message `init`, en croyant qu'un `init` signale le (re)démarrage du
+process CLI. **Le SDK en émet un à CHAQUE REPRISE DE TOUR**, notamment juste après la notification
+d'un sous-agent terminé. Le premier agent notifie à 16:37:48 → l'`init` de reprise efface les trois
+autres → le `result` de 16:37:51 passe pour une fin de mission. À 16:37:53, les trois derniers
+sous-agents rendaient leur travail dans une session déjà close : leurs notifications sont dans le
+transcript, enfilées, jamais livrées. Mission `ab7183f0`, **7,72 $ perdus**.
+
+Deux équipes sur six touchées ce jour-là (`ab7183f0` 7,72 $ et la vague 2 de Plume 14,02 $) — ce
+sont exactement les deux qui ont lancé des sous-agents en arrière-plan, et les deux seules dont le
+transcript se termine sur des notifications en attente. L'orchestrateur en annonçait trois : sa
+comptabilité était fausse, comme son diagnostic.
+
+**Ce que ça a corrigé, au-delà de la mort prématurée** — le même défaut alimentait trois symptômes
+qu'on croyait distincts : la notification « équipe terminée » envoyée à l'orchestrateur alors que
+l'équipe travaillait, l'affichage « au repos » dans le Parc, et la clôture automatique qui fermait
+le projet quinze minutes plus tard. Tous trois découlaient de `etatSdk = 'idle'` posé au `result`.
+
+Trois règles qui en sortent, valables bien au-delà de ce fichier :
+
+1. **Un événement de cycle de vie appartient à celui qui le PROVOQUE.** La remise à zéro est
+   désormais dite par le superviseur (`ouvrir`, `reinitialiserTachesFond` appelé par `relancer`),
+   jamais déduite d'un message du flux dont ce n'est pas le sens.
+2. **« A fini de parler » n'est pas « a fini ».** `etatSdk` est maintenant DÉRIVÉ à la lecture
+   (`etatSdkEffectif`), une seule source. Deux écritures indépendantes du même champ finissent
+   toujours par diverger — c'est exactement comme ça que la panne est née.
+3. **Ne pas troquer une panne contre son opposé.** Une borne de patience de 20 min empêche un
+   `bun run dev` détaché de rendre une équipe immortelle, projet verrouillé à vie.
+
+`☠` **Le diagnostic de l'orchestrateur était faux, et il allait l'écrire dans ses mandats.** Il
+avait conclu que le piège était « le réflexe des leads à déléguer en arrière-plan puis rendre la
+main » et prévoyait d'interdire le mécanisme. Le mécanisme n'était pas fautif : le compteur l'était.
+Ses trois derniers mandats portaient une clause d'interdiction — elle a été retirée après
+confrontation aux journaux. Il garde l'interdiction de l'ATTENTE PASSIVE, ce qui est le bon
+arbitrage. Une inférence plausible posée comme une cause établie, sans accès à l'artefact qui
+l'aurait réfutée : c'est la même famille d'erreur que l'anti-narratif de `session-awareness.md`,
+mais commise par un agent du système plutôt que par le harness lui-même.
 
 ### `☠` 02/08 — LES SIX OUTILS SUR LESQUELS L'ORCHESTRATEUR NE POUVAIT PAS COMPTER
 
@@ -275,6 +321,18 @@ section « RÈGLE ABSOLUE ».
 
 ## Points en suspens
 
+- `🎯` **LE POINT DE REPRISE DU 03/08 — un mandat de test attend le clic de Chris.** Proposition
+  `42f3a52f` (projet `/mnt/projects/bac-a-sable` sur le VPS, accès écriture) : cinq sous-agents en
+  arrière-plan lancés dans un seul message, `sleep` de 20/35/170/195/480 s, un mot chacun (ALPHA,
+  BRAVO, CHARLIE, DELTA, ECHO). Le lead rend la main immédiatement, puis **après chaque
+  notification** — c'est le geste qui tuait les équipes, reproduit cinq fois. `⚠` Deux autres
+  propositions traînent en attente (`c33f391b`, `8593870b`, stockiop en lecture) : ce sont les
+  tentatives d'avant le bac à sable, **à rejeter**.
+  **Résultat attendu** : équipe vivante 8–10 min · UNE seule notification de fin, à la vraie fin ·
+  jamais affichée au repos pendant l'attente · les cinq mots dans la synthèse · aucune clôture auto.
+  **Signature d'échec** : notification au bout d'une minute, un ou deux mots sur cinq.
+  L'orchestrateur doit aussi abaisser le plafond de 250 $ à 5 $ au démarrage via `definir_budget` —
+  second test gratuit de l'outil réparé le matin même : une BAISSE doit répondre `applique`.
 - **Deux surfaces mortes repérées le 31/07, non traitées** (signalées à Chris, hors scope du jour) :
   l'audit `PreToolUse` est branché sur un `CollecteurAuditPermissions` créé neuf à chaque worker,
   jeté à la fin, que personne ne lit — même famille de défaut que le bus d'escalade · le formulaire
@@ -285,7 +343,7 @@ section « RÈGLE ABSOLUE ».
   et ce n'est PAS du bus de permissions : c'est un canal de conversation remontante (le lead a une
   QUESTION et attend). Aujourd'hui l'orchestrateur peut lire une équipe et lui pousser un message,
   l'inverse n'existe pas.
-- **`STATE.md` dépasse encore la limite de 300 lignes** (335) : il couvre deux produits, l'app v1 et
+- **`STATE.md` dépasse largement la limite de 300 lignes** (390) : il couvre deux produits, l'app v1 et
   le harness. À scinder si la limite devient gênante.
 - **Quotas** : compte A à 27 % / 3 %, compte B à 12 % / 76 % (mesuré le 31/07 au matin). La sonde
   tourne à 60 s par compte en rotation, le 429 chronique est résorbé.

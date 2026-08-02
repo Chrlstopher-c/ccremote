@@ -199,7 +199,8 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
 - `anti-boucle-cablage.test.ts` — tests du câblage anti-boucle
 - `budgets-workers.ts` — relais `rate_limit_event`/messages d'usage vers `ObservateurUsage`
 - `sonde-quotas.ts` — mesure RÉELLE des fenêtres de rate limit d'un compte (`usage_EXPERIMENTAL`) ; interroge dès `init` puis interrompt — la méthode n'est valable que pendant que la session vit, et la laisser ouverte consommerait le quota qu'on surveille
-- `collecteur-telemetrie.ts` — ce que SEUL le PC observe : modèle résolu, coût, contexte ventilé, saturation de compte, et la file DRAINANTE des activités du lead (réflexion / outil / texte)
+- `collecteur-telemetrie.ts` — ce que SEUL le PC observe : modèle résolu, coût, contexte ventilé, saturation de compte, et la file DRAINANTE des activités du lead (réflexion / outil / texte). Porte aussi le comptage des tâches de fond et l'état SDK, DÉRIVÉ à la lecture — « tour rendu » n'est pas « au repos »
+- `taches-fond-init.test.ts` — `☠` la panne du 02/08 (mission ab7183f0, 7,72 $) : un `init` de reprise de tour ne doit PAS effacer les tâches de fond d'une équipe, et une tâche qui ne s'éteint jamais ne doit pas la rendre immortelle
 - `exploration-projets.ts` — listing en lecture seule BORNÉ à une racine (un `..` est résolu avant le contrôle, jamais après) ; `estDansRacine` y est la source unique du confinement
 - `lecture-fichier.ts` / `.test.ts` — contenu d'un fichier en lecture seule, MÊME racine que l'exploration, plafonné à 200 Ko (troncature annoncée) ; liens symboliques résolus avant le contrôle, binaires refusés
 - `fencing-arbitrage-workers.ts` — arbitrage de fencing appliqué au flux de résultats
@@ -324,6 +325,10 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
   `bypassPermissions` : Write/Edit/NotebookEdit retirés de la liste d'outils, Read/Bash conservés,
   règle scopée du plancher toujours refusée. Tout l'accès `lecture` d'un mandat en dépend —
   **à repasser à tout changement de version du SDK**
+- `taches-fond-sousagents-reel.ts` — `☠` prouve sur un flux RÉEL qu'un `init` est un début de tour
+  et non un démarrage de process. Fait tourner le VRAI `CollecteurTelemetrie` en maintenant, en
+  parallèle, la réplique de la règle d'AVANT : le même run montre les deux verdicts côte à côte
+  (dernier passage : deux `result` où l'ancienne règle tuait l'équipe, gardée par la nouvelle)
 - `worktree-git-reel.ts` — git réel, bug de perte de données trouvé et corrigé
 - `multi-comptes-reel.ts` — deux comptes Claude Code en parallèle
 - `session-store-reel.ts` — `SessionStore` sollicité par le vrai SDK

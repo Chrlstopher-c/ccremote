@@ -5,11 +5,57 @@
 
 **Contexte complet : `harness/REPRISE.md`.**
 
-### ✅ LIVRÉ LE 02/08 — les six défauts d'outillage relevés par l'orchestrateur (NON DÉPLOYÉ)
+### 🎯 EN COURS — le test qui attend le clic de Chris (03/08 au réveil)
+
+- [ ] **Approuver la proposition `42f3a52f`** dans l'interface (projet `/mnt/projects/bac-a-sable`
+      sur le VPS, accès écriture). C'est le test du correctif « tâches de fond », armé le 02/08 au
+      soir mais jamais lancé : la fenêtre d'autonomie s'était refermée à 20:00 et H-61 ne se
+      contourne pas par un message dans le fil.
+      `⚠` **Rejeter les deux autres propositions en attente** (`c33f391b`, `8593870b`, stockiop en
+      lecture) : ce sont les tentatives d'avant la création du bac à sable.
+- [ ] **Relever les quatre mesures** que l'orchestrateur doit rapporter, et ne conclure sur rien
+      d'autre : sous-agents lancés contre mots cités dans la synthèse · heure de la première
+      notification de fin reçue · état affiché par l'équipe pendant l'attente · coût total.
+      **Attendu** : équipe vivante 8–10 min, UNE seule notification (à la vraie fin), jamais au
+      repos pendant l'attente, cinq mots (ALPHA/BRAVO/CHARLIE/DELTA/ECHO) cités, aucune clôture
+      auto. **Signature d'échec** : notification au bout d'une minute, un ou deux mots sur cinq.
+- [ ] **Vérifier au passage `definir_budget`** : l'orchestrateur doit abaisser le plafond de 250 $
+      à 5 $ au démarrage. Une BAISSE doit répondre `applique` — sinon c'est un défaut de plus.
+
+### ✅ LIVRÉ ET DÉPLOYÉ LE 02/08 (soir) — l'`init` qui tuait les équipes en plein travail
+
+- [x] **Un `init` de reprise de tour effaçait les tâches de fond d'une équipe.** Le collecteur le
+      prenait pour un (re)démarrage de process CLI et vidait la liste ; le SDK en émet un à CHAQUE
+      reprise, notamment après la notification d'un sous-agent terminé. Mission `ab7183f0`, 7,72 $ :
+      quatre agents lancés, garde tenue au premier `result` (16:34:14), notification à 16:37:48,
+      `init` de reprise, `result` de 16:37:51 pris pour une fin de mission — et à 16:37:53 les trois
+      derniers sous-agents rendaient leur travail dans une session close. Deux équipes sur six
+      touchées ce jour-là (l'orchestrateur en annonçait trois : décompte faux, comme son diagnostic).
+      La remise à zéro est désormais DITE par le superviseur (`ouvrir`, `reinitialiserTachesFond`
+      appelé par `relancer`), jamais déduite du flux.
+- [x] **`etatSdk` dérivé au lieu d'être posé** — « tour rendu » n'est plus « au repos ». Éteint
+      d'un coup trois symptômes qu'on croyait distincts : notification de fin envoyée à
+      l'orchestrateur pendant que l'équipe travaillait, affichage « au repos » dans le Parc, et
+      clôture automatique à 15 min qui fermait le projet en plein travail.
+- [x] **Borne de patience de 20 min sur les tâches de fond** — sans elle, un `bun run dev` détaché
+      rendait une équipe immortelle et verrouillait son projet à vie : la panne inversée.
+- [x] **Banc réel `acceptation/taches-fond-sousagents-reel.ts`** — fait tourner le VRAI collecteur
+      sur un VRAI flux en maintenant en parallèle la réplique de la règle d'avant : le même run
+      montre les deux verdicts côte à côte. Dernier passage : deux `result` où l'ancienne règle
+      tuait l'équipe, gardée par la nouvelle.
+- [x] **Clause d'interdiction retirée des mandats de l'orchestrateur.** Il avait conclu que le
+      piège était la délégation en arrière-plan et l'interdisait depuis trois mandats. Le mécanisme
+      n'était pas fautif — interdire aurait coûté le parallélisme réel sur les missions de recherche.
+      Il garde l'interdiction de l'attente passive, ce qui est le bon arbitrage.
+- [x] **Bac à sable créé sur le VPS** (`/mnt/projects/bac-a-sable`, dépôt git, arbre propre) : il
+      n'existait aucun projet jetable, et le harness refuse d'ancrer une équipe sur un chemin
+      inexistant — l'orchestrateur avait dû se rabattre sur stockiop en lecture seule.
+
+### ✅ LIVRÉ ET DÉPLOYÉ LE 02/08 — les six défauts d'outillage relevés par l'orchestrateur
 
 L'orchestrateur a dressé lui-même la liste après une session où il n'a pas pu piloter ses équipes.
 Chacun est corrigé, chacun a son test, et chaque test a été validé DANS LES DEUX SENS (rouge sans le
-correctif, vert avec). **Rien n'est déployé : attente du feu vert de Chris.**
+correctif, vert avec). **Déployé le 02/08 au soir**, Pi et les deux machines de travail.
 
 - [x] **`envoyer_a_equipe` refusait TOUTES les équipes, vivantes comprises.** Le serveur MCP
       consommait `RepertoireCibles` (un `SDKUserMessage`, un `query.interrupt()`) — inatteignable
