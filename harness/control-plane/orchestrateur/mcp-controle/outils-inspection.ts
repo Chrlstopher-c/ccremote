@@ -129,6 +129,15 @@ export type ResolutionMission =
 export function resoudreMission(registre: Registre, designation: string): ResolutionMission {
   const exact = registre.missions.lire(designation);
   if (exact !== null) return { trouve: exact };
+  // `☠` L'IDENTIFIANT DU WORKER est accepté comme désignation de l'équipe.
+  // `creer_equipe` rend les deux — `ref` (l'équipe) et, dans son détail, la
+  // session du worker — et le second est aussi crédible que le premier pour qui
+  // lit la réponse. L'orchestrateur s'y est trompé au premier essai, le 02/08 :
+  // « équipe introuvable » sur une équipe qui venait de démarrer. Le harness
+  // CONNAÎT la correspondance ; refuser reviendrait à punir une confusion que
+  // la forme de la réponse rend inévitable.
+  const parSession = registre.missions.lireParSession(designation);
+  if (parSession !== null) return { trouve: parSession };
   const aiguille = designation.trim().toLowerCase();
   if (aiguille.length === 0) return { absent: true };
   const candidats = registre.missions.listerRecentes(200);

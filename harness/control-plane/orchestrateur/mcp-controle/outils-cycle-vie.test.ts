@@ -429,6 +429,21 @@ describe('proposerCreationEquipe × issue RÉELLE du dispatch', () => {
     expect(resultat.ref).toBe('m-42');
   });
 
+  test('☠ les DEUX identifiants sont étiquetés — celui de l’équipe est désigné comme tel', async () => {
+    const resultat = await proposer({
+      ref: 'prop-6',
+      autoApprouve: true,
+      detail: 'fenêtre d’autonomie ouverte',
+      dispatch: { etat: 'parti', missionId: 'd35acd69', detail: 'worker démarré : fabdead6' },
+    });
+    // L'orchestrateur a pris `fabdead6` pour l'équipe au premier essai (02/08) :
+    // la réponse doit nommer lequel des deux sert à lui parler.
+    expect(resultat.etat).toContain('équipe « d35acd69 »');
+    expect(resultat.etat).toContain('envoyer_a_equipe');
+    expect(resultat.etat).toContain('fabdead6');
+    expect(resultat.etat).toContain('technique');
+  });
+
   test('☠ dispatch ÉCHOUÉ ⇒ refus portant la vraie raison, jamais un « lancée »', async () => {
     const resultat = await proposer({
       ref: 'prop-2',

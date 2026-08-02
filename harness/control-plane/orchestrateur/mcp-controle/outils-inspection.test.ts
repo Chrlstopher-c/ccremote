@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import type { InterrogateurGit } from '../../../projets/index.ts';
-import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, rapportEquipe } from './outils-inspection.ts';
+import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, rapportEquipe, resoudreMission } from './outils-inspection.ts';
 
 const GIT_FACTICE_NON_GIT: InterrogateurGit = {
   estDepotGit: async () => false,
@@ -165,5 +165,34 @@ describe('rapport_equipe — ce que l’équipe a écrit', () => {
     registre.missions.ajouterActivite('m-t', 'pattern=TODO', 3_000, 'outil', 'Grep');
     // Le dernier ÉVÉNEMENT est un outil ; le dernier TEXTE reste la synthèse.
     expect(rapportEquipe(registre, 'flux').etat).toBe('la vraie synthèse');
+  });
+});
+
+/**
+ * `☠` `creer_equipe` rend DEUX identifiants — celui de l'équipe (`ref`) et celui
+ * du worker (dans le détail de la machine). L'orchestrateur a pris le second au
+ * premier essai, le 02/08, et s'est vu répondre « équipe introuvable » sur une
+ * équipe qui venait de démarrer. Le harness connaît la correspondance : la
+ * refuser punirait une confusion que la forme de la réponse rend inévitable.
+ */
+describe('resoudreMission — l’identifiant du WORKER désigne aussi son équipe', () => {
+  test('☠ un sessionId résout vers la mission qui le porte', () => {
+    registre.lots.creer({ id: 'lot-w', intention: 'confusion des identifiants' });
+    registre.missions.creer({
+      id: 'd35acd69',
+      lotId: 'lot-w',
+      nom: 'refonte auth',
+      projet: 'lumen',
+      compteId: 'compte1',
+      sessionId: 'fabdead6',
+    });
+    const parEquipe = resoudreMission(registre, 'd35acd69');
+    const parWorker = resoudreMission(registre, 'fabdead6');
+    expect('trouve' in parEquipe && parEquipe.trouve.id).toBe('d35acd69');
+    expect('trouve' in parWorker && parWorker.trouve.id).toBe('d35acd69');
+  });
+
+  test('un identifiant qui n’est ni l’un ni l’autre reste absent', () => {
+    expect('absent' in resoudreMission(registre, 'deadbeef-inconnu')).toBe(true);
   });
 });

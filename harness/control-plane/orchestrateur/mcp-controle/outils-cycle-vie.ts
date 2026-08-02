@@ -135,7 +135,20 @@ function retourDispatch(intention: string, depot: ResultatEnregistrement): Contr
         'vérifie avec lister_equipes avant de compter dessus',
     );
   }
-  return applique(intention, `${depot.detail} — ${issue.detail}`, issue.missionId ?? depot.ref);
+  // `☠` LES DEUX IDENTIFIANTS SONT ÉTIQUETÉS. La réponse en portait deux — celui
+  // de l'équipe (`ref`) et celui du worker, nu, dans le détail de la machine
+  // (« worker démarré : fabdead6 ») — sans rien pour les distinguer.
+  // L'orchestrateur a pris le second au premier essai et s'est vu répondre
+  // « équipe introuvable » (02/08). `resoudreMission` accepte maintenant les
+  // deux ; ici on retire la CAUSE, plutôt que de se reposer sur le rattrapage.
+  const equipe = issue.missionId ?? depot.ref;
+  return applique(
+    intention,
+    `${depot.detail} — équipe « ${equipe} » : c'est CET identifiant qui la désigne partout ` +
+      `(envoyer_a_equipe, suivre_equipe, arreter_equipe). Détail machine : ${issue.detail} ` +
+      "— identifiant technique de la session, tu n'en as pas l'usage.",
+    equipe,
+  );
 }
 
 /**
