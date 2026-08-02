@@ -552,6 +552,11 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     }
     const entree = new GenerateurEntree({ sessionId });
     const handle = await this.#demarrerWorker(existant.spec, entree.flux, { ...this.#startWorkerDeps, resume: true });
+    // `☠` Process neuf : les tâches de fond du précédent sont mortes avec lui.
+    // `relancer()` ne repasse pas par `ouvrir()`, donc la remise à zéro se dit
+    // ICI — la branche `init` du collecteur ne la fait plus, elle vidait aussi à
+    // chaque reprise de tour et ça coûtait des équipes entières.
+    this.#telemetrie.reinitialiserTachesFond(missionId);
     this.#registre.remplacer({
       missionId,
       sessionId,

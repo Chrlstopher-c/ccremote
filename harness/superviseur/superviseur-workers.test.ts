@@ -661,6 +661,37 @@ describe('un `result` pendant des tâches de fond ne tue PAS la session', () => 
     expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 
+  test('☠ un `init` de reprise entre les deux results ne tue plus l’équipe (ab7183f0, 02/08)', async () => {
+    // Test d'ASSEMBLAGE, et pas seulement du collecteur : c'est ici que la garde
+    // est consommée (`aDesTachesFond`), et c'est ici que la mission ab7183f0 est
+    // morte avec 7,72 $ de travail dans trois sous-agents encore en vol.
+    const initReprise = {
+      type: 'system',
+      subtype: 'init',
+      model: 'claude-opus-4-6',
+      uuid: '77777777-2222-3333-4444-555555555555',
+      session_id: '11111111-2222-3333-4444-555555555555',
+    } as unknown as SDKMessage;
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerFactice(() =>
+        fakeQuery([
+          tachesDeFond([
+            { task_id: 't-1', task_type: 'subagent', description: 'recherche 1' },
+            { task_id: 't-2', task_type: 'subagent', description: 'recherche 2' },
+          ]),
+          resultOk(), // le lead rend la main une première fois
+          tachesDeFond([{ task_id: 't-2', task_type: 'subagent', description: 'recherche 2' }]),
+          initReprise, // la notification du premier sous-agent rouvre un tour
+          resultOk(), // « j'attends l'autre » — celui qui tuait l'équipe
+        ]),
+      ),
+    });
+    await superviseur.demarrer(demande());
+    await laisserPasserLesMicrotaches();
+    expect(superviseur.inventaire()[0]?.vivant).toBe(true);
+  });
+
   test('☠ aucune tâche de fond du tout : comportement d’avant INCHANGÉ', async () => {
     const superviseur = new SuperviseurWorkers({
       compteurRelances: new CompteurRelances(),
@@ -671,27 +702,34 @@ describe('un `result` pendant des tâches de fond ne tue PAS la session', () => 
     expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 
-  test('☠ les tâches de fond repartent VIDES à chaque `init` — sinon un worker relancé n’est plus jamais tenu pour fini', async () => {
-    const init = {
-      type: 'system',
-      subtype: 'init',
-      uuid: '88888888-2222-3333-4444-555555555555',
-      session_id: '11111111-2222-3333-4444-555555555555',
-    } as unknown as SDKMessage;
+  test('☠ un worker RELANCÉ n’hérite pas des tâches de fond du process précédent', async () => {
+    // `☠` Ce test vérifiait autrefois que l'ensemble repartait vide « à chaque
+    // `init` ». C'était la panne elle-même, gravée en propriété : mesuré le
+    // 02/08, le SDK émet un `init` à chaque REPRISE DE TOUR, pas seulement au
+    // spawn — la purge effaçait donc des sous-agents bien vivants.
+    //
+    // La propriété visée reste juste, elle se vérifie simplement là où elle a un
+    // sens : un process neuf, qui n'a hérité de rien.
+    const fluxSuccessifs: SDKMessage[][] = [
+      [tachesDeFond([{ task_id: 't-1', task_type: 'subagent', description: 'du process précédent' }])],
+      [resultOk()],
+    ];
     const superviseur = new SuperviseurWorkers({
       compteurRelances: new CompteurRelances(),
-      demarrerWorker: demarrerWorkerFactice(() =>
-        fakeQuery([
-          tachesDeFond([{ task_id: 't-1', task_type: 'subagent', description: 'héritée' }]),
-          init,
-          resultOk(),
-        ]),
-      ),
+      demarrerWorker: demarrerWorkerFactice(() => fakeQuery(fluxSuccessifs.shift() ?? [])),
     });
-    await superviseur.demarrer(demande());
+    const handle = await superviseur.demarrer(demande());
     await laisserPasserLesMicrotaches();
-    // L'ensemble hérité a bien été purgé : la mission se termine, au lieu de
-    // rester indéfiniment « en attente de tâches » qui n'existent plus.
+    // Le premier process meurt avec une tâche de fond encore inscrite à son état
+    // de télémétrie — c'est l'héritage dont le suivant ne doit rien savoir.
+    await superviseur.arreter('mission-1');
+    expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+
+    await superviseur.relancer('mission-1', handle.sessionId);
+    await laisserPasserLesMicrotaches();
+    // Le process relancé reçoit un `result` sans aucune tâche à lui : il se
+    // termine. Sans la remise à zéro explicite de `relancer()`, il resterait
+    // vivant pour toujours sur une tâche qui n'existe plus — projet verrouillé.
     expect(superviseur.inventaire()[0]?.vivant).toBe(false);
   });
 });

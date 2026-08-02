@@ -47,11 +47,28 @@ const OUTIL_MAX = 400;
  */
 const FILE_ACTIVITE_MAX = 50;
 
+/**
+ * Patience accordée à une tâche de fond avant de cesser de la tenir pour vivante.
+ *
+ * `☠` Ce plafond existe pour ne pas troquer une panne contre son exact opposé.
+ * Tenir une équipe éveillée tant qu'une tâche de fond est annoncée est juste pour
+ * des sous-agents — ils rendent en minutes. Ça ne l'est pas pour un `Bash` détaché
+ * (`bun run dev` lancé pour tester, cas très courant en fin de mission) : celui-là
+ * ne s'éteint jamais, et sans borne l'équipe ne serait plus JAMAIS déclarée finie,
+ * ni close automatiquement — son projet resterait verrouillé à vie (H-56).
+ *
+ * `☠` Chiffre CHOISI, pas mesuré, et l'arbitrage est le même que celui de
+ * `politique-cloture.ts` : dépasser coûte une relance (le `sessionId` survit),
+ * couper trop tôt coûte du travail. Vingt minutes couvrent très largement des
+ * sous-agents réels — les six équipes du 02/08 n'ont jamais dépassé quatre minutes
+ * d'attente — et la clôture automatique n'intervient que quinze minutes après.
+ */
+const PATIENCE_TACHES_FOND_MS = 20 * 60_000;
+
 interface Etat {
   sessionId: string;
   vivant: boolean;
   modeleResolu: string | null;
-  etatSdk: TelemetrieWorker['etatSdk'];
   coutUsd: number;
   contexteTokensUtilises: number | null;
   contexteTokensMax: number | null;
@@ -77,9 +94,21 @@ interface Etat {
    *
    * `☠` Rien n'est émis au démarrage : l'ensemble DOIT repartir vide à chaque
    * (re)démarrage du process CLI, sinon un worker relancé hérite des tâches du
-   * précédent et ne se termine plus jamais.
+   * précédent et ne se termine plus jamais. C'est le SUPERVISEUR qui le dit
+   * (`ouvrir`, `reinitialiserTachesFond`) — jamais un message du flux, voir la
+   * branche `init` de `#appliquer`.
    */
   tachesFond: readonly { readonly taskId: string; readonly type: string; readonly description: string }[];
+  /** Dernier instant où le SDK a annoncé un ensemble de tâches NON vide. */
+  tachesFondVuesA: number;
+  /**
+   * Le dernier `result` reçu n'a pas encore été suivi d'un message `assistant`.
+   *
+   * `☠` « Tour fini » et « au repos » sont DEUX choses : un lead qui a délégué en
+   * arrière-plan puis rendu la main a fini son tour et travaille encore. Seul ce
+   * FAIT est mémorisé ; `etatSdk` s'en déduit à la lecture (`etatSdkEffectif`).
+   */
+  tourFini: boolean;
   quotaSature: boolean;
   motifQuota: string | null;
   observeA: number;
@@ -212,6 +241,32 @@ function apercuTexte(prises: readonly PriseActivite[]): string | null {
   return dernier === undefined ? null : dernier.texte.slice(0, APERCU_MAX);
 }
 
+/**
+ * Une tâche de fond est-elle encore à attendre ?
+ *
+ * `☠` Deux conditions, jamais une seule : l'ensemble annoncé n'est pas vide, ET
+ * cette annonce n'est pas périmée. La seconde est ce qui empêche un `Bash`
+ * détaché de rendre une équipe immortelle (voir `PATIENCE_TACHES_FOND_MS`).
+ */
+function tachesFondVivantes(etat: Etat, maintenant: number): boolean {
+  if (etat.tachesFond.length === 0) return false;
+  return maintenant - etat.tachesFondVuesA < PATIENCE_TACHES_FOND_MS;
+}
+
+/**
+ * `etatSdk` DÉRIVÉ, jamais mémorisé : au repos = tour rendu ET plus aucune tâche
+ * de fond à attendre.
+ *
+ * `☠` Une seule source. Deux écritures indépendantes du même champ finissent
+ * toujours par diverger — la panne du 02/08 est née exactement comme ça, un
+ * `result` posant `idle` sans rien savoir des sous-agents encore en vol.
+ */
+function etatSdkEffectif(etat: Etat, maintenant: number): TelemetrieWorker['etatSdk'] {
+  if (!etat.vivant) return 'idle';
+  if (!etat.tourFini) return 'running';
+  return tachesFondVivantes(etat, maintenant) ? 'running' : 'idle';
+}
+
 export class CollecteurTelemetrie {
   readonly #par = new Map<string, Etat>();
 
@@ -221,7 +276,6 @@ export class CollecteurTelemetrie {
       sessionId,
       vivant: true,
       modeleResolu: null,
-      etatSdk: 'running',
       coutUsd: 0,
       contexteTokensUtilises: null,
       contexteTokensMax: null,
@@ -231,6 +285,8 @@ export class CollecteurTelemetrie {
       resultatsEnAttente: [],
       sousAgents: [],
       tachesFond: [],
+      tachesFondVuesA: maintenant,
+      tourFini: false,
       quotaSature: false,
       motifQuota: null,
       observeA: maintenant,
@@ -242,7 +298,7 @@ export class CollecteurTelemetrie {
     const etat = this.#par.get(missionId);
     if (etat === undefined) return;
     try {
-      this.#appliquer(etat, message);
+      this.#appliquer(etat, message, maintenant);
       etat.observeA = maintenant;
     } catch (erreur) {
       log.error({ err: erreur, missionId }, 'télémétrie ignorée sur ce message — surveillance préservée');
@@ -259,8 +315,24 @@ export class CollecteurTelemetrie {
    * Des tâches de fond tournent-elles encore pour cette mission ? C'est ce qui
    * autorise, ou non, à traiter un `result` comme une fin de session.
    */
-  aDesTachesFond(missionId: string): boolean {
-    return (this.#par.get(missionId)?.tachesFond.length ?? 0) > 0;
+  aDesTachesFond(missionId: string, maintenant: number = Date.now()): boolean {
+    const etat = this.#par.get(missionId);
+    return etat === undefined ? false : tachesFondVivantes(etat, maintenant);
+  }
+
+  /**
+   * Nouveau process CLI pour cette mission (relance B.3.3) : les tâches de fond
+   * du process précédent ne sont plus les siennes.
+   *
+   * `☠` Existe parce que `relancer()` ne repasse PAS par `ouvrir()` — il remplace
+   * l'enregistrement sans toucher à l'état de télémétrie. Sans cet appel, retirer
+   * la remise à zéro de la branche `init` ferait hériter un worker relancé des
+   * tâches de son prédécesseur : plus jamais tenu pour fini, projet verrouillé.
+   */
+  reinitialiserTachesFond(missionId: string): void {
+    const etat = this.#par.get(missionId);
+    if (etat === undefined) return;
+    etat.tachesFond = [];
   }
 
   /** Relevé disque des sous-agents (`sous-agents-disque.ts`), posé par le superviseur. */
@@ -308,7 +380,6 @@ export class CollecteurTelemetrie {
     const etat = this.#par.get(missionId);
     if (etat === undefined) return;
     etat.vivant = false;
-    etat.etatSdk = 'idle';
     etat.observeA = maintenant;
   }
 
@@ -317,7 +388,7 @@ export class CollecteurTelemetrie {
    * consommé une fois — les relire à chaque passage de balayage dupliquerait
    * chaque message du lead dans le fil toutes les 5 secondes.
    */
-  tous(): readonly TelemetrieWorker[] {
+  tous(maintenant: number = Date.now()): readonly TelemetrieWorker[] {
     return [...this.#par.entries()].map(([missionId, e]) => {
       const activites = e.activitesEnAttente;
       e.activitesEnAttente = [];
@@ -325,11 +396,24 @@ export class CollecteurTelemetrie {
       // laisser en place ferait réappliquer les mêmes résultats à chaque passage.
       const resultats = e.resultatsEnAttente;
       e.resultatsEnAttente = [];
-      return { missionId, ...e, activitesEnAttente: activites, resultatsEnAttente: resultats };
+      // `☠` L'état SDK est calculé À LA LECTURE, pas mémorisé : la péremption des
+      // tâches de fond dépend du TEMPS QUI PASSE, et aucun message n'arrive pour
+      // l'annoncer. Un état figé à la dernière ingestion resterait « running »
+      // pour toujours derrière une tâche qui ne s'éteint jamais.
+      // `tourFini` et `tachesFondVuesA` restent internes : ils n'ont de sens
+      // qu'ici, et le relevé traverse le lien vers le Pi.
+      const { tourFini, tachesFondVuesA, ...vue } = e;
+      return {
+        missionId,
+        ...vue,
+        etatSdk: etatSdkEffectif(e, maintenant),
+        activitesEnAttente: activites,
+        resultatsEnAttente: resultats,
+      };
     });
   }
 
-  #appliquer(etat: Etat, message: SDKMessage): void {
+  #appliquer(etat: Etat, message: SDKMessage, maintenant: number): void {
     const sonde = message as unknown as {
       type: string;
       subtype?: string;
@@ -360,15 +444,34 @@ export class CollecteurTelemetrie {
       etat.tachesFond = Array.isArray(taches)
         ? taches.map((t) => ({ taskId: t.task_id, type: t.task_type, description: t.description }))
         : [];
+      // `☠` Horodaté seulement quand l'ensemble est NON vide : c'est la preuve
+      // qu'une tâche vivait encore à cet instant, et c'est de cette preuve que
+      // court la patience (`PATIENCE_TACHES_FOND_MS`).
+      if (etat.tachesFond.length > 0) etat.tachesFondVuesA = maintenant;
       return;
     }
 
     if (sonde.type === 'system' && sonde.subtype === 'init') {
-      // `☠` Rien n'est émis au démarrage : l'ensemble des tâches de fond DOIT
-      // repartir vide quand le process CLI (re)démarre, sinon un worker relancé
-      // hérite des tâches du précédent et n'est plus jamais tenu pour fini.
-      etat.tachesFond = [];
-      // Le modèle résolu n'est connu qu'ici : le CLI peut résoudre un alias
+      // `☠☠ UN `init` N'EST PAS UN DÉMARRAGE DE PROCESS — C'EST UN DÉBUT DE TOUR.
+      //
+      // Cette branche vidait `tachesFond`, en croyant `init` réservé au (re)spawn
+      // du CLI. Mesuré sur banc réel le 02/08 (`acceptation/taches-fond-sousagents-reel.ts`) :
+      // le SDK émet un `init` à CHAQUE reprise de tour — notamment juste après la
+      // notification d'une tâche de fond terminée, et juste après un `result`.
+      //
+      // Conséquence, mesurée en production le même jour sur la mission ab7183f0
+      // (7,72 $ perdus) : le lead lance quatre sous-agents en arrière-plan, rend
+      // la main (`result` n°1, 16:34:14 — la garde tient, quatre tâches vues), le
+      // premier sous-agent notifie sa fin à 16:37:48, un `init` de reprise vide
+      // ici les trois tâches restantes, et le `result` n°2 de 16:37:51 passe pour
+      // une fin de mission. Deux secondes plus tard, les trois derniers
+      // sous-agents rendaient leur travail dans une session déjà close.
+      //
+      // La remise à zéro est donc DITE par le superviseur, qui seul sait qu'il
+      // spawne un process (`ouvrir`, `reinitialiserTachesFond`) — jamais déduite
+      // d'un message dont ce n'est pas le sens.
+      //
+      // Le modèle résolu, lui, n'est connu qu'ici : le CLI peut résoudre un alias
       // (`opus`) vers un identifiant précis, et c'est celui-là qui compte.
       if (typeof sonde.model === 'string') etat.modeleResolu = sonde.model;
       return;
@@ -386,7 +489,7 @@ export class CollecteurTelemetrie {
     }
 
     if (sonde.type === 'assistant') {
-      etat.etatSdk = 'running';
+      etat.tourFini = false;
       const prises = prisesAssistant(message);
       const apercu = apercuTexte(prises);
       if (apercu !== null) etat.derniereActivite = apercu;
@@ -403,7 +506,12 @@ export class CollecteurTelemetrie {
     }
 
     if (sonde.type === 'result') {
-      etat.etatSdk = 'idle';
+      etat.tourFini = true;
+      // `☠` PAS `idle` d'office. Le Pi lit cette transition `running → idle` comme
+      // « l'équipe a rendu son travail » : il la notifie à l'orchestrateur, il
+      // l'affiche au repos, et la clôture automatique la ferme quinze minutes plus
+      // tard (`politique-cloture.ts`). Un lead qui attend ses sous-agents en
+      // arrière-plan déclenchait donc les trois — dont un arrêt en plein travail.
       // `☠` Valeur ABSOLUE rendue par le SDK, jamais une somme maison : additionner
       // les tours ferait dériver le total dès qu'un message est manqué.
       // `☠` Monotone, comme la sonde en cours de tour : sur une session reprise le
