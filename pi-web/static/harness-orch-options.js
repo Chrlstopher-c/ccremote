@@ -17,10 +17,18 @@ function hOuvrirOptionsOrch() {
   const compte = nRappels && nRappels.textContent ? nRappels.textContent : '';
   const auto = document.getElementById('hAutonomieLabel');
   const etatAuto = auto && auto.textContent !== 'Autonomie' ? auto.textContent : 'aucune plage';
+  // ☠ « aucune » n'est PAS une valeur neutre : un fil sans machine tourne tant
+  // qu'une seule est en ligne, puis échoue sur TOUTE opération dès que la
+  // seconde démarre (mesuré en prod le 02/08). Il doit se voir depuis ici.
+  const filCourant = (hOrch.list || []).find((c) => c.id === hOrch.convId);
+  const machineFil = filCourant && filCourant.machine ? filCourant.machine : '⚠ aucune';
   const html = `
     <div class="h-grp"><div class="gh">Automatisation</div>
       ${hOrchRow('Autonomie — plage déléguée', 'hSheetAutonomie()', etatAuto)}
       ${hOrchRow('Rappels programmés', 'hSheetRappels()', compte)}
+    </div>
+    <div class="h-grp"><div class="gh">Machine de travail</div>
+      ${hOrchRow('Machine portant ce fil', 'hSheetMachine()', machineFil)}
     </div>
     <div class="h-grp"><div class="gh">Conversation</div>
       ${hOrchRow('Statistiques de session', 'hSheetStats()')}
@@ -35,6 +43,115 @@ function hOuvrirOptionsOrch() {
       <button class="h-row danger" onclick="hArchiverDepuisFeuille()">Archiver cette conversation</button>
     </div>`;
   HSheets.ouvrir({ titre: 'Options', html });
+}
+
+// ============ Machine de travail du fil ============
+//
+// ☠ Pourquoi cette feuille existe : la machine d'un fil était fixée à sa
+// création, invisible ensuite, et impossible à corriger. Un fil ouvert alors
+// qu'une seule machine était en ligne partait SANS machine ; à l'allumage de la
+// seconde, il échouait sur chaque dispatch avec « aucune machine précisée et
+// plusieurs sont en ligne », sans le moindre geste offert pour en sortir
+// (prod, 02/08, conversation af847b10). On voit, et on change.
+//
+// ☠ Le serveur REFUSE de déplacer un fil qui porte une équipe vivante : ses
+// ordres partiraient vers une machine qui n'héberge pas son worker. L'interface
+// n'anticipe pas ce refus, elle le RAPPORTE — dupliquer la règle ici la ferait
+// diverger le jour où elle change côté serveur.
+
+const H_MACHINE_SONDE_MS = 4000;
+/** Borne dure : ~10 min de feuille ouverte. Aucune boucle sans fin (JPL). */
+const H_MACHINE_SONDE_MAX = 150;
+
+function hSheetMachine() {
+  HSheets.ouvrir({
+    titre: 'Machine de travail',
+    html: '<div id="hMachineFil"><div class="h-liste-vide">Lecture du parc…</div></div>',
+    retour: hOuvrirOptionsOrch,
+  });
+  void hRenderMachineFil();
+  let tours = 0;
+  const sonde = setInterval(() => {
+    tours += 1;
+    // La feuille refermée retire le nœud du document : c'est le signal d'arrêt,
+    // et il ne dépend d'aucun rappel de fermeture qu'HSheets n'expose pas.
+    if (!document.getElementById('hMachineFil') || tours >= H_MACHINE_SONDE_MAX) {
+      clearInterval(sonde);
+      return;
+    }
+    void hRenderMachineFil();
+  }, H_MACHINE_SONDE_MS);
+}
+
+async function hRenderMachineFil() {
+  const hote = document.getElementById('hMachineFil');
+  if (!hote) return;
+  const convId = hOrch && hOrch.convId;
+  if (!convId) { hote.innerHTML = '<div class="h-liste-vide">Aucun fil ouvert.</div>'; return; }
+
+  let machines = [];
+  let fil = null;
+  try {
+    const [rm, rc] = await Promise.all([HarnessAPI.getMachines(), HarnessAPI.getConversations()]);
+    machines = (rm && rm.data) || [];
+    fil = ((rc && rc.data) || []).find((c) => c.id === convId) || null;
+  } catch (e) {
+    hote.innerHTML = '<div class="h-liste-vide">Parc injoignable — réessaie dans un instant.</div>';
+    return;
+  }
+  if (!document.getElementById('hMachineFil')) return; // feuille refermée pendant l'attente
+
+  const portee = fil && fil.machine ? fil.machine : null;
+  const enLigne = machines.filter((m) => m.enLigne).length;
+  // ☠ Signature avant écriture : réécrire un HTML identique à chaque sonde
+  // ferait clignoter la feuille sous le doigt.
+  const sig = JSON.stringify([portee, machines.map((m) => [m.id, m.enLigne])]);
+  if (hote.dataset.sig === sig) return;
+  hote.dataset.sig = sig;
+
+  const alerte = portee === null
+    ? `<div class="h-grp"><div class="h-liste-vide" style="color: var(--warn, #d08770);">
+         Ce fil n'est rattaché à AUCUNE machine. Il fonctionne tant qu'une seule est en ligne,
+         et échouera sur chaque dispatch dès qu'une deuxième démarrera
+         (${enLigne} en ligne actuellement). Choisis-en une.
+       </div></div>`
+    : '';
+
+  const lignes = machines.map((m) => {
+    const actif = m.id === portee;
+    const etat = m.enLigne ? 'en ligne' : 'hors ligne';
+    const marque = actif ? '<span class="rv">✓ ce fil</span>' : '<span class="rv">›</span>';
+    return `<button class="h-row" ${actif ? 'disabled' : ''} onclick="hDefinirMachineFil('${escapeHtml(m.id)}')">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <span class="dot" style="background:${m.enLigne ? 'var(--ok)' : 'var(--ink-3, #888)'};"></span>
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.id)}</span>
+        <span class="rv">${etat}</span>
+      </span>
+      ${marque}
+    </button>`;
+  }).join('');
+
+  const vide = machines.length === 0
+    ? '<div class="h-liste-vide">Aucune machine ne s’est encore connectée au Pi.</div>'
+    : '';
+
+  hote.innerHTML = `${alerte}<div class="h-grp"><div class="gh">Parc — état en direct</div>${lignes}${vide}</div>
+    <div class="h-grp"><div class="h-liste-vide">
+      Une machine HORS LIGNE reste choisissable : le fil l'attendra plutôt que de partir ailleurs.
+      Un fil qui porte une équipe vivante ne peut pas être déplacé — le serveur le refuse et le dit.
+    </div></div>`;
+}
+
+async function hDefinirMachineFil(machineId) {
+  const convId = hOrch && hOrch.convId;
+  if (!convId) return;
+  const r = await HarnessAPI.setConversationMachine(convId, machineId);
+  if (!r.ok) { showToast(r.erreur || 'Rattachement refusé', 'warn'); return; }
+  showToast(`Fil rattaché à ${machineId}`, 'ok');
+  const hote = document.getElementById('hMachineFil');
+  if (hote) hote.dataset.sig = '';
+  await hLoadConvList();
+  void hRenderMachineFil();
 }
 
 /** ☠ Emprunte le panneau déjà monté — voir l'en-tête de ce fichier. */
