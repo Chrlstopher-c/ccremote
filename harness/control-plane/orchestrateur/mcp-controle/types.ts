@@ -136,6 +136,15 @@ export type { ConfigPlafondParc, SDKUserMessage };
  * dans le fil plutôt que dans une liste hors contexte.
  */
 export interface EnregistreurProposition {
+  /**
+   * `☠ ASYNCHRONE DEPUIS LE 02/08.` Elle rendait la main immédiatement et le
+   * dispatch partait en `void` : `creer_equipe` répondait « équipe lancée » avant
+   * que quoi que ce soit ne démarre, et un échec (machine hors ligne, projet
+   * absent, mandat déjà tranché) n'arrivait jamais jusqu'au modèle — il repartait
+   * sur une prémisse fausse pour tout le reste de son tour. Deux dispatchs perdus
+   * de cette façon le 02/08 au matin. L'attente est BORNÉE côté appelant : au-delà
+   * du plafond, la réponse dit « en vol », jamais « partie ».
+   */
   enregistrer(mandat: {
     readonly projet: string;
     readonly objectif: string;
@@ -145,7 +154,7 @@ export interface EnregistreurProposition {
     readonly acces?: AccesMandat;
     readonly modele?: string | null;
     readonly effort?: string | null;
-  }): ResultatEnregistrement;
+  }): Promise<ResultatEnregistrement>;
 }
 
 /**
@@ -162,6 +171,21 @@ export interface ResultatEnregistrement {
   readonly autoApprouve: boolean;
   /** Phrase à reprendre telle quelle : dit pourquoi ça part ou pourquoi ça attend. */
   readonly detail: string;
+  /**
+   * Issue RÉELLE du dispatch, quand il a été tenté (`autoApprouve`). Absent
+   * lorsqu'aucun dispatch n'a été lancé — un mandat qui attend un humain.
+   *
+   * `☠` C'est ce champ qui empêche `creer_equipe` d'annoncer un démarrage qui
+   * n'a pas eu lieu : `parti` porte l'identifiant de la mission réellement
+   * créée, `echec` porte la raison telle que le dispatch l'a donnée (machine
+   * hors ligne, projet absent de la machine, compte saturé…), `en_vol` dit
+   * seulement que la confirmation n'est pas arrivée dans le délai.
+   */
+  readonly dispatch?: {
+    readonly etat: 'parti' | 'en_vol' | 'echec';
+    readonly missionId?: string;
+    readonly detail: string;
+  };
 }
 
 /**

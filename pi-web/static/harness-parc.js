@@ -66,9 +66,26 @@ function hMcardTemplate(m) {
       ${(!isAct && !isLanding) ? `<span class="badge" style="${HARNESS_STATE_BADGE[m.state]}">${HARNESS_STATE_LABEL[m.state]}</span>` : ''}
     </div>
     <div class="last">${escapeHtml(lastText)}</div>
+    ${hBandeauNonCommite(m)}
     ${hBandeauInspection(m)}
     <div class="foot">${footExtra}</div>
   </button>`;
+}
+
+/**
+ * Bandeau « travail non commité » — le fait qui distingue une équipe qui a
+ * LIVRÉ d'une équipe qui a seulement fini de parler.
+ *
+ * ☠ Affiché seulement quand le relevé existe ET compte des fichiers : un
+ * `git === null` signifie « jamais mesuré », et peindre un bandeau vert
+ * « propre » sur une absence de mesure serait exactement le mensonge qu'on
+ * vient de retirer du harness (02/08).
+ */
+function hBandeauNonCommite(m) {
+  const g = m.git;
+  if (!g || !g.uncommitted) return '';
+  const branche = g.branch ? ` sur ${escapeHtml(g.branch)}` : '';
+  return `<div class="last" style="color: var(--warn, #d08770);">⚠ ${g.uncommitted} fichier(s) non commité(s)${branche}</div>`;
 }
 
 async function hRenderParc() {

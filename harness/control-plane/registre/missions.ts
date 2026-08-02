@@ -274,6 +274,59 @@ export class DepotMissions {
     );
   }
 
+  /**
+   * Plafond de dépense d'une équipe, révisable EN COURS DE ROUTE (`definir_budget`).
+   *
+   * `☠` Ce plafond-ci est celui du HARNESS, pas celui du SDK. Le second est figé
+   * au démarrage de la session (`maxBudgetUsd`, `workers/options-composition.ts`)
+   * et aucune API ne le rouvre : c'est pour cela que `definir_budget` était réputé
+   * « inopérant sur session démarrée ». Le BAISSER est pleinement effectif — le
+   * balayage de télémétrie coupe avant le SDK ; le MONTER ne repousse pas la
+   * coupure du SDK, et l'outil le dit plutôt que de laisser croire l'inverse.
+   */
+  public definirBudgetMax(id: string, budgetMaxUsd: number): Mission {
+    return executer(
+      'missions.definirBudgetMax',
+      () => {
+        this.db.query('UPDATE mission SET budget_max_usd = ? WHERE id = ?').run(budgetMaxUsd, id);
+        return this.exiger(id);
+      },
+      { id, budgetMaxUsd },
+    );
+  }
+
+  /**
+   * Enregistre le RELEVÉ git d'une mission (migration 23).
+   *
+   * `☠` Les quatre colonnes bougent ensemble, `git_releve_a` compris : sans la
+   * date, un constat ancien serait indistinguable d'un constat frais, et une
+   * équipe passerait pour « propre » sur la foi d'une mesure d'il y a une heure.
+   */
+  public poserConstatGit(
+    id: string,
+    constat: {
+      readonly fichiersModifies: number;
+      readonly branche: string | null;
+      readonly dernierCommit: string | null;
+    },
+    maintenant: number = Date.now(),
+  ): Mission {
+    return executer(
+      'missions.poserConstatGit',
+      () => {
+        this.db
+          .query(
+            `UPDATE mission
+                SET git_fichiers_modifies = ?, git_branche = ?, git_dernier_commit = ?, git_releve_a = ?
+              WHERE id = ?`,
+          )
+          .run(constat.fichiersModifies, constat.branche, constat.dernierCommit, maintenant, id);
+        return this.exiger(id);
+      },
+      { id, fichiersModifies: constat.fichiersModifies },
+    );
+  }
+
   public ajouterCout(id: string, coutUsd: number): Mission {
     return executer(
       'missions.ajouterCout',

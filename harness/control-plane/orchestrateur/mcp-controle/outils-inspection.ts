@@ -171,6 +171,7 @@ export function etatEquipe(registre: Registre, designation: string): ContratReto
     const manquantes = registre.capacites.manquantesSurveillees(mission.id);
     const etat = [
       resumerMission(mission),
+      resumerDepot(mission),
       `budget=${mission.budgetConsommeUsd}/${mission.budgetMaxUsd ?? '∞'} USD`,
       `contexte=${mission.contexteTokensUtilises ?? '?'}/${mission.contexteTokensMax ?? '?'}`,
       manquantes.length > 0 ? `capacités manquantes: ${manquantes.join(', ')}` : 'capacités surveillées toutes présentes',
@@ -180,6 +181,20 @@ export function etatEquipe(registre: Registre, designation: string): ContratReto
     journal.error({ err: erreur, designation }, 'etat_equipe en échec');
     return echecInattendu(intention, erreur);
   }
+}
+
+/**
+ * L'état du dépôt tel que le dernier relevé l'a vu (migration 23).
+ *
+ * `☠` Trois valeurs distinctes, dont « jamais relevé » : le repli sur « propre »
+ * est exactement ce qui faisait passer une équipe non commitée pour une équipe
+ * qui a livré.
+ */
+function resumerDepot(mission: Mission): string {
+  const constat = mission.constatGit;
+  if (constat === null) return 'dépôt=non relevé';
+  if (constat.fichiersModifies === 0) return `dépôt=propre (${constat.branche ?? 'branche inconnue'})`;
+  return `dépôt=⚠ ${constat.fichiersModifies} fichier(s) NON COMMITÉ(S) sur ${constat.branche ?? 'branche inconnue'}`;
 }
 
 function resumerProjet(p: ConfigProjet): string {

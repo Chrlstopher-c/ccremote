@@ -48,7 +48,7 @@ beforeEach(() => {
     configPlafondParc: {},
     // H-61 : sans registre de propositions, `creer_equipe` refuse — la
     // proposition ne survivrait pas au tour et personne ne pourrait l'autoriser.
-    propositions: { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
+    propositions: { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
   };
 });
 

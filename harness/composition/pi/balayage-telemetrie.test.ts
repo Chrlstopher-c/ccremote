@@ -122,3 +122,82 @@ describe('balayage-telemetrie — ce que l’équipe produit', () => {
     expect(registre.missions.activites('m-1')).toHaveLength(1);
   });
 });
+
+/**
+ * `☠` LE plafond de dépense devient un fait vérifiable ici. Avant le 02/08,
+ * `budgetMaxUsd` était écrit au registre, affiché dans `etat_equipe`, et comparé
+ * à RIEN : le seul plafond réel était celui posé au SDK au démarrage de la
+ * session, figé pour toute sa vie — d'où un `definir_budget` que l'orchestrateur
+ * a fini par qualifier d'« inopérant sur session démarrée ».
+ */
+describe('balayage-telemetrie — plafond de dépense (G, filet H-68)', () => {
+  function balayerAvecPlafond(
+    releve: TelemetrieWorker,
+    coupes: { missionId: string; motif: string }[],
+  ): ReturnType<typeof demarrerBalayageTelemetrie> {
+    return demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [releve] },
+      arreterSurPlafond: async (missionId, motif) => {
+        coupes.push({ missionId, motif });
+      },
+    });
+  }
+
+  test('☠ dépassement ⇒ l’équipe est COUPÉE, avec le montant dans le motif', async () => {
+    registre.missions.definirBudgetMax('m-1', 1);
+    const coupes: { missionId: string; motif: string }[] = [];
+    const b = balayerAvecPlafond({ ...RELEVE, coutUsd: 1.4 }, coupes);
+    await b.passer();
+    b.arreter();
+    expect(coupes).toHaveLength(1);
+    expect(coupes[0]?.missionId).toBe('m-1');
+    expect(coupes[0]?.motif).toContain('1.40');
+  });
+
+  test('sous le plafond ⇒ rien n’est coupé', async () => {
+    registre.missions.definirBudgetMax('m-1', 10);
+    const coupes: { missionId: string; motif: string }[] = [];
+    const b = balayerAvecPlafond({ ...RELEVE, coutUsd: 1.4 }, coupes);
+    await b.passer();
+    b.arreter();
+    expect(coupes).toEqual([]);
+  });
+
+  test('☠ une BAISSE de plafond en cours de route coupe une équipe déjà lancée', async () => {
+    const coupes: { missionId: string; motif: string }[] = [];
+    const b = balayerAvecPlafond({ ...RELEVE, coutUsd: 3 }, coupes);
+    registre.missions.definirBudgetMax('m-1', 20);
+    await b.passer();
+    expect(coupes).toEqual([]);
+    // C'est le geste que `definir_budget` déclenche : le plafond passe SOUS le
+    // consommé, et l'équipe doit s'arrêter au relevé suivant.
+    registre.missions.definirBudgetMax('m-1', 2);
+    await b.passer();
+    b.arreter();
+    expect(coupes).toHaveLength(1);
+  });
+
+  test('☠ une mission DÉJÀ arrêtée ne redéclenche pas de coupure à chaque passe', async () => {
+    registre.missions.definirBudgetMax('m-1', 1);
+    const coupes: { missionId: string; motif: string }[] = [];
+    const b = balayerAvecPlafond({ ...RELEVE, coutUsd: 1.4 }, coupes);
+    await b.passer();
+    registre.etats.appliquerEtatHarness('m-1', 'annulee', { motif: 'plafond' });
+    await b.passer();
+    await b.passer();
+    b.arreter();
+    expect(coupes).toHaveLength(1);
+  });
+
+  test('☠ sans arrêt câblé, le dépassement n’explose pas — il est seulement journalisé', async () => {
+    registre.missions.definirBudgetMax('m-1', 1);
+    const b = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, coutUsd: 5 }] },
+    });
+    await b.passer();
+    b.arreter();
+    expect(registre.missions.lire('m-1')?.etatHarness).toBe('en_cours');
+  });
+});

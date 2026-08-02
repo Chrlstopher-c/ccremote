@@ -11,7 +11,7 @@
  *
  * Pourquoi ne PAS clore dès `running → idle`, la solution qui vient d'abord :
  * `idle` veut dire « le lead a fini de parler », pas « le lead a fini ». C'est
- * exactement l'état dans lequel on lui réinjecte un message (`envoyer_message_equipe`)
+ * exactement l'état dans lequel on lui réinjecte un message (`envoyer_a_equipe`)
  * pour prolonger son travail sans repayer un démarrage. Clore immédiatement
  * supprimerait cette capacité.
  *

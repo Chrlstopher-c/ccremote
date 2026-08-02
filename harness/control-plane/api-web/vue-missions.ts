@@ -54,6 +54,16 @@ export interface MissionApi {
   readonly account: string;
   /** Machine de travail où l'équipe tourne (migration 22). `null` avant la V2. */
   readonly machine: string | null;
+  /**
+   * État du dépôt au dernier relevé (migration 23). `null` = JAMAIS mesuré, ce
+   * qui n'est pas « propre » : l'interface doit pouvoir dire la différence.
+   */
+  readonly git: {
+    readonly uncommitted: number;
+    readonly branch: string | null;
+    readonly lastCommit: string | null;
+    readonly at: number;
+  } | null;
   readonly state: EtatMissionApi;
   readonly ctx: number;
   /**
@@ -225,6 +235,15 @@ export function versMissionApi(
     branch: mission.branche ?? '',
     account: mission.compteId,
     machine: mission.machine,
+    git:
+      mission.constatGit === null
+        ? null
+        : {
+            uncommitted: mission.constatGit.fichiersModifies,
+            branch: mission.constatGit.branche,
+            lastCommit: mission.constatGit.dernierCommit,
+            at: mission.constatGit.releveA,
+          },
     state,
     ctx: pourcentageContexte(mission),
     ctxDetail: mission.contexteVentilation ?? [],

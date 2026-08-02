@@ -486,10 +486,12 @@ function outilsBudget(deps: DependancesServeurControle) {
   return [
     tool(
       'definir_budget',
-      "Plafond `maxBudgetUsd` d'une équipe — filet de dernier recours (H-68), pas l'anti-boucle.",
-      { missionId: z.string(), maxUsd: z.number() },
+      "Plafond de dépense d'une équipe — filet de dernier recours (H-68), pas l'anti-boucle. " +
+        'Le BAISSER coupe une équipe déjà lancée dès le dépassement ; le MONTER ne repousse pas ' +
+        'la coupure du SDK, posée au démarrage de la session — la réponse le précise.',
+      { missionId: z.string().describe("Identifiant, nom ou projet de l'équipe."), maxUsd: z.number() },
       async ({ missionId, maxUsd }) =>
-        protege('definir_budget', () => definirBudget(deps.budget, missionId, maxUsd)),
+        protege('definir_budget', () => definirBudget(deps.budget, deps.registre, missionId, maxUsd)),
     ),
     // ☠ `arret_urgence` est DÉLIBÉRÉMENT ABSENT — H-57 (16-decisions-operateur.md,
     // FAIT AUTORITÉ) interdit qu'il passe par l'orchestrateur. Voir index.ts.

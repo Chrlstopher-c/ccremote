@@ -82,7 +82,7 @@ describe('ce qui ne doit SURTOUT pas être clos', () => {
 
   test('une équipe idle depuis moins que le délai est laissée tranquille', () => {
     const m = semer('a', 'idle', T - 60_000);
-    // C'est la fenêtre de réinjection : `envoyer_message_equipe` a besoin d'un
+    // C'est la fenêtre de réinjection : `envoyer_a_equipe` a besoin d'un
     // worker vivant, et l'orchestrateur vient à peine d'être notifié.
     expect(missionsAClore([m], T)).toHaveLength(0);
   });

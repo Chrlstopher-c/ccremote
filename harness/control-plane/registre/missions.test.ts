@@ -260,3 +260,42 @@ describe('capacités par mission (E.5)', () => {
     expect(registre.capacites.manquantesSurveillees('m-2')).toEqual(['interrupt_receipt_v1']);
   });
 });
+
+/**
+ * `☠` Migration 23 — le constat git d'une équipe. Ce que ces cas verrouillent
+ * n'est pas le SQL : c'est la distinction entre « propre » et « jamais
+ * mesuré », que le harness ne faisait pas et qui lui faisait présenter une
+ * équipe non commitée comme une équipe ayant livré (02/08).
+ */
+describe('constat git d’une mission (migration 23)', () => {
+  function semer(id: string): void {
+    registre.lots.creer({ id: `lot-${id}`, intention: 'constat git' });
+    mission(id, `projet-${id}`, `lot-${id}`);
+  }
+
+  test('☠ une mission neuve a `constatGit: null` — « jamais mesuré », pas « propre »', () => {
+    semer('m-git-1');
+    expect(registre.missions.lire('m-git-1')?.constatGit).toBeNull();
+  });
+
+  test('le relevé est persisté avec sa date, et relu tel quel', () => {
+    semer('m-git-2');
+    const apres = registre.missions.poserConstatGit(
+      'm-git-2',
+      { fichiersModifies: 7, branche: 'travaux', dernierCommit: 'a1b2c3 · socle' },
+      1_785_000_000_000,
+    );
+    expect(apres.constatGit?.fichiersModifies).toBe(7);
+    expect(apres.constatGit?.branche).toBe('travaux');
+    expect(apres.constatGit?.releveA).toBe(1_785_000_000_000);
+    expect(registre.missions.lire('m-git-2')?.constatGit?.dernierCommit).toContain('socle');
+  });
+
+  test('☠ zéro fichier modifié est un CONSTAT, pas une absence de constat', () => {
+    semer('m-git-3');
+    registre.missions.poserConstatGit('m-git-3', { fichiersModifies: 0, branche: 'main', dernierCommit: 'ff00 · fin' });
+    const relu = registre.missions.lire('m-git-3');
+    expect(relu?.constatGit).not.toBeNull();
+    expect(relu?.constatGit?.fichiersModifies).toBe(0);
+  });
+});

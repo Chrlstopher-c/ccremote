@@ -23,6 +23,7 @@ import type {
   EnregistreurProposition,
   LecteurUtilisationParc,
   RelanceurMission,
+  ResultatEnregistrement,
 } from './types.ts';
 
 const RAISON_DELAI = "aucune confirmation du port dans le délai — le lien avec l'équipe est peut-être coupé";
@@ -68,7 +69,7 @@ function evaluerPlafondParc(
  * bloquer l'outil (acceptation (a)/(d)) — `avecPlafond` n'a pas de raison
  * d'être ici, il n'y a pas d'attente à borner.
  */
-export function proposerCreationEquipe(
+export async function proposerCreationEquipe(
   projet: string,
   objectif: string,
   critereArret: string | null,
@@ -79,7 +80,7 @@ export function proposerCreationEquipe(
   enregistreur?: EnregistreurProposition,
   modele?: string | null,
   effort?: string | null,
-): ContratRetour {
+): Promise<ContratRetour> {
   const intention = `proposer une équipe sur ${projet}`;
   try {
     const plafond = evaluerPlafondParc(lecteur, config);
@@ -91,14 +92,12 @@ export function proposerCreationEquipe(
     if (enregistreur === undefined) {
       return refuse(intention, "aucun registre de propositions câblé : impossible de soumettre ce mandat à l'opérateur");
     }
-    const depot = enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, acces, modele, effort });
+    const depot = await enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, acces, modele, effort });
     // `☠` `applique` quand l'équipe est PARTIE, `differe` quand elle attend un
     // clic. Le contrat A.2.3 distingue les deux justement pour que le modèle ne
     // promette pas un résultat qu'il n'a pas — garder `differe` dans les deux cas
     // lui ferait annoncer une attente alors que le travail a commencé.
-    if (depot.autoApprouve) {
-      return applique(intention, `${depot.detail} (mandat ${depot.ref})`);
-    }
+    if (depot.autoApprouve) return retourDispatch(intention, depot);
     return {
       ok: true,
       intention,
@@ -110,6 +109,33 @@ export function proposerCreationEquipe(
     journal.error({ err: erreur, projet }, 'proposerCreationEquipe en échec');
     return echecInattendu(intention, erreur);
   }
+}
+
+/**
+ * Traduit l'issue RÉELLE du dispatch en contrat A.2.3.
+ *
+ * `☠` Un `dispatch` absent signifie « l'enregistreur ne sait pas dire » : on
+ * retombe alors sur `accepte`, jamais sur `applique`. Le défaut du 02/08 tenait
+ * exactement à cette nuance — annoncer « équipe lancée » sur la seule foi d'une
+ * auto-approbation, alors que le démarrage n'avait même pas commencé.
+ */
+function retourDispatch(intention: string, depot: ResultatEnregistrement): ContratRetour {
+  const issue = depot.dispatch;
+  if (issue === undefined) {
+    return accepte(intention, depot.ref, `${depot.detail} (mandat ${depot.ref}) — démarrage non confirmé`);
+  }
+  if (issue.etat === 'echec') {
+    return refuse(intention, `mandat ${depot.ref} autorisé mais NON démarré — ${issue.detail}`);
+  }
+  if (issue.etat === 'en_vol') {
+    return accepte(
+      intention,
+      depot.ref,
+      `${depot.detail} — démarrage en cours, pas encore confirmé par la machine : ` +
+        'vérifie avec lister_equipes avant de compter dessus',
+    );
+  }
+  return applique(intention, `${depot.detail} — ${issue.detail}`, issue.missionId ?? depot.ref);
 }
 
 /**
@@ -220,8 +246,14 @@ export async function interrompreEquipe(
 
 /**
  * `arreter_equipe` (A.2.2) — fin de vie. L'état harness (autorité du Pi, E.1.1)
- * est écrit immédiatement et localement ; la libération réelle du worker (PC)
- * reste asynchrone et best-effort — d'où `accepte`, jamais `applique`.
+ * est écrit immédiatement et localement ; la machine confirme ensuite.
+ *
+ * `☠ CE QUE LE RETOUR DIT MAINTENANT` — il rendait toujours « libération du
+ * worker en cours », même quand la machine avait déjà confirmé. L'orchestrateur
+ * n'avait alors aucun moyen de savoir QUAND le projet redevenait libre (H-56,
+ * une seule équipe active par projet) : il attendait, ou enchaînait un dispatch
+ * en aveugle. La distinction `applique` / `accepte` porte exactement cette
+ * information — c'est le contrat A.2.3 utilisé pour ce à quoi il sert.
  */
 export async function arreterEquipe(
   arreteur: ArreteurMission,
@@ -233,12 +265,30 @@ export async function arreterEquipe(
   try {
     const mission = registre.missions.lire(missionId);
     if (mission === null) return refuse(intention, 'mission introuvable');
+    // `☠` L'arrêt ne détruit aucun fichier, mais il fait disparaître le LEAD :
+    // plus personne à qui demander de commiter, et un travail qui reste en
+    // suspens dans le dépôt. Le dire dans le retour est le seul moment où
+    // l'information change encore quelque chose.
+    const nonCommite = mission.constatGit !== null && mission.constatGit.fichiersModifies > 0;
+    const alerte = nonCommite
+      ? ` ⚠ ${mission.constatGit?.fichiersModifies} fichier(s) restent NON COMMITÉS dans « ${mission.projet} » —` +
+        ' plus personne ne peut les commiter pour toi maintenant.'
+      : '';
     registre.etats.appliquerEtatHarness(missionId, 'annulee', { motif: 'arrêtée depuis le control plane' });
     const resultat = await avecPlafond(arreteur.arreter(missionId), plafondMs);
     if (resultat.etat === 'delai_depasse') {
-      return accepte(intention, missionId, 'arrêt enregistré au registre — confirmation du worker non reçue à temps');
+      return accepte(
+        intention,
+        missionId,
+        `arrêt enregistré, confirmation de la machine non reçue à temps — le verrou de « ${mission.projet} » ` +
+          `est levé côté registre, mais laisse quelques secondes au worker avant de redispatcher.${alerte}`,
+      );
     }
-    return accepte(intention, missionId, 'arrêt enregistré, libération du worker en cours');
+    return applique(
+      intention,
+      `équipe arrêtée et confirmée par la machine — « ${mission.projet} » est libre, un nouveau dispatch peut partir.${alerte}`,
+      missionId,
+    );
   } catch (erreur) {
     journal.error({ err: erreur, missionId }, 'arreterEquipe en échec');
     return echecInattendu(intention, erreur);

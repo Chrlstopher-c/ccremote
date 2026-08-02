@@ -67,6 +67,7 @@ import { GenerateurEntree } from '../control-plane/orchestrateur/entree/index.ts
 import type { StartWorkerDeps, WorkerHandle } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
 import { creerPilotage, type Pilotage } from './pilotage-workers.ts';
+import { releverEtatGit, type ConstatGit } from './etat-git.ts';
 import { surveillerMessageUsage, surveillerQuota } from './budgets-workers.ts';
 import { ConcurrentsRestaures } from './fencing-restauration.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
@@ -470,6 +471,15 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       'reinitialize() appelé (D.2.4)',
     );
     return { demandesEnAttente };
+  }
+
+  /**
+   * État du dépôt d'une mission (F, lecture pure). `☠` Sur la MACHINE : le Pi
+   * n'a aucun accès à ce disque. Ce constat est ce qui permet de distinguer une
+   * équipe qui a livré d'une équipe qui a seulement fini de parler.
+   */
+  async etatGit(chemin: string): Promise<ConstatGit> {
+    return releverEtatGit(chemin);
   }
 
   // -- RepertoireCibles (A.2.2) ----------------------------------------------

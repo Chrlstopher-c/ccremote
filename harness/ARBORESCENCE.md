@@ -41,7 +41,6 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/pi/balayage-telemetrie.ts` — le Pi INTERROGE le PC (D.3.2) toutes les 5 s : modèle résolu, état SDK, coût (en écart, jamais en absolu), contexte ventilé, activités du lead, jauges de quota ; déclenche la réconciliation quand un worker MORT est vu sur une mission active
 - `composition/pi/balayage-telemetrie.test.ts` — banc : mort en cours de route, drainage des activités, réconciliation qui échoue sans arrêter le balayage
 - `composition/pi/balayage-quotas.test.ts` — banc des jauges : 100 % ⇒ compte `rejected` (H-53), sonde en échec qui n'écrase jamais une valeur connue
-- `composition/pi/ports-non-cables.ts` — `RepertoireCibles`/`DefinisseurBudget` : refus explicites, aucune implémentation réseau n'existe (voir rapport)
 - `composition/pi/verificateur-session-sdk.ts` — `VerificateurSessionExistante` réel via `getSessionInfo` du SDK
 - `composition/pc/assembler-superviseur.ts` — racine de composition du PC (persistance+boot_id, anti-boucle, lien vers le Pi)
 - `composition/pc/bin-pc.ts` — point d'entrée exécutable du process PC (`bun run start:pc`), conçu pour `systemd --user` (voir `composition/deploiement/`)
@@ -184,6 +183,7 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
   entière dépasse deux minutes (mesuré 01/08). Confinement partagé avec `exploration-projets.ts`.
 
 - `superviseur-workers.ts` / `.test.ts` — `SuperviseurWorkers`, implémente tous les ports A.2/E.1.4
+- `etat-git.ts` / `.test.ts` — état du dépôt d'une équipe (branche, fichiers non commités, dernier commit) : le fait qui distingue « a livré » de « a fini de parler » (migration 23)
 - `superviseur-workers-types.ts` — dépendances et constantes extraites (limite 500 lignes)
 - `canal-controle.ts` / `.test.ts` — `CanalControle` (D.3), idempotence par `opId`
 - `persistance-registre.ts` / `.test.ts` — `PersistanceRegistreSqlite` (dette n°1)
@@ -342,3 +342,4 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
 - `ARCHITECTURE.md` — carte des domaines, définitions, frontières (cette mission)
 - `ARBORESCENCE.md` — ce fichier
 - `.env.example` — variables d'environnement de composition (cette mission)
+

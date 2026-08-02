@@ -60,6 +60,7 @@ import type {
   JetonCompte,
 } from '../../superviseur/index.ts';
 import type { MetriquesHote } from '../../superviseur/metriques-hote.ts';
+import type { ConstatGit } from '../../superviseur/etat-git.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
 import type { ResultatRecherche } from '../../superviseur/recherche-projets.ts';
 import type { ResultatLectureFichier } from '../../superviseur/lecture-fichier.ts';
@@ -318,6 +319,19 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     const reponse = await this.#appeler({ type: 'envoyer_instruction', missionId, texte });
     if (!reponse.ok) throw new Error(reponse.detail ?? "la machine a refusé de transmettre l'instruction");
     return { detail: reponse.detail ?? '' };
+  }
+
+  /**
+   * `☠` Un refus de la machine devient une EXCEPTION, pas un constat vide : la
+   * seule chose pire que ne pas savoir si le travail est commité, c'est croire
+   * qu'il l'est.
+   */
+  async etatGit(chemin: string): Promise<ConstatGit> {
+    const reponse = await this.#appeler({ type: 'etat_git', chemin });
+    if (!reponse.ok || reponse.etatGit === undefined) {
+      throw new Error(reponse.detail ?? 'la machine n’a pas rendu l’état git');
+    }
+    return reponse.etatGit;
   }
 
   async interrompre(missionId: string): Promise<void> {

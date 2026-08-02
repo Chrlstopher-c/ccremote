@@ -1,13 +1,44 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-08-01*
+*Dernière mise à jour : 2026-08-02*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 01/08 (soir)** : EN PRODUCTION, **1365 tests / 1365 verts**, typecheck propre, SDK
-épinglé **0.3.220**, schéma du registre en **version 22**.
+**État au 02/08** : **1414 tests / 1414 verts**, typecheck propre, SDK épinglé **0.3.220**, schéma
+du registre en **version 23**. `⚠` La prod tourne encore le code du 01/08 : les correctifs du 02/08
+sont commités et testés, **PAS déployés** (décision de Chris — déploiement sur son ordre explicite).
+
+### `☠` 02/08 — LES SIX OUTILS SUR LESQUELS L'ORCHESTRATEUR NE POUVAIT PAS COMPTER
+
+Journée entièrement consacrée à un seul motif : **un outil qui répond autre chose que ce qui s'est
+réellement passé**. L'orchestrateur en a dressé la liste lui-même, après une session où il a vu ses
+équipes déraper sans pouvoir leur parler. Détail complet et mesures dans `TODO.md`.
+
+| Outil | Ce qu'il répondait | Ce qui se passait vraiment |
+|---|---|---|
+| `envoyer_a_equipe` | « équipe introuvable ou plus vivante » | port jamais câblé — refus CONSTANT |
+| `interrompre_equipe` | idem | idem |
+| `creer_equipe` | « équipe lancée » | dispatch en `void`, parfois échoué |
+| `definir_budget` | « plafond fixé » | valeur écrite, comparée à rien |
+| `relancer_equipe` | « relance transmise » | worker déjà vivant, aucun effet |
+| `arreter_equipe` | « libération en cours » | machine déjà confirmée, projet libre |
+
+Deux causes racines, à retenir au-delà de ces six cas :
+
+1. **Un port satisfait par une implémentation qui refuse tout** passe tous les tests d'unité et ne
+   se voit qu'en assemblage. C'est la 12ᵉ occurrence de « écrit, testé, branché sur rien » — et la
+   première où le refus était *honnête* mais *mal nommé* : « introuvable ou plus vivante » a fait
+   conclure à l'orchestrateur que ses équipes étaient mortes.
+2. **Un choix implicite non écrit devient une panne dès que le contexte change.** Un fil ouvert
+   PC éteint n'avait pas de machine ; le routage tranchait seul, jusqu'à l'allumage du PC. Ce qui
+   marchait le matin ne marchait plus l'après-midi, sans qu'aucune action ne l'explique.
+
+Ajouté au passage, parce que c'est le fait qui manquait le plus : le harness relève désormais
+l'**état git** du dépôt d'une équipe quand elle rend la main (migration 23). « Terminée » ne veut
+plus dire « a fini de parler » — la notification, le Parc et `etat_equipe` distinguent maintenant
+*non commité*, *propre*, et *jamais relevé*.
 
 ### `☠` DEUX MACHINES DE TRAVAIL SIMULTANÉES — le changement structurant du 01/08
 

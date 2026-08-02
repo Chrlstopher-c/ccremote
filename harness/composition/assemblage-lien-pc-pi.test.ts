@@ -14,6 +14,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -29,6 +31,8 @@ import { LienWebSocket, type WebSocketLike } from '../transport/lien-websocket.t
 import { cablerRecepteurControlePc } from './pc/canal-controle-recepteur.ts';
 import { ClientSuperviseurPc } from './pi/client-superviseur-pc.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './pi/reconciliation-sur-rattachement.ts';
+
+const execFileAsync = promisify(execFile);
 
 type Ecouteur<T> = (ev: T) => void;
 
@@ -427,5 +431,50 @@ describe('assemblage — envoyer_a_equipe : outil MCP → Pi → lien → machin
     cablerRecepteurControlePc(sansPilotage, pc);
     const client = new ClientSuperviseurPc(pi, { timeoutMs: 2000 });
     await expect(client.envoyerInstruction('m-1', 'x')).rejects.toThrow(/pilotage/);
+  });
+});
+
+/**
+ * `☠` Assemblage du relevé git : outil → Pi → lien → machine → VRAI dépôt sur
+ * disque. Le constat qui distingue « a livré » de « a fini de parler » ne vaut
+ * que s'il traverse réellement le lien — un test unitaire du module git ne
+ * prouverait pas que le Pi peut l'obtenir.
+ */
+describe('assemblage — etat_git : le constat traverse le lien jusqu’au vrai dépôt', () => {
+  test('☠ un dépôt SALE est rapporté comme tel au Pi, fichiers comptés', async () => {
+    const { pi, pc } = creerPaireLiens();
+    await Promise.all([pi.connecter(), pc.connecter()]);
+
+    const racine = await mkdtemp(join(tmpdir(), 'ccremote-assemblage-git-'));
+    await execFileAsync('git', ['-C', racine, 'init', '-q', '-b', 'principale']);
+    await execFileAsync('git', ['-C', racine, 'config', 'user.email', 'banc@ccremote.test']);
+    await execFileAsync('git', ['-C', racine, 'config', 'user.name', 'Banc']);
+    await writeFile(join(racine, 'travail-en-cours.ts'), 'export const x = 1;\n');
+
+    const superviseur = new SuperviseurWorkers({ compteurRelances: new CompteurRelances() } as never);
+    cablerRecepteurControlePc(superviseur, pc);
+    const client = new ClientSuperviseurPc(pi, { timeoutMs: 5000 });
+
+    const constat = await client.etatGit(racine);
+    expect(constat.depot).toBe(true);
+    expect(constat.fichiersModifies).toBe(1);
+    expect(constat.apercu).toContain('travail-en-cours.ts');
+    expect(constat.branche).toBe('principale');
+  });
+
+  test('☠ une machine sans relevé git câblé REFUSE — jamais un dépôt réputé propre', async () => {
+    const { pi, pc } = creerPaireLiens();
+    await Promise.all([pi.connecter(), pc.connecter()]);
+    const sansGit: PortSuperviseurControle = {
+      inventaire: () => [],
+      demarrer: async () => ({ sessionId: 's1' }),
+      arreter: async () => {},
+      tuerSansPreavis: () => {},
+      relancer: async () => ({ dejaVivant: false }),
+      reinitialiser: async () => ({ demandesEnAttente: [] }),
+    };
+    cablerRecepteurControlePc(sansGit, pc);
+    const client = new ClientSuperviseurPc(pi, { timeoutMs: 2000 });
+    await expect(client.etatGit('/tmp')).rejects.toThrow(/non câblé/);
   });
 });

@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import { arreterEquipe, envoyerAEquipe, interrompreEquipe, proposerCreationEquipe, relancerEquipe } from './outils-cycle-vie.ts';
+import { definirBudget } from './outils-budget.ts';
 import type {
   ArreteurMission,
   ConfigPlafondParc,
+  DefinisseurBudget,
   EmetteurEquipe,
+  EnregistreurProposition,
   LecteurUtilisationParc,
   RelanceurMission,
 } from './types.ts';
@@ -40,8 +43,8 @@ function fabriquerLecteur(parCompte: Record<string, readonly RelevePourPlafond[]
 }
 
 describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)', () => {
-  test("retourne 'differe' avec une proposition de mandat, jamais 'applique'", () => {
-    const resultat = proposerCreationEquipe(
+  test("retourne 'differe' avec une proposition de mandat, jamais 'applique'", async () => {
+    const resultat = await proposerCreationEquipe(
       'alpha',
       'refaire l’auth',
       'tests verts',
@@ -49,72 +52,72 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
       'ecriture',
       LECTEUR_PERMISSIF,
       PLAFOND_DESACTIVE,
-      { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
+      { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
     );
     expect(resultat.effet).toBe('differe');
     expect(resultat.ref).toBeDefined();
     expect(resultat.etat).toContain('refaire l’auth');
   });
 
-  test('☠ ne touche à AUCUN registre — aucune mission créée', () => {
-    proposerCreationEquipe('alpha', 'x', 'y', 'z', 'ecriture', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+  test('☠ ne touche à AUCUN registre — aucune mission créée', async () => {
+    await proposerCreationEquipe('alpha', 'x', 'y', 'z', 'ecriture', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(registre.missions.listerActives().length).toBe(0);
   });
 });
 
 describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M-53 corrigé)', () => {
-  test('seuil bas dépassé sur le seul compte connu ⇒ refus, jamais differe', () => {
+  test('seuil bas dépassé sur le seul compte connu ⇒ refus, jamais differe', async () => {
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 10 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 10 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.effet).toBe('refuse');
     expect(resultat.raison).toContain('compte1');
     expect(resultat.raison).toContain('five_hour');
   });
 
-  test('seuil haut, sous le seuil ⇒ autorisé, differe', () => {
+  test('seuil haut, sous le seuil ⇒ autorisé, differe', async () => {
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 20, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
-  test('un compte saturé mais un second disponible ⇒ autorisé (au moins un compte viable)', () => {
+  test('un compte saturé mais un second disponible ⇒ autorisé (au moins un compte viable)', async () => {
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 99, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'five_hour', utilisation: 5, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
-  test('tous les comptes saturés ⇒ refus, motif lisible par compte', () => {
+  test('tous les comptes saturés ⇒ refus, motif lisible par compte', async () => {
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'seven_day', utilisation: 95, statut: 'allowed' }],
     });
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('compte1');
     expect(resultat.raison).toContain('compte2');
   });
 
-  test('aucun compte connu ⇒ rien à borner, autorisé', () => {
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+  test('aucun compte connu ⇒ rien à borner, autorisé', async () => {
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
-  test('☠ un port qui lève une exception ne bloque jamais l’outil ⇒ refus propre, pas de throw', () => {
+  test('☠ un port qui lève une exception ne bloque jamais l’outil ⇒ refus propre, pas de throw', async () => {
     const lecteur: LecteurUtilisationParc = {
       comptesConnus: () => {
         throw new Error('port hors service');
       },
       releves: () => [],
     };
-    const resultat = proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, PLAFOND_DESACTIVE, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, PLAFOND_DESACTIVE, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('port hors service');
   });
@@ -274,7 +277,10 @@ describe('arreterEquipe (fin de vie)', () => {
     registre.missions.creer({ id: 'm-5', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
     const arreteur: ArreteurMission = { arreter: async () => {} };
     const resultat = await arreterEquipe(arreteur, registre, 'm-5');
-    expect(resultat.effet).toBe('accepte');
+    // `☠` La machine a CONFIRMÉ : le projet est libre, et l'orchestrateur doit
+    // pouvoir le savoir pour redispatcher sans attendre au hasard.
+    expect(resultat.effet).toBe('applique');
+    expect(resultat.etat).toContain('libre');
     expect(registre.missions.lire('m-5')?.etatHarness).toBe('annulee');
   });
 
@@ -285,6 +291,7 @@ describe('arreterEquipe (fin de vie)', () => {
     const resultat = await arreterEquipe(arreteur, registre, 'm-6', 30);
     expect(Date.now() - debut).toBeLessThan(500);
     expect(resultat.effet).toBe('accepte');
+    expect(resultat.etat).toContain('non reçue à temps');
     expect(registre.missions.lire('m-6')?.etatHarness).toBe('annulee');
   });
 });
@@ -324,5 +331,136 @@ describe('relancerEquipe (B.3.3, resume)', () => {
     const resultat = await relancerEquipe(relanceur, registre, 'm-9');
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('envoyer_a_equipe');
+  });
+});
+
+/**
+ * `☠` `definir_budget` — l'outil que l'orchestrateur a qualifié d'« inopérant sur
+ * session démarrée » (02/08). Il l'était : le port levait toujours. Ce qu'il
+ * écrit désormais est le plafond du HARNESS, et la réponse distingue ce qui est
+ * réellement obtenu (baisse) de ce qui ne l'est pas (hausse, bornée par le SDK).
+ */
+describe('definirBudget (G, H-68)', () => {
+  function equipeAvecBudget(id: string, budget: number, consomme: number): void {
+    registre.missions.creer({
+      id,
+      lotId: 'lot-1',
+      nom: 'budget',
+      projet: 'alpha',
+      compteId: 'compte1',
+      sessionId: `sess-${id}`,
+      budgetMaxUsd: budget,
+    });
+    registre.etats.appliquerEtatHarness(id, 'en_cours', { motif: 'test' });
+    if (consomme > 0) registre.missions.ajouterCout(id, consomme);
+  }
+
+  const definisseurReel: DefinisseurBudget = {
+    definir: async (missionId: string, maxUsd: number): Promise<void> => {
+      registre.missions.definirBudgetMax(missionId, maxUsd);
+    },
+  };
+
+  test('☠ BAISSE ⇒ applique, et le registre porte le nouveau plafond', async () => {
+    equipeAvecBudget('m-b1', 20, 3);
+    const resultat = await definirBudget(definisseurReel, registre, 'm-b1', 5);
+    expect(resultat.effet).toBe('applique');
+    expect(registre.missions.lire('m-b1')?.budgetMaxUsd).toBe(5);
+  });
+
+  test('☠ HAUSSE ⇒ accepte, et la réponse DIT que le SDK coupera avant', async () => {
+    equipeAvecBudget('m-b2', 5, 1);
+    const resultat = await definirBudget(definisseurReel, registre, 'm-b2', 50);
+    expect(resultat.effet).toBe('accepte');
+    expect(resultat.etat).toContain('5');
+    expect(String(resultat.etat)).toContain('SDK');
+  });
+
+  test('valeur absurde ⇒ refus, rien n’est écrit', async () => {
+    equipeAvecBudget('m-b3', 20, 0);
+    const resultat = await definirBudget(definisseurReel, registre, 'm-b3', -4);
+    expect(resultat.ok).toBe(false);
+    expect(registre.missions.lire('m-b3')?.budgetMaxUsd).toBe(20);
+  });
+
+  test('désignation libre (projet) acceptée', async () => {
+    equipeAvecBudget('m-b4', 20, 0);
+    const resultat = await definirBudget(definisseurReel, registre, 'alpha', 7);
+    expect(resultat.ok).toBe(true);
+    expect(registre.missions.lire('m-b4')?.budgetMaxUsd).toBe(7);
+  });
+
+  test('équipe inconnue ⇒ refus explicite', async () => {
+    const resultat = await definirBudget(definisseurReel, registre, 'fantome', 7);
+    expect(resultat.ok).toBe(false);
+  });
+});
+
+/**
+ * `☠` L'issue du dispatch, telle que le modèle la reçoit. Défaut mesuré le
+ * 02/08 : `creer_equipe` répondait « équipe lancée » avant tout démarrage, et
+ * deux dispatchs échoués (routage machine) n'ont jamais atteint l'orchestrateur
+ * — qui a construit la suite de son tour sur une équipe inexistante.
+ */
+describe('proposerCreationEquipe × issue RÉELLE du dispatch', () => {
+  const mandat = ['alpha', 'objectif', null, 'src/**', 'ecriture'] as const;
+
+  async function proposer(depot: Awaited<ReturnType<EnregistreurProposition['enregistrer']>>) {
+    return proposerCreationEquipe(
+      mandat[0],
+      mandat[1],
+      mandat[2],
+      mandat[3],
+      mandat[4],
+      LECTEUR_PERMISSIF,
+      PLAFOND_DESACTIVE,
+      { enregistrer: async () => depot },
+    );
+  }
+
+  test('dispatch PARTI ⇒ applique, avec l’identifiant de la mission réellement créée', async () => {
+    const resultat = await proposer({
+      ref: 'prop-1',
+      autoApprouve: true,
+      detail: 'fenêtre d’autonomie ouverte',
+      dispatch: { etat: 'parti', missionId: 'm-42', detail: 'équipe démarrée' },
+    });
+    expect(resultat.effet).toBe('applique');
+    expect(resultat.ref).toBe('m-42');
+  });
+
+  test('☠ dispatch ÉCHOUÉ ⇒ refus portant la vraie raison, jamais un « lancée »', async () => {
+    const resultat = await proposer({
+      ref: 'prop-2',
+      autoApprouve: true,
+      detail: 'fenêtre d’autonomie ouverte',
+      dispatch: {
+        etat: 'echec',
+        detail: 'conversation af847b10 : aucune machine précisée et plusieurs sont en ligne',
+      },
+    });
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('aucune machine précisée');
+  });
+
+  test('dispatch EN VOL ⇒ accepte, et invite à vérifier avant de compter dessus', async () => {
+    const resultat = await proposer({
+      ref: 'prop-3',
+      autoApprouve: true,
+      detail: 'fenêtre d’autonomie ouverte',
+      dispatch: { etat: 'en_vol', detail: 'pas de confirmation en 20 s' },
+    });
+    expect(resultat.effet).toBe('accepte');
+    expect(resultat.etat).toContain('lister_equipes');
+  });
+
+  test('☠ enregistreur muet sur le dispatch ⇒ accepte, jamais applique', async () => {
+    const resultat = await proposer({ ref: 'prop-4', autoApprouve: true, detail: 'auto' });
+    expect(resultat.effet).toBe('accepte');
+  });
+
+  test('mandat en attente d’un humain ⇒ differe, inchangé (H-61)', async () => {
+    const resultat = await proposer({ ref: 'prop-5', autoApprouve: false, detail: 'en attente' });
+    expect(resultat.effet).toBe('differe');
   });
 });

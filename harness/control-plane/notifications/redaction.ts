@@ -46,17 +46,51 @@ function duree(debutMs: number | null, finMs: number): string {
  * annonce à Chris qu'une équipe a réussi sur la seule foi de sa fin de tour —
  * exactement le mode de panne « narratif au lieu de mesuré » déjà payé ici.
  */
+/**
+ * Ce que le dépôt de l'équipe dit d'elle, en une phrase adressée au modèle.
+ *
+ * `☠` Trois cas, jamais deux : travail non commité (le cas qui coûte), dépôt
+ * propre, et RELEVÉ ABSENT. Le troisième n'est pas le deuxième — replier
+ * « jamais mesuré » sur « propre » ferait exactement le dégât qu'on répare :
+ * une équipe arrêtée sur la foi d'une vérification qui n'a pas eu lieu.
+ */
+function paragrapheGit(mission: Mission): string {
+  const constat = mission.constatGit;
+  if (constat === null) {
+    return (
+      "ÉTAT DU DÉPÔT : non relevé (machine hors ligne, dépôt illisible, ou relevé impossible). " +
+      "« Non relevé » n'est pas « propre » — si le mandat impliquait d'écrire du code, " +
+      'demande-lui son état avant de conclure.\n\n'
+    );
+  }
+  if (constat.fichiersModifies === 0) {
+    const dernier = constat.dernierCommit === null ? 'aucun commit dans ce dépôt' : `dernier commit : ${constat.dernierCommit}`;
+    return `ÉTAT DU DÉPÔT : propre, rien de non commité (${dernier}).\n\n`;
+  }
+  return (
+    `⚠ TRAVAIL NON COMMITÉ : ${constat.fichiersModifies} fichier(s) modifié(s) dans « ${mission.projet} » ` +
+    `(branche ${constat.branche ?? 'inconnue'}) ne sont PAS commités. ` +
+    "Cette équipe a fini de parler, elle n'a pas livré. " +
+    'Avant tout arrêt : demande-lui de commiter avec envoyer_a_equipe — ' +
+    'un rapport sans commit ne laisse aucune trace exploitable de son travail.\n\n'
+  );
+}
+
 export function redigerFinEquipe(mission: Mission, maintenant: number = Date.now()): TexteNotification {
   const nom = mission.nom || mission.id;
-  const detail = `${mission.projet} · ${cout(mission.budgetConsommeUsd)} · ${duree(mission.demarreeA, maintenant)}`;
+  const nonCommite = mission.constatGit !== null && mission.constatGit.fichiersModifies > 0;
+  const detail =
+    `${mission.projet} · ${cout(mission.budgetConsommeUsd)} · ${duree(mission.demarreeA, maintenant)}` +
+    (nonCommite ? ` · ⚠ ${mission.constatGit?.fichiersModifies} fichier(s) non commité(s)` : '');
   return {
-    titre: `Équipe terminée — ${nom}`,
+    titre: nonCommite ? `Équipe terminée (non commitée) — ${nom}` : `Équipe terminée — ${nom}`,
     corps: detail,
     pourOrchestrateur:
       `[HARNESS] L'équipe « ${nom} » (${mission.projet}) vient de rendre sa réponse. ` +
       `Identifiant : ${mission.id}. Coût ${cout(mission.budgetConsommeUsd)}, ` +
       `durée ${duree(mission.demarreeA, maintenant)}.\n\n` +
       "Ce message vient du harness, pas de Chris : il ne t'a rien demandé, c'est un fait du parc.\n\n" +
+      paragrapheGit(mission) +
       `Lis son rapport avec rapport_equipe("${mission.id}") AVANT de conclure quoi que ce soit — ` +
       "« terminée » signifie que le lead a fini de parler, pas que l'objectif est atteint. " +
       'Puis décide : le mandat est-il rempli, faut-il une équipe de suite, ou une vérification ? ' +
@@ -67,7 +101,7 @@ export function redigerFinEquipe(mission: Mission, maintenant: number = Date.now
       // sur un parc qui n'affiche pourtant aucune équipe active (mesuré le 01/08).
       `ATTENTION — cette équipe OCCUPE ENCORE « ${mission.projet} » : tant qu'elle est ouverte, ` +
       'aucune autre équipe ne peut démarrer sur ce projet (H-56). Deux gestes possibles, ' +
-      "choisis-en un maintenant : lui réinjecter du travail avec envoyer_message_equipe " +
+      "choisis-en un maintenant : lui réinjecter du travail avec envoyer_a_equipe " +
       `si son mandat mérite d'être prolongé, ou la fermer avec arreter_equipe("${mission.id}") ` +
       'pour libérer le projet. Ne rien faire la laisse au repos — le harness finira par la ' +
       'clore seul, mais après un délai qui bloque tout dispatch entre-temps.',

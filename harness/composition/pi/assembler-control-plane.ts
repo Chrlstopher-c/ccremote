@@ -36,7 +36,7 @@
  */
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
-import { ouvrirRegistre, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
+import { ouvrirRegistre, type Mission, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
 import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
 import { deciderAutorisation, fenetreOuverte } from '../../control-plane/autonomie/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
@@ -64,7 +64,6 @@ import { creerAgregatParc, ParcSuperviseurs } from './parc-superviseurs.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
-import { BUDGET_NON_CABLE } from './ports-non-cables.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
 import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
@@ -76,6 +75,24 @@ const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' })
 
 /** Budget par défaut d'un mandat proposé — l'orchestrateur n'en fixe pas encore. */
 const BUDGET_MANDAT_DEFAUT_USD = PLAFOND_EQUIPE_USD;
+
+/**
+ * Combien de temps `creer_equipe` attend la confirmation d'un dispatch avant de
+ * répondre « en vol ».
+ *
+ * `☠` Mesuré sur le chemin réel : résolution de machine, vérification du projet
+ * sur place (un aller-retour sur le lien), puis spawn du worker. Quelques
+ * secondes en régime normal ; l'échec de routage, lui, revient immédiatement.
+ * Trop court, on annoncerait « en vol » des équipes déjà parties ; trop long, on
+ * immobiliserait le tour de l'orchestrateur sur une machine muette.
+ */
+const PLAFOND_DISPATCH_MS = 20_000;
+
+/** Issue réelle d'un dispatch auto, telle qu'elle remonte jusqu'au modèle. */
+type IssueDispatch =
+  | { readonly etat: 'parti'; readonly missionId: string; readonly detail: string }
+  | { readonly etat: 'en_vol'; readonly detail: string }
+  | { readonly etat: 'echec'; readonly detail: string };
 
 export interface OptionsAssemblageControlPlanePi {
   readonly cheminRegistreDb: string;
@@ -271,7 +288,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       },
       arreteur: versMission,
       relanceur: versMission,
-      budget: BUDGET_NON_CABLE,
+      // `☠` Le plafond vit au REGISTRE et devient effectif par le balayage de
+      // télémétrie (`arreterSurPlafond`). Avant, ce port levait toujours : un
+      // filet de dernier recours qui ne pouvait pas être posé.
+      budget: {
+        definir: async (missionId: string, maxUsd: number): Promise<void> => {
+          registre.missions.definirBudgetMax(missionId, maxUsd);
+        },
+      },
       utilisationParc: creerLecteurUtilisationParc(registre),
       configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
       compacteurContexte: compacteur,
@@ -362,6 +386,60 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     return r;
   }
 
+  /**
+   * Relève l'état du dépôt d'une mission sur SA machine et le persiste.
+   *
+   * `☠` Best-effort et jamais bloquant pour la notification : machine hors
+   * ligne, dépôt absent, `git` muet — on renonce en le journalisant, et la
+   * mission garde `constatGit: null`, qui se lit « jamais mesuré ». Le seul
+   * résultat interdit ici serait d'écrire « propre » sans avoir mesuré.
+   */
+  async function releverConstatGit(missionId: string): Promise<Mission | null> {
+    const mission = registre.missions.lire(missionId);
+    if (mission === null || mission.worktree === null) return null;
+    try {
+      const constat = await parc.pourMission(missionId).client.etatGit(mission.worktree);
+      if (!constat.depot) return null;
+      return registre.missions.poserConstatGit(missionId, {
+        fichiersModifies: constat.fichiersModifies,
+        branche: constat.branche,
+        dernierCommit: constat.dernierCommit,
+      });
+    } catch (erreur) {
+      log.warn({ err: erreur, missionId }, 'état git non relevé — la mission reste sans constat (jamais « propre » par défaut)');
+      return null;
+    }
+  }
+
+  /**
+   * Lance le dispatch d'un mandat auto-approuvé et rend son issue RÉELLE, sans
+   * jamais immobiliser le tour de l'orchestrateur au-delà du plafond.
+   *
+   * `☠` La promesse n'est PAS annulée au dépassement : un dispatch en vol doit
+   * aboutir (l'équipe démarre vraiment), et son échec éventuel reste journalisé.
+   * Ce qui est borné, c'est l'ATTENTE — jamais le travail.
+   */
+  async function issueDuDispatch(
+    propositionId: string,
+    raisonAutorisation: string,
+  ): Promise<{ ref: string; autoApprouve: true; detail: string; dispatch: IssueDispatch }> {
+    const enCours = dispatcherMandatAutorise(propositionId, 'auto').catch((erreur: unknown) => {
+      log.error({ err: erreur, propositionId }, 'dispatch auto en échec');
+      return erreur instanceof Error ? erreur : new Error(String(erreur));
+    });
+    const echeance = new Promise<'delai'>((resoudre) => {
+      const t = setTimeout(() => resoudre('delai'), PLAFOND_DISPATCH_MS);
+      if (typeof t.unref === 'function') t.unref();
+    });
+    const issue = await Promise.race([enCours, echeance]);
+    const base = { ref: propositionId, autoApprouve: true as const, detail: raisonAutorisation };
+    if (issue === 'delai') {
+      return { ...base, dispatch: { etat: 'en_vol', detail: `pas de confirmation en ${PLAFOND_DISPATCH_MS / 1000} s` } };
+    }
+    if (issue instanceof Error) return { ...base, dispatch: { etat: 'echec', detail: issue.message } };
+    return { ...base, dispatch: { etat: 'parti', missionId: issue.missionId, detail: issue.detail } };
+  }
+
   let gestionnaireConversations: GestionnaireConversations | null = null;
   // Même référence différée que `gestionnaire` ci-dessous, dans l'autre sens :
   // les deux se connaissent, aucun ne peut être construit en premier.
@@ -402,7 +480,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
             // `☠` La proposition est persistée ET un marqueur est posé dans le
             // fil : c'est ce marqueur qui fait apparaître la carte à autoriser au
             // bon endroit, au lieu d'une liste hors contexte.
-            enregistrer: (mandat) => {
+            enregistrer: async (mandat) => {
               const p = registre.propositions.creer({
                 id: randomUUID(),
                 conversationId,
@@ -438,14 +516,15 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 return { ref: p.id, autoApprouve: false, detail: decision.raison };
               }
 
-              // `☠` Lancé sans être attendu : `enregistrer` doit rendre la main
-              // au tour de l'orchestrateur en millisecondes, et un dispatch
-              // ouvre une session sur le PC. L'échec ne se perd pas pour autant
-              // — il retombe dans le fil comme une notification.
-              void dispatcherMandatAutorise(p.id, 'auto').catch((erreur: unknown) => {
-                log.error({ err: erreur, propositionId: p.id }, 'dispatch auto en échec');
-              });
-              return { ref: p.id, autoApprouve: true, detail: decision.raison };
+              // `☠` ATTENDU, mais BORNÉ (02/08). Ce dispatch partait en `void` :
+              // `creer_equipe` répondait « équipe lancée » avant que rien ne
+              // démarre, et deux échecs de routage machine ce matin-là n'ont
+              // jamais atteint le modèle — il a construit tout son tour sur une
+              // équipe qui n'existait pas. On attend donc la confirmation, sans
+              // jamais immobiliser le tour : au-delà du plafond, le dispatch
+              // CONTINUE en arrière-plan et la réponse dit « en vol », ce qui
+              // est la vérité — ni un succès, ni un échec.
+              return await issueDuDispatch(p.id, decision.raison);
             },
           },
           conversationId,
@@ -575,8 +654,15 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       }
     },
     signalerFinEquipe: async (missionId) => {
-      const mission = registre.missions.lire(missionId);
-      if (mission === null) return;
+      const missionAvant = registre.missions.lire(missionId);
+      if (missionAvant === null) return;
+      // `☠` RELEVÉ AVANT LA NOTIFICATION, jamais après : c'est le seul fait qui
+      // distingue une équipe qui a LIVRÉ d'une équipe qui a seulement fini de
+      // parler. Sans lui, le harness invitait à arrêter une équipe dont sept
+      // fichiers n'étaient pas commités (02/08). Un relevé impossible (machine
+      // hors ligne, dépôt illisible) laisse `constatGit` à `null` — « jamais
+      // mesuré », ce que la rédaction dit explicitement plutôt que de conclure.
+      const mission = await releverConstatGit(missionAvant.id) ?? missionAvant;
       // `☠` LE câblage qui manquait. `reveiller` existait, était testé, et
       // n'était passé par PERSONNE — le motif « écrit, testé, branché sur rien »,
       // commis le jour même où on le documentait. Conséquence réelle : pendant
@@ -596,6 +682,22 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
           maintenant: Date.now(),
         });
       await notifications.signaler('equipe_terminee', mission, { reveiller });
+    },
+    /**
+     * `☠` LE plafond de dépense devient RÉEL ici. Jusqu'au 02/08, `budgetMaxUsd`
+     * n'était comparé à rien côté Pi : seul le SDK bornait, avec la valeur figée
+     * au démarrage de la session. Une baisse décidée en cours de route
+     * (`definir_budget`) n'avait donc aucun effet. L'ordre part vers la machine
+     * qui héberge l'équipe, et l'état harness est écrit AVANT — un ordre perdu
+     * ne doit pas laisser une équipe hors budget passer pour bornée.
+     */
+    arreterSurPlafond: async (missionId, motif) => {
+      registre.etats.appliquerEtatHarness(missionId, 'annulee', { motif });
+      const mission = registre.missions.lire(missionId);
+      if (mission !== null) {
+        await notifications.signaler('equipe_echouee', mission, { raison: motif });
+      }
+      await versMission.arreter(missionId);
     },
   });
 

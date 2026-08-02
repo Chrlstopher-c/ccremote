@@ -233,6 +233,19 @@ export interface Mission {
    * route qu'en l'absence d'ambiguïté (une seule machine en ligne).
    */
   readonly machine: string | null;
+  /**
+   * Ce que le dépôt de l'équipe contenait au dernier relevé (migration 23).
+   *
+   * `☠` `null` signifie « jamais mesuré », JAMAIS « propre ». C'est la
+   * distinction qui manquait : une équipe qui rend la main avec du travail non
+   * commité était présentée comme une équipe qui a livré.
+   */
+  readonly constatGit: {
+    readonly fichiersModifies: number;
+    readonly branche: string | null;
+    readonly dernierCommit: string | null;
+    readonly releveA: number;
+  } | null;
   readonly creeA: number;
   readonly demarreeA: number | null;
   readonly termineeA: number | null;

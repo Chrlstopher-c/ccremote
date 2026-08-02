@@ -30,6 +30,7 @@ import type {
   RapportArretUrgence,
   TelemetrieWorker,
 } from './types.ts';
+import type { ConstatGit } from './etat-git.ts';
 import type { ResultatExploration } from './exploration-projets.ts';
 import type { ResultatLectureFichier } from './lecture-fichier.ts';
 import type { ResultatRecherche } from './recherche-projets.ts';
@@ -54,6 +55,12 @@ export interface PortSuperviseurControle {
   lireFichier?(chemin: string): ResultatLectureFichier;
   /** Recherche de contenu bornée dans les projets du PC. */
   rechercherProjets?(motif: string, chemin?: string, max?: number): Promise<ResultatRecherche>;
+  /**
+   * État du dépôt d'une équipe — ce qui reste non commité quand elle rend la
+   * main. Absent ⇒ opération refusée, JAMAIS un dépôt réputé propre : c'est la
+   * distinction entre « a livré » et « a seulement fini de parler ».
+   */
+  etatGit?(chemin: string): Promise<ConstatGit>;
   /**
    * Avis du juge H-68 sur-le-champ. Absent ⇒ opération refusée, jamais un
    * « progrès » par défaut : un avis rassurant fabriqué sur une absence de
@@ -129,6 +136,12 @@ export type OperationControle =
    * contrairement à l'exploration, il n'existe pas de défaut raisonnable.
    */
   | { readonly type: 'lire_fichier'; readonly chemin: string }
+  /**
+   * Lecture pure : l'état du dépôt d'une équipe (fichiers non commités, branche,
+   * dernier commit). `☠` Ponctuelle, à la fin d'un tour — jamais dans le
+   * balayage : un `git status` de gros dépôt n'a rien à faire toutes les 5 s.
+   */
+  | { readonly type: 'etat_git'; readonly chemin: string }
   /** Lecture pure : chercher un motif DANS le contenu des projets du PC. */
   | {
       readonly type: 'rechercher_projets';
@@ -182,6 +195,7 @@ type OperationMutative = Exclude<
   | { readonly type: 'explorer_projets' }
   | { readonly type: 'lire_fichier' }
   | { readonly type: 'rechercher_projets' }
+  | { readonly type: 'etat_git' }
   // `☠` `inspecter` est une LECTURE : elle interroge le juge et rend un verdict,
   // elle ne coupe rien. La ranger parmi les mutations la ferait passer par le
   // cache d'idempotence, et le second clic sur « Lancer une inspection »
@@ -217,6 +231,8 @@ export interface ReponseControle {
   readonly demandesEnAttente?: readonly DemandeEnAttenteReinitialisation[];
   /** Présent uniquement pour `arret_urgence` (G.4, mission M-52). */
   readonly rapportArretUrgence?: RapportArretUrgence;
+  /** Présent uniquement pour `etat_git`. */
+  readonly etatGit?: ConstatGit;
   /** Présent uniquement pour `inspecter` — verdict du juge H-68, jamais une décision. */
   readonly inspection?: { readonly verdict: string; readonly motif: string };
   /**
@@ -305,6 +321,18 @@ export class CanalControle {
         rechercheProjets: recherche,
         ...(recherche.note !== undefined ? { detail: recherche.note } : {}),
       };
+    }
+
+    // `☠` REFUS explicite quand le superviseur ne sait pas relever git, jamais
+    // un constat vide : un dépôt réputé propre à tort ferait exactement le
+    // dégât qu'on cherche à éviter — une équipe arrêtée sur la foi d'un « rien
+    // à signaler » qu'aucune commande n'a produit.
+    if (requete.operation.type === 'etat_git') {
+      const constat = await this.#superviseur.etatGit?.(requete.operation.chemin);
+      if (constat === undefined) {
+        return { ok: false, effet: 'refuse', detail: 'relevé git non câblé sur ce superviseur' };
+      }
+      return { ok: true, effet: 'applique', etatGit: constat };
     }
 
     if (requete.operation.type === 'telemetrie') {

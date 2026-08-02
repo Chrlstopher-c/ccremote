@@ -1,9 +1,59 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-08-01*
+*Dernière mise à jour : 2026-08-02*
 
 ## ⚡ Harness d'orchestration — chantier actif
 
 **Contexte complet : `harness/REPRISE.md`.**
+
+### ✅ LIVRÉ LE 02/08 — les six défauts d'outillage relevés par l'orchestrateur (NON DÉPLOYÉ)
+
+L'orchestrateur a dressé lui-même la liste après une session où il n'a pas pu piloter ses équipes.
+Chacun est corrigé, chacun a son test, et chaque test a été validé DANS LES DEUX SENS (rouge sans le
+correctif, vert avec). **Rien n'est déployé : attente du feu vert de Chris.**
+
+- [x] **`envoyer_a_equipe` refusait TOUTES les équipes, vivantes comprises.** Le serveur MCP
+      consommait `RepertoireCibles` (un `SDKUserMessage`, un `query.interrupt()`) — inatteignable
+      depuis le Pi, donc satisfait par `CIBLES_NON_CABLEES` qui rendait `null` en permanence, et
+      l'outil traduisait ce `null` en « équipe introuvable ou plus vivante ». Preuve : six warns
+      « RepertoireCibles non câblé » dans `journalctl` du Pi. Nouveau port `EmetteurEquipe` branché
+      sur `pilotage.envoyerInstruction` — le chemin qui sert l'interface depuis le 01/08. Nouvelle
+      opération de canal `interrompre_worker` (couper un tour sans mettre en pause). Les deux outils
+      acceptent désormais une désignation libre (id, nom, projet), comme `suivre_equipe`.
+      `☠` Leçon : un refus honnête ne suffit pas, il doit NOMMER la bonne cause — celui-là a fait
+      conclure à l'orchestrateur que ses équipes étaient mortes, et relancer des sessions vivantes.
+- [x] **Un fil ouvert avec une seule machine en ligne devenait irroutable à l'allumage de la
+      seconde.** L'UI ne posait pas la question (à raison) mais renvoyait `''` : `conversation.machine`
+      restait `NULL`, le routage tranchait « sans ambiguïté »… jusqu'à ce que le PC démarre. Mesuré
+      sur `af847b10` : deux dispatchs auto perdus à 09:31 et 09:33. Trois verrous — l'UI renvoie
+      l'id de l'unique machine ; `pourConversation` ADOPTE et persiste le choix implicite dès la
+      première opération ; `POST /conversations/:id/machine` rattache un fil existant (refusé tant
+      que le fil porte une équipe vivante, l'arbitrage du 01/08 tient là et nulle part ailleurs).
+- [x] **`creer_equipe` annonçait un démarrage qui n'avait pas eu lieu.** Le dispatch partait en
+      `void` et l'outil répondait `applique` sur la seule foi de l'auto-approbation. Les deux échecs
+      de routage du 02/08 ne sont donc JAMAIS remontés au modèle, qui a construit tout son tour sur
+      une équipe inexistante. `EnregistreurProposition` est asynchrone, l'attente est bornée à 20 s :
+      `applique` (avec l'id de mission réel) · `accepte` (« en vol, vérifie avec lister_equipes »)
+      · `refuse` (avec la raison telle que le dispatch l'a donnée).
+- [x] **`definir_budget` était inopérant.** `budgetMaxUsd` était écrit, affiché… et comparé à rien :
+      le seul plafond réel était celui posé au SDK au démarrage, figé pour la vie de la session. Le
+      plafond du harness est désormais évalué à chaque relevé de télémétrie et COUPE l'équipe au
+      dépassement. La distinction est dite au modèle : baisser est pleinement effectif, monter ne
+      repousse pas la coupure du SDK.
+- [x] **`relancer_equipe` acceptait sans effet sur une équipe `idle`.** `relancer()` ignorait
+      silencieusement un worker vivant. Le verdict `dejaVivant` remonte jusqu'au modèle, et le refus
+      l'oriente vers `envoyer_a_equipe`.
+- [x] **`arreter_equipe` ne disait jamais quand le projet redevenait libre.** Toujours « libération
+      en cours », même après confirmation de la machine : l'orchestrateur attendait ou redispatchait
+      en aveugle (H-56). Désormais `applique` quand la machine a confirmé, `accepte` sinon.
+- [x] **Une équipe pouvait rendre la main sans avoir commité, et passait pour terminée.**
+      Nouveau relevé `etat_git` côté machine (branche, fichiers non commités, dernier commit),
+      opération de canal dédiée, migration 23, affichage dans `etat_equipe`, dans le Parc et dans la
+      notification de fin. `☠` Trois valeurs distinctes, jamais deux : non commité · propre ·
+      **jamais relevé** — replier la troisième sur la deuxième serait le défaut d'origine.
+- [x] **La notification de fin d'équipe citait `envoyer_message_equipe`, un outil qui n'existe pas.**
+      Le vrai nom est `envoyer_a_equipe` : à chaque fin d'équipe, le harness donnait à l'orchestrateur
+      une consigne inapplicable.
+- [x] **`ports-non-cables.ts` a disparu** — ses deux ports fantômes sont câblés.
 
 ### ✅ DÉFAUT DE SÛRETÉ — trouvé ET fermé le 01/08 au soir
 

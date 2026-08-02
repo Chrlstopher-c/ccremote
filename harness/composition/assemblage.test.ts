@@ -39,25 +39,25 @@ function dossierTemporaire(prefixe: string): string {
 }
 
 describe('assemblage — plafond de parc (G.1.3, H-74 occurrence n°2)', () => {
-  test('proposerCreationEquipe REFUSE quand le vrai registre porte un compte au-dessus du seuil', () => {
+  test('proposerCreationEquipe REFUSE quand le vrai registre porte un compte au-dessus du seuil', async () => {
     const registre = ouvrirRegistre({ chemin: ':memory:' });
     registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/x' });
     registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', utilisation: 95 });
 
     const lecteur = creerLecteurUtilisationParc(registre);
-    const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const retour = await proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
 
     expect(retour.effet).toBe('refuse');
     expect(retour.raison).toContain('90');
   });
 
-  test('proposerCreationEquipe AUTORISE quand tous les comptes réels sont sous le seuil', () => {
+  test('proposerCreationEquipe AUTORISE quand tous les comptes réels sont sous le seuil', async () => {
     const registre = ouvrirRegistre({ chemin: ':memory:' });
     registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/x' });
     registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', utilisation: 10 });
 
     const lecteur = creerLecteurUtilisationParc(registre);
-    const retour = proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const retour = await proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
 
     expect(retour.effet).toBe('differe');
   });
@@ -116,8 +116,9 @@ describe("assemblage — arrêt d'urgence via le canal de contrôle réel (D.3, 
 
     expect(reponse.ok).toBe(true);
     expect(reponse.rapportArretUrgence).toBeDefined();
-    // Absence de workers vivants ⇒ liste vide, mais le CHEMIN a été réellement exécuté
-    // (pas de branche « non câblé » comme celle documentée dans ports-non-cables.ts).
+    // Absence de workers vivants ⇒ liste vide, mais le CHEMIN a été réellement
+    // exécuté — pas une branche « non câblé » qui rendrait un rapport de complaisance.
+    // (`ports-non-cables.ts` a disparu le 02/08 : ses deux ports fantômes sont câblés.)
     expect(reponse.rapportArretUrgence?.missions).toEqual([]);
     void cheminRegistrePersistance;
   });

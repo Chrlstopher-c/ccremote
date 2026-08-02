@@ -58,6 +58,20 @@ export interface OptionsBalayage {
    * retarderait l'état de TOUT le parc pour une seule équipe.
    */
   readonly signalerFinEquipe?: (missionId: string) => Promise<unknown>;
+  /**
+   * Coupe une équipe qui a dépassé son plafond de dépense (G, filet H-68).
+   *
+   * `☠ CE QUE CETTE OPTION RÉPARE` — `budgetMaxUsd` était écrit au registre,
+   * affiché dans `etat_equipe`… et comparé à RIEN. Le seul plafond réel était
+   * celui posé au SDK au démarrage, figé pour la vie de la session : d'où un
+   * `definir_budget` « inopérant sur session démarrée ». Le harness borne
+   * maintenant lui-même, ce qui rend la baisse de plafond immédiatement
+   * effective — y compris sur une équipe déjà lancée.
+   *
+   * Absent ⇒ aucun garde-fou de budget, comme avant. Un déploiement qui ne le
+   * câble pas doit le savoir : c'est journalisé au premier dépassement.
+   */
+  readonly arreterSurPlafond?: (missionId: string, motif: string) => Promise<unknown>;
 }
 
 /** Ce qu'un relevé apprend au Pi, au-delà de ce qu'il vient d'écrire. */
@@ -66,6 +80,8 @@ interface ResultatReleve {
   readonly mortEnCoursDeRoute: boolean;
   /** L'équipe vient de rendre sa réponse (`running → idle`). */
   readonly finDeTour: boolean;
+  /** Plafond de dépense franchi — motif prêt à journaliser, `null` sinon. */
+  readonly depassementBudget: string | null;
 }
 
 export interface BalayageTelemetrie {
@@ -101,7 +117,7 @@ function marquerCompteSature(registre: Registre, compteId: string, motif: string
 function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   const mission = registre.missions.lire(t.missionId);
   // Mission inconnue du Pi : la réconciliation s'en charge, pas nous.
-  if (mission === null) return { mortEnCoursDeRoute: false, finDeTour: false };
+  if (mission === null) return { mortEnCoursDeRoute: false, finDeTour: false, depassementBudget: null };
 
   // `☠` Relevé AVANT toute écriture : les valeurs d'un worker mort restent
   // celles de son dernier instant, elles ne mentent pas — mais son état, lui,
@@ -147,7 +163,21 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   }
   // Écart seulement : `ajouterCout` accumule côté registre.
   const ecart = t.coutUsd - mission.budgetConsommeUsd;
-  if (ecart > 0) registre.missions.ajouterCout(t.missionId, ecart);
+  const consomme =
+    ecart > 0 ? registre.missions.ajouterCout(t.missionId, ecart).budgetConsommeUsd : mission.budgetConsommeUsd;
+  // `☠` Comparé APRÈS l'accumulation, sur la valeur du registre et non sur le
+  // relevé : c'est le registre qui fait foi sur la dépense (le relevé d'une
+  // machine peut arriver en retard, ou repartir de zéro après une relance).
+  // `☠` `en_cours` seulement : une mission déjà arrêtée ou terminée redéclencherait
+  // une coupure à chaque passe de 5 s, tant que la machine n'a pas fini de rendre
+  // son worker — une tempête d'ordres pour une équipe qui meurt déjà.
+  const depassementBudget =
+    mission.etatHarness === 'en_cours' &&
+    mission.budgetMaxUsd !== null &&
+    mission.budgetMaxUsd > 0 &&
+    consomme >= mission.budgetMaxUsd
+      ? `plafond de dépense atteint : ${consomme.toFixed(2)} $ sur ${mission.budgetMaxUsd.toFixed(2)} $ autorisés`
+      : null;
 
   if (t.contexteTokensUtilises !== null && mission.contexteTokensUtilises !== t.contexteTokensUtilises) {
     registre.missions.definirUsageContexte(
@@ -157,7 +187,7 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
       t.contexteVentilation,
     );
   }
-  return { mortEnCoursDeRoute, finDeTour };
+  return { mortEnCoursDeRoute, finDeTour, depassementBudget };
 }
 
 /**
@@ -174,6 +204,25 @@ function notifierFinEquipe(options: OptionsBalayage, missionId: string): void {
   });
 }
 
+/**
+ * Coupe une équipe qui a franchi son plafond. `☠` Lancée sans être attendue,
+ * comme la notification : l'ordre traverse le lien jusqu'à la machine, et le
+ * balayage doit rendre la main en millisecondes. Sans câblage, le dépassement
+ * est JOURNALISÉ en `warn` — jamais silencieux : un plafond qui ne coupe pas
+ * doit au moins laisser une trace de ce qu'il n'a pas fait.
+ */
+function couperSurPlafond(options: OptionsBalayage, missionId: string, motif: string): void {
+  const couper = options.arreterSurPlafond;
+  if (couper === undefined) {
+    log.warn({ missionId, motif }, 'plafond de dépense franchi mais AUCUN arrêt câblé — équipe laissée en vie');
+    return;
+  }
+  log.warn({ missionId, motif }, 'plafond de dépense franchi — arrêt de l’équipe demandé (G, H-68)');
+  void couper(missionId, motif).catch((erreur: unknown) => {
+    log.error({ err: erreur, missionId }, 'arrêt sur plafond en échec — le balayage continue');
+  });
+}
+
 export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTelemetrie {
   const periode = options.periodeMs ?? PERIODE_BALAYAGE_MS;
 
@@ -186,6 +235,9 @@ export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTe
           const resultat = appliquer(options.registre, t);
           if (resultat.mortEnCoursDeRoute) reconciliationRequise = true;
           if (resultat.finDeTour) notifierFinEquipe(options, t.missionId);
+          if (resultat.depassementBudget !== null) {
+            couperSurPlafond(options, t.missionId, resultat.depassementBudget);
+          }
         } catch (erreur) {
           log.error({ err: erreur, missionId: t.missionId }, 'relevé de télémétrie inapplicable — les autres sont traités');
         }

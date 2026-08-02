@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ouvrirRegistre, type Mission, type Registre } from '../registre/index.ts';
 import { ServiceNotifications, type PortRemiseOrchestrateur } from './service-notifications.ts';
+import { redigerFinEquipe } from './redaction.ts';
 
 let repertoire: string;
 let registre: Registre;
@@ -221,5 +222,46 @@ describe('marquage lu — indépendant de la remise', () => {
     expect(registre.notifications.nombreNonLues()).toBe(0);
     // `☠` Deux destinataires, deux compteurs : Chris a lu, l'orchestrateur non.
     expect(registre.notifications.nonRemises('conv-a')).toHaveLength(1);
+  });
+});
+
+/**
+ * `☠` « Terminée » ne dit rien de ce que l'équipe a LIVRÉ. Ces cas verrouillent
+ * la distinction que le harness ne faisait pas le 02/08 : rendre la main ≠ avoir
+ * commité, et « non relevé » ≠ « propre ».
+ */
+describe('rédaction — travail non commité (migration 23)', () => {
+  function missionAvecConstat(constat: Mission['constatGit']): Mission {
+    const base = creerMission(`m-git-${constat === null ? 'nul' : constat.fichiersModifies}`, 'conv-a');
+    return { ...base, constatGit: constat };
+  }
+
+  const MAINTENANT = 1_785_000_000_000;
+
+  test('☠ fichiers non commités ⇒ le titre ET le corps le disent, avec le geste à faire', () => {
+    const texte = redigerFinEquipe(
+      missionAvecConstat({ fichiersModifies: 7, branche: 'travaux', dernierCommit: null, releveA: 1 }),
+      MAINTENANT,
+    );
+    expect(texte.titre).toContain('non commitée');
+    expect(texte.corps).toContain('7 fichier');
+    expect(texte.pourOrchestrateur).toContain('NON COMMITÉ');
+    expect(texte.pourOrchestrateur).toContain('envoyer_a_equipe');
+  });
+
+  test('dépôt propre ⇒ dit propre, avec le dernier commit', () => {
+    const texte = redigerFinEquipe(
+      missionAvecConstat({ fichiersModifies: 0, branche: 'main', dernierCommit: 'a1b2c3 · livré', releveA: 1 }),
+      MAINTENANT,
+    );
+    expect(texte.titre).not.toContain('non commitée');
+    expect(texte.pourOrchestrateur).toContain('propre');
+    expect(texte.pourOrchestrateur).toContain('a1b2c3');
+  });
+
+  test('☠ relevé ABSENT ⇒ dit « non relevé », jamais « propre »', () => {
+    const texte = redigerFinEquipe(missionAvecConstat(null), MAINTENANT);
+    expect(texte.pourOrchestrateur).toContain('non relevé');
+    expect(texte.pourOrchestrateur).not.toContain('ÉTAT DU DÉPÔT : propre');
   });
 });

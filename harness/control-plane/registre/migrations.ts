@@ -700,6 +700,24 @@ ALTER TABLE mission ADD COLUMN machine TEXT;
 CREATE INDEX idx_mission_machine ON mission(machine);
 `;
 
+/**
+ * Migration 23 — l'état du dépôt d'une équipe à la fin de son tour.
+ *
+ * `☠` Ce que ces colonnes rendent possible : distinguer « a livré » de « a fini
+ * de parler ». Jusqu'ici, une équipe qui rendait la main avec sept fichiers
+ * modifiés et zéro commit était affichée exactement comme une équipe ayant
+ * terminé — et la notification invitait à l'arrêter pour libérer le projet.
+ *
+ * `☠` Rien n'est rétro-rempli : le constat est un RELEVÉ daté, pas une déduction.
+ * `git_releve_a` à NULL signifie « jamais mesuré », ce qui n'est pas « propre ».
+ */
+const MIGRATION_23 = `
+ALTER TABLE mission ADD COLUMN git_fichiers_modifies INTEGER;
+ALTER TABLE mission ADD COLUMN git_branche TEXT;
+ALTER TABLE mission ADD COLUMN git_dernier_commit TEXT;
+ALTER TABLE mission ADD COLUMN git_releve_a INTEGER;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -723,6 +741,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 20, nom: 'verdict-inspection-mission', sql: MIGRATION_20 },
   { version: 21, nom: 'resultats-outils-conversation', sql: MIGRATION_21 },
   { version: 22, nom: 'machine-de-travail', sql: MIGRATION_22 },
+  { version: 23, nom: 'constat-git-mission', sql: MIGRATION_23 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

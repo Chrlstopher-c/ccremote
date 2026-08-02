@@ -21,6 +21,7 @@ export type {
   ResultatArretUnitaireUrgence,
 } from './types.ts';
 
+export { releverEtatGit, resumerConstatGit, type ConstatGit } from './etat-git.ts';
 export { RegistreWorkers } from './registre-workers.ts';
 
 export {
