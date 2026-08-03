@@ -20,6 +20,24 @@
       un drapeau d'échec · `lister_projets` dit quel registre est vide · `etat_equipe` compte les
       sous-agents.
 
+- [x] **Outillage de la machine de travail garanti par le déploiement** — `rg` manquait sur le VPS
+      et c'est ce qui rendait `rechercher_projets` muet (« Executable not found in $PATH », 01/08 et
+      02/08 : deux recherches rendues vides sur des dépôts qui contenaient la réponse). ripgrep,
+      tree, jq et unzip sont installés et vérifiés à chaque déploiement. Éprouvé en production :
+      2352 occurrences sur stockiop, et un motif impossible rend « aucune occurrence (recherche
+      réellement effectuée, moteur rg) » — l'ambiguïté est levée. Ni `node` ni `npm` : la doctrine
+      reste Bun.
+- [x] **Le PC avait le même défaut que le VPS, en pire : aucun script de déploiement.**
+      `deploy-superviseur-pc.sh` créé, avec le même contrôle de fraîcheur. Les trois machines sont
+      couvertes.
+- [x] **Modèle des sous-agents : héritage voulu, pas subi.** Sur les 45 sous-agents lancés depuis le
+      1er août, ceux des vraies missions sont en `sonnet` ou `opus` — le modèle de leur lead — et
+      les seuls `haiku` sont ceux des deux tests d'attente, où le lead l'a choisi pour une tâche
+      mécanique. C'est l'arbitrage correct, et il appartient au lead : lui seul connaît la
+      granularité de ses sous-tâches. Rien à corriger.
+- [x] **`logs/` ajouté au `.gitignore` du bac à sable** — il déclenchait l'avertissement « fichiers
+      non commités » à chaque fin d'équipe sur ce projet.
+
 ### 🎯 À LA REPRISE
 
 - [ ] **Deux contraintes à répercuter dans les mandats qui font attendre un agent** (découvertes
@@ -27,11 +45,6 @@
       forme acceptée est `fin=$(( $(date +%s) + N )); until [ $(date +%s) -ge $fin ]; do sleep 2; done`
       — et il coupe à 120 s sans `timeout` explicite à l'appel. Sans les deux, un sous-agent rend
       « Waiting for background process to complete... » au lieu de son résultat.
-- [ ] **`logs/` non commité traîne dans `/mnt/projects/bac-a-sable`** sur le VPS : il déclenche
-      l'avertissement « fichiers non commités » à chaque fin d'équipe sur ce projet. À ajouter au
-      `.gitignore` du bac à sable.
-- [ ] **Les sous-agents tournent en `haiku`** (lu dans les `.meta.json` du VPS) alors que le lead
-      est en `claude-sonnet-5`. À vérifier : héritage voulu du SDK, ou dimensionnement subi ?
 
 ### ✅ LIVRÉ ET DÉPLOYÉ LE 02/08 (soir) — l'`init` qui tuait les équipes en plein travail
 

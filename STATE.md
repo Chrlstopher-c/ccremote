@@ -31,6 +31,12 @@ plus récente que le process ⇒ le déploiement **échoue bruyamment**. Vérifi
 fichiers » sont deux faits distincts, et seul le second compte. Aucun déploiement ne doit se
 déclarer réussi sans avoir mesuré le second.
 
+`☠` **Le PC était le trou le plus béant, parce qu'il n'avait AUCUN déploiement.** Il lit
+`/mnt/projects/ccremote/harness` directement, donc « déployer » s'y réduisait à un redémarrage
+qu'aucun script ne faisait — aucun geste, donc aucun contrôle. Le même jour, il servait lui aussi du
+code antérieur aux correctifs de la matinée. **`deploy-superviseur-pc.sh`** existe maintenant et
+porte le même contrôle que les deux autres. Les trois machines sont désormais couvertes.
+
 ### `☠` 03/08 — LE TEST, REFAIT ET VERT
 
 Deux exécutions réelles sur `/mnt/projects/bac-a-sable`, code corrigé chargé :

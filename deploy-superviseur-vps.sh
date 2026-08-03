@@ -59,6 +59,37 @@ echo "  comptes présents : $COMPTES"
 # résolus lexicalement (les cibles restent sous `/mnt/projects/`), et
 # `lecture-fichier.ts` applique `realpathSync` à la racine ET à la cible — les
 # deux se résolvent alors vers `~/dev`. Vérifié en réel après la bascule.
+# ── Outillage de la machine de travail ──────────────────────────────────────
+#
+# ☠ `rg` EST UNE DÉPENDANCE DURE, PAS UN CONFORT. `rechercher_projets` le
+# `Bun.spawn` directement : absent, l'outil rendait `occurrences: []` avec une
+# note en fin de charge utile — c'est-à-dire la FORME EXACTE d'une recherche
+# fructueuse mais vide. Deux fois en production (01/08 sur `stockiop/security`,
+# 02/08 sur `bac-a-sable`), l'orchestrateur a reçu « rien trouvé » sur des dépôts
+# qui contenaient la réponse ; il l'a relevé lui-même au test des 23 outils. Le
+# code a désormais un repli `grep` et un drapeau d'échec, mais le vrai correctif
+# est ici : la machine part avec ses outils, et le déploiement le DIT.
+#
+# ☠ Ni `node` ni `npm` : la doctrine est Bun, et l'installer ici ferait diverger
+# les machines de travail de la règle du poste. Une équipe qui en a besoin le
+# demande dans son rapport.
+OUTILS_REQUIS="ripgrep tree jq unzip"
+echo "→ Outillage de la machine (rg est une dépendance de rechercher_projets)"
+ssh "$CIBLE" "manquants=''; \
+  for paire in 'rg:ripgrep' 'tree:tree' 'jq:jq' 'unzip:unzip'; do \
+    bin=\${paire%%:*}; paquet=\${paire##*:}; \
+    command -v \$bin >/dev/null 2>&1 || manquants=\"\$manquants \$paquet\"; \
+  done; \
+  if [ -n \"\$manquants\" ]; then \
+    echo \"  installation :\$manquants\"; \
+    sudo -n apt-get install -y \$manquants >/dev/null 2>&1 || echo '  ⚠ installation impossible (sudo ?)'; \
+  fi; \
+  for bin in rg tree jq unzip; do \
+    command -v \$bin >/dev/null 2>&1 || echo \"  ✗ \$bin TOUJOURS ABSENT\"; \
+  done; \
+  command -v rg >/dev/null 2>&1 && echo '  ✓ rg présent — rechercher_projets opérationnel' \
+    || echo '  ✗ rg ABSENT — rechercher_projets tombera sur son repli grep'"
+
 RACINE_DEV="${CCREMOTE_VPS_RACINE_DEV:-/home/ubuntu/dev}"
 echo "→ Racine des projets (/mnt/projects → $RACINE_DEV)"
 ssh "$CIBLE" "mkdir -p '$RACINE_DEV'; \

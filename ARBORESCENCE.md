@@ -48,6 +48,10 @@ server/
 
 deploy-pi.sh                Déploiement du client CLI vers le Raspberry Pi
 deploy-web-pi.sh            Déploiement de pi-web vers le Raspberry Pi (scp + restart systemd)
+deploy-harness-pi.sh        Control plane du harness → Pi (restart + contrôle de fraîcheur)
+deploy-superviseur-vps.sh   Machine de travail VPS (outillage, restart + contrôle de fraîcheur)
+deploy-superviseur-pc.sh    Machine de travail PC : restart + contrôle de fraîcheur (pas de copie)
+deploy-mcp-vps.sh           Serveurs MCP du VPS
 start.sh                     Démarre pi-web en local pour le dev (PID file, logs/pi-web.log)
 stop.sh                       Arrête l'instance de dev local de pi-web (via le PID file)
 restart.sh                    stop.sh puis start.sh
