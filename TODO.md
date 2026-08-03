@@ -1,26 +1,37 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-08-02*
+*Dernière mise à jour : 2026-08-03*
 
 ## ⚡ Harness d'orchestration — chantier actif
 
 **Contexte complet : `harness/REPRISE.md`.**
 
-### 🎯 EN COURS — le test qui attend le clic de Chris (03/08 au réveil)
+### ✅ FAIT LE 03/08 — le test est passé, et huit défauts sont fermés
 
-- [ ] **Approuver la proposition `42f3a52f`** dans l'interface (projet `/mnt/projects/bac-a-sable`
-      sur le VPS, accès écriture). C'est le test du correctif « tâches de fond », armé le 02/08 au
-      soir mais jamais lancé : la fenêtre d'autonomie s'était refermée à 20:00 et H-61 ne se
-      contourne pas par un message dans le fil.
-      `⚠` **Rejeter les deux autres propositions en attente** (`c33f391b`, `8593870b`, stockiop en
-      lecture) : ce sont les tentatives d'avant la création du bac à sable.
-- [ ] **Relever les quatre mesures** que l'orchestrateur doit rapporter, et ne conclure sur rien
-      d'autre : sous-agents lancés contre mots cités dans la synthèse · heure de la première
-      notification de fin reçue · état affiché par l'équipe pendant l'attente · coût total.
-      **Attendu** : équipe vivante 8–10 min, UNE seule notification (à la vraie fin), jamais au
-      repos pendant l'attente, cinq mots (ALPHA/BRAVO/CHARLIE/DELTA/ECHO) cités, aucune clôture
-      auto. **Signature d'échec** : notification au bout d'une minute, un ou deux mots sur cinq.
-- [ ] **Vérifier au passage `definir_budget`** : l'orchestrateur doit abaisser le plafond de 250 $
-      à 5 $ au démarrage. Une BAISSE doit répondre `applique` — sinon c'est un défaut de plus.
+- [x] **Le test des sous-agents en arrière-plan est VERT**, deux fois, sur `bac-a-sable`. Quatre
+      mesures conformes : tous les mots cités, UNE notification à la vraie fin, jamais « au repos »
+      pendant l'attente, coût sous plafond. Détail chiffré dans `STATE.md`.
+- [x] **Cause de l'échec du matin trouvée : le process du VPS tournait le code du 1er août.**
+      `enable --now` ne redémarre pas un service actif. Le déploiement fait maintenant un `restart`
+      et VÉRIFIE que le process est postérieur aux sources — il échoue sinon.
+- [x] **Les sous-agents étaient invisibles sur le VPS depuis le 01/08** (clé de projet calculée sur
+      le chemin du mandat, le CLI écrit sous le realpath — `/mnt/projects` est un lien vers `~/dev`).
+- [x] `creer_equipe` accepte `budgetMaxUsd` · `retirer_mandat` (23ᵉ outil) · `arreter_equipe` ne
+      requalifie plus une équipe terminée en `annulee` · `rechercher_projets` a un repli `grep` et
+      un drapeau d'échec · `lister_projets` dit quel registre est vide · `etat_equipe` compte les
+      sous-agents.
+
+### 🎯 À LA REPRISE
+
+- [ ] **Deux contraintes à répercuter dans les mandats qui font attendre un agent** (découvertes
+      pendant le test, elles ne viennent pas du harness) : l'outil Bash refuse un `sleep` nu — la
+      forme acceptée est `fin=$(( $(date +%s) + N )); until [ $(date +%s) -ge $fin ]; do sleep 2; done`
+      — et il coupe à 120 s sans `timeout` explicite à l'appel. Sans les deux, un sous-agent rend
+      « Waiting for background process to complete... » au lieu de son résultat.
+- [ ] **`logs/` non commité traîne dans `/mnt/projects/bac-a-sable`** sur le VPS : il déclenche
+      l'avertissement « fichiers non commités » à chaque fin d'équipe sur ce projet. À ajouter au
+      `.gitignore` du bac à sable.
+- [ ] **Les sous-agents tournent en `haiku`** (lu dans les `.meta.json` du VPS) alors que le lead
+      est en `claude-sonnet-5`. À vérifier : héritage voulu du SDK, ou dimensionnement subi ?
 
 ### ✅ LIVRÉ ET DÉPLOYÉ LE 02/08 (soir) — l'`init` qui tuait les équipes en plein travail
 

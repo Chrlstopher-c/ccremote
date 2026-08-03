@@ -1,15 +1,78 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-08-02*
+*Dernière mise à jour : 2026-08-03*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 02/08 (fin de soirée)** : **1429 tests / 1429 verts**, typecheck propre, SDK épinglé
-**0.3.220**, schéma du registre en **version 23**. **TOUT EST DÉPLOYÉ** — Pi (control plane + web)
-et les deux machines de travail (`trinityarch`, `vps-e411b5c7`), les deux rattachées, zéro
-supersede, zéro erreur au journal. Dernier commit en prod : `4e8df9f`.
+**État au 03/08 (matinée)** : **1441 tests / 1441 verts**, typecheck propre, schéma du registre en
+**version 23**. **TOUT EST DÉPLOYÉ ET VÉRIFIÉ COMME TEL** — le déploiement compare désormais
+l'heure de démarrage du process au mtime des sources et échoue s'il sert du code périmé.
+
+### `☠` 03/08 — LE CORRECTIF ÉTAIT SUR LE DISQUE, LE PROCESS TOURNAIT CELUI DE LA VEILLE
+
+Le test des sous-agents en arrière-plan, armé le 02/08 au soir, a échoué au réveil exactement
+comme le bug qu'il devait valider : notification à T+1 min, trois mots sur cinq. Il n'a rien
+testé — le superviseur du VPS tournait **depuis le 01/08 16:25 UTC (`NRestarts=0`)** alors que le
+correctif était sur son disque **depuis le 02/08 18:38**. Le rsync avait livré, le service n'avait
+jamais redémarré.
+
+Cause : `deploy-superviseur-vps.sh` faisait `systemctl --user enable --now`. **`--now` DÉMARRE un
+service arrêté, il ne redémarre pas un service actif.** Deux moitiés d'un même système, une seule
+mise à jour — le pitfall n°3 de `session-awareness.md`, à la lettre.
+
+Ce qui le rend impossible à refaire : le déploiement fait un `restart` explicite, PUIS compare
+`ExecMainStartTimestamp` au mtime le plus récent des sources (`find -newermt`). Une seule source
+plus récente que le process ⇒ le déploiement **échoue bruyamment**. Vérifié dans les deux sens : un
+`touch` sur un fichier suffit à faire sortir le contrôle en rouge.
+
+`☠` **La leçon dépasse ce script** : « les fichiers sont à jour » et « le process exécute ces
+fichiers » sont deux faits distincts, et seul le second compte. Aucun déploiement ne doit se
+déclarer réussi sans avoir mesuré le second.
+
+### `☠` 03/08 — LE TEST, REFAIT ET VERT
+
+Deux exécutions réelles sur `/mnt/projects/bac-a-sable`, code corrigé chargé :
+
+| Mesure | Attendu | Mesuré (5 sous-agents) | Mesuré (3 sous-agents) |
+|---|---|---|---|
+| Mots cités dans la synthèse | tous | 5/5 | 3/3 |
+| Notifications de fin | UNE, à la vraie fin | 1, à T+10 min | 1, à T+2 min |
+| Affichage pendant l'attente | jamais « au repos » | `en_cours`/`running` | idem, 4 relevés |
+| Coût / plafond | sous plafond | 0,84 $ / 5 $ | 0,98 $ / 3 $ |
+
+À comparer au run du matin sur la même infrastructure : notification à T+1 min, 3 mots sur 5.
+
+**Deux parasites du protocole, découverts et neutralisés** — ils ne concernent pas le harness mais
+tout mandat qui fait attendre un sous-agent : l'outil Bash **refuse un `sleep` nu** (forme acceptée :
+`fin=$(( $(date +%s) + N )); until [ $(date +%s) -ge $fin ]; do sleep 2; done`) et **coupe à 120 s**
+sauf `timeout` explicite à l'appel. Sans les deux, les sous-agents partent en `run_in_background` et
+rendent « Waiting for background process to complete... » au lieu de leur résultat.
+
+### `☠` 03/08 — LES SOUS-AGENTS ÉTAIENT INVISIBLES DEPUIS LA BASCULE MULTI-MACHINES
+
+Le CLI range les transcripts de sous-agents sous la clé du chemin **réel** ; le harness les
+cherchait sous celle du chemin du mandat. Sur le VPS, `/mnt/projects` est un lien vers `~/dev` : la
+clé calculée (`-mnt-projects-bac-a-sable`) n'existait sur aucune machine. **Zéro sous-agent remonté,
+en silence, depuis le 01/08.** Mesuré : sept transcrits sur le disque, « sous-agents : aucun » à
+l'écran pendant dix minutes. Les deux clés sont désormais essayées.
+
+Dans la foulée, deux lacunes que l'orchestrateur a nommées lui-même : `etat_equipe` n'exposait
+AUCUN champ sous-agents (« je ne peux pas dire que le harness en voit zéro, je peux dire que mon
+outil ne remonte pas l'information » — refus de conclure exemplaire), et le compteur d'actifs
+restait figé après la clôture. Le total est conservé, les actifs sont **dérivés** de l'état de
+l'équipe — la règle du 02/08, appliquée à un second champ.
+
+### Les cinq autres défauts fermés le 03/08
+
+| Défaut | Ce qui se passait | Ce qui a changé |
+|---|---|---|
+| Plafond de dépense | `definir_budget` n'existe qu'après démarrage : une mission d'une minute finit avant tout réveil | `creer_equipe` accepte `budgetMaxUsd`, posé au mandat |
+| Mandat remplacé | aucun moyen de le retirer ; `arreter_equipe` sur un id de proposition répondait « mission introuvable », lu comme une suppression — c'est ce mandat-là qui a été autorisé le lendemain, sur le mauvais projet | `retirer_mandat` (23ᵉ outil), et le refus nomme la bonne cause |
+| `arreter_equipe` | marquait `annulee` une équipe qui avait rendu son rapport — or la notification de fin ORDONNE de l'appeler. 43 missions « annulées » au registre, la plupart réussies | un état terminal est conservé ; seule une équipe vivante est annulée |
+| `rechercher_projets` | `rg` absent du VPS et du Pi ⇒ `occurrences: []` + une note, qui se lit « rien trouvé » | ripgrep installé, repli `grep`, et un échec porte un drapeau `echec` |
+| `lister_projets` | « aucun projet valide » quand `explorer_projets` voyait trois dépôts | dit QUEL registre est vide et renvoie vers `explorer_projets` |
 
 ### `☠` 02/08 (soir) — « TERMINÉE » ALORS QUE TROIS SOUS-AGENTS TRAVAILLAIENT ENCORE
 
