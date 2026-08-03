@@ -6,7 +6,7 @@
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 03/08 (matinée)** : **1442 tests / 1442 verts**, typecheck propre, schéma du registre en
+**État au 03/08** : **1443 tests / 1443 verts**, typecheck propre, schéma du registre en
 **version 23**. **TOUT EST DÉPLOYÉ ET VÉRIFIÉ COMME TEL** — le déploiement compare désormais
 l'heure de démarrage du process au mtime des sources et échoue s'il sert du code périmé.
 

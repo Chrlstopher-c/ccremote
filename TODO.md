@@ -51,11 +51,22 @@
       cités, une notification à la vraie fin, 0,45 $ sur 3 $. À comparer au test du matin : trois
       sous-agents sur cinq dévoyés, deux relances.
 
+- [x] **Le sous-agent non prévenu s'en sort seul — point fermé sur deux mesures.** Un mandat
+      interdisant au lead de souffler quoi que ce soit : (1) serveur HTTP à démarrer et vérifier —
+      le sous-agent produit `nohup`, `curl`, `pgrep`, aucun blocage ; (2) script de 150 s lancé au
+      premier plan sans aucune précaution — passé en 157 s, sans coupure ni relance.
+      `☠` **Au passage, ma première conclusion était fausse et l'orchestrateur l'a refusée** : le
+      `sleep 1` qui passait cumulait deux propriétés (court ET accompagné). Quatre mesures isolent
+      la variable — `sleep 1` seul PASSE · `sleep 35` seul BLOQUÉ · `echo; sleep 35; echo` PASSE ·
+      `echo; sleep 170; echo` PASSE. Et le plafond de 120 s n'est **pas systématique** : il a coupé
+      le matin, pas l'après-midi. Le prompt dit désormais ce qui a été mesuré, au mot près.
+- [x] **Piège ajouté au prompt du lead, plus courant que le cas `sleep`** : après `nohup cmd &`,
+      `$!` désigne souvent le wrapper bash et non le process. Mesuré sur un transcript — le `kill`
+      a réussi, le serveur répondait toujours. Relevé par l'orchestrateur en relisant le fil.
+
 ### 🎯 À LA REPRISE
 
-- [ ] **Un sous-agent dont le parent n'anticipe PAS le besoin d'attente** reste non testé : ce qu'on
-      a mesuré est une propagation descendante (le lead recopie la règle dans le brief), pas une
-      découverte indépendante à chaque niveau. Relevé par l'orchestrateur lui-même.
+- [ ] Rien d'ouvert sur le harness. Prochain chantier au choix de Chris.
 
 ### ✅ LIVRÉ ET DÉPLOYÉ LE 02/08 (soir) — l'`init` qui tuait les équipes en plein travail
 
