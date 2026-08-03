@@ -310,6 +310,11 @@ et critère d'arrêt au changement de droits.
 
 | Décision | Raison | Date |
 |----------|--------|------|
+| Un déploiement ÉCHOUE si le process est antérieur à ses sources | « les fichiers sont à jour » et « le process exécute ces fichiers » sont deux faits distincts, et seul le second compte. Le contrôle est mécanique (`ExecMainStartTimestamp` vs `find -newermt`), jamais une discipline | 2026-08-03 |
+| `budgetMaxUsd` posé au MANDAT, pas seulement après démarrage | `definir_budget` n'opère que sur une équipe vivante ; une mission d'une minute finit avant tout réveil de l'orchestrateur. Le seul instant où un plafond protège encore quelque chose est le dépôt | 2026-08-03 |
+| `arreter_equipe` conserve un état terminal déjà acquis | La notification de fin ORDONNE de l'appeler pour libérer le projet : toute équipe qui réussissait finissait marquée « annulée ». 43 au registre, et c'est cet historique que l'orchestrateur relit avant de décider | 2026-08-03 |
+| Repli `grep` dans `rechercher_projets`, plutôt qu'une dépendance dure à ripgrep | Une capacité du harness ne doit pas dépendre d'un paquet optionnel de la machine. L'installation reste garantie par le déploiement — la ceinture ET les bretelles | 2026-08-03 |
+| AUCUN agent custom pour propager les règles aux sous-agents | Écraser `general-purpose` coûterait son prompt d'origine, pour un cas que le système résout seul — mesuré deux fois : un sous-agent sans consigne s'en sort, y compris sur une attente de 150 s | 2026-08-03 |
 | `acces` obligatoire dans `creer_equipe`, deux valeurs | Un droit s'énumère et se valide ; la sortie d'un LLM passée à un exécutable est une entrée utilisateur | 2026-07-31 |
 | `Bash` reste ouvert en accès `lecture` | Décision Chris : « lecture seule » borne l'écriture de FICHIERS, pas l'exécution de commandes. Un agent d'exploration travaille au shell — l'en priver le rend infirme, pas sûr. Écrire via `sed -i` reste possible mais jamais ACCIDENTEL, et le plancher couvre le catastrophique | 2026-07-31 |
 | Retrait complet du bus d'escalade | Câblé de bout en bout, zéro demande depuis le premier jour (`canUseTool` jamais appelé en mode `auto`). Une catégorie vide affirme une protection inexistante | 2026-07-31 |
@@ -399,6 +404,10 @@ section « RÈGLE ABSOLUE ».
 
 **Liste tenue à jour dans `TODO.md`** (section « EN COURS »), plus précise que celle-ci.
 
+`☠` **Au 03/08, rien n'est ouvert sur le harness lui-même** : les huit défauts de la journée sont
+fermés, testés en production et déployés sur les trois machines. Le prochain chantier est un choix
+de Chris, pas une dette qui appelle.
+
 1. **Chris envoie ses notes d'idées** prises il y a quelques jours — cas d'usage et améliorations à
    tester. C'est le point de reprise convenu en fin de session du 31/07.
 2. **Exercer le mode rapide et ultracode** — `fastMode` est exposé par `/modeles` (seul Opus 5 le
@@ -412,18 +421,9 @@ section « RÈGLE ABSOLUE ».
 
 ## Points en suspens
 
-- `🎯` **LE POINT DE REPRISE DU 03/08 — un mandat de test attend le clic de Chris.** Proposition
-  `42f3a52f` (projet `/mnt/projects/bac-a-sable` sur le VPS, accès écriture) : cinq sous-agents en
-  arrière-plan lancés dans un seul message, `sleep` de 20/35/170/195/480 s, un mot chacun (ALPHA,
-  BRAVO, CHARLIE, DELTA, ECHO). Le lead rend la main immédiatement, puis **après chaque
-  notification** — c'est le geste qui tuait les équipes, reproduit cinq fois. `⚠` Deux autres
-  propositions traînent en attente (`c33f391b`, `8593870b`, stockiop en lecture) : ce sont les
-  tentatives d'avant le bac à sable, **à rejeter**.
-  **Résultat attendu** : équipe vivante 8–10 min · UNE seule notification de fin, à la vraie fin ·
-  jamais affichée au repos pendant l'attente · les cinq mots dans la synthèse · aucune clôture auto.
-  **Signature d'échec** : notification au bout d'une minute, un ou deux mots sur cinq.
-  L'orchestrateur doit aussi abaisser le plafond de 250 $ à 5 $ au démarrage via `definir_budget` —
-  second test gratuit de l'outil réparé le matin même : une BAISSE doit répondre `applique`.
+- `✅` **Le test du 03/08 est fait et vert** — il occupait cette place depuis la veille. Détail
+  chiffré plus haut. Rien ne reste en attente d'un clic : le parc est vide, aucune proposition ne
+  traîne, le bac à sable est propre.
 - **Deux surfaces mortes repérées le 31/07, non traitées** (signalées à Chris, hors scope du jour) :
   l'audit `PreToolUse` est branché sur un `CollecteurAuditPermissions` créé neuf à chaque worker,
   jeté à la fin, que personne ne lit — même famille de défaut que le bus d'escalade · le formulaire
