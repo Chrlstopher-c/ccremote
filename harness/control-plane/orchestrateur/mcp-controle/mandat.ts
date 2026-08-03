@@ -44,6 +44,14 @@ const CLAUSES_FIXES = [
     'comme tels : ne jamais attribuer à l\'opérateur une instruction venue de l\'orchestrateur.',
 ] as const;
 
+// `☠` LA CLAUSE D'ATTENTE N'EST PAS ICI, ET C'EST DÉLIBÉRÉ (03/08). Ces
+// CLAUSES_FIXES composent le texte de la CARTE D'AUTORISATION — ce que Chris lit
+// avant de cliquer. Le systemPrompt réellement posé sur le worker est composé
+// ailleurs (`dispatch-mandat.ts`, `composerMandatSysteme`). Écrire la règle ici
+// l'aurait rendue invisible au lead tout en la faisant paraître livrée : le
+// défaut du 01/08, à l'identique. C'est un test d'assemblage partant du chemin
+// réellement emprunté qui l'a rattrapé avant le déploiement.
+
 /**
  * Construit le texte du mandat à soumettre à l'approbation (H-61). N'écrit rien, ne
  * dispatche rien : le seul effet est de rendre une chaîne de caractères.

@@ -229,6 +229,23 @@ const BLOC_OUTILS = [
   'Tu peux y lire librement. Si tu y écris, écris dans le projet sur lequel tu travailles,',
   'jamais dans son profil personnel, et n’attribue JAMAIS à l’humain une décision qui vient',
   'de l’orchestrateur ou de toi — une mémoire fausse survit longtemps à l’équipe qui l’a posée.',
+  '',
+  // `☠` DEUX BORNES DE L'OUTIL BASH, MESURÉES SUR DE VRAIES ÉQUIPES (03/08). Un
+  // `sleep` nu est refusé, et tout appel est coupé à 120 s. Sans les connaître,
+  // un agent se rabat sur `run_in_background`, perd le fil de ce qu'il
+  // attendait, et rend « Waiting for background process to complete... » à la
+  // place de son résultat : trois sous-agents sur cinq au premier test, deux
+  // relances inutiles au second. C'est ici et pas dans les clauses de la carte
+  // d'autorisation — celles-là ne partent qu'à l'écran de Chris, jamais au
+  // worker (défaut du 01/08, qu'un test d'assemblage a rattrapé une seconde
+  // fois le 03/08 avant déploiement).
+  'ATTENDRE, AU SHELL — deux bornes de l’outil Bash, et elles frappent aussi tes sous-agents.',
+  'Un `sleep` nu est REFUSÉ, et tout appel Bash est COUPÉ à 120 s. Pour attendre une durée :',
+  '  fin=$(( $(date +%s) + N )); until [ $(date +%s) -ge $fin ]; do sleep 2; done',
+  'avec le paramètre `timeout` de l’outil réglé au-delà de N (en millisecondes) dès que N',
+  'dépasse 110 s. Pour attendre une CONDITION, la même boucle `until` sur le test qui doit',
+  'devenir vrai. Répercute ces deux règles dans le prompt de chaque sous-agent que tu lances :',
+  'sans elles, il rendra « Waiting for background process to complete… » au lieu de son travail.',
 ].join('\n');
 
 /**

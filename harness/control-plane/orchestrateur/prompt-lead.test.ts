@@ -188,6 +188,19 @@ describe('ce qui doit SURVIVRE à la compaction du lead', () => {
     expect(systeme).toContain('Ne jamais attribuer à l’opérateur');
   });
 
+  // `☠` 03/08 : mesuré sur deux équipes réelles, l'outil Bash refuse un `sleep`
+  // nu et coupe à 120 s. Sans la règle, un agent part en `run_in_background` et
+  // rend « Waiting for background process to complete... » au lieu de son
+  // travail — trois sous-agents sur cinq au premier test. Elle doit survivre à
+  // la compaction : un lead au tour 50 attend autant qu'au tour 1.
+  test('comment attendre au shell — les deux bornes de l’outil Bash', () => {
+    expect(systeme).toContain('`sleep` nu est REFUSÉ');
+    expect(systeme).toContain('until [ $(date +%s) -ge $fin ]');
+    expect(systeme).toContain('120 s');
+    // Le lead écrit les prompts de ses sous-agents : la règle doit se propager.
+    expect(systeme).toContain('prompt de chaque sous-agent');
+  });
+
   test('les trois gestes qui prouvent un correctif', () => {
     expect(systeme).toContain('DEUX SENS');
     expect(systeme).toContain('artefact RÉEL');
