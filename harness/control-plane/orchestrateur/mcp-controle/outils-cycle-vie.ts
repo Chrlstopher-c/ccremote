@@ -80,9 +80,21 @@ export async function proposerCreationEquipe(
   enregistreur?: EnregistreurProposition,
   modele?: string | null,
   effort?: string | null,
+  budgetMaxUsd?: number | null,
 ): Promise<ContratRetour> {
   const intention = `proposer une équipe sur ${projet}`;
   try {
+    // `☠` Validé AVANT toute écriture, et le refus NOMME la valeur attendue :
+    // une sortie de modèle est une entrée non fiable, et un refus muet lui fait
+    // réémettre la même valeur au tour suivant (`code-standards.md`).
+    if (budgetMaxUsd !== undefined && budgetMaxUsd !== null) {
+      if (!Number.isFinite(budgetMaxUsd) || budgetMaxUsd <= 0) {
+        return refuse(
+          intention,
+          `plafond « ${budgetMaxUsd} » invalide — attendu un nombre de dollars fini et strictement positif (ex. 5)`,
+        );
+      }
+    }
     const plafond = evaluerPlafondParc(lecteur, config);
     if (!plafond.autorise) return refuse(intention, plafond.motif);
     const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre, acces);
@@ -92,7 +104,16 @@ export async function proposerCreationEquipe(
     if (enregistreur === undefined) {
       return refuse(intention, "aucun registre de propositions câblé : impossible de soumettre ce mandat à l'opérateur");
     }
-    const depot = await enregistreur.enregistrer({ projet, objectif, critereArret, perimetre, acces, modele, effort });
+    const depot = await enregistreur.enregistrer({
+      projet,
+      objectif,
+      critereArret,
+      perimetre,
+      acces,
+      modele,
+      effort,
+      budgetMaxUsd,
+    });
     // `☠` `applique` quand l'équipe est PARTIE, `differe` quand elle attend un
     // clic. Le contrat A.2.3 distingue les deux justement pour que le modèle ne
     // promette pas un résultat qu'il n'a pas — garder `differe` dans les deux cas
@@ -107,6 +128,70 @@ export async function proposerCreationEquipe(
     };
   } catch (erreur) {
     journal.error({ err: erreur, projet }, 'proposerCreationEquipe en échec');
+    return echecInattendu(intention, erreur);
+  }
+}
+
+/**
+ * `retirer_mandat` (03/08) — retire une proposition ENCORE EN ATTENTE.
+ *
+ * `☠ POURQUOI CET OUTIL EXISTE.` Le 02/08 au soir, l'orchestrateur remplace un
+ * mandat ancré sur le mauvais projet par un autre. Pour retirer le premier, il
+ * appelle `arreter_equipe` avec un identifiant de PROPOSITION, lit « mission
+ * introuvable », et en conclut — raisonnablement — qu'elle n'existe plus. Elle
+ * existait toujours : c'est elle qui a été autorisée le lendemain matin, sur le
+ * mauvais dépôt et sans la clause qui rendait le test valide. Un refus honnête
+ * mais mal nommé, encore, et cette fois il a coûté un test entier.
+ *
+ * Deux gardes : seule une proposition `en_attente` se retire (une équipe déjà
+ * partie s'arrête avec `arreter_equipe`), et seulement dans le fil qui l'a
+ * proposée — retirer le mandat d'un autre fil serait agir hors de sa vue.
+ */
+export function retirerMandat(
+  registre: Registre,
+  conversationId: string | null,
+  propositionId: string,
+): ContratRetour {
+  const intention = `retirer le mandat ${propositionId}`;
+  try {
+    const proposition = registre.propositions.lire(propositionId);
+    if (proposition === null) {
+      return refuse(
+        intention,
+        'aucun mandat ne porte cet identifiant — vérifie que ce n’est pas celui d’une ÉQUIPE ' +
+          '(dans ce cas c’est arreter_equipe qu’il faut, pas retirer_mandat)',
+      );
+    }
+    if (proposition.conversationId !== conversationId) {
+      return refuse(intention, 'ce mandat a été proposé dans un autre fil — il ne se retire que depuis celui-là');
+    }
+    if (proposition.statut !== 'en_attente') {
+      const suite =
+        proposition.statut === 'approuvee'
+          ? `déjà autorisé${proposition.missionId === null ? '' : ` — équipe « ${proposition.missionId} », ` +
+              'utilise arreter_equipe pour la couper'}`
+          : 'déjà refusé — rien à retirer';
+      return refuse(intention, suite);
+    }
+    const tranche = registre.propositions.trancher(
+      propositionId,
+      'refusee',
+      'retiré par l’orchestrateur (remplacé ou caduc)',
+      null,
+      Date.now(),
+      'orchestrateur',
+    );
+    if (!tranche) {
+      return refuse(intention, 'mandat tranché entre-temps (autorisé ou refusé) — relis lister_equipes avant de conclure');
+    }
+    return applique(
+      intention,
+      `mandat retiré — il n’apparaît plus à l’autorisation et ne peut plus démarrer. Projet « ${proposition.projet} » ` +
+        'inchangé.',
+      propositionId,
+    );
+  } catch (erreur) {
+    journal.error({ err: erreur, propositionId }, 'retirerMandat en échec');
     return echecInattendu(intention, erreur);
   }
 }
@@ -287,7 +372,17 @@ export async function arreterEquipe(
       ? ` ⚠ ${mission.constatGit?.fichiersModifies} fichier(s) restent NON COMMITÉS dans « ${mission.projet} » —` +
         ' plus personne ne peut les commiter pour toi maintenant.'
       : '';
-    registre.etats.appliquerEtatHarness(missionId, 'annulee', { motif: 'arrêtée depuis le control plane' });
+    // `☠` ARRÊTER N'EST PAS ANNULER (03/08). L'outil écrivait `annulee` quel que
+    // soit l'état de départ — or la notification de fin ORDONNE d'appeler
+    // `arreter_equipe` pour libérer le projet (H-56). Toute équipe qui rendait
+    // son rapport finissait donc marquée « annulée » : 43 missions au registre le
+    // 03/08, dont l'immense majorité avait réussi, et l'orchestrateur relisait son
+    // propre parc comme une suite d'échecs avant de décider de la suite.
+    // Une équipe DÉJÀ terminée garde son état terminal — l'arrêt ne fait plus que
+    // libérer le worker et le projet.
+    if (mission.etatHarness !== 'terminee') {
+      registre.etats.appliquerEtatHarness(missionId, 'annulee', { motif: 'arrêtée depuis le control plane' });
+    }
     const resultat = await avecPlafond(arreteur.arreter(missionId), plafondMs);
     if (resultat.etat === 'delai_depasse') {
       return accepte(

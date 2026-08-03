@@ -73,7 +73,10 @@ import { choisirCompteDisponible } from './choix-compte-orchestrateur.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
 
-/** Budget par défaut d'un mandat proposé — l'orchestrateur n'en fixe pas encore. */
+/**
+ * Budget d'un mandat dont l'orchestrateur ne dit rien. Il PEUT désormais le fixer
+ * lui-même (`creer_equipe.budgetMaxUsd`, 03/08) : ceci n'est plus que le filet.
+ */
 const BUDGET_MANDAT_DEFAUT_USD = PLAFOND_EQUIPE_USD;
 
 /**
@@ -491,7 +494,12 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 // `☠` Absent ⇒ `lecture`, jamais l'écriture : un chemin qui
                 // oublierait de transmettre l'accès doit RETIRER des droits.
                 acces: mandat.acces ?? ACCES_DEFAUT,
-                budgetMaxUsd: BUDGET_MANDAT_DEFAUT_USD,
+                // `☠` Le plafond demandé au dépôt prime, et c'est le seul instant
+                // où il peut encore protéger quoi que ce soit : `definir_budget`
+                // n'existe qu'après démarrage, et une mission d'une minute
+                // (`96a9c788`, 03/08) finit avant le premier réveil de
+                // l'orchestrateur. Absent ⇒ le filet du parc, jamais l'illimité.
+                budgetMaxUsd: mandat.budgetMaxUsd ?? BUDGET_MANDAT_DEFAUT_USD,
                 modele: mandat.modele ?? null,
                 effort: mandat.effort ?? null,
               });

@@ -94,10 +94,16 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     expect(resultat.etat).toContain('capacités surveillées toutes présentes');
   });
 
-  test('lister_projets : répertoire vide ⇒ aucun projet valide', async () => {
+  test('lister_projets : répertoire vide ⇒ dit ce qui est vide, et vers quoi se tourner', async () => {
     const resultat = await listerProjets(repertoireProjets, GIT_FACTICE_NON_GIT);
     expect(resultat.ok).toBe(true);
-    expect(resultat.etat).toBe('aucun projet valide');
+    // `☠` 03/08 : « aucun projet valide » se lisait « il n'y a pas de projets »,
+    // alors qu'explorer_projets voyait trois dépôts — l'orchestrateur a relevé
+    // l'incohérence comme un défaut. Le vide doit dire QUEL registre est vide,
+    // et où sont les vrais projets.
+    expect(resultat.etat).toContain('aucun projet DÉCLARÉ');
+    expect(resultat.etat).toContain(repertoireProjets);
+    expect(resultat.etat).toContain('explorer_projets');
   });
 
   test('lister_projets : fichier invalide rejeté, jamais une exception', async () => {

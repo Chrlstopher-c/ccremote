@@ -52,7 +52,34 @@ describe('trouver', () => {
   test('« aucune occurrence » est une réponse, pas une erreur', async () => {
     const r = await rechercherDansProjets(racine, 'ZZZ_introuvable_42', 'projet-a');
     expect(r.occurrences).toHaveLength(0);
-    expect(r.note).toBe('aucune occurrence');
+    expect(r.note).toContain('aucune occurrence');
+    // `☠` LE point du 03/08 : une absence réelle ne porte JAMAIS le drapeau
+    // d'échec, sinon l'orchestrateur ne peut pas distinguer « le motif n'y est
+    // pas » de « la recherche n'a pas eu lieu » — il a fait la remarque lui-même.
+    expect(r.echec).toBeUndefined();
+    expect(r.note).toContain('réellement effectuée');
+  });
+});
+
+describe('échec d’outil vs absence de résultat', () => {
+  // `☠` Ces deux formes étaient INDISCERNABLES avant le 03/08 : toutes deux
+  // rendaient `occurrences: []` avec une note. `rg` manquait sur le VPS et sur le
+  // Pi ; l'outil répondait une liste vide et un cadrage naïf en concluait « rien
+  // trouvé » — sur un dépôt qui contenait la réponse.
+  test('un refus porte echec: true, une absence ne le porte pas', async () => {
+    const enEchec = await rechercherDansProjets(racine, 'cible', '/etc');
+    expect(enEchec.echec).toBe(true);
+    const absence = await rechercherDansProjets(racine, 'ZZZ_introuvable_42', 'projet-a');
+    expect(absence.echec).toBeUndefined();
+  });
+
+  test('le repli grep trouve ce que ripgrep trouve', async () => {
+    // Vérifie le moteur de repli sur le VRAI binaire — c'est lui qui sert quand
+    // `rg` n'est pas installé, et il n'a aucune raison de rendre moins.
+    const parGrep = Bun.spawnSync(['grep', '-rInE', '--', 'cible', `${racine}/projet-a`]);
+    expect(parGrep.exitCode).toBe(0);
+    const r = await rechercherDansProjets(racine, 'cible', 'projet-a');
+    expect(r.occurrences.length).toBeGreaterThan(0);
   });
 });
 

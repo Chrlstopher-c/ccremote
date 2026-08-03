@@ -35,6 +35,7 @@ import {
   interrompreEquipe,
   proposerCreationEquipe,
   relancerEquipe,
+  retirerMandat,
 } from './outils-cycle-vie.ts';
 import { definirBudget } from './outils-budget.ts';
 import {
@@ -291,7 +292,11 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         'documenter) — le cas le plus fréquent. `claude-opus-5` pour un mandat de CONCEPTION ' +
         '(direction artistique, motion design, architecture non triviale, défaut qui résiste). ' +
         'Mesuré le 01/08 : 6,40 $ par équipe Opus contre 0,67 $ par équipe Sonnet. Laissé vide, ' +
-        'le harness retombe sur Opus 5 — un défaut prudent, pas un choix : annonce le tien.',
+        'le harness retombe sur Opus 5 — un défaut prudent, pas un choix : annonce le tien. ' +
+        '`budgetMaxUsd` : le plafond de dépense de CETTE équipe, posé dès maintenant. ' +
+        'Le seul moment où tu peux le fixer avant qu’elle ne dépense — `definir_budget` ' +
+        'n’opère que sur une équipe déjà démarrée, et une mission courte finit avant tout ' +
+        'réveil. Laissé vide, elle court sous le plafond de parc (250 $).',
       {
         projet: z.string(),
         objectif: z.string(),
@@ -300,8 +305,9 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         acces: z.enum(ACCES_MANDAT),
         modele: z.string().nullable().optional(),
         effort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
+        budgetMaxUsd: z.number().nullable().optional().describe('Plafond de dépense en dollars, ex. 5.'),
       },
-      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort }) =>
+      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd }) =>
         protege('creer_equipe', () =>
           proposerCreationEquipe(
             projet,
@@ -314,8 +320,20 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             deps.propositions,
             modele,
             effort,
+            budgetMaxUsd,
           ),
         ),
+    ),
+    tool(
+      'retirer_mandat',
+      'Retire un mandat que tu as proposé et qui attend encore son autorisation — quand tu ' +
+        'le remplaces, ou qu’il n’a plus lieu d’être. `☠` Sans lui, un mandat caduc reste ' +
+        'autorisable indéfiniment : le 03/08, une proposition abandonnée la veille a été ' +
+        'autorisée le lendemain matin sur le mauvais projet. Ne concerne QUE les mandats en ' +
+        'attente : une équipe déjà partie se coupe avec arreter_equipe.',
+      { mandatId: z.string().describe('Identifiant du mandat proposé (la ref rendue par creer_equipe).') },
+      async ({ mandatId }) =>
+        protege('retirer_mandat', async () => retirerMandat(deps.registre, deps.conversationId ?? null, mandatId)),
     ),
     tool(
       'envoyer_a_equipe',

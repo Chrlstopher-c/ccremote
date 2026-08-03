@@ -84,10 +84,15 @@ describe('surface d’outils (A.2.2)', () => {
   //     équipes en vol coûtaient trois appels et trois allers-retours de
   //     contexte. Le budget de lignes y est RÉPARTI, jamais multiplié — quatre
   //     transcrits entiers satureraient le contexte qu'on cherche à préserver.
-  test('expose exactement les 22 outils spécifiés — ni plus, ni moins', () => {
+  //   `retirer_mandat` (2026-08-03) — l'orchestrateur pouvait proposer un mandat,
+  //     jamais le reprendre. Un mandat remplacé restait autorisable : celui du
+  //     02/08 au soir a été autorisé le lendemain matin, sur le mauvais projet,
+  //     et a fait échouer le test qu'il devait porter.
+  test('expose exactement les 23 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
+        'retirer_mandat',
         'lister_equipes',
         'etat_equipe',
         'rapport_equipe',

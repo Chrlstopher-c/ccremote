@@ -154,6 +154,15 @@ export interface EnregistreurProposition {
     readonly acces?: AccesMandat;
     readonly modele?: string | null;
     readonly effort?: string | null;
+    /**
+     * `☠` Plafond de dépense POSÉ AU DÉPÔT (03/08). `definir_budget` n'opère que
+     * sur une mission déjà démarrée : entre l'autorisation et le premier réveil
+     * de l'orchestrateur, une équipe courait donc toujours sous le plafond de
+     * parc (250 $). Mesuré le 03/08 sur `96a9c788` — une mission d'une minute,
+     * plafond jamais abaissé, aucune veille ne pouvait être assez rapide.
+     * Absent ⇒ le défaut du harness, jamais l'illimité.
+     */
+    readonly budgetMaxUsd?: number | null;
   }): Promise<ResultatEnregistrement>;
 }
 

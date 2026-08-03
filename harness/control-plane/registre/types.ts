@@ -444,7 +444,13 @@ export interface EvenementConversation {
  * humain : les relire comme `humain` est le comportement CORRECT, pas une
  * tolérance. L'inverse ferait croire qu'aucun fil n'a jamais été engagé.
  */
-export type OrigineApprobation = 'humain' | 'auto';
+/**
+ * Qui a tranché la proposition. `orchestrateur` (03/08) désigne le RETRAIT d'un
+ * mandat par celui qui l'a proposé — ni une décision humaine, ni une
+ * auto-approbation d'autonomie : les deux compteurs de H-61 l'ignorent, et c'est
+ * voulu (un mandat retiré n'a jamais dépensé de droit de lancement).
+ */
+export type OrigineApprobation = 'humain' | 'auto' | 'orchestrateur';
 
 export type TypeNotification =
   /** Une équipe a rendu sa réponse — le fait qui a motivé tout ce canal. */

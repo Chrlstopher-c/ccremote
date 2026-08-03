@@ -215,9 +215,18 @@ function resumerRejet(r: ProjetRejete): string {
 }
 
 /**
- * `lister_projets` (A.2.2) — projets connus et leur worktree. Délègue à F.
- * `interrogateurGit` injectable pour le test, réel par défaut — même motif que
- * `DependancesChargeur` de `projets/chargeur-projets.ts`.
+ * `lister_projets` (A.2.2) — projets DÉCLARÉS par un fichier de configuration, et
+ * leur worktree. Délègue à F. `interrogateurGit` injectable pour le test, réel par
+ * défaut — même motif que `DependancesChargeur` de `projets/chargeur-projets.ts`.
+ *
+ * `☠ CE QU'IL LISTE, ET CE QU'IL NE LISTE PAS` (03/08). Il rendait « aucun projet
+ * valide » pendant qu'`explorer_projets` voyait trois dépôts sur le disque, et
+ * l'orchestrateur a relevé l'incohérence comme un défaut : « les deux outils ne
+ * lisent visiblement pas la même source ». Ils ne la lisent effectivement pas —
+ * celui-ci ouvre un répertoire de FICHIERS DE DÉCLARATION (`*.json`), vide en
+ * production depuis l'origine, l'autre parcourt le disque des machines. Le vide
+ * n'est donc pas une panne, mais « aucun projet valide » se lit comme « il n'y a
+ * pas de projets » : c'est cette phrase-là qui mentait, pas le chiffre.
  */
 export async function listerProjets(
   repertoireProjets: string,
@@ -226,8 +235,12 @@ export async function listerProjets(
   const intention = 'lister les projets connus';
   try {
     const resultat = await chargerProjets(repertoireProjets, { interrogateurGit });
+    const vide =
+      `aucun projet DÉCLARÉ dans « ${repertoireProjets} » (registre de fichiers de configuration, ` +
+      'vide en production). Ce n’est pas « aucun projet » : les dépôts réellement exploitables ' +
+      'se listent avec explorer_projets, et un mandat s’ancre sur un chemin absolu.';
     const parties = [
-      resultat.projets.length === 0 ? 'aucun projet valide' : resultat.projets.map(resumerProjet).join(' | '),
+      resultat.projets.length === 0 ? vide : resultat.projets.map(resumerProjet).join(' | '),
       ...(resultat.rejetes.length > 0 ? [`rejetés: ${resultat.rejetes.map(resumerRejet).join(' | ')}`] : []),
     ];
     return applique(intention, parties.join(' — '));

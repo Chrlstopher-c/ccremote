@@ -153,6 +153,18 @@ echo "→ Vérification"
 sleep 4
 ssh $SSH_OPTS "$TARGET" "systemctl is-active ccremote-harness && curl -sf -m 5 http://127.0.0.1:8722/api/harness/health && echo"
 
+# ☠ MÊME CONTRÔLE QUE CÔTÉ MACHINE DE TRAVAIL (03/08) : « les fichiers sont à
+# jour » et « le process exécute ces fichiers » sont deux faits distincts, et
+# c'est le second qui compte. Le Pi fait bien un `restart` — ce contrôle est là
+# pour que la question ne se repose jamais, ici non plus.
+echo "→ Contrôle de fraîcheur : le process est-il plus récent que le code ?"
+ssh $SSH_OPTS "$TARGET" "demarre=\$(systemctl show ccremote-harness -p ExecMainStartTimestamp --value); \
+  epoch=\$(date -d \"\$demarre\" +%s 2>/dev/null || echo 0); \
+  perimes=\$(find $REMOTE_DIR -name '*.ts' -newermt \"@\$epoch\" -not -path '*/node_modules/*' | head -5); \
+  if [ -z \"\$demarre\" ] || [ \"\$epoch\" = 0 ]; then echo '  ⚠ heure de démarrage illisible — contrôle impossible'; exit 1; fi; \
+  if [ -n \"\$perimes\" ]; then echo '  ✗ PROCESS PÉRIMÉ — sources plus récentes que le process :'; echo \"\$perimes\"; exit 1; fi; \
+  echo \"  ✓ process démarré le \$demarre, postérieur à toutes les sources\""
+
 echo ""
 echo "✓ Control plane déployé."
 echo "  Le PC doit utiliser LE MÊME CCREMOTE_LIEN_SECRET."

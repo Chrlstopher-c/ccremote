@@ -199,8 +199,30 @@ fi
 # dire qu'on ne lance pas deux fois `ccremote-pc` sur un même hôte.
 echo "→ Cohabitation : le Pi accepte plusieurs machines identifiées (V2, 01/08)"
 
-echo "→ Démarrage du superviseur sur le VPS"
-ssh "$CIBLE" "systemctl --user enable --now ccremote-pc && sleep 6 && systemctl --user is-active ccremote-pc"
+# ☠ `restart`, JAMAIS `enable --now` (correctif du 03/08). `--now` ne fait que
+# DÉMARRER un service arrêté : sur un service déjà actif il ne fait rien, et le
+# process continue d'exécuter le code d'avant le rsync. Mesuré : le superviseur du
+# VPS tournait depuis le 01/08 16:25 UTC (NRestarts=0) alors que le correctif
+# « tâches de fond » était sur son disque depuis le 02/08 18:38. L'équipe de test
+# du lendemain matin a donc tourné sous l'ancien code et échoué exactement comme
+# le bug d'origine — un test qui n'a rien testé, et deux heures pour le voir.
+echo "→ Redémarrage du superviseur sur le VPS (restart, pas enable --now)"
+ssh "$CIBLE" "export XDG_RUNTIME_DIR=/run/user/\$(id -u); systemctl --user enable ccremote-pc >/dev/null 2>&1; \
+  systemctl --user restart ccremote-pc && sleep 6 && systemctl --user is-active ccremote-pc"
+
+# ☠ LE CONTRÔLE QUI REND LE MENSONGE IMPOSSIBLE. Un déploiement « réussi » ne
+# prouve rien tant que le process qui SERT n'est pas plus récent que le code
+# déployé. On compare donc les deux faits, sur la machine, après coup : s'il
+# existe une seule source plus récente que le démarrage du process, le
+# déploiement ÉCHOUE bruyamment plutôt que d'annoncer une livraison imaginaire.
+echo "→ Contrôle de fraîcheur : le process est-il plus récent que le code ?"
+ssh "$CIBLE" "export XDG_RUNTIME_DIR=/run/user/\$(id -u); \
+  demarre=\$(systemctl --user show ccremote-pc -p ExecMainStartTimestamp --value); \
+  epoch=\$(date -d \"\$demarre\" +%s 2>/dev/null || echo 0); \
+  perimes=\$(find $DISTANT/harness -name '*.ts' -newermt \"@\$epoch\" -not -path '*/node_modules/*' | head -5); \
+  if [ -z \"\$demarre\" ] || [ \"\$epoch\" = 0 ]; then echo '  ⚠ heure de démarrage illisible — contrôle impossible'; exit 1; fi; \
+  if [ -n \"\$perimes\" ]; then echo '  ✗ PROCESS PÉRIMÉ — sources plus récentes que le process :'; echo \"\$perimes\"; exit 1; fi; \
+  echo \"  ✓ process démarré le \$demarre, postérieur à toutes les sources\""
 echo ""
-echo "✓ Superviseur actif sur le VPS."
+echo "✓ Superviseur actif sur le VPS, et il exécute bien le code qu'on vient d'envoyer."
 echo "  Vérifier le rattachement :  bun harness/pilotage/pilote.ts sante"

@@ -75,10 +75,19 @@ export interface ResultatRecherche {
   readonly occurrences: readonly OccurrenceRecherche[];
   /** Renseignée dès que le résultat est partiel, refusé ou vide pour une raison précise. */
   readonly note?: string;
+  /**
+   * `☠` LA DIFFÉRENCE ENTRE « RIEN TROUVÉ » ET « JE N'AI PAS CHERCHÉ » (03/08).
+   * Un échec rendait exactement la même forme qu'une recherche fructueuse mais
+   * vide — `occurrences: []` plus une note — et l'orchestrateur l'a dit lui-même
+   * après le test des outils : « un cadrage naïf conclurait *rien trouvé* au lieu
+   * de *outil HS* ». Ce drapeau est là pour qu'aucune lecture pressée ne puisse
+   * confondre les deux.
+   */
+  readonly echec?: true;
 }
 
 function refus(motif: string, chemin: string, note: string): ResultatRecherche {
-  return { motif, chemin, occurrences: [], note };
+  return { motif, chemin, occurrences: [], note, echec: true };
 }
 
 /**
@@ -111,6 +120,57 @@ function parserLigne(brut: string, base: string): OccurrenceRecherche | null {
     ligne,
     texte: tronquer(brut.slice(second + 1)),
   };
+}
+
+/**
+ * Le moteur réellement disponible sur CETTE machine.
+ *
+ * `☠` `rg` n'est pas installé partout : présent sur le PC, absent du VPS et du Pi
+ * (mesuré le 03/08). `Bun.spawn` lève alors « Executable not found in $PATH »,
+ * l'exception devenait une note, et l'outil rendait une liste vide — le mode de
+ * panne exact que l'orchestrateur a relevé. Le repli `grep` n'est pas un luxe :
+ * il fait que la capacité ne dépend plus d'un paquet optionnel.
+ */
+async function moteurDisponible(): Promise<'rg' | 'grep' | null> {
+  for (const binaire of ['rg', 'grep'] as const) {
+    try {
+      const proc = Bun.spawn([binaire, '--version'], { stdout: 'ignore', stderr: 'ignore' });
+      if ((await proc.exited) === 0) return binaire;
+    } catch {
+      // Binaire absent : on essaie le suivant, c'est tout le propos de cette boucle.
+    }
+  }
+  return null;
+}
+
+/** Arguments de `rg` — le moteur préféré : exclusions natives, `--smart-case`. */
+function argsRg(aiguille: string, cible: string): string[] {
+  return [
+    'rg',
+    '--line-number',
+    '--no-heading',
+    '--color=never',
+    '--max-count=3',
+    '--max-filesize=2M',
+    `--max-columns=${RECHERCHE_MAX_LONGUEUR_LIGNE * 2}`,
+    '--smart-case',
+    ...EXCLUSIONS.flatMap((g) => ['--glob', g]),
+    '--',
+    aiguille,
+    cible,
+  ];
+}
+
+/**
+ * Arguments du repli `grep`. `☠` `-I` (binaires ignorés) et les `--exclude-dir`
+ * ne sont pas cosmétiques : sans eux, le repli scanne `node_modules` et `.git`,
+ * dépasse le timeout, et se comporte exactement comme la panne qu'il répare.
+ * `-E` pour que le même motif marche des deux côtés — `rg` est en regex par défaut.
+ */
+function argsGrep(aiguille: string, cible: string): string[] {
+  const dossiers = EXCLUSIONS.filter((g) => !g.includes('*')).map((g) => `--exclude-dir=${g.slice(1)}`);
+  const fichiers = EXCLUSIONS.filter((g) => g.includes('*')).map((g) => `--exclude=${g.slice(1)}`);
+  return ['grep', '-rInE', '--binary-files=without-match', ...dossiers, ...fichiers, '--', aiguille, cible];
 }
 
 /**
@@ -153,24 +213,22 @@ export async function rechercherDansProjets(
 
   const plafond = Math.min(Math.max(Math.trunc(maxResultats), 1), RECHERCHE_MAX_RESULTATS);
 
-  try {
-    const proc = Bun.spawn(
-      [
-        'rg',
-        '--line-number',
-        '--no-heading',
-        '--color=never',
-        '--max-count=3',
-        '--max-filesize=2M',
-        `--max-columns=${RECHERCHE_MAX_LONGUEUR_LIGNE * 2}`,
-        '--smart-case',
-        ...EXCLUSIONS.flatMap((g) => ['--glob', g]),
-        '--',
-        aiguille,
-        cible,
-      ],
-      { stdout: 'pipe', stderr: 'pipe' },
+  const moteur = await moteurDisponible();
+  if (moteur === null) {
+    return refus(
+      aiguille,
+      cible,
+      'ÉCHEC DE L’OUTIL, pas un résultat vide : ni ripgrep (`rg`) ni `grep` ne sont installés sur ' +
+        'la machine qui porte ce projet. Ne conclus rien sur le contenu du dépôt — fais installer ' +
+        'ripgrep, ou passe par une équipe qui a le shell.',
     );
+  }
+
+  try {
+    const proc = Bun.spawn(moteur === 'rg' ? argsRg(aiguille, cible) : argsGrep(aiguille, cible), {
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
 
     // `☠` Timeout OBLIGATOIRE : une recherche sur un dépôt monstrueux bloquerait
     // le canal de contrôle, donc TOUT le pilotage du parc, pour une commodité.
@@ -197,10 +255,15 @@ export async function rechercherDansProjets(
       );
     }
 
-    // `rg` rend 1 quand il ne trouve rien : ce n'est pas une erreur.
+    // `rg` comme `grep` rendent 1 quand ils ne trouvent rien : ce n'est pas une erreur.
     if (code !== 0 && code !== 1 && sortie.length === 0) {
       const err = await new Response(proc.stderr).text();
-      return refus(aiguille, cible, `recherche impossible (code ${code}) : ${err.slice(0, 200) || 'ripgrep introuvable'}`);
+      return refus(
+        aiguille,
+        cible,
+        `ÉCHEC DE L’OUTIL (${moteur}, code ${code}) — aucune conclusion à tirer sur le dépôt : ` +
+          `${err.slice(0, 200) || 'sortie d’erreur vide'}`,
+      );
     }
 
     const brutes = sortie.split('\n').filter((l) => l.length > 0);
@@ -216,14 +279,20 @@ export async function rechercherDansProjets(
       motif: aiguille,
       chemin: cible,
       occurrences,
+      // `☠` « Aucune occurrence » dit maintenant AVEC QUOI on a cherché : c'est ce
+      // qui permet de distinguer une absence réelle d'une recherche dégradée.
       ...(occurrences.length === 0
-        ? { note: 'aucune occurrence' }
+        ? { note: `aucune occurrence (recherche réellement effectuée, moteur ${moteur})` }
         : tronque
           ? { note: `${occurrences.length} occurrences affichées sur ${brutes.length} trouvées — affine le motif` }
           : {}),
     };
   } catch (erreur) {
     log.error({ err: erreur, motif: aiguille }, 'recherche dans les projets en échec');
-    return refus(aiguille, cible, `recherche impossible : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
+    return refus(
+      aiguille,
+      cible,
+      `ÉCHEC DE L’OUTIL — aucune conclusion à tirer sur le dépôt : ${erreur instanceof Error ? erreur.message : String(erreur)}`,
+    );
   }
 }

@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
-import { arreterEquipe, envoyerAEquipe, interrompreEquipe, proposerCreationEquipe, relancerEquipe } from './outils-cycle-vie.ts';
+import {
+  arreterEquipe,
+  envoyerAEquipe,
+  interrompreEquipe,
+  proposerCreationEquipe,
+  relancerEquipe,
+  retirerMandat,
+} from './outils-cycle-vie.ts';
 import { definirBudget } from './outils-budget.ts';
 import type {
   ArreteurMission,
@@ -293,6 +300,88 @@ describe('arreterEquipe (fin de vie)', () => {
     expect(resultat.effet).toBe('accepte');
     expect(resultat.etat).toContain('non reçue à temps');
     expect(registre.missions.lire('m-6')?.etatHarness).toBe('annulee');
+  });
+});
+
+/**
+ * `☠ ARRÊTER N'EST PAS ANNULER` (03/08). La notification de fin d'équipe ORDONNE
+ * d'appeler `arreter_equipe` pour libérer le projet (H-56) : toute équipe qui
+ * rendait son rapport finissait donc marquée « annulée ». 43 missions au registre
+ * ce jour-là, dont l'immense majorité avait réussi — et c'est cet historique-là que
+ * l'orchestrateur relit avant de décider de la suite.
+ */
+describe('arreterEquipe × état terminal déjà acquis', () => {
+  test('une équipe TERMINÉE garde son état — l’arrêt ne fait que libérer le projet', async () => {
+    registre.missions.creer({ id: 'm-fin', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
+    registre.etats.appliquerEtatHarness('m-fin', 'en_cours', {});
+    registre.etats.appliquerEtatHarness('m-fin', 'terminee', {});
+    const resultat = await arreterEquipe({ arreter: async () => {} }, registre, 'm-fin');
+    expect(resultat.effet).toBe('applique');
+    expect(resultat.etat).toContain('libre');
+    expect(registre.missions.lire('m-fin')?.etatHarness).toBe('terminee');
+  });
+
+  test('une équipe EN COURS est bien annulée — le correctif ne fait pas disparaître l’annulation', async () => {
+    registre.missions.creer({ id: 'm-vif', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
+    registre.etats.appliquerEtatHarness('m-vif', 'en_cours', {});
+    await arreterEquipe({ arreter: async () => {} }, registre, 'm-vif');
+    expect(registre.missions.lire('m-vif')?.etatHarness).toBe('annulee');
+  });
+});
+
+/**
+ * `☠ POURQUOI `retirer_mandat` EXISTE` (03/08). Le 02/08 au soir, l'orchestrateur
+ * remplace un mandat ancré sur le mauvais projet. Pour retirer le premier, il
+ * appelle `arreter_equipe` avec un identifiant de PROPOSITION, lit « mission
+ * introuvable », et conclut qu'elle n'existe plus. Elle existait : elle a été
+ * autorisée le lendemain matin, sur le mauvais dépôt, et a fait échouer le test.
+ */
+describe('retirerMandat (03/08)', () => {
+  function proposer(id: string, conversationId: string, statut?: 'approuvee'): void {
+    registre.conversations.creer({ id: conversationId, titre: 'fil' });
+    registre.propositions.creer({
+      id,
+      conversationId,
+      projet: '/mnt/projects/bac-a-sable',
+      objectif: 'o',
+      critereArret: null,
+      perimetre: 'p',
+      acces: 'lecture',
+      budgetMaxUsd: 5,
+      modele: null,
+      effort: null,
+    });
+    if (statut !== undefined) registre.propositions.trancher(id, statut, 'd', 'm-x');
+  }
+
+  test('mandat en attente ⇒ retiré, et il ne peut plus être autorisé', () => {
+    proposer('prop-1', 'conv-1');
+    const resultat = retirerMandat(registre, 'conv-1', 'prop-1');
+    expect(resultat.effet).toBe('applique');
+    expect(registre.propositions.lire('prop-1')?.statut).toBe('refusee');
+    // Le geste qui compte : une autorisation arrivée APRÈS le retrait ne prend pas.
+    expect(registre.propositions.trancher('prop-1', 'approuvee', 'd', 'm-y')).toBe(false);
+  });
+
+  test('mandat déjà autorisé ⇒ refus qui ORIENTE vers arreter_equipe', () => {
+    proposer('prop-2', 'conv-2', 'approuvee');
+    const resultat = retirerMandat(registre, 'conv-2', 'prop-2');
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('arreter_equipe');
+  });
+
+  test('mandat d’un autre fil ⇒ refus', () => {
+    proposer('prop-3', 'conv-3');
+    expect(retirerMandat(registre, 'conv-autre', 'prop-3').ok).toBe(false);
+  });
+
+  test('☠ identifiant d’ÉQUIPE passé par erreur ⇒ le refus nomme la bonne cause', () => {
+    // C'est la confusion exacte qui a coûté le test du 03/08 : un refus muet
+    // (« mission introuvable ») avait été lu comme « le mandat n'existe plus ».
+    registre.missions.creer({ id: 'm-10', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
+    const resultat = retirerMandat(registre, 'conv-4', 'm-10');
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('arreter_equipe');
   });
 });
 

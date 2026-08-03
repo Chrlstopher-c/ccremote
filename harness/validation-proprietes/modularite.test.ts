@@ -116,7 +116,7 @@ describe('modularité — vérifiée aussi à la surface MCP réelle (lister_pro
     await nettoyerConfig();
     const avant = await listerProjets(CONFIG);
     expect(avant.effet).toBe('applique');
-    expect(avant.etat).toContain('aucun projet valide');
+    expect(avant.etat).toContain('aucun projet DÉCLARÉ');
 
     await ecrireProjet('gamma-projet.json', { id: 'gamma-projet', cheminDepot: `${RACINE}/repo-gamma`, budgetMaxUsd: 10, modeleDefaut: 'sonnet' });
 
