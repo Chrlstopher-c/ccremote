@@ -107,6 +107,21 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     expect(etatEquipe(registre, 'm-sa').etat).toContain('sous-agents=2 (1 actif)');
   });
 
+  test('☠ équipe CLOSE ⇒ aucun sous-agent annoncé en cours, même si le dernier relevé disait « actif »', () => {
+    // Relevé par l'orchestrateur : « sous-agents=3 (2 actifs) » sur une équipe
+    // terminée. Le statut vient du silence sur disque, donc du dernier relevé,
+    // qui date d'avant la clôture. Restituer cet instantané refait la panne du
+    // 02/08 dans l'autre sens : un état posé une fois, jamais redérivé.
+    registre.missions.creer({ id: 'm-close', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
+    registre.missions.poserSousAgents('m-close', [
+      { agentId: 'a1', type: 'general-purpose', description: 'ALPHA', toolUseId: null, profondeur: 1, statut: 'actif', derniereAction: 'ALPHA', majA: Date.now() },
+    ]);
+    registre.etats.appliquerEtatHarness('m-close', 'terminee');
+    const etat = etatEquipe(registre, 'm-close').etat ?? '';
+    expect(etat).toContain('sous-agents=1 (équipe close, aucun en cours)');
+    expect(etat).not.toContain('actif');
+  });
+
   test('etat_equipe : aucun sous-agent ⇒ « aucun observé », jamais un silence', () => {
     registre.missions.creer({ id: 'm-seul', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
     expect(etatEquipe(registre, 'm-seul').etat).toContain('sous-agents=aucun observé');

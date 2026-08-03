@@ -14,7 +14,7 @@ import {
   type InterrogateurGit,
   type ProjetRejete,
 } from '../../../projets/index.ts';
-import type { Mission, Registre } from '../../registre/index.ts';
+import { ETATS_HARNESS_TERMINAUX, type Mission, type Registre } from '../../registre/index.ts';
 import { applique, echecInattendu } from './contrat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type { ContratRetour } from './types.ts';
@@ -171,10 +171,21 @@ export function resoudreMission(registre: Registre, designation: string): Resolu
  *
  * Le nombre ACTIF est dit séparément : c'est lui qui distingue « cinq agents ont
  * tourné » de « cinq agents tournent en ce moment ».
+ *
+ * `☠ UNE ÉQUIPE CLOSE N'A PLUS RIEN D'ACTIF` — relevé par l'orchestrateur dans la
+ * foulée : `sous-agents=3 (2 actifs)` sur une équipe `terminee`. Le statut d'un
+ * sous-agent se déduit de son silence sur disque (`INACTIVITE_TERMINE_MS`), donc
+ * du DERNIER relevé, qui date d'avant la clôture. Restituer cet instantané, c'est
+ * refaire la panne du 02/08 dans l'autre sens : un état posé une fois puis
+ * conservé, au lieu d'être dérivé de ce qu'on sait maintenant. Ici, ce qu'on sait
+ * est plus fort que le relevé — l'équipe est fermée, donc rien ne tourne.
  */
-function resumerSousAgents(registre: Registre, missionId: string): string {
-  const agents = registre.missions.sousAgents(missionId);
+function resumerSousAgents(registre: Registre, mission: Mission): string {
+  const agents = registre.missions.sousAgents(mission.id);
   if (agents.length === 0) return 'sous-agents=aucun observé';
+  if (ETATS_HARNESS_TERMINAUX.includes(mission.etatHarness)) {
+    return `sous-agents=${agents.length} (équipe close, aucun en cours)`;
+  }
   const actifs = agents.filter((a) => a.statut === 'actif').length;
   return `sous-agents=${agents.length} (${actifs} actif${actifs > 1 ? 's' : ''})`;
 }
@@ -203,7 +214,7 @@ export function etatEquipe(registre: Registre, designation: string): ContratReto
       resumerDepot(mission),
       `budget=${mission.budgetConsommeUsd}/${mission.budgetMaxUsd ?? '∞'} USD`,
       `contexte=${mission.contexteTokensUtilises ?? '?'}/${mission.contexteTokensMax ?? '?'}`,
-      resumerSousAgents(registre, mission.id),
+      resumerSousAgents(registre, mission),
       manquantes.length > 0 ? `capacités manquantes: ${manquantes.join(', ')}` : 'capacités surveillées toutes présentes',
     ].join(' · ');
     return applique(intention, etat);
