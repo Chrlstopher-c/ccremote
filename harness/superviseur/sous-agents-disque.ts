@@ -22,7 +22,7 @@
  *                                                              agent-<id>.meta.json
  */
 
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readdir, readFile, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { superviseurLogger } from './logger.ts';
@@ -72,6 +72,31 @@ function cleProjet(cwd: string): string {
 export function dossierSousAgents(sessionId: string, cwd: string, configDir?: string): string {
   const racine = configDir ?? join(homedir(), '.claude');
   return join(racine, 'projects', cleProjet(cwd), sessionId, 'subagents');
+}
+
+/**
+ * Les dossiers à essayer, dans l'ordre.
+ *
+ * `☠ LE CLI ÉCRIT SOUS LE CHEMIN RÉEL, LE HARNESS CHERCHAIT SOUS LE LIEN` (03/08).
+ * Sur le VPS, `/mnt/projects` est un lien symbolique vers `~/dev` : le worker est
+ * lancé avec `cwd=/mnt/projects/bac-a-sable`, mais le CLI résout le realpath et
+ * range ses transcripts sous `-home-ubuntu-dev-bac-a-sable`. Le harness calculait
+ * `-mnt-projects-bac-a-sable`, un dossier qui n'existe sur aucune machine — donc
+ * ZÉRO sous-agent remonté, en silence, depuis la bascule multi-machines.
+ * Mesuré sur la mission `acbb7465` : sept transcrits sur le disque, autant de
+ * `.meta.json` lisibles, et « sous-agents : aucun » à l'écran pendant dix minutes.
+ * Les deux clés sont essayées : le PC (sans lien) tombe sur la première, le VPS
+ * sur la seconde, et aucune des deux machines ne dépend de la topologie de l'autre.
+ */
+async function dossiersCandidats(sessionId: string, cwd: string, configDir?: string): Promise<readonly string[]> {
+  const candidats = [dossierSousAgents(sessionId, cwd, configDir)];
+  try {
+    const reel = await realpath(cwd);
+    if (reel !== cwd) candidats.push(dossierSousAgents(sessionId, reel, configDir));
+  } catch {
+    // `cwd` disparu (worktree supprimé) : la clé brute reste le meilleur essai.
+  }
+  return candidats;
 }
 
 interface MetaBrute {
@@ -161,13 +186,19 @@ export async function lireSousAgents(
   configDir?: string,
   maintenant: number = Date.now(),
 ): Promise<readonly SousAgentObserve[]> {
-  const dossier = dossierSousAgents(sessionId, cwd, configDir);
-  let fichiers: readonly string[];
-  try {
-    fichiers = await readdir(dossier);
-  } catch {
-    return []; // Aucun sous-agent dispatché : régime nominal, pas une panne.
+  let dossier: string | null = null;
+  let fichiers: readonly string[] = [];
+  for (const candidat of await dossiersCandidats(sessionId, cwd, configDir)) {
+    try {
+      fichiers = await readdir(candidat);
+      dossier = candidat;
+      break;
+    } catch {
+      // Dossier absent sous cette clé : on essaie la suivante (lien symbolique).
+    }
   }
+  // Aucun sous-agent dispatché, sous aucune clé : régime nominal, pas une panne.
+  if (dossier === null) return [];
   const observes: SousAgentObserve[] = [];
   for (const fichier of fichiers) {
     if (!fichier.endsWith('.jsonl')) continue;

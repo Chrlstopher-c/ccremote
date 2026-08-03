@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { dossierSousAgents, lireSousAgents } from './sous-agents-disque.ts';
@@ -94,5 +94,39 @@ describe('sous-agents — statut déduit du silence', () => {
     ]);
     const [agent] = await lireSousAgents(SESSION, CWD, configDir);
     expect(agent?.statut).toBe('termine');
+  });
+});
+
+/**
+ * `☠ LE CLI RANGE SOUS LE CHEMIN RÉEL` (03/08). Sur le VPS, `/mnt/projects` est un
+ * lien vers `~/dev` : le worker démarre avec `cwd=/mnt/projects/bac-a-sable`, le
+ * CLI résout le realpath et écrit sous `-home-ubuntu-dev-bac-a-sable`, et le
+ * harness cherchait `-mnt-projects-bac-a-sable`. Résultat mesuré sur la mission
+ * `acbb7465` : sept transcrits sur le disque, « sous-agents : aucun » à l'écran
+ * pendant toute la mission. Une machine à liens symboliques ne montrait donc
+ * JAMAIS un sous-agent, en silence, depuis la bascule multi-machines.
+ */
+describe('sous-agents — projet atteint par un lien symbolique', () => {
+  test('le dossier est trouvé même quand le cwd passe par un lien', async () => {
+    const base = await mkdtemp(join(tmpdir(), 'ccremote-lien-'));
+    const reel = join(base, 'reel');
+    const lien = join(base, 'lien');
+    await mkdir(reel, { recursive: true });
+    await symlink(reel, lien);
+
+    // Le CLI écrit sous la clé du chemin RÉEL…
+    const dossier = dossierSousAgents(SESSION, reel, configDir);
+    await mkdir(dossier, { recursive: true });
+    await writeFile(
+      join(dossier, 'agent-lien-1.jsonl'),
+      messageAssistant('ALPHA', new Date().toISOString()),
+    );
+    await writeFile(join(dossier, 'agent-lien-1.meta.json'), JSON.stringify({ agentType: 'general-purpose' }));
+
+    // … et le harness interroge avec le chemin SYMBOLIQUE, celui du mandat.
+    const agents = await lireSousAgents(SESSION, lien, configDir);
+    expect(agents).toHaveLength(1);
+    expect(agents[0]?.derniereAction).toBe('ALPHA');
+    await rm(base, { recursive: true, force: true });
   });
 });
