@@ -230,22 +230,45 @@ const BLOC_OUTILS = [
   'jamais dans son profil personnel, et n’attribue JAMAIS à l’humain une décision qui vient',
   'de l’orchestrateur ou de toi — une mémoire fausse survit longtemps à l’équipe qui l’a posée.',
   '',
-  // `☠` DEUX BORNES DE L'OUTIL BASH, MESURÉES SUR DE VRAIES ÉQUIPES (03/08). Un
-  // `sleep` nu est refusé, et tout appel est coupé à 120 s. Sans les connaître,
-  // un agent se rabat sur `run_in_background`, perd le fil de ce qu'il
-  // attendait, et rend « Waiting for background process to complete... » à la
-  // place de son résultat : trois sous-agents sur cinq au premier test, deux
-  // relances inutiles au second. C'est ici et pas dans les clauses de la carte
-  // d'autorisation — celles-là ne partent qu'à l'écran de Chris, jamais au
-  // worker (défaut du 01/08, qu'un test d'assemblage a rattrapé une seconde
-  // fois le 03/08 avant déploiement).
-  'ATTENDRE, AU SHELL — deux bornes de l’outil Bash, et elles frappent aussi tes sous-agents.',
-  'Un `sleep` nu est REFUSÉ, et tout appel Bash est COUPÉ à 120 s. Pour attendre une durée :',
+  // `☠` LA FORME EXACTE DU BLOCAGE, ISOLÉE EN QUATRE MESURES (03/08) — la
+  // première rédaction disait « un `sleep` nu est refusé », et c'était faux
+  // assez pour nuire : un agent l'aurait lu comme une interdiction générale et
+  // aurait contourné des formes parfaitement acceptées. Mesuré : `sleep 1` seul
+  // PASSE · `sleep 35` seul est BLOQUÉ · `echo; sleep 35; echo` PASSE ·
+  // `echo; sleep 170; echo` PASSE. Les deux propriétés comptent ensemble —
+  // seul ET long. Le `sleep 2` d'une boucle `until` n'a jamais été menacé.
+  //
+  // `☠` Le plafond de 120 s N'EST PAS SYSTÉMATIQUE, contrairement à ce qu'on a
+  // d'abord écrit : il a coupé deux sous-agents le matin (exit 143 sur des
+  // boucles `until`), et l'après-midi un script de 150 s lancé au premier plan
+  // sans rien préciser est passé (157 s mesurées). Le `timeout` explicite est
+  // donc une PRÉCAUTION qui supprime le risque, pas la parade à une fatalité —
+  // le dire autrement ferait douter un agent de ce qu'il observe.
+  //
+  // Ce bloc est ici et pas dans les clauses de la carte d'autorisation : celles-là
+  // ne partent qu'à l'écran de Chris, jamais au worker (défaut du 01/08, qu'un
+  // test d'assemblage a rattrapé une seconde fois le 03/08 avant déploiement).
+  'ATTENDRE, AU SHELL — ce que l’outil Bash refuse, et ce qu’il accepte.',
+  'Un `sleep` SEUL ET LONG est refusé (`sleep 35` : bloqué). Court, il passe (`sleep 1`), et',
+  'accompagné il passe aussi — `cmd && sleep 2 && verif`, ou le `sleep 2` d’une boucle, n’ont',
+  'jamais été refusés. Pour attendre une durée, la forme sûre :',
   '  fin=$(( $(date +%s) + N )); until [ $(date +%s) -ge $fin ]; do sleep 2; done',
-  'avec le paramètre `timeout` de l’outil réglé au-delà de N (en millisecondes) dès que N',
-  'dépasse 110 s. Pour attendre une CONDITION, la même boucle `until` sur le test qui doit',
-  'devenir vrai. Répercute ces deux règles dans le prompt de chaque sous-agent que tu lances :',
-  'sans elles, il rendra « Waiting for background process to complete… » au lieu de son travail.',
+  'Pour attendre une CONDITION, la même boucle `until` sur le test qui doit devenir vrai —',
+  'c’est presque toujours ce qu’il faut : attendre qu’un port réponde vaut mieux qu’attendre',
+  '« assez longtemps ». Au-delà de deux minutes, règle le paramètre `timeout` de l’outil',
+  '(en millisecondes, au-delà de N) : une commande longue est parfois coupée à 120 s, pas',
+  'toujours, et la précaution coûte moins cher que la relance.',
+  '',
+  // `☠` MESURÉ LE 03/08, ET BIEN PLUS SYSTÉMATIQUE QUE LE CAS `sleep` — relevé
+  // par l'orchestrateur en lisant un transcript : un sous-agent a capturé `$!`
+  // après `nohup … &` en croyant tenir le PID de son serveur ; il tenait le
+  // wrapper bash de l'outil. Son `kill` n'a rien tué, le serveur répondait
+  // toujours, et il a fallu deux commandes de plus pour s'en apercevoir.
+  'ARRÊTER CE QUE TU AS LANCÉ EN ARRIÈRE-PLAN. Après `cmd &` ou `nohup cmd &`, `$!` désigne',
+  'souvent le shell qui enveloppe ta commande, pas ton process : le `kill` réussit et le',
+  'service tourne encore. Retrouve le vrai PID (`pgrep -af "<motif unique>"`), tue celui-là,',
+  'et VÉRIFIE après coup — le port ne répond plus, le process a disparu. Un service laissé',
+  'vivant sur un worktree éphémère survit à ton équipe.',
 ].join('\n');
 
 /**

@@ -193,12 +193,26 @@ describe('ce qui doit SURVIVRE à la compaction du lead', () => {
   // rend « Waiting for background process to complete... » au lieu de son
   // travail — trois sous-agents sur cinq au premier test. Elle doit survivre à
   // la compaction : un lead au tour 50 attend autant qu'au tour 1.
-  test('comment attendre au shell — les deux bornes de l’outil Bash', () => {
-    expect(systeme).toContain('`sleep` nu est REFUSÉ');
+  test('comment attendre au shell — la forme du blocage, telle qu’elle a été mesurée', () => {
+    // `☠` Quatre mesures, 03/08 : `sleep 1` seul PASSE · `sleep 35` seul BLOQUÉ ·
+    // `echo; sleep 35; echo` PASSE · `echo; sleep 170; echo` PASSE. Les deux
+    // propriétés comptent ENSEMBLE. La première rédaction disait « un sleep nu
+    // est refusé » : un agent l'aurait lue comme une interdiction générale et
+    // aurait contourné des formes acceptées.
+    expect(systeme).toContain('SEUL ET LONG');
     expect(systeme).toContain('until [ $(date +%s) -ge $fin ]');
-    expect(systeme).toContain('120 s');
-    // Le lead écrit les prompts de ses sous-agents : la règle doit se propager.
-    expect(systeme).toContain('prompt de chaque sous-agent');
+    // Le plafond de 120 s n'est PAS systématique — mesuré dans les deux sens le
+    // même jour. Le prompt doit dire « parfois », sinon il fait douter un agent
+    // de ce qu'il observe.
+    expect(systeme).toContain('parfois coupée à 120 s, pas');
+  });
+
+  test('☠ arrêter un process lancé en arrière-plan — `$!` ment', () => {
+    // Relevé sur un transcript réel : `$!` après `nohup … &` a rendu le wrapper
+    // bash, le `kill` n'a rien tué, le serveur répondait toujours. Plus
+    // systématique que le cas `sleep`.
+    expect(systeme).toContain('`$!` désigne');
+    expect(systeme).toContain('pgrep -af');
   });
 
   test('les trois gestes qui prouvent un correctif', () => {
