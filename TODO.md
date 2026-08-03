@@ -38,13 +38,24 @@
 - [x] **`logs/` ajouté au `.gitignore` du bac à sable** — il déclenchait l'avertissement « fichiers
       non commités » à chaque fin d'équipe sur ce projet.
 
+- [x] **Les deux contraintes d'attente sont dans le system prompt de toute équipe** — `sleep` nu
+      refusé, coupure Bash à 120 s, boucle `until` et paramètre `timeout`. Posées dans `BLOC_OUTILS`
+      (`composerMandatSysteme`), donc elles survivent à la compaction du lead.
+      `☠` Écrites d'abord dans `CLAUSES_FIXES` : le test d'assemblage les a refusées, et il avait
+      raison — ces clauses composent la CARTE D'AUTORISATION que Chris lit, pas le prompt du worker.
+      Le défaut du 01/08 à l'identique, rattrapé avant déploiement.
+      **Vérifié en production sur un mandat MUET** (ni `sleep`, ni `until`, ni `timeout` : 0
+      occurrence dans le texte envoyé) : le lead a produit la bonne forme et l'a recopiée dans le
+      brief de ses deux sous-agents, qui l'ont appliquée du premier coup. Attente de 150 s — au-delà
+      de la coupure — passée en **un seul appel Bash, sans relance ni exit 143**. Les deux mots
+      cités, une notification à la vraie fin, 0,45 $ sur 3 $. À comparer au test du matin : trois
+      sous-agents sur cinq dévoyés, deux relances.
+
 ### 🎯 À LA REPRISE
 
-- [ ] **Deux contraintes à répercuter dans les mandats qui font attendre un agent** (découvertes
-      pendant le test, elles ne viennent pas du harness) : l'outil Bash refuse un `sleep` nu — la
-      forme acceptée est `fin=$(( $(date +%s) + N )); until [ $(date +%s) -ge $fin ]; do sleep 2; done`
-      — et il coupe à 120 s sans `timeout` explicite à l'appel. Sans les deux, un sous-agent rend
-      « Waiting for background process to complete... » au lieu de son résultat.
+- [ ] **Un sous-agent dont le parent n'anticipe PAS le besoin d'attente** reste non testé : ce qu'on
+      a mesuré est une propagation descendante (le lead recopie la règle dans le brief), pas une
+      découverte indépendante à chaque niveau. Relevé par l'orchestrateur lui-même.
 
 ### ✅ LIVRÉ ET DÉPLOYÉ LE 02/08 (soir) — l'`init` qui tuait les équipes en plein travail
 

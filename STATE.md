@@ -56,6 +56,28 @@ tout mandat qui fait attendre un sous-agent : l'outil Bash **refuse un `sleep` n
 sauf `timeout` explicite à l'appel. Sans les deux, les sous-agents partent en `run_in_background` et
 rendent « Waiting for background process to complete... » au lieu de leur résultat.
 
+### `☠` 03/08 — LE LEAD SAIT MAINTENANT ATTENDRE, ET IL L'APPREND À SES SOUS-AGENTS
+
+Les deux bornes de l'outil Bash (`sleep` nu refusé, coupure à 120 s) sont posées dans le
+**systemPrompt** de toute équipe — donc elles survivent à la compaction, contrairement au premier
+message.
+
+`☠` Elles ont d'abord été écrites dans `CLAUSES_FIXES` de `mcp-controle/mandat.ts`. **Le test
+d'assemblage les a refusées, et il avait raison** : ces clauses composent le texte de la CARTE
+D'AUTORISATION que Chris lit avant de cliquer, jamais le prompt du worker. C'est exactement le
+défaut du 01/08 (« écrit, testé, branché sur rien », dixième occurrence) — cette fois rattrapé
+avant le déploiement, par un test qui part du chemin réellement emprunté plutôt que de la fonction.
+
+**Éprouvé sur un mandat MUET** : ni `sleep`, ni `until`, ni `timeout` dans le texte envoyé (zéro
+occurrence, vérifié avant autorisation). Le lead a produit la bonne forme de lui-même et l'a
+recopiée dans le brief de chacun de ses deux sous-agents. Attente de 150 s, au-delà de la coupure :
+**un seul appel Bash, aucune relance, aucun exit 143**. Les deux mots cités, une notification à la
+vraie fin, 0,45 $ sur 3 $. Le run du matin, lui, dévoyait trois sous-agents sur cinq.
+
+`⚠` Ce qui reste non testé, et l'orchestrateur l'a relevé seul : un sous-agent dont le parent
+n'anticipe PAS son besoin d'attente. Le mécanisme observé est une propagation descendante, pas une
+découverte indépendante à chaque niveau.
+
 ### `☠` 03/08 — LES SOUS-AGENTS ÉTAIENT INVISIBLES DEPUIS LA BASCULE MULTI-MACHINES
 
 Le CLI range les transcripts de sous-agents sous la clé du chemin **réel** ; le harness les
