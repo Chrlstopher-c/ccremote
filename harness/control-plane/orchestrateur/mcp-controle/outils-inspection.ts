@@ -159,6 +159,26 @@ export function resoudreMission(registre: Registre, designation: string): Resolu
   return { ambigu: retenus.slice(0, 10) };
 }
 
+/**
+ * Les sous-agents d'une équipe, tels que le disque de sa machine les montre.
+ *
+ * `☠ L'ORCHESTRATEUR NE POUVAIT PAS RÉPONDRE À LA QUESTION` (03/08). Interrogé
+ * sur le nombre de sous-agents d'une équipe en vol, il a dû répondre : « il n'y a
+ * aucun champ sous-agents, ni 3 ni aucun — je ne peux pas dire que le harness en
+ * voit zéro, je peux dire que mon outil ne remonte pas l'information ». Il avait
+ * raison de refuser de conclure, et cette lacune lui coûtait sa seule façon de
+ * savoir si une équipe silencieuse travaille ou attend.
+ *
+ * Le nombre ACTIF est dit séparément : c'est lui qui distingue « cinq agents ont
+ * tourné » de « cinq agents tournent en ce moment ».
+ */
+function resumerSousAgents(registre: Registre, missionId: string): string {
+  const agents = registre.missions.sousAgents(missionId);
+  if (agents.length === 0) return 'sous-agents=aucun observé';
+  const actifs = agents.filter((a) => a.statut === 'actif').length;
+  return `sous-agents=${agents.length} (${actifs} actif${actifs > 1 ? 's' : ''})`;
+}
+
 /** `etat_equipe` (A.2.2) — détail d'une équipe : tâche, coût, contexte, capacités manquantes. */
 export function etatEquipe(registre: Registre, designation: string): ContratRetour {
   const intention = `état de ${designation}`;
@@ -183,6 +203,7 @@ export function etatEquipe(registre: Registre, designation: string): ContratReto
       resumerDepot(mission),
       `budget=${mission.budgetConsommeUsd}/${mission.budgetMaxUsd ?? '∞'} USD`,
       `contexte=${mission.contexteTokensUtilises ?? '?'}/${mission.contexteTokensMax ?? '?'}`,
+      resumerSousAgents(registre, mission.id),
       manquantes.length > 0 ? `capacités manquantes: ${manquantes.join(', ')}` : 'capacités surveillées toutes présentes',
     ].join(' · ');
     return applique(intention, etat);

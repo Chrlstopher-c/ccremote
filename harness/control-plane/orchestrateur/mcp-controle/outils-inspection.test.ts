@@ -94,6 +94,24 @@ describe('outils-inspection (A.2.2, groupe lecture seule)', () => {
     expect(resultat.etat).toContain('capacités surveillées toutes présentes');
   });
 
+  // `☠` 03/08 : interrogé sur les sous-agents d'une équipe en vol, l'orchestrateur
+  // a répondu « il n'y a aucun champ sous-agents, ni 3 ni aucun ». Il ne pouvait
+  // ni les compter, ni conclure qu'il n'y en avait pas — la seule information qui
+  // distingue une équipe qui travaille d'une équipe qui attend.
+  test('etat_equipe : compte les sous-agents, et dit combien sont actifs', () => {
+    registre.missions.creer({ id: 'm-sa', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
+    registre.missions.poserSousAgents('m-sa', [
+      { agentId: 'a1', type: 'general-purpose', description: 'ALPHA', toolUseId: null, profondeur: 1, statut: 'actif', derniereAction: 'ALPHA', majA: Date.now() },
+      { agentId: 'a2', type: 'general-purpose', description: 'BRAVO', toolUseId: null, profondeur: 1, statut: 'termine', derniereAction: 'BRAVO', majA: Date.now() },
+    ]);
+    expect(etatEquipe(registre, 'm-sa').etat).toContain('sous-agents=2 (1 actif)');
+  });
+
+  test('etat_equipe : aucun sous-agent ⇒ « aucun observé », jamais un silence', () => {
+    registre.missions.creer({ id: 'm-seul', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' });
+    expect(etatEquipe(registre, 'm-seul').etat).toContain('sous-agents=aucun observé');
+  });
+
   test('lister_projets : répertoire vide ⇒ dit ce qui est vide, et vers quoi se tourner', async () => {
     const resultat = await listerProjets(repertoireProjets, GIT_FACTICE_NON_GIT);
     expect(resultat.ok).toBe(true);
