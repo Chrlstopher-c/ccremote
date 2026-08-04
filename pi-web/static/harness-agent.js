@@ -65,5 +65,10 @@ async function hRenderAgentDetail(missionId, agentId) {
     </div>
   `;
   const scroll = document.getElementById('hAgentFeedScroll');
-  if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  if (scroll) {
+    scroll.scrollTop = scroll.scrollHeight;
+    // Même flèche que les deux autres fils — H-72.1 vaut aussi pour le confort
+    // de lecture : un sous-agent se consulte comme un lead.
+    window.HFilBas?.attacher(scroll);
+  }
 }

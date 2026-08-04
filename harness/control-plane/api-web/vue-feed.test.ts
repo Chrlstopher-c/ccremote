@@ -44,4 +44,23 @@ describe('vue-feed — suivre une équipe qui cherche', () => {
     // Un texte n'est pas décoré : c'est la réponse, pas une étape.
     expect(feed.find((e) => e.text.includes('rapport'))?.nature).toBeUndefined();
   });
+
+  test('chaque évènement porte son instant ABSOLU, pas seulement l’heure murale', () => {
+    registre.missions.ajouterActivite('m-1', 'je cherche', 1_700_000_000_000, 'reflexion');
+    const feed = construireFeed(registre, 'm-1').filter((e) => e.type === 'activity');
+    // Sans `at`, l'interface soustrairait des `HH:MM:SS` — faux de ~24 h dès
+    // qu'un fil traverse minuit, ce qui est le cas de toute équipe du soir.
+    expect(feed[0]?.at).toBe(1_700_000_000_000);
+  });
+
+  test('le fil qui traverse MINUIT reste dans l’ordre chronologique', () => {
+    const avantMinuit = new Date('2026-08-03T23:58:00').getTime();
+    const apresMinuit = new Date('2026-08-04T00:03:00').getTime();
+    registre.missions.ajouterActivite('m-1', 'dernier acte de la veille', avantMinuit, 'texte');
+    registre.missions.ajouterActivite('m-1', 'premier acte du lendemain', apresMinuit, 'texte');
+    const textes = construireFeed(registre, 'm-1').filter((e) => e.type === 'activity').map((e) => e.text);
+    // Le tri lexicographique sur `HH:MM:SS` remontait `00:03` AVANT `23:58` :
+    // le fil se lisait à l'envers sur toute équipe lancée le soir.
+    expect(textes).toEqual(['dernier acte de la veille', 'premier acte du lendemain']);
+  });
 });

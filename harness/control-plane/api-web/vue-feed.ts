@@ -17,6 +17,15 @@ import type { Registre, Transition } from '../registre/index.ts';
 
 export interface FeedEventApi {
   readonly ts: string;
+  /**
+   * Le même instant en millisecondes epoch (04/08).
+   *
+   * `☠` `ts` seul ne permet PAS de calculer une durée : c'est `HH:MM:SS`, donc
+   * deux évènements de part et d'autre de minuit donnent un écart négatif de
+   * ~24 h. L'interface affiche des durées entre évènements — il lui faut un
+   * instant absolu, pas une heure murale.
+   */
+  readonly at: number;
   readonly type: 'permission' | 'activity' | 'system' | 'instruction';
   readonly text: string;
   /**
@@ -59,7 +68,7 @@ function texteTransition(t: Transition): string {
 }
 
 function versEvenementTransition(t: Transition): FeedEventApi {
-  return { ts: horodatage(t.survenuA), type: 'system', text: texteTransition(t) };
+  return { ts: horodatage(t.survenuA), at: t.survenuA, type: 'system', text: texteTransition(t) };
 }
 
 /**
@@ -81,6 +90,7 @@ export function construireFeed(
   for (const a of registre.missions.activites(missionId, limite)) {
     evenements.push({
       ts: horodatage(a.survenuA),
+      at: a.survenuA,
       type: 'activity',
       text: a.texte,
       ...(a.outil !== null ? { tool: a.outil } : {}),
@@ -90,7 +100,8 @@ export function construireFeed(
   }
 
 
-  // Tri sur l'horodatage textuel : format fixe `HH:MM:SS`, donc l'ordre
-  // lexicographique EST l'ordre chronologique sur une même journée.
-  return evenements.sort((a, b) => a.ts.localeCompare(b.ts));
+  // `☠` Tri sur l'instant ABSOLU, plus sur `HH:MM:SS` : le tri textuel n'était
+  // juste que sur une même journée, et remontait au début du fil tout ce qui
+  // suivait minuit — sur une équipe lancée le soir, le fil se lisait à l'envers.
+  return evenements.sort((a, b) => a.at - b.at);
 }

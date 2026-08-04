@@ -351,7 +351,11 @@ async function hOpenConversation(id) {
   hRenderPartiel(d.partial || null);
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
   hRenderStats(d);
-  hScrollChat();
+  // ☠ `hBrancherFilBas` et pas seulement `hScrollChat` : à l'ouverture d'un fil
+  // ancien, il faut à la fois arriver EN BAS et disposer de la flèche pour y
+  // revenir. Le calage est fait après le rendu complet, sinon la hauteur totale
+  // n'est pas encore connue et le fil s'arrête au milieu.
+  hBrancherFilBas();
   // ☠ Le sondage démarre TOUJOURS, generation ou pas : c'est lui qui apporte ce
   // que le harness pousse de lui-même (fin d'équipe, rappel, réveil). Il choisit
   // sa cadence tout seul — rapide pendant un tour, en veille sinon.
@@ -397,7 +401,27 @@ function hEnsureAssistant(chat) {
   // ☠ `.h-say` depuis le passage au vocabulaire de la page mission : le sélecteur
   // `.md` seul ne trouvait plus rien et le bouton copiait une chaîne vide.
   a.appendChild(hBoutonCopier(() => [...a.querySelectorAll('.h-say, .md')].map((n) => n.innerText).join('\n\n').trim()));
+  // ☠ L'instant de DÉPART du tour est retenu dès l'ouverture du groupe : la
+  // durée affichée est le temps de réponse vu par l'opérateur — de sa question
+  // au dernier mot rendu. La calculer entre le premier et le dernier bloc de la
+  // réponse cacherait précisément l'attente qu'on veut mesurer.
+  a.dataset.debut = String(hOrch.dernierEnvoiAt || Date.now());
   chat.appendChild(a); hOrch.cur = a; return a;
+}
+
+/**
+ * Pose ou met à jour le pied d'un groupe de réponse : heure de fin + durée du
+ * tour. Rappelé à chaque évènement — le pied suit la réponse qui s'allonge.
+ */
+function hMajPiedGroupe(groupe, at) {
+  if (!groupe || !window.HTemps) return;
+  const debut = Number(groupe.dataset.debut);
+  const fin = Number.isFinite(at) ? at : Date.now();
+  groupe.dataset.fin = String(fin);
+  const pied = window.HTemps.pied(fin, Number.isFinite(debut) && fin > debut ? fin - debut : null);
+  if (!pied) return;
+  groupe.querySelector(':scope > .msg-pied')?.remove();
+  groupe.appendChild(pied);
 }
 function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
 
@@ -731,7 +755,7 @@ function hBlocNode(type, contenu, live, extra) {
 }
 
 /** Bulle d'un message opérateur, avec son bouton de copie. */
-function hBulleOperateur(texte, pieces) {
+function hBulleOperateur(texte, pieces, at) {
   const u = document.createElement('div');
   u.className = 'bubble-u msg-wrap';
   u.dataset.menu = 'parole';
@@ -745,6 +769,10 @@ function hBulleOperateur(texte, pieces) {
   u.append(t, hBoutonCopier(() => texte));
   const jointes = window.HPieces?.rendrePieces(pieces);
   if (jointes) u.appendChild(jointes);
+  // ☠ Pas de durée sur un message d'opérateur : il est instantané. Afficher
+  // « 0 s » sous chaque question laisserait croire à une mesure.
+  const pied = window.HTemps?.pied(at ?? Date.now(), null);
+  if (pied) u.appendChild(pied);
   return u;
 }
 
@@ -792,12 +820,17 @@ function hAppendEvent(ev) {
       // par le Pi : les premières meurent avec l'onglet, les secondes survivent
       // au rechargement. Sans ce remplacement, rouvrir le fil montrerait des
       // images cassées sur le dernier message.
+      const piedReel = window.HTemps?.pied(ev.at, null);
+      if (piedReel) optimiste.querySelector(':scope > .msg-pied')?.replaceWith(piedReel);
+      // Le tour qui suit se mesure depuis CE message, pas depuis le clic.
+      hOrch.dernierEnvoiAt = ev.at;
       const ancien = optimiste.querySelector('.pj-jointes');
       const servies = window.HPieces?.rendrePieces(ev.pieces);
       if (ancien && servies) optimiste.replaceChild(servies, ancien);
       hOrch.cur = null; return;
     }
-    const u = hBulleOperateur(ev.contenu, ev.pieces);
+    hOrch.dernierEnvoiAt = ev.at;
+    const u = hBulleOperateur(ev.contenu, ev.pieces, ev.at);
     if (ev.seq !== undefined) u.dataset.seq = ev.seq;
     chat.appendChild(u); hOrch.cur = null; return;
   }
@@ -833,12 +866,16 @@ function hAppendEvent(ev) {
   if (ev.type === 'outil') {
     const ligne = hAjouterLigneOutil(groupe, ev.contenu, ev);
     if (ev.seq !== undefined) ligne.dataset.seq = ev.seq;
+    // Un appel d'outil fait avancer le tour : le pied doit le suivre, sinon la
+    // durée se figerait sur le dernier texte alors que l'équipe travaille encore.
+    hMajPiedGroupe(groupe, ev.at);
     return;
   }
 
   const noeud = hBlocNode(ev.type, ev.contenu, false, ev);
   if (!noeud) return;
   if (ev.seq !== undefined) noeud.dataset.seq = ev.seq;
+  if (Number.isFinite(ev.at)) noeud.dataset.at = String(ev.at);
   // ☠ L'agent reprend la parole ⇒ la séquence d'outils est FINIE : le groupe se
   // ferme, et les appels d'APRÈS ouvriront leur propre carte. Sans ça, tout un
   // tour finirait dans une carte unique et le résumé ne voudrait plus rien dire.
@@ -878,6 +915,9 @@ function hInsererDansGroupe(groupe, noeud) {
   const enCours = hOrch.partielEl;
   const ancre = enCours && enCours.parentNode === groupe ? enCours : null;
   groupe.insertBefore(noeud, ancre);
+  // Le pied suit la réponse qui s'allonge : il est reposé à chaque bloc, et
+  // reste donc juste même quand un tour dure plusieurs minutes.
+  hMajPiedGroupe(groupe, Number(noeud.dataset.at) || undefined);
 }
 
 /**
@@ -993,6 +1033,9 @@ async function hPollNow() {
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
   hRenderStats(d);
   if (auBas) hScrollChat();
+  // ☠ Compté seulement quand on lit AILLEURS : la pastille dit « il s'est passé
+  // ceci pendant que tu remontais », pas « des messages existent ».
+  else if (nouveauxEvenements > 0) window.HFilBas?.de('hChatScroll')?.signalerMessage();
   if (hOrch.generating) {
     hOrch.timer = setTimeout(hPollNow, HORCH_POLL_MS);
     return;
@@ -1034,6 +1077,19 @@ function hEstEnBas() {
 
 function hScrollChat() {
   const s = document.getElementById('hChatScroll'); if (s) s.scrollTop = s.scrollHeight;
+  window.HFilBas?.de('hChatScroll')?.majuster();
+}
+
+/**
+ * Branche la flèche de retour au présent, et cale le fil EN BAS.
+ *
+ * ☠ Rouvrir une conversation de plusieurs heures atterrissait en haut : il
+ * fallait faire défiler des minutes pour revenir au dernier message. Un fil se
+ * lit par la fin — c'est le point de départ, pas une préférence.
+ */
+function hBrancherFilBas() {
+  window.HFilBas?.attacher('hChatScroll');
+  window.HFilBas?.de('hChatScroll')?.caler();
 }
 
 // ---- envoi ------------------------------------------------------------------
@@ -1057,7 +1113,8 @@ async function hSendOrchMessage() {
   const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
   // Vignettes locales le temps de l'aller-retour — remplacées par celles du Pi
   // dès que l'évènement revient avec ses URL.
-  const u = hBulleOperateur(text, window.HPieces?.file().map((p) => ({ ...p, url: p.apercu })));
+  hOrch.dernierEnvoiAt = Date.now();
+  const u = hBulleOperateur(text, window.HPieces?.file().map((p) => ({ ...p, url: p.apercu })), hOrch.dernierEnvoiAt);
   u.dataset.optimiste = '1';
   chat.appendChild(u); hOrch.cur = null;
   hOrch.generating = true; btn.disabled = true;

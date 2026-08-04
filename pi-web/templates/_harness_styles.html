@@ -280,6 +280,25 @@
   .pj-vignette:hover .pj-x, .pj-x:focus-visible { opacity: 1; }
   .pj-x:hover { background: var(--err); }
 
+  /* ===== pied de message : quand, et combien de temps (04/08) ===== */
+  /* Discret par défaut, net au survol du message : l'horodatage doit être là
+     quand on le cherche, invisible quand on lit. */
+  .msg-pied { font-size: 9.5px; color: var(--ink-3); letter-spacing: .02em; margin-top: 6px; opacity: .55; transition: opacity .15s ease; }
+  .msg-wrap:hover > .msg-pied, .seg:hover > .msg-pied, .h-say-wrap:hover ~ .msg-pied { opacity: 1; }
+  .bubble-u > .msg-pied { text-align: right; }
+  .seg { display: flex; flex-direction: column; }
+  .seg > .msg-pied { align-self: flex-start; }
+
+  /* ===== bouton « redescendre » (04/08) ===== */
+  /* ☠ Rouvrir un fil de plusieurs heures atterrissait EN HAUT : il fallait
+     faire défiler des minutes pour retrouver le présent. Le fil s'ouvre
+     désormais en bas, et ce bouton ramène au dernier message dès qu'on remonte. */
+  .fil-bas { position: absolute; right: 22px; bottom: 22px; z-index: 20; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.13); opacity: 0; transform: translateY(6px); pointer-events: none; transition: opacity .18s ease, transform .18s ease, background .15s ease; }
+  .fil-bas.visible { opacity: 1; transform: none; pointer-events: auto; }
+  .fil-bas:hover { background: var(--bg-2); color: var(--ink); }
+  .fil-bas .pastille { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--accent-2); color: #fff; font-size: 9.5px; font-weight: 600; display: none; align-items: center; justify-content: center; }
+  .fil-bas.avec-nouveaux .pastille { display: flex; }
+
   /* Visionneuse plein écran — dans la page, jamais un onglet : ouvrir un onglet
      fait perdre le fil, et un bloqueur de pop-up l'avalerait en silence. */
   .pj-visionneuse { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 40px; background: rgba(16,14,12,.78); backdrop-filter: blur(6px); animation: pjFondu .16s ease; }

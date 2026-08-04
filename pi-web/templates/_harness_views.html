@@ -235,7 +235,9 @@
       <div class="orch-composer">
         <div class="composer-shell" id="hComposerShell">
           <div class="pj-file" id="hPiecesFile" style="display: none;"></div>
-          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe… (collez une capture avec ⌘/Ctrl+V)"></textarea>
+          <!-- ☠ Court à dessein : la mention du collage vit dans l'info-bulle du
+               trombone, pas ici. Allongée, la ligne débordait du composeur. -->
+          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur…"></textarea>
           <div class="composer-foot">
             <div class="composer-settings">
               <button id="hBtnPieceJointe" class="pill-btn" type="button" title="Joindre un fichier — ou collez une capture (⌘/Ctrl+V), ou déposez-la ici">

@@ -76,13 +76,34 @@ function hSystemeTemplate(ev) {
   return `<div class="h-sys">${escapeHtml(ev.text.replace(/^\[\w+\]\s*/, ''))}</div>`;
 }
 
-function hSegmentTemplate(seg, index) {
+function hCorpsSegment(seg, index) {
   if (seg.genre === 'outils') return hValiseOutilsTemplate(seg, index);
   if (seg.genre === 'pensees') return hValisePenseesTemplate(seg, index);
   if (seg.genre === 'operateur') return hOperateurTemplate(seg.ev);
   if (seg.genre === 'permission') return hPermissionTemplate(seg.ev, index);
   if (seg.genre === 'systeme') return hSystemeTemplate(seg.ev);
   return hParoleTemplate(seg.ev);
+}
+
+/**
+ * Un segment = son contenu + son pied « quand · combien de temps ».
+ *
+ * ☠ Le pied est DANS l'enveloppe du segment, jamais un frère : le rendu
+ * incrémental identifie un segment par SON nœud racine (`hNoeudSegment` prend
+ * `firstElementChild`). Un second nœud racine sortirait du comptage et se
+ * dupliquerait à chaque mise à jour.
+ *
+ * ☠ Le même code sert le fil d'une équipe ET celui d'un sous-agent (H-72.1,
+ * « même niveau de détail que le lead ») : `harness-agent.js` appelle
+ * `hCorpsFil`. Une durée ajoutée ici l'est donc aux deux, par construction.
+ */
+function hSegmentTemplate(seg, index) {
+  const corps = hCorpsSegment(seg, index);
+  const items = seg.items || (seg.ev ? [seg.ev] : []);
+  const etendue = window.HTemps ? window.HTemps.etendue(items) : { fin: null, duree: null };
+  const pied = window.HTemps ? window.HTemps.piedHtml(etendue.fin, etendue.duree) : '';
+  if (!pied) return `<div class="seg">${corps}</div>`;
+  return `<div class="seg">${corps}${pied}</div>`;
 }
 
 /** Segments du dernier rendu — les feuilles y puisent leur contenu. */
@@ -236,7 +257,13 @@ function hSousTitre(m) {
 
 function hDefilerEnBas() {
   const vue = document.querySelector('[data-view="harness-mission"]');
-  if (vue) vue.scrollTop = vue.scrollHeight;
+  if (!vue) return;
+  vue.scrollTop = vue.scrollHeight;
+  // La flèche de retour au présent vit sur la vue elle-même : c'est elle qui
+  // défile ici, pas un cadre interne.
+  vue.dataset.filBasCle = 'mission';
+  window.HFilBas?.attacher(vue, { calerMaintenant: false });
+  window.HFilBas?.de('mission')?.majuster();
 }
 
 // ------------------------------------------------------------------ actions

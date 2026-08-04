@@ -209,6 +209,9 @@ export function versSubagentDetailApi(
     ...versSubagentApi(agent),
     feed: activites.map((a) => ({
       ts: new Date(a.survenuA).toTimeString().slice(0, 8),
+      // `☠` L'instant absolu accompagne toujours l'heure murale : sans lui, une
+      // durée entre deux évènements est fausse dès que le fil passe minuit.
+      at: a.survenuA,
       type: 'activity' as const,
       text: a.texte,
       ...(a.type === 'texte' ? {} : { nature: a.type }),
