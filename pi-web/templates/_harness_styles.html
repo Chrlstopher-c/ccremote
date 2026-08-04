@@ -256,18 +256,40 @@
      mais sans état coché : il ouvre, il ne bascule rien. */
   .pill-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 26px; height: 26px; border: 1px solid var(--line-2); background: var(--bg-2); border-radius: 999px; color: var(--ink-3); cursor: pointer; transition: all .15s ease; }
   .pill-btn:hover { color: var(--ink); border-color: var(--ink-3); }
-  .pj-file { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
-  .pj-jointes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .pj-vignette { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 92px; padding: 6px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg-2); }
+  .pj-file { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+  .pj-jointes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  /* ☠ Tuile CARRÉE où l'image occupe tout : ce qu'on veut lire d'une capture,
+     c'est la capture — pas une fiche avec un nom sous une miniature écrasée.
+     Le nom vit dans le `title`, et sous la visionneuse une fois ouverte. */
+  .pj-vignette { position: relative; width: 78px; height: 78px; border-radius: 12px; overflow: hidden; background: var(--bg-2); box-shadow: 0 0 0 1px var(--line-2), 0 1px 3px rgba(0,0,0,.06); transition: box-shadow .16s ease, transform .16s ease; }
+  .pj-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .pj-vignette.cliquable { cursor: zoom-in; }
-  .pj-vignette.cliquable:hover { border-color: var(--accent-2); }
-  .pj-vignette img { width: 100%; height: 56px; object-fit: cover; border-radius: 6px; display: block; }
-  .pj-doc { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border-radius: 6px; background: var(--card); font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-3); text-transform: uppercase; }
-  /* ☠ `min-width: 0` + `ellipsis` : sans ça un nom long élargit la vignette et
-     fait déborder la barre du composeur au lieu de se tronquer. */
-  .pj-nom { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; color: var(--ink-3); }
-  .pj-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2); font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; }
-  .pj-x:hover { color: var(--err); border-color: var(--err); }
+  .pj-vignette.cliquable:hover { box-shadow: 0 0 0 1px var(--accent-2), 0 4px 12px rgba(0,0,0,.12); transform: translateY(-1px); }
+  /* Pièce non-image : le type en grand, le nom tronqué dessous. */
+  .pj-doc { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 100%; height: 100%; padding: 6px; background: var(--card); text-align: center; }
+  .pj-doc b { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+  /* ☠ `min-width: 0` + `ellipsis` : sans ça un nom long élargit la tuile et fait
+     déborder la barre du composeur au lieu de se tronquer. */
+  .pj-doc i { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-style: normal; font-size: 8.5px; color: var(--ink-3); }
+  /* Pièce dont le fichier n'est plus sur le Pi : la tuile le DIT (grisée, non
+     cliquable) au lieu d'afficher une image cassée. */
+  .pj-vignette.absente { opacity: .55; cursor: default; }
+  .pj-vignette.absente:hover { transform: none; box-shadow: 0 0 0 1px var(--line-2); }
+  /* La croix n'apparaît qu'au survol de la tuile — permanente, elle salit la grille. */
+  .pj-x { position: absolute; top: 4px; right: 4px; width: 19px; height: 19px; border-radius: 50%; border: none; background: rgba(20,18,16,.72); color: #fff; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .14s ease, background .14s ease; }
+  .pj-vignette:hover .pj-x, .pj-x:focus-visible { opacity: 1; }
+  .pj-x:hover { background: var(--err); }
+
+  /* Visionneuse plein écran — dans la page, jamais un onglet : ouvrir un onglet
+     fait perdre le fil, et un bloqueur de pop-up l'avalerait en silence. */
+  .pj-visionneuse { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; padding: 40px; background: rgba(16,14,12,.78); backdrop-filter: blur(6px); animation: pjFondu .16s ease; }
+  @keyframes pjFondu { from { opacity: 0; } to { opacity: 1; } }
+  .pj-v-fig { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 100%; max-height: 100%; }
+  .pj-v-fig img { max-width: min(1200px, 88vw); max-height: 80vh; object-fit: contain; border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.45); animation: pjZoom .18s cubic-bezier(.2,.8,.3,1); }
+  @keyframes pjZoom { from { transform: scale(.97); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .pj-v-fig figcaption { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(255,255,255,.72); }
+  .pj-v-x { position: absolute; top: 18px; right: 20px; width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255,255,255,.12); color: #fff; display: flex; align-items: center; justify-content: center; transition: background .14s ease; }
+  .pj-v-x:hover { background: rgba(255,255,255,.24); }
   .composer-shell.pj-survol { border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-soft, rgba(199,106,60,.10)); }
   .composer-hint { font-size: 10.5px; color: var(--ink-3); line-height: 1.45; margin-top: 8px; padding: 0 2px; }
   .composer-hint strong { color: var(--warn); }

@@ -41,14 +41,20 @@ ssh $SSH_OPTS "$TARGET" "mkdir -p $REMOTE_DIR"
 # `.db` lui-même). `--delete` les effaçait donc à CHAQUE déploiement : une
 # conversation créée puis un redéploiement, et elle avait disparu. Le motif doit
 # couvrir les fichiers annexes de SQLite, pas seulement l'extension nue.
-# ☠ MÊME PIÈGE, AUTRE DOSSIER (04/08) : `pieces-jointes/` vit sous le cwd de
-# l'orchestrateur, c'est-à-dire SOUS $REMOTE_DIR, et n'est pas dans le dépôt.
-# Sans cette exclusion, `--delete` effacerait toutes les captures jointes aux
-# messages à chaque déploiement — les vignettes des anciens fils deviendraient
-# des 404, et le fichier que l'orchestrateur doit relire aurait disparu.
+# ☠ MÊME PIÈGE, AUTRE DOSSIER (04/08) : le dossier de dépôt des pièces jointes
+# vit sous le cwd de l'orchestrateur, c'est-à-dire SOUS $REMOTE_DIR, et n'est pas
+# dans le dépôt. Sans exclusion, `--delete` effacerait toutes les captures
+# jointes aux messages à chaque déploiement.
+#
+# ☠ ET L'EXCLUSION EST ANCRÉE (`/pieces-jointes`), PAS NUE. Mesuré en production
+# le 04/08 : écrite `--exclude 'pieces-jointes'`, elle matche AUSSI le dossier
+# SOURCE `control-plane/pieces-jointes/` — le code du domaine n'est jamais parti,
+# et le service est mort au démarrage sur `Cannot find module`. Un motif rsync
+# sans `//` initial s'applique à TOUT segment de chemin, exactement comme un
+# `pkill -f` trop large : ce qu'on vise doit être une identité, pas un nom.
 rsync -az --delete \
   --exclude node_modules --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
-  --exclude '.env' --exclude 'logs' --exclude 'pieces-jointes' \
+  --exclude '.env' --exclude 'logs' --exclude '/pieces-jointes' \
   -e "ssh $SSH_OPTS" \
   /mnt/projects/ccremote/harness/ "$TARGET:$REMOTE_DIR/"
 

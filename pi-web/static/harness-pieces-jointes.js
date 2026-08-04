@@ -135,6 +135,14 @@ function hpPourEnvoi() {
   return hPieces.file.map((p) => ({ nom: p.nom, type: p.type, donneesBase64: p.base64 }));
 }
 
+/**
+ * Aperçu carré d'une pièce — l'image REMPLIT la tuile, le nom n'apparaît que
+ * pour ce qui n'est pas une image.
+ *
+ * ☠ Un nom sous chaque vignette faisait une grille de fiches ; ce qu'on veut
+ * lire d'une capture, c'est la capture. Le nom reste dans le `title` au survol,
+ * et sous la visionneuse une fois ouverte.
+ */
 function hpVignette({ nom, type, taille, apercu, url }, surRetrait) {
   const noeud = document.createElement('div');
   noeud.className = 'pj-vignette';
@@ -144,27 +152,72 @@ function hpVignette({ nom, type, taille, apercu, url }, surRetrait) {
     const img = document.createElement('img');
     img.src = source;
     img.alt = nom;
+    // ☠ Un fichier disparu du disque (purge, restauration partielle) rendait une
+    // image cassée avec son alt en travers de la tuile. On retombe sur la tuile
+    // « document », qui dit ce qu'était la pièce au lieu d'afficher une panne.
+    img.addEventListener('error', () => {
+      noeud.classList.add('absente');
+      // ☠ Et elle cesse d'être cliquable : ouvrir en grand une image que le
+      // navigateur vient d'échouer à charger ne montrerait qu'un cadre vide.
+      noeud.classList.remove('cliquable');
+      noeud.innerHTML = `<span class="pj-doc"><b>${HP_TYPES[type] || 'fichier'}</b><i>${nom}</i></span>`;
+      noeud.title = `${nom} — fichier introuvable sur le Pi`;
+    });
     noeud.appendChild(img);
   } else {
     const doc = document.createElement('span');
     doc.className = 'pj-doc';
-    doc.textContent = (HP_TYPES[type] || 'fichier').slice(0, 8);
+    doc.innerHTML = `<b>${HP_TYPES[type] || 'fichier'}</b><i>${nom}</i>`;
     noeud.appendChild(doc);
   }
-  const legende = document.createElement('span');
-  legende.className = 'pj-nom';
-  legende.textContent = nom;
-  noeud.appendChild(legende);
   if (surRetrait) {
     const croix = document.createElement('button');
     croix.className = 'pj-x';
     croix.type = 'button';
     croix.title = 'Retirer';
-    croix.textContent = '×';
+    croix.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
     croix.addEventListener('click', surRetrait);
     noeud.appendChild(croix);
   }
   return noeud;
+}
+
+/**
+ * Visionneuse plein écran d'une pièce du fil.
+ *
+ * ☠ Dans la page, PAS un `window.open` : ouvrir un onglet fait perdre le fil de
+ * la conversation, et un bloqueur de pop-up peut l'avaler en silence — un clic
+ * sans effet visible, sans erreur.
+ */
+function hpOuvrirVisionneuse({ nom, type, url }) {
+  if (!url) return;
+  // Ce que le navigateur ne sait pas afficher en grand s'ouvre à côté.
+  if (!hpEstImage(type)) { window.open(url, '_blank', 'noopener'); return; }
+  document.getElementById('hPjVisionneuse')?.remove();
+  const hote = document.createElement('div');
+  hote.id = 'hPjVisionneuse';
+  hote.className = 'pj-visionneuse';
+  hote.innerHTML = `
+    <button class="pj-v-x" type="button" title="Fermer (Échap)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <figure class="pj-v-fig">
+      <img src="${url}" alt="">
+      <figcaption></figcaption>
+    </figure>`;
+  hote.querySelector('figcaption').textContent = nom;
+  const fermer = () => {
+    hote.remove();
+    document.removeEventListener('keydown', surTouche);
+  };
+  function surTouche(e) { if (e.key === 'Escape') fermer(); }
+  hote.querySelector('.pj-v-x').addEventListener('click', fermer);
+  // Clic sur le fond seulement : sur l'image, il ne se passe rien.
+  hote.addEventListener('mousedown', (e) => { if (e.target === hote || e.target.tagName === 'FIGURE') fermer(); });
+  document.addEventListener('keydown', surTouche);
+  document.body.appendChild(hote);
 }
 
 function hpRendreFile() {
@@ -189,7 +242,10 @@ function hpRendrePieces(pieces) {
     const vignette = hpVignette(piece, null);
     if (piece.url) {
       vignette.classList.add('cliquable');
-      vignette.addEventListener('click', () => window.open(piece.url, '_blank', 'noopener'));
+      vignette.addEventListener('click', () => {
+        if (vignette.classList.contains('absente')) return;
+        hpOuvrirVisionneuse(piece);
+      });
     }
     bloc.appendChild(vignette);
   }
@@ -240,6 +296,7 @@ function hpBrancher({ zoneSaisie, coque, bouton, input, surChangement, surRefus 
 
 window.HPieces = {
   brancher: hpBrancher,
+  ouvrir: hpOuvrirVisionneuse,
   ajouter: hpAjouter,
   vider: hpVider,
   pourEnvoi: hpPourEnvoi,
