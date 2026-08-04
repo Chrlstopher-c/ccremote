@@ -251,6 +251,24 @@
   .composer-send:hover { background: #2C2A28; }
   .composer-send:active { transform: scale(.94); }
   .composer-send[disabled] { opacity: .35; pointer-events: none; }
+  /* ===== pièces jointes du composeur (04/08) ===== */
+  /* Bouton d'action de la barre de réglages — même gabarit que .pill-toggle,
+     mais sans état coché : il ouvre, il ne bascule rien. */
+  .pill-btn { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 26px; height: 26px; border: 1px solid var(--line-2); background: var(--bg-2); border-radius: 999px; color: var(--ink-3); cursor: pointer; transition: all .15s ease; }
+  .pill-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .pj-file { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .pj-jointes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .pj-vignette { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 92px; padding: 6px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--bg-2); }
+  .pj-vignette.cliquable { cursor: zoom-in; }
+  .pj-vignette.cliquable:hover { border-color: var(--accent-2); }
+  .pj-vignette img { width: 100%; height: 56px; object-fit: cover; border-radius: 6px; display: block; }
+  .pj-doc { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; border-radius: 6px; background: var(--card); font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--ink-3); text-transform: uppercase; }
+  /* ☠ `min-width: 0` + `ellipsis` : sans ça un nom long élargit la vignette et
+     fait déborder la barre du composeur au lieu de se tronquer. */
+  .pj-nom { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9.5px; color: var(--ink-3); }
+  .pj-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--line-2); background: var(--card); color: var(--ink-2); font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; }
+  .pj-x:hover { color: var(--err); border-color: var(--err); }
+  .composer-shell.pj-survol { border-color: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-soft, rgba(199,106,60,.10)); }
   .composer-hint { font-size: 10.5px; color: var(--ink-3); line-height: 1.45; margin-top: 8px; padding: 0 2px; }
   .composer-hint strong { color: var(--warn); }
   .mandate-card { border: 1px solid var(--line-2); border-radius: 13px; overflow: hidden; margin: 8px 0; background: var(--card); }

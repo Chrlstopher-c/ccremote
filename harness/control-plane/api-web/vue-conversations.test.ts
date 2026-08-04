@@ -32,6 +32,7 @@ function evenement(surcharges: Partial<EvenementConversation> = {}): EvenementCo
     toolUseId: 'toolu_1',
     detail: '{"projet":"lumen"}',
     resultat: '{"ok":true}',
+    pieces: [],
     ...surcharges,
   };
 }
@@ -48,8 +49,30 @@ describe('la frontière HTTP transporte ce que la base contient', () => {
     // fait échouer l'ajout d'une colonne oubliée en chemin, au lieu de laisser
     // l'écran afficher un vide crédible.
     expect(Object.keys(versEvenementApi(evenement())).sort()).toEqual(
-      ['at', 'contenu', 'detail', 'effort', 'model', 'resultat', 'seq', 'type'],
+      ['at', 'contenu', 'detail', 'effort', 'model', 'pieces', 'resultat', 'seq', 'type'],
     );
+  });
+
+  test('les pièces jointes traversent la frontière avec une URL, jamais un chemin disque', () => {
+    const api = versEvenementApi(
+      evenement({
+        type: 'operateur',
+        conversationId: 'conv b',
+        pieces: [{ fichier: '170-0-capture.png', nom: 'capture.png', type: 'image/png', taille: 2048 }],
+      }),
+    );
+    expect(api.pieces).toHaveLength(1);
+    expect(api.pieces[0]?.nom).toBe('capture.png');
+    expect(api.pieces[0]?.taille).toBe(2048);
+    // Le navigateur ne peut rien faire d'un chemin sur le Pi — et le publier
+    // révélerait l'arborescence du control plane.
+    expect(api.pieces[0]?.url).toBe('/api/harness/orchestrator/conversations/conv%20b/pieces/170-0-capture.png');
+  });
+
+  test('un message sans pièce rend un tableau vide, jamais `undefined`', () => {
+    // `undefined` obligerait chaque appelant du front à se garder — et le
+    // premier qui oublierait planterait le rendu du fil entier.
+    expect(versEvenementApi(evenement()).pieces).toEqual([]);
   });
 
   test('un résultat pas encore revenu reste `null`, jamais une chaîne vide', () => {

@@ -21,7 +21,7 @@ control plane est mort sur le Pi.
 
 import httpx
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from loguru import logger
 
 from config import HARNESS_API_URL
@@ -50,6 +50,28 @@ def build_router(check_session) -> APIRouter:
                 # de croire à un simple PC éteint.
                 "message": "Le control plane du harness ne répond pas sur le Pi — ce n'est pas un PC éteint.",
             },
+        )
+
+    # `☠` DÉCLARÉE AVANT le relais générique, sinon jamais atteinte : FastAPI
+    # résout dans l'ordre de déclaration et `{chemin:path}` avale tout. Cette
+    # route est la seule du harness qui rende des OCTETS — une pièce jointe
+    # passée par `reponse.json()` ferait exploser le relais sur un PNG.
+    @router.get("/api/harness/orchestrator/conversations/{cid}/pieces/{fichier}")
+    async def relayer_piece_jointe(
+        cid: str, fichier: str, _: str = Depends(check_session)
+    ):
+        url = f"{HARNESS_API_URL}/api/harness/orchestrator/conversations/{cid}/pieces/{fichier}"
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUT_S) as client:
+                reponse = await client.get(url)
+        except httpx.RequestError as erreur:
+            return await _relayer_injoignable(url, erreur)
+        if reponse.status_code != 200:
+            return JSONResponse(status_code=reponse.status_code, content=reponse.json())
+        return Response(
+            content=reponse.content,
+            media_type=reponse.headers.get("content-type", "application/octet-stream"),
+            headers={"cache-control": "private, max-age=86400"},
         )
 
     @router.get("/api/harness/{chemin:path}")

@@ -48,6 +48,11 @@ import {
   type PortConversations,
   type PortMandats,
 } from './vue-conversations.ts';
+import {
+  cheminPieceRelue,
+  ErreurPieceJointe,
+  type PieceJointeEntrante,
+} from '../pieces-jointes/index.ts';
 import { apiWebLogger } from './logger.ts';
 
 const log = apiWebLogger;
@@ -100,6 +105,12 @@ export interface DependancesApiWeb {
   readonly orchestrateurContexteRatio?: () => number | null;
   readonly maintenant?: () => number;
   readonly plafondRelances?: number;
+  /**
+   * Racine sur disque des pièces jointes (migration 24). Absente ⇒ la route de
+   * relecture répond 501, et le gestionnaire refuse les envois qui en portent —
+   * jamais une pièce acceptée puis introuvable à l'affichage.
+   */
+  readonly racinePiecesJointes?: string;
 }
 
 /**
@@ -339,6 +350,52 @@ async function lireCorps(req: Request): Promise<Record<string, unknown>> {
 }
 
 /**
+ * Extrait les pièces jointes du corps JSON. `☠` Aucune validation ici — ni type,
+ * ni taille, ni contenu : c'est le domaine `pieces-jointes` qui refuse, en un
+ * seul endroit, avec le message qui nomme les valeurs acceptées. Dupliquer un
+ * bout de règle ici créerait deux vérités sur ce qui est accepté.
+ */
+function lirePiecesDuCorps(corps: Record<string, unknown>): readonly PieceJointeEntrante[] {
+  const brut = corps['pieces'];
+  if (!Array.isArray(brut)) return [];
+  return brut.map((p: unknown) => {
+    const objet = (p !== null && typeof p === 'object' ? p : {}) as Record<string, unknown>;
+    return { nom: objet['nom'], type: objet['type'], donneesBase64: objet['donneesBase64'] };
+  });
+}
+
+/**
+ * Sert une pièce jointe à l'interface. `☠` Rendue en BINAIRE avec son type :
+ * c'est la seule route non-JSON du control plane, et `pi-web` la relaie telle
+ * quelle. Sans elle, l'interface ne pourrait afficher que des noms de fichiers.
+ */
+async function servirPieceJointe(
+  chemin: string,
+  deps: DependancesApiWeb,
+): Promise<Response | null> {
+  const m = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/pieces\/([^/]+)$/);
+  if (m?.[1] === undefined || m[2] === undefined) return null;
+  if (deps.racinePiecesJointes === undefined) {
+    throw new ErreurApi(501, 'pièces jointes non configurées sur ce déploiement (CCREMOTE_PI_PIECES_JOINTES)');
+  }
+  let fichier: string;
+  try {
+    fichier = cheminPieceRelue(deps.racinePiecesJointes, decodeURIComponent(m[1]), decodeURIComponent(m[2]));
+  } catch (erreur) {
+    throw requeteInvalide(erreur instanceof Error ? erreur.message : 'pièce invalide');
+  }
+  const contenu = Bun.file(fichier);
+  if (!(await contenu.exists())) throw introuvable('pièce jointe');
+  return new Response(contenu, {
+    headers: {
+      'content-type': contenu.type,
+      // Le fil est relu souvent ; la pièce, elle, ne change jamais après écriture.
+      'cache-control': 'private, max-age=86400',
+    },
+  });
+}
+
+/**
  * Écritures sur les conversations. `☠` Ne dépendent PAS du PC — elles touchent la
  * session orchestrateur sur le Pi. Traitées AVANT le garde `pc` du routage
  * d'ordres, sinon un déploiement sans PC les refuserait à tort. `null` = pas une
@@ -484,7 +541,12 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
   if (message?.[1] !== undefined) {
     const corps = await lireCorps(req);
     const texte = corps['text'];
-    if (typeof texte !== 'string' || texte.trim().length === 0) throw requeteInvalide('message vide');
+    const pieces = lirePiecesDuCorps(corps);
+    // `☠` Un message vide EST valide s'il porte une capture : coller une image
+    // sans écrire un mot est le geste le plus naturel du composeur.
+    if (typeof texte !== 'string' || (texte.trim().length === 0 && pieces.length === 0)) {
+      throw requeteInvalide('message vide');
+    }
     // `☠` Modèle et effort étaient reçus ici et JETÉS : l'interface proposait un
     // réglage sans le moindre effet, et la session tournait sur sa constante.
     const modele = typeof corps['model'] === 'string' ? corps['model'] : undefined;
@@ -492,8 +554,21 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     // `☠` NE bloque pas jusqu'à la réponse : `envoyer` enfile puis rend la main.
     // La réponse remonte par le streaming (GET .../events). Un POST bloquant
     // jusqu'au `result` immobiliserait le relais et Cloudflare le couperait.
-    await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort });
-    return { ok: true, effet: 'message envoyé — la réponse arrive en streaming' };
+    try {
+      await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort }, pieces);
+    } catch (erreur) {
+      // `☠` 400 et le message TEL QUEL : il nomme les types acceptés et les
+      // plafonds. Le remplacer par « requête invalide » obligerait l'opérateur à
+      // deviner ce que l'interface vient de refuser.
+      if (erreur instanceof ErreurPieceJointe) throw requeteInvalide(erreur.message);
+      throw erreur;
+    }
+    return {
+      ok: true,
+      effet: pieces.length === 0
+        ? 'message envoyé — la réponse arrive en streaming'
+        : `message envoyé avec ${pieces.length} pièce${pieces.length > 1 ? 's' : ''} jointe${pieces.length > 1 ? 's' : ''}`,
+    };
   }
 
   const compact = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/compact$/);
@@ -613,6 +688,10 @@ export function demarrerServeurApiWeb(options: OptionsServeurApiWeb): ServeurApi
           const releves = (await options.metriquesMachines?.()) ?? [];
           return json(enveloppe(options.pcEnLigne(), releves));
         }
+        // `☠` Avant le routeur JSON : cette route rend des octets, pas une
+        // enveloppe. La faire passer par `router()` la sérialiserait en JSON.
+        const piece = await servirPieceJointe(chemin, options);
+        if (piece !== null) return piece;
         return json(router(chemin, url, options));
       } catch (erreur) {
         if (erreur instanceof ErreurApi) return json({ error: erreur.message }, erreur.statut);

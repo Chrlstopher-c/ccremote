@@ -41,9 +41,14 @@ ssh $SSH_OPTS "$TARGET" "mkdir -p $REMOTE_DIR"
 # `.db` lui-même). `--delete` les effaçait donc à CHAQUE déploiement : une
 # conversation créée puis un redéploiement, et elle avait disparu. Le motif doit
 # couvrir les fichiers annexes de SQLite, pas seulement l'extension nue.
+# ☠ MÊME PIÈGE, AUTRE DOSSIER (04/08) : `pieces-jointes/` vit sous le cwd de
+# l'orchestrateur, c'est-à-dire SOUS $REMOTE_DIR, et n'est pas dans le dépôt.
+# Sans cette exclusion, `--delete` effacerait toutes les captures jointes aux
+# messages à chaque déploiement — les vignettes des anciens fils deviendraient
+# des 404, et le fichier que l'orchestrateur doit relire aurait disparu.
 rsync -az --delete \
   --exclude node_modules --exclude '*.db' --exclude '*.db-wal' --exclude '*.db-shm' \
-  --exclude '.env' --exclude 'logs' \
+  --exclude '.env' --exclude 'logs' --exclude 'pieces-jointes' \
   -e "ssh $SSH_OPTS" \
   /mnt/projects/ccremote/harness/ "$TARGET:$REMOTE_DIR/"
 

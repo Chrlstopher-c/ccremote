@@ -233,10 +233,15 @@
         <div class="py-4 flex flex-col gap-4" id="hChatBody"></div>
       </div>
       <div class="orch-composer">
-        <div class="composer-shell">
-          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe…"></textarea>
+        <div class="composer-shell" id="hComposerShell">
+          <div class="pj-file" id="hPiecesFile" style="display: none;"></div>
+          <textarea id="hOrchInput" rows="1" placeholder="Demandez à l'orchestrateur — lancer une mission, faire le point, arrêter une équipe… (collez une capture avec ⌘/Ctrl+V)"></textarea>
           <div class="composer-foot">
             <div class="composer-settings">
+              <button id="hBtnPieceJointe" class="pill-btn" type="button" title="Joindre un fichier — ou collez une capture (⌘/Ctrl+V), ou déposez-la ici">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <input id="hInputPieceJointe" type="file" multiple accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json" style="display: none;">
               <label class="pill-select" title="Modèle de l'orchestrateur">
                 <select id="hSelModel"></select>
                 <svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>

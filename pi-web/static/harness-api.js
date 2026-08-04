@@ -143,7 +143,7 @@ const HarnessAPI = (() => {
      * le sélecteur de fil et doit rester instantané.
      */
     async getMachineMetrics() { return lireReel('/machines/metriques'); },
-    async sendConversationMessage(id, text, choix) {
+    async sendConversationMessage(id, text, choix, pieces) {
       // ☠ NON bloquant : le serveur enfile puis rend la main, la réponse arrive
       // en streaming via getConversationEvents. On ne fabrique jamais de réponse.
       // ☠ `model`/`effort` n'étaient PAS transmis sur cette route : le sélecteur
@@ -153,6 +153,9 @@ const HarnessAPI = (() => {
         text,
         model: choix?.model,
         effort: choix?.effort,
+        // ☠ Absentes plutôt que `[]` : le corps d'un message sans capture ne
+        // grossit pas d'un champ vide, et la route distingue les deux cas.
+        ...(pieces !== undefined && pieces.length > 0 ? { pieces } : {}),
       });
     },
     async renameConversation(id, titre) {

@@ -203,6 +203,34 @@ la démo — en réel, streaming SSE probable, sur le même modèle que `/api/ag
 `☠` `ultracode` a une portée **session uniquement** — jamais persisté, à réinitialiser à chaque
 rechargement/reconnexion (H-71.1).
 
+### Pièces jointes d'un message (migration 24, 04/08)
+
+`POST /api/harness/orchestrator/conversations/{id}/message` accepte un champ
+`pieces: [{ nom, type, donneesBase64 }]` en plus de `text`. Types acceptés : `image/png`,
+`image/jpeg`, `image/gif`, `image/webp`, `application/pdf`, `text/plain`, `text/markdown`,
+`text/csv`, `application/json`. Plafonds : 6 fichiers, 10 Mo par fichier, 25 Mo par message.
+
+`☠` **Un `text` vide est valide s'il y a au moins une pièce** — coller une capture sans écrire un
+mot est le geste normal du composeur.
+
+`☠` Le refus vient du serveur et son **message est affichable tel quel** : il nomme les types
+acceptés et les plafonds. Le contrôle côté navigateur n'est qu'un miroir, pour ne pas faire monter
+20 Mo qui seront refusés.
+
+`☠` **L'orchestrateur ne reçoit pas l'image, il reçoit un chemin** (mesuré le 04/08 : son outil
+`Read` rend le contenu visuel d'un PNG). Le fichier est écrit sous
+`<cwd de l'orchestrateur>/pieces-jointes/<conversation>/`, et le message qui part au SDK porte le
+chemin + la consigne de lecture. Un fichier sur disque survit à la compaction ; un bloc image dans
+un contexte compacté, non.
+
+Chaque évènement `operateur` rend `pieces: [{ nom, type, taille, url }]`.
+
+### `GET /api/harness/orchestrator/conversations/{id}/pieces/{fichier}`
+**Seule route non-JSON du control plane** : elle rend les octets avec leur `content-type`, et
+`pi-web` la relaie telle quelle (route dédiée déclarée AVANT le relais générique, sinon
+`{chemin:path}` l'avale). `400` sur toute traversée de chemin — refusée, jamais « nettoyée » ;
+`404` sur pièce inconnue ; `501` si aucune racine n'est configurée.
+
 ### `POST /api/harness/orchestrator/propose-mandate` → `HarnessAPI.proposeMandate(fields)`
 `☠ H-61, non négociable` : cet endpoint **ne crée jamais d'équipe**. Il retourne
 `{ id, ...fields, status: 'pending' }` — une proposition, `effet: 'differe'` au sens de A.2.2.

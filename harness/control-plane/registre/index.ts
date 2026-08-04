@@ -35,6 +35,7 @@ export type {
   Lot,
   Mission,
   Notification,
+  PieceJointeMessage,
   Rappel,
   EtatRappel,
   TypeNotification,

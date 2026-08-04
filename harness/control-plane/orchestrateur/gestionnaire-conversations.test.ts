@@ -9,13 +9,14 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
 import type { PoigneeOrchestrateur } from './processus/index.ts';
 import { GestionnaireConversations } from './gestionnaire-conversations.ts';
+import { ErreurPieceJointe } from '../pieces-jointes/index.ts';
 
 let repertoire: string;
 let registre: Registre;
@@ -171,5 +172,122 @@ describe('GestionnaireConversations', () => {
     const gest = new GestionnaireConversations(registre, async () => { appels += 1; return sess.poignee; });
     await expect(gest.envoyer('inexistant', 'x')).rejects.toThrow();
     expect(appels).toBe(0);
+  });
+});
+
+/**
+ * `☠` Ces tests partent du chemin RÉELLEMENT emprunté par un message de
+ * l'interface — `envoyer`, jusqu'au texte reçu par le SDK. C'est la leçon du
+ * 03/08 : une règle écrite dans un objet qui n'alimente pas le systemPrompt
+ * paraît livrée et ne l'est pas. Ici, ce qui compte n'est pas que le fichier
+ * existe, c'est que le CHEMIN arrive dans ce que le modèle lit.
+ */
+describe('GestionnaireConversations — pièces jointes (migration 24)', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x2a]).toString('base64');
+  const piece = (nom = 'capture.png'): { nom: string; type: string; donneesBase64: string } =>
+    ({ nom, type: 'image/png', donneesBase64: PNG });
+
+  function gestionnaireAvecPieces(sess: FausseSession): { gest: GestionnaireConversations; racine: string } {
+    const racine = join(repertoire, 'pieces');
+    const gest = new GestionnaireConversations(
+      registre,
+      async () => sess.poignee,
+      undefined,
+      undefined,
+      racine,
+    );
+    return { gest, racine };
+  }
+
+  test('le CHEMIN de la pièce et la consigne de lecture arrivent au SDK', async () => {
+    const sess = fausseSession('sess-1');
+    const { gest, racine } = gestionnaireAvecPieces(sess);
+    const conv = gest.creer('Fil');
+    await gest.envoyer(conv.id, 'regarde ça', {}, [piece()]);
+
+    const envoye = sess.envoyes[0] ?? '';
+    expect(envoye).toContain('regarde ça');
+    expect(envoye).toContain(racine);
+    expect(envoye).toContain('capture.png');
+    // Sans la consigne, un chemin dans un message se lit comme une référence
+    // documentaire — et la pièce reste invisible au modèle.
+    expect(envoye).toContain('Read');
+  });
+
+  test('le fichier est réellement posé sur le disque', async () => {
+    const sess = fausseSession('sess-1');
+    const { gest, racine } = gestionnaireAvecPieces(sess);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, 'x', {}, [piece()]);
+
+    const evt = registre.conversations.evenements(conv.id)[0];
+    const fichier = evt?.pieces[0]?.fichier ?? '';
+    expect(fichier).not.toBe('');
+    expect(existsSync(join(racine, conv.id, fichier))).toBe(true);
+  });
+
+  test('le registre garde le texte EXACT de l’opérateur, jamais le bloc des chemins (H-66)', async () => {
+    const sess = fausseSession('sess-1');
+    const { gest } = gestionnaireAvecPieces(sess);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, 'regarde ça', {}, [piece()]);
+
+    const evt = registre.conversations.evenements(conv.id)[0];
+    expect(evt?.contenu).toBe('regarde ça');
+    expect(evt?.pieces).toHaveLength(1);
+    expect(evt?.pieces[0]?.nom).toBe('capture.png');
+    expect(evt?.pieces[0]?.type).toBe('image/png');
+  });
+
+  test('un message SANS texte mais AVEC une capture passe', async () => {
+    const sess = fausseSession('sess-1');
+    const { gest } = gestionnaireAvecPieces(sess);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, '', {}, [piece()]);
+    expect(sess.envoyes[0]).toContain('capture.png');
+  });
+
+  test('un message vide SANS pièce reste refusé', async () => {
+    const sess = fausseSession('sess-1');
+    const { gest } = gestionnaireAvecPieces(sess);
+    const conv = gest.creer();
+    await expect(gest.envoyer(conv.id, '   ')).rejects.toThrow(RangeError);
+  });
+
+  test('une pièce refusée n’écrit NI fichier NI événement, et ne démarre pas la session', async () => {
+    const sess = fausseSession('sess-1');
+    let appels = 0;
+    const racine = join(repertoire, 'pieces');
+    const gest = new GestionnaireConversations(
+      registre,
+      async () => { appels += 1; return sess.poignee; },
+      undefined,
+      undefined,
+      racine,
+    );
+    const conv = gest.creer();
+    await expect(
+      gest.envoyer(conv.id, 'tiens', {}, [{ nom: 'x.exe', type: 'application/x-msdownload', donneesBase64: PNG }]),
+    ).rejects.toThrow(ErreurPieceJointe);
+    expect(appels).toBe(0);
+    expect(registre.conversations.evenements(conv.id)).toHaveLength(0);
+    expect(existsSync(racine)).toBe(false);
+  });
+
+  test('sans racine configurée, une pièce est REFUSÉE — jamais acceptée puis jetée', async () => {
+    const sess = fausseSession('sess-1');
+    const gest = new GestionnaireConversations(registre, async () => sess.poignee);
+    const conv = gest.creer();
+    await expect(gest.envoyer(conv.id, 'tiens', {}, [piece()])).rejects.toThrow(/racine de stockage/);
+    expect(registre.conversations.evenements(conv.id)).toHaveLength(0);
+  });
+
+  test('un message sans pièce ne porte aucun bloc parasite', async () => {
+    const sess = fausseSession('sess-1');
+    const { gest } = gestionnaireAvecPieces(sess);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, 'juste du texte');
+    expect(sess.envoyes[0]).toBe('juste du texte');
+    expect(registre.conversations.evenements(conv.id)[0]?.pieces).toEqual([]);
   });
 });

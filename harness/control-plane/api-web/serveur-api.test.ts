@@ -11,6 +11,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { demarrerServeurApiWeb, type ServeurApiWeb } from './index.ts';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
 import { ErreurMandatDejaTranche } from '../orchestrateur/dispatch-mandat.ts';
+import { ErreurPieceJointe } from '../pieces-jointes/index.ts';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 let registre: Registre;
 let serveur: ServeurApiWeb | null = null;
@@ -386,6 +390,144 @@ describe('API web — modèle et raisonnement d’une conversation (23/07)', () 
     });
     expect(rep.status).toBe(200);
     expect(recus[0]?.choix).toEqual({ modele: 'claude-sonnet-5', effort: 'medium' });
+  });
+});
+
+/**
+ * `☠` Banc de CÂBLAGE, pas de fonction : le domaine `pieces-jointes` a ses
+ * propres tests. Ce qui se prouve ici, c'est que le corps HTTP arrive jusqu'au
+ * gestionnaire et que la pièce ressort en OCTETS — la seule route non-JSON du
+ * control plane, donc la plus facile à casser sans que rien ne le dise.
+ */
+describe('API web — pièces jointes d’un message (migration 24)', () => {
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x7f]).toString('base64');
+  let racine: string;
+
+  function conversationsFactices(recus: { pieces: unknown }[]): never {
+    return {
+      lister: () => [],
+      detail: () => null,
+      evenements: () => null,
+      creer: () => ({ id: 'c1', titre: 't', creeA: MAINTENANT, majA: MAINTENANT }),
+      envoyer: async (_id: string, _texte: string, _choix?: unknown, pieces?: unknown) => {
+        recus.push({ pieces });
+      },
+      renommer: async () => {},
+      archiver: async () => {},
+      compacter: async () => ({ compacte: false, detail: 'rien' }),
+    } as never;
+  }
+
+  beforeEach(() => {
+    racine = mkdtempSync(join(tmpdir(), 'api-pieces-'));
+  });
+
+  afterEach(() => {
+    rmSync(racine, { recursive: true, force: true });
+  });
+
+  test('☠ les pièces du corps arrivent jusqu’au gestionnaire', async () => {
+    const recus: { pieces: unknown }[] = [];
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      racinePiecesJointes: racine,
+      conversations: conversationsFactices(recus),
+    });
+    const rep = await fetch(`http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations/c1/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'regarde', pieces: [{ nom: 'c.png', type: 'image/png', donneesBase64: PNG }] }),
+    });
+    expect(rep.status).toBe(200);
+    expect(recus[0]?.pieces).toEqual([{ nom: 'c.png', type: 'image/png', donneesBase64: PNG }]);
+  });
+
+  test('un message SANS texte mais AVEC pièce est accepté', async () => {
+    const recus: { pieces: unknown }[] = [];
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      racinePiecesJointes: racine,
+      conversations: conversationsFactices(recus),
+    });
+    const rep = await fetch(`http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations/c1/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '', pieces: [{ nom: 'c.png', type: 'image/png', donneesBase64: PNG }] }),
+    });
+    expect(rep.status).toBe(200);
+  });
+
+  test('un refus du domaine sort en 400 avec le message QUI NOMME les types acceptés', async () => {
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      racinePiecesJointes: racine,
+      conversations: {
+        lister: () => [],
+        detail: () => null,
+        evenements: () => null,
+        creer: () => ({ id: 'c1', titre: 't', creeA: MAINTENANT, majA: MAINTENANT }),
+        envoyer: async (): Promise<void> => {
+          throw new ErreurPieceJointe('pièce « x.exe » refusée — types acceptés : image/png, application/pdf');
+        },
+        renommer: async () => {},
+        archiver: async () => {},
+        compacter: async () => ({ compacte: false, detail: 'rien' }),
+      } as never,
+    });
+    const rep = await fetch(`http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations/c1/message`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'x', pieces: [{ nom: 'x.exe', type: 'application/x-msdownload', donneesBase64: PNG }] }),
+    });
+    expect(rep.status).toBe(400);
+    // L'opérateur doit lire CE qui a été refusé, pas « requête invalide ».
+    expect(String((await rep.json() as { error: string }).error)).toContain('types acceptés');
+  });
+
+  test('la pièce est servie en OCTETS avec son type, pas en JSON', async () => {
+    mkdirSync(join(racine, 'c1'), { recursive: true });
+    writeFileSync(join(racine, 'c1', 'a.png'), Buffer.from(PNG, 'base64'));
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      racinePiecesJointes: racine,
+    });
+    const rep = await fetch(`http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations/c1/pieces/a.png`);
+    expect(rep.status).toBe(200);
+    expect(rep.headers.get('content-type')).toContain('image/png');
+    expect(new Uint8Array(await rep.arrayBuffer())[0]).toBe(0x89);
+  });
+
+  test('une traversée de chemin est refusée, et une pièce inconnue est un vrai 404', async () => {
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      racinePiecesJointes: racine,
+    });
+    const base = `http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations`;
+    expect((await fetch(`${base}/c1/pieces/${encodeURIComponent('../../etc/passwd')}`)).status).toBe(400);
+    expect((await fetch(`${base}/c1/pieces/fantome.png`)).status).toBe(404);
+  });
+
+  test('sans racine configurée, la route le DIT (501) au lieu de rendre un vide', async () => {
+    serveur = demarrerServeurApiWeb({ port: 0, registre, pcEnLigne: () => pcOnline, maintenant: () => MAINTENANT });
+    const rep = await fetch(
+      `http://127.0.0.1:${serveur.port}/api/harness/orchestrator/conversations/c1/pieces/a.png`,
+    );
+    expect(rep.status).toBe(501);
   });
 });
 

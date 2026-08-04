@@ -31,6 +31,21 @@ export interface EvenementApi {
    */
   readonly detail: string | null;
   readonly resultat: string | null;
+  /**
+   * Pièces jointes du message opérateur (migration 24) — vide partout ailleurs.
+   *
+   * `☠` `url` est servie par le control plane et relayée par pi-web, qui porte
+   * l'authentification : jamais un chemin de fichier, que le navigateur ne
+   * pourrait pas ouvrir et qui révélerait l'arborescence du Pi.
+   */
+  readonly pieces: readonly PieceJointeApi[];
+}
+
+export interface PieceJointeApi {
+  readonly nom: string;
+  readonly type: string;
+  readonly taille: number;
+  readonly url: string;
 }
 
 export interface ConversationApi {
@@ -123,8 +138,19 @@ export interface PortConversations {
    * deux valeurs étaient reçues par la route puis jetées : le sélecteur de
    * l'interface n'avait aucun effet sur la session (23/07).
    */
-  envoyer(id: string, texte: string, choix?: { readonly modele?: string; readonly effort?: string }): Promise<void>;
+  envoyer(
+    id: string,
+    texte: string,
+    choix?: { readonly modele?: string; readonly effort?: string },
+    /** Pièces jointes brutes du navigateur (migration 24) — validées côté domaine, jamais ici. */
+    pieces?: readonly { readonly nom: unknown; readonly type: unknown; readonly donneesBase64: unknown }[],
+  ): Promise<void>;
   compacter(id: string): Promise<{ readonly compacte: boolean; readonly detail: string }>;
+}
+
+/** URL de relecture d'une pièce — le seul endroit qui connaît la forme de cette route. */
+export function urlPieceJointe(conversationId: string, fichier: string): string {
+  return `/api/harness/orchestrator/conversations/${encodeURIComponent(conversationId)}/pieces/${encodeURIComponent(fichier)}`;
 }
 
 export function versEvenementApi(ev: EvenementConversation): EvenementApi {
@@ -137,6 +163,12 @@ export function versEvenementApi(ev: EvenementConversation): EvenementApi {
     effort: ev.effort,
     detail: ev.detail,
     resultat: ev.resultat,
+    pieces: ev.pieces.map((p) => ({
+      nom: p.nom,
+      type: p.type,
+      taille: p.taille,
+      url: urlPieceJointe(ev.conversationId, p.fichier),
+    })),
   };
 }
 

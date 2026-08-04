@@ -41,6 +41,8 @@ async function main(): Promise<void> {
     : envOptionnel('CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR', '/tmp/ccremote-incidents-inutilises');
   const repertoireProjets = envObligatoire('CCREMOTE_PI_REPERTOIRE_PROJETS');
   const cwdOrchestrateur = envOptionnel('CCREMOTE_PI_CWD_ORCHESTRATEUR', process.cwd());
+  // Absente ⇒ `<cwd de l'orchestrateur>/pieces-jointes`, choisi par l'assembleur.
+  const racinePiecesJointes = process.env['CCREMOTE_PI_PIECES_JOINTES'];
   const configDirOrchestrateur = process.env['CCREMOTE_PI_CONFIG_DIR_ORCHESTRATEUR'];
   // H-75 : le Pi héberge le lien Pi↔PC (inversion — plus de dial-out vers le PC).
   const portLienPc = envNombreOptionnel('CCREMOTE_LIEN_PORT', 8721);
@@ -61,6 +63,7 @@ async function main(): Promise<void> {
     cheminIncidentsOrchestrateur,
     repertoireProjets,
     cwdOrchestrateur,
+    ...(racinePiecesJointes === undefined ? {} : { racinePiecesJointes }),
     configDirOrchestrateur,
     configDirsOrchestrateur: (process.env['CCREMOTE_PI_CONFIG_DIRS_ORCHESTRATEUR'] ?? '')
       .split(',')

@@ -111,6 +111,16 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `registre.test.ts` — tests d'intégration du point d'entrée `Registre`
 - `index.ts` — interface publique + `ouvrirRegistre()`
 
+### `pieces-jointes/` — fichiers joints à un message opérateur, migration 24 (2026-08-04)
+
+- `index.ts` — interface publique du domaine
+- `pieces-jointes.ts` — validation PURE (types, plafonds, signature) puis écriture sur disque, et
+  le bloc de texte qui donne à l'orchestrateur le chemin + la consigne `Read`. `☠` Il reçoit un
+  CHEMIN, jamais l'image : mesuré le 04/08, son `Read` rend le contenu visuel d'un PNG, et un
+  fichier survit à la compaction là où un bloc image dans le contexte ne survit pas.
+- `pieces-jointes.test.ts` — refus avant toute écriture, traversée de chemin refusée (jamais
+  « nettoyée »), extension dérivée du type validé et non du nom fourni
+
 ### `notifications/` — canal asynchrone, migration 14 (2026-08-01)
 
 - `index.ts` — interface publique du domaine

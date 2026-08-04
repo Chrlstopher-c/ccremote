@@ -26,6 +26,14 @@ import type { Conversation, EvenementConversation, Registre } from '../registre/
 import type { StockageIdentite } from './processus/index.ts';
 import type { PoigneeOrchestrateur } from './processus/index.ts';
 import { CollecteurConversation, type BlocPartiel } from './collecteur-conversation.ts';
+import {
+  decrirePiecesPourModele,
+  ecrirePieces,
+  ErreurPieceJointe,
+  validerPieces,
+  type PieceJointeEnregistree,
+  type PieceJointeEntrante,
+} from '../pieces-jointes/index.ts';
 import { consigneNommage, normaliserTitre, TITRE_PAR_DEFAUT, type SourceTitre } from './titre-fil.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
@@ -207,6 +215,12 @@ export class GestionnaireConversations {
      * donc jamais `#assurerSession` en cascade.
      */
     private readonly rattraperNotifications?: (conversationId: string) => Promise<unknown>,
+    /**
+     * Racine sur disque des pièces jointes (migration 24). `☠` Absente ⇒ un
+     * message AVEC pièces est REFUSÉ, jamais accepté puis amputé : l'écran
+     * montrerait une capture transmise que l'orchestrateur n'a jamais reçue.
+     */
+    private readonly racinePiecesJointes?: string,
   ) {}
 
   listerConversations(): readonly EntreeListeConversation[] {
@@ -287,11 +301,31 @@ export class GestionnaireConversations {
    * réponse : `envoyerOperateur` ne fait qu'enfiler — la réponse remonte par le
    * streaming (événements). L'appelant HTTP rend la main tout de suite.
    */
-  async envoyer(id: string, texte: string, choix: ChoixModele = {}): Promise<void> {
+  async envoyer(
+    id: string,
+    texte: string,
+    choix: ChoixModele = {},
+    pieces: readonly PieceJointeEntrante[] = [],
+  ): Promise<void> {
     const propre = texte.trim();
-    if (propre.length === 0) throw new RangeError('message vide');
+    // `☠` Un message SANS texte mais AVEC une capture est légitime : coller une
+    // image et n'écrire aucun mot est le geste le plus naturel de l'interface.
+    if (propre.length === 0 && pieces.length === 0) throw new RangeError('message vide');
     const conv = this.registre.conversations.lire(id);
     if (conv === null) throw new ConversationIntrouvableError(id);
+    // `☠` Validation AVANT toute écriture — base comme disque : un refus doit
+    // laisser l'état exactement comme il était (code-standards).
+    const validees = pieces.length === 0 ? [] : validerPieces(pieces);
+    if (validees.length > 0 && this.racinePiecesJointes === undefined) {
+      throw new ErreurPieceJointe(
+        'pièces jointes refusées : aucune racine de stockage configurée sur ce ' +
+          'déploiement (CCREMOTE_PI_PIECES_JOINTES)',
+      );
+    }
+    const ecrites =
+      validees.length === 0 || this.racinePiecesJointes === undefined
+        ? []
+        : await ecrirePieces(this.racinePiecesJointes, id, validees);
 
     // `☠` Le choix de l'opérateur n'était appliqué NULLE PART : l'UI envoyait
     // bien `model` et `effort`, la route les jetait, et la session tournait sur
@@ -307,6 +341,9 @@ export class GestionnaireConversations {
       contenu: propre,
       modele,
       effort,
+      // `☠` Le descriptif seulement, et sans le chemin absolu : l'interface a
+      // besoin du nom, du type et de la taille ; le chemin se recalcule.
+      pieces: ecrites.map((p) => ({ fichier: p.fichier, nom: p.nom, type: p.type, taille: p.taille })),
     });
     const session = await this.#assurerSession(conv);
     // `☠` AVANT le message de Chris, jamais après : l'orchestrateur doit savoir
@@ -320,7 +357,23 @@ export class GestionnaireConversations {
     }
     session.collecteur.marquerEnvoi();
     session.collecteur.poserModeleEffort(modele, effort);
-    await session.poignee.entree.envoyerOperateur(this.#avecConsigneNommage(id, conv, propre));
+    await session.poignee.entree.envoyerOperateur(
+      this.#avecConsigneNommage(id, conv, this.#avecPieces(propre, ecrites)),
+    );
+  }
+
+  /**
+   * Joint au texte le bloc des pièces — chemins réels + consigne de lecture.
+   *
+   * `☠` Ce bloc part au SDK et JAMAIS au registre : l'événement persisté garde
+   * le texte exact de Chris (H-66, même raison que la consigne de nommage).
+   * L'écran lui montre ses pièces comme vignettes, pas comme une liste de
+   * chemins qu'il n'a pas tapée.
+   */
+  #avecPieces(propre: string, ecrites: readonly PieceJointeEnregistree[]): string {
+    const bloc = decrirePiecesPourModele(ecrites);
+    if (bloc === '') return propre;
+    return propre.length === 0 ? bloc : `${propre}\n\n${bloc}`;
   }
 
   /**

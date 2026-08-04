@@ -718,6 +718,22 @@ ALTER TABLE mission ADD COLUMN git_dernier_commit TEXT;
 ALTER TABLE mission ADD COLUMN git_releve_a INTEGER;
 `;
 
+/**
+ * Migration 24 — pièces jointes d'un message opérateur (2026-08-04).
+ *
+ * `☠` Les fichiers eux-mêmes ne sont PAS en base : seul leur descriptif JSON
+ * l'est (nom d'origine, type, taille, nom du fichier écrit). Stocker les octets
+ * ferait grossir le registre d'une capture par message — plusieurs Mo chacune,
+ * relus intégralement à chaque ouverture de fil.
+ *
+ * `☠` Colonne portée par l'ÉVÉNEMENT et non par la conversation : une pièce
+ * appartient au message qu'elle accompagne. Sur la conversation, elle
+ * ressurgirait sur des messages qui ne l'ont jamais eue.
+ */
+const MIGRATION_24 = `
+ALTER TABLE conversation_evenement ADD COLUMN pieces TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -742,6 +758,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 21, nom: 'resultats-outils-conversation', sql: MIGRATION_21 },
   { version: 22, nom: 'machine-de-travail', sql: MIGRATION_22 },
   { version: 23, nom: 'constat-git-mission', sql: MIGRATION_23 },
+  { version: 24, nom: 'pieces-jointes-message', sql: MIGRATION_24 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

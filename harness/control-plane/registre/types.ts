@@ -430,6 +430,27 @@ export interface EvenementConversation {
   readonly toolUseId: string | null;
   readonly detail: string | null;
   readonly resultat: string | null;
+  /**
+   * Pièces jointes du message opérateur (migration 24) — vide partout ailleurs.
+   *
+   * `☠` Descriptif seulement : les octets vivent sur le disque du Pi, pas en
+   * base. Et pas de chemin absolu ici — il se recalcule depuis la racine
+   * courante ; figé en base, il deviendrait faux le jour où la racine change.
+   */
+  readonly pieces: readonly PieceJointeMessage[];
+}
+
+/**
+ * Une pièce jointe telle que le registre la connaît : ce qu'il faut pour la
+ * retrouver sur le disque (`fichier`) et pour l'afficher (`nom`, `type`,
+ * `taille`). `nom` est le nom d'ORIGINE — jamais utilisé pour construire un
+ * chemin, il vient du navigateur.
+ */
+export interface PieceJointeMessage {
+  readonly fichier: string;
+  readonly nom: string;
+  readonly type: string;
+  readonly taille: number;
 }
 
 /**

@@ -53,6 +53,7 @@ import {
   type ConstruireSessionConversation,
 } from '../../control-plane/orchestrateur/gestionnaire-conversations.ts';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { dispatcherMandat, ErreurMandatDejaTranche } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
 import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
 import { PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
@@ -107,6 +108,13 @@ export interface OptionsAssemblageControlPlanePi {
   readonly cheminIncidentsOrchestrateur: string;
   readonly repertoireProjets: string;
   readonly cwdOrchestrateur: string;
+  /**
+   * Racine des pièces jointes des messages (migration 24). `☠` Par défaut SOUS
+   * le cwd de l'orchestrateur : c'est ce qui garantit que son outil `Read`
+   * atteint le fichier. Une racine ailleurs marcherait aussi, mais dépendrait
+   * de règles de permission qu'aucun test ne couvre.
+   */
+  readonly racinePiecesJointes?: string;
   /** Port d'écoute du lien Pi↔PC (H-75 — le Pi héberge). */
   readonly portLienPc: number;
   readonly hostnameLienPc?: string;
@@ -443,6 +451,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     return { ...base, dispatch: { etat: 'parti', missionId: issue.missionId, detail: issue.detail } };
   }
 
+  // `☠` Sous le cwd de l'orchestrateur par défaut : son `Read` y accède sans
+  // dépendre d'une règle de permission qu'aucun test ne couvre (mesuré le 04/08
+  // — `Read` sur un PNG rend bien son contenu visuel).
+  const racinePiecesJointes = options.racinePiecesJointes ?? join(options.cwdOrchestrateur, 'pieces-jointes');
+
   let gestionnaireConversations: GestionnaireConversations | null = null;
   // Même référence différée que `gestionnaire` ci-dessous, dans l'autre sens :
   // les deux se connaissent, aucun ne peut être construit en premier.
@@ -560,7 +573,8 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     },
     async (conversationId) => {
       await serviceNotifications?.remettreEnAttente(conversationId);
-    });
+    },
+    racinePiecesJointes);
     gestionnaire = gestionnaireConversations;
   } else {
     log.warn(
@@ -612,6 +626,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       arreter: (missionId) => versMission.arreter(missionId),
     }),
     conversations: gestionnaireConversations ?? undefined,
+    racinePiecesJointes,
     mandats: {
       enAttente: () => registre.propositions.enAttente(),
       refuser: (id) => registre.propositions.trancher(id, 'refusee', "refusé par l'opérateur", null),

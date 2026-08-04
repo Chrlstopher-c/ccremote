@@ -731,13 +731,20 @@ function hBlocNode(type, contenu, live, extra) {
 }
 
 /** Bulle d'un message opérateur, avec son bouton de copie. */
-function hBulleOperateur(texte) {
+function hBulleOperateur(texte, pieces) {
   const u = document.createElement('div');
   u.className = 'bubble-u msg-wrap';
   u.dataset.menu = 'parole';
+  // ☠ Le texte est aussi porté en `dataset` : l'adoption de la bulle optimiste
+  // le compare, et depuis que la bulle peut contenir des vignettes, son
+  // `textContent` inclut les noms de fichiers — la comparaison échouait donc et
+  // le message s'affichait EN DOUBLE.
+  u.dataset.texte = texte;
   const t = document.createElement('span');
   t.textContent = texte;
   u.append(t, hBoutonCopier(() => texte));
+  const jointes = window.HPieces?.rendrePieces(pieces);
+  if (jointes) u.appendChild(jointes);
   return u;
 }
 
@@ -777,13 +784,20 @@ function hAppendEvent(ev) {
     // ☠ La bulle a pu être posée en optimiste à l'envoi : on l'ADOPTE (on lui
     // donne son `seq`) au lieu d'en créer une seconde identique juste en dessous.
     const optimiste = [...chat.querySelectorAll('.bubble-u[data-optimiste]')]
-      .find((n) => n.textContent === ev.contenu);
+      .find((n) => n.dataset.texte === ev.contenu);
     if (optimiste) {
       delete optimiste.dataset.optimiste;
       if (ev.seq !== undefined) optimiste.dataset.seq = ev.seq;
+      // ☠ Les vignettes locales (objectURL) sont remplacées par celles servies
+      // par le Pi : les premières meurent avec l'onglet, les secondes survivent
+      // au rechargement. Sans ce remplacement, rouvrir le fil montrerait des
+      // images cassées sur le dernier message.
+      const ancien = optimiste.querySelector('.pj-jointes');
+      const servies = window.HPieces?.rendrePieces(ev.pieces);
+      if (ancien && servies) optimiste.replaceChild(servies, ancien);
       hOrch.cur = null; return;
     }
-    const u = hBulleOperateur(ev.contenu);
+    const u = hBulleOperateur(ev.contenu, ev.pieces);
     if (ev.seq !== undefined) u.dataset.seq = ev.seq;
     chat.appendChild(u); hOrch.cur = null; return;
   }
@@ -1027,7 +1041,10 @@ async function hSendOrchMessage() {
   const el = document.getElementById('hOrchInput');
   const btn = document.getElementById('hBtnOrchSend');
   const text = (el.value || '').trim();
-  if (!text || hOrch.generating) return;
+  // ☠ Un message sans texte MAIS avec une capture est légitime — coller une
+  // image et n'écrire aucun mot est le geste le plus naturel du composeur.
+  const pieces = window.HPieces?.pourEnvoi() ?? [];
+  if ((!text && pieces.length === 0) || hOrch.generating) return;
   if (!hOrch.convId) { await hNewConversation(); if (!hOrch.convId) return; }
   // ☠ `/compact` est traité PAR LE HARNESS, jamais envoyé au modèle : mesuré, le
   // SDK ne connaît pas les commandes slash dans le flux — le modèle y répondrait
@@ -1038,7 +1055,9 @@ async function hSendOrchMessage() {
   // `seq` au prochain sondage, la garde d'idempotence évitera le doublon.
   const chat = document.getElementById('hChatBody');
   const vide = chat.querySelector('.conv-empty'); if (vide) vide.remove();
-  const u = hBulleOperateur(text);
+  // Vignettes locales le temps de l'aller-retour — remplacées par celles du Pi
+  // dès que l'évènement revient avec ses URL.
+  const u = hBulleOperateur(text, window.HPieces?.file().map((p) => ({ ...p, url: p.apercu })));
   u.dataset.optimiste = '1';
   chat.appendChild(u); hOrch.cur = null;
   hOrch.generating = true; btn.disabled = true;
@@ -1048,14 +1067,18 @@ async function hSendOrchMessage() {
   const r = await HarnessAPI.sendConversationMessage(hOrch.convId, text, {
     model: HarnessState.orchModel.model,
     effort: HarnessState.orchModel.effort,
-  });
+  }, pieces);
   btn.disabled = false;
   // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.
   if (!r.ok) {
     hOrch.generating = false; hShowTyping(false);
     hAppendEvent({ type: 'erreur', contenu: r.erreur || 'Message non transmis' });
+    // ☠ La file N'EST PAS vidée sur échec : les pièces restent attachées pour
+    // le renvoi. Les jeter obligerait à re-sélectionner des fichiers que
+    // l'opérateur vient de choisir, pour une panne qui n'est pas la sienne.
     hScrollChat(); return;
   }
+  window.HPieces?.vider();
   hStartPoll();
 }
 
@@ -1135,4 +1158,15 @@ document.addEventListener('DOMContentLoaded', () => {
   zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); hSendOrchMessage(); } });
   // Le champ grandit avec le texte, jusqu'au plafond fixé en CSS (max-height).
   zone.addEventListener('input', () => { zone.style.height = 'auto'; zone.style.height = zone.scrollHeight + 'px'; });
+
+  // Pièces jointes : trombone, collage (⌘/Ctrl+V) et glisser-déposer.
+  // ☠ Un refus est MONTRÉ. Un fichier écarté en silence se lit comme un fichier
+  // joint — l'opérateur croirait sa capture partie.
+  window.HPieces?.brancher({
+    zoneSaisie: zone,
+    coque: document.getElementById('hComposerShell'),
+    bouton: document.getElementById('hBtnPieceJointe'),
+    input: document.getElementById('hInputPieceJointe'),
+    surRefus: (refus) => showToast(refus.join(' · '), 'err'),
+  });
 });

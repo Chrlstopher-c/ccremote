@@ -10,7 +10,12 @@
 
 import type { Database } from 'bun:sqlite';
 import { executer } from './journal.ts';
-import type { Conversation, EvenementConversation, TypeEvenementConversation } from './types.ts';
+import type {
+  Conversation,
+  EvenementConversation,
+  PieceJointeMessage,
+  TypeEvenementConversation,
+} from './types.ts';
 
 interface LigneConversation {
   id: string;
@@ -41,6 +46,23 @@ interface LigneEvenement {
   tool_use_id: string | null;
   detail: string | null;
   resultat: string | null;
+  pieces: string | null;
+}
+
+/**
+ * `☠` Une colonne JSON illisible ne doit PAS faire disparaître le message qui la
+ * porte : on rend une liste vide et on laisse la trace. Perdre la parole de
+ * Chris parce que le descriptif d'une capture est corrompu serait un très
+ * mauvais échange.
+ */
+function lirePieces(brut: string | null): readonly PieceJointeMessage[] {
+  if (brut === null || brut.length === 0) return [];
+  try {
+    const decode: unknown = JSON.parse(brut);
+    return Array.isArray(decode) ? (decode as PieceJointeMessage[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function versConversation(l: LigneConversation): Conversation {
@@ -78,6 +100,7 @@ function versEvenement(l: LigneEvenement): EvenementConversation {
     toolUseId: l.tool_use_id,
     detail: l.detail,
     resultat: l.resultat,
+    pieces: lirePieces(l.pieces),
   };
 }
 
@@ -104,6 +127,8 @@ export interface AjoutEvenement {
   readonly toolUseId?: string | null;
   /** Paramètres de l'appel, déjà bornés par `resultats-outils.ts`. */
   readonly detail?: string | null;
+  /** Messages opérateur uniquement (migration 24) — descriptif, jamais les octets. */
+  readonly pieces?: readonly PieceJointeMessage[];
 }
 
 export class DepotConversations {
@@ -338,8 +363,8 @@ export class DepotConversations {
           const res = this.db
             .query(
               `INSERT INTO conversation_evenement
-                 (conversation_id, type, contenu, cree_a, modele, effort, tool_use_id, detail)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                 (conversation_id, type, contenu, cree_a, modele, effort, tool_use_id, detail, pieces)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             )
             .run(
               ajout.conversationId,
@@ -350,6 +375,10 @@ export class DepotConversations {
               ajout.effort ?? null,
               ajout.toolUseId ?? null,
               ajout.detail ?? null,
+              // `☠` `null` et non `'[]'` quand il n'y a rien : la colonne dit
+              // « aucune pièce » de la même façon pour les millions de lignes
+              // antérieures à la migration et pour les nouvelles.
+              ajout.pieces === undefined || ajout.pieces.length === 0 ? null : JSON.stringify(ajout.pieces),
             );
           this.db.query('UPDATE conversation SET maj_a = ? WHERE id = ?').run(maintenant, ajout.conversationId);
           return {
@@ -366,6 +395,7 @@ export class DepotConversations {
             // pas encore quand l'appel est écrit. Il arrive au message suivant et
             // se pose par `completerResultatOutil`.
             resultat: null,
+            pieces: ajout.pieces ?? [],
           };
         })(),
       { conversationId: ajout.conversationId, type: ajout.type },

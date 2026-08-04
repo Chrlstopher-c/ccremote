@@ -74,4 +74,24 @@ describe('DepotConversations', () => {
     expect(registre.conversations.lire('a')?.titre).toBe('Nouveau titre');
     expect(registre.conversations.evenements('a')).toHaveLength(1);
   });
+
+  test('les pièces jointes d’un message survivent à la relecture (migration 24)', () => {
+    registre.conversations.creer({ id: 'a', titre: 'A' });
+    registre.conversations.ajouterEvenement({
+      conversationId: 'a',
+      type: 'operateur',
+      contenu: 'regarde',
+      pieces: [{ fichier: '1-0-c.png', nom: 'c.png', type: 'image/png', taille: 42 }],
+    });
+    const relu = registre.conversations.evenements('a')[0];
+    expect(relu?.pieces).toHaveLength(1);
+    expect(relu?.pieces[0]?.fichier).toBe('1-0-c.png');
+    expect(relu?.pieces[0]?.taille).toBe(42);
+  });
+
+  test('un événement sans pièce relit un tableau vide, jamais `undefined`', () => {
+    registre.conversations.creer({ id: 'a', titre: 'A' });
+    registre.conversations.ajouterEvenement({ conversationId: 'a', type: 'texte', contenu: 'ok' });
+    expect(registre.conversations.evenements('a')[0]?.pieces).toEqual([]);
+  });
 });
