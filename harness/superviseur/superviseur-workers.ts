@@ -68,8 +68,8 @@ import type { StartWorkerDeps, WorkerHandle } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
 import { creerPilotage, type Pilotage } from './pilotage-workers.ts';
 import { releverEtatGit, type ConstatGit } from './etat-git.ts';
-import { AucuneRevendicationActiveError } from '../projets/index.ts';
-import type { ConfigProjet, GestionnaireCycleVieWorktree, RevendicationWorktree } from '../projets/index.ts';
+import type { GestionnaireCycleVieWorktree } from '../projets/index.ts';
+import { allouerWorktreeSiConfigure, libererWorktreeSiConfigure } from './worktree-wiring-workers.ts';
 import { surveillerMessageUsage, surveillerQuota } from './budgets-workers.ts';
 import { ConcurrentsRestaures } from './fencing-restauration.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
@@ -201,7 +201,11 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     // qui suivent doivent voir ce cwd-là, pas celui provisoire envoyé par le Pi
     // (`dispatch-mandat.ts` compose le chemin du dépôt PRINCIPAL, faute de savoir
     // ce que `git worktree add` va réellement produire).
-    const revendication = await this.#allouerWorktree(demande, log);
+    const revendication = await allouerWorktreeSiConfigure(
+      { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees },
+      demande,
+      log,
+    );
     const specEffectif = revendication === null ? demande.spec : { ...demande.spec, cwd: revendication.worktreePath };
     const demandeEffective: DemandeDemarrage = revendication === null ? demande : { ...demande, spec: specEffectif };
 
@@ -234,58 +238,6 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     );
     void this.#surveillerResultats(demande.missionId, handle);
     return handle;
-  }
-
-  /**
-   * Alloue un worktree git dédié pour cette mission (F.2, câblage E2). `null`
-   * si aucun gestionnaire n'est configuré — comportement inchangé (mode
-   * dégradé pour tout le monde), c'est le défaut pour les tests unitaires qui
-   * n'en injectent pas.
-   *
-   * `☠` Aucun fichier de config F.1.2 n'est chargé ici : `demande.spec.cwd` est
-   * la seule donnée transportée depuis le Pi, donc le `ConfigProjet` passé à
-   * `allouer()` est reconstruit à la volée depuis un relevé git réel — jamais
-   * simulé. `estGit` exige à la fois un dépôt ET une branche courante lisible :
-   * un dépôt en HEAD détachée n'a pas de `brancheDefaut` exploitable par
-   * `git worktree add`, donc il retombe en mode dégradé plutôt que de lever.
-   */
-  async #allouerWorktree(
-    demande: DemandeDemarrage,
-    log: ReturnType<typeof missionLogger>,
-  ): Promise<RevendicationWorktree | null> {
-    if (this.#gestionnaireWorktrees === undefined) return null;
-
-    const cheminDepot = demande.spec.cwd;
-    const constat = await releverEtatGit(cheminDepot);
-    const estGit = constat.depot && constat.branche !== null;
-    const projet: ConfigProjet = {
-      id: cheminDepot,
-      cheminDepot,
-      estGit,
-      brancheDefaut: estGit ? constat.branche : null,
-      // `☠` Champs sans consommateur ici (`allouer()` ne lit que `estGit`,
-      // `brancheDefaut`, `cheminDepot`, `id`) — posés à des valeurs neutres pour
-      // satisfaire `ConfigProjet`, jamais lus par ce chemin.
-      budgetMaxUsd: 0,
-      modeleDefaut: '',
-      deniedToolPatternsSupplementaires: [],
-      agentTeamsActif: false,
-      mandatType: '',
-      isolationGarantie: estGit,
-      fichierSource: '(dérivé au dispatch — aucun fichier de config F.1.2)',
-    };
-
-    try {
-      return await this.#gestionnaireWorktrees.allouer({
-        projet,
-        idEquipe: demande.missionId,
-        epoch: demande.epoch,
-        racineWorktrees: this.#racineWorktrees,
-      });
-    } catch (erreur) {
-      log.error({ err: erreur, cheminDepot }, 'allocation du worktree échouée — aucun spawn (F.2)');
-      throw erreur;
-    }
   }
 
   /**
@@ -606,36 +558,11 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     // encore écrit par un process vivant serait la panne #9 par un autre
     // chemin. Best-effort — un échec ici ne doit jamais empêcher `arreter()`
     // de rendre la main, le worker est déjà mort au moment où on l'atteint.
-    await this.#libererWorktree(missionId);
-  }
-
-  /**
-   * Fin de mission (F.2, câblage E2) : libère la revendication de worktree si
-   * une allocation a eu lieu pour cette mission. No-op si aucun gestionnaire
-   * n'est configuré, ou si cette mission n'a jamais revendiqué de worktree
-   * (relance restaurée d'avant ce câblage, notamment) — les deux cas sont
-   * attendus, pas des pannes.
-   */
-  async #libererWorktree(missionId: string): Promise<void> {
-    if (this.#gestionnaireWorktrees === undefined) return;
-    const log = missionLogger(missionId);
-    try {
-      const revendication = await this.#gestionnaireWorktrees.liberer(missionId);
-      if (revendication.etat === 'terminee_non_liberee') {
-        log.warn(
-          { worktreePath: revendication.worktreePath },
-          'travail non commité détecté — worktree CONSERVÉ (F.2.3, panne #9)',
-        );
-      } else {
-        log.info({ worktreePath: revendication.worktreePath }, 'worktree libéré (F.2.2)');
-      }
-    } catch (erreur) {
-      if (erreur instanceof AucuneRevendicationActiveError) {
-        log.debug({ missionId }, 'aucune revendication de worktree pour cette mission — rien à libérer');
-        return;
-      }
-      log.error({ err: erreur, missionId }, 'libération du worktree échouée');
-    }
+    await libererWorktreeSiConfigure(
+      { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees },
+      missionId,
+      missionLogger(missionId),
+    );
   }
 
   /**
