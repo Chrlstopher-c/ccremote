@@ -117,6 +117,43 @@ function superviseurFactice(avecArretUrgence = true): PortSuperviseurControle & 
   };
 }
 
+/**
+ * `☠` Câblage E2 (mandat câblage-worktree) : `worktreeDe()` est un port OPTIONNEL
+ * de `PortSuperviseurControle` — `demarrer_worker` doit surfacer son résultat
+ * quand il est câblé, et rester silencieux (comportement historique) quand il
+ * ne l'est pas. C'est ce champ qui permet à `dispatch-mandat.ts` d'écrire le
+ * chemin/branche RÉELLEMENT alloués au registre du Pi (`definirWorktree`).
+ */
+describe('demarrer_worker relaie le worktree alloué (E2)', () => {
+  test('superviseur câblé (`worktreeDe`) ⇒ la réponse porte chemin et branche', async () => {
+    const superviseur = { ...superviseurFactice(), compteurs: superviseurFactice().compteurs } as ReturnType<
+      typeof superviseurFactice
+    > & { worktreeDe(missionId: string): { readonly chemin: string; readonly branche: string | null } | null };
+    superviseur.worktreeDe = (missionId: string) =>
+      missionId === 'mission-1' ? { chemin: '/tmp/worktrees/mission-1', branche: 'equipe/mission-1' } : null;
+    const canal = new CanalControle(superviseur, { assemblerSpec: assembleurFactice });
+
+    const reponse = await canal.traiter({
+      opId: 'op-worktree',
+      operation: { type: 'demarrer_worker', demande: demandeTransportable() },
+    });
+
+    expect(reponse.worktree).toEqual({ chemin: '/tmp/worktrees/mission-1', branche: 'equipe/mission-1' });
+  });
+
+  test('superviseur SANS `worktreeDe` (mode dégradé) ⇒ aucun champ `worktree` dans la réponse', async () => {
+    const superviseur = superviseurFactice();
+    const canal = new CanalControle(superviseur, { assemblerSpec: assembleurFactice });
+
+    const reponse = await canal.traiter({
+      opId: 'op-sans-worktree',
+      operation: { type: 'demarrer_worker', demande: demandeTransportable() },
+    });
+
+    expect(reponse.worktree).toBeUndefined();
+  });
+});
+
 describe('idempotence mécanique par opId (D.3.2)', () => {
   test('☠ rejouer arreter_worker avec le même opId ne ré-exécute jamais le port', async () => {
     const superviseur = superviseurFactice();
