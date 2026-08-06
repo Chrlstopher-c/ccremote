@@ -1,5 +1,5 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-08-03*
+*Dernière mise à jour : 2026-08-06*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
@@ -9,6 +9,86 @@ détail du harness — REPRISE.md est plus précis.
 **État au 03/08** : **1443 tests / 1443 verts**, typecheck propre, schéma du registre en
 **version 23**. **TOUT EST DÉPLOYÉ ET VÉRIFIÉ COMME TEL** — le déploiement compare désormais
 l'heure de démarrage du process au mtime des sources et échoue s'il sert du code périmé.
+
+### `☠` 06/08 — QUATRE OUTILS MACHINE AJOUTÉS AU SERVEUR MCP DE CONTRÔLE (groupe A.2.2)
+
+Deux commits, `c1f6e8f` puis `ac7ffa1` : le modèle peut désormais lire l'état matériel du PC,
+le réveiller à distance, lire l'état d'un service systemd du Pi, et redémarrer une unité — chacun
+un outil du serveur MCP `control-plane/orchestrateur/mcp-controle/serveur.ts`, câblé
+conditionnellement (port absent ⇒ outil non exposé, même patron que les outils existants).
+
+**`etat_machine({machine:'pc'})`** — `control-plane/orchestrateur/mcp-controle/outils-machine.ts`.
+Lecture pure (`readOnlyHint`), passe par le **canal de contrôle [D]** (D.3) : le PC est une machine
+distante, il faut le lien Pi↔PC pour l'atteindre. Ne relève rien lui-même — délègue à l'opération
+`metriques_hote` déjà câblée de bout en bout (`superviseur/metriques-hote.ts`), sans dupliquer la
+collecte : un second relevé indépendant divergerait tôt ou tard du premier.
+
+`☠` **`cpu` et `reseau` rendent `?` au PREMIER appel — CE N'EST PAS UNE PANNE.** Ces deux métriques
+se calculent sur un **delta entre deux relevés successifs** (`metriques-hote.ts:63,173-190` — cache
+module-level `precedent`) ; il n'y en a pas encore au premier appel après démarrage du process. Le
+second appel donne des valeurs réelles. Vérifié en direct le 06/08. Sans cette note, un `?` sur ces
+deux champs sera un jour lu comme une sonde cassée plutôt que comme l'absence de second point de
+mesure.
+
+**`reveiller_machine({machine:'pc'})`** — Wake-on-LAN, `composition/pi/reveil-wol.ts`. **HORS canal
+[D]**, seule opération de contrôle qui ne le traverse jamais : magic packet en **UDP broadcast
+LOCAL depuis le Pi**. Raison structurelle (H-75) : c'est le PC qui initie le lien vers le Pi, jamais
+l'inverse ; PC éteint, il n'existe aucun lien à emprunter — rien à traverser pour le réveiller. MAC
+surchargeable via `CCREMOTE_PC_MAC` (défaut conservé si absent, valeur malformée refusée avec log).
+Rend `accepte`, jamais `applique` : le paquet est émis, l'allumage n'est pas confirmable depuis le
+Pi.
+
+**`etat_service({machine:'pi', service})`** — `control-plane/orchestrateur/mcp-controle/outils-service.ts`
++ `composition/pi/service-systeme.ts`. Lecture d'une unité systemd du Pi, **LOCALE, hors canal [D]**
+(contrairement à `etat_machine` : les unités visées tournent sur la machine qui héberge ce serveur
+MCP, il n'y a rien à traverser). `systemctl is-active` + `show` via `execFile` (jamais de shell
+interpolé) — lecture, donc aucune permission root requise.
+
+**`piloter_service({machine:'pi', service, action:'restart'})`** — même fichier, redémarrage seul
+(`restart`) : un `stop` sans `start` laisserait un service de prod éteint sans garde-fou que ce
+harness puisse détecter ou réparer.
+
+**Liste blanche à trois seaux** (`outils-service.ts`, constantes `SEAU_1_JAMAIS_EXPOSE` /
+`SEAU_2_ETAT_SEULEMENT` / `SEAU_3_DEUX_OUTILS`) :
+- **Seau 1, jamais exposé** (aucun enum) : `semantic-memory-http`, `semantic-memory-embed`
+  (écrivain unique de la mémoire sémantique), `ccremote-harness`, `ccremote-web` (hébergent
+  l'orchestrateur qui appelle l'outil — un restart ici est un suicide en cours de phrase),
+  `cloudflared` (tunnel d'accès distant — s'il tombe hors LAN, plus aucun chemin de secours).
+- **Seau 2, `etat_service` seulement** : `stockiop-ops-backend`, `license-server`,
+  `web-platform-backend`, `web-platform-frontend`, `homelab-dns`, `homelab-proxy`.
+- **Seau 3, les deux outils** : `portfolio`, `nullnode-relay`.
+
+`☠` **Cette liste vient d'un inventaire du Pi daté du 17/07, complété le 01/08 — PAS d'une mesure en
+direct.** `stockiop-api` a par exemple migré vers le VPS depuis (`TODO.md`). Une unité absente de
+systemd produit un `refuse` explicite (`LoadState=not-found`), jamais une erreur brute.
+
+**Deux conditions d'activation** — le code seul, non déployé, ne rend rien disponible au modèle :
+1. **Déploiement** par `deploy-harness-pi.sh` (redémarrage du process `ccremote-harness` sur le Pi).
+2. **Pour `piloter_service` seulement** : une **règle sudoers à poser à la main sur le Pi**, en
+   root. `ccremote-harness` tourne en `User=pi` (non-root, sans TTY) ; `systemctl restart` sur une
+   unité système invoque l'action polkit `manage-units`, refusée par défaut à `pi`. Aucune règle
+   sudoers pour `pi` n'existe dans ce dépôt ni ses scripts (vérifié par grep au dépôt de la mission
+   `ac7ffa1`). Règle exacte donnée par le message de commit, **une ligne par unité du seau 3,
+   jamais un glob** (un glob romprait le modèle capacitaire en autorisant `pi` à redémarrer
+   n'importe quelle unité, y compris celles du seau 1) :
+
+   ```
+   # /etc/sudoers.d/ccremote-piloter-service
+   pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart portfolio.service
+   pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart nullnode-relay.service
+   ```
+
+   Chemin `/usr/bin/systemctl` standard Debian/Raspberry Pi OS, **à confirmer sur le Pi**
+   (`which systemctl`) avant d'écrire la règle. Tant que cette règle n'est pas posée,
+   `piloter_service` échoue systématiquement en `refuse` explicite (motif `permission`), jamais en
+   erreur brute.
+
+Tests : 1533 pass / 3 échecs préexistants sans rapport (`mcp-du-poste.test.ts`, config locale du
+poste), typecheck clean — d'après le message de commit `ac7ffa1`, non ré-exécuté dans ce mandat
+(mandat purement documentaire, aucun test relancé).
+
+`☠` **Dette non créée par cette mission, mais aggravée** : `serveur.ts` fait désormais 781 lignes
+(710 avant), au-dessus de la limite de 500 du standard du projet — voir `TODO.md`.
 
 ### `☠` 03/08 — LE CORRECTIF ÉTAIT SUR LE DISQUE, LE PROCESS TOURNAIT CELUI DE LA VEILLE
 

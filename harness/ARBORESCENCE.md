@@ -42,6 +42,8 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/pi/balayage-telemetrie.test.ts` — banc : mort en cours de route, drainage des activités, réconciliation qui échoue sans arrêter le balayage
 - `composition/pi/balayage-quotas.test.ts` — banc des jauges : 100 % ⇒ compte `rejected` (H-53), sonde en échec qui n'écrase jamais une valeur connue
 - `composition/pi/verificateur-session-sdk.ts` — `VerificateurSessionExistante` réel via `getSessionInfo` du SDK
+- `composition/pi/reveil-wol.ts` / `.test.ts` — réveil Wake-on-LAN du PC en UDP broadcast LOCAL depuis le Pi, HORS canal D.3 (H-75 : le PC éteint n'a aucun lien à emprunter) ; MAC surchargeable via `CCREMOTE_PC_MAC`, valeur malformée refusée (2026-08-06)
+- `composition/pi/service-systeme.ts` / `.test.ts` — lecture (`is-active`/`show`) et redémarrage (`sudo -n systemctl restart`) LOCAUX d'une unité systemd du Pi via `execFile` (jamais de shell interpolé), HORS canal D.3 (2026-08-06)
 - `composition/pc/assembler-superviseur.ts` — racine de composition du PC (persistance+boot_id, anti-boucle, lien vers le Pi)
 - `composition/pc/bin-pc.ts` — point d'entrée exécutable du process PC (`bun run start:pc`), conçu pour `systemd --user` (voir `composition/deploiement/`)
 - `composition/pc/client-lien-pi.ts` — H-75 : le PC INITIE (seul point d'entrée réseau sortant), reconnexion infinie backoff+gigue ; le connecteur ne résout que sur `open` RÉEL, sans quoi le backoff ne monte jamais (défaut mesuré au banc à deux machines)
@@ -69,6 +71,8 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `outils-inspection.ts` / `.test.ts` — outils en lecture (lister/état/historique/permissions)
 - `outils-cycle-vie.ts` / `.test.ts` — `creer_equipe`/`envoyer_a_equipe`/`interrompre`/`arreter`/`relancer`
 - `outils-budget.ts` — `definir_budget` (ex-`outils-arbitrage.ts` : `repondre_permission` est parti avec le bus d'escalade le 31/07)
+- `outils-machine.ts` / `.test.ts` — groupe « machine » (A.2.2) : `etat_machine` (lecture pure, délègue à `metriques_hote`) et `reveiller_machine` (WoL, `accepte` jamais `applique`) ; `machine` en `z.enum(['pc'])` fermé (2026-08-06)
+- `outils-service.ts` / `.test.ts` — groupe « service » (A.2.2) : `etat_service`/`piloter_service` sur les unités systemd du Pi ; liste blanche à trois seaux (`SEAU_1_JAMAIS_EXPOSE`/`SEAU_2_ETAT_SEULEMENT`/`SEAU_3_DEUX_OUTILS`), `piloter_service` n'expose que `restart` (2026-08-06)
 - `contrat.ts` / `.test.ts` — contrat de retour uniforme (`applique`/`accepte`/`refuse`/`differe`)
 - `plafond.ts` / `.test.ts` — `avecPlafond`, garantie mécanique du non-blocage (A.2.1)
 - `mandat.ts` / `.test.ts` — construction d'une proposition de mandat (H-61)

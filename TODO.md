@@ -1,9 +1,37 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-08-03*
+*Dernière mise à jour : 2026-08-06*
 
 ## ⚡ Harness d'orchestration — chantier actif
 
 **Contexte complet : `harness/REPRISE.md`.**
+
+### 06/08 — quatre outils machine ajoutés (`c1f6e8f`, `ac7ffa1`) — voir `STATE.md`
+
+- [ ] **Poser la règle sudoers sur le Pi** pour que `piloter_service` fonctionne réellement — geste
+      opérateur, jamais automatisé par ce harness (établi factuellement par grep au dépôt de la
+      mission `ac7ffa1` : aucune règle sudoers pour `pi` n'existe). Sans elle, l'outil échoue
+      systématiquement en `refuse` explicite (motif `permission`), jamais en erreur brute. À poser
+      sur le Pi, en root, **une ligne par unité du seau 3, jamais un glob** :
+      ```
+      # /etc/sudoers.d/ccremote-piloter-service
+      pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart portfolio.service
+      pi ALL=(root) NOPASSWD: /usr/bin/systemctl restart nullnode-relay.service
+      ```
+      `⚠` Chemin `/usr/bin/systemctl` à confirmer sur le Pi (`which systemctl`) avant écriture — pas
+      vérifié en direct pour ce mandat, purement documentaire.
+- [ ] **Revalidation de la liste blanche des services (`outils-service.ts`) contre l'état réel du
+      Pi.** Vient d'un inventaire du 17/07, complété le 01/08 — **jamais revérifiée en direct**.
+      `stockiop-api` a par exemple migré vers le VPS depuis et n'apparaît déjà plus dans la liste
+      actuelle ; d'autres unités des trois seaux ont pu être renommées, désactivées ou supprimées
+      sans que ce module ait aucun moyen de le savoir (il produit un `refuse` propre sur une unité
+      absente, mais ne peut pas détecter une unité qui existe encore sous un autre nom). À faire :
+      un passage sur le Pi (`systemctl list-units`) comparé aux trois seaux, un par un.
+- [ ] **Dette — `serveur.ts` fait 781 lignes**, au-dessus de la limite de 500 lignes du standard du
+      projet (710 lignes avant les missions `c1f6e8f`/`ac7ffa1` — dette préexistante, aggravée mais
+      pas créée par elles). Candidat à un refactor dédié : scinder ce fichier touche au câblage de
+      **tous** les outils de contrôle de l'orchestrateur (inspection, mandat, rappels, fil, machine,
+      service…), pas seulement les quatre outils récents — mérite son propre mandat plutôt qu'un
+      correctif de passage.
 
 ### ✅ FAIT LE 03/08 — le test est passé, et huit défauts sont fermés
 
@@ -867,9 +895,15 @@ les deux anciens `.credentials_account*.json`).
       Rien dans l'UI ne le compose ni ne l'affiche.
 - [ ] **Barre de sûreté absente de la vue Orchestrateur et de Paramètres** (présente sur 4 vues / 6)
       — or H-57 exige que le bouton reste joignable partout. Coût : hauteur du composer sur mobile.
-- [ ] **Wake-on-LAN retiré sans remplaçant** — la v2 sait afficher « lien coupé » mais n'offre plus
+- [x] **Wake-on-LAN retiré sans remplaçant** — la v2 sait afficher « lien coupé » mais n'offre plus
       le geste qui corrige. Trois options : réveil dans la carte lien · réveil auto au dispatch · PC
       allumé en permanence (choix implicite actuel de la maquette).
+      **RÉSOLU 06/08** : le geste existe désormais comme outil de l'orchestrateur —
+      `reveiller_machine({machine:'pc'})` (`c1f6e8f`, voir `STATE.md`). `☠` La réserve d'origine
+      reste partiellement vraie côté **maquette v2** : le geste est joignable en conversation avec
+      l'orchestrateur, mais aucune des trois options UI listées ci-dessus (carte lien, auto-dispatch,
+      PC permanent) n'est câblée dans l'interface elle-même — à trancher séparément si un bouton
+      dédié dans l'UI reste désiré en plus du canal conversationnel.
 - [ ] **Métriques machine supprimées** — alors que H-57 acte que les processus enfants survivent à la
       pause et s'accumulent. La v2 retire le seul endroit où ça se serait vu. Compromis proposé : une
       ligne de charge dans la carte lien.
@@ -948,7 +982,7 @@ l'instant ce n'est pas le plus important. C'est ultra important de les garder en
       (fix déployé, heuristique non observée sur un vrai cycle prod)
 
 ## Backlog
-- [ ] **Démarrer le PC depuis la conversation avec l'orchestrateur master** (demandé par Chris,
+- [x] **Démarrer le PC depuis la conversation avec l'orchestrateur master** (demandé par Chris,
       2026-07-22). L'agent doit en être **capable**, mais **toujours demander et faire confirmer par
       l'utilisateur** — jamais de réveil automatique.
       Le moyen existe déjà : Wake-on-LAN, `PC_MAC` dans `client/config.py`, utilisé par
@@ -960,6 +994,14 @@ l'instant ce n'est pas le plus important. C'est ultra important de les garder en
       relève du seuil de confirmation obligatoire, au même titre qu'une extinction ; (3) le réveil
       n'a de sens qu'articulé avec la reconnexion automatique (le PC réveillé doit se rattacher
       seul) — donc à faire **après** que la reprise automatique soit prouvée, pas avant.
+      **RÉSOLU 06/08** : l'outil existe — `reveiller_machine({machine:'pc'})` (`c1f6e8f`, voir
+      `STATE.md`), MAC surchargeable via `CCREMOTE_PC_MAC` (successeur de `PC_MAC`/`client/config.py`).
+      `⚠` Point (1) **non revérifié dans ce mandat documentaire** : `outils-machine.ts` n'appelle
+      aucun bus de permissions/escalade visible autour de `reveillerMachine` — seul le wrapper
+      générique `protege()` entoure l'appel. Si la confirmation humaine passe par un mécanisme
+      générique du client MCP en amont, ce point est couvert ; si elle devait être un arbitrage
+      explicite câblé dans ce fichier, ce n'est pas visible dans le diff des deux commits lus. À
+      vérifier avant de considérer H-61/M-21 pleinement honorés ici.
 - [ ] Reasoning par round de tool-calling en streaming (actuellement fusionné en un seul bloc
       pour tout l'échange, simplification assumée)
 - [ ] Décider si `zai-glm-4.7`/`gpt-oss-120b`/`gemma-4-31b` ont vraiment les tailles de contexte
