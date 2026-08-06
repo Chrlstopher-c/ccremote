@@ -234,6 +234,13 @@ export interface Mission {
    */
   readonly machine: string | null;
   /**
+   * Le projet est-il un dépôt git (migration 25) ? C'est la colonne qui
+   * conditionne H-56 : mono-équipe stricte pour un projet non-git (pas
+   * d'isolation possible), multi-équipe pour un projet git (une équipe par
+   * `git worktree`, plafonné en APPLICATION, pas en base — `dispatch-mandat.ts`).
+   */
+  readonly projetEstGit: boolean;
+  /**
    * Ce que le dépôt de l'équipe contenait au dernier relevé (migration 23).
    *
    * `☠` `null` signifie « jamais mesuré », JAMAIS « propre ». C'est la
@@ -266,6 +273,9 @@ export interface CreationMission {
   readonly modeleResolu?: string | null;
   /** Machine de travail visée — voir `Mission.machine`. */
   readonly machine?: string | null;
+  /** Absent ⇒ `false` : comportement mono-équipe préservé par défaut pour tout appelant
+   * qui ne le fournit pas (tests, restauration…) — voir `Mission.projetEstGit`. */
+  readonly projetEstGit?: boolean;
   readonly budgetMaxUsd?: number | null;
   /**
    * Epoch de fencing (M-11) réellement envoyé au PC pour ce dispatch.

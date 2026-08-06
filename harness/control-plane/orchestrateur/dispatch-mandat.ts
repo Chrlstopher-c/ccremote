@@ -33,7 +33,11 @@ const log = processusOrchestrateurLogger.child({ composant: 'dispatch-mandat' })
 
 /** Ce que le Pi sait faire démarrer sur le PC. */
 export interface DemarreurEquipe {
-  demarrer(demande: DemandeDemarrageTransportable): Promise<{ readonly detail: string }>;
+  demarrer(demande: DemandeDemarrageTransportable): Promise<{
+    readonly detail: string;
+    /** Chemin/branche RÉELLEMENT alloués côté PC (worktree git) — absent en mode dégradé non-git. */
+    readonly worktree?: { readonly chemin: string; readonly branche: string | null };
+  }>;
 }
 
 export interface DependancesDispatch {
@@ -65,6 +69,8 @@ export interface DependancesDispatch {
   readonly repertoireProjets: string;
   /** Motifs d'outils refusés d'office (plancher de déni, H-41). */
   readonly deniedToolPatterns?: readonly string[];
+  /** Plafond d'équipes simultanées sur un projet GIT. Défaut : `PLAFOND_EQUIPES_PROJET_GIT_DEFAUT`. */
+  readonly plafondEquipesParProjet?: number;
 }
 
 export interface ResultatDispatch {
@@ -81,6 +87,14 @@ export interface ResultatDispatch {
  * que les deux ne puissent plus se croiser en silence.
  */
 const BUDGET_DEFAUT_USD = PLAFOND_EQUIPE_USD;
+
+/**
+ * Plafond d'équipes simultanées sur un projet GIT (mandat E3). Motifs : disque
+ * (chaque worktree porte ses propres node_modules/target), VRAM partagée (12 Go),
+ * lisibilité d'une fusion à plus de quatre branches. Un projet non-git reste à 1
+ * (H-56 strict), ce plafond ne s'applique jamais à lui.
+ */
+export const PLAFOND_EQUIPES_PROJET_GIT_DEFAUT = 4;
 
 /**
  * `☠` Défauts du team leader, POSÉS et non hérités du CLI (décision Chris,
@@ -504,10 +518,31 @@ export class ErreurProjetOccupe extends Error {
     readonly etat: string,
   ) {
     super(
-      `une équipe est déjà active sur « ${projet} » (mission ${missionId.slice(0, 8)}, état ${etat}) — ` +
-        'termine-la avec `arreter_equipe` avant d’en lancer une autre (H-56 : une équipe par projet)',
+      `${projet} n'est pas un dépôt git : une seule équipe à la fois, faute d'isolation possible ` +
+        `(git worktree indisponible). Équipe déjà active : mission ${missionId.slice(0, 8)}, état ${etat} — ` +
+        'termine-la avec arreter_equipe avant d’en lancer une autre (H-56, projets non-git).',
     );
     this.name = 'ErreurProjetOccupe';
+  }
+}
+
+/**
+ * Le plafond d'équipes simultanées sur un projet GIT est atteint (mandat E3).
+ * Erreur NOMMÉE, sur le même principe que `ErreurProjetOccupe` : un refus lisible
+ * plutôt qu'une contrainte SQL anonyme — la base ne connaît d'ailleurs pas ce
+ * plafond, il n'existe qu'en application.
+ */
+export class ErreurPlafondEquipesProjetAtteint extends Error {
+  constructor(
+    readonly projet: string,
+    readonly actives: number,
+    readonly plafond: number,
+  ) {
+    super(
+      `« ${projet} » a déjà ${actives} équipe(s) active(s), au plafond configuré (${plafond}) — ` +
+        'termine-en une avec `arreter_equipe` avant d’en lancer une autre.',
+    );
+    this.name = 'ErreurPlafondEquipesProjetAtteint';
   }
 }
 
@@ -557,6 +592,9 @@ export class ErreurProjetAbsentDeLaMachine extends Error {
 export interface VerificationProjet {
   readonly present: boolean;
   readonly note?: string;
+  /** Absent ou `false` ⇒ traité comme non-git (défaut conservateur, préserve H-56 strict
+   * pour tout appelant qui ne le fournit pas). */
+  readonly estGit?: boolean;
 }
 
 export class ErreurMandatDejaTranche extends Error {
@@ -591,15 +629,52 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     log.info({ compteId: compte.id }, 'rotation de compte : le précédent est saturé');
   }
 
+  // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
+  // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
+  // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
+  // aucune des deux machines (constaté en prod le 23/07).
+  const cwd = p.projet.startsWith('/') ? p.projet : join(deps.repertoireProjets, p.projet);
+
+  // `☠` AVANT la première écriture, jamais au point d'usage. Un mandat qui vise
+  // un projet absent de la machine choisie doit être refusé net : laisser passer
+  // produirait un worker démarré dans un cwd inexistant, une mission inscrite au
+  // registre, et un échec surgissant beaucoup plus loin sous une forme qui ne
+  // nomme pas sa cause. Un demi-enregistrement suivi d'un dispatch raté est pire
+  // qu'un refus propre — il laisse un état à réconcilier.
+  //
+  // `☠` Déplacé AVANT le contrôle H-56 : c'est ce verdict (`estGit`) qui décide
+  // quelle règle appliquer — mono-équipe stricte ou plafond git.
+  let estGit = false;
+  if (deps.verifierProjet !== undefined) {
+    const verdict = await deps.verifierProjet(cwd);
+    if (!verdict.present) {
+      throw new ErreurProjetAbsentDeLaMachine(p.projet, deps.machine ?? '(non précisée)', cwd, verdict.note);
+    }
+    estGit = verdict.estGit === true;
+  }
+
   // `☠` H-56 VÉRIFIÉ ICI, avant toute écriture. L'index unique partiel de la base
   // fait bien son travail, mais son échec remontait en `SQLITE_CONSTRAINT_UNIQUE`
   // ⇒ 500 ⇒ « erreur interne du control plane » à l'écran (constaté en prod le
   // 23/07). Une règle métier connue n'est PAS une panne : elle se refuse en
   // clair, en nommant l'équipe qui bloque, sinon l'opérateur clique trois fois
   // sans jamais comprendre pourquoi rien ne part.
-  const dejaActive = deps.registre.missions.listerActives().find((m) => m.projet === p.projet);
-  if (dejaActive !== undefined) {
-    throw new ErreurProjetOccupe(dejaActive.id, p.projet, dejaActive.etatHarness);
+  //
+  // `☠` Depuis le mandat E3 : mono-équipe (H-56 strict) UNIQUEMENT pour un projet
+  // non-git — un projet git accepte plusieurs équipes, une par worktree, jusqu'à
+  // un plafond appliqué ICI (la base ne le connaît pas, elle ignore ce qu'est
+  // un worktree).
+  const actives = deps.registre.missions.listerActives().filter((m) => m.projet === p.projet);
+  if (!estGit) {
+    const dejaActive = actives[0];
+    if (dejaActive !== undefined) {
+      throw new ErreurProjetOccupe(dejaActive.id, p.projet, dejaActive.etatHarness);
+    }
+  } else {
+    const plafond = deps.plafondEquipesParProjet ?? PLAFOND_EQUIPES_PROJET_GIT_DEFAUT;
+    if (actives.length >= plafond) {
+      throw new ErreurPlafondEquipesProjetAtteint(p.projet, actives.length, plafond);
+    }
   }
 
   const missionId = randomUUID();
@@ -616,30 +691,12 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   // test) ne doit pas obtenir l'écriture par omission. Une seule lecture, servant
   // À LA FOIS le prompt et les refus d'outils.
   const acces: AccesMandat = estAccesMandat(p.acces) ? p.acces : ACCES_DEFAUT;
-  // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
-  // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
-  // produisait `/home/pi/projets/mnt/projects/vela` — un chemin qui n'existe sur
-  // aucune des deux machines (constaté en prod le 23/07).
-  const cwd = p.projet.startsWith('/') ? p.projet : join(deps.repertoireProjets, p.projet);
   // `☠` Calculé UNE FOIS, puis écrit au registre ET envoyé au PC. Il n'était
   // qu'envoyé : la colonne restait à 0, et comme `prochainEpoch()` la lit, il
   // rendait toujours 1 — deux dispatchs successifs sur un même worktree
   // portaient donc le même epoch, ce que le fencing (M-11) doit justement
   // rejeter. Deux valeurs calculées séparément divergeraient de la même façon.
   const epoch = prochainEpoch(deps.registre, p.projet);
-
-  // `☠` AVANT la première écriture, jamais au point d'usage. Un mandat qui vise
-  // un projet absent de la machine choisie doit être refusé net : laisser passer
-  // produirait un worker démarré dans un cwd inexistant, une mission inscrite au
-  // registre, et un échec surgissant beaucoup plus loin sous une forme qui ne
-  // nomme pas sa cause. Un demi-enregistrement suivi d'un dispatch raté est pire
-  // qu'un refus propre — il laisse un état à réconcilier.
-  if (deps.verifierProjet !== undefined) {
-    const verdict = await deps.verifierProjet(cwd);
-    if (!verdict.present) {
-      throw new ErreurProjetAbsentDeLaMachine(p.projet, deps.machine ?? '(non précisée)', cwd, verdict.note);
-    }
-  }
 
   deps.registre.lots.creer({ id: lotId, intention: p.objectif, origine: 'orchestrateur' });
   deps.registre.missions.creer({
@@ -670,6 +727,8 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     // ordre d'arrêt ne saurait plus à qui s'adresser dès que deux machines
     // tournent (migration 22).
     machine: deps.machine ?? null,
+    // `☠` Conditionne H-56 (mono-équipe non-git vs plafond git) — voir migration 25.
+    projetEstGit: estGit,
   });
 
   const demande: DemandeDemarrageTransportable = {
@@ -697,9 +756,9 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     },
   };
 
-  let detail: string;
+  let resultatDemarrage: Awaited<ReturnType<DemarreurEquipe['demarrer']>>;
   try {
-    ({ detail } = await deps.demarreur.demarrer(demande));
+    resultatDemarrage = await deps.demarreur.demarrer(demande);
   } catch (erreur) {
     // `☠` ROLLBACK. Panne mesurée en prod le 2026-08-01 : la mission est
     // inscrite AVANT le démarrage (à dessein — sinon un worker vivant serait
@@ -715,10 +774,19 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     log.error({ err: erreur, missionId, projet: p.projet }, 'démarrage refusé — mission close, projet libéré');
     throw erreur;
   }
+  // `☠` Le worktree RÉELLEMENT alloué côté PC (chemin, branche dédiée) peut
+  // différer du `cwd` provisoire écrit plus haut — mis à jour ici, une fois connu.
+  if (resultatDemarrage.worktree !== undefined) {
+    deps.registre.missions.definirWorktree(
+      missionId,
+      resultatDemarrage.worktree.chemin,
+      resultatDemarrage.worktree.branche,
+    );
+  }
   // `☠` L'état n'est avancé qu'APRÈS un démarrage confirmé : une mission laissée
   // `planifiee` alors que le worker tourne serait une équipe fantôme, et
   // l'inverse ferait croire à une équipe vivante qui n'existe pas.
   deps.registre.etats.appliquerEtatHarness(missionId, 'en_cours', { motif: 'mandat autorisé par l’opérateur' });
   log.info({ missionId, projet: p.projet, compteId: compte.id }, 'équipe démarrée après autorisation humaine (H-61)');
-  return { missionId, detail };
+  return { missionId, detail: resultatDemarrage.detail };
 }

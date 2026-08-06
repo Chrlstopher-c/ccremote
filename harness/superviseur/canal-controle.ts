@@ -68,6 +68,8 @@ export interface PortSuperviseurControle {
    */
   inspecter?(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }>;
   arreter(missionId: string): Promise<void>;
+  /** Chemin/branche réellement alloués pour cette mission (worktree git). Absent du port ⇒ non renseigné dans la réponse. */
+  worktreeDe?(missionId: string): { readonly chemin: string; readonly branche: string | null } | null;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
   relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }>;
   reinitialiser(
@@ -241,6 +243,8 @@ export interface ReponseControle {
    * distinguer « repartie » de « sans effet » et annonçait la première.
    */
   readonly relanceIgnoree?: boolean;
+  /** Présent uniquement pour `demarrer_worker`, si un worktree a été alloué. */
+  readonly worktree?: { readonly chemin: string; readonly branche: string | null };
 }
 
 const TAILLE_MAX_CACHE_DEFAUT = 1000;
@@ -391,7 +395,13 @@ export class CanalControle {
             promptInitial: d.promptInitial,
             spec: this.#assemblerSpec(d.parametres),
           });
-          return { ok: true, effet: 'applique', detail: `worker démarré : ${handle.sessionId}` };
+          const worktree = this.#superviseur.worktreeDe?.(d.missionId) ?? undefined;
+          return {
+            ok: true,
+            effet: 'applique',
+            detail: `worker démarré : ${handle.sessionId}`,
+            ...(worktree !== undefined && worktree !== null ? { worktree } : {}),
+          };
         }
         case 'arreter_worker':
           await this.#superviseur.arreter(operation.missionId);

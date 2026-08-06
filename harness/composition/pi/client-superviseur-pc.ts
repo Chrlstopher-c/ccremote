@@ -283,7 +283,10 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
    * Démarre réellement une équipe sur le PC (H-61 : appelé UNIQUEMENT après
    * l'autorisation humaine d'un mandat, jamais par l'orchestrateur seul).
    */
-  async demarrer(demande: DemandeDemarrageTransportable): Promise<{ readonly detail: string }> {
+  async demarrer(demande: DemandeDemarrageTransportable): Promise<{
+    readonly detail: string;
+    readonly worktree?: { readonly chemin: string; readonly branche: string | null };
+  }> {
     const reponse = await this.#appeler({ type: 'demarrer_worker', demande });
     // `☠` Un refus du PC est une ERREUR, jamais un succès silencieux. Sans cette
     // garde (constaté en prod le 23/07), un worker qui n'avait pas démarré était
@@ -291,7 +294,10 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     if (!reponse.ok) {
       throw new Error(reponse.detail ?? "le PC a refusé de démarrer l'équipe");
     }
-    return { detail: reponse.detail ?? 'équipe démarrée' };
+    return {
+      detail: reponse.detail ?? 'équipe démarrée',
+      ...(reponse.worktree !== undefined ? { worktree: reponse.worktree } : {}),
+    };
   }
 
   async arreter(missionId: string): Promise<void> {

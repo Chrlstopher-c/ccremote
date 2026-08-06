@@ -734,6 +734,35 @@ const MIGRATION_24 = `
 ALTER TABLE conversation_evenement ADD COLUMN pieces TEXT;
 `;
 
+/**
+ * Migration 25 — un projet git peut porter plusieurs équipes (mandat câblage-worktree, E3).
+ *
+ * `☠` H-56 (une seule mission active par projet) ne s'applique plus qu'aux
+ * projets NON-git. Un projet git accepte plusieurs équipes en parallèle,
+ * chacune sur son propre `git worktree` — l'isolation qui manquait au projet
+ * non-git, où deux équipes se marcheraient sur les mêmes fichiers sur disque.
+ * L'index unique partiel est donc restreint aux lignes `projet_est_git = 0` :
+ * la base n'empêche plus que la collision non-git, elle ne sait rien du
+ * plafond git. Le plafond d'équipes simultanées sur un projet git (mandat E3)
+ * est appliqué en APPLICATION (`dispatch-mandat.ts`), pas en base — la base
+ * n'a aucun moyen de compter des worktrees qu'elle ne connaît pas.
+ *
+ * `DEFAULT 0` : toute mission historique est traitée comme non-git
+ * rétroactivement, sans rattrapage — même motif qu'en migration 22 (mesuré à
+ * l'époque : toutes les missions du registre étaient terminales, rien de
+ * vivant à reclasser).
+ */
+const MIGRATION_25 = `
+ALTER TABLE mission ADD COLUMN projet_est_git INTEGER NOT NULL DEFAULT 0 CHECK (projet_est_git IN (0, 1));
+
+DROP INDEX idx_mission_active_par_projet;
+
+CREATE UNIQUE INDEX idx_mission_active_par_projet
+  ON mission(projet)
+  WHERE etat_harness IN ('planifiee', 'en_cours', 'en_pause', 'attente_machine')
+    AND projet_est_git = 0;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -759,6 +788,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 22, nom: 'machine-de-travail', sql: MIGRATION_22 },
   { version: 23, nom: 'constat-git-mission', sql: MIGRATION_23 },
   { version: 24, nom: 'pieces-jointes-message', sql: MIGRATION_24 },
+  { version: 25, nom: 'projet-est-git-mission', sql: MIGRATION_25 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

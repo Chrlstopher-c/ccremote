@@ -105,6 +105,7 @@ export interface LigneMission {
   derniere_raison_terminale: string | null;
   conversation_id: string | null;
   machine: string | null;
+  projet_est_git: number;
   git_fichiers_modifies: number | null;
   git_branche: string | null;
   git_dernier_commit: string | null;
@@ -210,6 +211,7 @@ export function versMission(l: LigneMission): Mission {
     derniereRaisonTerminale: l.derniere_raison_terminale,
     conversationId: l.conversation_id,
     machine: l.machine,
+    projetEstGit: l.projet_est_git === 1,
     // `☠` `null` = JAMAIS MESURÉ, ce qui n'est pas « propre ». Les deux se
     // ressembleraient si on repliait l'absence de relevé sur zéro fichier.
     constatGit:

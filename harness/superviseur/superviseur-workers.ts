@@ -45,7 +45,7 @@ import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { estDansRacine, explorerProjets, type ResultatExploration } from './exploration-projets.ts';
 import { existsSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { rechercherDansProjets, type ResultatRecherche } from './recherche-projets.ts';
 import { lireFichier, type ResultatLectureFichier } from './lecture-fichier.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';

@@ -130,6 +130,8 @@ export interface EnregistrementWorker {
   readonly sessionId: string;
   readonly epoch: number;
   readonly worktree: string;
+  /** Branche git dédiée du worktree alloué (H-11, F.2) — `null` en mode dégradé non-git. */
+  readonly branche?: string | null;
   readonly spec: WorkerSpec;
   readonly handle: WorkerHandle;
   /**

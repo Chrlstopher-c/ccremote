@@ -12,6 +12,7 @@ import { startWorker as startWorkerReel } from '../workers/index.ts';
 import type { ConfigAntiBoucle, ObservateurAntiBoucle } from './anti-boucle-workers.ts';
 import type { PersistanceRegistre } from './persistance-registre.ts';
 import type { ObservateurFlux, ObservateurRelance } from './types.ts';
+import type { GestionnaireCycleVieWorktree } from '../projets/index.ts';
 
 /**
  * Fenêtre de grâce par défaut avant le forçage (G.4.2, mission M-52).
@@ -119,4 +120,13 @@ export interface DependancesSuperviseur {
   readonly configAntiBoucle?: ConfigAntiBoucle;
   /** Best-effort (H-15, H-64) : trace chaque décision anti-boucle dans le fil de la mission. */
   readonly observateurAntiBoucle?: ObservateurAntiBoucle;
+  /**
+   * Gestionnaire réel du cycle de vie worktree ↔ équipe (F.2, `projets/cycle-vie-worktree.ts`).
+   * Absent ⇒ AUCUNE allocation git n'est tentée : comportement inchangé (mkdirSync
+   * simple, mode dégradé pour tout le monde) — c'est le défaut pour les tests
+   * unitaires qui n'en injectent pas.
+   */
+  readonly gestionnaireWorktrees?: GestionnaireCycleVieWorktree;
+  /** Racine sous laquelle créer les worktrees git dédiés. Défaut : `<racineProjets>/.worktrees`. */
+  readonly racineWorktrees?: string;
 }

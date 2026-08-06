@@ -56,8 +56,8 @@ export class DepotMissions {
                id, lot_id, nom, projet, worktree, branche, session_id, compte_id,
                mandat, critere_arret, modele_demande, modele_resolu,
                etat_sdk, etat_sdk_maj_a, etat_harness, etat_harness_maj_a,
-               budget_max_usd, cree_a, epoch, conversation_id, machine
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?, ?)`,
+               budget_max_usd, cree_a, epoch, conversation_id, machine, projet_est_git
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             creation.id,
@@ -87,6 +87,7 @@ export class DepotMissions {
             // et le routage refusera plutôt que de deviner dès que deux machines
             // sont en ligne — voir `parc-superviseurs.ts#resoudre`.
             creation.machine ?? null,
+            creation.projetEstGit === true ? 1 : 0,
           );
         return this.exiger(creation.id);
       },
