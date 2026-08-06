@@ -17,6 +17,7 @@ import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { FileEntreeCiblee, SourceInterruption } from '../../../pause/index.ts';
 import type { ConfigPlafondParc, RelevePourPlafond } from '../../../budgets/index.ts';
 import type { AccesMandat } from '../../../shared/acces-mandat.ts';
+import type { MetriquesHote } from '../../../superviseur/metriques-hote.ts';
 
 /**
  * `'accepte'` ≠ `'applique'` (A.2.3) : le premier dit « pris en compte, pas
@@ -250,4 +251,15 @@ export interface ExplorateurProjets {
     readonly entrees: readonly { readonly nom: string; readonly type: string; readonly chemin: string; readonly depotGit?: boolean }[];
     readonly note?: string;
   }>;
+}
+
+/**
+ * Lit ce que le PC sait dire de lui-même (CPU, RAM, disque, GPU, réseau, uptime),
+ * qui vit sur le PC (H-75). `☠` Réutilise `metriques_hote` — déjà relevé et
+ * transporté par le canal D.3 pour l'API web (`assembler-control-plane.ts`) —
+ * plutôt que d'introduire un second relevé qui pourrait diverger du premier.
+ */
+export interface LecteurMetriquesHote {
+  /** `null` : machine hors ligne ou métriques indisponibles — jamais un objet à zéros. */
+  metriquesHote(): Promise<MetriquesHote | null>;
 }

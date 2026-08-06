@@ -143,6 +143,67 @@ describe('surface d’outils (A.2.2)', () => {
     expect(noms).not.toContain('arret_urgence');
   });
 
+  // ☠ Même famille que `rechercher_projets` ci-dessus : `etat_machine` et
+  // `reveiller_machine` sont conditionnels à leur port, absents par défaut ici,
+  // ce qui explique pourquoi ils ne figurent pas dans le compte des 23 outils.
+  test('etat_machine apparaît dès que le lecteur de métriques est câblé', () => {
+    const avec = construireOutilsControle({
+      ...deps,
+      lecteurMetriquesHote: { metriquesHote: async () => null },
+    }).map((o) => o.name);
+    expect(avec).toContain('etat_machine');
+  });
+
+  test('etat_machine reste ABSENT quand il ne l’est pas', () => {
+    expect(construireOutilsControle(deps).map((o) => o.name)).not.toContain('etat_machine');
+  });
+
+  test('reveiller_machine apparaît dès que l’émetteur de réveil est câblé', () => {
+    const avec = construireOutilsControle({
+      ...deps,
+      emetteurReveilPc: { reveiller: async () => {} },
+    }).map((o) => o.name);
+    expect(avec).toContain('reveiller_machine');
+  });
+
+  test('reveiller_machine reste ABSENT quand il ne l’est pas', () => {
+    expect(construireOutilsControle(deps).map((o) => o.name)).not.toContain('reveiller_machine');
+  });
+
+  test('etat_machine porte readOnlyHint (auto-approuvable, comme carburant_parc)', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      lecteurMetriquesHote: { metriquesHote: async () => null },
+    });
+    const outil = outils.find((o) => o.name === 'etat_machine');
+    expect(outil?.annotations?.readOnlyHint).toBe(true);
+  });
+
+  test('reveiller_machine ne porte PAS readOnlyHint (ce n’est pas une lecture)', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      emetteurReveilPc: { reveiller: async () => {} },
+    });
+    const outil = outils.find((o) => o.name === 'reveiller_machine');
+    expect(outil?.annotations?.readOnlyHint).not.toBe(true);
+  });
+
+  test('etat_machine : machine hors du z.enum fermé (« pi ») est refusée par Zod', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      lecteurMetriquesHote: { metriquesHote: async () => null },
+    });
+    const outil = outils.find((o) => o.name === 'etat_machine');
+    // `inputSchema` est la FORME brute passée à `tool()` — un objet de champs
+    // Zod, pas un `z.object` — voir la signature `AnyZodRawShape` du SDK.
+    const champMachine = (outil?.inputSchema as { machine: { parse: (v: unknown) => unknown } } | undefined)?.machine;
+    expect(champMachine).toBeDefined();
+    // `parse` lève sur une valeur hors de l’énumération fermée — c’est la garde
+    // structurelle qui empêche un modèle de désigner autre chose que le PC.
+    expect(() => champMachine?.parse('pi')).toThrow();
+    expect(() => champMachine?.parse('pc')).not.toThrow();
+  });
+
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
     const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'suivre_equipes', 'mon_autonomie', 'carburant_parc', 'lister_projets', 'historique_equipe'];
     const outils = construireOutilsControle(deps);

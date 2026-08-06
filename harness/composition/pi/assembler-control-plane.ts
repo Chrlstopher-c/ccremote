@@ -64,6 +64,7 @@ import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
 import { creerAgregatParc, ParcSuperviseurs } from './parc-superviseurs.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
+import { reveillerPc } from './reveil-wol.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
@@ -324,6 +325,16 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       chercheurProjets: {
         rechercherProjets: (motif, chemin, max) => machineDuFil(conversationId).rechercherProjets(motif, chemin, max),
       },
+      // `☠` MÊME chemin que la page « État du système » de l'API web
+      // (`metriquesMachines` ci-dessous) : un seul relevé, jamais deux qui
+      // pourraient diverger.
+      lecteurMetriquesHote: { metriquesHote: () => machineDuFil(conversationId).metriquesHote() },
+      // `☠` HORS canal D.3 (H-75) : `reveillerPc` émet un magic packet en
+      // diffusion locale, sans passer par le parc de superviseurs — voir
+      // `reveil-wol.ts`. Toujours câblé : contrairement aux ports ci-dessus, il
+      // ne dépend d'aucune machine déjà connectée, précisément parce qu'il sert
+      // à en réveiller une qui ne l'est pas.
+      emetteurReveilPc: { reveiller: () => reveillerPc() },
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :

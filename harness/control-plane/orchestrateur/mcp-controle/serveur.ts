@@ -47,6 +47,7 @@ import {
   supprimerRappel,
 } from './outils-rappels.ts';
 import { nommerFil } from './outils-fil.ts';
+import { etatMachine, reveillerMachine, type EmetteurReveil } from './outils-machine.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type {
   ArreteurMission,
@@ -58,6 +59,7 @@ import type {
   ChercheurProjets,
   ExplorateurProjets,
   LecteurFichierProjet,
+  LecteurMetriquesHote,
   RelanceurMission,
   EmetteurEquipe,
 } from './types.ts';
@@ -124,6 +126,18 @@ export interface DependancesServeurControle {
    * qu'il lirait comme « rien ne correspond ».
    */
   readonly chercheurProjets?: ChercheurProjets;
+  /**
+   * Métriques matérielles du PC (`etat_machine`) — branche le port `metriques_hote`
+   * déjà câblé de bout en bout (canal D.3), ne le duplique pas. Absent ⇒ l'outil
+   * n'est pas exposé DU TOUT, même règle que les ports projets ci-dessus.
+   */
+  readonly lecteurMetriquesHote?: LecteurMetriquesHote;
+  /**
+   * Réveil Wake-on-LAN du PC (`reveiller_machine`). `☠` HORS canal D.3 (H-75) :
+   * le PC éteint n'a aucun lien à emprunter — voir `composition/pi/reveil-wol.ts`.
+   * Absent ⇒ l'outil n'est pas exposé DU TOUT.
+   */
+  readonly emetteurReveilPc?: EmetteurReveil;
   /**
    * Conversation dont ce serveur est la surface (migration 15). `☠` Un serveur
    * de contrôle est construit PAR conversation — sans cet identifiant,
@@ -629,6 +643,47 @@ function outilsContexte(deps: DependancesServeurControle) {
   ];
 }
 
+/**
+ * Groupe « machine » (A.2.2) — `etat_machine` et `reveiller_machine`, chacun
+ * présent SEULEMENT si la composition a câblé son port (voir
+ * `DependancesServeurControle.lecteurMetriquesHote` / `.emetteurReveilPc`).
+ */
+function outilsMachine(deps: DependancesServeurControle) {
+  const lecteur = deps.lecteurMetriquesHote;
+  const outilEtatMachine =
+    lecteur === undefined
+      ? []
+      : [
+          tool(
+            'etat_machine',
+            "État matériel du PC : CPU, RAM, disque, températures, GPU, réseau, uptime. " +
+              "Lecture seule — mêmes données que la page « État du système » de l'interface.",
+            { machine: z.enum(['pc']).describe('Seule machine pilotable par ces outils : le PC.') },
+            async ({ machine }) => protege('etat_machine', () => etatMachine(lecteur, machine)),
+            { annotations: { readOnlyHint: true } },
+          ),
+        ];
+
+  const emetteurReveil = deps.emetteurReveilPc;
+  const outilReveillerMachine =
+    emetteurReveil === undefined
+      ? []
+      : [
+          tool(
+            'reveiller_machine',
+            "Envoie un magic packet Wake-on-LAN au PC, en diffusion locale depuis le Pi — " +
+              "AUCUN lien n'est requis, c'est justement ce qui permet de réveiller un PC éteint " +
+              "(H-75 : le PC initie le lien, jamais le Pi ; éteint, il n'y en a aucun à emprunter). " +
+              "`☠` Ne confirme JAMAIS l'allumage : le paquet est émis, rien de plus — reviens avec " +
+              "`etat_machine` après quelques minutes pour vérifier que la machine a répondu.",
+            { machine: z.enum(['pc']).describe('Seule machine pilotable par ces outils : le PC.') },
+            async ({ machine }) => protege('reveiller_machine', () => reveillerMachine(emetteurReveil, machine)),
+          ),
+        ];
+
+  return [...outilEtatMachine, ...outilReveillerMachine];
+}
+
 export function construireOutilsControle(deps: DependancesServeurControle) {
   return [
     ...outilsInspection(deps),
@@ -640,6 +695,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsExploration(deps),
     ...outilsRecherche(deps),
     ...outilsLectureFichier(deps),
+    ...outilsMachine(deps),
   ];
 }
 
