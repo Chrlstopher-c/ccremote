@@ -65,6 +65,7 @@ import { creerAgregatParc, ParcSuperviseurs } from './parc-superviseurs.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
 import { reveillerPc } from './reveil-wol.ts';
+import { lireEtatService, redemarrerService } from './service-systeme.ts';
 import { creerLecteurUtilisationParc } from './port-utilisation-parc.ts';
 import { creerVerificateurSessionSdk } from './verificateur-session-sdk.ts';
 import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-telemetrie.ts';
@@ -335,6 +336,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       // ne dépend d'aucune machine déjà connectée, précisément parce qu'il sert
       // à en réveiller une qui ne l'est pas.
       emetteurReveilPc: { reveiller: () => reveillerPc() },
+      // `☠` HORS canal D.3 également (H-75) : les services visés tournent SUR
+      // LE PI, comme ce processus lui-même — voir `service-systeme.ts` pour
+      // l'obstacle sudo établi factuellement (`piloter_service` refuse
+      // explicitement tant que la règle sudoers de l'opérateur manque).
+      // Toujours câblés, même raison que le réveil ci-dessus : aucune
+      // dépendance à une machine de travail déjà connectée.
+      lecteurServiceSysteme: { etatService: (service) => lireEtatService(service) },
+      piloteServiceSysteme: { redemarrer: (service) => redemarrerService(service) },
     });
 
   // `☠` La réconciliation est câblée AVANT le serveur API et le gestionnaire :

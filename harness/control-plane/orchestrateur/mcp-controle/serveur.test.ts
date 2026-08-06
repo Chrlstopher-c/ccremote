@@ -188,6 +188,121 @@ describe('surface d’outils (A.2.2)', () => {
     expect(outil?.annotations?.readOnlyHint).not.toBe(true);
   });
 
+  // ☠ Même famille que `etat_machine`/`reveiller_machine` ci-dessus : conditionnels
+  // à leur port respectif, absents par défaut — donc hors du compte des 23 outils.
+  test('etat_service apparaît dès que le lecteur de services est câblé', () => {
+    const avec = construireOutilsControle({
+      ...deps,
+      lecteurServiceSysteme: { etatService: async () => null },
+    }).map((o) => o.name);
+    expect(avec).toContain('etat_service');
+  });
+
+  test('etat_service reste ABSENT quand il ne l’est pas', () => {
+    expect(construireOutilsControle(deps).map((o) => o.name)).not.toContain('etat_service');
+  });
+
+  test('piloter_service apparaît dès que le piloteur de services est câblé', () => {
+    const avec = construireOutilsControle({
+      ...deps,
+      piloteServiceSysteme: { redemarrer: async () => ({ ok: true }) },
+    }).map((o) => o.name);
+    expect(avec).toContain('piloter_service');
+  });
+
+  test('piloter_service reste ABSENT quand il ne l’est pas', () => {
+    expect(construireOutilsControle(deps).map((o) => o.name)).not.toContain('piloter_service');
+  });
+
+  test('etat_service porte readOnlyHint (lecture pure)', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      lecteurServiceSysteme: { etatService: async () => null },
+    });
+    const outil = outils.find((o) => o.name === 'etat_service');
+    expect(outil?.annotations?.readOnlyHint).toBe(true);
+  });
+
+  test('piloter_service ne porte PAS readOnlyHint (ce n’est pas une lecture)', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      piloteServiceSysteme: { redemarrer: async () => ({ ok: true }) },
+    });
+    const outil = outils.find((o) => o.name === 'piloter_service');
+    expect(outil?.annotations?.readOnlyHint).not.toBe(true);
+  });
+
+  /**
+   * `inputSchema` est la FORME brute passée à `tool()` — un objet de champs
+   * Zod (`AnyZodRawShape`), pas un `z.object` complet. Même patron que le test
+   * `etat_machine` ci-dessus, cast justifié pour ce seul besoin de test.
+   */
+  function champZod(
+    outils: ReturnType<typeof construireOutilsControle>,
+    nom: string,
+    champ: string,
+  ): { parse: (v: unknown) => unknown } | undefined {
+    const outil = outils.find((o) => o.name === nom);
+    const schema = outil?.inputSchema as Record<string, { parse: (v: unknown) => unknown }> | undefined;
+    return schema?.[champ];
+  }
+
+  test('☠ etat_service : un service HORS de la liste blanche est rejeté par Zod', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      lecteurServiceSysteme: { etatService: async () => null },
+    });
+    const champService = champZod(outils, 'etat_service', 'service');
+    expect(() => champService?.parse('un-service-invente-par-le-modele')).toThrow();
+    // Validation dans les deux sens : un service RÉELLEMENT du seau 2/3 passe.
+    expect(() => champService?.parse('portfolio')).not.toThrow();
+    expect(() => champService?.parse('stockiop-ops-backend')).not.toThrow();
+  });
+
+  test('☠ etat_service : le SEAU 1 (jamais exposé) est rejeté par Zod, même par erreur de frappe plausible', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      lecteurServiceSysteme: { etatService: async () => null },
+    });
+    const champService = champZod(outils, 'etat_service', 'service');
+    expect(() => champService?.parse('ccremote-harness')).toThrow();
+    expect(() => champService?.parse('cloudflared')).toThrow();
+  });
+
+  test('☠ piloter_service : un service du SEAU 2 (etat_service seulement) est rejeté par Zod', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      piloteServiceSysteme: { redemarrer: async () => ({ ok: true }) },
+    });
+    const champService = champZod(outils, 'piloter_service', 'service');
+    expect(() => champService?.parse('stockiop-ops-backend')).toThrow();
+    expect(() => champService?.parse('homelab-dns')).toThrow();
+    // Validation dans les deux sens : un service du seau 3 (les deux outils) passe.
+    expect(() => champService?.parse('portfolio')).not.toThrow();
+  });
+
+  test('☠ piloter_service : action hors de `restart` est rejetée par Zod (pas de start/stop exposés)', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      piloteServiceSysteme: { redemarrer: async () => ({ ok: true }) },
+    });
+    const champAction = champZod(outils, 'piloter_service', 'action');
+    expect(() => champAction?.parse('stop')).toThrow();
+    expect(() => champAction?.parse('start')).toThrow();
+    expect(() => champAction?.parse('restart')).not.toThrow();
+  });
+
+  test('etat_service / piloter_service : machine hors du z.enum fermé (« pc ») est rejetée par Zod', () => {
+    const outils = construireOutilsControle({
+      ...deps,
+      lecteurServiceSysteme: { etatService: async () => null },
+      piloteServiceSysteme: { redemarrer: async () => ({ ok: true }) },
+    });
+    expect(() => champZod(outils, 'etat_service', 'machine')?.parse('pc')).toThrow();
+    expect(() => champZod(outils, 'etat_service', 'machine')?.parse('pi')).not.toThrow();
+    expect(() => champZod(outils, 'piloter_service', 'machine')?.parse('pc')).toThrow();
+  });
+
   test('etat_machine : machine hors du z.enum fermé (« pi ») est refusée par Zod', () => {
     const outils = construireOutilsControle({
       ...deps,
@@ -240,6 +355,38 @@ describe('handlers — contrat uniforme et non-blocage', () => {
     const outil = trouverOutil(deps, 'envoyer_a_equipe');
     const resultat = contenuJson(await outil.handler({ missionId: 'x', message: 'salut' }, undefined));
     expect(resultat.ok).toBe(false);
+  });
+
+  test('☠ etat_service sur une unité absente de systemd (réserve d’inventaire) ⇒ refus propre, jamais une erreur brute', async () => {
+    const depsAvecService: DependancesServeurControle = {
+      ...deps,
+      lecteurServiceSysteme: { etatService: async () => null },
+    };
+    const outil = trouverOutil(depsAvecService, 'etat_service');
+    const resultat = contenuJson(await outil.handler({ machine: 'pi', service: 'portfolio' }, undefined));
+    expect(resultat.ok).toBe(false);
+    expect(resultat.effet).toBe('refuse');
+    expect(resultat.raison).toContain('introuvable');
+  });
+
+  test('☠ piloter_service bloqué par l’obstacle sudo ⇒ refus qui nomme la règle manquante, jamais une erreur brute', async () => {
+    const depsAvecPilotage: DependancesServeurControle = {
+      ...deps,
+      piloteServiceSysteme: {
+        redemarrer: async () => ({
+          ok: false,
+          motif: 'permission',
+          detail: 'privilège root requis — règle sudoers manquante pour pi',
+        }),
+      },
+    };
+    const outil = trouverOutil(depsAvecPilotage, 'piloter_service');
+    const resultat = contenuJson(
+      await outil.handler({ machine: 'pi', service: 'portfolio', action: 'restart' }, undefined),
+    );
+    expect(resultat.ok).toBe(false);
+    expect(resultat.effet).toBe('refuse');
+    expect(resultat.raison).toContain('sudoers');
   });
 });
 

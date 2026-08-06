@@ -48,6 +48,7 @@ import {
 } from './outils-rappels.ts';
 import { nommerFil } from './outils-fil.ts';
 import { etatMachine, reveillerMachine, type EmetteurReveil } from './outils-machine.ts';
+import { etatService, piloterService, SERVICES_ETAT_SERVICE, SERVICES_PILOTER_SERVICE } from './outils-service.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type {
   ArreteurMission,
@@ -60,6 +61,8 @@ import type {
   ExplorateurProjets,
   LecteurFichierProjet,
   LecteurMetriquesHote,
+  LecteurServiceSysteme,
+  PiloteServiceSysteme,
   RelanceurMission,
   EmetteurEquipe,
 } from './types.ts';
@@ -138,6 +141,19 @@ export interface DependancesServeurControle {
    * Absent ⇒ l'outil n'est pas exposé DU TOUT.
    */
   readonly emetteurReveilPc?: EmetteurReveil;
+  /**
+   * Lecture d'état des services systemd du Pi (`etat_service`). `☠` HORS canal
+   * D.3 — LOCAL au Pi (H-75, voir `outils-service.ts`), même statut que
+   * `emetteurReveilPc` : absent ⇒ l'outil n'est pas exposé DU TOUT.
+   */
+  readonly lecteurServiceSysteme?: LecteurServiceSysteme;
+  /**
+   * Redémarrage des services systemd du Pi (`piloter_service`), SEAU 3
+   * seulement (voir `outils-service.ts`). `☠` Peut échouer par `refuse`
+   * explicite si la règle sudoers de l'opérateur manque — voir
+   * `composition/pi/service-systeme.ts`. Absent ⇒ l'outil n'est pas exposé DU TOUT.
+   */
+  readonly piloteServiceSysteme?: PiloteServiceSysteme;
   /**
    * Conversation dont ce serveur est la surface (migration 15). `☠` Un serveur
    * de contrôle est construit PAR conversation — sans cet identifiant,
@@ -684,6 +700,61 @@ function outilsMachine(deps: DependancesServeurControle) {
   return [...outilEtatMachine, ...outilReveillerMachine];
 }
 
+/**
+ * Groupe « service » (A.2.2) — `etat_service` et `piloter_service`, LOCAUX au
+ * Pi (H-75, voir `outils-service.ts`), chacun présent SEULEMENT si la
+ * composition a câblé son port (`lecteurServiceSysteme` / `piloteServiceSysteme`).
+ *
+ * `☠` Les enums `service` sont fermés côté SEAUX (`outils-service.ts`) :
+ * `etat_service` expose SEAU 2 + SEAU 3, `piloter_service` expose SEAU 3 SEUL —
+ * jamais une chaîne libre, jamais le même enum pour les deux outils.
+ */
+function outilsService(deps: DependancesServeurControle) {
+  const lecteur = deps.lecteurServiceSysteme;
+  const outilEtatService =
+    lecteur === undefined
+      ? []
+      : [
+          tool(
+            'etat_service',
+            "État d'un service systemd du Pi : actif/inactif/en échec, et depuis quand si connu. " +
+              "Lecture seule — les services ici listés sont ceux dont l'opérateur a validé la lecture " +
+              "(production comprise). Une unité absente de systemd est rendue en `refuse` explicite : " +
+              "l'inventaire de cette liste date du 17/07 (complété 01/08), pas d'une mesure en direct.",
+            {
+              machine: z.enum(['pi']).describe('Seule machine pilotable par ces outils : le Pi.'),
+              service: z.enum(SERVICES_ETAT_SERVICE).describe('Unité systemd, liste blanche fermée.'),
+            },
+            async ({ machine, service }) => protege('etat_service', () => etatService(lecteur, machine, service)),
+            { annotations: { readOnlyHint: true } },
+          ),
+        ];
+
+  const piloteur = deps.piloteServiceSysteme;
+  const outilPiloterService =
+    piloteur === undefined
+      ? []
+      : [
+          tool(
+            'piloter_service',
+            "Redémarre un service systemd du Pi — `restart` UNIQUEMENT (pas de `start`/`stop` : un `stop` " +
+              "sans relance laisse un service de prod éteint sans garde-fou). N'accepte que des services à " +
+              "impact faible et panne visible (voir la liste blanche). `☠` Peut échouer par `refuse` si " +
+              "l'opérateur n'a pas encore posé la règle sudoers requise sur le Pi — le message dit alors " +
+              "exactement laquelle ajouter, ce n'est jamais à cet outil de la poser.",
+            {
+              machine: z.enum(['pi']).describe('Seule machine pilotable par ces outils : le Pi.'),
+              service: z.enum(SERVICES_PILOTER_SERVICE).describe('Unité systemd, liste blanche fermée (sous-ensemble de etat_service).'),
+              action: z.enum(['restart']).describe('Seule action disponible au premier déploiement.'),
+            },
+            async ({ machine, service, action }) =>
+              protege('piloter_service', () => piloterService(piloteur, machine, service, action)),
+          ),
+        ];
+
+  return [...outilEtatService, ...outilPiloterService];
+}
+
 export function construireOutilsControle(deps: DependancesServeurControle) {
   return [
     ...outilsInspection(deps),
@@ -696,6 +767,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsRecherche(deps),
     ...outilsLectureFichier(deps),
     ...outilsMachine(deps),
+    ...outilsService(deps),
   ];
 }
 

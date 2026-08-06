@@ -263,3 +263,49 @@ export interface LecteurMetriquesHote {
   /** `null` : machine hors ligne ou métriques indisponibles — jamais un objet à zéros. */
   metriquesHote(): Promise<MetriquesHote | null>;
 }
+
+/**
+ * État d'une unité systemd, relevé LOCALEMENT sur le Pi (H-75, `outils-service.ts`).
+ * `☠` Réutilisé tel quel par `etat_service` — aucun second type dupliqué : voir
+ * la leçon consignée (couplage composant non réutilisable) sur `outils-machine.ts`.
+ */
+export interface EtatServiceSysteme {
+  readonly service: string;
+  readonly actif: 'active' | 'inactive' | 'failed' | 'activating' | 'deactivating' | 'autre';
+  /** Sous-état systemd (`running`, `dead`, `exited`…) — précision au-delà d'`actif`. */
+  readonly sousEtat: string | null;
+  /** Depuis quand l'unité est dans son état courant. `null` si systemd ne le sait pas. */
+  readonly depuis: string | null;
+}
+
+/**
+ * Lit l'état d'une unité systemd, LOCALE au Pi (`etat_service`). `☠` HORS canal
+ * D.3, même raison que `EmetteurReveil` : le Pi héberge lui-même les services
+ * visés, il n'y a aucun lien à traverser pour les lire.
+ */
+export interface LecteurServiceSysteme {
+  /** `null` : unité inconnue de systemd (`LoadState=not-found`) — jamais un objet à zéros. */
+  etatService(service: string): Promise<EtatServiceSysteme | null>;
+}
+
+/**
+ * Issue d'une tentative de redémarrage, catégorisée pour que `outils-service.ts`
+ * puisse rendre un `refuse` ACTIONNABLE plutôt qu'un échec brut.
+ *
+ * `☠ 'permission'` est le cas établi factuellement au dépôt de cette mission :
+ * `ccremote-harness` tourne en `User=pi`, et `systemctl restart` sur une unité
+ * SYSTÈME exige une autorisation root que polkit refuse par défaut à un
+ * utilisateur non-root sans règle sudoers dédiée. Ce module ne pose JAMAIS
+ * cette règle — il ne fait que la nommer dans `detail`.
+ */
+export type ResultatPilotageService =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly motif: 'permission' | 'inconnu' | 'autre'; readonly detail: string };
+
+/**
+ * Redémarre une unité systemd, LOCALE au Pi (`piloter_service`). `☠` `restart`
+ * UNIQUEMENT — voir `outils-service.ts` pour le pourquoi de `start`/`stop` absents.
+ */
+export interface PiloteServiceSysteme {
+  redemarrer(service: string): Promise<ResultatPilotageService>;
+}
