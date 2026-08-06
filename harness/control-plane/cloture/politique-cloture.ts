@@ -19,6 +19,16 @@
  * la session vit encore et TIENT son worktree. Deux Claude Code écrivant dans le
  * même arbre est précisément le désastre que H-56 empêche.
  *
+ * `☠` Depuis le mandat E3 (câblage worktree), H-56 ne verrouille plus le projet
+ * ENTIER pour un dépôt git — une équipe idle n'y bloque plus les autres, elle
+ * n'occupe plus que SON worktree et un emplacement du plafond git. La logique
+ * ci-dessous n'a PAS été révisée pour en tenir compte : `missionsAClore()` clôt
+ * toujours après le même délai, git ou non — c'est un arbitrage de politique
+ * (délai différencié ? aucun délai pour le git ?) qui dépasse ce mandat. Décision
+ * VOLONTAIREMENT laissée à l'opérateur plutôt qu'inventée ici ; le comportement
+ * actuel reste sûr dans les deux cas (il ne fait que libérer PLUS de ressources,
+ * jamais moins).
+ *
  * D'où le délai. Il arbitre entre deux coûts asymétriques :
  *   - clore trop tôt coûte UNE relance — `relancer_equipe` reprend la session par
  *     son `sessionId`, qui survit à la clôture, donc le contexte n'est pas perdu ;

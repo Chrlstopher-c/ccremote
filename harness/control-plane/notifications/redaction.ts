@@ -99,12 +99,24 @@ export function redigerFinEquipe(mission: Mission, maintenant: number = Date.now
       // vient d'hériter d'un verrou. Il lisait le rapport, répondait « bien
       // reçu », et le projet restait occupé — dispatch suivant refusé par H-56
       // sur un parc qui n'affiche pourtant aucune équipe active (mesuré le 01/08).
-      `ATTENTION — cette équipe OCCUPE ENCORE « ${mission.projet} » : tant qu'elle est ouverte, ` +
-      'aucune autre équipe ne peut démarrer sur ce projet (H-56). Deux gestes possibles, ' +
-      "choisis-en un maintenant : lui réinjecter du travail avec envoyer_a_equipe " +
-      `si son mandat mérite d'être prolongé, ou la fermer avec arreter_equipe("${mission.id}") ` +
-      'pour libérer le projet. Ne rien faire la laisse au repos — le harness finira par la ' +
-      'clore seul, mais après un délai qui bloque tout dispatch entre-temps.',
+      // `☠` Depuis le mandat E3 : ce n'est plus vrai sur un projet GIT (H-56
+      // assoupli — plusieurs équipes en parallèle, une par worktree). Le
+      // paragraphe distingue les deux, `mission.projetEstGit` fait autorité —
+      // jamais un texte générique qui mentirait sur l'un des deux cas.
+      (mission.projetEstGit
+        ? `Cette équipe reste ouverte sur « ${mission.projet} » (dépôt git — plusieurs équipes en ` +
+          "parallèle sont possibles, H-56 assoupli par le mandat E3) : elle n'empêche personne d'autre " +
+          "de démarrer, mais elle occupe encore son worktree et un emplacement du plafond d'équipes " +
+          'simultanées tant qu\'elle n\'est pas fermée. Deux gestes possibles : lui réinjecter du travail ' +
+          "avec envoyer_a_equipe si son mandat mérite d'être prolongé, ou la fermer avec " +
+          `arreter_equipe("${mission.id}") pour libérer son worktree. Ne rien faire la laisse au repos — ` +
+          'le harness finira par la clore seul.'
+        : `ATTENTION — cette équipe OCCUPE ENCORE « ${mission.projet} » : tant qu'elle est ouverte, ` +
+          "aucune autre équipe ne peut démarrer sur ce projet (H-56, projet non-git — pas d'isolation " +
+          'possible). Deux gestes possibles, choisis-en un maintenant : lui réinjecter du travail avec ' +
+          "envoyer_a_equipe si son mandat mérite d'être prolongé, ou la fermer avec " +
+          `arreter_equipe("${mission.id}") pour libérer le projet. Ne rien faire la laisse au repos — ` +
+          'le harness finira par la clore seul, mais après un délai qui bloque tout dispatch entre-temps.'),
   };
 }
 

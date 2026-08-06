@@ -143,6 +143,8 @@ export interface OptionsAssemblageControlPlanePi {
    * d'un `/login` sur le Pi.
    */
   readonly avecOrchestrateur?: boolean;
+  /** Plafond d'équipes simultanées sur un projet GIT (mandat E3). Défaut : `PLAFOND_EQUIPES_PROJET_GIT_DEFAUT` (4). */
+  readonly plafondEquipesParProjet?: number;
 }
 
 export interface ControlPlanePiAssemble {
@@ -407,9 +409,23 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       verifierProjet: async (chemin: string) => {
         const exploration = await cible.client.explorerProjets(chemin);
         const note = exploration.note ?? '';
-        return { present: exploration.entrees.length > 0 || note === '', note };
+        const present = exploration.entrees.length > 0 || note === '';
+        if (!present) return { present, note };
+        // `☠` H-56 assoupli (mandat E3) : seul un projet git accepte plusieurs
+        // équipes. Best-effort — un relevé git en échec ne doit jamais empêcher
+        // un dispatch par ailleurs légitime, il retombe sur `estGit: false`, le
+        // comportement le plus conservateur (mono-équipe stricte).
+        let estGit = false;
+        try {
+          const constat = await cible.client.etatGit(chemin);
+          estGit = constat.depot;
+        } catch (erreur) {
+          log.warn({ err: erreur, chemin }, 'constat git indisponible avant dispatch — traité comme non-git (H-56 strict)');
+        }
+        return { present, note, estGit };
       },
       repertoireProjets: options.repertoireProjets,
+      plafondEquipesParProjet: options.plafondEquipesParProjet,
     });
     // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
     // laisserait un mandat consommé sans équipe si le PC refusait.

@@ -28,7 +28,17 @@ export type EtatHarness =
   | 'terminee'
   | 'annulee';
 
-/** États harness considérés comme occupant le projet (H-56 : une seule mission active par projet). */
+/**
+ * États harness considérés comme occupant le projet. Sert deux règles distinctes,
+ * arbitrées au point d'usage — jamais ici, qui ignore `estGit` :
+ *  - H-56 stricte (mono-équipe) pour un projet NON-git, où `listerActives()`
+ *    filtré par ces états refuse toute deuxième mission ;
+ *  - le plafond git (mandat E3, `PLAFOND_EQUIPES_PROJET_GIT_DEFAUT`) pour un
+ *    projet git, où la même liste sert à COMPTER les équipes actives plutôt
+ *    qu'à en refuser plus d'une.
+ * Voir `dispatch-mandat.ts` (garde applicative) et migration 25 (index partiel
+ * restreint à `projet_est_git = 0`).
+ */
 export const ETATS_HARNESS_ACTIFS: readonly EtatHarness[] = [
   'planifiee',
   'en_cours',

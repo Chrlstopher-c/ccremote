@@ -24,6 +24,11 @@
 import { CompteurRelances } from '../../relance/compteur-relances.ts';
 import { creerJugeHaiku } from '../../anti-boucle/index.ts';
 import { PersistanceRegistreSqlite, SuperviseurWorkers } from '../../superviseur/index.ts';
+import {
+  GestionnaireCycleVieWorktree,
+  GestionnaireWorktreeGitReel,
+  InterrogateurGitReel,
+} from '../../projets/index.ts';
 import type { FermetureTerminale } from '../../transport/contrat.ts';
 import type { LienWebSocket } from '../../transport/lien-websocket.ts';
 import { compositionLogger } from '../logger.ts';
@@ -52,6 +57,8 @@ export interface OptionsAssemblageSuperviseurPc {
    * permanence jusqu'au 23/07.
    */
   readonly comptesASonder?: readonly { readonly id: string; readonly configDir: string }[];
+  /** Racine sous laquelle créer les worktrees git dédiés (F.2). Défaut : `<racineProjets>/.worktrees`. */
+  readonly racineWorktrees?: string;
 }
 
 export interface SuperviseurPcAssemble {
@@ -72,10 +79,21 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
   const compteurRelances = new CompteurRelances(options.plafondRelancesDefaut);
   const jugeBoucle = creerJugeHaiku();
 
+  // `☠` Câblage F.2 (E2) : le gestionnaire réel de cycle de vie worktree
+  // (`projets/cycle-vie-worktree.ts`, testé, jamais branché avant cette
+  // mission) est construit ICI avec ses implémentations git RÉELLES — c'est le
+  // premier appelant de production qui les exerce contre un vrai dépôt.
+  const gestionnaireWorktrees = new GestionnaireCycleVieWorktree({
+    interrogateur: new InterrogateurGitReel(),
+    gestionnaire: new GestionnaireWorktreeGitReel(),
+  });
+
   const superviseur = new SuperviseurWorkers({
     compteurRelances,
     persistance,
     jugeBoucle,
+    gestionnaireWorktrees,
+    ...(options.racineWorktrees ? { racineWorktrees: options.racineWorktrees } : {}),
     ...(options.comptesASonder ? { comptesASonder: options.comptesASonder } : {}),
   });
 
