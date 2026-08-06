@@ -312,4 +312,35 @@ describe('dispatch — H-56 conditionné au caractère git du projet (E3)', () =
     const erreur = await dispatcherMandat(PROPOSITION, deps()).catch((e: unknown) => e);
     expect(erreur).toBeInstanceOf(ErreurProjetOccupe);
   });
+
+  test('☠ le worktree RÉELLEMENT alloué (réponse du PC) est écrit au registre', async () => {
+    // Le PC peut allouer un chemin distinct de celui envoyé au dispatch — voir
+    // `SuperviseurWorkers.demarrer()` (câblage E2) — c'est ce que `definirWorktree`
+    // doit refléter, jamais le `cwd` provisoire composé côté Pi.
+    const d: DependancesDispatch = {
+      ...depsAvecVerdict(true),
+      demarreur: {
+        demarrer: async () => ({
+          detail: 'ok',
+          worktree: { chemin: '/mnt/projects/.worktrees/equipe-xyz', branche: 'equipe/xyz' },
+        }),
+      } as never,
+    };
+    const r = await dispatcherMandat(PROPOSITION, d);
+    const mission = registre.missions.lire(r.missionId);
+    expect(mission?.worktree).toBe('/mnt/projects/.worktrees/equipe-xyz');
+    expect(mission?.branche).toBe('equipe/xyz');
+  });
+
+  test('sans champ `worktree` dans la réponse du PC (mode dégradé), le worktree provisoire est conservé', async () => {
+    const d: DependancesDispatch = {
+      ...depsAvecVerdict(false),
+      demarreur: { demarrer: async () => ({ detail: 'ok' }) } as never,
+    };
+    const r = await dispatcherMandat(PROPOSITION, d);
+    const mission = registre.missions.lire(r.missionId);
+    // `definirWorktree` n'est PAS appelé — le worktree reste celui composé à la
+    // création (le `cwd` provisoire, ici le projet lui-même, mode dégradé).
+    expect(mission?.worktree).toBe('/mnt/projects/vela');
+  });
 });
