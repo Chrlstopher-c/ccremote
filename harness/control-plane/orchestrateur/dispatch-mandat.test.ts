@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
 import { OUTILS_ECRITURE, OUTILS_INTERACTION_HUMAINE } from '../../shared/acces-mandat.ts';
-import { dispatcherMandat, ErreurProjetOccupe, type DependancesDispatch } from './dispatch-mandat.ts';
+import {
+  dispatcherMandat,
+  ErreurPlafondEquipesProjetAtteint,
+  ErreurProjetOccupe,
+  PLAFOND_EQUIPES_PROJET_GIT_DEFAUT,
+  type DependancesDispatch,
+  type VerificationProjet,
+} from './dispatch-mandat.ts';
 
 let registre: Registre;
 
@@ -237,5 +244,72 @@ describe('☠ l’accès du mandat est un DROIT posé sur le worker, pas une phr
         'terminee',
       );
     }
+  });
+});
+
+/**
+ * `☠` Les deux cas qui comptent (mandat E3) : un projet NON-git refuse
+ * TOUJOURS une seconde équipe (H-56 stricte, inchangée) ; un projet GIT
+ * l'accepte jusqu'à un plafond, refusé explicitement au-delà. `deps()`
+ * (au-dessus) n'injecte aucun `verifierProjet` : `estGit` y retombe donc à
+ * `false` par défaut — c'est déjà ce que couvre `describe` H-56 plus haut.
+ */
+describe('dispatch — H-56 conditionné au caractère git du projet (E3)', () => {
+  function depsAvecVerdict(estGit: boolean, plafond?: number): DependancesDispatch {
+    return {
+      ...deps(),
+      verifierProjet: async (): Promise<VerificationProjet> => ({ present: true, estGit }),
+      ...(plafond === undefined ? {} : { plafondEquipesParProjet: plafond }),
+    };
+  }
+
+  test('☠ un projet GIT accepte une SECONDE équipe là où H-56 stricte l’aurait refusée', async () => {
+    semerMissionActive('/mnt/projects/vela');
+    const r = await dispatcherMandat(PROPOSITION, depsAvecVerdict(true));
+    expect(r.missionId).toBeDefined();
+  });
+
+  test('☠ le MÊME projet, non-git, refuse encore — preuve dans les deux sens sur une seule garde', async () => {
+    semerMissionActive('/mnt/projects/vela');
+    // Sens « casse » : estGit=true fait passer le dispatch (test précédent).
+    // Sens « restaure » : estGit=false (défaut) fait revenir le refus — même
+    // projet, même mission bloquante, seul le verdict git change.
+    const erreur = await dispatcherMandat(PROPOSITION, depsAvecVerdict(false)).catch((e: unknown) => e);
+    expect(erreur).toBeInstanceOf(ErreurProjetOccupe);
+  });
+
+  test(`accepte jusqu’au plafond (${PLAFOND_EQUIPES_PROJET_GIT_DEFAUT}), refuse explicitement au-delà`, async () => {
+    const d = depsAvecVerdict(true);
+    for (let i = 0; i < PLAFOND_EQUIPES_PROJET_GIT_DEFAUT; i++) {
+      const r = await dispatcherMandat(PROPOSITION, d);
+      expect(r.missionId).toBeDefined();
+    }
+    const erreur = await dispatcherMandat(PROPOSITION, d).catch((e: unknown) => e);
+    expect(erreur).toBeInstanceOf(ErreurPlafondEquipesProjetAtteint);
+    expect((erreur as Error).message).toContain(String(PLAFOND_EQUIPES_PROJET_GIT_DEFAUT));
+  });
+
+  test('le plafond est CONFIGURABLE — un plafond de 1 refuse dès la deuxième équipe', async () => {
+    const d = depsAvecVerdict(true, 1);
+    const premiere = await dispatcherMandat(PROPOSITION, d);
+    expect(premiere.missionId).toBeDefined();
+    const erreur = await dispatcherMandat(PROPOSITION, d).catch((e: unknown) => e);
+    expect(erreur).toBeInstanceOf(ErreurPlafondEquipesProjetAtteint);
+  });
+
+  test('une mission terminée libère un emplacement du plafond git', async () => {
+    const d = depsAvecVerdict(true, 1);
+    const premiere = await dispatcherMandat(PROPOSITION, d);
+    registre.etats.appliquerEtatHarness(premiere.missionId, 'terminee');
+    const deuxieme = await dispatcherMandat(PROPOSITION, d);
+    expect(deuxieme.missionId).toBeDefined();
+  });
+
+  test('un projet ABSENT du verdict git (verifierProjet non fourni) reste mono-équipe par défaut', async () => {
+    semerMissionActive('/mnt/projects/vela');
+    // `deps()` seul, sans `verifierProjet` — comportement de tout appelant qui
+    // n'a jamais été mis à jour (tests existants, restauration…).
+    const erreur = await dispatcherMandat(PROPOSITION, deps()).catch((e: unknown) => e);
+    expect(erreur).toBeInstanceOf(ErreurProjetOccupe);
   });
 });
