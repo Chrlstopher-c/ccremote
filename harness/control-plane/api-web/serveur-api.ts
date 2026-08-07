@@ -618,6 +618,15 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     return { ok: true, effet: r.detail, compacted: r.compacte };
   }
 
+  const stop = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/interrompre$/);
+  if (stop?.[1] !== undefined) {
+    // `☠` `interrompu: false` n'est PAS une erreur : couper un fil qui ne génère
+    // rien est un non-geste, pas une panne. L'interface a besoin du motif pour
+    // le dire, plutôt que d'afficher un échec sur une conversation au repos.
+    const r = await conv.interrompre(decodeURIComponent(stop[1]));
+    return { ok: true, effet: r.detail, interrupted: r.interrompu };
+  }
+
   const rename = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/rename$/);
   if (rename?.[1] !== undefined) {
     const corps = await lireCorps(req);

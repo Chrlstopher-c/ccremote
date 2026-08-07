@@ -209,12 +209,15 @@
   .orch-cursor { display: inline-block; width: 2px; height: 15px; background: var(--accent-2); margin-left: 3px; vertical-align: text-bottom; animation: orchBlink 1.05s steps(2) infinite; }
   @keyframes orchBlink { 0%,50% { opacity: 1; } 50.01%,100% { opacity: 0; } }
 
-  /* pastille « il travaille » avant le premier token */
-  .orch-typing { display: inline-flex; align-items: center; gap: 4px; padding: 3px 0; }
-  .orch-typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); display: block; animation: orchDot 1.15s ease-in-out infinite; }
-  .orch-typing i:nth-child(2) { animation-delay: .16s; }
-  .orch-typing i:nth-child(3) { animation-delay: .32s; }
-  @keyframes orchDot { 0%,60%,100% { transform: translateY(0); opacity: .35; } 30% { transform: translateY(-4px); opacity: 1; } }
+  /* Marque d'activité avant le premier token.
+     ☠ Remplace les trois points sautillants (07/08, « relou ») : ils bougeaient en
+     continu sans rien apprendre. Une ligne qui NOMME l'étape, et un seul point dont
+     la respiration est assez lente pour se lire comme un état, pas comme une alerte. */
+  .orch-work { display: inline-flex; align-items: center; gap: 7px; padding: 3px 0; }
+  .orch-work i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); display: block; animation: orchPulse 1.9s ease-in-out infinite; }
+  .orch-work span { font-size: 11.5px; letter-spacing: .04em; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
+  @keyframes orchPulse { 0%,100% { opacity: .3; } 50% { opacity: .85; } }
+  @media (prefers-reduced-motion: reduce) { .orch-work i { animation: none; opacity: .6; } }
 
   .conv-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 52px 20px; line-height: 1.65; }
   .conv-empty .ce-t { font-family: 'Source Serif 4', serif; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
@@ -251,6 +254,11 @@
   .composer-send:hover { background: #2C2A28; }
   .composer-send:active { transform: scale(.94); }
   .composer-send[disabled] { opacity: .35; pointer-events: none; }
+  /* ☠ Le même bouton coupe le tour pendant la génération. Il change de COULEUR
+     autant que d'icône : un carré sombre sur fond sombre se confondrait avec la
+     flèche d'envoi, et cliquer « envoyer » en croyant couper est le pire des deux. */
+  .composer-send.is-stop { background: #B4432F; }
+  .composer-send.is-stop:hover { background: #9B3826; }
   /* ===== pièces jointes du composeur (04/08) ===== */
   /* Bouton d'action de la barre de réglages — même gabarit que .pill-toggle,
      mais sans état coché : il ouvre, il ne bascule rien. */

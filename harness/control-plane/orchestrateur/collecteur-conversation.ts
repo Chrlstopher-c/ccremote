@@ -153,6 +153,23 @@ export class CollecteurConversation {
   }
 
   /**
+   * Referme l'état de génération après une interruption demandée par l'opérateur.
+   *
+   * `☠` Le bloc partiel est ABANDONNÉ, jamais persisté : une réflexion coupée au
+   * milieu d'une phrase, écrite dans le fil, s'y relirait ensuite comme une pensée
+   * complète.
+   *
+   * `☠` Et `#genere` doit retomber ICI : le SDK n'émet pas nécessairement de
+   * message de fin sur un tour coupé. Sans ça, l'interface reste bloquée sur « en
+   * cours » — donc sur un bouton d'envoi désactivé et un fil qu'on croit vivant.
+   */
+  marquerInterruption(): void {
+    this.#partiel = null;
+    this.#genere = false;
+    this.#streameCeTour = false;
+  }
+
+  /**
    * Ouvre un tour INTERNE (compaction) : rien n'est écrit dans le fil, et la
    * promesse rend le texte produit. `☠` Sans ce mode, la demande de résumé et sa
    * réponse apparaîtraient dans la conversation de l'opérateur — qui verrait le

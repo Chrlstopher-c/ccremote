@@ -354,6 +354,10 @@ async function hOpenConversation(id) {
   }
   hRenderPartiel(d.partial || null);
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
+  // ☠ Le bouton suit l'état de génération À CHAQUE rafraîchissement, jamais
+  // seulement à l'envoi : un tour peut se terminer, être coupé, ou repartir sur
+  // une notification du harness sans que l'opérateur ait rien fait.
+  hMajBoutonEnvoi();
   hRenderStats(d);
   // ☠ `hBrancherFilBas` et pas seulement `hScrollChat` : à l'ouverture d'un fil
   // ancien, il faut à la fois arriver EN BAS et disposer de la flèche pour y
@@ -988,15 +992,74 @@ function hSelectionDansNoeud(noeud) {
   return noeud.contains(sel.anchorNode) || noeud.contains(sel.focusNode);
 }
 
-/** Pastille « il travaille » : entre l'envoi et le premier token. */
-function hShowTyping(actif) {
+/**
+ * Marque d'activité entre l'envoi et le premier token.
+ *
+ * ☠ Les trois points animés ont sauté le 07/08 : « relou » — trois pastilles qui
+ * sautillent attirent l'œil en continu sans rien apprendre. Remplacées par une
+ * ligne calme qui NOMME ce qui se passe, et dont le seul mouvement est une
+ * respiration lente sur un point unique.
+ */
+function hShowTyping(actif, libelle) {
   const chat = document.getElementById('hChatBody');
-  const existant = chat.querySelector('.orch-typing');
+  const existant = chat.querySelector('.orch-work');
   if (!actif) { if (existant) existant.remove(); return; }
-  if (existant || hOrch.partielEl) return;
-  const t = document.createElement('div'); t.className = 'orch-typing';
-  t.innerHTML = '<i></i><i></i><i></i>';
+  const texte = libelle || 'Réflexion';
+  if (existant) {
+    // Repeindre à l'identique casserait une sélection en cours pour rien.
+    const cible = existant.querySelector('span');
+    if (cible && cible.textContent !== texte) cible.textContent = texte;
+    return;
+  }
+  if (hOrch.partielEl) return;
+  const t = document.createElement('div'); t.className = 'orch-work';
+  t.innerHTML = `<i></i><span>${texte}</span>`;
+  t.querySelector('span').textContent = texte;
   hEnsureAssistant(chat).appendChild(t);
+}
+
+/**
+ * Le bouton du composeur porte DEUX rôles selon l'état du fil : envoyer au repos,
+ * couper pendant la génération.
+ *
+ * ☠ Il n'est jamais désactivé. Avant le 07/08 il l'était pendant toute la
+ * génération — donc aucun moyen de couper un tour parti de travers, et aucun
+ * moyen d'écrire la précision qui aurait suffi à le corriger.
+ */
+function hMajBoutonEnvoi() {
+  const btn = document.getElementById('hBtnOrchSend');
+  if (!btn) return;
+  const stop = !!hOrch.generating;
+  if (btn.dataset.mode === (stop ? 'stop' : 'send')) return;
+  btn.dataset.mode = stop ? 'stop' : 'send';
+  btn.disabled = false;
+  btn.classList.toggle('is-stop', stop);
+  btn.title = stop ? 'Interrompre la réponse' : 'Envoyer';
+  btn.innerHTML = stop
+    ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>'
+    : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+}
+
+/** Clic sur le bouton du composeur : couper si ça génère, envoyer sinon. */
+async function hActionComposeur() {
+  if (hOrch.generating) return hInterrompreOrch();
+  return hSendOrchMessage();
+}
+
+/**
+ * Coupe le tour en cours. ☠ Ne vide PAS le champ de saisie et ne touche pas aux
+ * messages déjà mis en file par le harness : couper une réponse n'annule pas ce
+ * que l'opérateur a écrit pendant qu'elle arrivait.
+ */
+async function hInterrompreOrch() {
+  const id = hOrch.convId; if (!id) return;
+  const r = await HarnessAPI.interruptConversation(id);
+  if (!r.ok) { showToast('Interruption impossible'); return; }
+  // ☠ On ne force pas `generating` à faux ici : c'est le sondage qui fait foi.
+  // Le forcer rendrait la main à l'écran avant que le tour soit réellement coupé,
+  // et un token arrivé entre-temps rouvrirait un bloc qu'on croyait fermé.
+  hClearPartiel();
+  hPollNow();
 }
 
 // ---- polling de génération --------------------------------------------------
@@ -1035,6 +1098,10 @@ async function hPollNow() {
   hOrch.generating = !!d.generating;
   hRenderPartiel(d.partial || null);
   hShowTyping(hOrch.generating && !(d.partial && d.partial.contenu));
+  // ☠ Le bouton suit l'état de génération À CHAQUE rafraîchissement, jamais
+  // seulement à l'envoi : un tour peut se terminer, être coupé, ou repartir sur
+  // une notification du harness sans que l'opérateur ait rien fait.
+  hMajBoutonEnvoi();
   hRenderStats(d);
   if (auBas) hScrollChat();
   // ☠ Compté seulement quand on lit AILLEURS : la pastille dit « il s'est passé
@@ -1104,7 +1171,12 @@ async function hSendOrchMessage() {
   // ☠ Un message sans texte MAIS avec une capture est légitime — coller une
   // image et n'écrire aucun mot est le geste le plus naturel du composeur.
   const pieces = window.HPieces?.pourEnvoi() ?? [];
-  if ((!text && pieces.length === 0) || hOrch.generating) return;
+  // ☠ Plus de blocage sur `hOrch.generating` (07/08) : le harness met les
+  // messages en FILE d'attente depuis toujours (`GenerateurEntree`, capacité
+  // bornée, « ne perd jamais le message »). Le seul verrou était ici, à l'écran —
+  // écrire pendant que l'orchestrateur répond était impossible alors que rien,
+  // en dessous, ne l'interdisait.
+  if (!text && pieces.length === 0) return;
   if (!hOrch.convId) { await hNewConversation(); if (!hOrch.convId) return; }
   // ☠ `/compact` est traité PAR LE HARNESS, jamais envoyé au modèle : mesuré, le
   // SDK ne connaît pas les commandes slash dans le flux — le modèle y répondrait
@@ -1121,7 +1193,11 @@ async function hSendOrchMessage() {
   const u = hBulleOperateur(text, window.HPieces?.file().map((p) => ({ ...p, url: p.apercu })), hOrch.dernierEnvoiAt);
   u.dataset.optimiste = '1';
   chat.appendChild(u); hOrch.cur = null;
-  hOrch.generating = true; btn.disabled = true;
+  // ☠ Le bouton n'est plus DÉSACTIVÉ pendant la génération : il devient le bouton
+  // d'interruption. Le désactiver était le corollaire du verrou d'envoi qu'on
+  // vient de retirer, et laissait l'opérateur sans aucun moyen de couper un tour.
+  hOrch.generating = true;
+  hMajBoutonEnvoi();
   hShowTyping(true);
   hScrollChat();
 
@@ -1130,10 +1206,9 @@ async function hSendOrchMessage() {
     effort: HarnessState.orchModel.effort,
     fastMode: HarnessState.orchModel.fastMode,
   }, pieces);
-  btn.disabled = false;
   // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.
   if (!r.ok) {
-    hOrch.generating = false; hShowTyping(false);
+    hOrch.generating = false; hShowTyping(false); hMajBoutonEnvoi();
     hAppendEvent({ type: 'erreur', contenu: r.erreur || 'Message non transmis' });
     // ☠ La file N'EST PAS vidée sur échec : les pièces restent attachées pour
     // le renvoi. Les jeter obligerait à re-sélectionner des fichiers que
@@ -1215,7 +1290,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('hSelEffort').addEventListener('change', (e) => { HarnessState.orchModel.effort = e.target.value; hUpdateModelHint(); });
   document.getElementById('hChkFastMode').addEventListener('change', (e) => { HarnessState.orchModel.fastMode = e.target.checked; hUpdateModelHint(); });
   document.getElementById('hChkUltracode').addEventListener('change', (e) => { HarnessState.orchModel.ultracode = e.target.checked; hUpdateModelHint(); });
-  document.getElementById('hBtnOrchSend').addEventListener('click', hSendOrchMessage);
+  document.getElementById('hBtnOrchSend').addEventListener('click', hActionComposeur);
   const zone = document.getElementById('hOrchInput');
   zone.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); hSendOrchMessage(); } });
   // Le champ grandit avec le texte, jusqu'au plafond fixé en CSS (max-height).

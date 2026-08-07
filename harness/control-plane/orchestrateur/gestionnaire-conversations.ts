@@ -521,6 +521,44 @@ export class GestionnaireConversations {
     await session.poignee.entree.envoyerOperateur(propre);
   }
 
+  /**
+   * Coupe le tour en cours d'un fil, sans fermer la session ni perdre le fil.
+   *
+   * `☠` N'ALLUME JAMAIS une session : interrompre un fil qui ne génère rien n'a
+   * aucun sens, et le faire par `#assurerSession` démarrerait une session (donc
+   * du quota) pour l'arrêter aussitôt. Un fil sans session vivante rend
+   * `interrompu: false` — c'est une information, pas une erreur.
+   *
+   * `☠` Le message déjà mis en file d'entrée n'est PAS retiré : `interrupt()`
+   * coupe le tour du modèle, il ne vide pas la file. C'est voulu — ce que Chris
+   * a écrit pendant la génération doit être traité au tour suivant, pas jeté
+   * parce qu'il a coupé la réponse en cours.
+   */
+  async interrompre(id: string): Promise<{ readonly interrompu: boolean; readonly detail: string }> {
+    const conv = this.registre.conversations.lire(id);
+    if (conv === null) throw new ConversationIntrouvableError(id);
+    const session = this.#sessions.get(id);
+    if (session === undefined) return { interrompu: false, detail: 'aucune session vivante sur ce fil' };
+    try {
+      await session.poignee.query.interrupt();
+      // `☠` L'évènement est persisté pour que le fil garde la trace d'une réponse
+      // coupée. Sans lui, un tour interrompu se relit comme un tour vide, et on
+      // croit à une panne du harness.
+      this.registre.conversations.ajouterEvenement({
+        conversationId: id,
+        type: 'erreur',
+        contenu: 'Réponse interrompue.',
+        modele: conv.modele,
+        effort: conv.effort,
+      });
+      session.collecteur.marquerInterruption();
+      return { interrompu: true, detail: 'tour coupé' };
+    } catch (erreur) {
+      log.warn({ err: erreur, conversationId: id }, 'interruption en échec');
+      return { interrompu: false, detail: "le tour n'a pas pu être coupé" };
+    }
+  }
+
   fermer(id: string): void {
     const session = this.#sessions.get(id);
     if (session === undefined) return;

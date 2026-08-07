@@ -166,6 +166,13 @@ const HarnessAPI = (() => {
     async renameConversation(id, titre) {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/rename`, { titre });
     },
+    // ☠ Coupe le TOUR, pas la session ni le fil. `interrupted:false` n'est pas une
+    // erreur : c'est « ce fil ne générait rien ». Et un message déjà mis en file
+    // n'est pas retiré — ce que Chris a écrit pendant la génération sera traité au
+    // tour suivant, couper la réponse en cours ne doit pas le jeter.
+    async interruptConversation(id) {
+      return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/interrompre`, {});
+    },
     // ☠ La compaction est faite PAR LE HARNESS (aucune API SDK ne l'expose) :
     // résumé du fil, puis session neuve amorcée dessus. `compacted:false` n'est
     // pas une erreur — c'est « il n'y avait rien à compacter ».

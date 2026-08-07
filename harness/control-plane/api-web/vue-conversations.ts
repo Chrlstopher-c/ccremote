@@ -147,6 +147,8 @@ export interface PortConversations {
     pieces?: readonly { readonly nom: unknown; readonly type: unknown; readonly donneesBase64: unknown }[],
   ): Promise<void>;
   compacter(id: string): Promise<{ readonly compacte: boolean; readonly detail: string }>;
+  /** Coupe le tour en cours. N'allume aucune session : un fil au repos rend `interrompu: false`. */
+  interrompre(id: string): Promise<{ readonly interrompu: boolean; readonly detail: string }>;
 }
 
 /** URL de relecture d'une pièce — le seul endroit qui connaît la forme de cette route. */

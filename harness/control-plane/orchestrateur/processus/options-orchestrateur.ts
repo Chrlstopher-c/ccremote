@@ -101,6 +101,12 @@ export function composerOptionsOrchestrateur(deps: DependancesOptionsOrchestrate
     cwd: deps.cwd,
     model: MODELE_ORCHESTRATEUR,
     effort: EFFORT_ORCHESTRATEUR,
+    // `☠` Posé explicitement le 2026-08-07. Le collecteur sait traiter les blocs
+    // `thinking` depuis le premier jour et l'interface sait les afficher, mais le
+    // registre n'en comptait AUCUN sur 2 732 évènements : sans ce champ, la
+    // session ne produit pas de bloc de réflexion, et toute la chaîne d'affichage
+    // en aval reste morte sans qu'aucune erreur ne le signale.
+    thinking: { type: 'adaptive' },
     // `☠` `bypassPermissions` et NON `auto` (décision Chris, 2026-08-02) — même
     // raison que pour les workers le 31/07, un cran plus haut. MESURÉ le 02/08 à
     // 12h22 : le classifieur du mode `auto` a refusé un `creer_equipe`
