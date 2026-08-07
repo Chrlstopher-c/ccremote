@@ -1,14 +1,53 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-08-06*
+*Dernière mise à jour : 2026-08-07*
 
 ## ⚡ Chantier en cours — harness d'orchestration (depuis le 2026-07-22)
 
 **Point d'entrée pour reprendre : `harness/REPRISE.md`.** Ne pas repartir de ce STATE pour le
 détail du harness — REPRISE.md est plus précis.
 
-**État au 03/08** : **1443 tests / 1443 verts**, typecheck propre, schéma du registre en
-**version 23**. **TOUT EST DÉPLOYÉ ET VÉRIFIÉ COMME TEL** — le déploiement compare désormais
+**État au 07/08** : **1578 tests / 1578 verts**, typecheck propre, schéma du registre en
+**version 28**. **TOUT EST DÉPLOYÉ ET VÉRIFIÉ COMME TEL** — le déploiement compare désormais
 l'heure de démarrage du process au mtime des sources et échoue s'il sert du code périmé.
+
+### `☠` 07/08 — L'ORCHESTRATEUR N'AVAIT AUCUNE CONDUITE, ET QUATRE OUTILS MUETS
+
+Point de départ : Chris signale qu'il ne suit plus ses conversations avec l'orchestrateur.
+Mesuré sur le fil « Lab Stark » (43 messages de lui, 139 réponses) — message médian de Chris
+172 caractères, réponse médiane 1 131, la plus longue **7 172** en réponse à « ok go », suivie
+deux messages plus tard de « j'ai rien compris ».
+
+**Cause racine.** Aucun `CLAUDE.md` n'était chargé. `settingSources` inclut bien `user`, mais
+`CLAUDE_CONFIG_DIR` pointe sur `.claude-orchestrateur`, où rien n'avait jamais été posé — celui
+de `/home/pi/.claude/` n'est donc jamais lu. Restait le mandat seul, qui décrit des CAPACITÉS et
+pas une CONDUITE.
+
+**Livré et déployé** (commits `5c34c23`, `65e6205`, `dfa0e01`) :
+
+- `harness/composition/deploiement/config-orchestrateur/` — `CLAUDE.md` (conduite : interlocuteur,
+  voix, longueur proportionnée, frontière de vocabulaire, division du travail, points ouverts) et
+  quatre compétences (`mandate-framing`, `campaign-planning`, `unattended-shift`,
+  `parc-diagnosis`). Posés sur les DEUX comptes par `deploy-harness-pi.sh`, qui refuse le
+  déploiement si l'un des deux repart sans conduite.
+- `Skill` ajouté à `OUTILS_ORCHESTRATEUR` : sans lui un dossier `skills/` est inerte, sans erreur.
+- Mandat réécrit, 19 210 → 12 966 caractères sans perte d'information (le détail a déménagé dans
+  les compétences). `☠` Il est réécrit en phrases déclaratives : ses aphorismes ressortaient mot
+  pour mot dans les réponses à Chris — un modèle imite le registre de son prompt système.
+- Mode rapide câblé bout en bout (migration 28, `applyFlagSettings({fastMode})`). La case existait
+  à l'écran depuis le début et n'était transmise nulle part.
+- `effort` posé dans les `Options` + `assertEffortPose`. Il retombait sur la cascade de réglages
+  du compte, et le compte de repli portait `effortLevel: low`.
+- **Cinq outils annoncés au mandat** : `demander_rallonge_autonomie` (livré le 06/08) et les
+  quatre outils machine. Un test ferme la boucle — tout outil servi doit être annoncé, tous les
+  ports optionnels câblés, validé dans les deux sens.
+
+**Mesure après.** Même type de question : 334 à 515 caractères contre 1 131 de médiane avant.
+Prose, aucun titre markdown, aucun nom d'outil dans le texte, et il consulte `etat_machine` de
+lui-même avant de répondre au lieu de spéculer.
+
+**Non prouvé.** Que le mode rapide soit EFFECTIVEMENT actif côté Anthropic : il est transmis,
+persisté et accepté sans erreur, mais le SDK ne le confirme que par `fast_mode_state` dans le
+flux, que le harness ne capte pas encore.
 
 ### `☠` 06/08 — QUATRE OUTILS MACHINE AJOUTÉS AU SERVEUR MCP DE CONTRÔLE (groupe A.2.2)
 
