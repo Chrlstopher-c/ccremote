@@ -5,5 +5,10 @@
  * Aucun autre module ne doit importer les fichiers internes de ce dossier.
  */
 
-export { AUTO_APPROBATIONS_MAX, deciderAutorisation, fenetreOuverte } from './decision-autorisation.ts';
+export {
+  AUTO_APPROBATIONS_MAX,
+  deciderAutorisation,
+  fenetreOuverte,
+  seuilComptageAutonomie,
+} from './decision-autorisation.ts';
 export type { ContexteAutorisation, DecisionAutorisation, ModeAutorisation } from './decision-autorisation.ts';

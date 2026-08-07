@@ -38,7 +38,7 @@
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Mission, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
 import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
-import { deciderAutorisation, fenetreOuverte } from '../../control-plane/autonomie/index.ts';
+import { deciderAutorisation, fenetreOuverte, seuilComptageAutonomie } from '../../control-plane/autonomie/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
@@ -563,7 +563,10 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 approbationHumaineAnterieure: registre.propositions.aApprobationHumaine(conversationId),
                 autoApprouveesDeja: registre.propositions.compterAutoApprouvees(
                   conversationId,
-                  conv?.autonomieDebut ?? 0,
+                  seuilComptageAutonomie(
+                    conv?.autonomieDebut ?? null,
+                    registre.propositions.dateDerniereApprobationHumaine(conversationId),
+                  ),
                 ),
                 fenetreDebut: conv?.autonomieDebut ?? null,
                 fenetreFin: conv?.autonomieFin ?? null,

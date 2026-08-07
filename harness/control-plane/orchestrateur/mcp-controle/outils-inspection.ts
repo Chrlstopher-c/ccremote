@@ -14,6 +14,7 @@ import {
   type InterrogateurGit,
   type ProjetRejete,
 } from '../../../projets/index.ts';
+import { seuilComptageAutonomie } from '../../autonomie/index.ts';
 import { ETATS_HARNESS_TERMINAUX, type Mission, type Registre } from '../../registre/index.ts';
 import { applique, echecInattendu } from './contrat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
@@ -463,7 +464,14 @@ export function autonomieDuFil(
     if (conv === null) return applique(intention, 'conversation introuvable au registre.');
 
     const humain = registre.propositions.aApprobationHumaine(conversationId);
-    const auto = registre.propositions.compterAutoApprouvees(conversationId, conv.autonomieDebut ?? 0);
+    // `☠` MÊME seuil que la décision d'autorisation, jamais un calcul parallèle :
+    // deux origines de comptage divergentes feraient annoncer par `mon_autonomie`
+    // un état que le dispatch ne partage pas — l'orchestrateur croirait le mur
+    // levé alors qu'il tient encore, ou l'inverse.
+    const auto = registre.propositions.compterAutoApprouvees(
+      conversationId,
+      seuilComptageAutonomie(conv.autonomieDebut, registre.propositions.dateDerniereApprobationHumaine(conversationId)),
+    );
     const lignes: string[] = [];
 
     if (conv.autonomieDebut !== null && conv.autonomieFin !== null) {

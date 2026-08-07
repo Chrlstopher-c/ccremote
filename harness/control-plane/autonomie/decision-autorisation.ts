@@ -53,6 +53,33 @@ export interface ContexteAutorisation {
   readonly plafond?: number;
 }
 
+/**
+ * À partir de quel instant compter les mandats partis seuls dans un fil.
+ *
+ * `☠` LE POINT DU DÉFAUT (production, 07/08). Le refus de plafond dit à
+ * l'orchestrateur « sa prochaine approbation manuelle relance le compteur ».
+ * C'était faux : le comptage partait de `autonomieDebut` seul, qu'une
+ * approbation humaine ne déplace pas. Après 40 équipes, `autoApprouveesDeja`
+ * restait à 40 pour toujours — un clic de Chris ne changeait rien, `mon_autonomie`
+ * annonçait le mur, et le fil était définitivement mort.
+ *
+ * Deux issues possibles : corriger le message, ou corriger le compteur. C'est le
+ * COMPTEUR qui est corrigé, parce que le message décrivait le comportement
+ * attendu — un humain qui reprend la main doit rouvrir l'autonomie, sinon
+ * l'approbation manuelle ne sert plus à rien une fois le plafond touché, et
+ * l'unique geste qui reste à Chris est de créer un autre fil.
+ *
+ * Le plus TARDIF des deux jalons gagne : une fenêtre ouverte après le dernier
+ * clic ne doit pas ressusciter des auto-approbations que ce clic venait de
+ * solder, et réciproquement. Aucun jalon ⇒ 0, c'est-à-dire toute la vie du fil.
+ */
+export function seuilComptageAutonomie(
+  autonomieDebut: number | null,
+  derniereApprobationHumaine: number | null,
+): number {
+  return Math.max(autonomieDebut ?? 0, derniereApprobationHumaine ?? 0);
+}
+
 /** La fenêtre est-elle ouverte à cet instant ? Bornes absentes ⇒ non. */
 export function fenetreOuverte(ctx: ContexteAutorisation): boolean {
   if (ctx.fenetreDebut === null || ctx.fenetreFin === null) return false;

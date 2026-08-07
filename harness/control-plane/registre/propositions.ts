@@ -210,4 +210,36 @@ export class DepotPropositions {
       { conversationId },
     );
   }
+
+  /**
+   * Quand un humain a-t-il approuvé un mandat pour la DERNIÈRE fois dans ce fil ?
+   * `null` : jamais.
+   *
+   * `☠` C'est ce que le refus de plafond promettait déjà à l'orchestrateur — « sa
+   * prochaine approbation manuelle relance le compteur » — sans que rien ne le
+   * lise. Le compteur partait de `autonomieDebut` seul, donc un clic de Chris ne
+   * déplaçait aucune borne : `autoApprouveesDeja` restait à son plafond, et le
+   * fil était mort pour de bon (mesuré en production le 07/08, après 40 équipes).
+   * La date sert de nouvelle origine de comptage — voir `seuilComptageAutonomie`.
+   *
+   * `☠` `origine_approbation IS NULL` compte comme humain, exactement comme dans
+   * `aApprobationHumaine` : les approbations d'avant la migration 15 n'ont pas
+   * d'origine, et les traiter en `auto` ferait mentir les deux lectures.
+   */
+  public dateDerniereApprobationHumaine(conversationId: string): number | null {
+    return executer(
+      'propositions.dateDerniereApprobationHumaine',
+      () => {
+        const ligne = this.db
+          .query<{ derniere: number | null }, [string]>(
+            `SELECT MAX(maj_a) AS derniere FROM proposition
+              WHERE conversation_id = ? AND statut = 'approuvee'
+                AND (origine_approbation IS NULL OR origine_approbation = 'humain')`,
+          )
+          .get(conversationId);
+        return ligne?.derniere ?? null;
+      },
+      { conversationId },
+    );
+  }
 }
