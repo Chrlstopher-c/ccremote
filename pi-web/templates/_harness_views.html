@@ -23,7 +23,16 @@
          tout le reste (identité, mandat, sous-agents, fin de vie) vit derrière
          le bouton « ··· ». Le tableau de bord d'avant mettait le fil en
          cinquième position, sous quatre cartes de même poids. -->
-    <div class="view flex-1 flex-col overflow-y-auto h-mission-view" data-view="harness-mission">
+    <!-- ☠ La vue NE défile PLUS elle-même (`overflow-y-auto` retiré, `min-h-0`
+         ajouté) : le fil a sa propre zone défilante et le dock est son FRÈRE,
+         hors de cette zone. Tant que les deux partageaient le même conteneur,
+         le composer collé en bas se posait PAR-DESSUS le fil et la seule
+         protection était un `padding-bottom` en dur de 170 px sur `.h-flow` —
+         calibré sur un dock qui n'existe plus tel quel depuis que la barre de
+         commandes s'y est ajoutée (07/08). Une réserve en pixels se
+         désynchronise au premier changement de hauteur ; une zone défilante qui
+         s'arrête là où le dock commence ne peut pas se désynchroniser. -->
+    <div class="view flex-1 flex-col min-h-0 h-mission-view" data-view="harness-mission">
       <!-- ☠ Barre de titre à 32 px, UNE seule ligne : le titre est un bouton
            texte aligné à gauche, l'icône d'état occupe un gutter en position
            absolue, les actions sont à droite. Le titre centré sur deux lignes
@@ -43,20 +52,27 @@
           </button>
         </div>
       </header>
-      <div class="h-flow" id="hMissionBody"></div>
+      <div class="h-scroll" id="hMissionScroll">
+        <div class="h-flow" id="hMissionBody"></div>
+      </div>
       <div class="h-dock" id="hMissionDock">
         <!-- ☠ Le bouton d'envoi est DANS la boîte (en bas à droite) et la rangée
              de réglages est DESSOUS, hors de la boîte : c'est la structure du
              composer de référence. Tout empiler dans la boîte l'épaissit et
-             mélange l'écriture avec le paramétrage. -->
-        <div class="h-box">
-          <textarea id="hInstrInput" rows="1" placeholder="Parler à cette équipe…"></textarea>
-          <button class="h-snd" onclick="hSendInstruction()" aria-label="Envoyer">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7"/></svg>
-          </button>
-        </div>
-        <div class="h-ctl">
-          <span class="h-hint">Lue au prochain tour disponible.</span>
+             mélange l'écriture avec le paramétrage.
+             ☠ `.h-dock-in` porte la colonne de lecture (760 px centrés) pendant
+             que `.h-dock` porte le fond et le filet : sur grand écran, un fond
+             limité à 760 px laissait un filet flottant au milieu de la page. -->
+        <div class="h-dock-in">
+          <div class="h-box">
+            <textarea id="hInstrInput" rows="1" placeholder="Parler à cette équipe…"></textarea>
+            <button class="h-snd" onclick="hSendInstruction()" aria-label="Envoyer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V4M5 11l7-7 7 7"/></svg>
+            </button>
+          </div>
+          <div class="h-ctl">
+            <span class="h-hint">Lue au prochain tour disponible.</span>
+          </div>
         </div>
       </div>
     </div>

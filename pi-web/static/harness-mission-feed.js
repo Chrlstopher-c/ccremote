@@ -122,6 +122,95 @@ function hLibelleValise(outils) {
   return phrase.charAt(0).toUpperCase() + phrase.slice(1);
 }
 
+// ============ Transitions d'état — du jargon vers du français ============
+//
+// ☠ Le fil montrait les identifiants du registre tels quels : « planifiee →
+// en_cours », « running », « en_cours → terminee ». Ce sont des valeurs de
+// colonne SQL (`EtatHarness` et `EtatSdk`, `control-plane/registre/types.ts`),
+// affichées à quelqu'un qui ne lit jamais de code — et il y en avait trois sur
+// un seul écran de la capture du 07/08.
+//
+// ☠ On traduit ICI, jamais côté serveur : `texteTransition` (`vue-feed.ts`) est
+// aussi ce que lit l'orchestrateur par `outils-inspection.ts`, qui a besoin des
+// identifiants exacts. Deux publics, deux vocabulaires.
+
+/** État d'arrivée → ce qui vient d'arriver, du point de vue de l'opérateur. */
+const H_ETATS_LISIBLES = {
+  planifiee: 'équipe planifiée',
+  en_cours: 'équipe démarrée',
+  en_pause: 'équipe mise en pause',
+  attente_machine: 'en attente de la machine',
+  echec_definitif: 'équipe en échec',
+  terminee: 'équipe terminée',
+  annulee: 'équipe annulée',
+  idle: 'le lead a rendu la main',
+  running: 'le lead travaille',
+  requires_action: 'le lead attend une autorisation',
+};
+
+/**
+ * Passages dont l'état d'arrivée seul dirait faux : arriver sur `en_cours`
+ * depuis `en_pause` est une reprise, pas un démarrage.
+ */
+const H_PASSAGES_LISIBLES = {
+  'en_pause>en_cours': 'équipe reprise',
+  'attente_machine>en_cours': 'machine retrouvée, équipe repartie',
+};
+
+/**
+ * Décompose une ligne de transition telle que le Pi l'écrit :
+ * `[origine] avant → après — motif` (`vue-feed.ts`, `texteTransition`).
+ * ☠ Le motif est cherché sur ` — ` et pas sur `—` seul : un motif libre peut
+ * contenir un tiret cadratin collé, la séquence espacée est celle du format.
+ */
+function hAnalyserTransition(texte) {
+  const brut = String(texte || '').trim();
+  const entete = /^\[(\w+)\]\s*/.exec(brut);
+  const origine = entete ? entete[1] : '';
+  const reste = entete ? brut.slice(entete[0].length) : brut;
+  const sep = reste.indexOf(' — ');
+  const passage = sep === -1 ? reste : reste.slice(0, sep);
+  const motif = sep === -1 ? '' : reste.slice(sep + 3).trim();
+  const bornes = passage.split(' → ').map((s) => s.trim());
+  return {
+    origine,
+    passage,
+    avant: bornes.length > 1 ? bornes[0] : '',
+    apres: bornes[bornes.length - 1],
+    motif,
+  };
+}
+
+/** ☠ Repli sur le PASSAGE brut si l'état est inconnu — un vocabulaire qui
+ * s'enrichit côté serveur ne doit jamais faire DISPARAÎTRE une ligne du fil.
+ * Sur le passage, pas sur le texte entier : celui-ci porte déjà le motif, qu'on
+ * recolle juste après (mesuré ici même — « … — motif — motif »). */
+function hPhraseTransition(t) {
+  const libelle = H_PASSAGES_LISIBLES[`${t.avant}>${t.apres}`]
+    || H_ETATS_LISIBLES[t.apres]
+    || t.passage;
+  const phrase = t.motif ? `${libelle} — ${t.motif}` : libelle;
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+}
+
+/**
+ * La phrase à montrer pour une RAFALE de transitions consécutives.
+ *
+ * ☠ « running → idle » puis « en_cours → terminee » à une seconde d'écart
+ * disent la même chose à l'opérateur : le lead a fini. On garde la dernière
+ * transition du Pi quand il y en a une — c'est lui l'autorité sur le cycle de
+ * vie de l'équipe, le SDK ne fait qu'osciller à chaque tour (`types.ts` :
+ * « `en_cours` ≠ `running` »). Rien n'est perdu : l'heure du groupe et sa
+ * conclusion restent à l'écran, seul le doublon disparaît.
+ */
+function hTransitionLisible(items) {
+  const analyses = (items || []).filter(Boolean).map((e) => hAnalyserTransition(e.text));
+  if (analyses.length === 0) return '';
+  const duPi = analyses.filter((t) => t.origine === 'harness');
+  const retenue = duPi.length > 0 ? duPi[duPi.length - 1] : analyses[analyses.length - 1];
+  return hPhraseTransition(retenue);
+}
+
 /**
  * Regroupe le fil en segments affichables.
  *
@@ -138,14 +227,22 @@ function hSegmenterFeed(feed) {
   const segments = [];
   let courant = null;
   const pousser = () => {
-    if (courant) segments.push(courant);
+    if (courant) {
+      // ☠ `ev` conservé sur un groupe de transitions : `harness-mission-sheets.js`
+      // rend un fil de sous-agent par `hSystemeTemplate(seg.ev)`. Sans lui, ce
+      // chemin recevrait `undefined` et la ligne disparaîtrait du fil sans la
+      // moindre erreur pour le dire.
+      if (courant.genre === 'systeme') courant.ev = courant.items[courant.items.length - 1];
+      segments.push(courant);
+    }
     courant = null;
   };
   for (const ev of feed) {
     const estOutil = ev.type === 'activity' && ev.nature === 'outil';
     const estPensee = ev.type === 'activity' && ev.nature === 'reflexion';
-    if (estOutil || estPensee) {
-      const genre = estOutil ? 'outils' : 'pensees';
+    const estSysteme = ev.type === 'system';
+    if (estOutil || estPensee || estSysteme) {
+      const genre = estOutil ? 'outils' : estPensee ? 'pensees' : 'systeme';
       const delegation = estOutil && hEstDelegation(ev);
       if (courant && courant.genre === genre && courant.delegation === delegation) courant.items.push(ev);
       else {
@@ -157,7 +254,6 @@ function hSegmenterFeed(feed) {
     pousser();
     if (ev.type === 'instruction') segments.push({ genre: 'operateur', ev });
     else if (ev.type === 'permission') segments.push({ genre: 'permission', ev });
-    else if (ev.type === 'system') segments.push({ genre: 'systeme', ev });
     else segments.push({ genre: 'parole', ev });
   }
   pousser();

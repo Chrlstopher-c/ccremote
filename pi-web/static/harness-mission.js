@@ -24,8 +24,24 @@ function hOperateurTemplate(ev) {
 }
 
 const H_ICO_CHEVRON = '<span class="cv">›</span>';
-const H_ICO_HORLOGE =
-  '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg>';
+
+/**
+ * Marqueur d'une valise de RÉFLEXION.
+ *
+ * ☠ Une horloge, c'était le temps passé — pas ce que fait le lead. Repliée, la
+ * valise ressemblait trait pour trait à une ligne d'outil. La classe
+ * `ic-pensee` est le SEUL accroche-style disponible : `HValise.html` accepte une
+ * icône mais pas de classe sur le bouton, et le CSS l'attrape par `:has()`.
+ */
+const H_ICO_PENSEE =
+  '<svg class="ic-pensee" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+  + 'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M12 3l1.7 4.6L18.3 9.3 13.7 11 12 15.6 10.3 11 5.7 9.3 10.3 7.6z"/>'
+  + '<path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></svg>';
+
+/** ☠ Alias conservé : `harness-mission-sheets.js` (hors périmètre de cette
+ * passe) référence encore ce nom pour la même valise de réflexion. */
+const H_ICO_HORLOGE = H_ICO_PENSEE;
 
 function hValiseOutilsTemplate(seg, index) {
   // ☠ Clé DÉTERMINISTE : le même segment produit le même HTML d'un rendu à
@@ -38,6 +54,12 @@ function hValiseOutilsTemplate(seg, index) {
  * ☠ Le résumé montré est le DÉBUT de la réflexion, pas un libellé générique :
  * « Réfléchi » ne dit rien, alors que la première phrase dit si ça vaut la peine
  * d'ouvrir. C'est exactement ce que fait Claude Code.
+ *
+ * ☠ Ce template n'est atteint que si le serveur marque l'évènement
+ * `nature: 'reflexion'` (`vue-feed.ts`) — le chemin client, lui, n'a jamais
+ * changé. Une équipe sans aucune réflexion à l'écran n'est donc PAS un écran en
+ * panne : sur une tâche triviale, un modèle en raisonnement adaptatif n'en
+ * produit simplement pas. Rien n'est affiché dans ce cas, et c'est voulu.
  */
 function hValisePenseesTemplate(seg, index) {
   const apercu = seg.items[0].text.replace(/\s+/g, ' ').trim();
@@ -45,7 +67,7 @@ function hValisePenseesTemplate(seg, index) {
     () => `<div class="h-think">${seg.items.map((e) => hMarkdown(e.text)).join('')}</div>`,
     `pensees-${index}`,
   );
-  return HValise.html(apercu, cle, H_ICO_HORLOGE);
+  return HValise.html(apercu, cle, H_ICO_PENSEE);
 }
 
 /**
@@ -70,10 +92,18 @@ function hPermissionTemplate(ev, index) {
   </div>`;
 }
 
-function hSystemeTemplate(ev) {
-  // Le préfixe d'origine (`[sdk]`, `[harness]`) est du bruit à l'écran : la
-  // transition elle-même suffit, l'origine reste dans le registre.
-  return `<div class="h-sys">${escapeHtml(ev.text.replace(/^\[\w+\]\s*/, ''))}</div>`;
+/**
+ * Une transition d'état, en français.
+ *
+ * ☠ Accepte un SEGMENT (rafale groupée) ou un évènement seul :
+ * `harness-mission-sheets.js` appelle encore avec `seg.ev`, et le fil d'un
+ * sous-agent passe par là. Les deux formes doivent rendre la même phrase.
+ */
+function hSystemeTemplate(source) {
+  const items = source && Array.isArray(source.items) ? source.items : [source];
+  const phrase = hTransitionLisible(items);
+  if (!phrase) return '';
+  return `<div class="h-sys">${escapeHtml(phrase)}</div>`;
 }
 
 function hCorpsSegment(seg, index) {
@@ -81,7 +111,7 @@ function hCorpsSegment(seg, index) {
   if (seg.genre === 'pensees') return hValisePenseesTemplate(seg, index);
   if (seg.genre === 'operateur') return hOperateurTemplate(seg.ev);
   if (seg.genre === 'permission') return hPermissionTemplate(seg.ev, index);
-  if (seg.genre === 'systeme') return hSystemeTemplate(seg.ev);
+  if (seg.genre === 'systeme') return hSystemeTemplate(seg);
   return hParoleTemplate(seg.ev);
 }
 
@@ -99,7 +129,13 @@ function hCorpsSegment(seg, index) {
  */
 function hSegmentTemplate(seg, index) {
   const corps = hCorpsSegment(seg, index);
-  const items = seg.items || (seg.ev ? [seg.ev] : []);
+  // ☠ Une rafale de transitions n'a pas de DURÉE : entre « le lead a rendu la
+  // main » et « équipe terminée » il s'écoule une seconde de plomberie, et
+  // l'afficher (« 21:43 · 1 s ») donne à lire une mesure qui ne mesure rien.
+  // Seul l'instant d'arrivée compte, donc seul le dernier évènement du groupe.
+  const items = seg.genre === 'systeme' && seg.ev
+    ? [seg.ev]
+    : seg.items || (seg.ev ? [seg.ev] : []);
   const etendue = window.HTemps ? window.HTemps.etendue(items) : { fin: null, duree: null };
   const pied = window.HTemps ? window.HTemps.piedHtml(etendue.fin, etendue.duree) : '';
   if (!pied) return `<div class="seg">${corps}</div>`;
@@ -268,15 +304,51 @@ function hSousTitre(m) {
     `${projet} · ${escapeHtml(m.model || '—')} · ${hMoney(m.cost)}`;
 }
 
+/**
+ * ☠ La zone défilante est `#hMissionScroll`, plus la vue entière : depuis que
+ * le dock est son FRÈRE et non son voisin de flux, défiler la vue ne défile
+ * plus rien. Les trois endroits qui parlaient de défilement de cette page
+ * doivent viser la même zone, sans quoi « suivre le fil » cesse silencieusement
+ * de fonctionner — aucune erreur, juste un fil qui n'avance plus.
+ */
+function hZoneFilMission() {
+  return document.getElementById('hMissionScroll');
+}
+
 function hDefilerEnBas() {
-  const vue = document.querySelector('[data-view="harness-mission"]');
-  if (!vue) return;
-  vue.scrollTop = vue.scrollHeight;
-  // La flèche de retour au présent vit sur la vue elle-même : c'est elle qui
-  // défile ici, pas un cadre interne.
-  vue.dataset.filBasCle = 'mission';
-  window.HFilBas?.attacher(vue, { calerMaintenant: false });
+  const zone = hZoneFilMission();
+  if (!zone) return;
+  zone.scrollTop = zone.scrollHeight;
+  zone.dataset.filBasCle = 'mission';
+  window.HFilBas?.attacher(zone, { calerMaintenant: false });
   window.HFilBas?.de('mission')?.majuster();
+}
+
+/**
+ * Publie la hauteur RÉELLE du dock en variable CSS.
+ *
+ * ☠ Elle change en cours de session : la barre de commandes n'existe que sur
+ * une équipe pilotable, l'indice passe sur deux lignes quand l'équipe est en
+ * pause, et le champ de saisie grandit jusqu'à 120 px sous la frappe. Une seule
+ * chose en dépend encore — la flèche « revenir au dernier message », posée dans
+ * la vue et non dans la zone défilante — mais une valeur en dur s'y
+ * désynchroniserait au premier de ces changements, exactement comme le
+ * `padding-bottom: 170px` qu'on vient de retirer.
+ */
+function hObserverDock() {
+  const dock = document.getElementById('hMissionDock');
+  const vue = document.querySelector('[data-view="harness-mission"]');
+  if (!dock || !vue || typeof ResizeObserver !== 'function') return;
+  // ☠ Jamais `0px` : la vue est `display:none` au chargement, et publier zéro
+  // écraserait le repli du CSS par une valeur fausse jusqu'au premier affichage.
+  // On garde la dernière hauteur connue tant que le dock n'est pas mesurable.
+  const publier = () => {
+    const hauteur = Math.round(dock.offsetHeight);
+    if (hauteur > 0) vue.style.setProperty('--h-dock-h', `${hauteur}px`);
+  };
+  const observateur = new ResizeObserver(publier);
+  observateur.observe(dock);
+  publier();
 }
 
 // ------------------------------------------- commandes rapides du composer
@@ -337,7 +409,11 @@ function hMajDockActes(m) {
     barre.className = 'h-actes';
     // Sous la rangée de réglages, HORS de la boîte de saisie : une commande
     // n'est pas du texte, elle n'a rien à faire dans le cadre du composer.
-    dock.appendChild(barre);
+    // ☠ Dans `.h-dock-in`, jamais dans `.h-dock` : le dock porte le fond pleine
+    // largeur, la colonne de lecture est à l'intérieur. Posée sur le dock, la
+    // barre s'étirait sur toute la largeur de l'écran pendant que le composer
+    // restait centré à 760 px.
+    (dock.querySelector('.h-dock-in') || dock).appendChild(barre);
   }
   const actif = HarnessAPI._isPcOnline() && !['echec', 'terminee'].includes(m.state);
   const html = hDockActesHtml(m, actif);
@@ -532,9 +608,9 @@ async function hMajMissionDetail(id) {
   // ☠ Comparé SEGMENT PAR SEGMENT, jamais par la longueur du feed : deux
   // événements peuvent enrichir une valise existante sans en créer de nouvelle
   // (un résultat d'outil qui rejoint son appel), et le contraire est vrai aussi.
-  const vue = document.querySelector('[data-view="harness-mission"]');
+  const zone = hZoneFilMission();
   // « Collé en bas » à 80 px près : ne rattraper le défilement que si on suivait.
-  const suivait = vue ? vue.scrollHeight - vue.scrollTop - vue.clientHeight < 80 : true;
+  const suivait = zone ? zone.scrollHeight - zone.scrollTop - zone.clientHeight < 80 : true;
   if (hMajSegments(corps, m)) {
     hMissionRendue.feedLen = m.feed.length;
     if (suivait) hDefilerEnBas();
@@ -547,6 +623,7 @@ async function hMajMissionDetail(id) {
 // ☠ Câblé une seule fois au chargement, sur un élément qui n'est jamais recréé :
 // le brancher dans le rendu ajouterait un écouteur à chaque rafraîchissement.
 document.addEventListener('DOMContentLoaded', () => {
+  hObserverDock();
   const el = document.getElementById('hInstrInput');
   if (!el) return;
   el.addEventListener('input', () => {

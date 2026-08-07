@@ -224,7 +224,10 @@
      il ne doit pas peser autant que ce qui est acquis. La réflexion se distingue
      de la rédaction par l'italique et le liseré, jamais par une couleur — une
      couleur ici signifierait un état anormal, ce qu'un lead qui pense n'est pas. */
-  .h-partiel { margin: 6px 0 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg-2); }
+  /* ☠ Marges latérales de 18 px comme `.h-say` et `.h-case-wrap` : `.h-flow` n'a
+     aucun padding horizontal, le bloc en cours de frappe touchait donc les bords
+     de la colonne pendant que tout le fil autour était en retrait. */
+  .h-partiel { margin: 6px 18px 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg-2); }
   .h-partiel .hp-tete { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
   .h-partiel .hp-tete i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); display: block; animation: orchPulse 1.9s ease-in-out infinite; }
   .h-partiel .hp-tete span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
@@ -387,15 +390,34 @@
   .h-mhead .more:hover { background: rgba(31,30,29,.05); }
   .h-sd { width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
 
-  .h-flow { flex: 1; max-width: 772px; margin: 0 auto; width: 100%; padding: 20px 0 170px; }
+  /* ☠ Le fil défile ICI, pas dans la vue : le dock vit hors de cette zone, donc
+     rien du fil ne peut plus passer dessous — ni un paragraphe du lead, ni le
+     bloc « en cours de frappe », qui est un enfant de `.h-flow`.
+     `min-height: 0` est obligatoire : dans un flex-column, un enfant qui défile
+     garde par défaut une hauteur minimale égale à son contenu et pousse le dock
+     hors de l'écran au lieu de scroller. */
+  .h-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+  /* ☠ 24 px de respiration, plus les 170 px de réserve d'avant : cette réserve
+     compensait un dock posé par-dessus le fil, elle n'a plus d'objet et laissait
+     un vide d'un tiers d'écran sous le dernier message. */
+  .h-flow { max-width: 772px; margin: 0 auto; width: 100%; padding: 20px 0 24px; }
 
   /* bulle opérateur — la seule chose du fil qui porte un fond */
   .h-op { display: flex; justify-content: flex-end; padding: 14px 18px 22px 46px; }
   .h-op .b { background: var(--bg-3); border-radius: 20px; padding: 13px 17px;
     font-size: 15.5px; line-height: 1.44; color: var(--ink); }
 
-  /* parole de l'agent — serif, pleine largeur, aucun fond, aucune carte */
-  .h-say { font-family: 'Source Serif 4', serif; font-size: 19px; line-height: 1.42;
+  /* parole de l'agent — serif, pleine largeur, aucun fond, aucune carte
+     ☠ 19px/1,42 était un corps de TITRE : quatre lignes remplissaient la moitié
+     d'un écran d'iPhone et le reste du fil disparaissait sous le pli (constaté
+     sur capture le 07/08). 16,5px/1,6 reste au-dessus de la bulle opérateur
+     (15,5px) — la parole du lead garde son rang sans devenir un titre.
+     La classe est PARTAGÉE avec la conversation de l'orchestrateur
+     (`hBlocNode`, `harness-orchestrateur.js`) : les deux vues bougent ensemble,
+     c'est voulu — une échelle inventée pour la seule page mission aurait fait
+     diverger deux fils qu'on compare en permanence. */
+  .h-say { font-family: 'Source Serif 4', serif; font-size: 16.5px; line-height: 1.6;
     color: var(--ink); padding: 0 18px; margin-bottom: 22px; }
   .h-say > *:last-child { margin-bottom: 0; }
   .h-say p { margin: 0 0 14px; }
@@ -404,9 +426,11 @@
   /* ☠ Aucun fond, aucune bordure : dans un corps serif, encadrer chaque terme
      technique fabrique des pavés qui hachent la ligne (mesuré à l'écran 01/08). */
   .h-say code { font-family: 'JetBrains Mono', monospace; font-size: .82em; word-break: break-word; }
-  .h-say h1 { font-size: 24px; font-weight: 700; line-height: 1.22; margin: 8px 0 14px; letter-spacing: -.01em; }
-  .h-say h2 { font-size: 20.5px; font-weight: 700; line-height: 1.26; margin: 26px 0 11px; }
-  .h-say h3 { font-size: 18.5px; font-weight: 700; margin: 20px 0 8px; }
+  /* Titres redescendus d'autant : à 24px au-dessus d'un corps à 16,5px, un `##`
+     de markdown pesait plus que le titre de la page elle-même. */
+  .h-say h1 { font-size: 20.5px; font-weight: 700; line-height: 1.25; margin: 8px 0 12px; letter-spacing: -.01em; }
+  .h-say h2 { font-size: 18px; font-weight: 700; line-height: 1.3; margin: 24px 0 10px; }
+  .h-say h3 { font-size: 16.5px; font-weight: 700; margin: 18px 0 8px; }
   .h-say ul, .h-say ol { margin: 0 0 14px; padding-left: 24px; }
   .h-say li { margin-bottom: 8px; }
   .h-say hr { border: none; border-top: 1px solid var(--line-2); margin: 24px 0; }
@@ -441,9 +465,15 @@
     font-size: 13.5px; font-weight: 500; }
   .h-perm .pg { padding: 8px 16px; border-radius: 9999px; border: 1px solid var(--line-2); font-size: 13.5px; }
 
+  /* ☠ Plus de monospace : la ligne portait des identifiants internes
+     (`en_cours → terminee`), elle porte désormais une phrase française. Le
+     monospace signale du code à quelqu'un qui n'en lit jamais — et il rendait
+     ces trois lignes plus voyantes que la parole du lead qu'elles séparent. */
   .h-sys { display: flex; align-items: center; gap: 12px; padding: 2px 18px 22px;
-    font-size: 12px; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
-  .h-sys::before, .h-sys::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+    font-size: 12px; color: var(--ink-3); font-family: 'Inter', sans-serif;
+    text-align: center; overflow-wrap: anywhere; }
+  .h-sys::before, .h-sys::after { content: ''; flex: 1 1 24px; min-width: 16px;
+    height: 1px; background: var(--line); }
 
   /* ☠ Troisième voix : ni Chris, ni le lead. L'attribuer à l'un des deux est H-66. */
   .h-harness { margin: 0 18px 22px; padding: 10px 15px; border-left: 2px solid var(--line-2);
@@ -453,10 +483,35 @@
   .h-harness code { font-family: 'JetBrains Mono', monospace; font-size: .88em; }
   .h-vide { padding: 40px 18px; text-align: center; color: var(--ink-3); font-size: 13.5px; }
 
-  /* dock */
-  .h-dock { position: sticky; bottom: 0; z-index: 15; max-width: 760px; margin: 0 auto; width: 100%;
-    padding: 0 12px 14px; background: linear-gradient(180deg, transparent, var(--bg-2) 34%); }
-  .h-dock.h-dock-off { opacity: .5; pointer-events: none; }
+  /* dock — FRÈRE de la zone défilante, plus un calque posé dessus
+     ☠ `flex: 0 0 auto` : dans un flex-column, un enfant sans base figée se fait
+     comprimer par le contenu (même piège que `.h-topbar`, plus bas). Comprimé,
+     le dock rendait ses trois rangées sur moins de place qu'elles n'en
+     demandent et débordait sur ce qui le précède.
+     ☠ Fond PLEIN, plus un dégradé partant de `transparent` : le dégradé n'avait
+     de sens que tant que du texte défilait derrière. Combiné à l'opacité de
+     `.h-dock-off` (équipe terminée), il laissait voir le fil au travers du
+     composer — le « à moitié masqué » des captures du 07/08.
+     ☠ `env(safe-area-inset-bottom)` : sans `viewport-fit=cover` sur le meta
+     viewport (dans `index.html`, hors périmètre de cette passe), il vaut 0 et le
+     repli explicite garde la valeur d'avant. Il n'y a rien à perdre à le poser
+     maintenant, et la barre d'accueil iOS mangera les commandes le jour où
+     `viewport-fit` passera à `cover`. */
+  .h-dock { flex: 0 0 auto; position: relative; z-index: 15; width: 100%; background: var(--bg-2);
+    border-top: 1px solid var(--line);
+    padding: 10px 12px calc(14px + env(safe-area-inset-bottom, 0px)); }
+  .h-dock-in { max-width: 760px; margin: 0 auto; width: 100%; }
+  /* L'atténuation porte sur le CONTENU : le fond du dock, lui, reste opaque. */
+  .h-dock.h-dock-off { pointer-events: none; }
+  .h-dock.h-dock-off .h-dock-in { opacity: .5; }
+
+  /* ☠ Le seul élément qui doive encore CONNAÎTRE la hauteur du dock : la flèche
+     « revenir au dernier message » est posée dans la vue (pas dans la zone
+     défilante, voir `harness-fil-bas.js`) et se retrouvait derrière le composer.
+     `--h-dock-h` est mesurée et republiée par `hObserverDock` à chaque
+     changement de hauteur — la barre de commandes qui apparaît, l'indice qui
+     passe sur deux lignes en pause, le champ qui grandit jusqu'à 120 px. */
+  .h-mission-view > .fil-bas { bottom: calc(var(--h-dock-h, 104px) + 14px); }
   .h-box { background: var(--card); border: 1px solid var(--line); border-radius: 24px;
     box-shadow: 0 6px 22px rgba(31,30,29,.08); padding: 13px 17px 9px; }
   .h-box textarea { width: 100%; border: none; outline: none; resize: none; font: inherit;
@@ -526,8 +581,11 @@
     padding: 13px 15px; font-family: 'JetBrains Mono', monospace; font-size: 12.5px;
     line-height: 1.66; overflow-x: auto; white-space: pre-wrap; word-break: break-word; color: var(--ink); }
   .h-note { font-size: 12px; color: var(--ink-3); line-height: 1.5; margin-top: 16px; }
-  .h-think { font-family: 'Source Serif 4', serif; font-size: 18px; line-height: 1.46; color: var(--ink); }
-  .h-think p { margin: 0 0 15px; }
+  /* Le corps d'une réflexion dépliée suit la parole du lead — même échelle, mais
+     en gris et en italique : c'est du raisonnement, pas une réponse. */
+  .h-think { font-family: 'Source Serif 4', serif; font-size: 15.5px; line-height: 1.62;
+    font-style: italic; color: var(--ink-2); }
+  .h-think p { margin: 0 0 13px; }
   .h-think code { font-family: 'JetBrains Mono', monospace; font-size: .82em; }
 
   .h-grp { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
@@ -613,6 +671,22 @@
      `hidden` est un ÉTAT, pas une suggestion de style. Même famille que le bouton
      d'envoi invisible du 01/08 — une spécificité qu'on n'avait pas comptée. */
   .h-case-body[hidden] { display: none !important; }
+
+  /* ── Valise de RÉFLEXION ───────────────────────────────────────────────────
+     ☠ Repliée, elle était indistinguable d'une ligne d'outil : même gris, même
+     graisse, même géométrie — sauf une icône d'horloge qui ne veut rien dire
+     ici. Or son aperçu est le début d'une PHRASE du lead, pas un résumé
+     d'action : l'italique et le filet le disent avant qu'on lise le texte.
+     `:has()` plutôt qu'une classe sur `.h-case` : le HTML de la valise est
+     produit par `HValise.html`, qui n'accepte pas de classe supplémentaire — et
+     ce fichier s'en sert déjà ainsi pour `.pill-toggle`. L'icône est donc le
+     seul marqueur disponible, et elle sert aux DEUX fils (équipe et sous-agent)
+     sans les faire diverger. */
+  .h-case:has(.ic-pensee) { color: var(--ink-2); font-style: italic; }
+  .h-case:has(.ic-pensee) .ic-pensee { color: var(--ink-3); opacity: .9; }
+  .h-case:has(.ic-pensee):hover { color: var(--ink); }
+  .h-case-wrap:has(> .h-case .ic-pensee) { border-left: 2px solid var(--line-2);
+    margin-left: 18px; padding-left: 12px; }
 
   /* ── Groupe d'appels d'outils ──────────────────────────────────────────────
      ☠ Trois rendus successifs le 01/08, et seul le dernier tient. D'abord des
