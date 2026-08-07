@@ -69,6 +69,7 @@ import { ServiceInspection } from '../../control-plane/inspection/index.ts';
 import type { EnregistreurProposition } from '../../control-plane/orchestrateur/mcp-controle/types.ts';
 import { compositionLogger } from '../logger.ts';
 import { ClientSuperviseurPc } from './client-superviseur-pc.ts';
+import { ErreurRoutageMachine } from '../../shared/routage-machine.ts';
 import { creerAgregatParc, ParcSuperviseurs } from './parc-superviseurs.ts';
 import { creerDeclencheurReconciliationSurRattachement } from './reconciliation-sur-rattachement.ts';
 import { demarrerServeurLienPc, type ServeurLienPc } from './serveur-lien-pc.ts';
@@ -424,6 +425,24 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
    * Déclarée en `function` : hoistée, donc utilisable par la closure
    * d'enregistrement définie plus haut dans ce même corps.
    */
+  /**
+   * Racine des projets TELLE QUE LA MACHINE CIBLE la connaît.
+   *
+   * `☠` `explorerProjets` avale ses erreurs et rend `racine: ''` avec une note
+   * (voir `client-superviseur-pc.ts`) : la chaîne vide est donc un ÉCHEC, pas une
+   * racine à la racine du système. La traiter comme une valeur ferait résoudre
+   * tous les projets sur `/`, ce qui est pire que le défaut qu'on corrige.
+   */
+  async function resoudreRacineProjets(cible: { readonly machineId: string; readonly client: ClientSuperviseurPc }): Promise<string> {
+    const exploration = await cible.client.explorerProjets();
+    if (exploration.racine !== '') return exploration.racine;
+    throw new ErreurRoutageMachine(
+      `impossible de lire la racine des projets sur « ${cible.machineId} »` +
+        `${exploration.note === undefined || exploration.note === '' ? '' : ` — ${exploration.note}`}` +
+        ' : la machine est-elle bien rattachée ? Réessaie, ou choisis une autre machine pour ce fil.',
+    );
+  }
+
   async function dispatcherMandatAutorise(
     id: string,
     origine: OrigineApprobation,
@@ -440,6 +459,20 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       p.conversationId === null
         ? parc.resoudre(null, `mandat ${id}`)
         : parc.pourConversation(p.conversationId);
+    // `☠` LA RACINE DES PROJETS EST CELLE DE LA MACHINE CIBLE, JAMAIS CELLE DU PI.
+    // Mesuré en production le 2026-08-07 : un mandat sur `ccremote` autorisé
+    // depuis le téléphone échouait sur « le projet n'est pas exploitable sur la
+    // machine trinityarch (cherché : /home/pi/projets/ccremote — chemin hors de
+    // /mnt/projects — refusé) ». Le chemin était bâti avec
+    // `CCREMOTE_PI_REPERTOIRE_PROJETS` (/home/pi/projets, la racine du Pi) puis
+    // envoyé à une machine dont la racine est /mnt/projects, qui le refusait à
+    // juste titre. AUCUN mandat désignant un projet par son nom ne pouvait donc
+    // partir — et le refus accusait le projet d'être absent alors qu'il était là.
+    //
+    // `☠` Refus explicite si la racine est introuvable, jamais un repli sur celle
+    // du Pi : ce repli EST le bug, et il produirait exactement la même erreur un
+    // cran plus loin, en la rendant à nouveau invisible.
+    const racineProjetsMachine = await resoudreRacineProjets(cible);
     const r = await dispatcherMandat(p, {
       registre,
       demarreur: cible.client,
@@ -470,7 +503,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
         }
         return { present, note, estGit };
       },
-      repertoireProjets: options.repertoireProjets,
+      repertoireProjets: racineProjetsMachine,
       plafondEquipesParProjet: options.plafondEquipesParProjet,
     });
     // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
