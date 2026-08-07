@@ -429,6 +429,28 @@ export interface Proposition {
   readonly majA: number;
 }
 
+export type StatutDemandeRallonge = 'en_attente' | 'accordee' | 'refusee';
+
+/**
+ * Demande d'un fil pour relever son plafond d'autonomie (migration 27).
+ *
+ * `☠` Distincte d'une `Proposition` (H-61) : celle-ci demande un DROIT DE
+ * LANCER PLUS LONGTEMPS SANS CLIC, jamais un mandat d'équipe. L'accorder
+ * n'ouvre aucun worker — elle applique `plafondDemande` au fil via
+ * `conversations.reglerPlafondAutonomie`, rien de plus.
+ */
+export interface DemandeRallonge {
+  readonly id: string;
+  readonly conversationId: string;
+  /** Ce que le fil demande. Jamais `herite` : une rallonge demande toujours quelque chose. */
+  readonly plafondDemande: ReglagePlafond;
+  readonly motif: string;
+  readonly statut: StatutDemandeRallonge;
+  readonly detail: string | null;
+  readonly creeA: number;
+  readonly majA: number;
+}
+
 /** Un bloc du fil, dans l'ordre d'arrivée. `seq` est le curseur de streaming. */
 export interface EvenementConversation {
   readonly seq: number;

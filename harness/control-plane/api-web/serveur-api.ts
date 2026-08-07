@@ -48,6 +48,7 @@ import {
   type PortConversations,
   type PortMandats,
 } from './vue-conversations.ts';
+import { versRallongeApi, type PortRallonges } from './vue-rallonges.ts';
 import {
   cheminPieceRelue,
   ErreurPieceJointe,
@@ -101,6 +102,12 @@ export interface DependancesApiWeb {
    * vaut un bouton absent qu'un bouton qui n'autorise rien.
    */
   readonly mandats?: PortMandats;
+  /**
+   * Décision humaine sur les demandes de rallonge du plafond d'autonomie
+   * (migration 27). Absent ⇒ les routes `/orchestrator/rallonges*` répondent
+   * 501 : mieux vaut un bouton absent qu'un bouton qui n'accorde rien.
+   */
+  readonly rallonges?: PortRallonges;
   /** Contexte réel de l'orchestrateur (ratio 0-1), lu de la sentinelle. Absent = orchestrateur inactif. */
   readonly orchestrateurContexteRatio?: () => number | null;
   readonly maintenant?: () => number;
@@ -310,6 +317,13 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     return enveloppe(pcOnline, liste);
   }
 
+  // `☠` Demandes de rallonge du plafond d'autonomie (migration 27) — jamais des
+  // mandats : approuver ici applique un réglage, ça ne dispatche aucune équipe.
+  if (chemin === '/orchestrator/rallonges') {
+    const liste = deps.rallonges === undefined ? [] : deps.rallonges.enAttente();
+    return enveloppe(pcOnline, liste.map(versRallongeApi));
+  }
+
   if (chemin === '/orchestrator/gauges') {
     // `☠` Le contexte vient de la VRAIE sentinelle. `null` (orchestrateur
     // inactif ou pas encore de mesure) ⇒ `contextPct: null`, jamais un chiffre
@@ -440,6 +454,24 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
       if (erreur instanceof ErreurRoutageMachine) throw new ErreurApi(409, erreur.message);
       throw erreur;
     }
+  }
+
+  // `☠` Demandes de rallonge (migration 27) — AVANT le filtre `/orchestrator/
+  // conversations`, même raison que les mandats : sinon jamais atteintes.
+  // `approuver` APPLIQUE le réglage au fil (registre.conversations.reglerPlafondAutonomie,
+  // câblé côté composition) ; `refuser` ne touche à rien.
+  const rallonge = chemin.match(/^\/orchestrator\/rallonges\/([^/]+)\/(approve|reject)$/);
+  if (rallonge?.[1] !== undefined && rallonge[2] !== undefined) {
+    if (deps.rallonges === undefined) {
+      throw new ErreurApi(501, 'décision des rallonges non câblée sur ce déploiement');
+    }
+    const id = decodeURIComponent(rallonge[1]);
+    if (rallonge[2] === 'reject') {
+      if (!deps.rallonges.refuser(id)) throw new ErreurApi(409, 'demande de rallonge déjà tranchée ou inconnue');
+      return { ok: true, effet: 'rallonge refusée — le plafond de ce fil ne change pas' };
+    }
+    if (!deps.rallonges.approuver(id)) throw new ErreurApi(409, 'demande de rallonge déjà tranchée ou inconnue');
+    return { ok: true, effet: 'rallonge accordée — le nouveau plafond est appliqué à ce fil' };
   }
 
   // Rappels d'un fil (migration 16) — pause, reprise, suppression depuis l'écran.

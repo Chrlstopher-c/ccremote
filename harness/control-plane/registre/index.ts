@@ -12,6 +12,7 @@ import { DepotCapacites } from './capacites.ts';
 import { DepotComptes } from './comptes.ts';
 import { DepotConversations } from './conversations.ts';
 import { DepotPropositions } from './propositions.ts';
+import { DepotRallonges } from './rallonges.ts';
 import { DepotNotifications } from './notifications.ts';
 import { DepotRappels } from './rappels.ts';
 import { DepotEtats } from './etats.ts';
@@ -29,6 +30,7 @@ export type {
   CreationCompte,
   CreationLot,
   CreationMission,
+  DemandeRallonge,
   EtatHarness,
   EtatSdk,
   EvenementConversation,
@@ -42,6 +44,7 @@ export type {
   OrigineApprobation,
   OrigineTransition,
   Proposition,
+  StatutDemandeRallonge,
   StatutProposition,
   Quota,
   RelevéQuota,
@@ -56,6 +59,8 @@ export type {
 export { DepotConversations } from './conversations.ts';
 export { DepotPropositions } from './propositions.ts';
 export type { CreationProposition } from './propositions.ts';
+export { DepotRallonges } from './rallonges.ts';
+export type { CreationDemandeRallonge } from './rallonges.ts';
 export { DepotNotifications } from './notifications.ts';
 export { DepotRappels } from './rappels.ts';
 export type { CreationRappel } from './rappels.ts';
@@ -81,6 +86,7 @@ export class Registre {
   public readonly capacites: DepotCapacites;
   public readonly conversations: DepotConversations;
   public readonly propositions: DepotPropositions;
+  public readonly rallonges: DepotRallonges;
   public readonly notifications: DepotNotifications;
   public readonly rappels: DepotRappels;
 
@@ -95,6 +101,7 @@ export class Registre {
     this.capacites = new DepotCapacites(db);
     this.conversations = new DepotConversations(db);
     this.propositions = new DepotPropositions(db);
+    this.rallonges = new DepotRallonges(db);
     this.notifications = new DepotNotifications(db);
     this.rappels = new DepotRappels(db);
   }

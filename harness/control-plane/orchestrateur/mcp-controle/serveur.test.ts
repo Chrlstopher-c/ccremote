@@ -88,7 +88,11 @@ describe('surface d’outils (A.2.2)', () => {
   //     jamais le reprendre. Un mandat remplacé restait autorisable : celui du
   //     02/08 au soir a été autorisé le lendemain matin, sur le mauvais projet,
   //     et a fait échouer le test qu'il devait porter.
-  test('expose exactement les 23 outils spécifiés — ni plus, ni moins', () => {
+  //   `demander_rallonge_autonomie` (migration 27) — l'orchestrateur pouvait
+  //     CONSULTER son plafond (`mon_autonomie`), jamais en demander plus : arrivé
+  //     au mur, sa seule option restait d'attendre le prochain clic de Chris sur
+  //     un mandat, sans pouvoir seulement dire pourquoi il en faudrait davantage.
+  test('expose exactement les 24 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -115,6 +119,7 @@ describe('surface d’outils (A.2.2)', () => {
         'modifier_rappel',
         'supprimer_rappel',
         'nommer_fil',
+        'demander_rallonge_autonomie',
       ].sort(),
     );
   });

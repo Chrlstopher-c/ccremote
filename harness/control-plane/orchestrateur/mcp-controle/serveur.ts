@@ -47,6 +47,7 @@ import {
   supprimerRappel,
 } from './outils-rappels.ts';
 import { nommerFil } from './outils-fil.ts';
+import { demanderRallongeAutonomie } from './outils-rallonge.ts';
 import { etatMachine, reveillerMachine, type EmetteurReveil } from './outils-machine.ts';
 import { etatService, piloterService, SERVICES_ETAT_SERVICE, SERVICES_PILOTER_SERVICE } from './outils-service.ts';
 import { mcpControleLogger as journal } from './logger.ts';
@@ -530,6 +531,39 @@ function outilsFil(deps: DependancesServeurControle) {
   ];
 }
 
+/**
+ * Groupe « rallonge » — l'orchestrateur DEMANDE un relèvement de son plafond
+ * d'autonomie (migration 27). Jamais un octroi : voir `outils-rallonge.ts`.
+ */
+function outilsRallonge(deps: DependancesServeurControle) {
+  return [
+    tool(
+      'demander_rallonge_autonomie',
+      "Demande à Chris de relever le plafond d'autonomie de CE fil — une DEMANDE, jamais un " +
+        "octroi : seul un clic humain sur l'écran accorde quoi que ce soit. À utiliser quand ton " +
+        'plafond (`mon_autonomie`) est atteint ou proche ET que le chantier en cours le justifie ' +
+        '— pas par prudence anticipée. `plafondDemande` : un entier positif en texte (nombre ' +
+        "d'équipes lançables sans clic), ou `illimite`. `motif` : le besoin CHIFFRÉ — ce qui " +
+        "reste à faire, combien d'équipes ça prendra. `☠` CET OUTIL N'ACCORDE RIEN : il ne " +
+        'relance pas ton compteur, il ne débloque pas le mandat en cours, et il ne touche pas au ' +
+        "plafond de DÉPENSE du parc (H-58), qui reste inchangé et reste le seul garde-fou " +
+        'vraiment contraignant. Une demande sans motif chiffré est un clic de plus demandé à ' +
+        'Chris pour rien. Une demande déjà en attente sur ce fil fait REFUSER la suivante — ' +
+        "n'insiste pas, attends sa décision plutôt que d'en empiler dix.",
+      {
+        plafondDemande: z
+          .string()
+          .describe('Un entier positif en texte (équipes lançables sans clic), ou « illimite ».'),
+        motif: z.string().describe('Pourquoi, chiffré : ce qui reste à faire et combien d’équipes ça demande.'),
+      },
+      async ({ plafondDemande, motif }) =>
+        protege('demander_rallonge_autonomie', () =>
+          demanderRallongeAutonomie(deps.registre, deps.conversationId ?? null, plafondDemande, motif),
+        ),
+    ),
+  ];
+}
+
 function outilsBudget(deps: DependancesServeurControle) {
   return [
     tool(
@@ -762,6 +796,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsBudget(deps),
     ...outilsRappels(deps),
     ...outilsFil(deps),
+    ...outilsRallonge(deps),
     ...outilsContexte(deps),
     ...outilsExploration(deps),
     ...outilsRecherche(deps),

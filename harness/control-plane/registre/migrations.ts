@@ -787,6 +787,51 @@ ALTER TABLE conversation ADD COLUMN plafond_autonomie TEXT
              AND CAST(CAST(plafond_autonomie AS INTEGER) AS TEXT) = plafond_autonomie));
 `;
 
+/**
+ * Migration 27 — demande de rallonge du plafond d'autonomie (H-58 conditionné).
+ *
+ * `☠` Ce n'est PAS une `proposition`. Approuver une proposition DISPATCHE une
+ * équipe (H-61) ; approuver une rallonge ne fait qu'APPLIQUER un réglage déjà
+ * décrit (migration 26) au fil qui l'a demandé — aucun worker, aucun worktree,
+ * aucune dépense. Les confondre ferait relire « approuvée » comme « équipe
+ * partie » sur une ligne qui n'a jamais rien lancé — le genre d'erreur de
+ * lecture qui coûte cher précisément parce qu'elle est plausible.
+ *
+ * `☠` `plafond_demande` porte la MÊME forme que `conversation.plafond_autonomie`
+ * (un entier positif en texte, ou le jeton `illimite`) — mais jamais `NULL` :
+ * une demande de rallonge demande FORCÉMENT quelque chose, `herite` n'a aucun
+ * sens ici (« demander d'hériter du défaut » n'est pas une rallonge, c'est un
+ * non-geste). Le CHECK reprend celui de la migration 26 sans la branche NULL.
+ *
+ * `☠` `statut` est un ÉNUMÉRÉ à trois valeurs, jamais un booléen : une demande
+ * refusée doit rester DISTINGUABLE d'une demande jamais tranchée, sinon un
+ * second essai après refus se heurterait à la même garde « déjà en attente »
+ * qu'un premier essai jamais vu par personne.
+ *
+ * L'index partiel sur les demandes en attente sert deux lectures à la fois :
+ * la liste servie à l'écran (`GET /orchestrator/rallonges`), et la garde de
+ * l'outil MCP qui refuse d'empiler une seconde demande sur le même fil tant
+ * que la première n'est pas tranchée.
+ */
+const MIGRATION_27 = `
+CREATE TABLE demande_rallonge (
+  id              TEXT PRIMARY KEY,
+  conversation_id TEXT NOT NULL,
+  plafond_demande TEXT NOT NULL CHECK (
+                    plafond_demande = 'illimite'
+                    OR (CAST(plafond_demande AS INTEGER) > 0
+                        AND CAST(CAST(plafond_demande AS INTEGER) AS TEXT) = plafond_demande)
+                  ),
+  motif           TEXT NOT NULL,
+  statut          TEXT NOT NULL CHECK (statut IN ('en_attente', 'accordee', 'refusee')),
+  cree_a          INTEGER NOT NULL,
+  maj_a           INTEGER NOT NULL,
+  detail          TEXT
+) STRICT;
+
+CREATE INDEX idx_demande_rallonge_attente ON demande_rallonge(statut, cree_a DESC);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -814,6 +859,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 24, nom: 'pieces-jointes-message', sql: MIGRATION_24 },
   { version: 25, nom: 'projet-est-git-mission', sql: MIGRATION_25 },
   { version: 26, nom: 'plafond-autonomie-par-fil', sql: MIGRATION_26 },
+  { version: 27, nom: 'demande-rallonge-autonomie', sql: MIGRATION_27 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

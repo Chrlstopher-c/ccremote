@@ -698,6 +698,21 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       // Le clic de Chris — même chemin que l'autonomie, seule l'origine change.
       approuver: (id) => dispatcherMandatAutorise(id, 'humain'),
     },
+    // `☠` Demandes de rallonge (migration 27) : `approuver` tranche PUIS applique
+    // le réglage au fil — deux écritures dans cet ordre précis, jamais l'inverse,
+    // sinon un plafond appliqué sur une demande qui échoue à se trancher (double
+    // clic, deux onglets) laisserait un réglage posé sans demande qui le justifie.
+    rallonges: {
+      enAttente: () => registre.rallonges.enAttente(),
+      refuser: (id) => registre.rallonges.trancher(id, 'refusee', "refusée par l'opérateur"),
+      approuver: (id) => {
+        const demande = registre.rallonges.lire(id);
+        if (demande === null || demande.statut !== 'en_attente') return false;
+        if (!registre.rallonges.trancher(id, 'accordee', "accordée par l'opérateur")) return false;
+        registre.conversations.reglerPlafondAutonomie(demande.conversationId, demande.plafondDemande);
+        return true;
+      },
+    },
   });
 
   // `☠` Sans ce balayage, l'interface affiche « (non résolu) », un coût à 0 et un
