@@ -21,6 +21,20 @@ import type { DecisionDemarrage } from './identite.ts';
 export const MODELE_ORCHESTRATEUR = 'opus';
 
 /**
+ * Effort de DÉMARRAGE de la session. `☠` Posé ici le 2026-08-07 parce qu'il ne
+ * l'était NULLE PART : `model` était bien dans les `Options` et écrasait donc le
+ * réglage du compte, mais l'effort, lui, retombait sur la cascade de réglages
+ * persistés du `CLAUDE_CONFIG_DIR` — laquelle diffère d'un compte à l'autre.
+ * Mesuré le même jour : le compte de repli portait `effortLevel: low` dans son
+ * `settings.json`, donc une bascule de compte pouvait faire raisonner
+ * l'orchestrateur deux crans plus bas sans le moindre signe à l'écran.
+ *
+ * `☠` Ce n'est qu'un DÉFAUT : le choix de l'opérateur passe ensuite par
+ * `applyFlagSettings` (portée session) à chaque message, et prime.
+ */
+export const EFFORT_ORCHESTRATEUR = 'high';
+
+/**
  * Jeu de base des outils intégrés. `AskUserQuestion` y figure explicitement :
  * c'est le mécanisme natif de désambiguïsation (A.3.2), pas une réimplémentation
  * maison. `Read`/`Grep`/`Glob` sont « le jeu minimal de lecture locale » d'A.1.1
@@ -86,6 +100,7 @@ export function composerOptionsOrchestrateur(deps: DependancesOptionsOrchestrate
     ...identite,
     cwd: deps.cwd,
     model: MODELE_ORCHESTRATEUR,
+    effort: EFFORT_ORCHESTRATEUR,
     // `☠` `bypassPermissions` et NON `auto` (décision Chris, 2026-08-02) — même
     // raison que pour les workers le 31/07, un cran plus haut. MESURÉ le 02/08 à
     // 12h22 : le classifieur du mode `auto` a refusé un `creer_equipe`
@@ -136,6 +151,7 @@ export function composerOptionsOrchestrateur(deps: DependancesOptionsOrchestrate
  */
 export function assertInvariantsOrchestrateur(options: Options): void {
   assertPasDeToolsDangereux(options);
+  assertEffortPose(options);
   assertModeAutonomeCoherent(options);
   assertAskUserQuestionDisponible(options);
   assertConfigMachineHonoree(options);
@@ -155,6 +171,21 @@ function assertAucunFluxBrutSubagent(options: Options): void {
   if (options.forwardSubagentText === true || options.agentProgressSummaries === true) {
     throw new OptionsOrchestrateurError(
       "forwardSubagentText/agentProgressSummaries actifs sur l'orchestrateur : violerait H-45 (aucun flux brut dans son contexte).",
+    );
+  }
+}
+
+/**
+ * `☠` L'effort absent des `Options` ne produit AUCUNE erreur : la session part
+ * simplement sur ce que dit le `settings.json` du compte, qui n'est pas le même
+ * d'un compte à l'autre. C'est une dégradation muette de la qualité du
+ * raisonnement — le pire mode de panne, puisque rien ne la signale.
+ */
+function assertEffortPose(options: Options): void {
+  if (options.effort === undefined) {
+    throw new OptionsOrchestrateurError(
+      "effort absent des Options : la session retomberait sur le settings.json du compte, " +
+        "qui diffère d'un compte à l'autre (mesuré le 07/08 : 'low' sur le compte de repli).",
     );
   }
 }

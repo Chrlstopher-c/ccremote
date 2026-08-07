@@ -32,6 +32,7 @@ export interface LigneConversation {
   resume_contexte: string | null;
   modele: string | null;
   effort: string | null;
+  mode_rapide: number | null;
   machine: string | null;
   autonomie_debut: number | null;
   autonomie_fin: number | null;
@@ -84,6 +85,9 @@ export function versConversation(l: LigneConversation): Conversation {
     resumeContexte: l.resume_contexte,
     modele: l.modele,
     effort: l.effort,
+    // `☠` `null` traversé tel quel, jamais rabattu sur `false` : c'est ce qui
+    // distingue « ce fil n'a jamais tranché » de « coupé explicitement ».
+    modeRapide: l.mode_rapide === null ? null : l.mode_rapide === 1,
     machine: l.machine,
     autonomieDebut: l.autonomie_debut,
     autonomieFin: l.autonomie_fin,

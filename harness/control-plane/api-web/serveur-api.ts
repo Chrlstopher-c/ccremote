@@ -206,6 +206,7 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
       // incomplet — le chemin de DONNÉES manquait, pas seulement l'affichage).
       model: d.modele,
       effort: d.effort,
+      fastMode: d.modeRapide,
       partial: d.partiel,
     });
   }
@@ -583,11 +584,16 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     // réglage sans le moindre effet, et la session tournait sur sa constante.
     const modele = typeof corps['model'] === 'string' ? corps['model'] : undefined;
     const effort = typeof corps['effort'] === 'string' ? corps['effort'] : undefined;
+    // `☠` Booléen STRICT, jamais une coercition : `fastMode` absent doit rester
+    // `undefined` — « le fil garde son réglage ». Devenu `false`, il couperait le
+    // mode rapide à chaque message qui n'en parle pas, y compris ceux que le
+    // harness enfile lui-même.
+    const modeRapide = typeof corps['fastMode'] === 'boolean' ? corps['fastMode'] : undefined;
     // `☠` NE bloque pas jusqu'à la réponse : `envoyer` enfile puis rend la main.
     // La réponse remonte par le streaming (GET .../events). Un POST bloquant
     // jusqu'au `result` immobiliserait le relais et Cloudflare le couperait.
     try {
-      await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort }, pieces);
+      await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort, modeRapide }, pieces);
     } catch (erreur) {
       // `☠` 400 et le message TEL QUEL : il nomme les types acceptés et les
       // plafonds. Le remplacer par « requête invalide » obligerait l'opérateur à

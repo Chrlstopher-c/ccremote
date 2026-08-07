@@ -832,6 +832,24 @@ CREATE TABLE demande_rallonge (
 CREATE INDEX idx_demande_rallonge_attente ON demande_rallonge(statut, cree_a DESC);
 `;
 
+/**
+ * Mode rapide, retenu par fil — exactement comme `modele` et `effort`
+ * (migration 12), et pour la même raison : sans persistance, rouvrir un fil le
+ * ramène à sa valeur d'usine et le réglage affiché ment.
+ *
+ * `☠` `NULL` n'est PAS `0`. `NULL` veut dire « ce fil n'a jamais tranché » et
+ * laisse le défaut du compte s'appliquer ; `0` est le choix explicite de le
+ * couper. Les confondre empêcherait de distinguer un fil neuf d'un fil où
+ * l'opérateur l'a délibérément désactivé, et imposerait un `applyFlagSettings`
+ * à chaque message d'un fil qui n'a jamais demandé ce réglage.
+ *
+ * `☠` Un entier, pas un booléen : SQLite STRICT n'a pas de type booléen, et un
+ * texte `'true'`/`'false'` se compare mal.
+ */
+const MIGRATION_28 = `
+ALTER TABLE conversation ADD COLUMN mode_rapide INTEGER CHECK (mode_rapide IN (0, 1));
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -860,6 +878,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 25, nom: 'projet-est-git-mission', sql: MIGRATION_25 },
   { version: 26, nom: 'plafond-autonomie-par-fil', sql: MIGRATION_26 },
   { version: 27, nom: 'demande-rallonge-autonomie', sql: MIGRATION_27 },
+  { version: 28, nom: 'mode-rapide-conversation', sql: MIGRATION_28 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

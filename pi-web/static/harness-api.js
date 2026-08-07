@@ -153,6 +153,11 @@ const HarnessAPI = (() => {
         text,
         model: choix?.model,
         effort: choix?.effort,
+        // ☠ MÊME PANNE que `model`/`effort` avant le 23/07, découverte le 07/08 :
+        // la case « mode rapide » existait à l'écran, gérait son état et se
+        // grisait sur les modèles qui ne le déclarent pas — et n'était transmise
+        // NULLE PART. Câblée bout en bout (migration 28, `applyFlagSettings`).
+        fastMode: choix?.fastMode,
         // ☠ Absentes plutôt que `[]` : le corps d'un message sans capture ne
         // grossit pas d'un champ vide, et la route distingue les deux cas.
         ...(pieces !== undefined && pieces.length > 0 ? { pieces } : {}),

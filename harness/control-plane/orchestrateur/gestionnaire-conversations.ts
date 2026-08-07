@@ -137,6 +137,8 @@ export interface DetailConversation {
    */
   readonly modele: string | null;
   readonly effort: string | null;
+  /** Mode rapide du fil (migration 28). `null` = jamais tranché ici. */
+  readonly modeRapide: boolean | null;
   /** Bloc en cours de frappe (streaming token par token), ou `null`. */
   readonly partiel: BlocPartiel | null;
 }
@@ -174,6 +176,7 @@ export class ConversationIntrouvableError extends Error {
 export interface ChoixModele {
   readonly modele?: string | null;
   readonly effort?: string | null;
+  readonly modeRapide?: boolean | null;
 }
 
 export class GestionnaireConversations {
@@ -275,6 +278,7 @@ export class GestionnaireConversations {
       compactions: conv.compactions,
       modele: conv.modele,
       effort: conv.effort,
+      modeRapide: conv.modeRapide,
       partiel: this.#partiel(id),
     };
   }
@@ -334,6 +338,8 @@ export class GestionnaireConversations {
     // suivants qui ne précisent rien — sinon rouvrir un fil le ferait taire.
     const modele = choix.modele ?? conv.modele;
     const effort = choix.effort ?? conv.effort;
+    // `☠` `??` et non `||` : `false` est un choix, pas une absence de choix.
+    const modeRapide = choix.modeRapide ?? conv.modeRapide;
 
     this.registre.conversations.ajouterEvenement({
       conversationId: id,
@@ -351,9 +357,9 @@ export class GestionnaireConversations {
     // fondée sur un état périmé, suivie d'une correction au tour d'après — ce
     // que le canal asynchrone existe précisément pour éviter.
     await this.#rattraper(id);
-    await this.#appliquerChoixModele(session.poignee.query, id, modele, effort);
-    if (choix.modele !== undefined || choix.effort !== undefined) {
-      this.registre.conversations.poserModeleEffort(id, modele, effort);
+    await this.#appliquerChoixModele(session.poignee.query, id, modele, effort, modeRapide);
+    if (choix.modele !== undefined || choix.effort !== undefined || choix.modeRapide !== undefined) {
+      this.registre.conversations.poserModeleEffort(id, modele, effort, modeRapide);
     }
     session.collecteur.marquerEnvoi();
     session.collecteur.poserModeleEffort(modele, effort);
@@ -406,22 +412,31 @@ export class GestionnaireConversations {
   }
 
   /**
-   * Applique modèle et effort à la session VIVANTE. `☠` Les deux ne sont
-   * disponibles qu'en streaming input (doc du SDK) — c'est notre cas. Un échec
-   * ne fait jamais perdre le message : on journalise et on envoie quand même,
-   * plutôt que de refuser un tour pour un réglage d'affichage.
+   * Applique modèle, effort et mode rapide à la session VIVANTE. `☠` Les trois
+   * ne sont disponibles qu'en streaming input (doc du SDK) — c'est notre cas. Un
+   * échec ne fait jamais perdre le message : on journalise et on envoie quand
+   * même, plutôt que de refuser un tour pour un réglage d'affichage.
+   *
+   * `☠` `fastMode` passe par le MÊME canal que l'effort, et pour la même raison :
+   * la cascade de réglages persistés n'est lue qu'au démarrage du process, alors
+   * qu'un fil vit des heures et change d'avis en cours de route.
    */
   async #appliquerChoixModele(
     query: { setModel?: (m?: string) => Promise<void>; applyFlagSettings?: (s: Record<string, unknown>) => Promise<void> },
     conversationId: string,
     modele: string | null,
     effort: string | null,
+    modeRapide: boolean | null = null,
   ): Promise<void> {
     try {
       if (modele !== null) await query.setModel?.(modele);
       if (effort !== null) await query.applyFlagSettings?.({ effortLevel: effort });
+      if (modeRapide !== null) await query.applyFlagSettings?.({ fastMode: modeRapide });
     } catch (erreur) {
-      log.warn({ err: erreur, conversationId, modele, effort }, 'modèle/effort non appliqués — message envoyé quand même');
+      log.warn(
+        { err: erreur, conversationId, modele, effort, modeRapide },
+        'réglages de génération non appliqués — message envoyé quand même',
+      );
     }
   }
 

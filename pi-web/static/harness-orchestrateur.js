@@ -343,6 +343,10 @@ async function hOpenConversation(id) {
   if (d.model) {
     HarnessState.orchModel.model = d.model;
     if (d.effort) HarnessState.orchModel.effort = d.effort;
+    // ☠ `!== null` et JAMAIS un test de véracité : `false` est un choix explicite
+    // du fil (« mode rapide coupé »), et un `if (d.fastMode)` le perdrait à
+    // chaque réouverture pour le confondre avec « jamais tranché ».
+    if (d.fastMode !== null && d.fastMode !== undefined) HarnessState.orchModel.fastMode = d.fastMode;
     hSyncSelecteursModele();
   }
   if (!d.events || d.events.length === 0) {
@@ -1124,6 +1128,7 @@ async function hSendOrchMessage() {
   const r = await HarnessAPI.sendConversationMessage(hOrch.convId, text, {
     model: HarnessState.orchModel.model,
     effort: HarnessState.orchModel.effort,
+    fastMode: HarnessState.orchModel.fastMode,
   }, pieces);
   btn.disabled = false;
   // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.

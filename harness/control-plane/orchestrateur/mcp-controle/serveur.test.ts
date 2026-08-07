@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import { construireOutilsControle, protege, type DependancesServeurControle } from './serveur.ts';
+import { MANDAT_ORCHESTRATEUR } from '../processus/mandat.ts';
 import type { ContratRetour } from './types.ts';
 
 function contenuJson(resultat: CallToolResult): ContratRetour {
@@ -122,6 +123,24 @@ describe('surface d’outils (A.2.2)', () => {
         'demander_rallonge_autonomie',
       ].sort(),
     );
+  });
+
+  // ☠ TROIS OCCURRENCES DU MÊME DÉFAUT, dont une payée en production. Un outil
+  // servi par ce serveur mais ABSENT de `MANDAT_ORCHESTRATEUR` n'existe pas pour
+  // le modèle : il ne lit pas ce dépôt, ce mandat est sa seule carte.
+  //   `repondre_permission` (31/07) — cité alors qu'il avait été supprimé.
+  //   `WebSearch`/`WebFetch` (31/07) — promis par le mandat, absents de `tools`.
+  //   `demander_rallonge_autonomie` (07/08) — livré le 06/08, jamais annoncé.
+  //     Mesuré : l'orchestrateur a écrit à Chris que « l'outil de rallonge
+  //     n'apparaît pas dans ma session » et lui a demandé d'aller vérifier la
+  //     liste des outils exposés — à quelqu'un qui ne lit pas de code.
+  // Ce test ferme la boucle : les deux listes changent ensemble, ou le build casse.
+  test('☠ chaque outil servi est ANNONCÉ dans le mandat — sinon il n’existe pas pour le modèle', () => {
+    const servis = construireOutilsControle({
+      ...deps,
+      chercheurProjets: { rechercherProjets: async () => ({ motif: 'x', chemin: '/', occurrences: [] }) },
+    }).map((o) => o.name);
+    expect(servis.filter((nom) => !MANDAT_ORCHESTRATEUR.includes(nom))).toEqual([]);
   });
 
   // ☠ Les outils de PROJET sont conditionnels : absents si la composition n'a

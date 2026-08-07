@@ -396,19 +396,29 @@ export class DepotConversations {
   }
 
   /**
-   * Mémorise le dernier couple modèle/effort du fil. `☠` C'est ce qui permet de
+   * Mémorise les réglages de génération du fil. `☠` C'est ce qui permet de
    * rouvrir la conversation là où on l'a laissée, au lieu de retomber sur les
    * défauts en contradiction avec le dernier message affiché.
+   *
+   * `☠` `modeRapide` vaut `null` tant que le fil n'a rien tranché — il est alors
+   * écrit tel quel, jamais rabattu sur `0` : un `0` signifierait « coupé
+   * volontairement » et masquerait le défaut du compte.
    */
-  public poserModeleEffort(id: string, modele: string | null, effort: string | null, maintenant: number = Date.now()): void {
+  public poserModeleEffort(
+    id: string,
+    modele: string | null,
+    effort: string | null,
+    modeRapide: boolean | null = null,
+    maintenant: number = Date.now(),
+  ): void {
     executer(
       'conversations.poserModeleEffort',
       () => {
         this.db
-          .query('UPDATE conversation SET modele = ?, effort = ?, maj_a = ? WHERE id = ?')
-          .run(modele, effort, maintenant, id);
+          .query('UPDATE conversation SET modele = ?, effort = ?, mode_rapide = ?, maj_a = ? WHERE id = ?')
+          .run(modele, effort, modeRapide === null ? null : modeRapide ? 1 : 0, maintenant, id);
       },
-      { id, modele, effort },
+      { id, modele, effort, modeRapide },
     );
   }
 

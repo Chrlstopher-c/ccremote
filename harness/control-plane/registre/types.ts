@@ -352,6 +352,13 @@ export interface Conversation {
   readonly modele: string | null;
   readonly effort: string | null;
   /**
+   * Mode rapide du fil (migration 28), même logique de persistance que le
+   * couple ci-dessus. `☠` `null` = jamais tranché sur ce fil, le défaut du
+   * compte s'applique ; `false` = coupé explicitement. Les confondre forcerait
+   * un réglage à chaque message d'un fil qui n'a jamais rien demandé.
+   */
+  readonly modeRapide: boolean | null;
+  /**
    * Fenêtre d'autonomie du fil (migration 15) — début, fin, et l'objectif que
    * Chris a confié pour cette plage.
    *

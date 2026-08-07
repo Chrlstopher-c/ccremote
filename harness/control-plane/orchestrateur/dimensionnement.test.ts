@@ -147,8 +147,12 @@ describe('ce que l’orchestrateur doit savoir pour arbitrer', () => {
   });
 
   test('il lui est demandé d’arbitrer, pas de renvoyer la question', () => {
-    expect(MANDAT_ORCHESTRATEUR).toContain('TU ARBITRES');
-    expect(MANDAT_ORCHESTRATEUR).toContain('Sans consigne, TU CHOISIS');
+    // `☠` Insensible à la casse depuis le dégraissage du 07/08 : le mandat a
+    // perdu ses majuscules d'emphase, que le modèle recopiait dans ses réponses
+    // à Chris. Ce qui doit être protégé ici est la CONSIGNE — il choisit, il ne
+    // renvoie pas la question — jamais la typographie qui la portait.
+    expect(MANDAT_ORCHESTRATEUR).toMatch(/sans consigne, tu choisis/i);
+    expect(MANDAT_ORCHESTRATEUR).toMatch(/ne lui renvoie pas la question/i);
   });
 
   test('☠ les identifiants qu’il doit écrire passent le validateur du harness', () => {
@@ -167,7 +171,7 @@ describe('ce que l’orchestrateur doit savoir pour arbitrer', () => {
 
   test('il doit annoncer son choix — sinon l’arbitrage devient invisible', () => {
     // La carte d'autorisation est le seul endroit où Chris peut le corriger
-    // avant la dépense.
-    expect(MANDAT_ORCHESTRATEUR).toContain('EN UNE LIGNE');
+    // avant la dépense. `☠` Insensible à la casse, même raison que ci-dessus.
+    expect(MANDAT_ORCHESTRATEUR).toMatch(/annonce ton choix en une ligne/i);
   });
 });

@@ -122,6 +122,7 @@ export interface PortConversations {
     readonly compactions: number;
     readonly modele: string | null;
     readonly effort: string | null;
+    readonly modeRapide: boolean | null;
     readonly partiel: { readonly type: TypeEvenementConversation; readonly contenu: string } | null;
   } | null;
   evenementsDepuis(id: string, depuis: number): {
@@ -135,13 +136,13 @@ export interface PortConversations {
   } | null;
   /**
    * `choix` absent ou partiel ⇒ le fil garde ce qu'il utilisait déjà. `☠` Ces
-   * deux valeurs étaient reçues par la route puis jetées : le sélecteur de
+   * valeurs étaient reçues par la route puis jetées : le sélecteur de
    * l'interface n'avait aucun effet sur la session (23/07).
    */
   envoyer(
     id: string,
     texte: string,
-    choix?: { readonly modele?: string; readonly effort?: string },
+    choix?: { readonly modele?: string; readonly effort?: string; readonly modeRapide?: boolean },
     /** Pièces jointes brutes du navigateur (migration 24) — validées côté domaine, jamais ici. */
     pieces?: readonly { readonly nom: unknown; readonly type: unknown; readonly donneesBase64: unknown }[],
   ): Promise<void>;
