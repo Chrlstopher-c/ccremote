@@ -10,6 +10,7 @@
 
 import { assemblerControlPlanePi } from './assembler-control-plane.ts';
 import { envNombreOptionnel, envObligatoire, envOptionnel, envSeuilPctOptionnel } from '../env.ts';
+import { lirePlafondAutonomieParc } from '../../control-plane/autonomie/index.ts';
 import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'bin-pi' });
@@ -57,9 +58,14 @@ async function main(): Promise<void> {
   // Comptes Claude garantis au démarrage. Format : `id=configDir` séparés par
   // des virgules — ex. `compte-a=/home/.../compte-a,compte-b=/home/.../compte-b`.
   const comptes = parserComptes(envOptionnel('CCREMOTE_PI_COMPTES', ''));
+  // Défaut de PARC du plafond d'autonomie. `illimite` retire le plafond pour
+  // tout fil qui n'a rien réglé lui-même ; absent ⇒ valeur d'usine (40).
+  // `☠` Ne remplace pas le plafond de DÉPENSE du parc, qui reste le vrai frein.
+  const plafondAutonomieDefaut = lirePlafondAutonomieParc(process.env['CCREMOTE_PI_PLAFOND_AUTONOMIE']);
 
   const assemble = await assemblerControlPlanePi({
     cheminRegistreDb,
+    plafondAutonomieDefaut,
     cheminIncidentsOrchestrateur,
     repertoireProjets,
     cwdOrchestrateur,

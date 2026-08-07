@@ -10,99 +10,19 @@
 
 import type { Database } from 'bun:sqlite';
 import { executer } from './journal.ts';
+import { ecrireReglagePlafond, type ReglagePlafond } from '../autonomie/reglage-plafond.ts';
+import {
+  versConversation,
+  versEvenement,
+  type LigneConversation,
+  type LigneEvenement,
+} from './lignes-conversation.ts';
 import type {
   Conversation,
   EvenementConversation,
   PieceJointeMessage,
   TypeEvenementConversation,
 } from './types.ts';
-
-interface LigneConversation {
-  id: string;
-  titre: string;
-  titre_source: string;
-  session_id: string | null;
-  statut: string;
-  cree_a: number;
-  maj_a: number;
-  compactions: number;
-  resume_contexte: string | null;
-  modele: string | null;
-  effort: string | null;
-  machine: string | null;
-  autonomie_debut: number | null;
-  autonomie_fin: number | null;
-  autonomie_objectif: string | null;
-}
-
-interface LigneEvenement {
-  seq: number;
-  conversation_id: string;
-  type: string;
-  contenu: string;
-  cree_a: number;
-  modele: string | null;
-  effort: string | null;
-  tool_use_id: string | null;
-  detail: string | null;
-  resultat: string | null;
-  pieces: string | null;
-}
-
-/**
- * `☠` Une colonne JSON illisible ne doit PAS faire disparaître le message qui la
- * porte : on rend une liste vide et on laisse la trace. Perdre la parole de
- * Chris parce que le descriptif d'une capture est corrompu serait un très
- * mauvais échange.
- */
-function lirePieces(brut: string | null): readonly PieceJointeMessage[] {
-  if (brut === null || brut.length === 0) return [];
-  try {
-    const decode: unknown = JSON.parse(brut);
-    return Array.isArray(decode) ? (decode as PieceJointeMessage[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function versConversation(l: LigneConversation): Conversation {
-  return {
-    id: l.id,
-    titre: l.titre,
-    // as : colonne alimentée uniquement par `renommer`, dont le paramètre est typé.
-    titreSource: l.titre_source as Conversation['titreSource'],
-    sessionId: l.session_id,
-    // as : colonne sous CHECK IN ('active','archivee').
-    statut: l.statut as Conversation['statut'],
-    creeA: l.cree_a,
-    majA: l.maj_a,
-    compactions: l.compactions,
-    resumeContexte: l.resume_contexte,
-    modele: l.modele,
-    effort: l.effort,
-    machine: l.machine,
-    autonomieDebut: l.autonomie_debut,
-    autonomieFin: l.autonomie_fin,
-    autonomieObjectif: l.autonomie_objectif,
-  };
-}
-
-function versEvenement(l: LigneEvenement): EvenementConversation {
-  return {
-    seq: l.seq,
-    conversationId: l.conversation_id,
-    // as : colonne sous CHECK IN (…) — aucune autre valeur ne peut exister.
-    type: l.type as TypeEvenementConversation,
-    contenu: l.contenu,
-    creeA: l.cree_a,
-    modele: l.modele,
-    effort: l.effort,
-    toolUseId: l.tool_use_id,
-    detail: l.detail,
-    resultat: l.resultat,
-    pieces: lirePieces(l.pieces),
-  };
-}
 
 export interface CreationConversation {
   readonly id: string;
@@ -301,6 +221,30 @@ export class DepotConversations {
           .run(complet ? debut : null, complet ? fin : null, complet ? objectif : null, id);
       },
       { id, debut, fin },
+    );
+  }
+
+  /**
+   * Règle le plafond d'autonomie DE CE FIL (migration 26).
+   *
+   * `☠` Le réglage est déjà normalisé par le domaine (`normaliserReglagePlafond`)
+   * avant d'arriver ici : ce dépôt n'arbitre pas ce qu'un modèle a pu écrire, il
+   * écrit une valeur dont la forme est déjà garantie — et le CHECK de la colonne
+   * reste le dernier filet, pas le premier.
+   *
+   * `☠` Ce réglage ne touche PAS le plafond de dépense du parc (H-58), qui reste
+   * le seul garde-fou réellement contraignant : un fil affranchi peut enchaîner
+   * les équipes, il ne peut pas dépasser le budget.
+   */
+  public reglerPlafondAutonomie(id: string, reglage: ReglagePlafond, maintenant: number = Date.now()): void {
+    executer(
+      'conversations.reglerPlafondAutonomie',
+      () => {
+        this.db
+          .query('UPDATE conversation SET plafond_autonomie = ?, maj_a = ? WHERE id = ?')
+          .run(ecrireReglagePlafond(reglage), maintenant, id);
+      },
+      { id, reglage: reglage.type },
     );
   }
 

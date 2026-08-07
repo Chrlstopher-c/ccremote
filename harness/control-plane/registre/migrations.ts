@@ -763,6 +763,30 @@ CREATE UNIQUE INDEX idx_mission_active_par_projet
     AND projet_est_git = 0;
 `;
 
+/**
+ * Migration 26 — le plafond d'autonomie devient réglable PAR FIL.
+ *
+ * `☠` Il était une constante compilée (`AUTO_APPROBATIONS_MAX = 40`) : le
+ * changer imposait un redéploiement, c'est-à-dire couper l'orchestrateur en
+ * pleine conversation. En pratique il ne changeait donc jamais.
+ *
+ * `☠` TEXT et non INTEGER, volontairement : la colonne doit porter trois états
+ * distincts — `NULL` (rien réglé, le fil hérite du défaut de parc), le jeton
+ * `illimite` (Chris a retiré le plafond DE CE FIL), ou un entier positif.
+ * Confondre « non réglé » et « illimité » sous un même `NULL` rendrait un fil
+ * délibérément affranchi indiscernable d'un fil neuf, et baisser le défaut de
+ * parc reserrerait en silence des fils que Chris avait ouverts à la main.
+ * Le CHECK refuse tout le reste À L'ÉCRITURE — une valeur folle ne s'installe
+ * pas en base pour être arbitrée plus tard au point d'usage.
+ */
+const MIGRATION_26 = `
+ALTER TABLE conversation ADD COLUMN plafond_autonomie TEXT
+  CHECK (plafond_autonomie IS NULL
+         OR plafond_autonomie = 'illimite'
+         OR (CAST(plafond_autonomie AS INTEGER) > 0
+             AND CAST(CAST(plafond_autonomie AS INTEGER) AS TEXT) = plafond_autonomie));
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -789,6 +813,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 23, nom: 'constat-git-mission', sql: MIGRATION_23 },
   { version: 24, nom: 'pieces-jointes-message', sql: MIGRATION_24 },
   { version: 25, nom: 'projet-est-git-mission', sql: MIGRATION_25 },
+  { version: 26, nom: 'plafond-autonomie-par-fil', sql: MIGRATION_26 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

@@ -49,8 +49,16 @@ export interface ContexteAutorisation {
   readonly fenetreDebut: number | null;
   readonly fenetreFin: number | null;
   readonly maintenant: number;
-  /** Plafond effectif, injecté pour rester testable. */
-  readonly plafond?: number;
+  /**
+   * Plafond effectif du fil, résolu en amont par `plafondEffectif`.
+   *
+   * `☠` TROIS valeurs distinctes, ne pas les confondre : `undefined` ⇒ rien n'a
+   * été résolu, on retombe sur `AUTO_APPROBATIONS_MAX` (bancs, tests, appelants
+   * non câblés) ; `null` ⇒ ILLIMITÉ, explicitement voulu ; un nombre ⇒ le mur.
+   * Écrire `ctx.plafond ?? AUTO_APPROBATIONS_MAX` ferait retomber « illimité »
+   * sur 40 — le réglage de Chris serait ignoré en silence.
+   */
+  readonly plafond?: number | null;
 }
 
 /**
@@ -93,9 +101,10 @@ export function fenetreOuverte(ctx: ContexteAutorisation): boolean {
  * une suggestion.
  */
 export function deciderAutorisation(ctx: ContexteAutorisation): DecisionAutorisation {
-  const plafond = ctx.plafond ?? AUTO_APPROBATIONS_MAX;
+  const plafond = ctx.plafond === undefined ? AUTO_APPROBATIONS_MAX : ctx.plafond;
+  const affiche = plafond === null ? '∞' : String(plafond);
 
-  if (ctx.autoApprouveesDeja >= plafond) {
+  if (plafond !== null && ctx.autoApprouveesDeja >= plafond) {
     return {
       mode: 'humain',
       raison:
@@ -111,7 +120,7 @@ export function deciderAutorisation(ctx: ContexteAutorisation): DecisionAutorisa
       mode: 'auto',
       raison:
         `fenêtre d'autonomie ouverte, ${restant} min avant l'échéance — l'équipe démarre sans attendre. ` +
-        `(${ctx.autoApprouveesDeja + 1}/${plafond})`,
+        `(${ctx.autoApprouveesDeja + 1}/${affiche})`,
     };
   }
 
@@ -120,7 +129,7 @@ export function deciderAutorisation(ctx: ContexteAutorisation): DecisionAutorisa
       mode: 'auto',
       raison:
         "Chris a déjà autorisé un mandat dans cette conversation : les suivants partent seuls. " +
-        `(${ctx.autoApprouveesDeja + 1}/${plafond})`,
+        `(${ctx.autoApprouveesDeja + 1}/${affiche})`,
     };
   }
 

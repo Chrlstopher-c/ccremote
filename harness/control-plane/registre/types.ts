@@ -5,6 +5,7 @@
 
 import type { AccesMandat } from '../../shared/acces-mandat.ts';
 import type { EtatInspection } from '../inspection/etat-inspection.ts';
+import type { ReglagePlafond } from '../autonomie/reglage-plafond.ts';
 
 /**
  * États rapportés par le worker (Découverte 2, E.1.1). Autorité : le PC.
@@ -362,6 +363,12 @@ export interface Conversation {
   readonly autonomieDebut: number | null;
   readonly autonomieFin: number | null;
   readonly autonomieObjectif: string | null;
+  /**
+   * Plafond d'autonomie PROPRE à ce fil (migration 26) — combien d'équipes il
+   * peut lancer sans qu'un humain reclique. `herite` : le défaut du parc
+   * s'applique. Résolu par `plafondEffectif`, jamais lu tel quel.
+   */
+  readonly plafondAutonomie: ReglagePlafond;
   /**
    * Machine de travail choisie à la CRÉATION du fil (migration 22).
    *

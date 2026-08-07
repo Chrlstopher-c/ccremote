@@ -38,7 +38,14 @@
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Mission, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
 import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
-import { deciderAutorisation, fenetreOuverte, seuilComptageAutonomie } from '../../control-plane/autonomie/index.ts';
+import {
+  AUTO_APPROBATIONS_MAX,
+  deciderAutorisation,
+  fenetreOuverte,
+  HERITE,
+  plafondEffectif,
+  seuilComptageAutonomie,
+} from '../../control-plane/autonomie/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
@@ -145,6 +152,15 @@ export interface OptionsAssemblageControlPlanePi {
   readonly avecOrchestrateur?: boolean;
   /** Plafond d'équipes simultanées sur un projet GIT (mandat E3). Défaut : `PLAFOND_EQUIPES_PROJET_GIT_DEFAUT` (4). */
   readonly plafondEquipesParProjet?: number;
+  /**
+   * Défaut de PARC du plafond d'autonomie : ce qui s'applique à un fil qui n'a
+   * rien réglé lui-même. `null` ⇒ parc entier affranchi (aucun plafond
+   * d'autonomie), `undefined` ⇒ `AUTO_APPROBATIONS_MAX`.
+   *
+   * `☠` Ne touche pas au plafond de DÉPENSE du parc (H-58) : c'est lui, et non
+   * celui-ci, qui borne réellement ce qu'une nuit d'autonomie peut coûter.
+   */
+  readonly plafondAutonomieDefaut?: number | null;
 }
 
 export interface ControlPlanePiAssemble {
@@ -198,6 +214,11 @@ function construireDependancesReconciliation(
  */
 export async function assemblerControlPlanePi(options: OptionsAssemblageControlPlanePi): Promise<ControlPlanePiAssemble> {
   const registre = ouvrirRegistre({ chemin: options.cheminRegistreDb });
+  // `☠` `undefined` ⇒ la valeur d'usine ; `null` ⇒ parc affranchi, et il doit
+  // traverser tel quel jusqu'à `plafondEffectif`. Un `??` ici écraserait le
+  // « illimité » du parc par 40, silencieusement.
+  const plafondParcDefaut =
+    options.plafondAutonomieDefaut === undefined ? AUTO_APPROBATIONS_MAX : options.plafondAutonomieDefaut;
 
   // `☠` Les comptes sont garantis ICI, dans la connexion du service lui-même,
   // idempotent à chaque démarrage. Un script d'enregistrement séparé écrivait
@@ -571,6 +592,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 fenetreDebut: conv?.autonomieDebut ?? null,
                 fenetreFin: conv?.autonomieFin ?? null,
                 maintenant: Date.now(),
+                // `☠` Le réglage DU FIL d'abord, le défaut de parc ensuite — et
+                // `null` traverse jusqu'au bout : c'est « illimité », pas
+                // « rien réglé ». Un `??` ici rendrait le plafond de 40 à un fil
+                // que Chris venait d'affranchir.
+                plafond: plafondEffectif(conv?.plafondAutonomie ?? HERITE, plafondParcDefaut),
               });
               if (decision.mode === 'humain') {
                 return { ref: p.id, autoApprouve: false, detail: decision.raison };
