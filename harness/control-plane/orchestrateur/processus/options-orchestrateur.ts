@@ -33,9 +33,17 @@ export const MODELE_ORCHESTRATEUR = 'opus';
  * n'explique. Le prompt et `tools` décrivent la même chose — ils changent
  * ensemble ou ils mentent. Ces deux outils lisent, ils n'agissent pas :
  * l'acceptation (a) (ni Bash, ni Write, ni Edit) reste entière.
+ *
+ * `☠` `Skill` ajouté le 2026-08-07. Sans lui, un dossier `skills/` posé dans le
+ * `CLAUDE_CONFIG_DIR` de l'orchestrateur est INERTE : le SDK n'expose une
+ * compétence QUE par cet outil. La panne aurait été silencieuse — des skills
+ * déployés, présents sur le disque, et jamais invoqués une seule fois, sans le
+ * moindre message d'erreur pour le dire. Il n'élargit pas la surface d'action :
+ * un skill est de la prose injectée dans le tour, il ne peut appeler que des
+ * outils déjà autorisés ici.
  */
 export const OUTILS_ORCHESTRATEUR: readonly string[] =
-  ['Read', 'Grep', 'Glob', 'AskUserQuestion', 'WebSearch', 'WebFetch'];
+  ['Read', 'Grep', 'Glob', 'AskUserQuestion', 'WebSearch', 'WebFetch', 'Skill'];
 
 /** Défense en profondeur — mêmes noms qu'absents de `OUTILS_ORCHESTRATEUR`, jamais un motif scopé ici : on VEUT amputer la capacité, pas seulement borner un danger (contrairement à H-41/plancher-deni, qui concerne les équipes). */
 export const OUTILS_INTERDITS_ORCHESTRATEUR: readonly string[] = ['Bash', 'Write', 'Edit', 'Agent'];

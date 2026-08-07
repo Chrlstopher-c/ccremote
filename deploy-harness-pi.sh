@@ -103,6 +103,46 @@ CCREMOTE_API_WEB_PORT=8722
 CCREMOTE_PI_ORCHESTRATEUR=${CCREMOTE_PI_ORCHESTRATEUR:-${ORCHESTRATEUR_ACTUEL:-0}}
 EOF
 
+# ── Conduite de l'orchestrateur : CLAUDE.md + compétences ───────────────────
+#
+# ☠ DÉCOUVERT LE 07/08 : l'orchestrateur tournait depuis des semaines SANS AUCUN
+# CLAUDE.md. `settingSources` inclut bien `user`, mais `CLAUDE_CONFIG_DIR` pointe
+# sur `.claude-orchestrateur`, où rien n'avait jamais été posé — le CLAUDE.md de
+# `/home/pi/.claude/` n'est donc jamais lu. Il ne restait que le mandat, qui
+# décrit ses CAPACITÉS et pas sa CONDUITE : d'où des réponses de 7 000 caractères
+# sur un « ok go », du vocabulaire de schéma envoyé à quelqu'un qui ne lit pas de
+# code, et des vérifications déléguées à Chris qu'il pouvait faire seul.
+#
+# ☠ Les DEUX comptes reçoivent la même conduite. Le compte de repli laissé sans
+# CLAUDE.md, c'est exactement la panne qu'on corrige ici, décalée d'une bascule.
+#
+# ☠ Copie ciblée, jamais `--delete` ni `rm -rf` sur ces répertoires eux-mêmes :
+# ils portent aussi les credentials du /login humain et les sessions du SDK.
+CONFIG_SRC="$REMOTE_DIR/composition/deploiement/config-orchestrateur"
+CONFIG_DIRS_ORCH="${CCREMOTE_PI_CONFIG_DIRS_ORCHESTRATEUR:-/home/pi/.claude-orchestrateur,/home/pi/.claude-orchestrateur-b}"
+echo "→ Conduite de l'orchestrateur (CLAUDE.md + compétences)"
+ssh $SSH_OPTS "$TARGET" "
+  set -e
+  for d in \$(echo '$CONFIG_DIRS_ORCH' | tr ',' ' '); do
+    mkdir -p \"\$d/skills\"
+    cp '$CONFIG_SRC/CLAUDE.md' \"\$d/CLAUDE.md\"
+    cp -r '$CONFIG_SRC/skills/.' \"\$d/skills/\"
+  done
+"
+# ☠ Contrôle de fraîcheur : un CLAUDE.md absent ou une compétence non copiée ne
+# produit AUCUNE erreur au démarrage — l'orchestrateur repart simplement sans
+# conduite, exactement comme avant le 07/08. On refuse le déploiement plutôt que
+# de laisser la panne redevenir silencieuse.
+for d in $(echo "$CONFIG_DIRS_ORCH" | tr ',' ' '); do
+  TAILLE=$(ssh $SSH_OPTS "$TARGET" "wc -c < '$d/CLAUDE.md' 2>/dev/null || echo 0")
+  NB_SKILLS=$(ssh $SSH_OPTS "$TARGET" "ls -d '$d'/skills/*/ 2>/dev/null | wc -l")
+  if [ "$TAILLE" -lt 1000 ] || [ "$NB_SKILLS" -lt 4 ]; then
+    echo "✗ conduite absente ou incomplète sur $d (CLAUDE.md=${TAILLE}o, compétences=$NB_SKILLS/4)" >&2
+    exit 78
+  fi
+  echo "  ✓ $d — CLAUDE.md ${TAILLE}o, $NB_SKILLS compétences"
+done
+
 echo "→ Service systemd"
 scp $SSH_OPTS /mnt/projects/ccremote/harness/composition/deploiement/ccremote-harness.service "$TARGET:/tmp/"
 ssh $SSH_OPTS "$TARGET" "sudo mv /tmp/ccremote-harness.service /etc/systemd/system/ && sudo systemctl daemon-reload && sudo systemctl enable ccremote-harness && sudo systemctl restart ccremote-harness"
