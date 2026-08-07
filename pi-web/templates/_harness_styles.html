@@ -219,6 +219,20 @@
   @keyframes orchPulse { 0%,100% { opacity: .3; } 50% { opacity: .85; } }
   @media (prefers-reduced-motion: reduce) { .orch-work i { animation: none; opacity: .6; } }
 
+  /* Bloc que le lead est en train d'écrire, en bas du fil d'une équipe.
+     ☠ Volontairement plus discret qu'une parole finie : c'est un état transitoire,
+     il ne doit pas peser autant que ce qui est acquis. La réflexion se distingue
+     de la rédaction par l'italique et le liseré, jamais par une couleur — une
+     couleur ici signifierait un état anormal, ce qu'un lead qui pense n'est pas. */
+  .h-partiel { margin: 6px 0 10px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg-2); }
+  .h-partiel .hp-tete { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .h-partiel .hp-tete i { width: 5px; height: 5px; border-radius: 50%; background: var(--ink-3); display: block; animation: orchPulse 1.9s ease-in-out infinite; }
+  .h-partiel .hp-tete span { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); font-family: 'JetBrains Mono', monospace; }
+  .h-partiel .hp-corps { font-size: 13px; line-height: 1.62; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .h-partiel.est-pensee { border-left: 2px solid var(--line-2); }
+  .h-partiel.est-pensee .hp-corps { font-style: italic; color: var(--ink-3); }
+  @media (prefers-reduced-motion: reduce) { .h-partiel .hp-tete i { animation: none; opacity: .6; } }
+
   .conv-empty { text-align: center; color: var(--ink-3); font-size: 13px; padding: 52px 20px; line-height: 1.65; }
   .conv-empty .ce-t { font-family: 'Source Serif 4', serif; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
   /* ---- zone de composition : réglages intégrés, plus de selects bruts ---- */
@@ -453,6 +467,25 @@
   .h-snd { width: 34px; height: 34px; border-radius: 50%; background: var(--ink); color: var(--bg);
     display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
   .h-snd:hover { background: #2C2A28; }
+
+  /* commandes rapides sous le composer d'une équipe */
+  /* ☠ Volontairement SANS geste destructeur : « arrêter l'équipe » reste au fond
+     de la feuille Détails, derrière une confirmation et en couleur de danger.
+     Rien ici ne porte cette couleur — couper un tour se rattrape, tuer une
+     session non, et deux boutons qui se ressemblent finissent par se confondre.
+     ☠ 36 px de haut, libellé toujours visible : rien ne dépend d'un survol,
+     l'écran est piloté au pouce. */
+  .h-actes { display: flex; gap: 8px; margin-top: 8px; }
+  .h-acte { display: flex; align-items: center; justify-content: center; gap: 7px;
+    flex: 1 1 0; min-height: 36px; padding: 0 14px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--bg-2); color: var(--ink-2);
+    font-size: 12.5px; line-height: 1; white-space: nowrap;
+    transition: background .15s ease, color .15s ease, border-color .15s ease; }
+  .h-acte:hover:not(:disabled) { background: var(--card); color: var(--ink); border-color: var(--line-2); }
+  .h-acte:active:not(:disabled) { background: var(--bg-3); }
+  .h-acte:disabled { opacity: .38; cursor: not-allowed; }
+  .h-acte svg { flex: 0 0 auto; color: var(--ink-3); }
+  .h-acte:hover:not(:disabled) svg { color: var(--ink-2); }
 
   /* ================= feuilles ================= */
   .hsheet-root { position: fixed; inset: 0; z-index: 90; pointer-events: none; }
@@ -883,3 +916,65 @@
     border: 1px solid var(--line); display: inline-block; }
   .insp-note.ok { color: var(--ok); border-color: var(--ok-soft); }
   .insp-note.coupe { color: var(--err); border-color: var(--err-soft); }
+
+  /* ===== bandeau de décision de la feuille « Détails » =====
+     Quatre tuiles lues avant de trancher « je la laisse continuer ». Grille
+     auto-ajustée plutôt qu'un point de rupture : à 360 px de large elle tient
+     deux colonnes, sur un écran de bureau quatre, sans media query à maintenir. */
+  .h-tuiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 9px; margin: 4px 0 14px; }
+  .h-tuile { display: flex; flex-direction: column; gap: 2px; min-width: 0;
+    border: 1px solid var(--line); background: var(--card); border-radius: 12px;
+    padding: 10px 12px 11px 14px; }
+  .h-tuile .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+  .h-tuile .v { font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--ink);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-tuile .s { font-size: 11.5px; color: var(--ink-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .h-tuile .s:empty { display: none; }
+
+  /* ☠ L'alerte passe par un LISERÉ, jamais par la couleur du chiffre : `--warn`
+     et `--accent` sur fond `--card` ne tiennent pas le contraste à 16 px, et un
+     nombre qu'on lit mal est pire qu'un nombre sans couleur. Même geste que
+     `.acc.active` plus haut — un seul idiome d'alerte dans toute l'interface.
+     Trois tons, trois sens, aucun décoratif : `alerte` il faut agir maintenant,
+     `veille` ça se prépare, `attente` un geste de l'opérateur est requis. */
+  .h-tuile.t-alerte { box-shadow: inset 3px 0 0 var(--err); }
+  .h-tuile.t-veille { box-shadow: inset 3px 0 0 var(--warn); }
+  .h-tuile.t-attente { box-shadow: inset 3px 0 0 var(--accent); }
+
+  /* Une note de groupe reste alignée sur les lignes qui l'entourent. */
+  .h-grp > .h-note { margin: 4px 0 13px; }
+
+  /* ===== délégation dépliée dans le fil de l'équipe =====
+     Le corps d'une valise « Délégué à … » : les sous-agents lancés là, en lignes
+     cliquables. C'est le point du fil où l'équipe grandit. */
+  .h-deleg { background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; padding: 0 14px; }
+  .h-deleg-orphe { padding: 12px 0; border-bottom: 1px solid var(--line);
+    font-size: 14px; color: var(--ink); }
+  .h-deleg-orphe:last-child { border-bottom: none; }
+  .h-deleg-orphe b { font-weight: 500; }
+  .h-deleg-orphe i { display: block; font-style: normal; font-size: 12px;
+    color: var(--ink-3); margin-top: 3px; line-height: 1.45; }
+
+  /* ===== fil d'un sous-agent, dans une feuille =====
+     ☠ Le fil est rendu par les MÊMES gabarits que celui du lead, et ceux-ci
+     portent leur propre gouttière de 18 px pour la pleine page. Dans la feuille,
+     qui en a déjà une, elle se cumule : 36 px de marge de chaque côté sur un
+     téléphone, la colonne de lecture n'existe plus. On l'annule ici, et
+     seulement ici — les gabarits eux-mêmes ne bougent pas. */
+  .h-fil-agent .h-case-wrap { padding-left: 0; padding-right: 0; }
+  .h-fil-agent .h-say { padding-left: 0; padding-right: 0; }
+  .h-fil-agent .h-op { padding-left: 0; padding-right: 0; }
+  .h-fil-agent .h-sys { padding-left: 0; padding-right: 0; }
+  .h-fil-agent .h-harness { margin-left: 0; margin-right: 0; }
+  .h-fil-agent .h-perm { margin-left: 0; margin-right: 0; }
+  .h-fa-hd { display: flex; align-items: center; gap: 9px; padding: 2px 0 9px;
+    font-size: 12.5px; color: var(--ink-3); }
+  .h-fa-hd .ad { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .h-fa-hd .fr { font-family: 'JetBrains Mono', monospace; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .h-fa-hd .fs { margin-left: auto; flex: 0 0 auto; }
+  .h-fa-act { font-size: 14px; line-height: 1.5; color: var(--ink-2); padding-bottom: 4px; }
+  .h-fa-page { border-bottom: 1px solid var(--line) !important; margin-bottom: 20px; }

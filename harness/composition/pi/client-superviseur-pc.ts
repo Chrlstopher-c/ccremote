@@ -59,6 +59,7 @@ import type {
   TelemetrieWorker,
   JetonCompte,
 } from '../../superviseur/index.ts';
+import type { BlocPartielFlux } from '../../control-plane/observabilite/index.ts';
 import type { MetriquesHote } from '../../superviseur/metriques-hote.ts';
 import type { ConstatGit } from '../../superviseur/etat-git.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
@@ -93,6 +94,14 @@ const TIMEOUT_MS_DEFAUT = 10_000;
  * latence hérité d'opérations locales ne s'applique pas à un appel distant.
  */
 const TIMEOUT_INSPECTION_MS = 90_000;
+
+/**
+ * Délai propre au partiel de flux. `☠` COURT, et c'est le point : ce relevé est
+ * PERDABLE. Une machine qui met plus de deux secondes à dire ce que son lead
+ * frappe rendra de toute façon un texte périmé — mieux vaut abandonner ce
+ * relevé-là que laisser dix appels s'empiler en vol pendant qu'un écran sonde.
+ */
+const TIMEOUT_PARTIEL_MS = 2_000;
 
 function versDescripteurs(reponse: ReponseControle): readonly DescripteurWorkerPc[] {
   return reponse.inventaire ?? [];
@@ -210,6 +219,27 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
       throw new Error(reponse.detail ?? 'le PC n’a rendu aucun verdict d’inspection');
     }
     return reponse.inspection;
+  }
+
+  /**
+   * Le bloc que le lead d'une mission est en train de frapper, sur la machine où
+   * elle tourne (E.2).
+   *
+   * `☠` PC absent, appel en échec, ou machine sans observabilité câblée ⇒
+   * `null`, jamais une exception : c'est un ornement d'affichage, il ne doit
+   * JAMAIS pouvoir faire échouer la vue d'une mission (H-75, l'absence du PC est
+   * un état normal). Le journal reste en `debug` pour la même raison — un écran
+   * ouvert sondera cette route en boucle, et un `warn` par appel noierait le log
+   * du Pi dès que le PC s'éteint.
+   */
+  async partielMission(missionId: string): Promise<BlocPartielFlux | null> {
+    try {
+      const reponse = await this.#appeler({ type: 'partiel_flux', missionId }, TIMEOUT_PARTIEL_MS);
+      return reponse.partielFlux ?? null;
+    } catch (erreur) {
+      log.debug({ err: erreur, missionId }, 'partiel de flux indisponible — traité comme « rien en cours »');
+      return null;
+    }
   }
 
   /** Parcourt l'arborescence des projets du PC. PC absent ⇒ note explicite, jamais une liste vide muette. */

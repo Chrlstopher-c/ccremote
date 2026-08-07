@@ -110,6 +110,18 @@ export interface DependancesApiWeb {
   readonly rallonges?: PortRallonges;
   /** Contexte réel de l'orchestrateur (ratio 0-1), lu de la sentinelle. Absent = orchestrateur inactif. */
   readonly orchestrateurContexteRatio?: () => number | null;
+  /**
+   * Bloc en cours de frappe du lead d'une mission (E.2). Absent ⇒ `partial: null`
+   * partout, et RIEN d'autre ne change : l'observation du flux est un ornement,
+   * son absence ne doit jamais dégrader la vue d'une mission.
+   *
+   * `☠` SYNCHRONE de bout en bout : la route rend l'état courant tenu en mémoire
+   * par le Pi et ne va JAMAIS attendre la machine pendant qu'un navigateur
+   * patiente (voir `EtatPartielsMissions.demander`).
+   */
+  readonly partielsMissions?: {
+    demander(missionId: string): { readonly type: 'texte' | 'reflexion'; readonly contenu: string } | null;
+  };
   readonly maintenant?: () => number;
   readonly plafondRelances?: number;
   /**
@@ -261,9 +273,14 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     // absent ne doit jamais transformer « inconnue » en « peut-être plus tard ».
     if (trouvee === null) throw introuvable('mission');
     const feed = construireFeed(deps.registre, trouvee.id);
+    // `☠` C'est CETTE lecture qui déclare l'observation : un GET sur le détail
+    // d'une mission est la preuve qu'un client la regarde, et rien d'autre ne
+    // fait tourner le relevé. Elle ne peut ni lever ni attendre — le partiel
+    // vaut zéro à côté de la vue de la mission, et ne doit jamais l'emporter.
+    const partiel = deps.partielsMissions?.demander(trouvee.id) ?? null;
     return enveloppe(
       pcOnline,
-      versMissionApi(trouvee, plafond, maintenant, feed, deps.registre.missions.sousAgents(trouvee.id)),
+      versMissionApi(trouvee, plafond, maintenant, feed, deps.registre.missions.sousAgents(trouvee.id), partiel),
     );
   }
 

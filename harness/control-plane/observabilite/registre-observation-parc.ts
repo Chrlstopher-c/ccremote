@@ -15,16 +15,34 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { observabiliteLogger as journal } from './logger.ts';
 import { ArbreFluxTempsReel } from './arbre-flux.ts';
 import { DiffusionObservation } from './diffusion-observation.ts';
-import type { EvenementDiffuse, EvenementFilMission, ModeAbonnement, ResumeEquipeObservee } from './types.ts';
+import {
+  RACINE_FLUX,
+  type BlocPartielFlux,
+  type EvenementDiffuse,
+  type EvenementFilMission,
+  type ModeAbonnement,
+  type ResumeEquipeObservee,
+} from './types.ts';
 
 interface DetailEquipe {
   readonly arbre: ArbreFluxTempsReel;
   readonly diffusion: DiffusionObservation;
 }
 
+/**
+ * Au-delà de ce silence, une équipe que plus personne ne réclame voit son détail
+ * libéré. `☠` DOIT rester très au-dessus de la cadence de sondage de l'interface :
+ * un TTL plus court que l'intervalle entre deux demandes détruirait l'arbre entre
+ * chaque appel, et le partiel repartirait de zéro à chaque fois — un écran qui
+ * clignote sans que rien ne soit en panne.
+ */
+const SILENCE_AVANT_LIBERATION_MS = 30_000;
+
 export class RegistreObservationParc {
   readonly #resumes = new Map<string, ResumeEquipeObservee>();
   readonly #details = new Map<string, DetailEquipe>();
+  /** Dernière demande d'observation PAR SONDAGE (sans abonnement) — borne la mémoire. */
+  readonly #dernieresDemandes = new Map<string, number>();
 
   /** Appelé par le superviseur à chaque transition d'état connue (E.1.2) — jamais par sondage. */
   majResume(equipeId: string, etat: ResumeEquipeObservee['etat'], dernierResume: string | null, majA: number): void {
@@ -97,6 +115,38 @@ export class RegistreObservationParc {
 
   arbreDe(equipeId: string): ArbreFluxTempsReel | undefined {
     return this.#details.get(equipeId)?.arbre;
+  }
+
+  /**
+   * DEMANDE d'observation par sondage : matérialise le détail de CETTE équipe si
+   * besoin, puis rend le bloc que son lead est en train de frapper.
+   *
+   * C'est le second visage d'un abonnement — `abonner()` sert le fil poussé,
+   * ceci sert le sondage. Sans lui, `ingererMessageFlux` reste un no-op pour
+   * toute équipe qu'aucun client n'a ouverte : le flux entrerait dans le
+   * superviseur et ne ressortirait nulle part.
+   *
+   * `☠` C'est l'APPEL qui matérialise, pas un balayage : une équipe que personne
+   * ne regarde ne coûte toujours rien. Et l'appel libère au passage les détails
+   * silencieux depuis `SILENCE_AVANT_LIBERATION_MS` — sans quoi la mémoire
+   * grossirait avec le nombre d'équipes REGARDÉES UN JOUR, pas regardées
+   * maintenant.
+   */
+  demanderPartielLead(equipeId: string, maintenant: number = Date.now()): BlocPartielFlux | null {
+    this.#dernieresDemandes.set(equipeId, maintenant);
+    const detail = this.ouvrirDetail(equipeId);
+    this.#libererSilencieuses(maintenant);
+    return detail.arbre.partielDe(RACINE_FLUX);
+  }
+
+  #libererSilencieuses(maintenant: number): void {
+    for (const [equipeId, demandeA] of this.#dernieresDemandes) {
+      if (maintenant - demandeA < SILENCE_AVANT_LIBERATION_MS) continue;
+      this.#dernieresDemandes.delete(equipeId);
+      // `fermerDetailSiInactif` refuse tant qu'un abonné pousse : un fil ouvert
+      // en SSE ne doit pas perdre son arbre parce qu'un sondeur s'est tu.
+      this.fermerDetailSiInactif(equipeId);
+    }
   }
 
   abonner(

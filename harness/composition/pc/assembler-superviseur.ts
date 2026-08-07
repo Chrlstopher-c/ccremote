@@ -35,6 +35,7 @@ import { compositionLogger } from '../logger.ts';
 import { cablerRecepteurControlePc, type RecepteurControlePc } from './canal-controle-recepteur.ts';
 import { construireWorkerSpec } from './construire-worker-spec.ts';
 import { CollecteurAuditPermissions, creerHooksAuditPermissions } from '../../control-plane/audit-permissions/index.ts';
+import { RegistreObservationParc } from '../../control-plane/observabilite/index.ts';
 import { creerClientLienPi } from './client-lien-pi.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-superviseur-pc' });
@@ -65,6 +66,8 @@ export interface SuperviseurPcAssemble {
   readonly superviseur: SuperviseurWorkers;
   readonly lien: LienWebSocket;
   readonly recepteurControle: RecepteurControlePc;
+  /** Observation temps réel du flux (E.2) — alimentée par le superviseur, lue par l'opération `partiel_flux`. */
+  readonly observationParc: RegistreObservationParc;
   arreter(): void;
 }
 
@@ -88,11 +91,21 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
     gestionnaire: new GestionnaireWorktreeGitReel(),
   });
 
+  // `☠` E.2 : `RegistreObservationParc` était écrit, testé
+  // (`superviseur/observateur-flux-cablage.test.ts`) et instancié NULLE PART en
+  // production — le port `observateurFlux` restait vide, donc chaque
+  // `stream_event` lu par le superviseur tombait dans le silence. Ce fichier est
+  // le premier appelant réel. Il est branché aux DEUX bouts, ici et sur
+  // `lecteurPartielsFlux` plus bas : nourri d'un côté, lu de l'autre. Nourri
+  // sans lecteur, il n'aurait fait que déplacer le module mort d'un cran.
+  const observationParc = new RegistreObservationParc();
+
   const superviseur = new SuperviseurWorkers({
     compteurRelances,
     persistance,
     jugeBoucle,
     gestionnaireWorktrees,
+    observateurFlux: observationParc,
     ...(options.racineWorktrees ? { racineWorktrees: options.racineWorktrees } : {}),
     ...(options.comptesASonder ? { comptesASonder: options.comptesASonder } : {}),
   });
@@ -128,6 +141,11 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
         // répertoire inexistant — mesuré le 01/08 sur le VPS.
         options.comptesASonder ?? [],
       ),
+    // `☠` C'est l'APPEL qui déclare l'observation : la première demande sur une
+    // mission matérialise son détail côté registre, et le silence prolongé le
+    // libère. Aucune boucle ici — une équipe que personne ne regarde ne coûte
+    // rien, et rien ne tourne pour personne.
+    lecteurPartielsFlux: (missionId) => observationParc.demanderPartielLead(missionId),
   });
   void lien.connecter();
 
@@ -135,6 +153,7 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
     superviseur,
     lien,
     recepteurControle,
+    observationParc,
     arreter: (): void => lien.fermer(),
   };
 }

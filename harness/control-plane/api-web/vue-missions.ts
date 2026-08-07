@@ -100,6 +100,17 @@ export interface MissionApi {
   readonly subagents: readonly SubagentApi[];
   readonly feed: readonly FeedEventApi[];
   readonly landing: null;
+  /**
+   * Le bloc que le lead est en train de frapper — MÊME forme que le `partial`
+   * d'une conversation orchestrateur, délibérément : l'écran l'affiche avec le
+   * même composant.
+   *
+   * `☠` `null` sur la LISTE des missions, toujours : ce relevé traverse le lien
+   * vers la machine, et le faire pour chaque carte du parc ferait payer un écran
+   * de synthèse par toutes les équipes qui tournent. Il n'est renseigné que sur
+   * le détail d'UNE mission — celle qui est réellement regardée.
+   */
+  readonly partial: { readonly type: 'texte' | 'reflexion'; readonly contenu: string } | null;
 }
 
 /**
@@ -227,6 +238,7 @@ export function versMissionApi(
   maintenant: number = Date.now(),
   feed: readonly FeedEventApi[] = [],
   sousAgents: readonly SousAgentMission[] = [],
+  partiel: MissionApi['partial'] = null,
 ): MissionApi {
   const state = etatAffiche(mission);
   return {
@@ -267,5 +279,6 @@ export function versMissionApi(
     subagents: sousAgents.map(versSubagentApi),
     feed,
     landing: null,
+    partial: partiel,
   };
 }

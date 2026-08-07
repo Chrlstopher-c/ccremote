@@ -38,6 +38,7 @@
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Mission, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
 import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
+import { EtatPartielsMissions } from '../../control-plane/observabilite/index.ts';
 import {
   AUTO_APPROBATIONS_MAX,
   deciderAutorisation,
@@ -282,6 +283,30 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     inspecter: async (missionId: string): Promise<{ readonly verdict: string; readonly motif: string }> =>
       parc.pourMission(missionId).client.inspecter(missionId),
   };
+
+  /**
+   * État courant du bloc en cours de frappe, PAR MISSION REGARDÉE (E.2).
+   *
+   * `☠` Aucune cadence n'est posée ici : c'est le GET sur `/missions/:id` qui
+   * déclenche le relevé suivant, donc la présence RÉELLE d'un client. Un
+   * balayage périodique tournerait toute la nuit pour un écran que personne ne
+   * regarde — et ferait payer aux machines un aller-retour par mission.
+   *
+   * `☠` Machine hors ligne ou mission inconnue ⇒ `null`, jamais une exception :
+   * le routage LÈVE dans ces deux cas (c'est juste pour un ordre d'arrêt, dont
+   * la perte se paierait cher), mais un ornement d'affichage ne doit jamais
+   * remonter en erreur jusqu'à la vue d'une mission.
+   */
+  const partielsMissions = new EtatPartielsMissions({
+    source: async (missionId: string) => {
+      try {
+        return await parc.pourMission(missionId).client.partielMission(missionId);
+      } catch (erreur) {
+        log.debug({ err: erreur, missionId }, 'partiel de flux non routable — traité comme « rien en cours »');
+        return null;
+      }
+    },
+  });
 
   /**
    * La machine d'un fil donné. Hors fil (chemins de service, bancs), on retombe
@@ -661,6 +686,9 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     pcEnLigne: () => parc.auMoinsUneEnLigne(),
     machines: () =>
       serveurLien.machines().map((m) => ({ id: m.machineId, enLigne: m.enLigne, supersedes: m.supersedes })),
+    // Lecture synchrone d'un état tenu en mémoire — jamais un aller-retour
+    // pendant qu'un navigateur attend (voir `EtatPartielsMissions.demander`).
+    partielsMissions,
     // `☠` Interrogées EN PARALLÈLE et jamais en série : deux allers-retours dont
     // l'un traverse Cloudflare additionneraient leurs latences, et la page
     // rafraîchirait au rythme de la machine la plus lente. Une machine hors
@@ -682,6 +710,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       envoyerInstruction: (missionId, texte) => versMission.envoyerInstruction(missionId, texte),
       mettreEnPause: (missionId) => versMission.mettreEnPause(missionId),
       reprendre: (missionId) => versMission.reprendre(missionId),
+      // `☠` `versMission.interrompre` existait depuis toujours et n'était câblé
+      // QUE sur le serveur MCP : la capacité était offerte à l'orchestrateur et
+      // refusée à Chris. Douzième « écrit, testé, branché sur rien » — sauf que
+      // celui-ci était branché à moitié, ce qui le rendait invisible.
+      interrompre: (missionId) => versMission.interrompre(missionId),
     },
     // Inspection à la demande (H-68) : le juge vit sur le PC, le verdict et sa
     // décision vivent au registre. `☠` Le même `clientSuperviseurPc` sert à

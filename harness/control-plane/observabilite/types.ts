@@ -61,6 +61,23 @@ export interface LigneTravailFlux {
 /** Racine du fil principal — jamais un sous-agent. */
 export const RACINE_FLUX = 'principal';
 
+/**
+ * Le bloc EN COURS DE FRAPPE d'une ligne — jamais un bloc terminé.
+ *
+ * Même forme que le `partiel` d'une conversation orchestrateur
+ * (`orchestrateur/collecteur-conversation.ts`), délibérément : l'interface
+ * affiche les deux avec le même composant, et deux formes voisines mais
+ * différentes finiraient par diverger.
+ *
+ * `☠` VOLATIL par nature — jamais persisté. Un bloc écrit à moitié, relu plus
+ * tard dans un fil, s'y relit comme une pensée complète ; et un INSERT par token
+ * noierait SQLite (même constat, mesuré, que le collecteur orchestrateur).
+ */
+export interface BlocPartielFlux {
+  readonly type: 'texte' | 'reflexion';
+  readonly contenu: string;
+}
+
 // ---------------------------------------------------------------------------
 // Complétude flux ⟷ store (H-72.3) — jamais lissée
 // ---------------------------------------------------------------------------

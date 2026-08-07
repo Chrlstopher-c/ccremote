@@ -61,7 +61,9 @@ export {
 
 export {
   CanalControle,
+  TAILLE_MAX_PARTIEL_FLUX,
   type EffetControle,
+  type LecteurPartielsFlux,
   type OperationControle,
   type OptionsCanalControle,
   type PortSuperviseurControle,

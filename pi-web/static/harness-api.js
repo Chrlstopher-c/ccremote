@@ -13,8 +13,8 @@
 //   RÉEL   — getMissions, getMission, getAccounts, getLinkStatus
 //            servis par le control plane (Bun) via /api/harness/*, relayé par
 //            pi-web qui porte l'authentification.
-//   RÉEL   — écritures : terminateMission, pauseMission,
-//            resumeMission, sendMissionInstruction, emergencyStop. Elles
+//   RÉEL   — écritures : terminateMission, pauseMission, resumeMission,
+//            interruptMission, sendMissionInstruction, emergencyStop. Elles
 //            traversent le lien vers le PC. Un échec renvoie { erreur } et DOIT
 //            être affiché : un ordre non transmis cru transmis est le pire cas.
 //   DÉMO   — orchestrateur (conversation, mandats, jauges) et simulateurs. La
@@ -311,6 +311,16 @@ const HarnessAPI = (() => {
 
     async resumeMission(id) {
       const r = await ecrireReel(`/missions/${encodeURIComponent(id)}/resume`, {});
+      return r.ok ? { ok: true, effet: r.effet } : { erreur: r.erreur };
+    },
+
+    // ☠ Coupe le TOUR du lead, jamais l'équipe : la session reste vivante et
+    // garde tout son contexte. C'est le geste qui manquait entre `pauseMission`
+    // (qui retient la session) et `terminateMission` (qui la tue) pour reprendre
+    // la main sur un lead parti de travers. La capacité existait depuis toujours
+    // côté canal de contrôle et n'était offerte qu'à l'orchestrateur.
+    async interruptMission(id) {
+      const r = await ecrireReel(`/missions/${encodeURIComponent(id)}/interrupt`, {});
       return r.ok ? { ok: true, effet: r.effet } : { erreur: r.erreur };
     },
 

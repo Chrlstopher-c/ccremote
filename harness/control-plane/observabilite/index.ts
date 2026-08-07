@@ -7,6 +7,7 @@
 export {
   RACINE_FLUX,
   type AbonnementObservation,
+  type BlocPartielFlux,
   type EvenementActiviteFil,
   type EvenementDiffuse,
   type EvenementFilMission,
@@ -28,4 +29,9 @@ export { chargerLigneAgent, listerSousAgentsConnus, ErreurLigneAgent } from './l
 export { evenementsPermissionsFil } from './permissions-fil.ts';
 export { DiffusionObservation, CAPACITE_TAMPON_DEFAUT } from './diffusion-observation.ts';
 export { RegistreObservationParc } from './registre-observation-parc.ts';
+export {
+  EtatPartielsMissions,
+  type OptionsEtatPartiels,
+  type SourcePartielMission,
+} from './partiels-missions.ts';
 export { observabiliteLogger } from './logger.ts';

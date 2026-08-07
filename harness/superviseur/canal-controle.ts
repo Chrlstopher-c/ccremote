@@ -22,6 +22,7 @@
  */
 
 import type { DemandeEnAttenteReinitialisation, DescripteurWorkerPc } from '../control-plane/reconciliation/types.ts';
+import type { BlocPartielFlux } from '../control-plane/observabilite/types.ts';
 import { superviseurLogger as journal } from './logger.ts';
 import type {
   DemandeDemarrage,
@@ -158,6 +159,13 @@ export type OperationControle =
    * cette raison : elle observe et rend un verdict, elle ne mute rien.
    */
   | { readonly type: 'inspecter'; readonly missionId: string }
+  /**
+   * E.2 — le bloc que le lead d'UNE mission est en train de frapper. Opération
+   * du FLUX, délibérément distincte de celles du pilotage : elle n'ordonne rien,
+   * elle regarde. Ses trois propriétés sont tenues à l'implémentation
+   * (`traiter()`), pas ici — voir le commentaire qui les porte.
+   */
+  | { readonly type: 'partiel_flux'; readonly missionId: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
   | { readonly type: 'arreter_worker'; readonly missionId: string }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
@@ -204,6 +212,9 @@ type OperationMutative = Exclude<
   // rendrait le premier verdict — un bouton inerte, exactement le symptôme
   // qu'on vient de corriger.
   | { readonly type: 'inspecter' }
+  // `☠` PERDABLE : la ranger parmi les mutations la ferait passer par le cache
+  // d'idempotence, et l'écran afficherait éternellement le premier bloc capté.
+  | { readonly type: 'partiel_flux' }
 >;
 
 export interface RequeteControle {
@@ -238,6 +249,12 @@ export interface ReponseControle {
   /** Présent uniquement pour `inspecter` — verdict du juge H-68, jamais une décision. */
   readonly inspection?: { readonly verdict: string; readonly motif: string };
   /**
+   * Présent uniquement pour `partiel_flux`. `☠` ABSENT veut dire « le lead
+   * n'écrit rien en ce moment », et c'est une information — pas « on ne sait
+   * pas », qui se lit sur `ok: false`.
+   */
+  readonly partielFlux?: BlocPartielFlux;
+  /**
    * Présent uniquement pour `relancer_worker`. `☠` `true` = la relance n'a RIEN
    * fait, le worker était déjà vivant. Sans ce champ, l'appelant ne pouvait pas
    * distinguer « repartie » de « sans effet » et annonçait la première.
@@ -249,6 +266,26 @@ export interface ReponseControle {
 
 const TAILLE_MAX_CACHE_DEFAUT = 1000;
 
+/**
+ * BORNE du texte partiel qui traverse le lien, en caractères. Un bloc de
+ * réflexion dépasse couramment plusieurs dizaines de milliers de caractères, et
+ * cette opération est sondée en boucle tant qu'un écran est ouvert : sans borne,
+ * le même pavé repartirait à chaque appel, pour un affichage qui n'en montre
+ * qu'un fragment.
+ *
+ * `☠` C'est la QUEUE qui est conservée, jamais la tête : ce que l'opérateur
+ * regarde, c'est ce qui s'écrit MAINTENANT. Tronquer par le début rendrait un
+ * texte figé au premier paragraphe pendant que l'agent continue d'écrire.
+ */
+export const TAILLE_MAX_PARTIEL_FLUX = 2_000;
+
+/**
+ * Source du bloc en cours de frappe, côté machine. Implémentée par
+ * `RegistreObservationParc.demanderPartielLead` — jamais importée ici, pour la
+ * même raison que le port `ObservateurFlux` (frontière A↔B).
+ */
+export type LecteurPartielsFlux = (missionId: string) => BlocPartielFlux | null;
+
 export interface OptionsCanalControle {
   /** Borne mémoire du cache d'idempotence — un opId très ancien est purgé (FIFO). */
   readonly tailleMaxCache?: number;
@@ -258,12 +295,19 @@ export interface OptionsCanalControle {
    * `demarrer_worker` est refusé explicitement — voir `REFUS_DISPATCH`.
    */
   readonly assemblerSpec?: (parametres: ParametresSpecTransportables) => WorkerSpec;
+  /**
+   * Lecteur du bloc en cours de frappe (E.2). Absent ⇒ `partiel_flux` est REFUSÉ
+   * explicitement, jamais servi comme « rien en cours » : un écran muet sur une
+   * machine sans observabilité câblée se lit comme un agent silencieux.
+   */
+  readonly lecteurPartielsFlux?: LecteurPartielsFlux;
 }
 
 export class CanalControle {
   readonly #superviseur: PortSuperviseurControle;
   readonly #tailleMaxCache: number;
   readonly #assemblerSpec: ((parametres: ParametresSpecTransportables) => WorkerSpec) | undefined;
+  readonly #lecteurPartielsFlux: LecteurPartielsFlux | undefined;
   /** Cache d'idempotence : opId ⇒ réponse d'une mutation RÉUSSIE (D.3.2). */
   readonly #traitees = new Map<string, ReponseControle>();
 
@@ -271,6 +315,7 @@ export class CanalControle {
     this.#superviseur = superviseur;
     this.#tailleMaxCache = options.tailleMaxCache ?? TAILLE_MAX_CACHE_DEFAUT;
     this.#assemblerSpec = options.assemblerSpec;
+    this.#lecteurPartielsFlux = options.lecteurPartielsFlux;
   }
 
   /**
@@ -281,6 +326,10 @@ export class CanalControle {
   async traiter(requete: RequeteControle): Promise<ReponseControle> {
     if (requete.operation.type === 'inventaire') {
       return { ok: true, effet: 'applique', inventaire: this.#superviseur.inventaire() };
+    }
+
+    if (requete.operation.type === 'partiel_flux') {
+      return this.#partielFlux(requete.operation.missionId);
     }
 
     // `☠` Hors cache d'idempotence, comme `inventaire` : une lecture doit rendre
@@ -378,6 +427,40 @@ export class CanalControle {
     // reste rejouable avec un effet réel, pas figé dans un refus définitif.
     if (reponse.ok) this.#memoriser(requete.opId, reponse);
     return reponse;
+  }
+
+  /**
+   * E.2 — le bloc en cours de frappe du lead d'UNE mission. Les trois propriétés
+   * de cette opération, écrites là où elles sont réellement tenues :
+   *
+   *  - **PERDABLE** — on rend l'ÉTAT COURANT, jamais une file. Aucun tampon,
+   *    aucun numéro de séquence, aucun rattrapage : un Pi en retard saute ce
+   *    qu'il n'a pas vu et lit la suite. C'est ce qui interdit à un lecteur lent
+   *    d'exercer la moindre contre-pression sur le worker — et c'est aussi
+   *    pourquoi elle reste HORS du cache d'idempotence (voir `OperationMutative`).
+   *  - **CIBLÉE** — elle porte l'identifiant de LA mission regardée et ne rend
+   *    qu'elle. Jamais le parc : sonder toutes les équipes pour afficher une
+   *    seule ferait payer l'écran ouvert par toutes celles qui tournent.
+   *  - **BORNÉE** — `TAILLE_MAX_PARTIEL_FLUX` caractères, queue conservée. Une
+   *    réflexion de 40 000 caractères ne traverse pas le lien à chaque appel.
+   *
+   * `☠` Lecteur absent ⇒ REFUS explicite. Rendre « rien en cours » ferait passer
+   * une observabilité non câblée pour un agent silencieux, et on chercherait la
+   * panne du côté de l'équipe.
+   */
+  #partielFlux(missionId: string): ReponseControle {
+    if (this.#lecteurPartielsFlux === undefined) {
+      return { ok: false, effet: 'refuse', detail: 'observation du flux non câblée sur cette machine' };
+    }
+    try {
+      const partiel = this.#lecteurPartielsFlux(missionId);
+      if (partiel === null) return { ok: true, effet: 'applique' };
+      const contenu = partiel.contenu.slice(-TAILLE_MAX_PARTIEL_FLUX);
+      return { ok: true, effet: 'applique', partielFlux: { type: partiel.type, contenu } };
+    } catch (erreur) {
+      journal.error({ err: erreur, missionId }, 'lecture du partiel de flux en échec — refus, jamais un silence inventé');
+      return { ok: false, effet: 'refuse', detail: 'lecture du partiel de flux en échec' };
+    }
   }
 
   async #executer(operation: OperationMutative): Promise<ReponseControle> {

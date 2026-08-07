@@ -27,6 +27,14 @@ export interface OrdresVersPc {
   envoyerInstruction?(missionId: string, texte: string): Promise<{ readonly detail: string }>;
   mettreEnPause?(missionId: string): Promise<void>;
   reprendre?(missionId: string): Promise<void>;
+  /**
+   * Coupe le TOUR en cours du lead, sans arrêter l'équipe (A.2.2). `☠` La
+   * capacité existait depuis toujours côté canal de contrôle et n'était offerte
+   * qu'à l'orchestrateur, par `interrompre_equipe` : Chris n'avait, à l'écran,
+   * que « mettre en pause » (qui retient la session) ou « arrêter » (qui la tue)
+   * pour un lead parti de travers. Rien entre les deux.
+   */
+  interrompre?(missionId: string): Promise<void>;
   /** Arrêt d'urgence G.4 — ne traverse JAMAIS l'orchestrateur. */
   arretUrgence?(graceMs?: number): Promise<unknown>;
 }
@@ -117,6 +125,16 @@ export async function traiterEcriture(
     if (typeof texte !== 'string' || texte.trim().length === 0) throw requeteInvalide('texte d’instruction vide');
     const { detail } = await deps.pc.envoyerInstruction(decodeURIComponent(instruction[1]), texte);
     return { ok: true, effet: detail };
+  }
+
+  const interrompre = chemin.match(/^\/missions\/([^/]+)\/interrupt$/);
+  if (interrompre?.[1] !== undefined) {
+    if (deps.pc.interrompre === undefined) throw new ErreurApi(501, 'pilotage non câblé sur ce déploiement');
+    // `☠` Coupe le TOUR, jamais l'équipe : la session reste vivante et garde tout
+    // son contexte. C'est ce qui manquait entre « pause » (qui retient) et
+    // « arrêter » (qui tue) pour reprendre la main sur un lead parti de travers.
+    await deps.pc.interrompre(decodeURIComponent(interrompre[1]));
+    return { ok: true, effet: 'tour interrompu — la session reste vivante, envoie-lui une instruction' };
   }
 
   const pause = chemin.match(/^\/missions\/([^/]+)\/(pause|resume)$/);

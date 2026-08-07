@@ -199,6 +199,13 @@ function hMajSegments(corps, m) {
     n.remove();
     modifie = true;
   });
+  // ☠ APRÈS le retrait du surplus, jamais avant : le bloc en cours de frappe vit
+  // hors de `[data-seg]`, mais il est bien dans `corps` — le placer plus haut le
+  // ferait balayer par la ligne ci-dessus dès que le fil raccourcit.
+  // ☠ Son mouvement compte dans `modifie` : sans ça, une réflexion qui s'allonge
+  // ne ferait pas suivre le défilement, et le texte pousserait sous le bord de
+  // l'écran pendant qu'on le lit.
+  if (hMajPartielMission(corps, m.partial)) modifie = true;
   return modifie;
 }
 
@@ -225,6 +232,11 @@ async function hRenderMissionDetail(id) {
   corps.innerHTML = HarnessAPI._isPcOnline() ? '' : hPcAbsentBanner('cette mission');
   if (m.feed.length === 0) {
     corps.insertAdjacentHTML('beforeend', hCorpsFil(m));
+    // ☠ Le fil vide est PRÉCISÉMENT le cas où le bloc en cours compte le plus :
+    // une équipe qui vient de partir réfléchit avant de produire son premier
+    // évènement. Passer par la seule branche `hMajSegments` laisserait l'écran
+    // vide pendant tout ce temps, et c'est ce moment-là qu'on veut voir.
+    hMajPartielMission(corps, m.partial);
   } else {
     hMajSegments(corps, m);
   }
@@ -233,6 +245,7 @@ async function hRenderMissionDetail(id) {
   const actif = HarnessAPI._isPcOnline() && !['echec', 'terminee'].includes(m.state);
   dock.classList.toggle('h-dock-off', !actif);
   dock.querySelector('textarea').disabled = !actif;
+  hMajDockActes(m);
 
   hDefilerEnBas();
   hMissionRendue = { id: m.id, empreinte: hEmpreinteMission(m), feedLen: m.feed.length };
@@ -266,38 +279,164 @@ function hDefilerEnBas() {
   window.HFilBas?.de('mission')?.majuster();
 }
 
+// ------------------------------------------- commandes rapides du composer
+//
+// ☠ CE QUE CECI CORRIGE — la vue d'une équipe n'offrait aucun contrôle direct :
+// tout vivait derrière « ··· » puis un défilement dans la feuille Détails, et
+// « couper le tour » n'avait même AUCUNE fonction cliente alors que la route
+// existe côté serveur. Or on s'aperçoit qu'un lead part de travers en lisant son
+// fil, le pouce déjà sur le composer — pas en fouillant une feuille.
+//
+// ☠ « Arrêter l'équipe » n'est PAS ici et n'y sera pas. Il reste au fond de la
+// feuille Détails, derrière une confirmation et en couleur de danger. Couper un
+// tour se rattrape en une phrase ; tuer une session emporte son contexte. Deux
+// gestes voisins sous le même pouce, c'est fabriquer l'accident.
+
+const H_ICO_COUPER =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>';
+const H_ICO_PAUSE =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="6" width="3.4" height="12" rx="1.2"/><rect x="13.6" y="6" width="3.4" height="12" rx="1.2"/></svg>';
+const H_ICO_REPRENDRE =
+  '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.6v12.8a1 1 0 0 0 1.53.85l10-6.4a1 1 0 0 0 0-1.7l-10-6.4A1 1 0 0 0 8 5.6z"/></svg>';
+
+const H_DOCK_ACTES_ID = 'hMissionActes';
+
+/**
+ * ☠ Un bouton ÉTEINT plutôt que retiré quand le geste n'a pas de sens : une
+ * commande qui disparaît déplace ses voisines sous un pouce déjà en descente,
+ * entre deux sondages. La barre garde toujours la même géométrie.
+ */
+function hDockActesHtml(m, actif) {
+  const enPause = m.state === 'paused';
+  // Couper un tour n'a de sens que s'il y en a un en vol. `requires_action` en
+  // fait partie : le SDK pose cet état SUR UNE DEMANDE D'AUTORISATION, le tour
+  // n'est pas fini (« requires_action on permission prompt, idle on turn end »,
+  // `claude-agent-sdk/bridge.d.ts`). C'est même le cas où reprendre la main
+  // presse le plus — un lead figé sur une permission qu'on ne veut pas donner.
+  const coupable = actif && ['running', 'requires_action'].includes(m.state);
+  return `<button class="h-acte" ${coupable ? '' : 'disabled'} onclick="hInterruptMission('${m.id}')"
+      aria-label="Couper le tour en cours sans arrêter l’équipe">${H_ICO_COUPER}<span>Couper le tour</span></button>
+    <button class="h-acte" ${actif ? '' : 'disabled'} onclick="hPauseOneMission('${m.id}')"
+      aria-label="${enPause ? 'Reprendre l’équipe' : 'Mettre l’équipe en pause'}">${enPause ? H_ICO_REPRENDRE : H_ICO_PAUSE}<span>${enPause ? 'Reprendre' : 'Mettre en pause'}</span></button>`;
+}
+
+/**
+ * Pose (une seule fois) et met à jour la barre de commandes sous le composer.
+ *
+ * ☠ Même règle que le fil : on ne réécrit QUE si le HTML a changé. Réécrire à
+ * chaque sondage annulerait l'appui en cours — le bouton meurt sous le doigt
+ * pendant que le geste se termine, et il ne se passe rien.
+ */
+function hMajDockActes(m) {
+  const dock = document.getElementById('hMissionDock');
+  if (!dock) return;
+  let barre = document.getElementById(H_DOCK_ACTES_ID);
+  if (!barre) {
+    barre = document.createElement('div');
+    barre.id = H_DOCK_ACTES_ID;
+    barre.className = 'h-actes';
+    // Sous la rangée de réglages, HORS de la boîte de saisie : une commande
+    // n'est pas du texte, elle n'a rien à faire dans le cadre du composer.
+    dock.appendChild(barre);
+  }
+  const actif = HarnessAPI._isPcOnline() && !['echec', 'terminee'].includes(m.state);
+  const html = hDockActesHtml(m, actif);
+  if (barre.dataset.sig !== html) {
+    barre.dataset.sig = html;
+    barre.innerHTML = html;
+  }
+  // ☠ L'indice dit ce qui va RÉELLEMENT arriver au message, AVANT l'envoi : sur
+  // une équipe en pause le serveur le retient, et l'apprendre seulement dans le
+  // toast d'après-coup, c'est l'apprendre trop tard.
+  const indice = dock.querySelector('.h-hint');
+  if (indice) {
+    indice.textContent = m.state === 'paused'
+      ? 'Équipe en pause — le message sera retenu jusqu’à la reprise.'
+      : 'Lue au prochain tour disponible.';
+  }
+}
+
 // ------------------------------------------------------------------ actions
 
 let hMissionCourante = null;
 
+/**
+ * ☠ Le résultat de l'envoi était JETÉ : le toast annonçait « Instruction
+ * transmise » quoi qu'il arrive, y compris sur un 501 ou un PC absent, et
+ * surtout y compris quand le serveur avait RETENU le message parce que l'équipe
+ * est en pause. Chris attendait alors une réaction qui ne viendrait qu'à la
+ * reprise. On montre désormais `effet` tel quel — c'est ce pour quoi il existe.
+ */
 async function hSendInstruction() {
   const el = document.getElementById('hInstrInput');
   const texte = (el.value || '').trim();
   if (!texte || !hMissionCourante) return;
-  await HarnessAPI.sendMissionInstruction(hMissionCourante.id, texte);
+  const id = hMissionCourante.id;
+  const res = await HarnessAPI.sendMissionInstruction(id, texte);
+  // ☠ Le champ n'est vidé qu'APRÈS un accusé : un ordre refusé effaçait quand
+  // même ce que Chris venait d'écrire au pouce, sans moyen de le récupérer.
+  if (res.erreur) { showToast(res.erreur, 'err'); return; }
   el.value = '';
   el.style.height = 'auto';
-  hRenderMissionDetail(hMissionCourante.id);
-  showToast('Instruction transmise à la mission', 'accent');
+  await hRenderMissionDetail(id);
+  showToast(res.effet || 'Instruction transmise à l’équipe', 'accent');
 }
 
 async function hPauseOneMission(id) {
   const res = await HarnessAPI.getMission(id);
   const m = res.data;
   if (!m) return;
-  if (m.state === 'paused') await HarnessAPI.resumeMission(id);
-  else await HarnessAPI.pauseMission(id);
+  const enPause = m.state === 'paused';
+  const r = enPause ? await HarnessAPI.resumeMission(id) : await HarnessAPI.pauseMission(id);
   HSheets.fermer();
-  hRenderParc();
-  hRenderMissionDetail(id);
+  // Un ordre non transmis cru transmis est le pire cas : il s'affiche, et rien
+  // n'est rafraîchi derrière — l'écran ne doit pas suggérer un changement d'état.
+  if (r.erreur) { showToast(r.erreur, 'err'); return; }
+  if (typeof hRenderParc === 'function') await hRenderParc();
+  await hRenderMissionDetail(id);
+  showToast(r.effet || (enPause ? 'Équipe reprise' : 'Équipe mise en pause'), enPause ? 'ok' : 'warn');
 }
 
+/**
+ * ☠ SEUL geste irréversible de cette page : la session meurt avec tout son
+ * contexte. Il passe donc par une confirmation, alors que couper le tour n'en
+ * demande aucune — c'est précisément ce qui doit les distinguer sous le pouce.
+ *
+ * ☠ La feuille est fermée AVANT le dialogue : `.hsheet-root` est en z-index 90
+ * et le dialogue en 50, une confirmation ouverte par-dessus une feuille se
+ * serait affichée DERRIÈRE elle. Même ordre que `hRunInspection`.
+ */
 async function hTerminateMission(id) {
-  await HarnessAPI.terminateMission(id);
   HSheets.fermer();
-  hRenderParc();
-  hRenderMissionDetail(id);
-  showToast('Mission terminée — worktree conservé', 'warn');
+  // Le libellé reprend MOT POUR MOT celui du bouton qu'on vient de toucher :
+  // une confirmation qui renomme l'action fait douter de ce qu'on confirme.
+  const ok = await hConfirmer(
+    'Terminer cette équipe ?',
+    'La session est tuée et son contexte perdu — le worktree et le travail sur disque restent intacts. '
+    + 'Pour seulement reprendre la main sur un lead parti de travers, coupe le tour depuis le composer.',
+    'Terminer l’équipe',
+  );
+  if (!ok) return;
+  const r = await HarnessAPI.terminateMission(id);
+  if (r.erreur) { showToast(r.erreur, 'err'); return; }
+  if (typeof hRenderParc === 'function') await hRenderParc();
+  await hRenderMissionDetail(id);
+  showToast('Équipe terminée — worktree conservé', 'warn');
+}
+
+/**
+ * Coupe le TOUR en cours du lead sans toucher à l'équipe.
+ *
+ * ☠ AUCUNE confirmation, et c'est délibéré : rien n'est détruit, la session
+ * garde son contexte et se relance sur la prochaine instruction. Demander à
+ * confirmer l'aurait mis au même rang que l'arrêt d'équipe, qui, lui, ne se
+ * rattrape pas — deux gestes qui se ressemblent finissent par se confondre.
+ */
+async function hInterruptMission(id) {
+  const r = await HarnessAPI.interruptMission(id);
+  if (r.erreur) { showToast(r.erreur, 'err'); return; }
+  await hRenderMissionDetail(id);
+  showToast(r.effet || 'Tour interrompu — la session reste vivante', 'warn');
 }
 
 /**
@@ -384,6 +523,9 @@ async function hMajMissionDetail(id) {
   const empreinte = hEmpreinteMission(m);
   if (empreinte !== hMissionRendue.empreinte) {
     document.getElementById('hMissionSub').innerHTML = hSousTitre(m);
+    // `m.state` fait partie de l'empreinte : la barre suit donc la pause, la
+    // reprise et la fin d'équipe sans sondage supplémentaire.
+    hMajDockActes(m);
     hMissionRendue.empreinte = empreinte;
   }
 

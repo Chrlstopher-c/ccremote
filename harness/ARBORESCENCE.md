@@ -27,6 +27,7 @@ recommentés individuellement (même rôle que leur fichier testé, suffixe `.te
 - `composition/env.ts` — lecture stricte des variables d'environnement (obligatoire/optionnel/nombre/pourcentage)
 - `composition/assemblage.test.ts` — test d'assemblage H-74/M-53 : garde-fous branchés sur le produit réel
 - `composition/assemblage-lien-pc-pi.test.ts` — test d'assemblage H-75 : multiplexage contrôle/permissions sur le lien unique, reconnexion, réconciliation sur rattachement (aucun socket réel)
+- `composition/assemblage-partiel-flux.test.ts` — test d'assemblage E.2 : un `stream_event` lu par le superviseur ressort en `partial` sur `GET /missions/:id`
 - `composition/lien-pc-pi/protocole.ts` — enveloppes multiplexées (`controle_requete/reponse`, `permission_demande/verdict`) sur l'unique lien Pi↔PC (H-75)
 - `composition/lien-pc-pi/secret.ts` — authentification du lien : secret en en-tête `Authorization: Bearer` (jamais dans l'URL, qui serait journalisée par Cloudflare Tunnel), comparaison à temps constant
 - `composition/lien-pc-pi/correlateur.ts` — corrélation requête/réponse par id, partagée par les deux sens de multiplexage
@@ -161,6 +162,7 @@ réellement vit dans `disallowedTools` — plancher de déni (H-41) et `shared/a
 - `completude-sous-agents.ts` / `.test.ts` — complétude des rapports de sous-agents
 - `permissions-fil.ts` / `.test.ts` — événements de permission dans le fil
 - `registre-observation-parc.ts` / `.test.ts` — registre des observateurs du parc
+- `partiels-missions.ts` — état courant du bloc en cours de frappe par mission regardée (Pi, en mémoire, jamais SQLite)
 - `types.ts` — formes de données
 - `logger.ts` — journal pino
 - `index.ts` — interface publique
