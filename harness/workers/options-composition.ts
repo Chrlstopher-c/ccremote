@@ -133,6 +133,14 @@ export function composeWorkerOptions(
     // depuis l'origine.
     mcpServers: { ...spec.mcpServers },
     includePartialMessages: true,
+    // `☠` MESURÉ le 07/08 : `activite_mission` porte 336 réflexions du 23/07 au
+    // 03/08, puis PLUS AUCUNE — zéro sur les 4 226 activités du 06/08, alors que
+    // les équipes tournaient normalement. Aucun commit du dépôt ne touche à ça :
+    // le défaut de `display` du CLI embarqué est passé à `omitted` sous nos pieds.
+    // Le modèle raisonne toujours, mais son raisonnement n'entre plus dans le
+    // flux — donc `suivre_equipe` ne rend plus que des outils et du texte, et
+    // l'orchestrateur surveille une équipe dont il ne voit plus la réflexion.
+    thinking: { type: 'adaptive', display: 'summarized' },
     forwardSubagentText: true,
     agentProgressSummaries: true,
     abortController,

@@ -126,9 +126,30 @@ describe('composeWorkerOptions', () => {
     // eu Playwright ni CodeIndex, alors que son mandat lui ordonnait de s'en
     // servir. Le poste reste la SOURCE (`workers/mcp-du-poste.ts` lit sa
     // config) ; ce qui change, c'est que la transmission est écrite.
-    for (const key of ['agents', 'plugins', 'thinking', 'effort', 'allowedTools']) {
+    // `☠` `thinking` a été RETIRÉ de cette liste le 07/08 — second renversement
+    // assumé, de la même forme exacte que celui de `mcpServers`, et pour la même
+    // raison : la doctrine reste juste, sa voie de transmission n'existe pas.
+    // `Settings` (sdk.d.ts) ne porte que `alwaysThinkingEnabled` et
+    // `effortLevel` — AUCUN réglage de `thinking.display`. Les deux seules voies
+    // sont `Options.thinking` au spawn et `setMaxThinkingTokens` en session.
+    // Laisser ce champ « au poste » revenait donc à le laisser à personne.
+    // MESURE qui l'impose : `activite_mission` porte 336 réflexions du 23/07 au
+    // 03/08, puis zéro — dont zéro sur les 4 226 activités du 06/08, équipes
+    // tournant normalement. Le défaut amont est passé à `omitted` sans qu'un seul
+    // commit du dépôt y touche.
+    for (const key of ['agents', 'plugins', 'effort', 'allowedTools']) {
       expect(options).not.toHaveProperty(key);
     }
+  });
+
+  // `☠` Garde du renversement ci-dessus : `display: 'summarized'` est la SEULE
+  // chose qui fasse entrer un bloc de réflexion dans le flux. L'oublier ne
+  // produit aucune erreur — juste des équipes qu'on croit muettes, et un
+  // orchestrateur qui les surveille sans jamais voir ce qu'elles pensent, alors
+  // que son mandat lui annonce des « réflexions » dans `suivre_equipe`.
+  test('☠ le raisonnement du lead entre bien dans le flux (display summarized)', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.thinking).toEqual({ type: 'adaptive', display: 'summarized' });
   });
 
   test('☠ H-74 (5e occurrence) : hooks porte l’audit de permissions branché sur le port injecté', () => {

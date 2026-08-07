@@ -229,6 +229,11 @@ export class CollecteurConversation {
         // sans le dupliquer.
         this.#completerAppels(message);
         // `☠` Le reste a déjà été persisté bloc par bloc : ne pas doubler.
+        // MESURÉ le 07/08 avec une sonde temporaire : ce qui est jeté ici n'est
+        // QUE du type `outil`, jamais de la réflexion. Ce chemin n'est donc pas
+        // la cause des réflexions manquantes — c'était `thinking.display`, côté
+        // options. L'hypothèse « le régime streamé jette le thinking » est
+        // réfutée, elle n'a pas à être ré-explorée.
         if (this.#streameCeTour) return;
         for (const bloc of blocsAssistant(message)) {
           this.#persister(bloc.type, bloc.contenu, bloc.toolUseId ?? null, bloc.detail ?? null);
