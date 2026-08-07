@@ -305,14 +305,43 @@
   .pj-vignette:hover .pj-x, .pj-x:focus-visible { opacity: 1; }
   .pj-x:hover { background: var(--err); }
 
-  /* ===== pied de message : quand, et combien de temps (04/08) ===== */
-  /* Discret par défaut, net au survol du message : l'horodatage doit être là
-     quand on le cherche, invisible quand on lit. */
-  .msg-pied { font-size: 9.5px; color: var(--ink-3); letter-spacing: .02em; margin-top: 6px; opacity: .55; transition: opacity .15s ease; }
-  .msg-wrap:hover > .msg-pied, .seg:hover > .msg-pied, .h-say-wrap:hover ~ .msg-pied { opacity: 1; }
+  /* ===== pied de message : quand, et combien de temps (04/08, revu 08/08) =====
+     ☠ UN SEUL ÉTAT, et c'est l'état LISIBLE. La règle précédente posait
+     `opacity: .55` relevée à `1` par trois sélecteurs `:hover` — or cette
+     interface se pilote au doigt sur un iPhone, où aucun survol n'existe : le
+     seul état atteignable était donc le plus effacé des deux. Calculé sur la
+     palette du thème : `--ink-3` (#86827B) sur `--bg-2` (#F0EEE6) donne 3,3:1 ;
+     à 55 % d'opacité, 1,8:1 — sous tout seuil de lisibilité, et à 9,5 px.
+     L'heure reste secondaire par sa TAILLE et sa COULEUR, pas par une
+     transparence qui la supprime. 11 px / `--ink-3`, soit exactement l'idiome
+     déjà employé par `.h-fil-s`, `.h-tuile .s` et `.h-agent .an i`. */
+  .msg-pied { font-size: 11px; color: var(--ink-3); letter-spacing: .02em; margin-top: 6px; }
   .bubble-u > .msg-pied { text-align: right; }
   .seg { display: flex; flex-direction: column; }
-  .seg > .msg-pied { align-self: flex-start; }
+
+  /* ☠ L'heure était ORPHELINE, et c'est ça le « vide » : chaque gabarit porte
+     déjà sa marge de fin (22 px pour `.h-say`, 20 px pour une valise, 22 px pour
+     `.h-op`), `.h-acts` intercale une rangée invisible au doigt, puis le pied
+     ajoutait 6 px — soit une trentaine de pixels entre une phrase et son heure,
+     et ZÉRO entre cette heure et le bloc suivant. Elle datait donc visuellement
+     le message d'APRÈS.
+     On inverse : le bloc rend sa marge de fin, et c'est le segment qui porte
+     l'espace jusqu'au suivant. Aucune arithmétique par type de bloc à maintenir. */
+  .seg:has(> .msg-pied) { padding-bottom: 22px; }
+  .seg:has(> .msg-pied) > .h-say-wrap > .h-say,
+  .seg:has(> .msg-pied) > .h-harness,
+  .seg:has(> .msg-pied) > .h-perm { margin-bottom: 0; }
+  .seg:has(> .msg-pied) > .h-op,
+  .seg:has(> .msg-pied) > .h-sys,
+  .seg:has(> .msg-pied) > .h-case-wrap { padding-bottom: 0; }
+  /* ☠ `align-self: flex-start` collait le pied au bord du segment pendant que
+     tous les gabarits du fil portent une gouttière de 18 px : les heures
+     formaient une colonne détachée dans la marge, à côté du texte qu'elles
+     datent. Elles prennent la même gouttière que lui. */
+  .seg > .msg-pied { margin-top: 3px; padding: 0 18px; }
+  /* Le gabarit opérateur est aligné à DROITE : son heure posée à gauche serait
+     à toute la largeur de l'écran de la bulle qu'elle date. */
+  .seg:has(> .h-op) > .msg-pied { text-align: right; }
 
   /* ===== bouton « redescendre » (04/08) ===== */
   /* ☠ Rouvrir un fil de plusieurs heures atterrissait EN HAUT : il fallait
@@ -644,6 +673,16 @@
   [data-view="harness-orchestrateur"] .h-case { padding-left: 0; padding-right: 0; }
   [data-view="harness-orchestrateur"] .h-say { padding-left: 0; padding-right: 0; }
   [data-view="harness-orchestrateur"] .h-harness { margin-left: 0; margin-right: 0; }
+  /* ☠ Même orphelinat que dans le fil d'une équipe, une classe plus haut : ici
+     le pied est enfant du GROUPE de réponse (`.bubble-a`), pas d'un `.seg`. Le
+     bloc qui le précède garde sa marge de fin (22 px) alors que la bulle
+     opérateur suivante n'en pose que 14 — l'heure était donc plus proche de la
+     question d'après que de la réponse qu'elle date. `:has(+ .msg-pied)` ne
+     vise QUE le dernier bloc du groupe : les précédents gardent leur rythme. */
+  [data-view="harness-orchestrateur"] .bubble-a:has(> .msg-pied) { padding-bottom: 16px; }
+  [data-view="harness-orchestrateur"] .bubble-a > .h-say:has(+ .msg-pied),
+  [data-view="harness-orchestrateur"] .bubble-a > .h-harness:has(+ .msg-pied) { margin-bottom: 0; }
+  [data-view="harness-orchestrateur"] .bubble-a > .msg-pied { margin-top: 3px; }
   .h-pastille { position: absolute; top: 3px; right: 3px; width: 7px; height: 7px;
     border-radius: 50%; background: var(--accent); }
   .h-mhead .more { position: relative; }
@@ -822,6 +861,13 @@
      chaque réponse. */
   .h-acts { opacity: 0; transition: opacity .15s ease; }
   .h-say-wrap:hover .h-acts, .h-acts:focus-within { opacity: 1; }
+  /* ☠ Sur un pointeur grossier, cette rangée est INATTEIGNABLE (aucun survol) et
+     ne laisse qu'une bande vide d'une vingtaine de pixels entre une phrase et son
+     heure — la moitié du « vide » constaté sur capture le 08/08. La copie n'est
+     pas perdue pour autant : `.h-say-wrap` porte `data-menu="parole"` et l'appui
+     long ouvre « Copier le message » (`harness-menus.js`). On ne masque donc pas
+     une action, on retire une rangée qui n'en portait aucune. */
+  @media (hover: none) { .h-acts { display: none; } }
 
   /* Cartes d'alerte : 480 px et un liseré d'1 px en ombre, pas une bordure. */
   .h-perm { max-width: 480px; border: none; box-shadow: 0 0 0 1px var(--line); }
@@ -888,6 +934,12 @@
     display: flex; align-items: center; justify-content: center; color: var(--ink-2);
     background: none; border: none; transition: all .15s ease; }
   .tb-ico:hover { background: rgba(31,30,29,.06); color: var(--ink); }
+  /* ☠ 28 px de boîte VISUELLE, 38 px de zone TACTILE. Le « ··· » est la seule
+     porte vers les détails du fil et se vise au pouce, mais la barre ne fait que
+     38 px de haut : grossir le bouton la ferait grossir avec lui et décalerait
+     tout le fil. Le pseudo-élément étend la cible sans toucher à la mise en
+     page — le parent porte déjà `position: relative`. */
+  .tb-ico::after { content: ''; position: absolute; inset: -5px; }
   /* Pastille de 4 px, comme la référence — un point, pas un compteur. */
   .tb-pastille { position: absolute; top: 5px; right: 5px; width: 5px; height: 5px;
     border-radius: 50%; background: var(--accent); }
@@ -1044,6 +1096,9 @@
   .h-fil-agent .h-sys { padding-left: 0; padding-right: 0; }
   .h-fil-agent .h-harness { margin-left: 0; margin-right: 0; }
   .h-fil-agent .h-perm { margin-left: 0; margin-right: 0; }
+  /* Le pied a pris la gouttière des gabarits (08/08) : elle se cumulerait ici
+     comme la leur, et l'heure serait la seule ligne décalée de la feuille. */
+  .h-fil-agent .seg > .msg-pied { padding-left: 0; padding-right: 0; }
   .h-fa-hd { display: flex; align-items: center; gap: 9px; padding: 2px 0 9px;
     font-size: 12.5px; color: var(--ink-3); }
   .h-fa-hd .ad { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }

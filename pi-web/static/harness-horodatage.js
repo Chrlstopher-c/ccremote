@@ -22,6 +22,39 @@ function hHeureSec(ms) {
 }
 
 /**
+ * Même jour civil que maintenant ?
+ *
+ * ☠ Comparaison de DATES, jamais d'un écart de 24 h : un message de 23:50 hier
+ * a vingt minutes d'âge et appartient pourtant à un autre jour — c'est
+ * exactement ce qu'on cherche à savoir au matin.
+ */
+function hMemeJour(ms, maintenant) {
+  const a = new Date(ms);
+  const b = new Date(maintenant);
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/**
+ * L'heure telle qu'un fil doit l'écrire : `14:32` aujourd'hui, `7 août 14:32`
+ * sinon.
+ *
+ * ☠ Un fil laissé en autonomie franchit minuit. Sans le jour, deux heures
+ * murales s'ORDONNENT mais ne se DATENT pas : « 03:12 » posé au-dessus de
+ * « 23:47 » se lit comme un retour en arrière alors que c'est le lendemain —
+ * et c'est précisément le fil qu'on relit au réveil.
+ */
+function hHeureFil(ms, maintenant = Date.now()) {
+  const heure = hHeure(ms);
+  if (heure === '' || hMemeJour(ms, maintenant)) return heure;
+  // L'année n'apparaît que si elle diffère : la porter partout allongerait
+  // chaque horodatage d'un fil de la veille pour lever une ambiguïté qui
+  // n'existe qu'au-delà de douze mois.
+  const memeAnnee = new Date(ms).getFullYear() === new Date(maintenant).getFullYear();
+  const format = { day: 'numeric', month: 'short', ...(memeAnnee ? {} : { year: 'numeric' }) };
+  return `${new Date(ms).toLocaleDateString('fr-FR', format)} ${heure}`;
+}
+
+/**
  * Durée lisible. La précision suit l'ordre de grandeur : sous la minute, le
  * dixième de seconde compte ; au-delà de l'heure, la seconde ne veut plus rien
  * dire.
@@ -55,7 +88,7 @@ function hPiedTemps(at, duree, prefixe) {
   pied.className = 'msg-pied mono';
   const morceaux = [];
   if (prefixe) morceaux.push(prefixe);
-  const heure = hHeure(at);
+  const heure = hHeureFil(at);
   if (heure) {
     morceaux.push(heure);
     pied.title = new Date(at).toLocaleString('fr-FR');
@@ -71,7 +104,7 @@ function hPiedTemps(at, duree, prefixe) {
 function hPiedTempsHtml(at, duree, prefixe) {
   const morceaux = [];
   if (prefixe) morceaux.push(prefixe);
-  const heure = hHeure(at);
+  const heure = hHeureFil(at);
   if (heure) morceaux.push(heure);
   const d = hDuree(duree);
   if (d) morceaux.push(d);
@@ -94,4 +127,12 @@ function hEtendue(items) {
   return { debut, fin, duree: instants.length > 1 && fin > debut ? fin - debut : null };
 }
 
-window.HTemps = { heure: hHeure, heureSec: hHeureSec, duree: hDuree, pied: hPiedTemps, piedHtml: hPiedTempsHtml, etendue: hEtendue };
+window.HTemps = {
+  heure: hHeure,
+  heureSec: hHeureSec,
+  heureFil: hHeureFil,
+  duree: hDuree,
+  pied: hPiedTemps,
+  piedHtml: hPiedTempsHtml,
+  etendue: hEtendue,
+};

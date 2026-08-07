@@ -12,7 +12,17 @@ let hModelsCache = [];
 // ☠ `barreSig` : la barre n'est réécrite que si son contenu change RÉELLEMENT.
 // Réécrire innerHTML à chaque sondage faisait re-jouer les animations d'entrée —
 // c'est ce qui donnait l'impression que tout clignotait pendant l'auto-refresh.
-const hOrch = { convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [], barreSig: '', partielEl: null, mandats: {} };
+// ☠ `reglage` et `mesure` existent parce que TROIS routes se partagent l'état
+// d'un fil et qu'aucune ne le porte en entier : la liste
+// (`/orchestrator/conversations`) sert dates, machine et titre mais PAS le
+// couple modèle/effort ; le détail (`/…/:id`) sert le couple mais pas les dates ;
+// le sondage d'évènements sert la mesure de contexte la plus fraîche. La feuille
+// « ··· » lit ici plutôt que de refaire un appel — sur un iPhone en 4G, relire
+// le détail d'un fil, c'est retélécharger tous ses évènements.
+const hOrch = {
+  convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [],
+  barreSig: '', partielEl: null, mandats: {}, reglage: null, mesure: null,
+};
 const HORCH_KEY = 'ccremote.orch.conv';
 const HORCH_POLL_MS = 400;
 // ☠ LE FIL NE DORT PLUS. Le sondage ne tournait QUE pendant une génération :
@@ -152,10 +162,15 @@ async function hArchiveConversationConfirme(id) {
 
 // ---- indicateurs de tête : contexte + compactions ---------------------------
 function hRenderStats(d) {
-  const el = document.getElementById('hOrchStats');
-  if (!el) return;
   const pct = (d && typeof d.contextPct === 'number') ? d.contextPct : null;
   const nb = (d && typeof d.compactions === 'number') ? d.compactions : 0;
+  // ☠ Retenu AVANT la garde sur le nœud, et pas après : cette affectation est la
+  // seule lecture du contexte rafraîchie à chaque sondage, et la feuille « ··· »
+  // s'en sert. La lier à la présence d'une boîte de statistiques à l'écran
+  // ferait dépendre une DONNÉE de la présence de son AFFICHAGE.
+  hOrch.mesure = { contextPct: pct, compactions: nb };
+  const el = document.getElementById('hOrchStats');
+  if (!el) return;
 
   // ☠ La structure n'est construite QU'UNE FOIS. Ensuite on ne touche que les
   // valeurs qui changent réellement. Réécrire innerHTML à chaque sondage faisait
@@ -318,6 +333,12 @@ async function hOpenConversation(id) {
   }
   hStopPoll();
   hOrch.convId = id; hOrch.cursor = 0; hOrch.cur = null; hOrch.partielEl = null;
+  // ☠ Invalidés AVEC le fil, et pas seulement réécrits plus bas : cette fonction
+  // peut sortir sur erreur avant de les remplir, et `convId` aurait alors changé
+  // pendant que `reglage`/`mesure` décriraient encore le fil PRÉCÉDENT. La
+  // feuille « ··· » afficherait un modèle et un pourcentage qui ne sont pas les
+  // siens — et rien ne le dirait.
+  hOrch.reglage = null; hOrch.mesure = null;
   localStorage.setItem(HORCH_KEY, id);
   hRenderConvBar(hOrch.list);
   const chat = document.getElementById('hChatBody');
@@ -340,6 +361,13 @@ async function hOpenConversation(id) {
   // avec le message affiché juste au-dessus — et il fallait re-régler à chaque
   // fois (friction remontée le 23/07). Un fil VIERGE n'a pas de mémoire : c'est
   // alors, et alors seulement, que les défauts s'appliquent.
+  // ☠ Retenu HORS du `if (d.model)` qui suit, et c'est tout l'intérêt : sur un
+  // fil vierge le détail rend `model: null`, et le bloc ci-dessous laisse alors
+  // `HarnessState.orchModel` sur les réglages du fil PRÉCÉDENT. Lire cet état
+  // partagé depuis la feuille « ··· » attribuerait donc au fil ouvert un modèle
+  // qu'il n'a jamais utilisé — un champ fabriqué. Ici, `null` reste `null` et la
+  // feuille peut écrire « pas encore fixé ».
+  hOrch.reglage = { model: d.model ?? null, effort: d.effort ?? null, fastMode: d.fastMode ?? null };
   if (d.model) {
     HarnessState.orchModel.model = d.model;
     if (d.effort) HarnessState.orchModel.effort = d.effort;

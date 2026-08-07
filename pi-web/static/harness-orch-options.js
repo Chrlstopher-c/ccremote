@@ -12,37 +12,190 @@ function hOrchRow(libelle, action, valeur) {
   return `<button class="h-row" onclick="${action}">${escapeHtml(libelle)}${v}</button>`;
 }
 
+// ============ État d'un fil, rassemblé une fois ============
+//
+// ☠ Cette feuille était une LISTE D'ACTIONS SANS ÉTAT : six lignes qui ouvrent
+// six panneaux, et pas un chiffre. On ne pouvait donc pas répondre à la seule
+// question qu'on se pose en l'ouvrant — « où en est ce fil ». Elle reprend la
+// forme de la feuille d'une équipe (`harness-mission-sheets.js`) : un bandeau de
+// tuiles qui tranche, puis des groupes hiérarchisés. Les gabarits sont ceux de
+// cette feuille (`hTuile`, `hLigneKv`, `hJaugeContexte`, `hTonContexte`) —
+// réécrire un troisième vocabulaire ici les ferait diverger au premier ajustement.
+
+/**
+ * Tout ce que l'écran SAIT du fil ouvert, en un objet.
+ *
+ * ☠ Chaque champ est pris là où il existe RÉELLEMENT — voir le commentaire de
+ * `hOrch`. Aucun n'est déduit ni complété : un fil sans machine rend `null`, un
+ * fil vierge rend `modele: null`, et c'est l'affichage qui met les mots dessus.
+ */
+function hEtatFil() {
+  const fil = (hOrch.list || []).find((c) => c.id === hOrch.convId) || null;
+  const mesure = hOrch.mesure || {};
+  const reglage = hOrch.reglage || {};
+  // La mesure du sondage prime sur celle de la liste : la seconde ne se
+  // rafraîchit qu'en fin de tour, la première à chaque battement.
+  const ctxListe = typeof fil?.contextPct === 'number' ? fil.contextPct : null;
+  return {
+    id: hOrch.convId,
+    titre: fil?.titre || '',
+    ctx: typeof mesure.contextPct === 'number' ? mesure.contextPct : ctxListe,
+    compactions: typeof mesure.compactions === 'number' ? mesure.compactions : (fil?.compactions ?? 0),
+    active: !!fil?.active,
+    generating: !!hOrch.generating,
+    machine: fil?.machine || null,
+    modele: reglage.model || null,
+    effort: reglage.effort || null,
+    rapide: reglage.fastMode === true,
+    creeA: Number.isFinite(fil?.creeA) ? fil.creeA : null,
+    majA: Number.isFinite(fil?.majA) ? fil.majA : null,
+  };
+}
+
+/**
+ * Ce que l'écran sait de la fenêtre d'autonomie — c'est-à-dire presque rien.
+ *
+ * ☠ AUCUNE route ne la relit. `POST …/autonomie` l'écrit dans le registre
+ * (`autonomieDebut / autonomieFin / autonomieObjectif`, migration 15) et rien ne
+ * la ressert : le libellé n'existe que si Chris a posé la plage depuis cet
+ * onglet, et retombe à « Autonomie » au premier rechargement, plage active ou
+ * non. L'ancien menu traduisait ce vide par « aucune plage » — une AFFIRMATION
+ * sur une donnée que personne n'a lue, et la nuit c'est l'affirmation la plus
+ * coûteuse de tout l'écran. On dit « non relevée ».
+ */
+function hEtatAutonomie() {
+  const libelle = (document.getElementById('hAutonomieLabel') || {}).textContent || '';
+  if (libelle === '' || libelle === 'Autonomie') return { connu: false, valeur: 'non relevée' };
+  return { connu: true, valeur: libelle.replace(/^Autonomie\s*/, '') || 'posée' };
+}
+
+/**
+ * Quatre tuiles, et pas une de plus — même discipline que la feuille d'une
+ * équipe : ce qu'on lit AVANT de décider si on écrit à ce fil ou si on le laisse
+ * courir. Tout le reste descend dans les groupes.
+ *
+ * ☠ Un seul ton coloré, et il porte une règle précise : `veille` sur la machine
+ * quand elle est ABSENTE. Un fil sans machine tourne tant qu'une seule est en
+ * ligne puis échoue sur tout dispatch dès que la seconde démarre (prod, 02/08) —
+ * la panne n'est pas là, elle est certaine, c'est exactement « ça se prépare ».
+ * ☠ Le contexte reprend `hTonContexte` de la feuille d'équipe au lieu d'un seuil
+ * local : deux barèmes feraient dire deux choses au même pourcentage.
+ * ☠ Ni la session ni l'autonomie ne sont colorées : « active » n'appelle aucun
+ * geste, et une couleur qui ne demande rien est celle qu'on cesse de lire.
+ */
+function hTuilesFil(e) {
+  const a = hEtatAutonomie();
+  const mesure = e.ctx !== null;
+  const session = e.generating ? 'répond' : (e.active ? 'vivante' : 'au repos');
+  const sousSession = e.active ? 'contexte chargé' : 'démarre au prochain message';
+  const compact = `${e.compactions} compaction${e.compactions > 1 ? 's' : ''}`;
+  return `<div class="h-tuiles">
+    ${hTuile('Contexte', mesure ? `${e.ctx} %` : 'non mesuré', compact, mesure ? hTonContexte(e.ctx) : '')}
+    ${hTuile('Session', session, sousSession, '')}
+    ${hTuile('Machine', e.machine || 'aucune',
+      e.machine ? 'porte ce fil' : 'échoue dès la 2ᵉ en ligne', e.machine ? '' : 'veille')}
+    ${hTuile('Autonomie', a.valeur, a.connu ? 'mandats sans clic' : 'non resservie par l’API', '')}
+  </div>`;
+}
+
+/**
+ * Le contexte du fil, et les deux gestes qui le concernent.
+ *
+ * ☠ La jauge n'est dessinée QUE sur une mesure réelle. À `ctx` absent elle
+ * rendrait une barre à 0 %, qu'on lit « il reste tout le contexte » là où la
+ * vérité est « personne n'a mesuré » — c'est le « 23 % » codé en dur de
+ * l'ancienne interface, repeint en barre.
+ */
+function hGroupeContexteFil(e) {
+  const jauge = e.ctx === null
+    ? '<div class="h-note">Contexte non mesuré — la sentinelle ne relève rien tant que la session dort.</div>'
+    : hJaugeContexte({ ctx: e.ctx, ctxTokens: {} });
+  return `<div class="h-grp"><div class="gh">Contexte</div>${jauge}
+    <div class="h-kv">${hLigneKv('Compactions subies', String(e.compactions))}</div>
+    ${hOrchRow('Compacter maintenant', 'HSheets.fermer();hCompacterMaintenant()')}
+    ${hOrchRow('Statistiques de session', 'hSheetStats()')}
+  </div>`;
+}
+
+/**
+ * Sur quoi ce fil tourne — ce qu'on regarde quand une réponse surprend.
+ *
+ * ☠ Ces trois valeurs sont le DERNIER couple réellement utilisé par le fil, lu à
+ * son ouverture (`/orchestrator/conversations/:id`), et pas l'état des pilules
+ * du composeur : celles-ci peuvent avoir été changées sans qu'aucun message ne
+ * soit encore parti. La note le dit, parce que confondre les deux ferait
+ * chercher un bug de modèle là où il n'y a qu'un réglage pas encore envoyé.
+ */
+function hGroupeExecutionFil(e) {
+  return `<div class="h-grp"><div class="gh">Exécution</div>
+    <div class="h-kv">
+      ${hLigneKv('Modèle', e.modele || 'pas encore fixé')}
+      ${hLigneKv('Raisonnement', e.effort || '—')}
+      ${hLigneKv('Mode rapide', e.rapide ? 'actif' : 'coupé')}
+    </div>
+    ${hOrchRow('Machine de travail', 'hSheetMachine()', e.machine || '⚠ aucune')}
+    <div class="h-note">Dernier couple réellement utilisé par ce fil.
+      Le prochain envoi suivra les pilules du composeur.</div>
+  </div>`;
+}
+
+/** Ce qui peut partir sans Chris : la plage déléguée et les rappels posés. */
+function hGroupeAutomatisationFil() {
+  const a = hEtatAutonomie();
+  const compte = (document.getElementById('hRappelsCount') || {}).textContent || '';
+  return `<div class="h-grp"><div class="gh">Automatisation</div>
+    ${hOrchRow('Plage d’autonomie', 'hSheetAutonomie()', a.valeur)}
+    ${hOrchRow('Rappels programmés', 'hSheetRappels()', compte)}
+    <div class="h-note">L’état de la plage n’est pas resservi par l’API : après un rechargement de
+      la page il redevient illisible, même si la plage tourne. Le plafond d’équipes lançables sans
+      clic n’est exposé par aucune route — il ne peut donc pas s’afficher ici.</div>
+  </div>`;
+}
+
+/** L'identité du fil : depuis quand il existe, quand il a bougé, qui il est. */
+function hGroupeIdentiteFil(e) {
+  const t = window.HTemps;
+  const quand = (ms) => (ms !== null && t ? t.heureFil(ms) : '—');
+  // ☠ Date ABSOLUE et pas un « il y a N h » : un fil ouvert avant-hier rendrait
+  // « 51 h 20 », qu'il faut convertir de tête pour situer quoi que ce soit. Et
+  // `heureFil` porte le jour dès qu'il n'est plus aujourd'hui — c'est ce que
+  // cherche exactement une relecture au réveil.
+  return `<div class="h-grp"><div class="gh">Fil</div>
+    <div class="h-kv">
+      ${hLigneKv('Ouvert', quand(e.creeA))}
+      ${hLigneKv('Dernière activité', quand(e.majA))}
+      ${hLigneKv('Identifiant', e.id || '—')}
+    </div>
+    <button class="h-row" onclick="hCopierId('${hArgJs(e.id || '')}')">
+      Copier l’identifiant<span class="rv">⧉</span></button>
+    ${hOrchRow('Nouvelle conversation', 'HSheets.fermer();hNewConversation()')}
+  </div>`;
+}
+
+/** Ce qui sort du fil : le parc, les comptes, et la sortie définitive. */
+function hGroupeActionsFil() {
+  return `<div class="h-grp">
+    ${hOrchRow('Notifications du parc', "HSheets.fermer();hGoto('harness-notifications')")}
+    ${hOrchRow('Comptes et quotas', "HSheets.fermer();hGoto('harness-comptes')")}
+    <button class="h-row danger" onclick="hArchiverDepuisFeuille()">Archiver cette conversation</button>
+  </div>`;
+}
+
+/**
+ * ☠ Instantané, jamais sondé. La feuille d'une équipe se rend une fois elle
+ * aussi, et une feuille qui se réécrit sous le doigt casse le défilement en
+ * cours — c'est déjà la raison d'être de la garde par signature de
+ * `hRenderMachineFil`, la seule qui ait besoin d'être vivante.
+ */
 function hOuvrirOptionsOrch() {
-  const nRappels = document.getElementById('hRappelsCount');
-  const compte = nRappels && nRappels.textContent ? nRappels.textContent : '';
-  const auto = document.getElementById('hAutonomieLabel');
-  const etatAuto = auto && auto.textContent !== 'Autonomie' ? auto.textContent : 'aucune plage';
-  // ☠ « aucune » n'est PAS une valeur neutre : un fil sans machine tourne tant
-  // qu'une seule est en ligne, puis échoue sur TOUTE opération dès que la
-  // seconde démarre (mesuré en prod le 02/08). Il doit se voir depuis ici.
-  const filCourant = (hOrch.list || []).find((c) => c.id === hOrch.convId);
-  const machineFil = filCourant && filCourant.machine ? filCourant.machine : '⚠ aucune';
-  const html = `
-    <div class="h-grp"><div class="gh">Automatisation</div>
-      ${hOrchRow('Autonomie — plage déléguée', 'hSheetAutonomie()', etatAuto)}
-      ${hOrchRow('Rappels programmés', 'hSheetRappels()', compte)}
-    </div>
-    <div class="h-grp"><div class="gh">Machine de travail</div>
-      ${hOrchRow('Machine portant ce fil', 'hSheetMachine()', machineFil)}
-    </div>
-    <div class="h-grp"><div class="gh">Conversation</div>
-      ${hOrchRow('Statistiques de session', 'hSheetStats()')}
-      ${hOrchRow('Compacter le contexte maintenant', 'HSheets.fermer();hCompacterMaintenant()')}
-      ${hOrchRow('Nouvelle conversation', 'HSheets.fermer();hNewConversation()')}
-    </div>
-    <div class="h-grp">
-      ${hOrchRow('Notifications du parc', "HSheets.fermer();hGoto('harness-notifications')")}
-      ${hOrchRow('Comptes et quotas', "HSheets.fermer();hGoto('harness-comptes')")}
-    </div>
-    <div class="h-grp">
-      <button class="h-row danger" onclick="hArchiverDepuisFeuille()">Archiver cette conversation</button>
-    </div>`;
-  HSheets.ouvrir({ titre: 'Options', html });
+  const e = hEtatFil();
+  if (!e.id) {
+    HSheets.ouvrir({ titre: 'Détails du fil', html: '<div class="h-liste-vide">Aucun fil ouvert.</div>' });
+    return;
+  }
+  const html = hTuilesFil(e) + hGroupeContexteFil(e) + hGroupeExecutionFil(e)
+    + hGroupeAutomatisationFil() + hGroupeIdentiteFil(e) + hGroupeActionsFil();
+  HSheets.ouvrir({ titre: e.titre || 'Détails du fil', html });
 }
 
 // ============ Machine de travail du fil ============
