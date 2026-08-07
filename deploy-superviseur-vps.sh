@@ -32,6 +32,27 @@ if [ -z "$CCREMOTE_LIEN_SECRET" ]; then
   exit 78
 fi
 
+# ☠ VÉCU LE 2026-08-07 — c'est précisément le mode de panne que le contrôle de
+# fraîcheur existe pour attraper, sauf qu'il ne tourne QUE dans la branche
+# `--demarrer`. Sans le drapeau, ce script copiait les sources et ne redémarrait
+# rien : « défaut volontaire », parfaitement juste quand le service est ARRÊTÉ,
+# et silencieusement faux quand il TOURNE. Mesuré ce jour-là : sources envoyées
+# à 21 h, process du VPS démarré la VEILLE à 06:56, pas un mot pour le dire — et
+# une capacité qu'on croyait déployée sur les deux machines de travail.
+#
+# ☠ La garde est AVANT le rsync, jamais après : refuser une fois les fichiers
+# copiés laisserait la machine dans l'état incohérent qu'on cherche à éviter,
+# sources neuves sur process ancien.
+if [ "$DEMARRER" -eq 0 ]; then
+  ACTIF=$(ssh "$CIBLE" "systemctl --user is-active ccremote-pc 2>/dev/null || true")
+  if [ "$ACTIF" = "active" ]; then
+    echo "✗ Le superviseur TOURNE déjà sur le VPS, et sans --demarrer ce script ne le" >&2
+    echo "  redémarrerait pas : il servirait du code périmé sans que rien ne le signale." >&2
+    echo "  Relance avec :  ./deploy-superviseur-vps.sh --demarrer" >&2
+    exit 78
+  fi
+fi
+
 echo "→ Vérification du compte Claude sur le VPS"
 if ! ssh "$CIBLE" "test -f \$HOME/.claude-comptes/compte-a/.credentials.json"; then
   echo "✗ compte-a non authentifié sur le VPS." >&2
