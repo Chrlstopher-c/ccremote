@@ -218,6 +218,22 @@ const HarnessAPI = (() => {
     async approveMandat(id) { return ecrireReel(`/orchestrator/propositions/${encodeURIComponent(id)}/approve`, {}); },
     async rejectMandat(id) { return ecrireReel(`/orchestrator/propositions/${encodeURIComponent(id)}/reject`, {}); },
 
+    /* ---- Rallonges du plafond d'autonomie (migration 27) — RÉEL ----------
+     * ☠ Le serveur servait ces trois routes depuis leur écriture et AUCUNE
+     * méthode cliente ne les appelait : une demande posée par l'orchestrateur
+     * n'était montrée nulle part et restait en attente indéfiniment, pendant
+     * qu'il croyait avoir sollicité une décision. Câblé le 08/08, le jour où
+     * l'outil `demander_rallonge_autonomie` est entré dans son mandat.
+     *
+     * ☠ Accorder une rallonge N'EST PAS approuver un mandat : ça n'ouvre aucun
+     * worker, ça applique un plafond au fil qui l'a demandée. Les deux circuits
+     * restent séparés jusqu'ici pour qu'un geste ne soit jamais pris pour
+     * l'autre.
+     */
+    async getRallonges() { return lireReel('/orchestrator/rallonges'); },
+    async approveRallonge(id) { return ecrireReel(`/orchestrator/rallonges/${encodeURIComponent(id)}/approve`, {}); },
+    async rejectRallonge(id) { return ecrireReel(`/orchestrator/rallonges/${encodeURIComponent(id)}/reject`, {}); },
+
     async archiveConversation(id) {
       return ecrireReel(`/orchestrator/conversations/${encodeURIComponent(id)}/archive`, {});
     },

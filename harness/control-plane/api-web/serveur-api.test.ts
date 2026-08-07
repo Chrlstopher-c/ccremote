@@ -829,3 +829,115 @@ describe('API web — rattacher un fil à une machine', () => {
     expect(statut).toBe(200);
   });
 });
+
+/**
+ * `☠` Banc d'ASSEMBLAGE, pas de fonction : `vue-conversations.test.ts` prouve
+ * que la traduction est juste, celui-ci prouve qu'elle est BRANCHÉE. C'est la
+ * séparation qui a coûté cher le 01/08 — une traduction correcte que la route
+ * n'appelait pas. Ici, le port de conversations lit le VRAI registre, donc un
+ * champ non joint par la route ressort vide et le test le voit.
+ */
+describe('API web — fenêtre d’autonomie et plafond d’un fil (migrations 15 et 26)', () => {
+  function demarrerAvecFils(): ServeurApiWeb {
+    serveur = demarrerServeurApiWeb({
+      port: 0,
+      registre,
+      pcEnLigne: () => pcOnline,
+      maintenant: () => MAINTENANT,
+      // `as never` : le port compte une douzaine de méthodes dont ce banc
+      // n'exerce que la lecture — même doublure que les bancs voisins.
+      conversations: {
+        listerConversations: () =>
+          registre.conversations.lister().map((c) => ({
+            id: c.id,
+            titre: c.titre,
+            creeA: c.creeA,
+            majA: c.majA,
+            active: false,
+            contextePct: null,
+            compactions: c.compactions,
+            machine: c.machine,
+          })),
+        detail: (id: string) => {
+          const c = registre.conversations.lire(id);
+          return c === null
+            ? null
+            : {
+                id: c.id,
+                titre: c.titre,
+                evenements: [],
+                curseur: 0,
+                genere: false,
+                active: false,
+                contextePct: null,
+                compactions: c.compactions,
+                modele: c.modele,
+                effort: c.effort,
+                modeRapide: c.modeRapide,
+                partiel: null,
+              };
+        },
+        evenementsDepuis: () => null,
+        creer: () => ({ id: 'c1', titre: 't', creeA: MAINTENANT, majA: MAINTENANT }),
+        envoyer: async () => {},
+        renommer: () => true,
+        archiver: () => true,
+        compacter: async () => ({ compacte: false, detail: 'rien' }),
+        interrompre: async () => ({ interrompu: false, detail: 'rien' }),
+      } as never,
+    });
+    return serveur;
+  }
+
+  function semerFil(id = 'fil-nuit'): string {
+    registre.conversations.creer({ id, titre: 'nuit du 07' });
+    return id;
+  }
+
+  test('☠ une plage posée est RESSERVIE par le détail — c’est ce qui manquait', async () => {
+    demarrerAvecFils();
+    const id = semerFil();
+    registre.conversations.poserFenetreAutonomie(id, MAINTENANT, MAINTENANT + 28_800_000, 'finir la migration');
+    const data = (await lire(`/orchestrator/conversations/${id}`)).corps['data'] as Record<string, unknown>;
+    expect(data['autonomieDebut']).toBe(MAINTENANT);
+    expect(data['autonomieFin']).toBe(MAINTENANT + 28_800_000);
+    expect(data['autonomieObjectif']).toBe('finir la migration');
+  });
+
+  test('☠ sans plage, les trois champs sont null — jamais absents du corps', async () => {
+    demarrerAvecFils();
+    const id = semerFil();
+    const data = (await lire(`/orchestrator/conversations/${id}`)).corps['data'] as Record<string, unknown>;
+    // Un champ ABSENT se lit « pas encore chargé » ; `null` se lit « aucune
+    // plage ». C'est exactement la distinction que l'écran n'avait pas.
+    expect('autonomieDebut' in data).toBe(true);
+    expect(data['autonomieDebut']).toBeNull();
+    expect(data['autonomieFin']).toBeNull();
+  });
+
+  test('le plafond propre au fil ressort sous sa forme lisible', async () => {
+    demarrerAvecFils();
+    const id = semerFil();
+    registre.conversations.reglerPlafondAutonomie(id, { type: 'valeur', max: 12 });
+    const data = (await lire(`/orchestrator/conversations/${id}`)).corps['data'] as Record<string, unknown>;
+    expect(data['plafondAutonomie']).toBe('12');
+  });
+
+  test('☠ un fil qui n’a rien réglé rend « herite », jamais « illimite »', async () => {
+    demarrerAvecFils();
+    const id = semerFil();
+    const data = (await lire(`/orchestrator/conversations/${id}`)).corps['data'] as Record<string, unknown>;
+    expect(data['plafondAutonomie']).toBe('herite');
+  });
+
+  test('la LISTE porte les mêmes champs — l’écran n’a pas à rouvrir chaque fil', async () => {
+    demarrerAvecFils();
+    const id = semerFil();
+    registre.conversations.poserFenetreAutonomie(id, MAINTENANT, MAINTENANT + 3_600_000, 'veille');
+    registre.conversations.reglerPlafondAutonomie(id, { type: 'illimite' });
+    const liste = (await lire('/orchestrator/conversations')).corps['data'] as Record<string, unknown>[];
+    expect(liste).toHaveLength(1);
+    expect(liste[0]?.['autonomieFin']).toBe(MAINTENANT + 3_600_000);
+    expect(liste[0]?.['plafondAutonomie']).toBe('illimite');
+  });
+});

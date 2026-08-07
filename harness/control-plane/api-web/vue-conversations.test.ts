@@ -17,8 +17,8 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { versEvenementApi } from './vue-conversations.ts';
-import type { EvenementConversation } from '../registre/index.ts';
+import { versAutonomieFilApi, versConversationApi, versEvenementApi } from './vue-conversations.ts';
+import type { Conversation, EvenementConversation } from '../registre/index.ts';
 
 function evenement(surcharges: Partial<EvenementConversation> = {}): EvenementConversation {
   return {
@@ -87,5 +87,85 @@ describe('la frontière HTTP transporte ce que la base contient', () => {
     const api = versEvenementApi(evenement({ modele: 'claude-sonnet-5', effort: 'medium' }));
     expect(api.model).toBe('claude-sonnet-5');
     expect(api.effort).toBe('medium');
+  });
+});
+
+/**
+ * `☠` Migration 15 (fenêtre d'autonomie) et migration 26 (plafond) écrivaient
+ * quatre colonnes que AUCUNE route ne resservait. L'interface, faute de source,
+ * affichait « aucune plage » — une affirmation sur une donnée que personne
+ * n'avait lue. Ces tests portent sur la même frontière que ceux ci-dessus : le
+ * seul endroit où « la donnée existe » et « la donnée arrive à l'écran » se
+ * séparent.
+ */
+function conversation(surcharges: Partial<Conversation> = {}): Conversation {
+  return {
+    id: 'conv-a',
+    titre: 'nuit du 07',
+    titreSource: 'auto',
+    sessionId: null,
+    statut: 'active',
+    creeA: 1_700_000_000_000,
+    majA: 1_700_000_100_000,
+    compactions: 2,
+    resumeContexte: null,
+    modele: 'claude-opus-5',
+    effort: 'high',
+    modeRapide: null,
+    autonomieDebut: null,
+    autonomieFin: null,
+    autonomieObjectif: null,
+    plafondAutonomie: { type: 'herite' },
+    machine: 'trinityarch',
+    ...surcharges,
+  };
+}
+
+describe('la fenêtre d’autonomie traverse la frontière HTTP', () => {
+  test('☠ une plage posée ressort telle quelle — objectif compris', () => {
+    const api = versAutonomieFilApi(
+      conversation({
+        autonomieDebut: 1_700_000_000_000,
+        autonomieFin: 1_700_028_800_000,
+        autonomieObjectif: 'finir la migration et la tester',
+      }),
+    );
+    expect(api.autonomieDebut).toBe(1_700_000_000_000);
+    expect(api.autonomieFin).toBe(1_700_028_800_000);
+    // L'objectif est la SEULE chose qui dise à quoi la plage a été déléguée :
+    // sans lui l'écran ne montrerait que deux dates.
+    expect(api.autonomieObjectif).toBe('finir la migration et la tester');
+  });
+
+  test('☠ « hérité », « illimité » et une valeur restent TROIS états distincts', () => {
+    // Les confondre afficherait un fil neuf comme délibérément affranchi.
+    expect(versAutonomieFilApi(conversation()).plafondAutonomie).toBe('herite');
+    expect(versAutonomieFilApi(conversation({ plafondAutonomie: { type: 'illimite' } })).plafondAutonomie)
+      .toBe('illimite');
+    expect(versAutonomieFilApi(conversation({ plafondAutonomie: { type: 'valeur', max: 12 } })).plafondAutonomie)
+      .toBe('12');
+  });
+
+  test('un fil absent du registre rend la forme la plus conservatrice, jamais un champ manquant', () => {
+    expect(versAutonomieFilApi(null)).toEqual({
+      autonomieDebut: null,
+      autonomieFin: null,
+      autonomieObjectif: null,
+      plafondAutonomie: 'herite',
+    });
+  });
+
+  test('☠ aucun champ attendu par l’écran ne manque à une conversation servie', () => {
+    // Même discipline que la liste explicite des évènements : c'est elle qui
+    // fait échouer l'ajout d'une colonne oubliée en chemin.
+    const api = versConversationApi(
+      { id: 'c', titre: 't', creeA: 1, majA: 2, active: true, contextePct: 30, machine: 'vps' },
+      versAutonomieFilApi(conversation({ autonomieDebut: 10, autonomieFin: 20 })),
+    );
+    expect(Object.keys(api).sort()).toEqual([
+      'active', 'autonomieDebut', 'autonomieFin', 'autonomieObjectif', 'compactions', 'contextPct',
+      'creeA', 'effort', 'id', 'machine', 'majA', 'model', 'plafondAutonomie', 'titre',
+    ]);
+    expect(api.autonomieFin).toBe(20);
   });
 });

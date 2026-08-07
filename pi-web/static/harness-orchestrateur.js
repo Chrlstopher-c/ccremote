@@ -19,9 +19,13 @@ let hModelsCache = [];
 // le sondage d'évènements sert la mesure de contexte la plus fraîche. La feuille
 // « ··· » lit ici plutôt que de refaire un appel — sur un iPhone en 4G, relire
 // le détail d'un fil, c'est retélécharger tous ses évènements.
+// ☠ `autonomie` : la fenêtre déléguée et le plafond du fil, tels que l'API les
+// sert depuis le 08/08 (migrations 15 et 26). `null` ne veut PAS dire « aucune
+// plage » — il veut dire « pas encore lu ». Confondre les deux, c'est refaire
+// l'affirmation fausse qu'on vient de retirer de la feuille « ··· ».
 const hOrch = {
   convId: null, cursor: 0, generating: false, timer: null, cur: null, list: [],
-  barreSig: '', partielEl: null, mandats: {}, reglage: null, mesure: null,
+  barreSig: '', partielEl: null, mandats: {}, reglage: null, mesure: null, autonomie: null,
 };
 const HORCH_KEY = 'ccremote.orch.conv';
 const HORCH_POLL_MS = 400;
@@ -70,7 +74,34 @@ async function hLoadConvList() {
   const r = await HarnessAPI.getConversations();
   if (r.erreur) { hRenderConvBar([], r.erreur); return; }
   hOrch.list = r.data || [];
+  // ☠ La LISTE porte désormais la fenêtre d'autonomie et le plafond du fil, et
+  // elle se rafraîchit à chaque fin de tour — là où le détail n'est lu qu'à
+  // l'ouverture. C'est donc elle qui garde le libellé vrai quand une plage
+  // s'ouvre, expire, ou qu'un plafond vient d'être relevé pendant qu'on lit.
+  const ouvert = hOrch.list.find((c) => c.id === hOrch.convId);
+  if (ouvert) {
+    hOrch.autonomie = hLireAutonomie(ouvert);
+    if (typeof hMajLabelAutonomie === 'function') hMajLabelAutonomie(hOrch.autonomie.debut, hOrch.autonomie.fin);
+  }
   hRenderConvBar(hOrch.list);
+}
+
+/**
+ * Fenêtre d'autonomie et plafond d'un fil, lus tels que l'API les sert.
+ *
+ * ☠ Rien n'est déduit ni complété. `plafond` reste `null` quand le champ est
+ * absent — « ce déploiement ne le sert pas » — et ça ne se confond pas avec
+ * `'herite'`, qui est une RÉPONSE (« le défaut du parc s'applique »). Les mêler
+ * remettrait à l'écran une affirmation que personne n'a mesurée.
+ */
+function hLireAutonomie(source) {
+  if (!source) return null;
+  return {
+    debut: Number.isFinite(source.autonomieDebut) ? source.autonomieDebut : null,
+    fin: Number.isFinite(source.autonomieFin) ? source.autonomieFin : null,
+    objectif: source.autonomieObjectif || null,
+    plafond: typeof source.plafondAutonomie === 'string' ? source.plafondAutonomie : null,
+  };
 }
 
 function hRenderConvBar(list, erreur) {
@@ -322,6 +353,167 @@ function hTamponMandat(id, libelle, couleur) {
   delete hOrch.mandats[id];
 }
 
+// ============ Rallonges du plafond d'autonomie (migration 27) ============
+//
+// ☠ CE QUE CECI RÉPARE — le circuit avait une moitié serveur complète et AUCUNE
+// moitié cliente : `grep -c rallonge harness-api.js` rendait 0. L'orchestrateur
+// pouvait poser une demande, elle était écrite en base, servie par
+// `GET /orchestrator/rallonges`, décidable par deux routes… et n'apparaissait
+// nulle part. Elle restait donc en attente indéfiniment pendant qu'il croyait
+// avoir sollicité une décision — « un écran qui ment, avec Chris qui attend un
+// bouton qui ne viendra pas ». Câblé le 08/08, le jour où l'outil
+// `demander_rallonge_autonomie` est entré dans son mandat.
+//
+// ☠ Une rallonge N'EST PAS un mandat : l'accorder n'ouvre aucune équipe, ça
+// applique un plafond au fil qui l'a demandée. Les deux circuits gardent leurs
+// libellés, leurs verdicts et leurs messages séparés — un geste ne doit jamais
+// pouvoir être pris pour l'autre.
+//
+// ☠ Le bandeau vit HORS du fil (`#hRallongesZone`, entre le fil et le
+// composeur) : une demande ne produit aucun évènement de conversation, elle n'a
+// donc aucune ancre dans le fil. Collée au composeur, elle reste visible même
+// quand Chris a remonté la lecture — c'est ce qui rend vraie la promesse « il la
+// verra sans ouvrir un menu ».
+
+const hRallonges = { enAttente: [], tranchees: {}, dernierAppel: 0 };
+/** Cadence PROPRE : le sondage du fil bat à 400 ms en génération, pas cette liste. */
+const HRALLONGE_INTERVALLE_MS = 5000;
+/** Combien de temps un verdict reste lisible sur sa carte avant de disparaître. */
+const HRALLONGE_TAMPON_MS = 12000;
+
+async function hRafraichirRallonges(force = false) {
+  const t = Date.now();
+  if (!force && t - hRallonges.dernierAppel < HRALLONGE_INTERVALLE_MS) return;
+  hRallonges.dernierAppel = t;
+  const r = await HarnessAPI.getRallonges();
+  // ☠ Control plane muet ⇒ on GARDE ce qui est déjà affiché. Vider la zone sur
+  // une erreur réseau ferait disparaître une demande en attente : le mode de
+  // panne qu'on corrige, repeint en incident transitoire.
+  if (r.erreur) return;
+  hRallonges.enAttente = Array.isArray(r.data) ? r.data : [];
+  hRendreRallonges();
+}
+
+/** Nom lisible d'un fil, ou son identifiant tronqué si la liste ne le connaît pas. */
+function hNomFil(conversationId) {
+  const fil = (hOrch.list || []).find((c) => c.id === conversationId);
+  if (fil && fil.titre) return fil.titre;
+  return conversationId ? `fil ${String(conversationId).slice(0, 8)}` : 'fil inconnu';
+}
+
+/**
+ * Le réglage en français, jamais le jeton brut.
+ *
+ * ☠ Trois états DISTINCTS côté domaine (`autonomie/reglage-plafond.ts`) :
+ * `herite` n'est pas `illimite`, et aucun des deux n'est un nombre. `null` est
+ * un quatrième cas — « pas relevé » — qui n'est pas une réponse du serveur.
+ */
+function hPlafondLisible(valeur) {
+  if (valeur === null || valeur === undefined || valeur === '') return 'non relevé';
+  if (valeur === 'illimite') return 'aucun plafond (illimité)';
+  if (valeur === 'herite') return 'défaut du parc';
+  const n = Number.parseInt(valeur, 10);
+  return Number.isSafeInteger(n) ? `${n} équipe${n > 1 ? 's' : ''} sans clic` : String(valeur);
+}
+
+function hCarteRallonge(d) {
+  const verdict = hRallonges.tranchees[d.id];
+  const cible = d.conversationId === hOrch.convId ? 'ce fil' : hNomFil(d.conversationId);
+  const quand = window.HTemps ? window.HTemps.heureFil(d.creeA) : '';
+  const bas = verdict
+    ? `<div class="verdict-stamp" style="color:${verdict.couleur};">${escapeHtml(verdict.libelle)}</div>`
+    : `<div class="macts">
+        <button class="btn btn-accent" onclick="hAccorderRallonge('${hArgJs(d.id)}')">Accorder</button>
+        <button class="btn btn-ghost" style="color:var(--err);border-color:var(--err-soft);"
+          onclick="hRefuserRallonge('${hArgJs(d.id)}')">Refuser</button>
+      </div>`;
+  const titre = verdict
+    ? 'Rallonge du plafond d’autonomie'
+    : 'Rallonge du plafond d’autonomie — ta décision est requise';
+  return `<div class="mandate-card${verdict ? ' resolved' : ''}" id="hRallonge_${escapeHtml(d.id)}">
+    <div class="mh2">${titre}</div>
+    <div class="mb">
+      <div class="mrow"><div class="k">Fil</div><div class="v">${escapeHtml(cible)}</div></div>
+      <div class="mrow"><div class="k">Demandé</div>
+        <div class="v mono">${escapeHtml(hPlafondLisible(d.plafondDemande))}</div></div>
+      <div class="mrow"><div class="k">Motif</div><div class="v">${escapeHtml(d.motif || '— non précisé')}</div></div>
+      <div class="mrow"><div class="k">Posée</div><div class="v">${escapeHtml(quand || '—')}</div></div>
+    </div>
+    ${bas}
+  </div>`;
+}
+
+function hRendreRallonges() {
+  const zone = document.getElementById('hRallongesZone');
+  if (!zone) return;
+  const maintenant = Date.now();
+  // Purge bornée : un verdict n'est gardé que le temps d'être lu, jamais plus.
+  for (const id of Object.keys(hRallonges.tranchees)) {
+    if (maintenant - hRallonges.tranchees[id].at > HRALLONGE_TAMPON_MS) delete hRallonges.tranchees[id];
+  }
+  const vues = [...hRallonges.enAttente];
+  for (const id of Object.keys(hRallonges.tranchees)) {
+    if (!vues.some((d) => d.id === id)) vues.push(hRallonges.tranchees[id].demande);
+  }
+  // ☠ Signature avant écriture : cette zone est recalculée à chaque battement du
+  // sondage, et réécrire un HTML identique remplacerait les boutons SOUS le
+  // doigt de Chris — au moment précis où il vise l'un des deux.
+  const sig = JSON.stringify(vues.map((d) => [d.id, d.statut, !!hRallonges.tranchees[d.id]]));
+  if (zone.dataset.sig !== sig) {
+    zone.dataset.sig = sig;
+    zone.innerHTML = vues.map(hCarteRallonge).join('');
+  }
+  zone.hidden = vues.length === 0;
+}
+
+/** Le refus du serveur dit-il « c'était déjà tranché » ? (409 du control plane) */
+function hRallongeDejaTranchee(message) {
+  return /déjà tranchée|inconnue/i.test(String(message || ''));
+}
+
+/**
+ * ☠ Une demande tranchée AILLEURS ne redevient jamais cliquable : le clic
+ * suivant échouerait exactement pareil. On tamponne ce qui s'est réellement
+ * passé au lieu de proposer de recommencer — même règle que les mandats, où une
+ * carte périmée a coûté un incident le 01/08.
+ */
+function hTamponRallonge(id, demande, libelle, couleur) {
+  const restant = demande || hRallonges.enAttente.find((d) => d.id === id) || null;
+  hRallonges.enAttente = hRallonges.enAttente.filter((d) => d.id !== id);
+  if (restant) {
+    const heure = new Date().toTimeString().slice(0, 8);
+    hRallonges.tranchees[id] = { demande: restant, libelle: `${libelle} à ${heure}`, couleur, at: Date.now() };
+  }
+  hRendreRallonges();
+}
+
+async function hAccorderRallonge(id) {
+  const demande = hRallonges.enAttente.find((d) => d.id === id) || null;
+  const r = await HarnessAPI.approveRallonge(id);
+  if (!r.ok) {
+    // Le `detail` du serveur est écrit pour être lu : on le montre tel quel.
+    if (hRallongeDejaTranchee(r.erreur)) hTamponRallonge(id, demande, 'Déjà tranchée ailleurs', 'var(--ink-3)');
+    showToast(r.erreur || 'Décision non transmise', 'warn');
+    return;
+  }
+  hTamponRallonge(id, demande, 'Accordée — nouveau plafond appliqué', 'var(--ok)');
+  showToast(r.effet || 'Rallonge accordée', 'ok');
+  // Le plafond du fil vient de changer : la liste le porte, la feuille le lit.
+  void hLoadConvList();
+}
+
+async function hRefuserRallonge(id) {
+  const demande = hRallonges.enAttente.find((d) => d.id === id) || null;
+  const r = await HarnessAPI.rejectRallonge(id);
+  if (!r.ok) {
+    if (hRallongeDejaTranchee(r.erreur)) hTamponRallonge(id, demande, 'Déjà tranchée ailleurs', 'var(--ink-3)');
+    showToast(r.erreur || 'Refus non transmis', 'warn');
+    return;
+  }
+  hTamponRallonge(id, demande, 'Refusée — le plafond ne change pas', 'var(--err)');
+  showToast(r.effet || 'Rallonge refusée', 'warn');
+}
+
 // ---- ouverture + rendu complet d'un fil ------------------------------------
 async function hOpenConversation(id) {
   // ☠ Reprise, pas reconstruction : on reprend le sondage là où il en était.
@@ -338,7 +530,7 @@ async function hOpenConversation(id) {
   // pendant que `reglage`/`mesure` décriraient encore le fil PRÉCÉDENT. La
   // feuille « ··· » afficherait un modèle et un pourcentage qui ne sont pas les
   // siens — et rien ne le dirait.
-  hOrch.reglage = null; hOrch.mesure = null;
+  hOrch.reglage = null; hOrch.mesure = null; hOrch.autonomie = null;
   localStorage.setItem(HORCH_KEY, id);
   hRenderConvBar(hOrch.list);
   const chat = document.getElementById('hChatBody');
@@ -368,6 +560,14 @@ async function hOpenConversation(id) {
   // qu'il n'a jamais utilisé — un champ fabriqué. Ici, `null` reste `null` et la
   // feuille peut écrire « pas encore fixé ».
   hOrch.reglage = { model: d.model ?? null, effort: d.effort ?? null, fastMode: d.fastMode ?? null };
+  // ☠ La fenêtre d'autonomie vient du DÉTAIL, pas d'un souvenir de l'onglet où
+  // Chris l'avait posée : avant le 08/08 aucune route ne la resservait, et le
+  // libellé retombait à « Autonomie » au premier rechargement — plage active ou
+  // non. Le label est réaligné ici même, pour qu'un F5 ne mente plus.
+  hOrch.autonomie = hLireAutonomie(d);
+  if (hOrch.autonomie && typeof hMajLabelAutonomie === 'function') {
+    hMajLabelAutonomie(hOrch.autonomie.debut, hOrch.autonomie.fin);
+  }
   if (d.model) {
     HarnessState.orchModel.model = d.model;
     if (d.effort) HarnessState.orchModel.effort = d.effort;
@@ -397,6 +597,10 @@ async function hOpenConversation(id) {
   // sa cadence tout seul — rapide pendant un tour, en veille sinon.
   hStartPoll();
   void hRattacherFilSansMachine(id);
+  // ☠ `force` : à l'ouverture d'un fil on ne veut pas attendre la cadence de la
+  // liste. Une demande posée pendant qu'on était ailleurs doit être visible tout
+  // de suite — elle bloque déjà le travail de l'orchestrateur.
+  void hRafraichirRallonges(true);
 }
 
 /**
@@ -1131,6 +1335,11 @@ async function hPollNow() {
   // une notification du harness sans que l'opérateur ait rien fait.
   hMajBoutonEnvoi();
   hRenderStats(d);
+  // ☠ Appelé à CHAQUE battement mais bridé à sa propre cadence (5 s) : une
+  // demande de rallonge peut naître EN COURS de tour — l'orchestrateur appelle
+  // l'outil au milieu de sa réflexion — et attendre la fin du tour pour
+  // l'afficher, c'est le laisser bloqué pendant tout ce temps.
+  void hRafraichirRallonges();
   if (auBas) hScrollChat();
   // ☠ Compté seulement quand on lit AILLEURS : la pastille dit « il s'est passé
   // ceci pendant que tu remontais », pas « des messages existent ».

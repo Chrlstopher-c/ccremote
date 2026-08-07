@@ -45,6 +45,8 @@ import { traiterEcriture, type OrdresVersPc, type OrchestrateurConversation } fr
 import {
   versEvenementApi,
   versConversationApi,
+  versAutonomieFilApi,
+  type AutonomieFilApi,
   type PortConversations,
   type PortMandats,
 } from './vue-conversations.ts';
@@ -173,13 +175,52 @@ function json(corps: unknown, statut = 200): Response {
   });
 }
 
+/**
+ * Détail d'un fil, tel que l'écran le lit à l'ouverture.
+ *
+ * `☠` Extrait de `routerLectureConversation` pour que l'ajout de la fenêtre
+ * d'autonomie ne pousse pas ce routeur au-delà de la limite de taille du dépôt.
+ */
+function vueDetailConversation(
+  d: NonNullable<ReturnType<PortConversations['detail']>>,
+  autonomie: AutonomieFilApi,
+): unknown {
+  return {
+    id: d.id,
+    titre: d.titre,
+    events: d.evenements.map(versEvenementApi),
+    cursor: d.curseur,
+    generating: d.genere,
+    active: d.active,
+    contextPct: d.contextePct,
+    compactions: d.compactions,
+    // `☠` Sans ces deux champs, l'interface n'a rien pour rouvrir le fil sur
+    // son propre réglage : elle retombait sur Opus 4.8 / high à chaque
+    // rafraîchissement (constaté en prod le 23/07, après un premier correctif
+    // incomplet — le chemin de DONNÉES manquait, pas seulement l'affichage).
+    model: d.modele,
+    effort: d.effort,
+    fastMode: d.modeRapide,
+    partial: d.partiel,
+    ...autonomie,
+  };
+}
+
 /** Sous-routage lecture des conversations. `null` = pas une route conversation. */
 function routerLectureConversation(chemin: string, url: URL, deps: DependancesApiWeb, pcOnline: boolean): unknown {
   if (deps.conversations === undefined) return null;
   const conv = deps.conversations;
 
   if (chemin === '/orchestrator/conversations') {
-    return enveloppe(pcOnline, conv.listerConversations().map(versConversationApi));
+    // `☠` La fenêtre d'autonomie et le plafond vivent dans le REGISTRE, pas dans
+    // le port : le gestionnaire de conversations ne les porte pas. Lus ici en
+    // UNE passe et joints par identifiant — un `lire()` par fil ferait autant de
+    // requêtes que de conversations sur une route appelée à chaque fin de tour.
+    const parId = new Map(deps.registre.conversations.lister().map((c) => [c.id, c]));
+    const liste = conv
+      .listerConversations()
+      .map((e) => versConversationApi(e, versAutonomieFilApi(parId.get(e.id) ?? null)));
+    return enveloppe(pcOnline, liste);
   }
 
   const evts = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/events$/);
@@ -201,26 +242,10 @@ function routerLectureConversation(chemin: string, url: URL, deps: DependancesAp
 
   const detail = chemin.match(/^\/orchestrator\/conversations\/([^/]+)$/);
   if (detail?.[1] !== undefined) {
-    const d = conv.detail(decodeURIComponent(detail[1]));
+    const id = decodeURIComponent(detail[1]);
+    const d = conv.detail(id);
     if (d === null) throw introuvable('conversation');
-    return enveloppe(pcOnline, {
-      id: d.id,
-      titre: d.titre,
-      events: d.evenements.map(versEvenementApi),
-      cursor: d.curseur,
-      generating: d.genere,
-      active: d.active,
-      contextPct: d.contextePct,
-      compactions: d.compactions,
-      // `☠` Sans ces deux champs, l'interface n'a rien pour rouvrir le fil sur
-      // son propre réglage : elle retombait sur Opus 4.8 / high à chaque
-      // rafraîchissement (constaté en prod le 23/07, après un premier correctif
-      // incomplet — le chemin de DONNÉES manquait, pas seulement l'affichage).
-      model: d.modele,
-      effort: d.effort,
-      fastMode: d.modeRapide,
-      partial: d.partiel,
-    });
+    return enveloppe(pcOnline, vueDetailConversation(d, versAutonomieFilApi(deps.registre.conversations.lire(id))));
   }
 
   return null;
@@ -584,7 +609,14 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
       );
     }
     const creee = conv.creer(titre, machineDemandee ?? null);
-    return { ok: true, effet: 'conversation créée', conversation: versConversationApi({ ...creee, active: false, contextePct: null }) };
+    // Un fil neuf n'a ni plage ni plafond propre : on le LIT quand même plutôt
+    // que de l'affirmer ici — le registre reste la seule source de ces champs.
+    const autonomie = versAutonomieFilApi(deps.registre.conversations.lire(creee.id));
+    return {
+      ok: true,
+      effet: 'conversation créée',
+      conversation: versConversationApi({ ...creee, active: false, contextePct: null }, autonomie),
+    };
   }
 
   const message = chemin.match(/^\/orchestrator\/conversations\/([^/]+)\/message$/);

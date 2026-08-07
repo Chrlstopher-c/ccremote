@@ -248,6 +248,15 @@
       <div class="flex-1 overflow-y-auto px-4 lg:px-7" id="hChatScroll">
         <div class="py-4 flex flex-col gap-4" id="hChatBody"></div>
       </div>
+      <!-- ☠ Les demandes de rallonge du plafond d'autonomie (migration 27) vivent
+           ICI, entre le fil et le composeur, et JAMAIS derrière un repli : une
+           demande en attente bloque le travail de l'orchestrateur, exactement
+           comme une permission en attente sur une équipe. C'est la seule valise
+           qui a le droit d'être visible par défaut (cf. `hPermissionTemplate`).
+           Hors du fil à dessein : la demande n'y produit aucun évènement, et un
+           bandeau collé au composeur reste lisible même quand Chris a remonté
+           le fil — c'est ce qui garantit qu'il la verra sans ouvrir un menu. -->
+      <div class="rallonge-zone" id="hRallongesZone" hidden></div>
       <div class="orch-composer">
         <div class="composer-shell" id="hComposerShell">
           <div class="pj-file" id="hPiecesFile" style="display: none;"></div>

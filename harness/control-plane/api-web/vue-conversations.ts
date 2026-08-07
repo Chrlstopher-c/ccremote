@@ -7,7 +7,8 @@
  * dépendance va du concret vers l'abstrait, jamais l'inverse.
  */
 
-import type { EvenementConversation, TypeEvenementConversation } from '../registre/index.ts';
+import { ecrireReglagePlafond } from '../autonomie/index.ts';
+import type { Conversation, EvenementConversation, TypeEvenementConversation } from '../registre/index.ts';
 
 export interface EvenementApi {
   readonly seq: number;
@@ -48,7 +49,52 @@ export interface PieceJointeApi {
   readonly url: string;
 }
 
-export interface ConversationApi {
+/**
+ * Fenêtre d'autonomie du fil (migration 15) et plafond d'équipes lançables sans
+ * clic (migration 26).
+ *
+ * `☠` Ces quatre colonnes existaient en base et n'étaient resservies par AUCUNE
+ * route. L'interface ne pouvait donc pas savoir si une plage courait, et
+ * affirmait « aucune plage » sur une donnée que personne n'avait lue — une
+ * affirmation fausse, et c'est la nuit qu'elle coûte le plus cher, quand Chris
+ * dort en croyant avoir délégué.
+ */
+export interface AutonomieFilApi {
+  readonly autonomieDebut: number | null;
+  readonly autonomieFin: number | null;
+  readonly autonomieObjectif: string | null;
+  /**
+   * Forme lisible du réglage : un entier en texte, « illimite », ou « herite »
+   * quand le fil ne règle rien et hérite du défaut du parc.
+   *
+   * `☠` Les trois états sont DISTINCTS (`autonomie/reglage-plafond.ts`) :
+   * confondre « non réglé » et « illimité » afficherait un fil neuf comme
+   * délibérément affranchi.
+   */
+  readonly plafondAutonomie: string;
+}
+
+/**
+ * `☠` `null` — fil absent du registre — rend la forme la plus CONSERVATRICE
+ * (aucune plage, plafond hérité) plutôt qu'un champ manquant que l'écran lirait
+ * comme « pas encore chargé ». Le cas ne se produit pas en pratique : le
+ * gestionnaire de conversations lit ce même registre.
+ */
+export function versAutonomieFilApi(conversation: Conversation | null): AutonomieFilApi {
+  if (conversation === null) {
+    return { autonomieDebut: null, autonomieFin: null, autonomieObjectif: null, plafondAutonomie: 'herite' };
+  }
+  return {
+    autonomieDebut: conversation.autonomieDebut,
+    autonomieFin: conversation.autonomieFin,
+    autonomieObjectif: conversation.autonomieObjectif,
+    // Même encodage que `vue-rallonges.ts` : une seule version de la forme
+    // écrite, déjà testée sur `conversation.plafond_autonomie`.
+    plafondAutonomie: ecrireReglagePlafond(conversation.plafondAutonomie) ?? 'herite',
+  };
+}
+
+export interface ConversationApi extends AutonomieFilApi {
   readonly id: string;
   readonly titre: string;
   readonly creeA: number;
@@ -175,18 +221,28 @@ export function versEvenementApi(ev: EvenementConversation): EvenementApi {
   };
 }
 
-export function versConversationApi(entree: {
-  readonly id: string;
-  readonly titre: string;
-  readonly creeA: number;
-  readonly majA: number;
-  readonly active: boolean;
-  readonly contextePct: number | null;
-  readonly compactions?: number;
-  readonly modele?: string | null;
-  readonly effort?: string | null;
-  readonly machine?: string | null;
-}): ConversationApi {
+/**
+ * `☠` `autonomie` est un paramètre OBLIGATOIRE, jamais un défaut optionnel :
+ * l'entrée du port ne la porte pas (elle vit dans le registre), et un paramètre
+ * facultatif ferait servir en silence « aucune plage, plafond hérité » à chaque
+ * appelant qui l'oublie — c'est-à-dire exactement l'affirmation fausse qu'on
+ * vient de corriger. Le typecheck force chaque site d'appel à la fournir.
+ */
+export function versConversationApi(
+  entree: {
+    readonly id: string;
+    readonly titre: string;
+    readonly creeA: number;
+    readonly majA: number;
+    readonly active: boolean;
+    readonly contextePct: number | null;
+    readonly compactions?: number;
+    readonly modele?: string | null;
+    readonly effort?: string | null;
+    readonly machine?: string | null;
+  },
+  autonomie: AutonomieFilApi,
+): ConversationApi {
   return {
     id: entree.id,
     titre: entree.titre,
@@ -198,6 +254,10 @@ export function versConversationApi(entree: {
     model: entree.modele ?? null,
     effort: entree.effort ?? null,
     machine: entree.machine ?? null,
+    autonomieDebut: autonomie.autonomieDebut,
+    autonomieFin: autonomie.autonomieFin,
+    autonomieObjectif: autonomie.autonomieObjectif,
+    plafondAutonomie: autonomie.plafondAutonomie,
   };
 }
 

@@ -53,20 +53,43 @@ function hEtatFil() {
 }
 
 /**
- * Ce que l'écran sait de la fenêtre d'autonomie — c'est-à-dire presque rien.
+ * La fenêtre d'autonomie du fil, lue de l'API — plus du DOM.
  *
- * ☠ AUCUNE route ne la relit. `POST …/autonomie` l'écrit dans le registre
- * (`autonomieDebut / autonomieFin / autonomieObjectif`, migration 15) et rien ne
- * la ressert : le libellé n'existe que si Chris a posé la plage depuis cet
- * onglet, et retombe à « Autonomie » au premier rechargement, plage active ou
- * non. L'ancien menu traduisait ce vide par « aucune plage » — une AFFIRMATION
- * sur une donnée que personne n'a lue, et la nuit c'est l'affirmation la plus
- * coûteuse de tout l'écran. On dit « non relevée ».
+ * ☠ Jusqu'au 08/08 AUCUNE route ne la relisait : `POST …/autonomie` l'écrivait
+ * dans le registre (migration 15) et rien ne la resservait. Le libellé n'existait
+ * donc que si Chris venait de poser la plage depuis cet onglet, et retombait à
+ * « Autonomie » au premier rechargement, plage active ou non — l'ancien menu
+ * traduisait ce vide par « aucune plage », une AFFIRMATION sur une donnée que
+ * personne n'avait lue, et la nuit c'est la plus coûteuse de tout l'écran.
+ * `GET /orchestrator/conversations[/:id]` sert désormais les quatre champs.
+ *
+ * ☠ `connu: false` ne subsiste que pour un fil pas encore chargé ou un
+ * déploiement dont l'API ne sert pas ces champs — JAMAIS pour un fil sans plage,
+ * qui est une réponse et se dit « aucune plage ».
  */
 function hEtatAutonomie() {
-  const libelle = (document.getElementById('hAutonomieLabel') || {}).textContent || '';
-  if (libelle === '' || libelle === 'Autonomie') return { connu: false, valeur: 'non relevée' };
-  return { connu: true, valeur: libelle.replace(/^Autonomie\s*/, '') || 'posée' };
+  const a = (typeof hOrch !== 'undefined' && hOrch && hOrch.autonomie) || null;
+  if (a === null) return { connu: false, valeur: 'non relevée', sous: 'pas encore lue', plafond: null, objectif: null };
+  if (a.debut === null || a.fin === null) {
+    const sous = 'chaque mandat attend ton clic';
+    return { connu: true, valeur: 'aucune plage', sous, plafond: a.plafond, objectif: null };
+  }
+  return { connu: true, ...hFenetreAutonomie(a.debut, a.fin), plafond: a.plafond, objectif: a.objectif };
+}
+
+/**
+ * Une plage datée, dite en français. ☠ « expirée » est un état À PART entière :
+ * une plage échue et une plage à venir affichaient toutes deux « programmée »,
+ * ce qui laissait croire à une délégation encore devant soi alors qu'elle est
+ * derrière — l'erreur exactement inverse de celle qu'on veut éviter la nuit.
+ */
+function hFenetreAutonomie(debut, fin) {
+  const t = window.HTemps;
+  const quand = (ms) => (t ? t.heureFil(ms) : new Date(ms).toLocaleString('fr-FR'));
+  const maintenant = Date.now();
+  if (maintenant >= fin) return { valeur: 'expirée', sous: `échue à ${quand(fin)}` };
+  if (maintenant >= debut) return { valeur: 'active', sous: `jusqu’à ${quand(fin)}` };
+  return { valeur: 'programmée', sous: `à partir de ${quand(debut)}` };
 }
 
 /**
@@ -94,7 +117,7 @@ function hTuilesFil(e) {
     ${hTuile('Session', session, sousSession, '')}
     ${hTuile('Machine', e.machine || 'aucune',
       e.machine ? 'porte ce fil' : 'échoue dès la 2ᵉ en ligne', e.machine ? '' : 'veille')}
-    ${hTuile('Autonomie', a.valeur, a.connu ? 'mandats sans clic' : 'non resservie par l’API', '')}
+    ${hTuile('Autonomie', a.valeur, a.sous, '')}
   </div>`;
 }
 
@@ -139,16 +162,32 @@ function hGroupeExecutionFil(e) {
   </div>`;
 }
 
-/** Ce qui peut partir sans Chris : la plage déléguée et les rappels posés. */
+/**
+ * Ce qui peut partir sans Chris : la plage déléguée, le plafond du fil, les
+ * rappels posés.
+ *
+ * ☠ Le plafond est affiché À CÔTÉ de la plage, pas ailleurs : c'est lui qui dit
+ * combien d'équipes partent sans clic PENDANT la plage. Séparés, on lisait une
+ * délégation ouverte sans savoir jusqu'où elle allait.
+ */
 function hGroupeAutomatisationFil() {
   const a = hEtatAutonomie();
   const compte = (document.getElementById('hRappelsCount') || {}).textContent || '';
+  const objectif = a.objectif ? hLigneKv('Objectif confié', a.objectif, false) : '';
+  const note = a.connu
+    ? `<div class="h-note">Pendant la plage, les mandats de ce fil démarrent sans ton clic, dans la
+       limite du plafond. Une demande de relèvement s’affiche au-dessus du composeur : rien n’est
+       accordé tant que tu ne l’as pas tranchée.</div>`
+    : `<div class="h-note">Fil pas encore chargé, ou déploiement qui ne ressert pas ces champs :
+       l’écran n’en sait rien, et ne l’invente pas.</div>`;
   return `<div class="h-grp"><div class="gh">Automatisation</div>
     ${hOrchRow('Plage d’autonomie', 'hSheetAutonomie()', a.valeur)}
+    <div class="h-kv">
+      ${hLigneKv('Plafond de ce fil', hPlafondLisible(a.plafond))}
+      ${objectif}
+    </div>
     ${hOrchRow('Rappels programmés', 'hSheetRappels()', compte)}
-    <div class="h-note">L’état de la plage n’est pas resservi par l’API : après un rechargement de
-      la page il redevient illisible, même si la plage tourne. Le plafond d’équipes lançables sans
-      clic n’est exposé par aucune route — il ne peut donc pas s’afficher ici.</div>
+    ${note}
   </div>`;
 }
 
