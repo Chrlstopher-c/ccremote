@@ -120,6 +120,15 @@ export class CollecteurConversation {
   #partiel: { type: TypeEvenementConversation; contenu: string } | null = null;
   /** Tour interne (compaction) : rien n'est persisté, le texte est capté à part. */
   #muet = false;
+  /**
+   * L'opérateur vient de couper ce tour. `☠` Le SDK termine alors sur un subtype
+   * d'erreur (`error_during_execution` mesuré le 07/08) : sans ce drapeau, le fil
+   * affiche DEUX lignes rouges à la suite — « Réponse interrompue. » puis « Le
+   * tour s'est terminé sur une erreur ». La seconde décrit la conséquence du
+   * geste de Chris, pas une panne, et lui fait chercher un incident qui n'existe
+   * pas.
+   */
+  #interrompu = false;
   #sature = false;
   #capture = '';
   #finTour: ((texte: string) => void) | null = null;
@@ -167,6 +176,7 @@ export class CollecteurConversation {
     this.#partiel = null;
     this.#genere = false;
     this.#streameCeTour = false;
+    this.#interrompu = true;
   }
 
   /**
@@ -342,9 +352,16 @@ export class CollecteurConversation {
       rendre?.(texte.trim());
       return;
     }
+    // `☠` Un tour COUPÉ par l'opérateur se termine sur un subtype d'erreur
+    // (`error_during_execution`, mesuré le 07/08) : c'est la conséquence normale
+    // du geste, pas une panne. Sans ce drapeau le fil portait deux lignes rouges
+    // à la suite, et la seconde envoyait chercher un incident inexistant. Le
+    // drapeau se consomme ici — le tour suivant repart propre.
+    const interrompu = this.#interrompu;
+    this.#interrompu = false;
     const subtype = (message as { subtype?: string }).subtype;
     if (subtype !== undefined && subtype !== 'success') {
-      this.#persister('erreur', `Le tour s'est terminé sur une erreur (${subtype}).`);
+      if (!interrompu) this.#persister('erreur', `Le tour s'est terminé sur une erreur (${subtype}).`);
       return;
     }
     this.#persister('resultat', '');
