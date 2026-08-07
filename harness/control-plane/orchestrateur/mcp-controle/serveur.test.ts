@@ -135,10 +135,27 @@ describe('surface d’outils (A.2.2)', () => {
   //     n'apparaît pas dans ma session » et lui a demandé d'aller vérifier la
   //     liste des outils exposés — à quelqu'un qui ne lit pas de code.
   // Ce test ferme la boucle : les deux listes changent ensemble, ou le build casse.
+  // ☠ TOUS les ports optionnels sont câblés ici, et c'est le cœur du test : les
+  // outils conditionnels sont précisément ceux qu'on oublie d'annoncer, puisqu'ils
+  // n'apparaissent dans aucune liste par défaut. Les QUATRE outils machine livrés
+  // le 06/08 (`etat_machine`, `reveiller_machine`, `etat_service`,
+  // `piloter_service`) sont restés absents du mandat pendant tout ce temps —
+  // l'orchestrateur ignorait qu'il pouvait réveiller le PC de Chris, une capacité
+  // que Chris avait justement demandée. Un port ajouté sans son annonce doit faire
+  // échouer ce test, pas passer inaperçu.
   test('☠ chaque outil servi est ANNONCÉ dans le mandat — sinon il n’existe pas pour le modèle', () => {
     const servis = construireOutilsControle({
       ...deps,
+      explorateurProjets: { explorerProjets: async () => ({ racine: '/', chemin: '/', entrees: [] }) },
       chercheurProjets: { rechercherProjets: async () => ({ motif: 'x', chemin: '/', occurrences: [] }) },
+      lecteurFichier: {
+        lireFichier: async () => ({ ok: true, racine: '/', chemin: '/x', contenu: '', octets: 0, tronque: false }),
+      },
+      lecteurMetriquesHote: { metriquesHote: async () => null },
+      emetteurReveilPc: { reveiller: async () => {} },
+      lecteurServiceSysteme: { etatService: async () => null },
+      piloteServiceSysteme: { redemarrer: async () => ({ ok: false, motif: 'autre', detail: 'ok' }) },
+      compacteurContexte: { demander: () => ({ arme: true, detail: 'ok' }) },
     }).map((o) => o.name);
     expect(servis.filter((nom) => !MANDAT_ORCHESTRATEUR.includes(nom))).toEqual([]);
   });
