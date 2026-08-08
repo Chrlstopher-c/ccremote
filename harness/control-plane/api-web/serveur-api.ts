@@ -51,6 +51,7 @@ import {
   type PortMandats,
 } from './vue-conversations.ts';
 import { versRallongeApi, type PortRallonges } from './vue-rallonges.ts';
+import { validerFenetre } from '../autonomie/index.ts';
 import {
   cheminPieceRelue,
   ErreurPieceJointe,
@@ -557,11 +558,18 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     const debut = typeof corps['start'] === 'number' ? corps['start'] : null;
     const fin = typeof corps['end'] === 'number' ? corps['end'] : null;
     const objectif = typeof corps['goal'] === 'string' ? corps['goal'] : null;
-    // `☠` Refus AVANT écriture, et message explicite : une fenêtre dont la fin
-    // précède le début serait posée sans jamais s'ouvrir — l'opérateur croirait
-    // avoir délégué une plage et retrouverait son parc à l'arrêt au matin.
-    if (debut !== null && fin !== null && fin <= debut) {
-      throw new ErreurApi(400, "la fin de la fenêtre doit suivre son début — sinon elle ne s'ouvre jamais");
+    // `☠` Refus AVANT écriture, et par la MÊME validation que les outils MCP
+    // (`autonomie/fenetre-autonomie.ts`) : deux jeux de bornes sur la même
+    // colonne divergeraient au premier ajustement, et le côté oublié serait
+    // celui que personne ne regarde tourner. Une fenêtre dont la fin précède le
+    // début serait posée sans jamais s'ouvrir — l'opérateur croirait avoir
+    // délégué une plage et retrouverait son parc à l'arrêt au matin.
+    if (debut !== null && fin !== null) {
+      try {
+        validerFenetre(debut, fin, deps.maintenant?.() ?? Date.now());
+      } catch (erreur) {
+        throw requeteInvalide(erreur instanceof Error ? erreur.message : 'fenêtre invalide');
+      }
     }
     deps.registre.conversations.poserFenetreAutonomie(id, debut, fin, objectif);
     const pose = debut !== null && fin !== null;

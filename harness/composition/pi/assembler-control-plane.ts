@@ -340,6 +340,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       // suivre jusqu'ici — sinon l'orchestrateur lit l'autonomie d'un autre fil,
       // ou rien du tout.
       conversationId,
+      // `☠` Le MÊME défaut de parc que celui qui tranche l'autorisation d'un
+      // mandat (`deciderAutorisation`, plus bas), et `null` traverse tel quel :
+      // sans lui, `ajuster_autonomie` comparerait une baisse de plafond à la
+      // valeur d'usine et refuserait une baisse réelle sur un parc affranchi.
+      plafondAutonomieParc: plafondParcDefaut,
       repertoireProjets: options.repertoireProjets,
       // `☠` Le MÊME chemin que celui qui sert l'interface depuis le 01/08
       // (`pilotage` sur le canal de contrôle), et non plus un port fantôme :
@@ -764,10 +769,15 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       // Le clic de Chris — même chemin que l'autonomie, seule l'origine change.
       approuver: (id) => dispatcherMandatAutorise(id, 'humain'),
     },
-    // `☠` Demandes de rallonge (migration 27) : `approuver` tranche PUIS applique
-    // le réglage au fil — deux écritures dans cet ordre précis, jamais l'inverse,
-    // sinon un plafond appliqué sur une demande qui échoue à se trancher (double
-    // clic, deux onglets) laisserait un réglage posé sans demande qui le justifie.
+    // `☠` Demandes d'autonomie (migrations 27 et 29) : `approuver` tranche PUIS
+    // applique le réglage au fil — deux écritures dans cet ordre précis, jamais
+    // l'inverse, sinon un réglage appliqué sur une demande qui échoue à se
+    // trancher (double clic, deux onglets) resterait posé sans demande qui le
+    // justifie.
+    //
+    // `☠` Les deux volets sont INDÉPENDANTS et conditionnés à leur présence :
+    // une demande de plage ne porte aucun plafond, et écrire `herite` « par
+    // défaut » ferait perdre au fil un plafond que Chris lui avait donné.
     rallonges: {
       enAttente: () => registre.rallonges.enAttente(),
       refuser: (id) => registre.rallonges.trancher(id, 'refusee', "refusée par l'opérateur"),
@@ -775,7 +785,17 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
         const demande = registre.rallonges.lire(id);
         if (demande === null || demande.statut !== 'en_attente') return false;
         if (!registre.rallonges.trancher(id, 'accordee', "accordée par l'opérateur")) return false;
-        registre.conversations.reglerPlafondAutonomie(demande.conversationId, demande.plafondDemande);
+        if (demande.plafondDemande !== null) {
+          registre.conversations.reglerPlafondAutonomie(demande.conversationId, demande.plafondDemande);
+        }
+        if (demande.fenetreDebut !== null && demande.fenetreFin !== null) {
+          registre.conversations.poserFenetreAutonomie(
+            demande.conversationId,
+            demande.fenetreDebut,
+            demande.fenetreFin,
+            demande.fenetreObjectif,
+          );
+        }
         return true;
       },
     },

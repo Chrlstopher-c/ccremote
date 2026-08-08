@@ -34,7 +34,7 @@ describe('DepotRallonges', () => {
 
     // La décision seule n'écrit rien sur le fil : c'est l'appelant (route API)
     // qui applique le réglage, exactement comme le fait la composition réelle.
-    registre.conversations.reglerPlafondAutonomie(FIL, tranchee!.plafondDemande);
+    registre.conversations.reglerPlafondAutonomie(FIL, tranchee!.plafondDemande!);
     const conv = registre.conversations.lire(FIL);
     expect(conv?.plafondAutonomie).toEqual({ type: 'valeur', max: 80 });
   });
@@ -60,7 +60,7 @@ describe('DepotRallonges', () => {
     });
     registre.rallonges.trancher('r3', 'accordee', 'accordée');
     const demande = registre.rallonges.lire('r3');
-    registre.conversations.reglerPlafondAutonomie(FIL, demande!.plafondDemande);
+    registre.conversations.reglerPlafondAutonomie(FIL, demande!.plafondDemande!);
     const conv = registre.conversations.lire(FIL);
     expect(conv?.plafondAutonomie).toEqual({ type: 'illimite' });
   });

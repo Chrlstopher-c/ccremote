@@ -497,6 +497,15 @@
 <script src="/static/harness-fil-bas.js?v={{ v }}"></script>
 <script src="/static/harness-pieces-jointes.js?v={{ v }}"></script>
 <script src="/static/harness-orchestrateur.js?v={{ v }}"></script>
+<!-- ☠ Ordre imposé, et ce n'est pas cosmétique : ces deux modules ont été sortis
+     de `harness-orchestrateur.js` et lisent ses `const` de portée globale
+     lexicale (`hOrch`) — en zone morte tant que ce script n'a pas tourné. Aucun
+     des deux ne rend quoi que ce soit au chargement, mais les déclarer AVANT ne
+     survivrait pas au premier init qu'on y ajouterait.
+     ☠ `harness-orch-options.js` reste APRÈS : sa feuille « ··· » appelle
+     `hPlafondLisible`, qui vit désormais dans `harness-rallonges.js`. -->
+<script src="/static/harness-appels-outils.js?v={{ v }}"></script>
+<script src="/static/harness-rallonges.js?v={{ v }}"></script>
 <script src="/static/harness-orch-options.js?v={{ v }}"></script>
 <script src="/static/harness-notifications.js?v={{ v }}"></script>
 <script src="/static/harness-autonomie.js?v={{ v }}"></script>

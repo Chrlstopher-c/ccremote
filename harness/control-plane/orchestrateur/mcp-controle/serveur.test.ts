@@ -93,7 +93,16 @@ describe('surface d’outils (A.2.2)', () => {
   //     CONSULTER son plafond (`mon_autonomie`), jamais en demander plus : arrivé
   //     au mur, sa seule option restait d'attendre le prochain clic de Chris sur
   //     un mandat, sans pouvoir seulement dire pourquoi il en faudrait davantage.
-  test('expose exactement les 24 outils spécifiés — ni plus, ni moins', () => {
+  //   `demander_fenetre_autonomie`, `ajuster_autonomie`, `terminer_autonomie`
+  //     (2026-08-08) — la fenêtre d'autonomie ne se posait QU'À LA MAIN dans
+  //     l'interface. L'orchestrateur pouvait la consulter et demander un plafond,
+  //     jamais proposer une plage, la resserrer ni la fermer : Chris devait tout
+  //     faire lui-même, y compris fermer une plage dont le chantier était fini.
+  //     `☠` Les deux régimes ne sont pas symétriques, et c'est le cœur de la
+  //     chose : resserrer et terminer partent seuls, ouvrir et prolonger passent
+  //     par un clic — une fenêtre est exactement ce qui dispense l'orchestrateur
+  //     de demander l'autorisation, il ne peut donc pas se l'accorder.
+  test('expose exactement les 27 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -121,6 +130,9 @@ describe('surface d’outils (A.2.2)', () => {
         'supprimer_rappel',
         'nommer_fil',
         'demander_rallonge_autonomie',
+        'demander_fenetre_autonomie',
+        'ajuster_autonomie',
+        'terminer_autonomie',
       ].sort(),
     );
   });

@@ -23,7 +23,10 @@ import type { DemandeRallonge, StatutDemandeRallonge } from './types.ts';
 interface LigneDemandeRallonge {
   id: string;
   conversation_id: string;
-  plafond_demande: string;
+  plafond_demande: string | null;
+  fenetre_debut: number | null;
+  fenetre_fin: number | null;
+  fenetre_objectif: string | null;
   motif: string;
   statut: string;
   cree_a: number;
@@ -50,7 +53,12 @@ function versDemandeRallonge(l: LigneDemandeRallonge): DemandeRallonge {
   return {
     id: l.id,
     conversationId: l.conversation_id,
-    plafondDemande: lireReglagePlafond(l.plafond_demande),
+    // `☠` `null` en base ⇒ `null` ici, jamais `herite` : la demande ne porte
+    // pas sur le plafond, et l'accorder ne doit RIEN écrire dans cette colonne.
+    plafondDemande: l.plafond_demande === null ? null : lireReglagePlafond(l.plafond_demande),
+    fenetreDebut: l.fenetre_debut,
+    fenetreFin: l.fenetre_fin,
+    fenetreObjectif: l.fenetre_objectif,
     motif: l.motif,
     // as : colonne sous CHECK IN ('en_attente','accordee','refusee').
     statut: l.statut as StatutDemandeRallonge,
@@ -63,7 +71,12 @@ function versDemandeRallonge(l: LigneDemandeRallonge): DemandeRallonge {
 export interface CreationDemandeRallonge {
   readonly id: string;
   readonly conversationId: string;
-  readonly plafondDemande: ReglagePlafond;
+  /** `null` ⇒ la demande ne touche pas au plafond (migration 29). */
+  readonly plafondDemande: ReglagePlafond | null;
+  /** Plage demandée (migration 29). Les deux ou aucune — le CHECK le refuse sinon. */
+  readonly fenetreDebut?: number | null;
+  readonly fenetreFin?: number | null;
+  readonly fenetreObjectif?: string | null;
   readonly motif: string;
 }
 
@@ -81,13 +94,17 @@ export class DepotRallonges {
         this.db
           .query(
             `INSERT INTO demande_rallonge
-               (id, conversation_id, plafond_demande, motif, statut, cree_a, maj_a, detail)
-             VALUES (?, ?, ?, ?, 'en_attente', ?, ?, NULL)`,
+               (id, conversation_id, plafond_demande, fenetre_debut, fenetre_fin, fenetre_objectif,
+                motif, statut, cree_a, maj_a, detail)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'en_attente', ?, ?, NULL)`,
           )
           .run(
             creation.id,
             creation.conversationId,
-            versTexteRallonge(creation.plafondDemande),
+            creation.plafondDemande === null ? null : versTexteRallonge(creation.plafondDemande),
+            creation.fenetreDebut ?? null,
+            creation.fenetreFin ?? null,
+            creation.fenetreObjectif ?? null,
             creation.motif,
             maintenant,
             maintenant,

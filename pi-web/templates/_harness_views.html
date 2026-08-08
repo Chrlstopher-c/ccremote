@@ -142,6 +142,21 @@
           </button>
         </div>
       </header>
+      <!-- ☠ Une demande de rallonge ne se voyait QUE depuis une vue de
+           conversation. Or c'est ICI qu'on atterrit, et ici qu'un téléphone
+           reste posé : on pouvait dormir à côté d'une décision que
+           l'orchestrateur attend, bloqué, sans que rien ne le dise.
+           Le bandeau est collé sous la barre de titre, pas posé dans la liste :
+           un repère qu'il faut faire défiler pour voir ne répare pas le
+           problème, il le décale d'un cran. Rempli par `harness-rallonges.js`
+           à partir de la liste DÉJÀ relevée pour le bandeau du fil — aucun
+           sondage supplémentaire. -->
+      <button class="fil-alerte" id="hFilsAlerte" hidden
+        onclick="window.HRallonges.ouvrirFilEnAttente()">
+        <span class="fa-pt"></span>
+        <span class="fa-txt"></span>
+        <span class="fa-chev">›</span>
+      </button>
       <div class="h-liste" id="hFilsListe"></div>
     </div>
 

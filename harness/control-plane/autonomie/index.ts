@@ -13,6 +13,19 @@ export {
 } from './decision-autorisation.ts';
 export type { ContexteAutorisation, DecisionAutorisation, ModeAutorisation } from './decision-autorisation.ts';
 export {
+  DUREE_FENETRE_MAX_MS,
+  DUREE_FENETRE_MIN_MS,
+  ErreurFenetreInvalide,
+  ErreurInstantInvalide,
+  instantLisible,
+  natureFin,
+  naturePlafond,
+  normaliserInstant,
+  validerFenetre,
+  type Fenetre,
+  type NatureChangement,
+} from './fenetre-autonomie.ts';
+export {
   decrirePlafond,
   ecrireReglagePlafond,
   ErreurPlafondInvalide,

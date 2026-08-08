@@ -4,6 +4,16 @@
 // le fil, rien n'est perdu. Le « streaming » = sondage de /events?since=curseur ;
 // chaque bloc SDK (réflexion, outil, texte) arrive comme un événement distinct.
 // H-61 : l'orchestrateur ne crée jamais une équipe seul — il propose un mandat.
+//
+// ☠ DEUX responsabilités sont sorties d'ici le 08/08, et l'ordre de chargement
+// déclaré dans `index.html` fait partie du contrat (il n'y a pas de bundler) :
+//   · `harness-appels-outils.js` → `window.HAppelsOutils` — les cartes d'appels
+//     d'outils du fil (résumé, lignes, détail, clic).
+//   · `harness-rallonges.js` → `window.HRallonges` — les demandes de rallonge du
+//     plafond d'autonomie, leur bandeau et leur repère sur la liste des fils.
+// Les deux sont appelés SANS `?.` : un module absent n'est pas une dégradation
+// acceptable (un fil qui perd ses appels d'outils, une décision jamais montrée),
+// c'est une panne qui doit crier au lieu de se taire.
 
 let hModelsCache = [];
 
@@ -111,6 +121,11 @@ function hRenderConvBar(list, erreur) {
   // corps. Le titre serait resté figé sur le premier fil ouvert, sans erreur.
   if (typeof hMajBarreOrch === 'function') hMajBarreOrch();
   if (typeof hRenderFils === 'function') hRenderFils();
+  // ☠ APRÈS `hRenderFils`, jamais avant : celle-ci réécrit la liste dès qu'elle a
+  // changé, et emporte avec elle les repères « décision en attente » posés sur ses
+  // lignes. Les reposer ici est ce qui les garde vrais après un renommage, un
+  // archivage ou une fin de tour.
+  window.HRallonges.marquerFils();
   const bar = document.getElementById('hConvBar');
   if (!bar) return;
   if (erreur) {
@@ -353,167 +368,6 @@ function hTamponMandat(id, libelle, couleur) {
   delete hOrch.mandats[id];
 }
 
-// ============ Rallonges du plafond d'autonomie (migration 27) ============
-//
-// ☠ CE QUE CECI RÉPARE — le circuit avait une moitié serveur complète et AUCUNE
-// moitié cliente : `grep -c rallonge harness-api.js` rendait 0. L'orchestrateur
-// pouvait poser une demande, elle était écrite en base, servie par
-// `GET /orchestrator/rallonges`, décidable par deux routes… et n'apparaissait
-// nulle part. Elle restait donc en attente indéfiniment pendant qu'il croyait
-// avoir sollicité une décision — « un écran qui ment, avec Chris qui attend un
-// bouton qui ne viendra pas ». Câblé le 08/08, le jour où l'outil
-// `demander_rallonge_autonomie` est entré dans son mandat.
-//
-// ☠ Une rallonge N'EST PAS un mandat : l'accorder n'ouvre aucune équipe, ça
-// applique un plafond au fil qui l'a demandée. Les deux circuits gardent leurs
-// libellés, leurs verdicts et leurs messages séparés — un geste ne doit jamais
-// pouvoir être pris pour l'autre.
-//
-// ☠ Le bandeau vit HORS du fil (`#hRallongesZone`, entre le fil et le
-// composeur) : une demande ne produit aucun évènement de conversation, elle n'a
-// donc aucune ancre dans le fil. Collée au composeur, elle reste visible même
-// quand Chris a remonté la lecture — c'est ce qui rend vraie la promesse « il la
-// verra sans ouvrir un menu ».
-
-const hRallonges = { enAttente: [], tranchees: {}, dernierAppel: 0 };
-/** Cadence PROPRE : le sondage du fil bat à 400 ms en génération, pas cette liste. */
-const HRALLONGE_INTERVALLE_MS = 5000;
-/** Combien de temps un verdict reste lisible sur sa carte avant de disparaître. */
-const HRALLONGE_TAMPON_MS = 12000;
-
-async function hRafraichirRallonges(force = false) {
-  const t = Date.now();
-  if (!force && t - hRallonges.dernierAppel < HRALLONGE_INTERVALLE_MS) return;
-  hRallonges.dernierAppel = t;
-  const r = await HarnessAPI.getRallonges();
-  // ☠ Control plane muet ⇒ on GARDE ce qui est déjà affiché. Vider la zone sur
-  // une erreur réseau ferait disparaître une demande en attente : le mode de
-  // panne qu'on corrige, repeint en incident transitoire.
-  if (r.erreur) return;
-  hRallonges.enAttente = Array.isArray(r.data) ? r.data : [];
-  hRendreRallonges();
-}
-
-/** Nom lisible d'un fil, ou son identifiant tronqué si la liste ne le connaît pas. */
-function hNomFil(conversationId) {
-  const fil = (hOrch.list || []).find((c) => c.id === conversationId);
-  if (fil && fil.titre) return fil.titre;
-  return conversationId ? `fil ${String(conversationId).slice(0, 8)}` : 'fil inconnu';
-}
-
-/**
- * Le réglage en français, jamais le jeton brut.
- *
- * ☠ Trois états DISTINCTS côté domaine (`autonomie/reglage-plafond.ts`) :
- * `herite` n'est pas `illimite`, et aucun des deux n'est un nombre. `null` est
- * un quatrième cas — « pas relevé » — qui n'est pas une réponse du serveur.
- */
-function hPlafondLisible(valeur) {
-  if (valeur === null || valeur === undefined || valeur === '') return 'non relevé';
-  if (valeur === 'illimite') return 'aucun plafond (illimité)';
-  if (valeur === 'herite') return 'défaut du parc';
-  const n = Number.parseInt(valeur, 10);
-  return Number.isSafeInteger(n) ? `${n} équipe${n > 1 ? 's' : ''} sans clic` : String(valeur);
-}
-
-function hCarteRallonge(d) {
-  const verdict = hRallonges.tranchees[d.id];
-  const cible = d.conversationId === hOrch.convId ? 'ce fil' : hNomFil(d.conversationId);
-  const quand = window.HTemps ? window.HTemps.heureFil(d.creeA) : '';
-  const bas = verdict
-    ? `<div class="verdict-stamp" style="color:${verdict.couleur};">${escapeHtml(verdict.libelle)}</div>`
-    : `<div class="macts">
-        <button class="btn btn-accent" onclick="hAccorderRallonge('${hArgJs(d.id)}')">Accorder</button>
-        <button class="btn btn-ghost" style="color:var(--err);border-color:var(--err-soft);"
-          onclick="hRefuserRallonge('${hArgJs(d.id)}')">Refuser</button>
-      </div>`;
-  const titre = verdict
-    ? 'Rallonge du plafond d’autonomie'
-    : 'Rallonge du plafond d’autonomie — ta décision est requise';
-  return `<div class="mandate-card${verdict ? ' resolved' : ''}" id="hRallonge_${escapeHtml(d.id)}">
-    <div class="mh2">${titre}</div>
-    <div class="mb">
-      <div class="mrow"><div class="k">Fil</div><div class="v">${escapeHtml(cible)}</div></div>
-      <div class="mrow"><div class="k">Demandé</div>
-        <div class="v mono">${escapeHtml(hPlafondLisible(d.plafondDemande))}</div></div>
-      <div class="mrow"><div class="k">Motif</div><div class="v">${escapeHtml(d.motif || '— non précisé')}</div></div>
-      <div class="mrow"><div class="k">Posée</div><div class="v">${escapeHtml(quand || '—')}</div></div>
-    </div>
-    ${bas}
-  </div>`;
-}
-
-function hRendreRallonges() {
-  const zone = document.getElementById('hRallongesZone');
-  if (!zone) return;
-  const maintenant = Date.now();
-  // Purge bornée : un verdict n'est gardé que le temps d'être lu, jamais plus.
-  for (const id of Object.keys(hRallonges.tranchees)) {
-    if (maintenant - hRallonges.tranchees[id].at > HRALLONGE_TAMPON_MS) delete hRallonges.tranchees[id];
-  }
-  const vues = [...hRallonges.enAttente];
-  for (const id of Object.keys(hRallonges.tranchees)) {
-    if (!vues.some((d) => d.id === id)) vues.push(hRallonges.tranchees[id].demande);
-  }
-  // ☠ Signature avant écriture : cette zone est recalculée à chaque battement du
-  // sondage, et réécrire un HTML identique remplacerait les boutons SOUS le
-  // doigt de Chris — au moment précis où il vise l'un des deux.
-  const sig = JSON.stringify(vues.map((d) => [d.id, d.statut, !!hRallonges.tranchees[d.id]]));
-  if (zone.dataset.sig !== sig) {
-    zone.dataset.sig = sig;
-    zone.innerHTML = vues.map(hCarteRallonge).join('');
-  }
-  zone.hidden = vues.length === 0;
-}
-
-/** Le refus du serveur dit-il « c'était déjà tranché » ? (409 du control plane) */
-function hRallongeDejaTranchee(message) {
-  return /déjà tranchée|inconnue/i.test(String(message || ''));
-}
-
-/**
- * ☠ Une demande tranchée AILLEURS ne redevient jamais cliquable : le clic
- * suivant échouerait exactement pareil. On tamponne ce qui s'est réellement
- * passé au lieu de proposer de recommencer — même règle que les mandats, où une
- * carte périmée a coûté un incident le 01/08.
- */
-function hTamponRallonge(id, demande, libelle, couleur) {
-  const restant = demande || hRallonges.enAttente.find((d) => d.id === id) || null;
-  hRallonges.enAttente = hRallonges.enAttente.filter((d) => d.id !== id);
-  if (restant) {
-    const heure = new Date().toTimeString().slice(0, 8);
-    hRallonges.tranchees[id] = { demande: restant, libelle: `${libelle} à ${heure}`, couleur, at: Date.now() };
-  }
-  hRendreRallonges();
-}
-
-async function hAccorderRallonge(id) {
-  const demande = hRallonges.enAttente.find((d) => d.id === id) || null;
-  const r = await HarnessAPI.approveRallonge(id);
-  if (!r.ok) {
-    // Le `detail` du serveur est écrit pour être lu : on le montre tel quel.
-    if (hRallongeDejaTranchee(r.erreur)) hTamponRallonge(id, demande, 'Déjà tranchée ailleurs', 'var(--ink-3)');
-    showToast(r.erreur || 'Décision non transmise', 'warn');
-    return;
-  }
-  hTamponRallonge(id, demande, 'Accordée — nouveau plafond appliqué', 'var(--ok)');
-  showToast(r.effet || 'Rallonge accordée', 'ok');
-  // Le plafond du fil vient de changer : la liste le porte, la feuille le lit.
-  void hLoadConvList();
-}
-
-async function hRefuserRallonge(id) {
-  const demande = hRallonges.enAttente.find((d) => d.id === id) || null;
-  const r = await HarnessAPI.rejectRallonge(id);
-  if (!r.ok) {
-    if (hRallongeDejaTranchee(r.erreur)) hTamponRallonge(id, demande, 'Déjà tranchée ailleurs', 'var(--ink-3)');
-    showToast(r.erreur || 'Refus non transmis', 'warn');
-    return;
-  }
-  hTamponRallonge(id, demande, 'Refusée — le plafond ne change pas', 'var(--err)');
-  showToast(r.effet || 'Rallonge refusée', 'warn');
-}
-
 // ---- ouverture + rendu complet d'un fil ------------------------------------
 async function hOpenConversation(id) {
   // ☠ Reprise, pas reconstruction : on reprend le sondage là où il en était.
@@ -600,7 +454,7 @@ async function hOpenConversation(id) {
   // ☠ `force` : à l'ouverture d'un fil on ne veut pas attendre la cadence de la
   // liste. Une demande posée pendant qu'on était ailleurs doit être visible tout
   // de suite — elle bloque déjà le travail de l'orchestrateur.
-  void hRafraichirRallonges(true);
+  void window.HRallonges.rafraichir(true);
 }
 
 /**
@@ -663,7 +517,6 @@ function hMajPiedGroupe(groupe, at) {
   groupe.querySelector(':scope > .msg-pied')?.remove();
   groupe.appendChild(pied);
 }
-function hToolLabel(name) { const p = String(name).split('__'); return p[p.length - 1] || String(name); }
 
 /**
  * Rend le Markdown d'une réponse. Réutilise `renderMarkdown` (chat.js) —
@@ -692,207 +545,6 @@ function hPeindreTexte(noeud, contenu, live) {
  * `☠` Réutilise les classes du chat (`.think`, `.tool`, `.md`, `.codeblock`) —
  * même ADN visuel, une seule définition à maintenir.
  */
-// ── Groupe d'appels d'outils ────────────────────────────────────────────────
-// ☠ Troisième rendu en un jour, et seul celui-ci tient. D'abord des blocs pleine
-// largeur empilant du JSON brut — illisibles. Puis une timeline à filet vertical
-// — compacte, mais une ligne de bruit par appel quand même. Le rendu retenu
-// (celui de Claude) traite le vrai problème : les appels CONSÉCUTIFS sont
-// regroupés sous un seul résumé, et la carte ne s'ouvre que si on veut le
-// détail. Sur un tour à huit outils, on lit une ligne au lieu de huit.
-
-/**
- * Libellé humain d'un appel. `☠` `mcp__ccremote-controle__lister_equipes` ne dit
- * rien à la lecture : on garde le verbe, et le nom technique reste dans le
- * détail pour qui le cherche.
- */
-function hOutilLisible(nom, detail) {
-  const court = hToolLabel(nom).replace(/_/g, ' ');
-  const titre = court.charAt(0).toUpperCase() + court.slice(1);
-  if (!detail) return titre;
-  // Un premier paramètre parlant vaut mieux qu'un JSON tronqué au hasard.
-  try {
-    const o = JSON.parse(detail);
-    const cle = ['projet', 'chemin', 'missionId', 'equipe', 'query', 'titre'].find((k) => typeof o[k] === 'string');
-    return cle ? `${titre} · ${String(o[cle]).split('/').pop()}` : titre;
-  } catch { return titre; }
-}
-
-/**
- * Familles d'outils, pour résumer un groupe en langage naturel.
- * ☠ L'ordre compte : le premier motif qui matche gagne. `suivre_equipe` doit
- * donc être testé avant le motif générique `equipe`, sinon un suivi se lirait
- * comme une action sur le parc.
- */
-const H_FAMILLES = [
-  { re: /^(lister_equipes|etat_equipe|rapport_equipe|suivre_equipes?|carburant_parc|historique_equipe|mon_autonomie)$/, verbe: 'Consulté', quoi: 'le parc' },
-  { re: /^(lister_projets|explorer_projets|rechercher_projets|lire_fichier)$/, verbe: 'Exploré', quoi: 'les projets' },
-  { re: /^creer_equipe$/, verbe: 'Proposé', quoi: 'un mandat' },
-  { re: /^(envoyer_a_equipe|interrompre_equipe|arreter_equipe|relancer_equipe|definir_budget)$/, verbe: 'Agi', quoi: 'sur une équipe' },
-  { re: /^(programmer_rappel|mes_rappels|modifier_rappel|supprimer_rappel|mettre_rappel_en_pause|reprendre_rappel)$/, verbe: 'Géré', quoi: 'les rappels' },
-  { re: /^nommer_fil$/, verbe: 'Nommé', quoi: 'ce fil' },
-  { re: /^(WebSearch|WebFetch)$/, verbe: 'Cherché', quoi: 'sur le web' },
-  { re: /^(Read|Grep|Glob)$/, verbe: 'Lu', quoi: 'des fichiers' },
-];
-
-/** Accord du complément quand une famille est appelée plusieurs fois. */
-function hFamilleDe(nom) {
-  const court = hToolLabel(nom);
-  return H_FAMILLES.find((f) => f.re.test(court)) ?? { verbe: 'Utilisé', quoi: 'un outil' };
-}
-
-/**
- * Résumé d'un groupe — la seule ligne visible au repos.
- *
- * ☠ Résumé SÉMANTIQUE, pas un compteur : « 5 appels d'outils » n'apprend rien.
- * On dit ce qui a été fait, par famille — « Consulté le parc, proposé un
- * mandat » — avec le verbe en avant et le complément en retrait, comme dans le
- * rendu de Claude. Le détail exact reste à un clic.
- *
- * ☠ Les échecs sont comptés à part et signalés : un échec doit se voir AVANT
- * d'ouvrir la carte, sinon il se lit comme un appel réussi.
- */
-function hResumeGroupe(carte) {
-  const lignes = [...carte.querySelectorAll('.tc-ligne')];
-  const echecs = lignes.filter((l) => l.classList.contains('err')).length;
-  // Regroupe par famille en PRÉSERVANT l'ordre d'appel : c'est l'ordre dans
-  // lequel l'orchestrateur a travaillé, et il raconte quelque chose.
-  const parFamille = [];
-  for (const ligne of lignes) {
-    const f = hFamilleDe(ligne.dataset.outil || '');
-    const vu = parFamille.find((x) => x.verbe === f.verbe && x.quoi === f.quoi);
-    if (vu) vu.n += 1;
-    else parFamille.push({ ...f, n: 1 });
-  }
-  const morceaux = parFamille.map((f) => {
-    const comp = f.n > 1 ? `${f.quoi} <span class="tc-n">(${f.n}×)</span>` : f.quoi;
-    return `<span class="tc-v">${escapeHtml(f.verbe)}</span> <span class="tc-n">${comp}</span>`;
-  });
-  const err = echecs > 0 ? ` <span style="color:var(--err);">· ${echecs} en échec</span>` : '';
-  return morceaux.join('<span class="tc-n">, </span>') + err;
-}
-
-/** Réécrit le résumé du groupe qui contient cette ligne. */
-function hMajResumeGroupe(ligne) {
-  const groupe = ligne.closest('.tc');
-  const carte = groupe && groupe.querySelector('.tc-carte');
-  const res = groupe && groupe.querySelector('.tc-res');
-  if (carte && res) res.innerHTML = hResumeGroupe(carte);
-}
-
-/**
- * Range sur la ligne ce que l'appel a demandé et ce qu'il a rendu, puis repeint.
- * ☠ Rappelé à chaque rafraîchissement : c'est le SEUL chemin par lequel un
- * résultat arrivé APRÈS l'appel rejoint sa ligne — la garde d'idempotence de
- * `hAppendEvent` interdit de reposer le nœud.
- */
-function hMajOutil(ligne, ev) {
-  if (!ligne || !ev) return;
-  if (ev.detail) ligne.dataset.detail = ev.detail;
-  if (ev.resultat !== null && ev.resultat !== undefined) ligne.dataset.resultat = ev.resultat;
-  ligne.classList.toggle('err', (ligne.dataset.resultat || '').startsWith('[ÉCHEC DE L’OUTIL]'));
-  const lbl = ligne.querySelector('.tc-lbl');
-  if (lbl) lbl.textContent = hOutilLisible(ligne.dataset.outil || '', ligne.dataset.detail);
-  const corps = ligne.querySelector('.tc-corps');
-  if (corps && corps.classList.contains('ouvert')) {
-    corps.querySelector('.tc-in').innerHTML = hCorpsOutilOrch(ligne);
-  }
-  hMajResumeGroupe(ligne);
-}
-
-/**
- * Détail d'une ligne : les paramètres en « commande », puis la sortie.
- * ☠ `resultat` absent veut dire « pas encore revenu », jamais « vide » : on le
- * DIT. Un outil présenté comme ayant répondu du vide est un mensonge plus
- * coûteux que l'absence d'information.
- */
-function hCorpsOutilOrch(ligne) {
-  const d = ligne.dataset || {};
-  const parts = [
-    `<div class="tc-cmd"><span class="tc-inv">$</span><pre>${escapeHtml(d.outil || '')}`
-    + (d.detail ? ` ${escapeHtml(d.detail)}` : '') + '</pre></div>',
-  ];
-  if (d.resultat === undefined) {
-    parts.push('<div class="tc-attente">Résultat en attente — l’outil n’a pas encore répondu.</div>');
-  } else {
-    const echec = d.resultat.startsWith('[ÉCHEC DE L’OUTIL]');
-    parts.push(`<div class="tc-sortie${echec ? ' err' : ''}" tabindex="0" role="group" aria-label="Sortie de l’outil">${escapeHtml(d.resultat)}</div>`);
-  }
-  return parts.join('');
-}
-
-/**
- * Le groupe ouvert en fin de `groupeAssistant`, ou `null`.
- * ☠ Un groupe se ferme dès que l'orchestrateur reprend la parole : les appels
- * d'APRÈS la réponse appartiennent à une autre séquence et ne doivent pas
- * rejoindre la carte précédente.
- */
-function hGroupeOutilsOuvert(groupeAssistant) {
-  const dernier = groupeAssistant.lastElementChild;
-  return dernier && dernier.classList.contains('tc') && dernier.dataset.clos !== '1' ? dernier : null;
-}
-
-/** Ferme le groupe d'outils courant — appelé dès que l'agent reprend la parole. */
-function hCloreGroupeOutils(groupeAssistant) {
-  if (!groupeAssistant) return;
-  const ouvert = hGroupeOutilsOuvert(groupeAssistant);
-  if (ouvert) ouvert.dataset.clos = '1';
-}
-
-/** Crée la coquille d'un groupe : le résumé cliquable et sa carte repliée. */
-function hCreerGroupeOutils() {
-  const g = document.createElement('div');
-  g.className = 'tc';
-  // ☠ `.tc-in` n'est pas décoratif : la grille anime `grid-template-rows`, et
-  // c'est l'enfant qui porte `overflow: hidden` et la bordure. Sans lui, le
-  // contenu déborde pendant la transition et le cadre reste visible fermé.
-  g.innerHTML = `<button class="tc-tete"><span class="tc-res"></span>${HValise.CHEVRON}</button>`
-    + '<div class="tc-carte"><div class="tc-in"></div></div>';
-  return g;
-}
-
-/**
- * Ajoute une ligne d'outil au groupe courant, en en ouvrant un si besoin.
- * Rend la ligne créée, pour que l'appelant y pose son `data-seq`.
- */
-function hAjouterLigneOutil(groupeAssistant, contenu, ev) {
-  const groupe = hGroupeOutilsOuvert(groupeAssistant)
-    || groupeAssistant.appendChild(hCreerGroupeOutils());
-  const ligne = document.createElement('div');
-  ligne.className = 'tc-ligne';
-  ligne.dataset.outil = contenu;
-  ligne.innerHTML = `<button class="tc-btn"><span class="tc-lbl"></span>${HValise.CHEVRON}</button>`
-    + '<div class="tc-corps"><div class="tc-in"></div></div>';
-  groupe.querySelector('.tc-carte > .tc-in').appendChild(ligne);
-  hMajOutil(ligne, ev || {});
-  return ligne;
-}
-
-// ☠ Délégation unique sur le document : les cartes sont recréées à chaque rendu
-// du fil, et rebrancher un écouteur par nœud fuirait à chaque passage.
-document.addEventListener('click', (e) => {
-  const tete = e.target.closest('.tc-tete');
-  if (tete) {
-    const carte = tete.parentElement.querySelector('.tc-carte');
-    if (carte) {
-      const ouvrir = !carte.classList.contains('ouvert');
-      carte.classList.toggle('ouvert', ouvrir);
-      tete.classList.toggle('ouvert', ouvrir);
-    }
-    return;
-  }
-  const btn = e.target.closest('.tc-btn');
-  if (!btn) return;
-  const ligne = btn.closest('.tc-ligne');
-  const corps = ligne && ligne.querySelector('.tc-corps');
-  if (!corps) return;
-  const ouvrir = !corps.classList.contains('ouvert');
-  // Rempli à l'OUVERTURE, jamais figé à la création : le résultat peut arriver
-  // après, et un contenu construit d'avance afficherait « en attente » à jamais.
-  if (ouvrir) corps.querySelector('.tc-in').innerHTML = hCorpsOutilOrch(ligne);
-  corps.classList.toggle('ouvert', ouvrir);
-  btn.classList.toggle('ouvert', ouvrir);
-});
-
 function hBlocNode(type, contenu, live, extra) {
   if (type === 'texte') {
     // ☠ Même corps que la page mission : serif, pleine largeur, aucun fond.
@@ -1044,7 +696,7 @@ function hAppendEvent(ev) {
   // aucun résultat — le défaut qu'on vient précisément de corriger côté serveur.
   const dejaPose = ev.seq !== undefined ? chat.querySelector(`[data-seq="${ev.seq}"]`) : null;
   if (dejaPose) {
-    if (ev.type === 'outil') hMajOutil(dejaPose, ev);
+    if (ev.type === 'outil') window.HAppelsOutils.majLigne(dejaPose, ev);
     return;
   }
 
@@ -1077,7 +729,7 @@ function hAppendEvent(ev) {
   if (ev.type === 'resultat') {
     // Fin de tour : on clôt une séquence encore ouverte (cas d'un tour qui se
     // termine sur un outil, sans reprise de parole).
-    hCloreGroupeOutils(hOrch.cur);
+    window.HAppelsOutils.clore(hOrch.cur);
     hOrch.cur = null; return; // le prochain bloc ouvre un nouveau groupe
   }
 
@@ -1104,7 +756,7 @@ function hAppendEvent(ev) {
   // courant, qui se replie d'un clic. C'est ce qui fait qu'un tour à huit appels
   // se lit sur une ligne au lieu de huit.
   if (ev.type === 'outil') {
-    const ligne = hAjouterLigneOutil(groupe, ev.contenu, ev);
+    const ligne = window.HAppelsOutils.ajouterLigne(groupe, ev.contenu, ev);
     if (ev.seq !== undefined) ligne.dataset.seq = ev.seq;
     // Un appel d'outil fait avancer le tour : le pied doit le suivre, sinon la
     // durée se figerait sur le dernier texte alors que l'équipe travaille encore.
@@ -1121,7 +773,7 @@ function hAppendEvent(ev) {
   // tour finirait dans une carte unique et le résumé ne voudrait plus rien dire.
   // Une réflexion, elle, ne clôt rien — penser entre deux outils est le cours
   // normal d'une séquence.
-  if (ev.type === 'texte') hCloreGroupeOutils(groupe);
+  if (ev.type === 'texte') window.HAppelsOutils.clore(groupe);
   hInsererDansGroupe(groupe, noeud);
 }
 
@@ -1202,7 +854,7 @@ function hRenderPartiel(partiel) {
   // d'outils qui précède est finie. Sans ça, « Terminé » n'apparaîtrait qu'à la
   // fin du tour et on lirait la réponse avec un filet encore ouvert au-dessus —
   // exactement l'ambiguïté que cette ligne existe pour lever.
-  if (partiel.type === 'texte') hCloreGroupeOutils(groupe);
+  if (partiel.type === 'texte') window.HAppelsOutils.clore(groupe);
   groupe.appendChild(noeud);
   hOrch.partielEl = noeud;
 }
@@ -1339,7 +991,7 @@ async function hPollNow() {
   // demande de rallonge peut naître EN COURS de tour — l'orchestrateur appelle
   // l'outil au milieu de sa réflexion — et attendre la fin du tour pour
   // l'afficher, c'est le laisser bloqué pendant tout ce temps.
-  void hRafraichirRallonges();
+  void window.HRallonges.rafraichir();
   if (auBas) hScrollChat();
   // ☠ Compté seulement quand on lit AILLEURS : la pastille dit « il s'est passé
   // ceci pendant que tu remontais », pas « des messages existent ».

@@ -439,18 +439,27 @@ export interface Proposition {
 export type StatutDemandeRallonge = 'en_attente' | 'accordee' | 'refusee';
 
 /**
- * Demande d'un fil pour relever son plafond d'autonomie (migration 27).
+ * Demande d'un fil pour ÉLARGIR son autonomie (migrations 27 et 29) — relever
+ * son plafond, ouvrir ou prolonger sa fenêtre datée, ou les deux.
  *
  * `☠` Distincte d'une `Proposition` (H-61) : celle-ci demande un DROIT DE
  * LANCER PLUS LONGTEMPS SANS CLIC, jamais un mandat d'équipe. L'accorder
- * n'ouvre aucun worker — elle applique `plafondDemande` au fil via
- * `conversations.reglerPlafondAutonomie`, rien de plus.
+ * n'ouvre aucun worker — elle applique un réglage au fil, via
+ * `conversations.reglerPlafondAutonomie` et/ou `poserFenetreAutonomie`.
+ *
+ * `☠` Les deux volets sont INDÉPENDANTS et au moins un est présent (CHECK de
+ * la migration 29). `plafondDemande` à `null` veut dire « ne touche pas au
+ * plafond », jamais « remets-le au défaut ».
  */
 export interface DemandeRallonge {
   readonly id: string;
   readonly conversationId: string;
-  /** Ce que le fil demande. Jamais `herite` : une rallonge demande toujours quelque chose. */
-  readonly plafondDemande: ReglagePlafond;
+  /** Plafond demandé, `null` si la demande ne porte que sur la plage. Jamais `herite`. */
+  readonly plafondDemande: ReglagePlafond | null;
+  /** Plage demandée (migration 29) — les trois ensemble, ou début/fin à `null`. */
+  readonly fenetreDebut: number | null;
+  readonly fenetreFin: number | null;
+  readonly fenetreObjectif: string | null;
   readonly motif: string;
   readonly statut: StatutDemandeRallonge;
   readonly detail: string | null;

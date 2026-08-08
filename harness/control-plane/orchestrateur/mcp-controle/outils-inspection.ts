@@ -14,7 +14,12 @@ import {
   type InterrogateurGit,
   type ProjetRejete,
 } from '../../../projets/index.ts';
-import { seuilComptageAutonomie } from '../../autonomie/index.ts';
+import {
+  AUTO_APPROBATIONS_MAX,
+  decrirePlafond,
+  plafondEffectif,
+  seuilComptageAutonomie,
+} from '../../autonomie/index.ts';
 import { ETATS_HARNESS_TERMINAUX, type Mission, type Registre } from '../../registre/index.ts';
 import { applique, echecInattendu } from './contrat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
@@ -454,6 +459,7 @@ export function autonomieDuFil(
   registre: Registre,
   conversationId: string | null,
   maintenant: number = Date.now(),
+  plafondParcDefaut: number | null = AUTO_APPROBATIONS_MAX,
 ): ContratRetour {
   const intention = 'état de mon autonomie';
   try {
@@ -495,6 +501,10 @@ export function autonomieDuFil(
         ? `Chris a déjà autorisé un mandat ici : les suivants partent seuls (${auto} lancé(s) sans clic).`
         : "Aucun mandat encore autorisé ici : le prochain que tu proposes attendra son clic.",
     );
+    // `☠` Le plafond EFFECTIF, pas le réglage brut du fil : sans ce chiffre,
+    // l'orchestrateur ne peut pas savoir ce que `ajuster_autonomie` acceptera
+    // comme baisse, et il découvre la borne par un refus.
+    lignes.push(`Plafond en vigueur : ${decrirePlafond(plafondEffectif(conv.plafondAutonomie, plafondParcDefaut))}.`);
     return applique(intention, lignes.join('\n'));
   } catch (erreur) {
     journal.error({ err: erreur, conversationId }, 'autonomieDuFil en échec');

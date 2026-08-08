@@ -48,6 +48,8 @@ import {
 } from './outils-rappels.ts';
 import { nommerFil } from './outils-fil.ts';
 import { demanderRallongeAutonomie } from './outils-rallonge.ts';
+import { ajusterAutonomie, demanderFenetreAutonomie, terminerAutonomie } from './outils-autonomie.ts';
+import { AUTO_APPROBATIONS_MAX } from '../../autonomie/index.ts';
 import { etatMachine, reveillerMachine, type EmetteurReveil } from './outils-machine.ts';
 import { etatService, piloterService, SERVICES_ETAT_SERVICE, SERVICES_PILOTER_SERVICE } from './outils-service.ts';
 import { mcpControleLogger as journal } from './logger.ts';
@@ -162,6 +164,18 @@ export interface DependancesServeurControle {
    * autre, ou rien.
    */
   readonly conversationId?: string;
+  /**
+   * Défaut de PARC du plafond d'autonomie, tel que la composition l'a résolu —
+   * `null` ⇒ parc affranchi. Sert à `ajuster_autonomie` pour savoir ce qui
+   * s'applique RÉELLEMENT au fil avant de dire si une valeur le baisse.
+   *
+   * `☠` Optionnel, mais l'oubli ne DÉSACTIVE rien (contrairement à
+   * `utilisationParc`, H-74) : absent ⇒ `AUTO_APPROBATIONS_MAX`, ce qui rend la
+   * garde plus STRICTE, jamais plus permissive. Le seul risque est un refus
+   * excessif sur un parc affranchi, et le message de refus dit contre quelle
+   * valeur la comparaison a été faite.
+   */
+  readonly plafondAutonomieParc?: number | null;
 }
 
 /** Port de compaction du contexte de la session appelante. */
@@ -276,7 +290,15 @@ function outilsInspection(deps: DependancesServeurControle) {
         "peux pas le deviner autrement. Si une fenêtre est ouverte, son échéance est une " +
         'contrainte réelle — arbitre entre lancer une équipe de plus et consolider.',
       {},
-      async () => protege('mon_autonomie', () => autonomieDuFil(deps.registre, deps.conversationId ?? null)),
+      async () =>
+        protege('mon_autonomie', () =>
+          autonomieDuFil(
+            deps.registre,
+            deps.conversationId ?? null,
+            Date.now(),
+            deps.plafondAutonomieParc === undefined ? AUTO_APPROBATIONS_MAX : deps.plafondAutonomieParc,
+          ),
+        ),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
@@ -564,6 +586,76 @@ function outilsRallonge(deps: DependancesServeurControle) {
   ];
 }
 
+/**
+ * Groupe « autonomie » — l'orchestrateur pilote la fenêtre datée de SON fil
+ * (migration 15). `☠` Deux régimes, arbitrés sur la VALEUR et non sur le nom de
+ * l'outil : resserrer et terminer partent seuls, ouvrir et prolonger passent par
+ * une demande que Chris tranche. Toute la garde vit dans `outils-autonomie.ts`,
+ * jamais dans ces descriptions : une consigne de prompt tient trente tours, pas
+ * trois cents.
+ */
+function outilsAutonomie(deps: DependancesServeurControle) {
+  const fil = (): string | null => deps.conversationId ?? null;
+  const plafondParc = deps.plafondAutonomieParc === undefined ? AUTO_APPROBATIONS_MAX : deps.plafondAutonomieParc;
+  const instant =
+    'Formats acceptés : « maintenant », un décalage relatif (« +8h », « +90min », « +3j »), ' +
+    'ou un instant ISO 8601 avec l’heure (« 2026-08-09T02:00 »). Une date sans heure est refusée.';
+  return [
+    tool(
+      'demander_fenetre_autonomie',
+      "Demande à Chris d'ouvrir une fenêtre d'autonomie sur CE fil, ou de repousser celle en " +
+        'cours. Une fenêtre est une plage datée pendant laquelle tes mandats démarrent sans clic. ' +
+        "C'est une DEMANDE : rien n'est ouvert tant que Chris n'a pas cliqué, et ton autonomie " +
+        "actuelle reste celle en vigueur en attendant. Utilise-le quand il annonce qu'il s'absente " +
+        "ou te confie un chantier long. `objectif` est la consigne qui tiendra pendant la plage : " +
+        "c'est aussi le seul texte que Chris lit pour décider, écris-le pour être compris sans " +
+        'contexte. Une seule demande en attente par fil. Pour RACCOURCIR une fenêtre existante, ' +
+        "c'est `ajuster_autonomie`, qui n'a besoin d'aucun clic.",
+      {
+        fin: z.string().describe(`Échéance de la plage. ${instant}`),
+        objectif: z.string().describe('La consigne qui tient pendant la plage, et le motif que Chris lit.'),
+        debut: z.string().optional().describe(`Début de la plage. Défaut : maintenant. ${instant}`),
+      },
+      async ({ fin, objectif, debut }) =>
+        protege('demander_fenetre_autonomie', () =>
+          demanderFenetreAutonomie(deps.registre, fil(), fin, objectif, debut),
+        ),
+    ),
+    tool(
+      'ajuster_autonomie',
+      "Resserre l'autonomie de CE fil, sans passer par Chris. Trois champs, tous facultatifs, " +
+        'mais au moins un requis : `fin` avance l’échéance de la fenêtre en cours, `objectif` ' +
+        'remplace la consigne de la plage, `plafond` baisse le nombre d’équipes lançables sans ' +
+        'clic. Ces gestes te retirent du pouvoir, donc ils partent seuls. Toute valeur qui ' +
+        "ÉLARGIT est refusée, quel que soit le champ : le refus te dit alors quelle valeur serait " +
+        'acceptable et quel outil demande le reste. Utilise-le quand le travail se termine plus ' +
+        'tôt que prévu, ou quand Chris précise sa consigne en cours de plage.',
+      {
+        fin: z.string().optional().describe(`Nouvelle échéance, plus proche que l’actuelle. ${instant}`),
+        objectif: z.string().optional().describe('Nouvelle consigne pour la plage en cours.'),
+        plafond: z
+          .string()
+          .optional()
+          .describe('Nouveau plafond : un entier strictement inférieur à celui en vigueur.'),
+      },
+      async ({ fin, objectif, plafond }) =>
+        protege('ajuster_autonomie', () =>
+          ajusterAutonomie(deps.registre, fil(), plafondParc, { fin, objectif, plafond }),
+        ),
+    ),
+    tool(
+      'terminer_autonomie',
+      "Ferme la fenêtre d'autonomie de CE fil tout de suite, sans passer par Chris. Les mandats " +
+        'suivants repassent par la règle du premier clic, sauf si un mandat a déjà été autorisé ' +
+        'ici. Appelle-le quand le chantier confié pour la plage est terminé, ou quand tu constates ' +
+        "que continuer sans supervision n'est plus raisonnable. Il ne touche ni au plafond, ni aux " +
+        'équipes déjà lancées. Réouvrir demandera un clic de Chris.',
+      {},
+      async () => protege('terminer_autonomie', () => terminerAutonomie(deps.registre, fil())),
+    ),
+  ];
+}
+
 function outilsBudget(deps: DependancesServeurControle) {
   return [
     tool(
@@ -797,6 +889,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsRappels(deps),
     ...outilsFil(deps),
     ...outilsRallonge(deps),
+    ...outilsAutonomie(deps),
     ...outilsContexte(deps),
     ...outilsExploration(deps),
     ...outilsRecherche(deps),

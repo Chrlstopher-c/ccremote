@@ -850,6 +850,68 @@ const MIGRATION_28 = `
 ALTER TABLE conversation ADD COLUMN mode_rapide INTEGER CHECK (mode_rapide IN (0, 1));
 `;
 
+/**
+ * Migration 29 — une demande de rallonge peut aussi porter une FENÊTRE.
+ *
+ * `☠` Réutilise `demande_rallonge` (migration 27) plutôt que `proposition`, et
+ * la distinction est celle que la migration 27 énonce déjà : approuver une
+ * `proposition` DISPATCHE une équipe (worker, worktree, dépense) ; approuver
+ * une rallonge APPLIQUE un réglage au fil qui l'a demandée. Ouvrir une plage
+ * d'autonomie est un réglage, pas un dispatch — même bouton, même garde « une
+ * seule demande en attente par fil », même lecture pour Chris. Une troisième
+ * table aurait dupliqué ce chemin pour rien.
+ *
+ * `☠` `plafond_demande` devient NULLABLE, ce qui impose une reconstruction de
+ * table (SQLite ne sait pas relâcher un NOT NULL). C'est le prix d'un modèle
+ * juste : une demande de plage ne demande PAS de changer le plafond, et
+ * l'encoder en réécrivant le plafond effectif transformerait un fil en `herite`
+ * en fil à valeur figée — il cesserait de suivre le défaut de parc sans que
+ * personne ne l'ait décidé.
+ *
+ * Trois CHECK portent l'invariant plutôt qu'un commentaire :
+ *   · une demande doit demander QUELQUE CHOSE (un plafond, ou une plage) ;
+ *   · une plage est entière ou absente — un début sans fin serait une fenêtre
+ *     ouverte pour toujours, exactement ce qu'une échéance existe pour fermer ;
+ *   · elle se termine après avoir commencé.
+ */
+const MIGRATION_29 = `
+ALTER TABLE demande_rallonge RENAME TO demande_rallonge_v27;
+DROP INDEX idx_demande_rallonge_attente;
+
+CREATE TABLE demande_rallonge (
+  id                TEXT PRIMARY KEY,
+  conversation_id   TEXT NOT NULL,
+  plafond_demande   TEXT CHECK (
+                      plafond_demande IS NULL
+                      OR plafond_demande = 'illimite'
+                      OR (CAST(plafond_demande AS INTEGER) > 0
+                          AND CAST(CAST(plafond_demande AS INTEGER) AS TEXT) = plafond_demande)
+                    ),
+  fenetre_debut     INTEGER,
+  fenetre_fin       INTEGER,
+  fenetre_objectif  TEXT,
+  motif             TEXT NOT NULL,
+  statut            TEXT NOT NULL CHECK (statut IN ('en_attente', 'accordee', 'refusee')),
+  cree_a            INTEGER NOT NULL,
+  maj_a             INTEGER NOT NULL,
+  detail            TEXT,
+  CHECK (plafond_demande IS NOT NULL OR fenetre_debut IS NOT NULL),
+  CHECK ((fenetre_debut IS NULL) = (fenetre_fin IS NULL)),
+  CHECK (fenetre_fin IS NULL OR fenetre_fin > fenetre_debut)
+) STRICT;
+
+INSERT INTO demande_rallonge
+  (id, conversation_id, plafond_demande, fenetre_debut, fenetre_fin, fenetre_objectif,
+   motif, statut, cree_a, maj_a, detail)
+SELECT id, conversation_id, plafond_demande, NULL, NULL, NULL,
+       motif, statut, cree_a, maj_a, detail
+  FROM demande_rallonge_v27;
+
+DROP TABLE demande_rallonge_v27;
+
+CREATE INDEX idx_demande_rallonge_attente ON demande_rallonge(statut, cree_a DESC);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -879,6 +941,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 26, nom: 'plafond-autonomie-par-fil', sql: MIGRATION_26 },
   { version: 27, nom: 'demande-rallonge-autonomie', sql: MIGRATION_27 },
   { version: 28, nom: 'mode-rapide-conversation', sql: MIGRATION_28 },
+  { version: 29, nom: 'demande-rallonge-fenetre', sql: MIGRATION_29 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

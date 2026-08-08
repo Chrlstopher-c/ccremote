@@ -1025,6 +1025,40 @@
     overflow: hidden; text-overflow: ellipsis; }
   .h-fil-s { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
   .h-fil-chev { color: var(--ink-3); font-size: 17px; flex: 0 0 auto; }
+
+  /* ===== « une décision attend » sur la liste des fils — migration 27 =====
+     ☠ La couleur d'ERREUR, et pas celle d'un compteur : une rallonge en attente
+     BLOQUE l'orchestrateur tant qu'elle n'est pas tranchée. Le contexte d'un fil
+     n'appelle aucun geste, ceci si — deux statuts, deux traitements.
+     ☠ Le rouge est porté par le POINT et par le fond, jamais par le texte : sur
+     le thème sable, `--err` sur `--err-soft` plafonne à 3,2:1 de contraste,
+     illisible à 10,5 px. Le texte reste en `--ink`, le sens reste rouge. */
+  .h-fil-decision { flex: 0 0 auto; display: inline-flex; align-items: center;
+    gap: 5px; padding: 4px 9px; border-radius: 9999px; background: var(--err-soft);
+    color: var(--ink); font-size: 10.5px; font-weight: 600; letter-spacing: .02em;
+    white-space: nowrap; }
+  .h-fil-decision i { width: 5px; height: 5px; border-radius: 50%;
+    background: var(--err); flex: 0 0 auto; }
+  /* ☠ Collé sous la barre de titre (38 px, elle-même `sticky`) et HORS de la
+     liste défilante : c'est ce qui garantit qu'une demande posée pendant la nuit
+     est vue à la reprise, sans faire défiler quoi que ce soit.
+     ☠ `[hidden]` doit être réaffirmé : la règle du navigateur perd contre le
+     `display: flex` de la classe, et le bandeau resterait visible à vide.
+     ☠ 44 px de haut : la cible se vise au pouce, à une main, sans survol. */
+  .fil-alerte { position: sticky; top: 38px; z-index: 19; display: flex;
+    align-items: center; gap: 10px; width: 100%; min-height: 44px;
+    padding: 9px 16px; text-align: left; border: none;
+    border-bottom: 1px solid var(--line); background: var(--err-soft); }
+  .fil-alerte[hidden] { display: none; }
+  .fil-alerte .fa-pt { width: 8px; height: 8px; border-radius: 50%;
+    background: var(--err); flex: 0 0 auto; }
+  /* Un titre de fil rédigé par un modèle peut porter un mot très long : il passe
+     à la ligne plutôt que de faire déborder la page latéralement. */
+  .fil-alerte .fa-txt { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.35;
+    color: var(--ink); overflow-wrap: anywhere; }
+  .fil-alerte .fa-chev { flex: 0 0 auto; font-size: 17px; color: var(--ink-2); }
+  @media (min-width: 1024px) { .fil-alerte { padding: 9px 28px; } }
+
   /* Les lignes du chat réutilisent leur rendu d'origine, à la taille d'une page. */
   .h-liste .conv-item { padding: 12px 14px !important; border-radius: 12px;
     border: 1px solid var(--line); background: var(--card); font-size: 14.5px !important; }
