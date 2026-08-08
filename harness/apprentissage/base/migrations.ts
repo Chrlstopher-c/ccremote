@@ -71,7 +71,24 @@ CREATE TABLE migration_appliquee (
 ) STRICT;
 `;
 
-export const MIGRATIONS: readonly Migration[] = [{ version: 1, nom: 'schema-initial', sql: MIGRATION_1 }] as const;
+/**
+ * Migration 2 (E10) — horloge de la consolidation périodique (C-4, PLAN-PORTAGE.md E10).
+ * Une ligne unique (`id = 1`, forcé par CHECK) : la date de la dernière passe exécutée (ou
+ * semée — SPEC §5, C-4 : « première observation : on sème l'horodatage et on diffère d'un
+ * intervalle complet »). Ne PORTE aucune décision de suppression : cette table ne fait que
+ * dater, elle ne touche jamais à `lecon`.
+ */
+const MIGRATION_2 = `
+CREATE TABLE consolidation_etat (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  derniere_passe_a INTEGER NOT NULL
+) STRICT;
+`;
+
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
+  { version: 2, nom: 'horloge-consolidation', sql: MIGRATION_2 },
+] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(
   (max, m) => (m.version > max ? m.version : max),

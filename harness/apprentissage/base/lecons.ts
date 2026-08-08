@@ -259,6 +259,40 @@ export function listerLeconsServables(db: Database, projet: string, machine: str
   });
 }
 
+/**
+ * Toutes les leçons de la base, `etat` optionnel pour restreindre — au contraire de
+ * `listerLeconsParProjet`, balaie TOUS les projets (E10, C-4 : la passe de consolidation
+ * examine l'horloge de chaque leçon, quel que soit son projet).
+ */
+export function listerToutesLecons(db: Database, etat?: Lecon['etat']): readonly Lecon[] {
+  return executer('listerToutesLecons', () => {
+    const lignes =
+      etat === undefined
+        ? db.query<LigneLecon, []>('SELECT * FROM lecon').all()
+        : db.query<LigneLecon, [string]>('SELECT * FROM lecon WHERE etat = ?').all(etat);
+    return lignes.map(versLecon);
+  });
+}
+
+/**
+ * Change l'état d'une leçon SANS toucher ses compteurs (E10, C-4 : transitions par horloge).
+ * `☠` Jamais de suppression : `obsolete` est un état comme les autres, la ligne reste
+ * (SPEC §5, C-4 `☠`). Ne lève jamais sur un id inexistant — rend `null`, laisse l'appelant
+ * (une passe de consolidation, jamais bloquante) décider.
+ */
+export function transitionnerEtatLecon(db: Database, id: string, nouvelEtat: Lecon['etat']): Lecon | null {
+  return executer(
+    'transitionnerEtatLecon',
+    () => {
+      const avant = obtenirLecon(db, id);
+      if (avant === null) return null;
+      db.query('UPDATE lecon SET etat = ? WHERE id = ?').run(nouvelEtat, id);
+      return obtenirLecon(db, id);
+    },
+    { id, nouvelEtat },
+  );
+}
+
 export function obtenirPasse(db: Database, missionId: string): PasseApprentissage | null {
   return executer('obtenirPasse', () => {
     const ligne = db

@@ -49,6 +49,7 @@ export type {
 export {
   validerLeconExtraite,
   validerLeconsExtraites,
+  validerOperationCompetence,
   validerVerdictRapprochement,
 } from './extraction/garde-sortie.ts';
 export type { LeconExtraite, ResultatGarde, RelationRapprochement, VerdictRapprochement } from './extraction/garde-sortie.ts';
@@ -65,8 +66,12 @@ export {
   confirmerLecon,
   contredireLecon,
   listerLeconsServables,
+  listerToutesLecons,
+  transitionnerEtatLecon,
 } from './base/lecons.ts';
 export type { ResultatConfirmation, ResultatContradiction } from './base/lecons.ts';
+
+export { enregistrerDernierePasseA, obtenirDernierePasseA } from './base/horloge-consolidation.ts';
 
 export { enfilerPasseApprentissage } from './service/file-attente.ts';
 export type { DependancesFileAttente } from './service/file-attente.ts';
@@ -75,6 +80,36 @@ export { executerPasseCloture } from './service/passe-cloture.ts';
 export type { EntreePasseCloture, ResultatPasseCloture } from './service/passe-cloture.ts';
 
 export { composerBlocLecons } from './injection/bloc-lecons.ts';
+
+export {
+  changerEtatCompetence,
+  cheminCompetencesParDefaut,
+  lireCompetence,
+  listerCompetences,
+  listerCompetencesServables,
+  listerSlugsCompetences,
+  slugifier,
+} from './competences/depot-competences.ts';
+export type { CorpsCompetence, FichierCompetence } from './competences/depot-competences.ts';
+
+export { appliquerOperationCompetence, SEUIL_LECONS_CREATION, SEUIL_LECONS_PIEGE } from './competences/operations.ts';
+export type { ContexteOperationCompetence, ResultatOperationCompetence } from './competences/operations.ts';
+
+export {
+  cheminApprentissageParDefaut,
+  cheminSauvegardesParDefaut,
+  listerSauvegardes,
+  MAX_SAUVEGARDES_CONSERVEES,
+  sauvegarderAvantPasse,
+} from './service/sauvegarde.ts';
+export type { ParametresSauvegarde, ResultatSauvegarde } from './service/sauvegarde.ts';
+
+export {
+  DELAI_DORMANCE_MS,
+  executerConsolidation,
+  INTERVALLE_MIN_MS,
+} from './service/consolidation.ts';
+export type { EntreeConsolidation, ResultatConsolidation, TransitionsAppliquees } from './service/consolidation.ts';
 
 export type {
   CategorieLecon,

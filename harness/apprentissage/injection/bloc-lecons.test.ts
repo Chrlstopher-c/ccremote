@@ -12,21 +12,42 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fermerBaseApprentissage, ouvrirBaseApprentissage } from '../base/connexion.ts';
 import { creerLecon, confirmerLecon } from '../base/lecons.ts';
+import { ecrireCompetence } from '../competences/depot-competences.ts';
+import type { Competence } from '../types.ts';
 import { composerBlocLecons } from './bloc-lecons.ts';
 
 let dossier: string;
 let chemin: string;
+let racineCompetences: string;
 
 beforeEach(() => {
   dossier = mkdtempSync(join(tmpdir(), 'ccremote-bloc-lecons-'));
   chemin = join(dossier, 'apprentissage.db');
+  racineCompetences = join(dossier, 'competences');
   process.env['CCREMOTE_APPRENTISSAGE_DB'] = chemin;
+  process.env['CCREMOTE_APPRENTISSAGE_COMPETENCES_DIR'] = racineCompetences;
 });
 
 afterEach(() => {
   delete process.env['CCREMOTE_APPRENTISSAGE_DB'];
+  delete process.env['CCREMOTE_APPRENTISSAGE_COMPETENCES_DIR'];
   rmSync(dossier, { recursive: true, force: true });
 });
+
+function semerCompetenceActive(slug: string, nom: string, projet: string): void {
+  const competence: Competence = {
+    slug,
+    nom,
+    description: `Description de ${nom}`,
+    portee: 'projet',
+    projet,
+    etat: 'active',
+    confirmations: 3,
+    origine: [],
+    maj: '2026-08-08',
+  };
+  ecrireCompetence(racineCompetences, { competence, corps: { quand: ['x'], etapes: ['y'], pieges: [] } });
+}
 
 const PROJET = '/mnt/projects/exemple';
 
@@ -74,5 +95,42 @@ describe('composerBlocLecons (E7, C-6)', () => {
   test('projet différent ⇒ leçon non servie (isolation par projet)', () => {
     semerLeconActive('lecon-autre-projet', 'Une leçon qui ne concerne pas ce projet.', 2);
     expect(composerBlocLecons('/mnt/projects/tout-autre')).toBe('');
+  });
+});
+
+describe('composerBlocLecons — extension E8 : index des compétences', () => {
+  test('une compétence active du projet apparaît sous son propre titre, avec chemin absolu', () => {
+    semerLeconActive('lecon-active', 'Toujours lire un artefact réel avant de conclure.', 2);
+    semerCompetenceActive('reprise-worktree-git', 'reprise-worktree-git', PROJET);
+    const bloc = composerBlocLecons(PROJET);
+    expect(bloc).toContain('PROCÉDURES DÉJÀ ÉCRITES POUR CE PROJET');
+    expect(bloc).toContain('reprise-worktree-git');
+    expect(bloc).toContain(join(racineCompetences, 'reprise-worktree-git', 'COMPETENCE.md'));
+  });
+
+  test('zéro compétence active ⇒ pas de titre « PROCÉDURES », le bloc de leçons reste seul', () => {
+    semerLeconActive('lecon-active', 'Toujours lire un artefact réel avant de conclure.', 2);
+    const bloc = composerBlocLecons(PROJET);
+    expect(bloc).not.toContain('PROCÉDURES DÉJÀ ÉCRITES');
+  });
+
+  test('une compétence active mais d’un AUTRE projet n’apparaît pas (isolation par projet)', () => {
+    semerLeconActive('lecon-active', 'Toujours lire un artefact réel avant de conclure.', 2);
+    semerCompetenceActive('competence-autre-projet', 'competence-autre-projet', '/mnt/projects/tout-autre');
+    const bloc = composerBlocLecons(PROJET);
+    expect(bloc).not.toContain('competence-autre-projet');
+  });
+
+  test('zéro leçon active ⇒ chaîne vide même si une compétence active existe (SPEC §5, C-6 `☠`)', () => {
+    semerCompetenceActive('reprise-worktree-git', 'reprise-worktree-git', PROJET);
+    expect(composerBlocLecons(PROJET)).toBe('');
+  });
+
+  test('dossier de compétences absent ⇒ bloc de leçons quand même servi, jamais bloquant', () => {
+    semerLeconActive('lecon-active', 'Toujours lire un artefact réel avant de conclure.', 2);
+    // Aucune compétence semée : `racineCompetences` n'existe même pas sur le disque.
+    const bloc = composerBlocLecons(PROJET);
+    expect(bloc).toContain('Toujours lire un artefact réel avant de conclure.');
+    expect(bloc).not.toContain('PROCÉDURES DÉJÀ ÉCRITES');
   });
 });

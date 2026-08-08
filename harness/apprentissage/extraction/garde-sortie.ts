@@ -9,6 +9,8 @@
  * Conception inspirée de Hermes Agent (Nous Research) — MIT. Transposition indépendante en TypeScript.
  */
 
+import type { OperationCompetence } from '../types.ts';
+
 /** Forme de sortie exigée du modèle pour une leçon candidate (SPEC §5.3). */
 export interface LeconExtraite {
   /** Une phrase, impératif, ≤ 200 caractères. */
@@ -155,6 +157,86 @@ export function validerVerdictRapprochement(brut: string): ResultatGarde<Verdict
   const relation = validerEnum(objetAnalyse.valeur['relation'], 'relation', RELATIONS_ACCEPTEES);
   if (!relation.ok) return { accepte: false, motif: relation.motif };
   return { accepte: true, valeur: { relation: relation.valeur } };
+}
+
+/** Formes acceptées d'`OperationCompetence` (SPEC §5.8 `☠`, C-8) — liste fermée. */
+const OPERATIONS_COMPETENCE_ACCEPTEES = ['creer', 'ajouter_piege', 'ajouter_etape', 'rien'] as const;
+const MAX_NOM_COMPETENCE = 80;
+const MAX_DESCRIPTION_COMPETENCE = 200;
+const MAX_LIGNE_COMPETENCE = 200;
+const MAX_LIGNES_QUAND = 3;
+const MAX_LIGNES_ETAPES = 5;
+
+function validerTableauDeChaines(valeur: unknown, nomChamp: string, max: number, maxItem: number): ResultatChamp<readonly string[]> {
+  if (!Array.isArray(valeur)) return { ok: false, motif: `« ${nomChamp} » doit être un tableau de chaînes` };
+  if (valeur.length === 0 || valeur.length > max) {
+    return { ok: false, motif: `« ${nomChamp} » doit contenir entre 1 et ${max} lignes (reçu ${valeur.length})` };
+  }
+  const lignes: string[] = [];
+  for (const item of valeur) {
+    const champ = validerChaineBornee(item, nomChamp, maxItem);
+    if (!champ.ok) return champ;
+    lignes.push(champ.valeur);
+  }
+  return { ok: true, valeur: lignes };
+}
+
+function validerOperationCreer(o: Record<string, unknown>): ResultatGarde<OperationCompetence> {
+  const nom = validerChaineBornee(o['nom'], 'nom', MAX_NOM_COMPETENCE);
+  if (!nom.ok) return { accepte: false, motif: nom.motif };
+  const description = validerChaineBornee(o['description'], 'description', MAX_DESCRIPTION_COMPETENCE);
+  if (!description.ok) return { accepte: false, motif: description.motif };
+  const quand = validerTableauDeChaines(o['quand'], 'quand', MAX_LIGNES_QUAND, MAX_LIGNE_COMPETENCE);
+  if (!quand.ok) return { accepte: false, motif: quand.motif };
+  const etapes = validerTableauDeChaines(o['etapes'], 'etapes', MAX_LIGNES_ETAPES, MAX_LIGNE_COMPETENCE);
+  if (!etapes.ok) return { accepte: false, motif: etapes.motif };
+  return {
+    accepte: true,
+    valeur: { type: 'creer', nom: nom.valeur, description: description.valeur, quand: quand.valeur, etapes: etapes.valeur },
+  };
+}
+
+function validerOperationAjouterPiege(o: Record<string, unknown>): ResultatGarde<OperationCompetence> {
+  const slug = validerChaineBornee(o['slug'], 'slug', MAX_NOM_COMPETENCE);
+  if (!slug.ok) return { accepte: false, motif: slug.motif };
+  const ligne = validerChaineBornee(o['ligne'], 'ligne', MAX_LIGNE_COMPETENCE);
+  if (!ligne.ok) return { accepte: false, motif: ligne.motif };
+  return { accepte: true, valeur: { type: 'ajouter_piege', slug: slug.valeur, ligne: ligne.valeur } };
+}
+
+function validerOperationAjouterEtape(o: Record<string, unknown>): ResultatGarde<OperationCompetence> {
+  const slug = validerChaineBornee(o['slug'], 'slug', MAX_NOM_COMPETENCE);
+  if (!slug.ok) return { accepte: false, motif: slug.motif };
+  const ligne = validerChaineBornee(o['ligne'], 'ligne', MAX_LIGNE_COMPETENCE);
+  if (!ligne.ok) return { accepte: false, motif: ligne.motif };
+  const apresEtape = o['apresEtape'];
+  if (typeof apresEtape !== 'number' || !Number.isInteger(apresEtape) || apresEtape < 0) {
+    return { accepte: false, motif: `« apresEtape » doit être un entier ≥ 0 (reçu « ${String(apresEtape)} »)` };
+  }
+  return { accepte: true, valeur: { type: 'ajouter_etape', slug: slug.valeur, ligne: ligne.valeur, apresEtape } };
+}
+
+/**
+ * Valide la sortie brute du modèle contre le schéma FERMÉ `OperationCompetence` (SPEC §5.8
+ * `☠`, C-8) : le modèle ne produit JAMAIS de contenu de fichier, seulement `creer`,
+ * `ajouter_piege`, `ajouter_etape` ou `rien`. Toute autre forme ⇒ rejet AVANT écriture, avec
+ * la liste des opérations acceptées dans le message (même discipline que `validerLeconExtraite`).
+ * `appliquerOperationCompetence` (`competences/operations.ts`) applique ensuite les seuils et
+ * l'écriture déterministe — cette fonction ne valide que la FORME.
+ */
+export function validerOperationCompetence(brut: string): ResultatGarde<OperationCompetence> {
+  const objetAnalyse = parserObjetJson(brut);
+  if (!objetAnalyse.ok) return { accepte: false, motif: objetAnalyse.motif };
+  const o = objetAnalyse.valeur;
+  const type = o['type'];
+  if (type === 'rien') return { accepte: true, valeur: { type: 'rien' } };
+  if (type === 'creer') return validerOperationCreer(o);
+  if (type === 'ajouter_piege') return validerOperationAjouterPiege(o);
+  if (type === 'ajouter_etape') return validerOperationAjouterEtape(o);
+  return {
+    accepte: false,
+    motif: `« type » invalide : « ${String(type)} » — opérations acceptées : ${OPERATIONS_COMPETENCE_ACCEPTEES.join(', ')}`,
+  };
 }
 
 /**
