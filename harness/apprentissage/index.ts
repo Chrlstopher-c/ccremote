@@ -38,6 +38,14 @@ export type {
   VerdictInspectionMission,
 } from './observation/classement-issue.ts';
 
+export { appellerVllm } from './extraction/client-vllm.ts';
+export type { ParametresAppelVllm, ReponseVllm } from './extraction/client-vllm.ts';
+
+export { validerLeconExtraite, validerLeconsExtraites } from './extraction/garde-sortie.ts';
+export type { LeconExtraite, ResultatGarde } from './extraction/garde-sortie.ts';
+
+export { construirePromptExtraction, LISTE_NEGATIVE_LECONS } from './extraction/prompts.ts';
+
 export type {
   CategorieLecon,
   Competence,
