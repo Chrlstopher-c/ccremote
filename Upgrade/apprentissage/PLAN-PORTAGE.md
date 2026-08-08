@@ -10,6 +10,14 @@ sections) et, pour les étapes 2 et 3, la section « Faits ccremote » (§2) qui
 réels. `INVENTAIRE-HERMES.md` n'est utile qu'à qui veut comprendre *pourquoi* une décision a été
 prise — il n'est jamais nécessaire pour exécuter.
 
+**`☠` CORRECTION DE CAP (2026-08-08, décision opérateur)** — vLLM est ANNULÉ. L'étape E4 ci-dessous
+décrit encore un client vLLM (`client-vllm.ts`) ; c'est caduc. L'inférence de toute la boucle passe
+par le SDK Claude Code, non interactif, sur `compte-a`, modèle **Haiku 4.5**
+(`claude-haiku-4-5-20251001`) — voir `SPEC-APPRENTISSAGE.md` §3 (mis à jour) pour le détail. Le
+fichier réel s'appelle `extraction/client-inference.ts` ; le banc réel
+`acceptation/apprentissage-inference-reel.ts`. Le reste de l'étape E4 (garde de sortie, prompts,
+deux tentatives, timeout, jamais d'exception) est inchangé.
+
 **Règles valables pour toutes les étapes, non répétées ensuite :**
 
 - TypeScript sur Bun. `bun test`, jamais npm/node. Standards maison : fichier ≤ 500 lignes,
@@ -40,7 +48,7 @@ harness/apprentissage/
     lecture-jsonl.ts          lecture en flux, tolérante aux types inconnus
     classement-issue.ts       C-2 — issue depuis le registre (pur)
   extraction/
-    client-vllm.ts            C-3 — SEUL point de sortie réseau du domaine
+    client-inference.ts       C-3 — SEUL point de sortie réseau du domaine (SDK Claude Code)
     prompts.ts                gabarits courts, dimensionnés 8B
     garde-sortie.ts           validation stricte des sorties de modèle
     extraction-lecons.ts      C-3 — orchestration d'une passe
@@ -64,7 +72,7 @@ harness/apprentissage/
 ```
 E1 socle ──┬─► E2 réduction ──► E3 issue ──┐
            │                                ├─► E5 extraction+confirmation ──► E6 déclencheur
-           └─► E4 client vLLM ──────────────┘                                        │
+           └─► E4 client inférence ──────────┘                                        │
                                                                                      ▼
                                   E7 réinjection ◄──────────────────────────── (boucle fermée)
                                         │
@@ -179,17 +187,17 @@ présentées comme livrées.
 
 ---
 
-## E4 — Client vLLM local et garde de sortie
+## E4 — Client d'inférence (SDK Claude Code) et garde de sortie
 
-**Objectif** : un point de sortie unique vers vLLM, et une garde qui refuse toute sortie non
+**Objectif** : un point de sortie unique vers le modèle, et une garde qui refuse toute sortie non
 conforme **avant** la moindre écriture.
 
 **Dépendances** : E1.
 
 **Travail**
-- `extraction/client-vllm.ts` : `POST {CCREMOTE_APPRENTISSAGE_VLLM_URL}/v1/chat/completions`,
-  modèle depuis `CCREMOTE_APPRENTISSAGE_VLLM_MODELE`. Timeout 45 s (`AbortSignal.timeout`),
-  **2 tentatives maximum**, température 0.2, `max_tokens` 300.
+- `extraction/client-inference.ts` : SDK Claude Code, `maxTurns: 1`, aucun outil, compte lu dans
+  `CCREMOTE_APPRENTISSAGE_CONFIG_DIR` (repli `compte-a`), modèle dans `CCREMOTE_APPRENTISSAGE_MODELE`
+  (repli Haiku 4.5). Timeout 45 s, **2 tentatives maximum**.
 - Indisponibilité (connexion refusée, timeout, 5xx) ⇒ résultat typé `{ disponible: false }`, **jamais
   d'exception qui remonte**, `warn` loggé. Aucun repli sur un modèle payant : c'est la contrainte
   full local.
@@ -199,17 +207,18 @@ conforme **avant** la moindre écriture.
 - `extraction/prompts.ts` : gabarits ≤ 3 000 tokens d'entrée, sortie attendue en JSON court. Y
   inclure verbatim la **liste négative** de la spec §5.3 (les cinq interdits).
 
-**Livrable nommé** : `harness/apprentissage/extraction/client-vllm.ts` + `garde-sortie.ts` +
-`garde-sortie.test.ts` + le banc `harness/acceptation/apprentissage-vllm-reel.ts`.
+**Livrable nommé** : `harness/apprentissage/extraction/client-inference.ts` + `garde-sortie.ts` +
+`garde-sortie.test.ts` + le banc `harness/acceptation/apprentissage-inference-reel.ts`.
 
 **Preuve à fournir** — deux :
 1. `bun test` sur la garde : sortie valide acceptée ; `portee: "univers"` rejetée ; JSON tronqué
    rejeté ; texte libre rejeté ; **et le message de rejet contient les valeurs acceptées** ;
-2. `bun harness/acceptation/apprentissage-vllm-reel.ts` avec le vrai serveur : envoie un
+2. `bun harness/acceptation/apprentissage-inference-reel.ts` avec le vrai compte : envoie un
    `ResumeMission` d'exemple, affiche la réponse brute **et** le verdict de la garde. Coller la
    sortie, y compris le cas serveur éteint (doit rendre `disponible: false`, pas une exception).
 
-**Critère d'arrêt** : les deux preuves fournies, dont **une avec vLLM réellement éteint**.
+**Critère d'arrêt** : les deux preuves fournies, dont **une avec le compte réellement joignable** —
+la preuve de grande valeur que vLLM ne pouvait pas fournir.
 
 **Piège `☠`** : toute valeur produite par un modèle et destinée à une écriture est une entrée
 utilisateur. Valider **avant la première écriture**, pas au point d'usage : un enregistrement
@@ -276,7 +285,8 @@ casser d'autre** — donc sans se voir. Le test d'idempotence n'est pas optionne
 **Preuve à fournir** — deux :
 1. `bun test` : une mission enfilée deux fois ⇒ **une seule** ligne `passe_apprentissage` ; une
    passe qui lève ⇒ entrée conservée avec `erreur`, rejouable ;
-2. **preuve d'innocuité** : montrer, avec vLLM éteint, qu'une mission se clôt normalement et que le
+2. **preuve d'innocuité** : montrer, avec le moteur d'inférence injoignable (config pointée sur un
+   répertoire vide), qu'une mission se clôt normalement et que le
    projet est libéré. Lire la ligne de la mission dans le registre **avant et après**. Coller les
    deux lignes.
 
@@ -402,8 +412,9 @@ options, les mesures réelles, et une recommandation d'une ligne.
 - `service/consolidation.ts` : (1) transitions par horloge, **sans modèle** — promotion, mise en
   dormance à 60 jours, réveil sur nouvelle confirmation, péremption sur contradiction ; (2) fusion
   par le modèle local des leçons et compétences redondantes d'un même projet.
-- Portes : ≥ 7 jours depuis la dernière passe, **aucune mission active sur la machine**, vLLM
-  joignable. Première observation ⇒ on **sème** l'horodatage et on diffère d'un intervalle complet.
+- Portes : ≥ 7 jours depuis la dernière passe, **aucune mission active sur la machine**, compte
+  Claude Code joignable. Première observation ⇒ on **sème** l'horodatage et on diffère d'un
+  intervalle complet.
 - `☠` **Jamais de suppression** : état `obsolete`, la ligne et le fichier restent.
 - Rapport de passe Markdown daté sous `apprentissage/rapports/`.
 

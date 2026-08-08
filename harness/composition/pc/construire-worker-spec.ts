@@ -7,10 +7,12 @@
  * l'oubli impossible en exigeant le port en paramètre, jamais en option.
  */
 
+import { hostname } from 'node:os';
 import type { WorkerSpec } from '../../workers/index.ts';
 import type { PortAuditPermissions } from '../../workers/types.ts';
 import { resoudreMcpEquipe } from '../../workers/mcp-du-poste.ts';
 import { superviseurLogger } from '../../superviseur/logger.ts';
+import { composerBlocLecons } from '../../apprentissage/index.ts';
 
 export interface ParametresWorkerSpec {
   readonly sessionId: string;
@@ -78,8 +80,18 @@ export function construireWorkerSpec(
   }
   const configDir = local?.configDir ?? parametres.configDir;
 
+  // ☠ E7 (SPEC-APPRENTISSAGE.md C-6, PLAN-PORTAGE.md) — LE point de réinjection : le
+  // domaine `apprentissage/` expose une fonction pure et en lecture seule, ce fichier
+  // l'appelle et concatène ; `workers/` reste ignorant de tout ceci (il ne connaît qu'un
+  // `mandate: string`). `parametres.cwd` est ICI le chemin du DÉPÔT (pas encore substitué
+  // par l'allocation de worktree, qui n'intervient que plus tard dans
+  // `SuperviseurWorkers.demarrer()`) — exactement ce que C-6 attend comme `projet`.
+  // Jamais bloquant : `composerBlocLecons` ne lève jamais, chaîne vide si rien à servir.
+  const blocLecons = composerBlocLecons(parametres.cwd, hostname());
+  const mandate = blocLecons.length > 0 ? `${parametres.mandate}\n\n${blocLecons}` : parametres.mandate;
+
   // ☠ Le port d'audit est un paramètre OBLIGATOIRE, jamais un champ optionnel
   // de `parametres` (H-74) : un worker assemblé sans audit passerait tous les
   // tests en n'observant rien.
-  return { ...parametres, configDir, mcpServers: mcp.serveurs, portAuditPermissions };
+  return { ...parametres, mandate, configDir, mcpServers: mcp.serveurs, portAuditPermissions };
 }
