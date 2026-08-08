@@ -230,6 +230,25 @@ export function listerCompetences(racine: string): readonly Competence[] {
 }
 
 /**
+ * Change l'état d'une compétence sans toucher son corps (E10, C-4 : consolidation/archivage).
+ * `☠` Jamais de suppression : `obsolete` reste un dossier lisible, jamais effacé (SPEC §5, C-4
+ * `☠`, réduction de H-9). `null` si le slug n'existe pas — jamais une exception.
+ */
+export function changerEtatCompetence(racine: string, slug: string, etat: EtatCompetence, maintenant: string): Competence | null {
+  return executer(
+    'changerEtatCompetence',
+    () => {
+      const fichier = lireCompetence(racine, slug);
+      if (fichier === null) return null;
+      const competence: Competence = { ...fichier.competence, etat, maj: maintenant };
+      ecrireCompetence(racine, { competence, corps: fichier.corps });
+      return competence;
+    },
+    { racine, slug, etat },
+  );
+}
+
+/**
  * Compétences `active` servables à `projet` (C-6, SPEC §5.6) : portée `projet` sur ce projet
  * exact, ou portée `machine`/`global` (aucun champ machine sur `Competence` — servie partout).
  * Triées par confirmations décroissantes.
