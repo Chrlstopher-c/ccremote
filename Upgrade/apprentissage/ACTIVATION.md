@@ -1,5 +1,11 @@
 # Activation de la boucle d'apprentissage — un seul interrupteur
 
+## Déploiement en une commande (`deployer-apprentissage.sh`)
+
+Allumer : `./deployer-apprentissage.sh` — éteindre : `./deployer-apprentissage.sh --eteindre`.
+Une fois allumé, observable par `bun harness/pilotage/pilote.ts machines` (service actif) et par
+un rapport Markdown daté sous `~/.local/share/ccremote/apprentissage/rapports/` après consolidation.
+
 `☠` Câblage E10 (PLAN-PORTAGE.md) : le déclenchement à la clôture (E6) et la consolidation
 périodique (E10) obéissent tous deux à **la même variable, la même logique**. Éteint veut dire
 éteint partout ; allumé veut dire les deux à la fois. Aucun autre geste n'est nécessaire.
