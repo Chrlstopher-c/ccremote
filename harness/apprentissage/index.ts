@@ -111,6 +111,12 @@ export {
 } from './service/consolidation.ts';
 export type { EntreeConsolidation, ResultatConsolidation, TransitionsAppliquees } from './service/consolidation.ts';
 
+export {
+  demarrerConsolidationPeriodique,
+  INTERVALLE_VERIFICATION_MS_DEFAUT,
+} from './service/consolidation-periodique.ts';
+export type { ConsolidationPeriodique, DependancesConsolidationPeriodique } from './service/consolidation-periodique.ts';
+
 export type {
   CategorieLecon,
   Competence,

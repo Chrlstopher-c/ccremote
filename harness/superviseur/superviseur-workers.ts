@@ -51,9 +51,13 @@ import type { Database } from 'bun:sqlite';
 import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ActionCoupure } from '../anti-boucle/index.ts';
 import {
+  cheminBaseParDefaut,
+  cheminCompetencesParDefaut,
   creerClientInference,
+  demarrerConsolidationPeriodique,
   enfilerPasseApprentissage,
   ouvrirBaseApprentissage,
+  type ConsolidationPeriodique,
   type DonneesMissionTerminee,
   type EntreePasseCloture,
 } from '../apprentissage/index.ts';
@@ -166,6 +170,12 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * log répété) ; `null` = jamais tenté.
    */
   #baseApprentissage: Database | 'indisponible' | null = null;
+  /**
+   * Déclenchement périodique de la consolidation (E10) — `null` si l'apprentissage est éteint
+   * (même variable, même logique que E6 : voir `apprentissageActif()`) ou si aucune passe n'a
+   * jamais été programmée. Démarré une seule fois, à la construction (voir `#demarrerConsolidationPeriodiqueSiConfigure`).
+   */
+  #consolidationPeriodique: ConsolidationPeriodique | null = null;
 
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
@@ -200,6 +210,27 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     this.#terminerConcurrentRestaure = deps.terminerConcurrentRestaure ?? ((pid, signal) => void process.kill(pid, signal));
     this.#registre = new RegistreWorkers(deps.persistance ?? null);
     this.#antiBoucle = creerCablageAntiBoucle(deps);
+    this.#consolidationPeriodique = this.#demarrerConsolidationPeriodiqueSiConfigure();
+  }
+
+  /**
+   * Câblage E10 (PLAN-PORTAGE.md, SPEC-APPRENTISSAGE.md §5, C-4) — programme la vérification
+   * périodique des portes de consolidation. `☠` Même interrupteur, même logique qu'E6
+   * (`apprentissageActif()`) : éteint veut dire éteint PARTOUT, un seul geste allume tout.
+   *
+   * `aucuneMissionActive` est calculée depuis `#registre` — la seule source honnête sur ce qui
+   * tourne sur cette machine (H-15) — jamais une estimation de durée ni un compteur maison.
+   * Chaque tick relit `#registre.tous()` à l'instant du tick, jamais une valeur figée ici.
+   */
+  #demarrerConsolidationPeriodiqueSiConfigure(): ConsolidationPeriodique | null {
+    if (!apprentissageActif()) return null;
+    return demarrerConsolidationPeriodique({
+      obtenirBase: () => this.#obtenirBaseApprentissage(),
+      cheminDb: cheminBaseParDefaut(),
+      racineCompetences: cheminCompetencesParDefaut(),
+      aucuneMissionActive: () => this.#registre.tous().every((e) => !e.vivant),
+      planifier: this.#planifier,
+    });
   }
 
   /**
