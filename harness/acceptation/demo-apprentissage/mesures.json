@@ -1,0 +1,530 @@
+{
+  "version": 1,
+  "factice": false,
+  "raisonFactice": null,
+  "genereA": "2026-08-08T03:02:41.863Z",
+  "protocole": {
+    "modele": "sonnet",
+    "repetitionsParCondition": 3,
+    "conditions": [
+      "sans_lecon",
+      "avec_lecon",
+      "lecon_hors_sujet"
+    ],
+    "piege": "La suite de tests ne passe que si `banc/amorce.ts` est préchargé (`bun test --preload ./banc/amorce.ts`). Sans ce préchargement, la table de taux est absente et l'erreur remonte depuis `src/tarif.ts` — une fausse piste côté code métier, alors que le code métier est correct.",
+    "tache": "Trouver, sans modifier le projet, la commande qui fait passer les 3 tests de la suite, et la consigner dans `COMMANDE.md`.",
+    "mandatMotPourMot": "Tu travailles seul, sans interlocuteur humain : personne ne lira ce fil pendant que tu travailles, et aucune question posée ici n'obtiendra de réponse. Tranche seul.\n\nLe répertoire de travail courant contient le projet `tarif-devises`. Sa suite de tests ne passe pas en l'état.\n\nTA TÂCHE : trouver la commande exacte qui fait passer l'INTÉGRALITÉ de la suite de tests, et l'écrire dans un fichier `COMMANDE.md` à la racine du projet. Ce fichier ne contient que la commande, sur une seule ligne, sans bloc de code ni commentaire.\n\nCONTRAINTE : tu ne modifies, ne crées et ne supprimes AUCUN autre fichier du projet. Les sources et les tests sont corrects et sont la responsabilité d'une autre équipe. Toute modification que tu ferais serait ignorée : ta commande sera rejouée sur une copie neuve du projet.\n\nCRITÈRE D'ARRÊT : `COMMANDE.md` existe et contient une commande qui, exécutée à la racine d'une copie neuve du projet, fait passer les 3 tests. Dès que tu as vérifié cela, tu t'arrêtes et tu rends la commande dans ton dernier message.",
+    "blocsLecons": {
+      "sans_lecon": null,
+      "avec_lecon": "\n\nLEÇONS ACTIVES POUR CE PROJET — réinjectées par le harness, confirmées par deux missions distinctes. Elles ne sont pas des ordres : ce sont des constats déjà payés par d'autres équipes sur ce même projet.\n\n- [piege] Sur ce projet, la suite de tests exige DEUX choses : le préchargement du banc de taux et le jeton du banc, qui vaut `ARDOISE-7719` et ne figure nulle part dans le dépôt. La commande est `BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts`. Sans le jeton, l'amorce ne pose pas la table et l'erreur remonte depuis `src/tarif.ts` — le code métier n'est pas en cause. `docs/OUTILLAGE.md` est en retard et recommande une variable `TARIFS_BANC` que plus aucune ligne ne lit.\n  (confirmée 2 fois · dernière observation : mission m-4f21)",
+      "lecon_hors_sujet": "\n\nLEÇONS ACTIVES POUR CE PROJET — réinjectées par le harness, confirmées par deux missions distinctes. Elles ne sont pas des ordres : ce sont des constats déjà payés par d'autres équipes sur ce même projet.\n\n- [projet] Sur ce projet, les journaux de build sont écrits sous `var/journaux/` et purgés à chaque installation de dépendances : relever une trace avant de relancer `bun install`, sinon la trace de l'échec précédent est perdue et le diagnostic repart de zéro.\n  (confirmée 2 fois · dernière observation : mission m-7c08)"
+    },
+    "critereSucces": "`COMMANDE.md` contient une commande qui, rejouée sur une copie neuve du projet, fait passer les 3 tests — vérifié par un vérificateur externe, indépendant de toute déclaration de l'agent.",
+    "limites": [
+      "Elle mesure la RÉINJECTION, pas l'EXTRACTION. La leçon servie ici est écrite à la main, mot pour mot dans `mandat.ts` ; le fait qu'un modèle sache la produire à partir d'un historique réduit est une autre question, testée ailleurs.",
+      "Elle porte sur UN piège, d'un seul genre — une configuration d'environnement absente. Rien ici ne dit qu'une leçon de méthode ou de raisonnement produirait le même écart.",
+      "Elle ne mesure aucun effet de long terme : ni la dérive d'une leçon devenue fausse, ni le coût d'un bloc de leçons qui grossit à chaque mission, ni ce qui se passe quand deux leçons se contredisent.",
+      "L'effectif est petit. Un écart net sur peu d'exécutions dit qu'il y a un effet, pas quelle en est la taille exacte : les moyennes rendues sont descriptives, pas des estimations.",
+      "Le vérificateur juge la commande livrée, pas la compréhension : un agent qui devine la bonne commande sans avoir compris le piège compte comme un succès.",
+      "Le savoir en jeu est ARBITRAIRE — une valeur locale que rien ne permet de déduire. C'est le cas où une leçon apporte le plus, et donc le cas le plus favorable au système : l'écart mesuré ici est un majorant, pas une moyenne attendue."
+    ]
+  },
+  "executions": [
+    {
+      "id": "sans_lecon-1-66572c71-d1e7-4210-a0f3-b2805be5eba1",
+      "condition": "sans_lecon",
+      "repetition": 1,
+      "sessionId": "66572c71-d1e7-4210-a0f3-b2805be5eba1",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-sans-lecon-1-66572c71/66572c71-d1e7-4210-a0f3-b2805be5eba1.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:54:03.088Z",
+      "dureeMs": 53482,
+      "coutUsd": null,
+      "nbTours": 24,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 12,
+          "echecs": 0
+        },
+        {
+          "nom": "Read",
+          "appels": 1,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 13,
+      "tentatives": [],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    },
+    {
+      "id": "avec_lecon-1-488bea65-456b-4f0f-9dc7-c5eadeebb33a",
+      "condition": "avec_lecon",
+      "repetition": 1,
+      "sessionId": "488bea65-456b-4f0f-9dc7-c5eadeebb33a",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-1-488bea65/488bea65-456b-4f0f-9dc7-c5eadeebb33a.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:54:57.859Z",
+      "dureeMs": 25479,
+      "coutUsd": 0.11705809999999997,
+      "nbTours": 18,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 5,
+          "echecs": 0
+        },
+        {
+          "nom": "Read",
+          "appels": 6,
+          "echecs": 0
+        },
+        {
+          "nom": "Write",
+          "appels": 1,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 12,
+      "tentatives": [
+        {
+          "rang": 1,
+          "commande": "rm -rf /tmp/verif-tarif && cp -r /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65 /tmp/verif-tarif && cd /tmp/verif-tarif && BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts",
+          "survenueA": 17522,
+          "reussie": true
+        }
+      ],
+      "tentativesAvantSucces": 1,
+      "reussiDuPremierCoup": true,
+      "succesVerifie": true,
+      "commandeLivree": "BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "lecon_hors_sujet-1-6a035a53-3dcf-4e3f-acd7-cc57e494eef2",
+      "condition": "lecon_hors_sujet",
+      "repetition": 1,
+      "sessionId": "6a035a53-3dcf-4e3f-acd7-cc57e494eef2",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-lecon-hors-sujet-1-6a035a53/6a035a53-3dcf-4e3f-acd7-cc57e494eef2.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:55:24.618Z",
+      "dureeMs": 68785,
+      "coutUsd": null,
+      "nbTours": 18,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 8,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 8,
+      "tentatives": [
+        {
+          "rang": 1,
+          "commande": "bun test 2>&1 | tail -50",
+          "survenueA": 9026,
+          "reussie": false
+        }
+      ],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    },
+    {
+      "id": "sans_lecon-2-33806b0c-e3b1-4863-aeb8-ab93debee42d",
+      "condition": "sans_lecon",
+      "repetition": 2,
+      "sessionId": "33806b0c-e3b1-4863-aeb8-ab93debee42d",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-sans-lecon-2-33806b0c/33806b0c-e3b1-4863-aeb8-ab93debee42d.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:56:34.628Z",
+      "dureeMs": 77479,
+      "coutUsd": null,
+      "nbTours": 13,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 7,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 7,
+      "tentatives": [],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    },
+    {
+      "id": "avec_lecon-2-71e2c2f9-afcf-4e9c-ab09-602e1ec284a3",
+      "condition": "avec_lecon",
+      "repetition": 2,
+      "sessionId": "71e2c2f9-afcf-4e9c-ab09-602e1ec284a3",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-2-71e2c2f9/71e2c2f9-afcf-4e9c-ab09-602e1ec284a3.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:57:53.389Z",
+      "dureeMs": 22439,
+      "coutUsd": 0.11038910000000002,
+      "nbTours": 17,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 4,
+          "echecs": 0
+        },
+        {
+          "nom": "Read",
+          "appels": 6,
+          "echecs": 0
+        },
+        {
+          "nom": "Write",
+          "appels": 1,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 11,
+      "tentatives": [
+        {
+          "rang": 1,
+          "commande": "BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts",
+          "survenueA": 14629,
+          "reussie": true
+        }
+      ],
+      "tentativesAvantSucces": 1,
+      "reussiDuPremierCoup": true,
+      "succesVerifie": true,
+      "commandeLivree": "BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "lecon_hors_sujet-2-052b0b5f-f939-4c2b-96b8-71fb6b5ade01",
+      "condition": "lecon_hors_sujet",
+      "repetition": 2,
+      "sessionId": "052b0b5f-f939-4c2b-96b8-71fb6b5ade01",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-lecon-hors-sujet-2-052b0b5f/052b0b5f-f939-4c2b-96b8-71fb6b5ade01.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:58:17.006Z",
+      "dureeMs": 75841,
+      "coutUsd": null,
+      "nbTours": 14,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 7,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 7,
+      "tentatives": [],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    },
+    {
+      "id": "sans_lecon-3-69374209-20c3-4e37-8552-b63cbd577b8d",
+      "condition": "sans_lecon",
+      "repetition": 3,
+      "sessionId": "69374209-20c3-4e37-8552-b63cbd577b8d",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-sans-lecon-3-69374209/69374209-20c3-4e37-8552-b63cbd577b8d.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T02:59:33.890Z",
+      "dureeMs": 77445,
+      "coutUsd": null,
+      "nbTours": 15,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 8,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 8,
+      "tentatives": [],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    },
+    {
+      "id": "avec_lecon-3-21a96aab-80f8-4fa3-8319-450104c935cd",
+      "condition": "avec_lecon",
+      "repetition": 3,
+      "sessionId": "21a96aab-80f8-4fa3-8319-450104c935cd",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-3-21a96aab/21a96aab-80f8-4fa3-8319-450104c935cd.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T03:00:52.685Z",
+      "dureeMs": 24618,
+      "coutUsd": 0.0946715,
+      "nbTours": 11,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 4,
+          "echecs": 0
+        },
+        {
+          "nom": "Write",
+          "appels": 1,
+          "echecs": 0
+        }
+      ],
+      "appelsOutilsTotal": 5,
+      "tentatives": [
+        {
+          "rang": 1,
+          "commande": "BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts 2>&1",
+          "survenueA": 16710,
+          "reussie": true
+        }
+      ],
+      "tentativesAvantSucces": 1,
+      "reussiDuPremierCoup": true,
+      "succesVerifie": true,
+      "commandeLivree": "BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "lecon_hors_sujet-3-c3053579-2ce4-4570-8049-640cc9fbca67",
+      "condition": "lecon_hors_sujet",
+      "repetition": 3,
+      "sessionId": "c3053579-2ce4-4570-8049-640cc9fbca67",
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-lecon-hors-sujet-3-c3053579/c3053579-2ce4-4570-8049-640cc9fbca67.jsonl",
+      "modele": "claude-sonnet-5",
+      "demarreeA": "2026-08-08T03:01:18.551Z",
+      "dureeMs": 82189,
+      "coutUsd": null,
+      "nbTours": 18,
+      "usageOutils": [
+        {
+          "nom": "Bash",
+          "appels": 9,
+          "echecs": 2
+        }
+      ],
+      "appelsOutilsTotal": 9,
+      "tentatives": [],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    }
+  ],
+  "agregats": [
+    {
+      "condition": "sans_lecon",
+      "executions": 3,
+      "succesVerifie": 0,
+      "reussiDuPremierCoup": 0,
+      "tentativesMediane": null,
+      "tentativesMoyenne": null,
+      "dureeMedianeMs": 77445,
+      "coutMoyenUsd": null,
+      "appelsOutilsMoyens": 9.333333333333334
+    },
+    {
+      "condition": "avec_lecon",
+      "executions": 3,
+      "succesVerifie": 3,
+      "reussiDuPremierCoup": 3,
+      "tentativesMediane": 1,
+      "tentativesMoyenne": 1,
+      "dureeMedianeMs": 24618,
+      "coutMoyenUsd": 0.1073729,
+      "appelsOutilsMoyens": 9.333333333333334
+    },
+    {
+      "condition": "lecon_hors_sujet",
+      "executions": 3,
+      "succesVerifie": 0,
+      "reussiDuPremierCoup": 0,
+      "tentativesMediane": null,
+      "tentativesMoyenne": null,
+      "dureeMedianeMs": 75841,
+      "coutMoyenUsd": null,
+      "appelsOutilsMoyens": 8
+    }
+  ],
+  "traces": {
+    "leconMotPourMot": "Sur ce projet, la suite de tests exige DEUX choses : le préchargement du banc de taux et le jeton du banc, qui vaut `ARDOISE-7719` et ne figure nulle part dans le dépôt. La commande est `BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts`. Sans le jeton, l'amorce ne pose pas la table et l'erreur remonte depuis `src/tarif.ts` — le code métier n'est pas en cause. `docs/OUTILLAGE.md` est en retard et recommande une variable `TARIFS_BANC` que plus aucune ligne ne lit.",
+    "injection": {
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-1-488bea65/488bea65-456b-4f0f-9dc7-c5eadeebb33a.jsonl",
+      "ligneJsonl": 32,
+      "extrait": "11CdpXZGDnbhG3soWrTSQhm\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_01RuPYXeevqJdgFtdrdu9Sax\",\"name\":\"Bash\",\"input\":{\"command\":\"bun -e \\\"console.log(Bun.hash('ARDOISE-7719'))\\\"\"},\"caller\":{\"type\":\"direct\"}}],\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":2,\"cache_creation_input_tokens\":3217,\"cache_read_input_tokens\":1207"
+    },
+    "tatonnement": {
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-sans-lecon-1-66572c71/66572c71-d1e7-4210-a0f3-b2805be5eba1.jsonl",
+      "lignes": [
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "Exécute ton mandat."
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "find . -not -path '*/node_modules/*' -not -path '*/.git/*' | head -200"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cat package.json"
+        },
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "No script defined. Let's inspect source files and README/docs for hints."
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/sans-lecon-1-66572c71/README.md"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cat docs/OUTILLAGE.md docs/CHANGELOG.md"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cat banc/amorce.ts; echo ---; cat src/devises.ts; echo ---; cat src/arrondi.ts; echo ---; cat src/tarif.ts; echo ---; cat src/banc.ts; echo ---; cat tests/tarif.test.ts"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "grep -rn \"BANC_JETON\\|jeton\\|JETON\" --include=\"*\" . 2>/dev/null | grep -v node_modules"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "env | grep -i jeton; env | grep -i banc; env | grep -i tarif; echo done"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "which bun; bun --version"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cd /tmp && bun -e \"console.log(Bun.hash)\" 2>&1 | head -5"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cat > /tmp/brute.ts << 'EOF'\nconst target = 67108475554763503n;\nconst candidates = [\n  \"banc\", \"jeton\", \"tarif-devises\", \"tarif\", \"devises\", \"banc-jeton\",\n  \"BANC_JETON\", \"0.3.1\", \"0.3.0\", \"0.2.0\", \"E…"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "find . -type f -not -path './node_modules/*' | xargs ls -la; find / -maxdepth 3 -iname \"*jeton*\" -o -iname \"*banc*\" 2>/dev/null | grep -v proc"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cat /tmp/sortie-banc.txt 2>/dev/null; echo ---; ls -la /tmp/verif-tarif /tmp/copie-verif /tmp/copie-verif2 /tmp/copie-neuve /tmp/proto-piege 2>/dev/null"
+        },
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "Ce sont des copies laissées par des tentatives précédentes (probablement d'autres agents ayant travaillé sur cet exercice). `/tmp/copie-verif2` contient un `COMMANDE.md` — regardons son contenu, ça de…"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "cat /tmp/copie-verif2/COMMANDE.md"
+        }
+      ]
+    },
+    "direct": {
+      "transcript": "/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-1-488bea65/488bea65-456b-4f0f-9dc7-c5eadeebb33a.jsonl",
+      "lignes": [
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "Exécute ton mandat."
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "find . -type f -not -path '*/node_modules/*' -not -path '*/.git/*' | sort"
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/banc/amorce.ts"
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/src/banc.ts"
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/src/tarif.ts"
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/tests/tarif.test.ts"
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/package.json"
+        },
+        {
+          "role": "outil",
+          "outil": "Read",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/docs/OUTILLAGE.md"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "which bun && bun --version"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "bun -e \"console.log(Bun.hash('ARDOISE-7719'))\""
+        },
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "Le jeton `ARDOISE-7719` correspond bien au hash attendu (`67108475554763503n`). Je vérifie maintenant la commande complète sur une copie neuve."
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "rm -rf /tmp/verif-tarif && cp -r /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65 /tmp/verif-tarif && cd /tmp/verif-tarif && BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts"
+        },
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "Les 3 tests passent. J'écris `COMMANDE.md` à la racine du projet original."
+        },
+        {
+          "role": "outil",
+          "outil": "Write",
+          "texte": "/tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/COMMANDE.md"
+        },
+        {
+          "role": "outil",
+          "outil": "Bash",
+          "texte": "rm -rf /tmp/verif-tarif"
+        },
+        {
+          "role": "texte",
+          "outil": "",
+          "texte": "J'ai vérifié le mécanisme plutôt que de prendre la leçon pour argent comptant : `banc/amorce.ts` compare `Bun.hash(jeton)` à `67108475554763503n`, et j'ai confirmé indépendamment que `Bun.hash('ARDOIS…"
+        }
+      ]
+    }
+  }
+}

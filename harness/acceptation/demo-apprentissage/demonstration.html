@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Est-ce que le harness a appris ?</title>
+<style>
+:root {
+  --fond: #0A0A0B;
+  --surface: #121214;
+  --surface-haute: #17171A;
+  --bord: #232326;
+  --texte: #E9E6E1;
+  --texte-doux: #9C9791;
+  --texte-faible: #6B6762;
+  --sans-lecon: #C2703F;
+  --avec-lecon: #4E9CB9;
+  --hors-sujet: #6E6A66;
+  --serif: Iowan Old Style, "Palatino Linotype", Palatino, Charter, Georgia, "Times New Roman", serif;
+  --mono: ui-monospace, "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--fond);
+  color: var(--texte);
+}
+
+body {
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.bandeau-factice {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 100%;
+  background: #3A1D14;
+  border-bottom: 2px solid #C2703F;
+  color: #F0C9B4;
+  padding: 18px 24px;
+}
+
+.bandeau-factice-interieur { max-width: 1000px; margin: 0 auto; }
+
+.bandeau-factice-titre {
+  font-family: var(--mono);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px 0;
+}
+
+.bandeau-factice-raison { margin: 0; font-family: var(--mono); font-size: 14px; }
+
+.section { padding: 48px 24px; }
+.section:first-of-type { padding-top: 64px; }
+
+.bloc-prose { max-width: 68ch; margin: 0 auto; }
+.bloc-large { max-width: 1000px; margin: 0 auto; }
+
+.titre-section {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 28px 0;
+}
+
+.numero-section {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--texte-faible);
+  margin-right: 10px;
+}
+
+h1 { font-family: var(--serif); font-size: 34px; font-weight: 600; margin: 0 0 16px 0; }
+
+.these { color: var(--texte-doux); font-size: 19px; margin: 0 0 24px 0; }
+
+.provenance {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--texte-faible);
+  border-top: 1px solid var(--bord);
+  padding-top: 16px;
+}
+
+p { margin: 0 0 16px 0; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+th, td {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--bord);
+  vertical-align: top;
+}
+
+th { color: var(--texte-faible); font-weight: 500; }
+
+.pastille {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+blockquote {
+  margin: 0;
+  padding: 12px 20px;
+  border-left: 3px solid var(--avec-lecon);
+  color: var(--texte-doux);
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--texte);
+  background: var(--surface);
+  border: 1px solid var(--bord);
+  border-radius: 2px;
+  padding: 16px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bloc-mandat {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--bord);
+  border-radius: 2px;
+  padding: 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.bloc-lecon {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--surface);
+  padding: 14px 16px;
+  margin-top: 12px;
+  white-space: pre-wrap;
+}
+
+.condition-carte {
+  border: 1px solid var(--bord);
+  border-radius: 2px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--surface);
+}
+
+.condition-nom { font-family: var(--mono); font-size: 14px; }
+
+.graphique-titre { font-family: var(--serif); font-size: 17px; margin: 0 0 4px 0; }
+.graphique-bloc { margin-bottom: 56px; }
+
+.legende { display: flex; gap: 20px; font-family: var(--mono); font-size: 12px; color: var(--texte-doux);
+  margin: 8px 0 16px 0; }
+.legende-item { display: flex; align-items: center; }
+
+svg text { font-family: var(--mono); }
+.valeur-non-mesuree { color: var(--texte-faible); font-style: italic; }
+
+.deux-colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+@media (max-width: 760px) {
+  .deux-colonnes { grid-template-columns: 1fr; }
+  h1 { font-size: 27px; }
+}
+
+.colonne-trace {
+  border: 1px solid var(--bord);
+  border-left-width: 3px;
+  border-radius: 2px;
+  padding: 16px;
+  background: var(--surface);
+}
+
+.colonne-trace-titre { font-family: var(--mono); font-size: 13px; margin: 0 0 12px 0; color: var(--texte-doux); }
+
+.ligne-trace { font-family: var(--mono); font-size: 13px; margin-bottom: 8px; }
+.ligne-trace-outil { color: var(--texte); font-weight: 700; }
+
+.trace-injection-chemin { font-family: var(--mono); font-size: 12px; color: var(--texte-faible); margin: 0 0 4px 0; }
+
+ul.liste-limites { padding-left: 20px; }
+ul.liste-limites li { margin-bottom: 14px; }
+
+footer {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--texte-faible);
+  border-top: 1px solid var(--bord);
+  padding: 32px 24px 64px 24px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<header class="section">
+  <div class="bloc-prose">
+    <h1>Est-ce que le harness a appris ?</h1>
+    <p class="these">Une leçon injectée dans le mandat d'une équipe change-t-elle ce qu'elle fait,
+    mesurablement, sur le même piège ?</p>
+    <p class="provenance">modèle : sonnet · exécutions : 9 ·
+    générée le 2026-08-08T03:02:41.863Z</p>
+  </div>
+</header>
+<section class="section">
+  <div class="bloc-prose">
+    <h2 class="titre-section"><span class="numero-section">02</span> Ce qu&#39;on a repris de Hermes</h2>
+    <p>Hermes est le mécanisme d'apprentissage inline d'un agent conversationnel : il relit
+    son propre tour et ajuste. Le harness relit le passé d'une équipe entière, pas un tour — trois écarts
+    en découlent.</p>
+    <table>
+      <thead><tr><th>Axe</th><th>Chez un agent (Hermes)</th><th>Dans le harness</th></tr></thead>
+      <tbody><tr><td>Qui apprend</td><td>un agent, sur la durée</td><td>le harness, dont les équipes sont éphémères</td></tr>
+<tr><td>Ce qu'on observe</td><td>la liste de messages du tour courant</td><td>un transcript JSONL complet, après coup</td></tr>
+<tr><td>Quand ça se déclenche</td><td>tous les 10 tours, pendant</td><td>à la clôture d'une mission</td></tr></tbody>
+    </table>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-large">
+    <h2 class="titre-section"><span class="numero-section">03</span> La boucle</h2>
+    <svg viewBox="0 0 960 220" width="100%" height="220"><line x1="840" y1="50" x2="840" y2="20" stroke="var(--texte-faible)" stroke-width="1" stroke-dasharray="3,3" /><line x1="840" y1="20" x2="120" y2="20" stroke="var(--texte-faible)" stroke-width="1" stroke-dasharray="3,3" /><line x1="120" y1="20" x2="120" y2="50" stroke="var(--texte-faible)" stroke-width="1" stroke-dasharray="3,3" /><line x1="116" y1="42" x2="120" y2="50" stroke="var(--texte-faible)" stroke-width="1" /><line x1="124" y1="42" x2="120" y2="50" stroke="var(--texte-faible)" stroke-width="1" /><line x1="220" y1="82" x2="260" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="254" y1="78" x2="260" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="254" y1="86" x2="260" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="460" y1="82" x2="500" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="494" y1="78" x2="500" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="494" y1="86" x2="500" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="700" y1="82" x2="740" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="734" y1="78" x2="740" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><line x1="734" y1="86" x2="740" y2="82" stroke="var(--texte-faible)" stroke-width="1" /><rect x="20" y="50" width="200" height="64" rx="2" fill="transparent" /><rect x="20" y="50" width="200" height="64" rx="2" fill="var(--surface)" stroke="var(--bord)" /><text x="120" y="76" text-anchor="middle" fill="var(--texte)" font-size="14" font-weight="700">observer</text><text x="120" y="94" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">l&#39;historique JSONL d&#39;une équipe</text><text x="120" y="107" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">terminée</text>
+<rect x="260" y="50" width="200" height="64" rx="2" fill="transparent" /><rect x="260" y="50" width="200" height="64" rx="2" fill="var(--surface)" stroke="var(--bord)" /><text x="360" y="76" text-anchor="middle" fill="var(--texte)" font-size="14" font-weight="700">extraire</text><text x="360" y="94" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">un modèle en tire des énoncés</text><text x="360" y="107" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">courts</text>
+<rect x="500" y="50" width="200" height="64" rx="2" fill="transparent" /><rect x="500" y="50" width="200" height="64" rx="2" fill="var(--surface)" stroke="var(--bord)" /><text x="600" y="76" text-anchor="middle" fill="var(--texte)" font-size="14" font-weight="700">confirmer</text><text x="600" y="94" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">une leçon vue par deux missions</text><text x="600" y="107" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">distinctes devient active</text>
+<rect x="740" y="50" width="200" height="64" rx="2" fill="transparent" /><rect x="740" y="50" width="200" height="64" rx="2" fill="var(--surface)" stroke="var(--bord)" /><text x="840" y="76" text-anchor="middle" fill="var(--texte)" font-size="14" font-weight="700">réinjecter</text><text x="840" y="94" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">les leçons actives entrent dans</text><text x="840" y="107" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">le mandat des équipes suivantes</text></svg>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-prose">
+    <h2 class="titre-section"><span class="numero-section">04</span> Le piège</h2>
+    <p><strong>Le piège.</strong> La suite de tests ne passe que si `banc/amorce.ts` est préchargé (`bun test --preload ./banc/amorce.ts`). Sans ce préchargement, la table de taux est absente et l&#39;erreur remonte depuis `src/tarif.ts` — une fausse piste côté code métier, alors que le code métier est correct.</p>
+    <p><strong>La tâche.</strong> Trouver, sans modifier le projet, la commande qui fait passer les 3 tests de la suite, et la consigner dans `COMMANDE.md`.</p>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-large">
+    <h2 class="titre-section"><span class="numero-section">05</span> Le protocole</h2>
+    <div class="condition-carte">
+    <p class="condition-nom"><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans_lecon — sans leçon</p>
+    <p class="valeur-non-mesuree">mandat nu — aucun bloc ajouté</p>
+  </div>
+<div class="condition-carte">
+    <p class="condition-nom"><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec_lecon — avec leçon</p>
+    <div class="bloc-lecon" style="border-left: 3px solid var(--avec-lecon)">
+
+LEÇONS ACTIVES POUR CE PROJET — réinjectées par le harness, confirmées par deux missions distinctes. Elles ne sont pas des ordres : ce sont des constats déjà payés par d&#39;autres équipes sur ce même projet.
+
+- [piege] Sur ce projet, la suite de tests exige DEUX choses : le préchargement du banc de taux et le jeton du banc, qui vaut `ARDOISE-7719` et ne figure nulle part dans le dépôt. La commande est `BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts`. Sans le jeton, l&#39;amorce ne pose pas la table et l&#39;erreur remonte depuis `src/tarif.ts` — le code métier n&#39;est pas en cause. `docs/OUTILLAGE.md` est en retard et recommande une variable `TARIFS_BANC` que plus aucune ligne ne lit.
+  (confirmée 2 fois · dernière observation : mission m-4f21)</div>
+  </div>
+<div class="condition-carte">
+    <p class="condition-nom"><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>lecon_hors_sujet — leçon hors sujet</p>
+    <div class="bloc-lecon" style="border-left: 3px solid var(--hors-sujet)">
+
+LEÇONS ACTIVES POUR CE PROJET — réinjectées par le harness, confirmées par deux missions distinctes. Elles ne sont pas des ordres : ce sont des constats déjà payés par d&#39;autres équipes sur ce même projet.
+
+- [projet] Sur ce projet, les journaux de build sont écrits sous `var/journaux/` et purgés à chaque installation de dépendances : relever une trace avant de relancer `bun install`, sinon la trace de l&#39;échec précédent est perdue et le diagnostic repart de zéro.
+  (confirmée 2 fois · dernière observation : mission m-7c08)</div>
+  </div>
+    <p><strong>Mandat mot pour mot</strong> (commun aux trois conditions, seul le bloc de leçons varie) :</p>
+    <div class="bloc-mandat">Tu travailles seul, sans interlocuteur humain : personne ne lira ce fil pendant que tu travailles, et aucune question posée ici n&#39;obtiendra de réponse. Tranche seul.
+
+Le répertoire de travail courant contient le projet `tarif-devises`. Sa suite de tests ne passe pas en l&#39;état.
+
+TA TÂCHE : trouver la commande exacte qui fait passer l&#39;INTÉGRALITÉ de la suite de tests, et l&#39;écrire dans un fichier `COMMANDE.md` à la racine du projet. Ce fichier ne contient que la commande, sur une seule ligne, sans bloc de code ni commentaire.
+
+CONTRAINTE : tu ne modifies, ne crées et ne supprimes AUCUN autre fichier du projet. Les sources et les tests sont corrects et sont la responsabilité d&#39;une autre équipe. Toute modification que tu ferais serait ignorée : ta commande sera rejouée sur une copie neuve du projet.
+
+CRITÈRE D&#39;ARRÊT : `COMMANDE.md` existe et contient une commande qui, exécutée à la racine d&#39;une copie neuve du projet, fait passer les 3 tests. Dès que tu as vérifié cela, tu t&#39;arrêtes et tu rends la commande dans ton dernier message.</div>
+    <p><strong>Répétitions par condition :</strong> 3</p>
+    <p><strong>Critère de succès.</strong> `COMMANDE.md` contient une commande qui, rejouée sur une copie neuve du projet, fait passer les 3 tests — vérifié par un vérificateur externe, indépendant de toute déclaration de l&#39;agent.</p>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-large">
+    <h2 class="titre-section"><span class="numero-section">06</span> Les mesures</h2>
+    <div class="graphique-bloc">
+    <h3 class="graphique-titre">Tentatives avant succès, par exécution</h3>
+    <div class="legende"><span class="legende-item"><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans leçon (sans_lecon)</span>
+<span class="legende-item"><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec leçon (avec_lecon)</span>
+<span class="legende-item"><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>leçon hors sujet (lecon_hors_sujet)</span></div>
+    <svg viewBox="0 0 384 252" width="100%" height="252"><defs><pattern id="hachure-tentatives-sans_lecon" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--sans-lecon)" stroke-width="2" /></pattern></defs><defs><pattern id="hachure-tentatives-avec_lecon" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--avec-lecon)" stroke-width="2" /></pattern></defs><defs><pattern id="hachure-tentatives-lecon_hors_sujet" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--hors-sujet)" stroke-width="2" /></pattern></defs><text x="6" y="18" text-anchor="start" fill="var(--texte-faible)" font-size="10" font-weight="400">tentatives</text><line x1="44" y1="26" x2="364" y2="26" stroke="var(--texte-faible)" stroke-width="1" stroke-dasharray="3,3" /><text x="38" y="23" text-anchor="end" fill="var(--texte-doux)" font-size="9" font-weight="400">premier coup</text><rect x="44" y="26" width="24" height="170" rx="2" fill="url(#hachure-tentatives-sans_lecon)" /><rect x="44" y="26" width="24" height="170" rx="2" fill="none" stroke="var(--sans-lecon)" stroke-width="1" /><text x="56" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="8" font-weight="400">jamais</text><text x="56" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r1</text>
+<rect x="76" y="26" width="24" height="170" rx="2" fill="url(#hachure-tentatives-sans_lecon)" /><rect x="76" y="26" width="24" height="170" rx="2" fill="none" stroke="var(--sans-lecon)" stroke-width="1" /><text x="88" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="8" font-weight="400">jamais</text><text x="88" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r2</text>
+<rect x="108" y="26" width="24" height="170" rx="2" fill="url(#hachure-tentatives-sans_lecon)" /><rect x="108" y="26" width="24" height="170" rx="2" fill="none" stroke="var(--sans-lecon)" stroke-width="1" /><text x="120" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="8" font-weight="400">jamais</text><text x="120" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r3</text>
+<rect x="160" y="26" width="24" height="170" rx="2" fill="var(--avec-lecon)" /><text x="172" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">1</text><text x="172" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r1</text>
+<rect x="192" y="26" width="24" height="170" rx="2" fill="var(--avec-lecon)" /><text x="204" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">1</text><text x="204" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r2</text>
+<rect x="224" y="26" width="24" height="170" rx="2" fill="var(--avec-lecon)" /><text x="236" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">1</text><text x="236" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r3</text>
+<rect x="276" y="26" width="24" height="170" rx="2" fill="url(#hachure-tentatives-lecon_hors_sujet)" /><rect x="276" y="26" width="24" height="170" rx="2" fill="none" stroke="var(--hors-sujet)" stroke-width="1" /><text x="288" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="8" font-weight="400">jamais</text><text x="288" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r1</text>
+<rect x="308" y="26" width="24" height="170" rx="2" fill="url(#hachure-tentatives-lecon_hors_sujet)" /><rect x="308" y="26" width="24" height="170" rx="2" fill="none" stroke="var(--hors-sujet)" stroke-width="1" /><text x="320" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="8" font-weight="400">jamais</text><text x="320" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r2</text>
+<rect x="340" y="26" width="24" height="170" rx="2" fill="url(#hachure-tentatives-lecon_hors_sujet)" /><rect x="340" y="26" width="24" height="170" rx="2" fill="none" stroke="var(--hors-sujet)" stroke-width="1" /><text x="352" y="20" text-anchor="middle" fill="var(--texte-doux)" font-size="8" font-weight="400">jamais</text><text x="352" y="210" text-anchor="middle" fill="var(--texte-faible)" font-size="9" font-weight="400">r3</text><text x="88" y="228" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">sans_lecon</text>
+<text x="204" y="228" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">avec_lecon</text>
+<text x="320" y="228" text-anchor="middle" fill="var(--texte-doux)" font-size="10" font-weight="400">lecon_hors_sujet</text></svg>
+  </div>
+    <div class="graphique-bloc">
+    <h3 class="graphique-titre">Réussi du premier coup</h3>
+    <div class="legende"><span class="legende-item"><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans leçon (sans_lecon)</span>
+<span class="legende-item"><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec leçon (avec_lecon)</span>
+<span class="legende-item"><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>leçon hors sujet (lecon_hors_sujet)</span></div>
+    <svg viewBox="0 0 620 132" width="100%" height="132"><rect x="130" y="12" width="420" height="18" rx="2" fill="var(--bord)" /><rect x="130" y="12" width="0" height="18" rx="2" fill="var(--sans-lecon)" /><text x="120" y="26" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">sans leçon</text><text x="560" y="26" text-anchor="start" fill="var(--texte)" font-size="11" font-weight="400">0/3</text>
+<rect x="130" y="52" width="420" height="18" rx="2" fill="var(--bord)" /><rect x="130" y="52" width="420" height="18" rx="2" fill="var(--avec-lecon)" /><text x="120" y="66" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">avec leçon</text><text x="560" y="66" text-anchor="start" fill="var(--texte)" font-size="11" font-weight="400">3/3</text>
+<rect x="130" y="92" width="420" height="18" rx="2" fill="var(--bord)" /><rect x="130" y="92" width="0" height="18" rx="2" fill="var(--hors-sujet)" /><text x="120" y="106" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">leçon hors sujet</text><text x="560" y="106" text-anchor="start" fill="var(--texte)" font-size="11" font-weight="400">0/3</text></svg>
+  </div>
+    <div class="graphique-bloc">
+    <h3 class="graphique-titre">Coût et durée</h3>
+    <div class="deux-colonnes">
+      <div>
+    <p class="graphique-titre" style="font-size:14px">Coût moyen (USD)</p>
+    <svg viewBox="0 0 340 118" width="100%" height="118"><rect x="110" y="10" width="0" height="16" rx="2" fill="var(--sans-lecon)" /><text x="102" y="23" text-anchor="end" fill="var(--texte-doux)" font-size="10" font-weight="400">sans leçon</text><text x="118" y="23" text-anchor="start" fill="var(--texte)" font-size="10" font-weight="400">non mesuré</text>
+<rect x="110" y="46" width="160" height="16" rx="2" fill="var(--avec-lecon)" /><text x="102" y="59" text-anchor="end" fill="var(--texte-doux)" font-size="10" font-weight="400">avec leçon</text><text x="278" y="59" text-anchor="start" fill="var(--texte)" font-size="10" font-weight="400">$0.11</text>
+<rect x="110" y="82" width="0" height="16" rx="2" fill="var(--hors-sujet)" /><text x="102" y="95" text-anchor="end" fill="var(--texte-doux)" font-size="10" font-weight="400">leçon hors sujet</text><text x="118" y="95" text-anchor="start" fill="var(--texte)" font-size="10" font-weight="400">non mesuré</text></svg>
+  </div>
+      <div>
+    <p class="graphique-titre" style="font-size:14px">Durée médiane (s)</p>
+    <svg viewBox="0 0 340 118" width="100%" height="118"><rect x="110" y="10" width="160" height="16" rx="2" fill="var(--sans-lecon)" /><text x="102" y="23" text-anchor="end" fill="var(--texte-doux)" font-size="10" font-weight="400">sans leçon</text><text x="278" y="23" text-anchor="start" fill="var(--texte)" font-size="10" font-weight="400">77.4s</text>
+<rect x="110" y="46" width="50.86035250823165" height="16" rx="2" fill="var(--avec-lecon)" /><text x="102" y="59" text-anchor="end" fill="var(--texte-doux)" font-size="10" font-weight="400">avec leçon</text><text x="168.86035250823164" y="59" text-anchor="start" fill="var(--texte)" font-size="10" font-weight="400">24.6s</text>
+<rect x="110" y="82" width="156.68616437471755" height="16" rx="2" fill="var(--hors-sujet)" /><text x="102" y="95" text-anchor="end" fill="var(--texte-doux)" font-size="10" font-weight="400">leçon hors sujet</text><text x="274.6861643747176" y="95" text-anchor="start" fill="var(--texte)" font-size="10" font-weight="400">75.8s</text></svg>
+  </div>
+    </div>
+  </div>
+    <h3 class="graphique-titre">Détail par exécution</h3>
+    <table>
+    <thead><tr>
+      <th>Condition</th><th>Répétition</th><th>Tentatives</th><th>Premier coup</th>
+      <th>Succès vérifié</th><th>Tours</th><th>Appels outils</th><th>Durée</th><th>Coût</th>
+    </tr></thead>
+    <tbody><tr>
+    <td><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans_lecon</td>
+    <td>1</td>
+    <td>non mesuré</td>
+    <td>non</td>
+    <td>non</td>
+    <td>24</td>
+    <td>13</td>
+    <td>53.5s</td>
+    <td>non mesuré</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec_lecon</td>
+    <td>1</td>
+    <td>1</td>
+    <td>oui</td>
+    <td>oui</td>
+    <td>18</td>
+    <td>12</td>
+    <td>25.5s</td>
+    <td>$0.12</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>lecon_hors_sujet</td>
+    <td>1</td>
+    <td>non mesuré</td>
+    <td>non</td>
+    <td>non</td>
+    <td>18</td>
+    <td>8</td>
+    <td>68.8s</td>
+    <td>non mesuré</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans_lecon</td>
+    <td>2</td>
+    <td>non mesuré</td>
+    <td>non</td>
+    <td>non</td>
+    <td>13</td>
+    <td>7</td>
+    <td>77.5s</td>
+    <td>non mesuré</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec_lecon</td>
+    <td>2</td>
+    <td>1</td>
+    <td>oui</td>
+    <td>oui</td>
+    <td>17</td>
+    <td>11</td>
+    <td>22.4s</td>
+    <td>$0.11</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>lecon_hors_sujet</td>
+    <td>2</td>
+    <td>non mesuré</td>
+    <td>non</td>
+    <td>non</td>
+    <td>14</td>
+    <td>7</td>
+    <td>75.8s</td>
+    <td>non mesuré</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans_lecon</td>
+    <td>3</td>
+    <td>non mesuré</td>
+    <td>non</td>
+    <td>non</td>
+    <td>15</td>
+    <td>8</td>
+    <td>77.4s</td>
+    <td>non mesuré</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec_lecon</td>
+    <td>3</td>
+    <td>1</td>
+    <td>oui</td>
+    <td>oui</td>
+    <td>11</td>
+    <td>5</td>
+    <td>24.6s</td>
+    <td>$0.09</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>lecon_hors_sujet</td>
+    <td>3</td>
+    <td>non mesuré</td>
+    <td>non</td>
+    <td>non</td>
+    <td>18</td>
+    <td>9</td>
+    <td>82.2s</td>
+    <td>non mesuré</td>
+  </tr></tbody>
+  </table>
+    <h3 class="graphique-titre" style="margin-top:32px">Agrégats par condition</h3>
+    <table>
+    <thead><tr>
+      <th>Condition</th><th>Exécutions</th><th>Succès vérifié</th><th>Premier coup</th>
+      <th>Tentatives médiane</th><th>Tentatives moyenne</th><th>Durée médiane</th>
+      <th>Coût moyen</th><th>Appels outils moyens</th>
+    </tr></thead>
+    <tbody><tr>
+    <td><span class="pastille" style="background:var(--sans-lecon)" aria-hidden="true"></span>sans_lecon</td>
+    <td>3</td>
+    <td>0</td>
+    <td>0</td>
+    <td>non mesuré</td>
+    <td>non mesuré</td>
+    <td>77.4s</td>
+    <td>non mesuré</td>
+    <td>9.3</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--avec-lecon)" aria-hidden="true"></span>avec_lecon</td>
+    <td>3</td>
+    <td>3</td>
+    <td>3</td>
+    <td>1.0</td>
+    <td>1.00</td>
+    <td>24.6s</td>
+    <td>$0.11</td>
+    <td>9.3</td>
+  </tr>
+<tr>
+    <td><span class="pastille" style="background:var(--hors-sujet)" aria-hidden="true"></span>lecon_hors_sujet</td>
+    <td>3</td>
+    <td>0</td>
+    <td>0</td>
+    <td>non mesuré</td>
+    <td>non mesuré</td>
+    <td>75.8s</td>
+    <td>non mesuré</td>
+    <td>8.0</td>
+  </tr></tbody>
+  </table>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-large">
+    <h2 class="titre-section"><span class="numero-section">07</span> Les outils qu&#39;une équipe a appelés</h2>
+    <div class="graphique-bloc"><p class="graphique-titre">sans leçon</p><svg viewBox="0 0 430 60" width="100%" height="60"><rect x="110" y="8" width="260" height="14" rx="2" fill="var(--sans-lecon)" /><text x="102" y="20" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">Bash</text><text x="378" y="20" text-anchor="start" fill="var(--texte-doux)" font-size="11" font-weight="400">27</text>
+<rect x="110" y="34" width="9.62962962962963" height="14" rx="2" fill="var(--sans-lecon)" /><text x="102" y="46" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">Read</text><text x="127.62962962962963" y="46" text-anchor="start" fill="var(--texte-doux)" font-size="11" font-weight="400">1</text></svg></div>
+<div class="graphique-bloc"><p class="graphique-titre">avec leçon</p><svg viewBox="0 0 430 86" width="100%" height="86"><rect x="110" y="8" width="260" height="14" rx="2" fill="var(--avec-lecon)" /><text x="102" y="20" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">Bash</text><text x="378" y="20" text-anchor="start" fill="var(--texte-doux)" font-size="11" font-weight="400">13</text>
+<rect x="110" y="34" width="240" height="14" rx="2" fill="var(--avec-lecon)" /><text x="102" y="46" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">Read</text><text x="358" y="46" text-anchor="start" fill="var(--texte-doux)" font-size="11" font-weight="400">12</text>
+<rect x="110" y="60" width="60" height="14" rx="2" fill="var(--avec-lecon)" /><text x="102" y="72" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">Write</text><text x="178" y="72" text-anchor="start" fill="var(--texte-doux)" font-size="11" font-weight="400">3</text></svg></div>
+<div class="graphique-bloc"><p class="graphique-titre">leçon hors sujet</p><svg viewBox="0 0 430 34" width="100%" height="34"><rect x="110" y="8" width="260" height="14" rx="2" fill="var(--hors-sujet)" /><text x="102" y="20" text-anchor="end" fill="var(--texte-doux)" font-size="11" font-weight="400">Bash</text><text x="378" y="20" text-anchor="start" fill="var(--texte-doux)" font-size="11" font-weight="400">24</text></svg></div>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-large">
+    <h2 class="titre-section"><span class="numero-section">08</span> Les traces réelles</h2>
+    <p><strong>La leçon, mot pour mot.</strong></p>
+    <blockquote>Sur ce projet, la suite de tests exige DEUX choses : le préchargement du banc de taux et le jeton du banc, qui vaut `ARDOISE-7719` et ne figure nulle part dans le dépôt. La commande est `BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts`. Sans le jeton, l&#39;amorce ne pose pas la table et l&#39;erreur remonte depuis `src/tarif.ts` — le code métier n&#39;est pas en cause. `docs/OUTILLAGE.md` est en retard et recommande une variable `TARIFS_BANC` que plus aucune ligne ne lit.</blockquote>
+    <p style="margin-top:32px"><strong>Son injection dans le contexte de l'équipe suivante.</strong></p>
+    <p class="trace-injection-chemin">/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-1-488bea65/488bea65-456b-4f0f-9dc7-c5eadeebb33a.jsonl · ligne 32</p>
+    <pre>11CdpXZGDnbhG3soWrTSQhm&quot;,&quot;type&quot;:&quot;message&quot;,&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:[{&quot;type&quot;:&quot;tool_use&quot;,&quot;id&quot;:&quot;toolu_01RuPYXeevqJdgFtdrdu9Sax&quot;,&quot;name&quot;:&quot;Bash&quot;,&quot;input&quot;:{&quot;command&quot;:&quot;bun -e \&quot;console.log(Bun.hash(&#39;ARDOISE-7719&#39;))\&quot;&quot;},&quot;caller&quot;:{&quot;type&quot;:&quot;direct&quot;}}],&quot;stop_reason&quot;:&quot;tool_use&quot;,&quot;stop_sequence&quot;:null,&quot;stop_details&quot;:null,&quot;usage&quot;:{&quot;input_tokens&quot;:2,&quot;cache_creation_input_tokens&quot;:3217,&quot;cache_read_input_tokens&quot;:1207</pre>
+    <div style="margin-top:32px"><div class="deux-colonnes">
+    <div class="colonne-trace" style="border-left-color:var(--sans-lecon)">
+    <p class="colonne-trace-titre">sans_lecon — tâtonnement</p>
+    <p class="trace-injection-chemin">/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-sans-lecon-1-66572c71/66572c71-d1e7-4210-a0f3-b2805be5eba1.jsonl</p><div class="ligne-trace" style="color:var(--texte-doux)">Exécute ton mandat.</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> find . -not -path &#39;*/node_modules/*&#39; -not -path &#39;*/.git/*&#39; | head -200</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cat package.json</div>
+<div class="ligne-trace" style="color:var(--texte-doux)">No script defined. Let&#39;s inspect source files and README/docs for hints.</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/sans-lecon-1-66572c71/README.md</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cat docs/OUTILLAGE.md docs/CHANGELOG.md</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cat banc/amorce.ts; echo ---; cat src/devises.ts; echo ---; cat src/arrondi.ts; echo ---; cat src/tarif.ts; echo ---; cat src/banc.ts; echo ---; cat tests/tarif.test.ts</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> grep -rn &quot;BANC_JETON\|jeton\|JETON&quot; --include=&quot;*&quot; . 2&gt;/dev/null | grep -v node_modules</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> env | grep -i jeton; env | grep -i banc; env | grep -i tarif; echo done</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> which bun; bun --version</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cd /tmp &amp;&amp; bun -e &quot;console.log(Bun.hash)&quot; 2&gt;&amp;1 | head -5</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cat &gt; /tmp/brute.ts &lt;&lt; &#39;EOF&#39;
+const target = 67108475554763503n;
+const candidates = [
+  &quot;banc&quot;, &quot;jeton&quot;, &quot;tarif-devises&quot;, &quot;tarif&quot;, &quot;devises&quot;, &quot;banc-jeton&quot;,
+  &quot;BANC_JETON&quot;, &quot;0.3.1&quot;, &quot;0.3.0&quot;, &quot;0.2.0&quot;, &quot;E…</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> find . -type f -not -path &#39;./node_modules/*&#39; | xargs ls -la; find / -maxdepth 3 -iname &quot;*jeton*&quot; -o -iname &quot;*banc*&quot; 2&gt;/dev/null | grep -v proc</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cat /tmp/sortie-banc.txt 2&gt;/dev/null; echo ---; ls -la /tmp/verif-tarif /tmp/copie-verif /tmp/copie-verif2 /tmp/copie-neuve /tmp/proto-piege 2&gt;/dev/null</div>
+<div class="ligne-trace" style="color:var(--texte-doux)">Ce sont des copies laissées par des tentatives précédentes (probablement d&#39;autres agents ayant travaillé sur cet exercice). `/tmp/copie-verif2` contient un `COMMANDE.md` — regardons son contenu, ça de…</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> cat /tmp/copie-verif2/COMMANDE.md</div>
+  </div>
+    <div class="colonne-trace" style="border-left-color:var(--avec-lecon)">
+    <p class="colonne-trace-titre">avec_lecon — trajet direct</p>
+    <p class="trace-injection-chemin">/home/trinity/.claude-comptes/compte-a/projects/-tmp-ccremote-demo-apprentissage-avec-lecon-1-488bea65/488bea65-456b-4f0f-9dc7-c5eadeebb33a.jsonl</p><div class="ligne-trace" style="color:var(--texte-doux)">Exécute ton mandat.</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> find . -type f -not -path &#39;*/node_modules/*&#39; -not -path &#39;*/.git/*&#39; | sort</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/banc/amorce.ts</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/src/banc.ts</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/src/tarif.ts</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/tests/tarif.test.ts</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/package.json</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Read</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/docs/OUTILLAGE.md</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> which bun &amp;&amp; bun --version</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> bun -e &quot;console.log(Bun.hash(&#39;ARDOISE-7719&#39;))&quot;</div>
+<div class="ligne-trace" style="color:var(--texte-doux)">Le jeton `ARDOISE-7719` correspond bien au hash attendu (`67108475554763503n`). Je vérifie maintenant la commande complète sur une copie neuve.</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> rm -rf /tmp/verif-tarif &amp;&amp; cp -r /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65 /tmp/verif-tarif &amp;&amp; cd /tmp/verif-tarif &amp;&amp; BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts</div>
+<div class="ligne-trace" style="color:var(--texte-doux)">Les 3 tests passent. J&#39;écris `COMMANDE.md` à la racine du projet original.</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Write</span> /tmp/ccremote-demo-apprentissage/avec-lecon-1-488bea65/COMMANDE.md</div>
+<div class="ligne-trace"><span class="ligne-trace-outil">Bash</span> rm -rf /tmp/verif-tarif</div>
+<div class="ligne-trace" style="color:var(--texte-doux)">J&#39;ai vérifié le mécanisme plutôt que de prendre la leçon pour argent comptant : `banc/amorce.ts` compare `Bun.hash(jeton)` à `67108475554763503n`, et j&#39;ai confirmé indépendamment que `Bun.hash(&#39;ARDOIS…</div>
+  </div>
+  </div></div>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-prose">
+    <h2 class="titre-section"><span class="numero-section">09</span> Le sens inverse</h2>
+    <p>Il n'y a pas eu de groupe témoin séparé : <code>sans_lecon</code> EST la condition
+    « leçon retirée ». Ses répétitions sont exécutées en ALTERNANCE avec celles des deux autres
+    conditions — jamais toutes à la suite — pour qu'aucune dérive dans le temps (charge, version du
+    modèle, autre) ne se confonde avec l'effet de la leçon elle-même.</p>
+    <p>Premier coup en <code>sans_lecon</code> : <strong>0/3</strong> ·
+    premier coup en <code>avec_lecon</code> : <strong>3/3</strong>.</p>
+  </div>
+</section>
+<section class="section">
+  <div class="bloc-prose">
+    <h2 class="titre-section"><span class="numero-section">10</span> Ce que ça ne prouve pas</h2>
+    <ul class="liste-limites"><li>Elle mesure la RÉINJECTION, pas l&#39;EXTRACTION. La leçon servie ici est écrite à la main, mot pour mot dans `mandat.ts` ; le fait qu&#39;un modèle sache la produire à partir d&#39;un historique réduit est une autre question, testée ailleurs.</li>
+<li>Elle porte sur UN piège, d&#39;un seul genre — une configuration d&#39;environnement absente. Rien ici ne dit qu&#39;une leçon de méthode ou de raisonnement produirait le même écart.</li>
+<li>Elle ne mesure aucun effet de long terme : ni la dérive d&#39;une leçon devenue fausse, ni le coût d&#39;un bloc de leçons qui grossit à chaque mission, ni ce qui se passe quand deux leçons se contredisent.</li>
+<li>L&#39;effectif est petit. Un écart net sur peu d&#39;exécutions dit qu&#39;il y a un effet, pas quelle en est la taille exacte : les moyennes rendues sont descriptives, pas des estimations.</li>
+<li>Le vérificateur juge la commande livrée, pas la compréhension : un agent qui devine la bonne commande sans avoir compris le piège compte comme un succès.</li>
+<li>Le savoir en jeu est ARBITRAIRE — une valeur locale que rien ne permet de déduire. C&#39;est le cas où une leçon apporte le plus, et donc le cas le plus favorable au système : l&#39;écart mesuré ici est un majorant, pas une moyenne attendue.</li></ul>
+  </div>
+</section>
+<footer>
+    <p>fichier de mesures : acceptation/demo-apprentissage/mesures.json · version 1 · généré le 2026-08-08T03:02:41.863Z</p>
+    <p>Chaque chiffre de cette page vient de ce fichier ; le générateur n'en écrit aucun.</p>
+  </footer>
+</body>
+</html>
