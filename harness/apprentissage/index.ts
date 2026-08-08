@@ -30,6 +30,14 @@ export {
 export { estimerTokensResumeMission, reduireTranscript } from './observation/reduction-transcript.ts';
 export type { ParametresReduction } from './observation/reduction-transcript.ts';
 
+export { classerIssue } from './observation/classement-issue.ts';
+export type {
+  ConstatGitMission,
+  DonneesMissionTerminee,
+  EtatHarnessMission,
+  VerdictInspectionMission,
+} from './observation/classement-issue.ts';
+
 export type {
   CategorieLecon,
   Competence,
