@@ -1,9 +1,44 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-08-06*
+*Dernière mise à jour : 2026-08-08*
 
 ## ⚡ Harness d'orchestration — chantier actif
 
 **Contexte complet : `harness/REPRISE.md`.**
+
+### 🎯 DEMANDÉ PAR CHRIS LE 08/08 — l'orchestrateur doit pouvoir présenter un fichier
+
+Aujourd'hui l'orchestrateur ne peut RIEN montrer. Il n'a ni `Write` ni `Bash` (et ce n'est pas
+une restriction temporaire, c'est sa définition) : pour faire lire un script ou une page à Chris,
+il n'a que le corps de son message. Un script de 80 lignes collé dans une bulle de conversation
+est illisible sur un téléphone, impossible à enregistrer, et se perd dès que le fil est compacté.
+
+**Ce que Chris demande, mot pour mot :** « dans une session avec l'orchestrateur faut qu'il ait à
+dispo un tool pour nous présenter que ce soit un fichier sh, py, lua etc. ainsi que html, et que
+nous on puisse l'avoir sous forme d'artéfact, pouvoir download avec un bouton, et lors du clic sur
+le composant qu'il s'affiche ; et dans le cas d'un html avoir un bouton toggle entre le code
+source et la visualisation. »
+
+- [ ] **Un outil MCP de présentation** — l'orchestrateur remet un contenu nommé et typé. Le nom
+      de l'outil et sa forme restent à trancher ; ce qui est acquis, c'est qu'il ne s'agit PAS
+      d'écrire sur un disque : c'est un artéfact attaché au fil, pas un fichier de projet.
+      `☠` Ne pas lui rendre `Write` par la bande. Un contenu remis à Chris et un fichier écrit
+      dans un dépôt sont deux gestes différents ; les confondre rouvrirait la surface d'écriture
+      que le harness lui refuse depuis l'origine (acceptation (a), `options-orchestrateur.ts`).
+- [ ] **Persistance de l'artéfact.** Le mécanisme des pièces jointes existe déjà dans l'autre sens
+      (migration 24, `control-plane/pieces-jointes/`, Chris → orchestrateur) : à examiner en
+      premier avant d'en construire un second. `☠` Le contenu doit survivre à une compaction du
+      fil — un artéfact qui disparaît avec l'historique ne vaut rien.
+- [ ] **Composant d'affichage dans la conversation** — replié par défaut comme les autres valises,
+      déplié au clic, avec un bouton de téléchargement. Réutiliser `HValise` plutôt qu'un
+      troisième vocabulaire, et le vocabulaire de coloration syntaxique déjà présent (`hMarkdown`,
+      `.codeblock`).
+- [ ] **Cas du HTML : bascule code source / rendu.** `☠` Le rendu d'un HTML produit par un modèle
+      est du contenu non fiable exécuté dans la page qui porte la session de Chris — `iframe`
+      `sandbox` sans `allow-same-origin`, jamais une injection directe dans le DOM de
+      l'application. Le point mérite d'être tranché avant d'écrire la première ligne : c'est la
+      seule partie de cette demande qui porte un risque réel.
+- [ ] **Annoncer l'outil dans le mandat** le jour où il est livré — un outil non annoncé n'existe
+      pas pour le modèle (quatre occurrences, un test le vérifie désormais).
 
 ### 06/08 — quatre outils machine ajoutés (`c1f6e8f`, `ac7ffa1`) — voir `STATE.md`
 
