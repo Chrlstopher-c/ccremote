@@ -431,6 +431,13 @@ options, les mesures réelles, et une recommandation d'une ligne.
 estimation de durée. Consolider pendant qu'une équipe travaille, c'est modifier le corpus qu'une
 autre est en train de lire.
 
+`☠` **CÂBLÉ** (mandat de branchement) : `service/consolidation.ts` était écrit et testé, mais
+rien ne l'appelait jamais — exactement le motif qui a le plus coûté à ce projet. Le déclenchement
+périodique vit maintenant dans `service/consolidation-periodique.ts` (tick programmé, portes
+relues à chaque tick, jamais de valeur figée) et le câblage dans `superviseur-workers.ts`
+calcule `aucuneMissionActive` depuis `RegistreWorkers.tous()`. Voir `ACTIVATION.md` pour
+l'interrupteur (même variable, même logique qu'E6) et la preuve d'artefact réel.
+
 ---
 
 ## E11 — Banc d'acceptation de bout en bout

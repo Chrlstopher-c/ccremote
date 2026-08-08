@@ -375,7 +375,13 @@ export interface LeconExtraite {
   - `candidate` → `active` : deux confirmations par des missions **distinctes** (C-5).
   - `active` → `dormante` : 60 jours sans nouvelle confirmation.
   - `dormante` → `active` : une nouvelle confirmation.
-  - `active` → `obsolete` : **uniquement** sur contradiction (C-5) ou sur geste explicite.
+  - `candidate` → `obsolete` : quand les contradictions rattrapent ou dépassent les confirmations.
+    `☠` CORRIGÉ (constat de portage) : la spec décrivait ici une transition `active` → `obsolete`
+    sur contradiction — inatteignable en pratique, parce que `contredireLecon` (C-5) rétrograde
+    déjà `active` en `candidate` **immédiatement**, dès la première contradiction (temps réel, pas
+    à la passe). Une leçon `active` n'est donc jamais contredite directement vers `obsolete` ; c'est
+    l'état `candidate` qui périme ici, une fois que les contradictions accumulées rattrapent les
+    confirmations. Geste explicite : toujours possible, hors de cette passe par horloge.
 - **`☠` Jamais de suppression.** État `obsolete` et exclusion du service ; la ligne reste, avec sa
   provenance. Le corollaire Hermes s'applique tel quel : archiver est récupérable, supprimer ne
   l'est pas.
