@@ -9,7 +9,7 @@
  */
 
 import { Database } from 'bun:sqlite';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { executer, journal } from '../logger.ts';
@@ -33,10 +33,33 @@ export function cheminBaseParDefaut(): string {
   return join(homedir(), '.local', 'share', 'ccremote', 'apprentissage.db');
 }
 
-/** Ouvre la base et garantit que le schéma est à jour. En lecture seule, aucune migration. */
+/**
+ * Erreur dédiée à l'ouverture en lecture seule d'une base jamais initialisée. `☠` Distincte
+ * de `ErreurApprentissage` : ce n'est PAS une panne (aucune écriture n'a encore eu lieu au
+ * premier démarrage du système), donc jamais journalisée en erreur — voir `ouvrirBaseApprentissage`.
+ */
+export class ErreurBaseAbsente extends Error {
+  constructor(chemin: string) {
+    super(`base d’apprentissage absente (jamais initialisée) : ${chemin}`);
+    this.name = 'ErreurBaseAbsente';
+  }
+}
+
+/**
+ * Ouvre la base et garantit que le schéma est à jour. En lecture seule, aucune migration.
+ * En écriture, le dossier ET le fichier sont créés s'ils n'existent pas encore — le premier
+ * mandat construit après l'allumage du système est l'occasion normale de cette création.
+ * En lecture seule sur une base absente : lève `ErreurBaseAbsente` SANS journaliser d'erreur —
+ * une base vide au premier démarrage est l'état NORMAL, pas une panne (voir `composerBlocLecons`,
+ * qui traite ce cas comme « zéro leçon »). Le journal d'erreur reste réservé aux vraies pannes :
+ * base corrompue, droits refusés — celles-ci passent toujours par `executer` plus bas.
+ */
 export function ouvrirBaseApprentissage(options: OptionsConnexionApprentissage = {}): Database {
   const chemin = options.chemin ?? cheminBaseParDefaut();
   const lectureSeule = options.lectureSeule ?? false;
+  if (lectureSeule && estFichierAbsent(chemin)) {
+    throw new ErreurBaseAbsente(chemin);
+  }
   return executer(
     'ouvrirBaseApprentissage',
     () => {
@@ -54,6 +77,32 @@ export function ouvrirBaseApprentissage(options: OptionsConnexionApprentissage =
 function preparerRepertoire(chemin: string): void {
   if (chemin === ':memory:' || chemin.startsWith('file::memory:')) return;
   mkdirSync(dirname(chemin), { recursive: true });
+}
+
+/**
+ * Vrai seulement si le fichier n'existe pas (ENOENT) — les autres pannes de `stat` (droits
+ * refusés, dossier parent absent…) sont de vraies pannes et doivent remonter jusqu'à
+ * `executer` pour être journalisées en erreur, pas absorbées ici.
+ */
+function estFichierAbsent(chemin: string): boolean {
+  if (chemin === ':memory:' || chemin.startsWith('file::memory:')) return false;
+  try {
+    statSync(chemin);
+    return false;
+  } catch (erreur) {
+    return estErreurFichierAbsent(erreur);
+  }
+}
+
+// Cast justifié : Node ne type pas nativement les erreurs `fs` — `code` est le seul moyen
+// standard de distinguer ENOENT (fichier absent, normal) d'une vraie panne (droits refusés).
+function estErreurFichierAbsent(erreur: unknown): boolean {
+  return (
+    typeof erreur === 'object' &&
+    erreur !== null &&
+    'code' in erreur &&
+    (erreur as { code?: unknown }).code === 'ENOENT'
+  );
 }
 
 function appliquerPragmas(

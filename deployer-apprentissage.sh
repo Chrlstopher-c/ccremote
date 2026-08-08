@@ -14,20 +14,29 @@
 # Séquence, dans l'ordre, chacune bloquant la suivante :
 #   1. arbre de travail propre (git status)
 #   2. suite de tests complète (`bun test`) + `tsc --noEmit`
-#   3. activation/désactivation PERSISTANTE — écrite dans le fichier
+#   3. préparation de la base de leçons SQLite (dossier + fichier créés si
+#      absents — premier allumage du système) : voir `#preparerBaseApprentissage`
+#   4. activation/désactivation PERSISTANTE — écrite dans le fichier
 #      d'environnement `%h/.config/ccremote/pc.env` que l'unité systemd charge
 #      via `EnvironmentFile=` : survit à un redémarrage machine, contrairement
 #      à un `export` de session.
-#   4. redémarrage du superviseur, DÉTACHÉ dans un scope systemd indépendant —
+#   5. redémarrage du superviseur, DÉTACHÉ dans un scope systemd indépendant —
 #      voir `#redemarrerDetache` pour pourquoi.
-#   5. contrôle après coup : service actif, process postérieur aux sources
+#   6. contrôle après coup : service actif, process postérieur aux sources
 #      (même garde que `deploy-superviseur-pc.sh`), interrupteur bien lu dans
 #      l'environnement RÉEL du process qui tourne (`/proc/<pid>/environ`, pas
 #      seulement le fichier — un fichier correct sur un process non redémarré
 #      ne prouve rien).
 #
-# Idempotent : relancer deux fois de suite ne casse rien (étape 3 ne duplique
-# jamais la ligne, étape 4 redémarre un service déjà à jour sans dommage).
+# Idempotent : relancer deux fois de suite ne casse rien (étape 3 n'écrase
+# jamais une base existante — migration idempotente —, étape 4 ne duplique
+# jamais la ligne, étape 5 redémarre un service déjà à jour sans dommage).
+#
+# Sortie : une ligne par étape, l'étape en cours annoncée avant qu'elle ne
+# bloque. La sortie complète de `bun test` (1700+ tests, journaux pino compris)
+# part dans un fichier de log dont le chemin est annoncé — jamais à l'écran.
+# En cas d'échec de test, seuls les tests réellement en échec sont affichés,
+# puis le script renvoie vers ce fichier pour le détail.
 set -e
 
 RACINE="$(cd "$(dirname "$0")" && pwd)"
@@ -63,15 +72,63 @@ controler_arbre_propre() {
 }
 
 # --- 2. Tests + typecheck ----------------------------------------------------
+# `☠` La sortie brute de `bun test` (1700+ tests + journaux pino de chaque
+# composant) est inexploitable par un humain — indiscernable entre un `ERROR`
+# de test normal (une panne délibérément provoquée pour vérifier qu'elle est
+# journalisée) et un vrai échec. Elle part donc intégralement dans un fichier ;
+# seule une ligne de statut s'affiche, et en cas d'échec seuls les tests
+# réellement fautifs (motif `(fail)` du reporter console de bun) sont montrés.
 controler_tests() {
-  echo "→ Suite de tests complète (bun test)"
-  (cd "$HARNESS" && bun test) || { echo "✗ suite de tests en échec — arrêt net." >&2; exit 1; }
+  echo "→ Suite de tests complète (bun test) — environ une minute, ne pas interrompre"
+  local journal_tests debut duree
+  journal_tests="$(mktemp /tmp/ccremote-deploiement-apprentissage-tests.XXXXXX.log)"
+  debut="$(date +%s)"
+  if ! (cd "$HARNESS" && bun test) >"$journal_tests" 2>&1; then
+    echo "✗ suite de tests en échec — tests fautifs :" >&2
+    grep -F '(fail)' "$journal_tests" >&2 || echo "  (aucun détail extrait — voir le journal)" >&2
+    echo "  journal complet : $journal_tests" >&2
+    exit 1
+  fi
+  duree=$(( $(date +%s) - debut ))
+  echo "  ✓ tests au vert (${duree}s, journal : $journal_tests)"
+
   echo "→ Vérification des types (tsc --noEmit)"
-  (cd "$HARNESS" && bunx tsc --noEmit) || { echo "✗ tsc --noEmit a trouvé des erreurs — arrêt net." >&2; exit 1; }
-  echo "  ✓ tests et types au vert"
+  local journal_tsc
+  journal_tsc="$(mktemp /tmp/ccremote-deploiement-apprentissage-tsc.XXXXXX.log)"
+  if ! (cd "$HARNESS" && bunx tsc --noEmit) >"$journal_tsc" 2>&1; then
+    echo "✗ tsc --noEmit a trouvé des erreurs :" >&2
+    cat "$journal_tsc" >&2
+    echo "  journal complet : $journal_tsc" >&2
+    exit 1
+  fi
+  echo "  ✓ types au vert"
 }
 
-# --- 3. Interrupteur persistant ----------------------------------------------
+# --- 3. Base de leçons SQLite -------------------------------------------------
+# `☠` Au premier allumage du système, `~/.local/share/ccremote/apprentissage.db`
+# n'existe pas — normal, rien ne l'a encore écrite. Sans cette étape, la
+# première ouverture réelle a lieu à l'aveugle, au premier mandat construit,
+# et échouait jusqu'ici en `SQLITE_CANTOPEN` (rattrapé, mais répété à chaque
+# mandat). `ouvrirBaseApprentissage()` en écriture crée le dossier ET le
+# fichier s'ils manquent (voir `harness/apprentissage/base/connexion.ts`) —
+# cette étape ne fait que le déclencher une fois, explicitement, et le dire.
+#preparerBaseApprentissage
+preparer_base_apprentissage() {
+  echo "→ Préparation de la base de leçons (SQLite)"
+  local chemin_base journal_base
+  chemin_base="${CCREMOTE_APPRENTISSAGE_DB:-$HOME/.local/share/ccremote/apprentissage.db}"
+  journal_base="$(mktemp /tmp/ccremote-deploiement-apprentissage-base.XXXXXX.log)"
+  if ! (cd "$HARNESS" && bun -e "
+import { fermerBaseApprentissage, ouvrirBaseApprentissage } from './apprentissage/index.ts';
+fermerBaseApprentissage(ouvrirBaseApprentissage());
+") >"$journal_base" 2>&1; then
+    echo "✗ préparation de la base de leçons en échec — journal : $journal_base" >&2
+    exit 1
+  fi
+  echo "  ✓ base de leçons prête : $chemin_base"
+}
+
+# --- 4. Interrupteur persistant ----------------------------------------------
 appliquer_interrupteur() {
   echo "→ Interrupteur persistant : $ENV_FICHIER"
   [ -f "$ENV_FICHIER" ] || { echo "✗ fichier d'environnement absent : $ENV_FICHIER" >&2; exit 1; }
@@ -88,7 +145,7 @@ appliquer_interrupteur() {
   fi
 }
 
-# --- 4. Redémarrage détaché ---------------------------------------------------
+# --- 5. Redémarrage détaché ---------------------------------------------------
 # `☠` Ce script peut être lancé depuis une session PILOTÉE PAR ccremote-pc lui-
 # même (un agent, enfant du service, exécutant ce script). Un `systemctl --user
 # restart ccremote-pc` en foreground tuerait alors tout le cgroup du service —
@@ -127,7 +184,7 @@ redemarrer_detache() {
   echo "  ✓ $SERVICE actif (journal : $journal)"
 }
 
-# --- 5. Contrôles après coup --------------------------------------------------
+# --- 6. Contrôles après coup --------------------------------------------------
 controler_fraicheur() {
   echo "→ Contrôle de fraîcheur : le process est-il plus récent que le code ?"
   local demarre epoch perimes
@@ -168,6 +225,7 @@ if [ "$SIMULATION" = "1" ]; then
   exit 0
 fi
 
+preparer_base_apprentissage
 appliquer_interrupteur
 redemarrer_detache
 controler_fraicheur
