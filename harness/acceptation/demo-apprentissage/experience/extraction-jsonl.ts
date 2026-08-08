@@ -10,13 +10,43 @@
  * protocole d'une mesure entière.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { LigneTrace, TentativeTest, UsageOutil } from './contrat.ts';
 
 export function cheminTranscript(configDir: string, cwd: string, sessionId: string): string {
   const cleProjet = cwd.replace(/[/\\]/g, '-');
   return join(configDir, 'projects', cleProjet, `${sessionId}.jsonl`);
+}
+
+/**
+ * Le chemin canonique, ou celui réellement écrit par le CLI.
+ *
+ * `☠ MESURÉ le 2026-08-08` — la clé de projet n'est PAS le simple remplacement des
+ * séparateurs : un `cwd` contenant `sans_lecon` a produit le dossier `…-sans-lecon-…`.
+ * Le CLI normalise davantage que ce que `cleProjet()` reproduit, et la règle exacte
+ * n'est pas documentée. Plutôt que de deviner cette règle — elle changera —, on
+ * cherche le fichier par son `sessionId`, qui, lui, est stable et unique.
+ */
+export async function resoudreTranscript(
+  configDir: string,
+  cwd: string,
+  sessionId: string,
+): Promise<string> {
+  const canonique = cheminTranscript(configDir, cwd, sessionId);
+  if (await Bun.file(canonique).exists()) return canonique;
+  const racine = join(configDir, 'projects');
+  try {
+    const dossiers = await readdir(racine, { withFileTypes: true });
+    for (const dossier of dossiers) {
+      if (!dossier.isDirectory()) continue;
+      const candidat = join(racine, dossier.name, `${sessionId}.jsonl`);
+      if (await Bun.file(candidat).exists()) return candidat;
+    }
+  } catch (error) {
+    console.error(`[extraction-jsonl] balayage des transcripts impossible sous ${racine} :`, error);
+  }
+  return canonique;
 }
 
 export interface MesuresTranscript {

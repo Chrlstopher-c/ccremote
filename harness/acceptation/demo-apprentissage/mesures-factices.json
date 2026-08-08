@@ -1,0 +1,252 @@
+{
+  "version": 1,
+  "factice": true,
+  "raisonFactice": "Ces valeurs sont inventées pour éprouver le rendu de la page — aucune exécution réelle n'a eu lieu, aucun modèle n'a été appelé.",
+  "genereA": "2026-08-08T09:45:00.000Z",
+  "protocole": {
+    "modele": "sonnet (factice)",
+    "repetitionsParCondition": 2,
+    "conditions": ["sans_lecon", "avec_lecon", "lecon_hors_sujet"],
+    "piege": "Piège factice : la suite de tests d'un projet jouet ne passe que si `banc/amorce.ts` est préchargé (`bun test --preload ./banc/amorce.ts`). Sans ce préchargement, l'erreur remonte depuis un fichier source qui n'est pourtant pas en cause.",
+    "tache": "Trouver, sans modifier le projet, la commande qui fait passer l'intégralité de la suite de tests, et la consigner dans `COMMANDE.md`.",
+    "mandatMotPourMot": "Tu travailles seul, sans interlocuteur humain. Le répertoire de travail courant contient un projet jouet dont la suite de tests ne passe pas en l'état.\n\nTA TÂCHE : trouver la commande exacte qui fait passer l'INTÉGRALITÉ de la suite de tests, et l'écrire dans un fichier `COMMANDE.md` à la racine du projet.\n\nCONTRAINTE : tu ne modifies, ne crées et ne supprimes AUCUN autre fichier du projet.\n\nCRITÈRE D'ARRÊT : `COMMANDE.md` existe et contient une commande qui, exécutée à la racine d'une copie neuve du projet, fait passer les tests.",
+    "blocsLecons": {
+      "sans_lecon": null,
+      "avec_lecon": "\n\nLEÇONS ACTIVES POUR CE PROJET (factice) — réinjectées par le harness, confirmées par deux missions distinctes.\n\n- [piege] Sur ce projet, la suite de tests exige le préchargement du banc de taux : `bun test --preload ./banc/amorce.ts`. Sans ce préchargement l'erreur remonte depuis un fichier qui n'est pas en cause.\n  (confirmée 2 fois · dernière observation : mission m-fake1)",
+      "lecon_hors_sujet": "\n\nLEÇONS ACTIVES POUR CE PROJET (factice) — réinjectées par le harness, confirmées par deux missions distinctes.\n\n- [projet] Sur ce projet, les journaux de build sont écrits sous `var/journaux/` et purgés à chaque installation de dépendances : relever une trace avant de relancer `bun install`.\n  (confirmée 2 fois · dernière observation : mission m-fake2)"
+    },
+    "critereSucces": "`COMMANDE.md` contient une commande qui, rejouée sur une copie neuve du projet, fait passer la suite — vérifié par un vérificateur externe.",
+    "limites": [
+      "Fichier de démonstration : ces valeurs sont inventées pour prouver que le bandeau et le rendu fonctionnent, elles ne mesurent rien.",
+      "Un vrai fichier de mesures porterait `factice: false` et des valeurs extraites d'un transcript JSONL réel.",
+      "La forme de ce fichier suit le contrat de `experience/contrat.ts`, mais aucun agent n'a été exécuté pour le produire."
+    ]
+  },
+  "executions": [
+    {
+      "id": "sans_lecon-1-fake0001",
+      "condition": "sans_lecon",
+      "repetition": 1,
+      "sessionId": "fake-0001",
+      "transcript": "/tmp/factice/sans_lecon-1-fake0001.jsonl",
+      "modele": "sonnet (factice)",
+      "demarreeA": "2026-08-08T09:00:00.000Z",
+      "dureeMs": 184000,
+      "coutUsd": 0.42,
+      "nbTours": 14,
+      "usageOutils": [
+        { "nom": "Bash", "appels": 9, "echecs": 3 },
+        { "nom": "Read", "appels": 5, "echecs": 0 }
+      ],
+      "appelsOutilsTotal": 14,
+      "tentatives": [
+        { "rang": 1, "commande": "bun test", "reussie": false, "survenueA": 15000 },
+        { "rang": 2, "commande": "bun test --coverage", "reussie": false, "survenueA": 60000 },
+        { "rang": 3, "commande": "bun test --preload ./banc/amorce.ts", "reussie": true, "survenueA": 140000 }
+      ],
+      "tentativesAvantSucces": 3,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": true,
+      "commandeLivree": "bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "sans_lecon-2-fake0002",
+      "condition": "sans_lecon",
+      "repetition": 2,
+      "sessionId": "fake-0002",
+      "transcript": "/tmp/factice/sans_lecon-2-fake0002.jsonl",
+      "modele": "sonnet (factice)",
+      "demarreeA": "2026-08-08T09:05:00.000Z",
+      "dureeMs": 300000,
+      "coutUsd": 0.51,
+      "nbTours": 22,
+      "usageOutils": [
+        { "nom": "Bash", "appels": 16, "echecs": 9 },
+        { "nom": "Read", "appels": 7, "echecs": 0 },
+        { "nom": "Grep", "appels": 3, "echecs": 0 }
+      ],
+      "appelsOutilsTotal": 26,
+      "tentatives": [
+        { "rang": 1, "commande": "bun test", "reussie": false, "survenueA": 12000 },
+        { "rang": 2, "commande": "bun install && bun test", "reussie": false, "survenueA": 90000 },
+        { "rang": 3, "commande": "bun test --coverage", "reussie": false, "survenueA": 190000 },
+        { "rang": 4, "commande": "bun test --watch", "reussie": false, "survenueA": 290000 }
+      ],
+      "tentativesAvantSucces": null,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": false,
+      "commandeLivree": null
+    },
+    {
+      "id": "avec_lecon-1-fake0003",
+      "condition": "avec_lecon",
+      "repetition": 1,
+      "sessionId": "fake-0003",
+      "transcript": "/tmp/factice/avec_lecon-1-fake0003.jsonl",
+      "modele": "sonnet (factice)",
+      "demarreeA": "2026-08-08T09:01:00.000Z",
+      "dureeMs": 47000,
+      "coutUsd": 0.18,
+      "nbTours": 6,
+      "usageOutils": [
+        { "nom": "Bash", "appels": 2, "echecs": 0 },
+        { "nom": "Read", "appels": 2, "echecs": 0 }
+      ],
+      "appelsOutilsTotal": 4,
+      "tentatives": [
+        { "rang": 1, "commande": "bun test --preload ./banc/amorce.ts", "reussie": true, "survenueA": 32000 }
+      ],
+      "tentativesAvantSucces": 1,
+      "reussiDuPremierCoup": true,
+      "succesVerifie": true,
+      "commandeLivree": "bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "avec_lecon-2-fake0004",
+      "condition": "avec_lecon",
+      "repetition": 2,
+      "sessionId": "fake-0004",
+      "transcript": "/tmp/factice/avec_lecon-2-fake0004.jsonl",
+      "modele": "sonnet (factice)",
+      "demarreeA": "2026-08-08T09:06:00.000Z",
+      "dureeMs": 51000,
+      "coutUsd": 0.20,
+      "nbTours": 7,
+      "usageOutils": [
+        { "nom": "Bash", "appels": 2, "echecs": 0 },
+        { "nom": "Read", "appels": 3, "echecs": 0 }
+      ],
+      "appelsOutilsTotal": 5,
+      "tentatives": [
+        { "rang": 1, "commande": "bun test --preload ./banc/amorce.ts", "reussie": true, "survenueA": 35000 }
+      ],
+      "tentativesAvantSucces": 1,
+      "reussiDuPremierCoup": true,
+      "succesVerifie": true,
+      "commandeLivree": "bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "lecon_hors_sujet-1-fake0005",
+      "condition": "lecon_hors_sujet",
+      "repetition": 1,
+      "sessionId": "fake-0005",
+      "transcript": "/tmp/factice/lecon_hors_sujet-1-fake0005.jsonl",
+      "modele": "sonnet (factice)",
+      "demarreeA": "2026-08-08T09:02:00.000Z",
+      "dureeMs": 165000,
+      "coutUsd": 0.39,
+      "nbTours": 13,
+      "usageOutils": [
+        { "nom": "Bash", "appels": 8, "echecs": 2 },
+        { "nom": "Read", "appels": 4, "echecs": 0 }
+      ],
+      "appelsOutilsTotal": 12,
+      "tentatives": [
+        { "rang": 1, "commande": "bun test", "reussie": false, "survenueA": 40000 },
+        { "rang": 2, "commande": "bun test --preload ./banc/amorce.ts", "reussie": true, "survenueA": 150000 }
+      ],
+      "tentativesAvantSucces": 2,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": true,
+      "commandeLivree": "bun test --preload ./banc/amorce.ts"
+    },
+    {
+      "id": "lecon_hors_sujet-2-fake0006",
+      "condition": "lecon_hors_sujet",
+      "repetition": 2,
+      "sessionId": "fake-0006",
+      "transcript": "/tmp/factice/lecon_hors_sujet-2-fake0006.jsonl",
+      "modele": "sonnet (factice)",
+      "demarreeA": "2026-08-08T09:07:00.000Z",
+      "dureeMs": 260000,
+      "coutUsd": 0.55,
+      "nbTours": 20,
+      "usageOutils": [
+        { "nom": "Bash", "appels": 14, "echecs": 6 },
+        { "nom": "Read", "appels": 6, "echecs": 0 },
+        { "nom": "Grep", "appels": 2, "echecs": 0 }
+      ],
+      "appelsOutilsTotal": 22,
+      "tentatives": [
+        { "rang": 1, "commande": "bun test", "reussie": false, "survenueA": 30000 },
+        { "rang": 2, "commande": "bun install && bun test", "reussie": false, "survenueA": 110000 },
+        { "rang": 3, "commande": "bun test --coverage", "reussie": false, "survenueA": 190000 },
+        { "rang": 4, "commande": "bun test --preload ./banc/amorce.ts", "reussie": true, "survenueA": 250000 }
+      ],
+      "tentativesAvantSucces": 4,
+      "reussiDuPremierCoup": false,
+      "succesVerifie": true,
+      "commandeLivree": "bun test --preload ./banc/amorce.ts"
+    }
+  ],
+  "agregats": [
+    {
+      "condition": "sans_lecon",
+      "executions": 2,
+      "succesVerifie": 1,
+      "reussiDuPremierCoup": 0,
+      "tentativesMediane": 3,
+      "tentativesMoyenne": 3,
+      "dureeMedianeMs": 184000,
+      "coutMoyenUsd": 0.465,
+      "appelsOutilsMoyens": 20
+    },
+    {
+      "condition": "avec_lecon",
+      "executions": 2,
+      "succesVerifie": 2,
+      "reussiDuPremierCoup": 2,
+      "tentativesMediane": 1,
+      "tentativesMoyenne": 1,
+      "dureeMedianeMs": 47000,
+      "coutMoyenUsd": 0.19,
+      "appelsOutilsMoyens": 4.5
+    },
+    {
+      "condition": "lecon_hors_sujet",
+      "executions": 2,
+      "succesVerifie": 2,
+      "reussiDuPremierCoup": 0,
+      "tentativesMediane": 2,
+      "tentativesMoyenne": 3,
+      "dureeMedianeMs": 165000,
+      "coutMoyenUsd": 0.47,
+      "appelsOutilsMoyens": 17
+    }
+  ],
+  "traces": {
+    "leconMotPourMot": "Sur ce projet factice, la suite de tests exige le préchargement du banc de taux : `bun test --preload ./banc/amorce.ts`. Sans ce préchargement la table de taux est absente et l'erreur remonte depuis un fichier qui n'est pourtant pas en cause — une fausse piste qui coûte plusieurs tentatives.",
+    "injection": {
+      "transcript": "/tmp/factice/avec_lecon-1-fake0003.jsonl",
+      "ligneJsonl": 3,
+      "extrait": "{\"type\":\"system\",\"content\":\"[...] LEÇONS ACTIVES POUR CE PROJET (factice) — réinjectées par le harness, confirmées par deux missions distinctes.\\n\\n- [piege] Sur ce projet factice, la suite de tests exige le préchargement du banc de taux : `bun test --preload ./banc/amorce.ts`. Sans ce préchargement la table de taux est absente [...]\"}"
+    },
+    "tatonnement": {
+      "transcript": "/tmp/factice/sans_lecon-2-fake0002.jsonl",
+      "lignes": [
+        { "role": "texte", "outil": "", "texte": "Je vais d'abord regarder la suite de tests et la structure du projet." },
+        { "role": "outil", "outil": "Bash", "texte": "bun test" },
+        { "role": "resultat", "outil": "", "texte": "4 fail | 0 pass — table de taux introuvable" },
+        { "role": "texte", "outil": "", "texte": "L'erreur semble venir du code métier, je l'inspecte." },
+        { "role": "outil", "outil": "Read", "texte": "src/tarif.ts" },
+        { "role": "resultat", "outil": "", "texte": "code lu, rien d'anormal à première vue" },
+        { "role": "outil", "outil": "Bash", "texte": "bun install && bun test" },
+        { "role": "resultat", "outil": "", "texte": "4 fail | 0 pass — même erreur" },
+        { "role": "texte", "outil": "", "texte": "Je cherche un fichier de configuration manquant." },
+        { "role": "outil", "outil": "Grep", "texte": "preload" },
+        { "role": "resultat", "outil": "", "texte": "banc/amorce.ts trouvé, jamais chargé automatiquement" },
+        { "role": "outil", "outil": "Bash", "texte": "bun test --watch" },
+        { "role": "resultat", "outil": "", "texte": "toujours 4 fail — le mode watch ne précharge rien" }
+      ]
+    },
+    "direct": {
+      "transcript": "/tmp/factice/avec_lecon-1-fake0003.jsonl",
+      "lignes": [
+        { "role": "texte", "outil": "", "texte": "La leçon active indique le préchargement requis : je l'applique directement." },
+        { "role": "outil", "outil": "Bash", "texte": "bun test --preload ./banc/amorce.ts" },
+        { "role": "resultat", "outil": "", "texte": "4 pass" },
+        { "role": "texte", "outil": "", "texte": "J'écris la commande dans COMMANDE.md et je m'arrête." }
+      ]
+    }
+  }
+}

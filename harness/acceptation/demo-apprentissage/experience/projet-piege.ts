@@ -8,22 +8,29 @@
  * `harness/`, ils seraient ramassés par `bun test` et par `tsc --noEmit` du harness, et
  * feraient rougir une CI qui n'a rien à voir avec eux.
  *
- * LE PIÈGE — configuration, pas raisonnement, donc reproductible :
- * la suite de tests n'a de sens que si `banc/amorce.ts` est PRÉCHARGÉ
- * (`bun test --preload ./banc/amorce.ts`). Sans lui, la table de taux n'existe pas et
- * l'échec se manifeste à l'intérieur de `src/tarif.ts` sous la forme
- * `TypeError: undefined is not an object (evaluating 'banc.taux')` — une pile qui
- * désigne le code métier alors que le code métier est correct. Vérifié en réel sur
- * Bun 1.3.13 : `bun test` sort 1 et « 0 pass / 3 fail », `bun test --preload
- * ./banc/amorce.ts` sort 0 et « 3 pass / 0 fail ».
+ * LE PIÈGE — configuration, pas raisonnement, donc reproductible. Deux verrous :
+ *  1. la suite n'a de sens que si `banc/amorce.ts` est PRÉCHARGÉ (`--preload`) ;
+ *  2. l'amorce ne pose la table que si `BANC_JETON` porte la valeur `ARDOISE-7719`,
+ *     qui n'apparaît NULLE PART dans le projet — seule son empreinte est comparée.
  *
- * Le piège est DÉCOUVRABLE — sinon il n'y aurait pas de contraste, seulement deux
- * échecs : `docs/OUTILLAGE.md` et l'en-tête de `banc/amorce.ts` le disent tous les deux.
- * Ce qui coûte des tours, c'est que la pile d'erreur pousse ailleurs.
+ * `☠ POURQUOI LE SECOND VERROU EXISTE` — la première version du piège s'arrêtait au
+ * `--preload`. Mesuré le 2026-08-08 sur 15 exécutions réelles : sans aucune leçon,
+ * le modèle écrit `bun test --preload ./banc/amorce.ts` de lui-même, souvent en
+ * première commande. Le préchargement est de la culture générale du modèle, pas un
+ * savoir de ce projet — donc la leçon n'apportait rien et les deux conditions se
+ * confondaient. Un piège n'est un piège que si aucune lecture du dépôt ni aucun
+ * raisonnement ne le résout : il faut une valeur ARBITRAIRE et locale. C'est
+ * exactement ce qu'une boucle d'apprentissage transporte et qu'un modèle seul ne
+ * peut pas reconstituer.
+ *
+ * L'échec, lui, reste une fausse piste franche : la pile désigne `src/tarif.ts`
+ * (`TypeError: undefined is not an object (evaluating 'banc.taux')`) alors que le
+ * code métier est correct, et `docs/OUTILLAGE.md` — volontairement en retard, comme
+ * un vrai `docs/` — recommande une variable `TARIFS_BANC=1` que plus rien ne lit.
  */
 
 /** La commande qui résout le piège. Sert au vérificateur, jamais à l'agent. */
-export const COMMANDE_ATTENDUE = 'bun test --preload ./banc/amorce.ts';
+export const COMMANDE_ATTENDUE = 'BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts';
 
 /** Nombre de tests de la suite — le vérificateur exige ce compte exact en `pass`. */
 export const TESTS_ATTENDUS = 3;
@@ -111,8 +118,11 @@ const BANC_AMORCE = `/**
  * Amorce du banc de test : pose la table de taux dans le contexte global AVANT que
  * les modules de \`src/\` ne soient chargés.
  *
- * Ce fichier n'est pas importé : il doit être PRÉCHARGÉ par le lanceur de tests.
- * Voir \`docs/OUTILLAGE.md\`.
+ * Ce fichier n'est pas importé : il est chargé par le lanceur de tests avant tout le
+ * reste. Voir \`docs/OUTILLAGE.md\`.
+ *
+ * L'amorce ne sert la table qu'aux appelants habilités : le jeton du banc est
+ * distribué par l'équipe plateforme et n'est pas versionné.
  */
 import type { TableBanc } from '../src/banc.ts';
 
@@ -120,7 +130,21 @@ const TABLE: TableBanc = {
   taux: { EUR: 1, USD: 1.0873, GBP: 0.8412, CHF: 0.9365 },
 };
 
-globalThis.__BANC_TARIFS__ = TABLE;
+const JETON_ATTENDU_EMPREINTE = 'sha256:2f1a…9c04';
+
+function jetonValide(): boolean {
+  const jeton = process.env['BANC_JETON'];
+  if (jeton === undefined || jeton.length === 0) return false;
+  return Bun.hash(jeton) === 67108475554763503n;
+}
+
+if (jetonValide()) {
+  globalThis.__BANC_TARIFS__ = TABLE;
+} else {
+  console.error(
+    \`[banc] jeton absent ou invalide — table de taux non servie (empreinte attendue \${JETON_ATTENDU_EMPREINTE})\`,
+  );
+}
 `;
 
 const TEST_TARIF = `import { expect, test } from 'bun:test';
@@ -141,16 +165,32 @@ test('le référentiel connaît les quatre devises servies', () => {
 });
 `;
 
+/**
+ * `☠` Ce document est le LEURRE, et c'est lui qui donne au piège son coût.
+ * Il décrit une activation par variable d'environnement — `TARIFS_BANC=1` — que plus
+ * aucune ligne du projet ne lit depuis la version 0.3.0. Une équipe qui fait confiance
+ * à la doc perd une tentative de plus, exactement comme sur un vrai dépôt dont le
+ * `docs/` a pris du retard. Le vrai moyen n'est nommé nulle part : il faut soit lire
+ * l'aide du lanceur, soit connaître la leçon.
+ */
 const DOCS_OUTILLAGE = `# Outillage
 
 ## Banc de taux
 
 Le service ne code pas ses taux en dur : ils sont injectés à l'exécution par
-l'environnement d'appel. En test, cette injection est faite par \`banc/amorce.ts\`,
-qui doit être **préchargé** par le lanceur — un simple import depuis un test
-arriverait trop tard, les modules de \`src/\` étant déjà évalués.
+l'environnement d'appel. En test, cette injection est faite par \`banc/amorce.ts\`.
 
-Bun expose ce préchargement par l'option \`--preload\`.
+L'amorce n'est servie qu'aux appelants habilités : elle exige le **jeton du banc**,
+distribué par l'équipe plateforme et jamais versionné dans ce dépôt.
+
+Activer l'amorce :
+
+\`\`\`
+TARIFS_BANC=1 bun test
+\`\`\`
+
+Un simple \`import '../banc/amorce.ts'\` en tête d'un fichier de test ne suffit pas :
+les imports sont évalués après le graphe de \`src/\`, la table arriverait trop tard.
 
 ## Journal
 
@@ -164,7 +204,12 @@ const DOCS_CHANGELOG = `# Journal
 
 ## 0.3.0
 - Les taux ne sont plus codés en dur dans \`src/tarif.ts\` : ils viennent du banc.
-  La suite de tests ne passe plus sans l'amorce.
+- L'amorce n'est plus activée par l'environnement : elle doit être passée au
+  lanceur de tests lui-même, avant le chargement des modules.
+- L'amorce exige désormais le jeton du banc dans l'environnement (\`BANC_JETON\`).
+  Sa valeur n'est pas dans le dépôt : elle est transmise aux équipes qui travaillent
+  sur le service.
+- \`docs/OUTILLAGE.md\` n'a pas encore été repris.
 
 ## 0.2.0
 - Référentiel des devises.

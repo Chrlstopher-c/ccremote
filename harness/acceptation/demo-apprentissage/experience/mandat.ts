@@ -42,10 +42,12 @@ t'arrêtes et tu rends la commande dans ton dernier message.`;
  * ce texte exact qui entre dans le mandat de la condition `avec_lecon`.
  */
 export const LECON_DU_PIEGE =
-  'Sur ce projet, la suite de tests exige le préchargement du banc de taux : ' +
-  '`bun test --preload ./banc/amorce.ts`. Sans ce préchargement la table de taux est ' +
-  "absente et l'erreur remonte depuis `src/tarif.ts` — le code métier n'est pas en cause, " +
-  "c'est une fausse piste qui coûte plusieurs tentatives.";
+  'Sur ce projet, la suite de tests exige DEUX choses : le préchargement du banc de taux ' +
+  'et le jeton du banc, qui vaut `ARDOISE-7719` et ne figure nulle part dans le dépôt. ' +
+  'La commande est `BANC_JETON=ARDOISE-7719 bun test --preload ./banc/amorce.ts`. ' +
+  "Sans le jeton, l'amorce ne pose pas la table et l'erreur remonte depuis `src/tarif.ts` " +
+  "— le code métier n'est pas en cause. `docs/OUTILLAGE.md` est en retard et recommande " +
+  'une variable `TARIFS_BANC` que plus aucune ligne ne lit.';
 
 /**
  * La leçon du contrôle placebo : même forme, même longueur d'ordre, aucune information
@@ -94,4 +96,7 @@ export const LIMITES: readonly string[] = [
     "en est la taille exacte : les moyennes rendues sont descriptives, pas des estimations.",
   "Le vérificateur juge la commande livrée, pas la compréhension : un agent qui devine la " +
     'bonne commande sans avoir compris le piège compte comme un succès.',
+  "Le savoir en jeu est ARBITRAIRE — une valeur locale que rien ne permet de déduire. " +
+    "C'est le cas où une leçon apporte le plus, et donc le cas le plus favorable au " +
+    "système : l'écart mesuré ici est un majorant, pas une moyenne attendue.",
 ];

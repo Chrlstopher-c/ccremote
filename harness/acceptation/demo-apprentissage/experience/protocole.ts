@@ -17,7 +17,7 @@ import { CONDITIONS } from './contrat.ts';
 import { mandatDe } from './mandat.ts';
 import { preparerProjet, racineJetable } from './preparation.ts';
 import { lireCommandeLivree, verifierCommande } from './verification.ts';
-import { cheminTranscript, extraireMesures, type MesuresTranscript } from './extraction-jsonl.ts';
+import { extraireMesures, resoudreTranscript, type MesuresTranscript } from './extraction-jsonl.ts';
 import { calculerAgregats, construireDescriptif, construireTraces } from './agregation.ts';
 
 const REPETITIONS = Number(process.env['REPETITIONS'] ?? '5');
@@ -129,7 +129,7 @@ function journaliser(execution: Execution): void {
 
 async function executerRepetition(condition: Condition, repetition: number): Promise<Execution> {
   const sessionId = crypto.randomUUID();
-  const racine = racineJetable(`${condition}-${repetition}-${sessionId.slice(0, 8)}`);
+  const racine = racineJetable(`${condition.replace(/_/g, '-')}-${repetition}-${sessionId.slice(0, 8)}`);
   try {
     await preparerProjet(racine);
   } catch (erreur) {
@@ -138,7 +138,7 @@ async function executerRepetition(condition: Condition, repetition: number): Pro
   }
   const demarreeA = new Date().toISOString();
   const coutUsd = await lancerAgent(condition, racine, sessionId);
-  const transcript = cheminTranscript(CONFIG_DIR, racine, sessionId);
+  const transcript = await resoudreTranscript(CONFIG_DIR, racine, sessionId);
   const mesures = await extraireMesures(transcript);
   const commandeLivree = await lireCommandeLivree(racine);
   const verif = commandeLivree === null ? { succes: false } : await verifierCommande(commandeLivree);
