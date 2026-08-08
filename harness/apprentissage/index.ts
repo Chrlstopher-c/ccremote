@@ -49,6 +49,7 @@ export type {
 export {
   validerLeconExtraite,
   validerLeconsExtraites,
+  validerOperationCompetence,
   validerVerdictRapprochement,
 } from './extraction/garde-sortie.ts';
 export type { LeconExtraite, ResultatGarde, RelationRapprochement, VerdictRapprochement } from './extraction/garde-sortie.ts';
@@ -75,6 +76,19 @@ export { executerPasseCloture } from './service/passe-cloture.ts';
 export type { EntreePasseCloture, ResultatPasseCloture } from './service/passe-cloture.ts';
 
 export { composerBlocLecons } from './injection/bloc-lecons.ts';
+
+export {
+  cheminCompetencesParDefaut,
+  lireCompetence,
+  listerCompetences,
+  listerCompetencesServables,
+  listerSlugsCompetences,
+  slugifier,
+} from './competences/depot-competences.ts';
+export type { CorpsCompetence, FichierCompetence } from './competences/depot-competences.ts';
+
+export { appliquerOperationCompetence, SEUIL_LECONS_CREATION, SEUIL_LECONS_PIEGE } from './competences/operations.ts';
+export type { ContexteOperationCompetence, ResultatOperationCompetence } from './competences/operations.ts';
 
 export type {
   CategorieLecon,

@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { validerLeconExtraite, validerLeconsExtraites } from './garde-sortie.ts';
+import { validerLeconExtraite, validerLeconsExtraites, validerOperationCompetence } from './garde-sortie.ts';
 
 const LECON_VALIDE = JSON.stringify({
   enonce: 'Toujours lire un artefact réel avant de conclure.',
@@ -142,5 +142,73 @@ describe('validerLeconsExtraites — le tableau réellement servi par le modèle
     const resultat = validerLeconsExtraites(`\`\`\`json\n[${LECON_VALIDE}]\n\`\`\``);
     expect(resultat.accepte).toBe(true);
     if (resultat.accepte) expect(resultat.valeur).toHaveLength(1);
+  });
+});
+
+describe('validerOperationCompetence (E8, C-8 `☠`) — forme, jamais les seuils métier', () => {
+  test('« rien » est accepté tel quel', () => {
+    const resultat = validerOperationCompetence('{"type": "rien"}');
+    expect(resultat.accepte).toBe(true);
+    if (resultat.accepte) expect(resultat.valeur).toEqual({ type: 'rien' });
+  });
+
+  test('« creer » valide est accepté', () => {
+    const brut = JSON.stringify({
+      type: 'creer',
+      nom: 'reprise-worktree-git',
+      description: 'Reprendre un worktree laissé par une équipe précédente',
+      quand: ['un worktree existe déjà sur la mission'],
+      etapes: ['lister les worktrees', 'reprendre celui qui correspond'],
+    });
+    const resultat = validerOperationCompetence(brut);
+    expect(resultat.accepte).toBe(true);
+    if (resultat.accepte && resultat.valeur.type === 'creer') {
+      expect(resultat.valeur.nom).toBe('reprise-worktree-git');
+      expect(resultat.valeur.etapes).toHaveLength(2);
+    }
+  });
+
+  test('un type hors liste fermée est rejeté et le message liste les opérations acceptées', () => {
+    const resultat = validerOperationCompetence('{"type": "supprimer", "slug": "x"}');
+    expect(resultat.accepte).toBe(false);
+    if (!resultat.accepte) {
+      expect(resultat.motif).toContain('supprimer');
+      expect(resultat.motif).toContain('creer');
+      expect(resultat.motif).toContain('ajouter_piege');
+      expect(resultat.motif).toContain('ajouter_etape');
+      expect(resultat.motif).toContain('rien');
+    }
+  });
+
+  test('« type » absent (texte libre) est rejeté avec la liste des opérations acceptées', () => {
+    const resultat = validerOperationCompetence('"je propose de créer une compétence"');
+    expect(resultat.accepte).toBe(false);
+  });
+
+  test('une ligne de piège au-delà de 200 caractères est rejetée', () => {
+    const brut = JSON.stringify({ type: 'ajouter_piege', slug: 'reprise-worktree-git', ligne: 'x'.repeat(201) });
+    const resultat = validerOperationCompetence(brut);
+    expect(resultat.accepte).toBe(false);
+    if (!resultat.accepte) expect(resultat.motif).toContain('200');
+  });
+
+  test('« ajouter_etape » sans apresEtape numérique est rejeté', () => {
+    const brut = JSON.stringify({ type: 'ajouter_etape', slug: 'x', ligne: 'une étape', apresEtape: 'un' });
+    const resultat = validerOperationCompetence(brut);
+    expect(resultat.accepte).toBe(false);
+    if (!resultat.accepte) expect(resultat.motif).toContain('apresEtape');
+  });
+
+  test('« creer » avec plus de 5 étapes est rejeté', () => {
+    const brut = JSON.stringify({
+      type: 'creer',
+      nom: 'x',
+      description: 'y',
+      quand: ['a'],
+      etapes: ['1', '2', '3', '4', '5', '6'],
+    });
+    const resultat = validerOperationCompetence(brut);
+    expect(resultat.accepte).toBe(false);
+    if (!resultat.accepte) expect(resultat.motif).toContain('5');
   });
 });
