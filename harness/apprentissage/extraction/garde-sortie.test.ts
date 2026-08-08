@@ -78,6 +78,14 @@ describe('validerLeconExtraite (E4)', () => {
     expect(resultat.accepte).toBe(false);
   });
 
+  test('une balise Markdown ```json autour du JSON est dépouillée avant validation (E5, artefact réel)', () => {
+    // ☠ Constaté sur artefact réel (banc `apprentissage-inference-reel.ts`) : Haiku 4.5
+    // enveloppe sa sortie malgré la consigne du prompt. Ne relâche rien : le contenu est
+    // toujours parsé et validé strictement APRÈS le dépouillement.
+    const resultat = validerLeconExtraite(`\`\`\`json\n${LECON_VALIDE}\n\`\`\``);
+    expect(resultat.accepte).toBe(true);
+  });
+
   test('énoncé au-delà de 200 caractères est rejeté', () => {
     const brut = JSON.stringify({
       enonce: 'x'.repeat(201),
@@ -128,5 +136,11 @@ describe('validerLeconsExtraites — le tableau réellement servi par le modèle
     const resultat = validerLeconsExtraites(`[${LECON_VALIDE},${invalide}]`);
     expect(resultat.accepte).toBe(false);
     if (!resultat.accepte) expect(resultat.motif).toContain('#1');
+  });
+
+  test('un tableau enveloppé de balises Markdown est dépouillé avant validation (E5, artefact réel)', () => {
+    const resultat = validerLeconsExtraites(`\`\`\`json\n[${LECON_VALIDE}]\n\`\`\``);
+    expect(resultat.accepte).toBe(true);
+    if (resultat.accepte) expect(resultat.valeur).toHaveLength(1);
   });
 });

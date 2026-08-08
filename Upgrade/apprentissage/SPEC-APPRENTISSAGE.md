@@ -10,6 +10,18 @@ de ce document porte, dans l'en-tête du domaine, la mention :
 `Conception inspirée de Hermes Agent (Nous Research) — MIT. Transposition indépendante en TypeScript.`
 Aucune ligne de code Python n'est copiée : la réécriture est intégrale.
 
+**`☠` CORRECTION DE CAP (2026-08-08, décision opérateur, appliquée par l'équipe E5/E6/E7)** — vLLM
+est ANNULÉ. Ce document décrivait encore, jusqu'à cette date, un serveur vLLM local (Qwen3 8B AWQ,
+plafond de contexte 4096) comme moteur d'inférence de la boucle. **Toute mention de vLLM ou de Qwen3
+ci-dessous est caduque.** L'inférence — résumé, extraction de leçons, rapprochement, et plus tard
+consolidation (C-4) — passe désormais par le **SDK Claude Code**, en mode non interactif (une
+requête, une réponse, `maxTurns: 1`, aucun outil), sur le compte déjà connecté sur le PC
+(`compte-a`, isolé par `CLAUDE_CONFIG_DIR` — même mécanisme que `harness/anti-boucle/juge-haiku.ts`
+et `harness/superviseur/sonde-quotas.ts`, repris plutôt que réinventé). Modèle imposé par
+l'opérateur : **Haiku 4.5** (`claude-haiku-4-5-20251001`). Voir §3 pour le détail à jour. Le contrat
+du client (résultat typé `{ disponible: false, motif }` sur toute panne, jamais une exception ; deux
+tentatives maximum ; garde de sortie stricte) survit intact — seul le transport change.
+
 ---
 
 ## 1. Ce qui n'est pas transposable, et pourquoi ça change tout
@@ -21,7 +33,7 @@ suivent.
 |---|---|---|
 | **Qui apprend** | un agent, sur la durée, pour un utilisateur | le **harness**. Une équipe est éphémère et ne revit jamais |
 | **Ce qu'on observe** | la liste de messages en mémoire vive du tour courant | un **transcript JSONL sur disque**, complet, après coup |
-| **Qui paie l'inférence** | le même fournisseur que la session | **vLLM local**, jamais le quota Claude |
+| **Qui paie l'inférence** | le même fournisseur que la session | le compte Claude Code de la machine (`compte-a`), en Haiku 4.5 |
 
 **Conséquence n°1 — le déclencheur change de nature.** Chez Hermes, la revue tourne *pendant* la
 vie de l'agent, tous les 10 tours, et le bénéfice arrive à la session suivante du même agent. Chez
@@ -113,21 +125,31 @@ intermédiaire ; elle ne rebâtit pas un second extracteur.
 
 ---
 
-## 3. Contrainte d'inférence : vLLM local, Qwen3 8B AWQ
+## 3. Contrainte d'inférence : SDK Claude Code, compte-a, Haiku 4.5
 
-Contrainte dure de l'opérateur. Elle n'est pas une préférence de déploiement, elle **dimensionne
-les prompts**.
+`☠` **Corrigé le 2026-08-08** — remplace la contrainte vLLM d'origine (décision opérateur, voir
+l'avertissement en tête de document). Ce qui suit dimensionne toujours les prompts : le modèle
+imposé reste petit et bon marché, seul le transport a changé.
 
-- **Un seul point de sortie**, `harness/apprentissage/client-vllm.ts`, endpoint compatible OpenAI
-  (`POST /v1/chat/completions`), URL et modèle lus dans l'environnement
-  (`CCREMOTE_APPRENTISSAGE_VLLM_URL`, `CCREMOTE_APPRENTISSAGE_VLLM_MODELE`). Aucun autre fichier du
-  domaine ne fait d'appel réseau. **Zéro appel à l'API Anthropic, zéro token de quota Claude.**
-- **Indisponible ⇒ dégradation, jamais échec.** vLLM éteint (le PC ne réserve pas sa VRAM, cf.
-  `mcp-du-poste.ts` sur `echohub`) ⇒ la passe est **différée**, l'observation reste en file sur
-  disque, et un `warn` le dit. Jamais de repli sur un modèle payant, jamais de blocage d'une
-  clôture de mission.
-- **Budget par appel** : ≤ 3 000 tokens d'entrée, ≤ 300 de sortie, température 0.2, timeout 45 s,
-  **2 tentatives maximum** puis abandon de la passe (boucle bornée, standard maison).
+- **Un seul point de sortie**, `harness/apprentissage/extraction/client-inference.ts`, qui appelle
+  le SDK Claude Code (`query()`) en mode non interactif : `maxTurns: 1`, `tools: []`,
+  `permissionMode: 'default'`, `env: { CLAUDE_CONFIG_DIR: <compte> }`. Répertoire de compte lu dans
+  `CCREMOTE_APPRENTISSAGE_CONFIG_DIR` (repli : `compte-a` de cette machine), modèle lu dans
+  `CCREMOTE_APPRENTISSAGE_MODELE` (repli : `claude-haiku-4-5-20251001`). Aucun autre fichier du
+  domaine ne fait d'appel réseau. Même mécanisme d'isolation par compte que
+  `harness/anti-boucle/juge-haiku.ts` et `harness/superviseur/sonde-quotas.ts` — repris, jamais
+  réinventé.
+- **Indisponible ⇒ dégradation, jamais échec.** Panne réseau, quota épuisé, timeout, réponse
+  inexploitable ⇒ la passe est **différée**, l'observation reste en file sur disque, et un `warn`
+  le dit. Jamais de repli sur un autre fournisseur, jamais de blocage d'une clôture de mission.
+- **Garde-fou de quota (non négociable)** : une passe d'apprentissage par mission, jamais de
+  traitement par lots automatique, jamais de rattrapage massif sur l'historique. Une passe en échec
+  est rejouable, elle n'est pas rejouée en boucle — ce compte sert aussi à faire tourner les
+  équipes.
+- **Budget par appel** : ≤ 3 000 tokens d'entrée, ≤ 300 de sortie, timeout 45 s, **2 tentatives
+  maximum** puis abandon de la passe (boucle bornée, standard maison). Le plafond de contexte de
+  4096 tokens (issu de la carte graphique du serveur vLLM annulé) n'a plus lieu d'être ; les bornes
+  du résumé (§5.1) restent, elles servent le coût et la qualité, pas une contrainte matérielle.
 - **Sorties structurées courtes et validées.** Toute réponse du modèle est **entrée non fiable** :
   elle est parsée en JSON, validée contre un schéma explicite, et **rejetée avant toute écriture**
   si elle ne correspond pas. Un rejet est loggé avec l'extrait fautif, jamais avalé.
@@ -218,7 +240,7 @@ transposition ligne à ligne.
 
 | Inventaire | Verdict | Devient |
 |---|---|---|
-| H-1 revue de fin de tour en fork | **retenu en intention, mécanisme écarté** | C-3 (déclenché à la clôture, servi par vLLM) |
+| H-1 revue de fin de tour en fork | **retenu en intention, mécanisme écarté** | C-3 (déclenché à la clôture, servi par le SDK Claude Code en Haiku 4.5) |
 | H-2 `MEMORY.md` | **retenu, refondu** | C-7 (`apprentissage.db`) — la moitié `USER.md` est écartée |
 | H-3 fournisseurs de mémoire externes | **écarté** | — |
 | H-4 bibliothèque de skills + index | **retenu** | C-8 + l'étage index de C-6 |
@@ -297,7 +319,7 @@ déterministe, donc il ne coûte pas un token.)*
 ### C-3 — Extraction de leçons par le modèle local
 
 *(Transposition de H-1, le fork de revue — mais déclenché à la clôture, restreint aux skills, et
-servi par vLLM.)*
+servi par le SDK Claude Code, compte-a, Haiku 4.5.)*
 
 - **Ce que ça devient** : une passe locale qui reçoit **un `ResumeMission`** (jamais un transcript)
   et rend **0 à 3 leçons candidates**, chacune en une phrase, avec sa portée.
@@ -347,7 +369,7 @@ export interface LeconExtraite {
   retiré, et pourquoi.
 - **Moment** : sur un tick d'arrière-plan du superviseur, avec les mêmes portes que Hermes :
   intervalle minimum **7 jours** depuis la dernière passe, **aucune mission active sur la machine**,
-  vLLM joignable. Première observation : on **sème** l'horodatage et on diffère d'un intervalle
+  le compte Claude Code joignable. Première observation : on **sème** l'horodatage et on diffère d'un intervalle
   complet (on ne consolide pas une base de trois leçons).
 - **Transitions par horloge, sans modèle** :
   - `candidate` → `active` : deux confirmations par des missions **distinctes** (C-5).
@@ -565,7 +587,7 @@ export type OperationCompetence =
                                                         ┌──────── tâche de fond ────────┐
                                                         │ C-1 réduction (sans modèle)   │
                                                         │ C-2 issue    (sans modèle)    │
-                                                        │ C-3 extraction (vLLM local)   │
+                                                        │ C-3 extraction (Claude Code)  │
                                                         │ C-5 confirmation/contradiction│
                                                         │ C-8 création/amendement       │
                                                         └───────────────┬───────────────┘
@@ -580,7 +602,7 @@ export type OperationCompetence =
 
 1. **Entrée** — un observateur s'abonne à la clôture (`control-plane/cloture/` côté Pi transporte la
    décision, le superviseur PC la constate). `☠` La passe est **asynchrone et sans effet de bord sur
-   la clôture** : une passe qui échoue, qui rame ou qui trouve vLLM éteint ne doit **jamais**
+   la clôture** : une passe qui échoue, qui rame ou qui trouve le compte Claude Code indisponible ne doit **jamais**
    empêcher une mission d'être close ni un projet d'être libéré (H-56 : une mission qui ne se ferme
    pas verrouille son worktree). En file, rejouable, et c'est tout.
 2. **Sortie** — `construireWorkerSpec` (F-4).
@@ -621,7 +643,7 @@ Un portage 1:1 n'est pas l'objectif. Ce qui suit est écarté **délibérément*
    le PC ne sert pas une équipe du VPS. Assumé pour la v1 : les leçons de portée `projet` sont
    naturellement liées à la machine qui héberge le dépôt. Une agrégation ultérieure passerait par le
    lien Pi↔PC existant, sans nouveau transport.
-3. **vLLM est un service que le harness ne possède pas.** Le PC ne réserve pas sa VRAM. La boucle
+3. **Le compte Claude Code sert aussi à faire tourner les équipes.** La boucle
    doit donc traiter l'indisponibilité comme le cas **normal**, pas comme une panne : file d'attente
    persistante, reprise à la passe suivante, jamais de perte de l'observation.
 4. **Le format du JSONL appartient au CLI Claude Code.** Il changera. C-1 est la seule fenêtre sur ce

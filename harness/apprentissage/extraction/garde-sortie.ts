@@ -71,13 +71,31 @@ function validerDoublonDe(valeur: unknown): ResultatChamp<string | null> {
   return { ok: false, motif: '« doublonDe » doit être une chaîne (id de leçon) ou null' };
 }
 
-function parserObjetJson(brut: string): ResultatChamp<Record<string, unknown>> {
-  let objet: unknown;
+/**
+ * Retire une éventuelle balise de code Markdown (```json ... ``` ou ``` ... ```) autour de la
+ * sortie. `☠` Constaté sur artefact RÉEL (banc `acceptation/apprentissage-inference-reel.ts`,
+ * E5) : Haiku 4.5 enveloppe sa sortie de balises malgré la consigne explicite du prompt
+ * (« aucun texte hors de ce tableau JSON … ni balise de code »). Ce n'est PAS un relâchement
+ * de la garde : le contenu est toujours parsé et validé strictement ensuite, on ne fait que
+ * retirer un habillage syntaxique constant et sans ambiguïté avant de le faire.
+ */
+function depouillerBalisesCode(brut: string): string {
+  const correspondance = /^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i.exec(brut.trim());
+  return correspondance?.[1] !== undefined ? correspondance[1].trim() : brut;
+}
+
+function parserJson(brut: string): ResultatChamp<unknown> {
   try {
-    objet = JSON.parse(brut);
+    return { ok: true, valeur: JSON.parse(depouillerBalisesCode(brut)) };
   } catch {
     return { ok: false, motif: `JSON invalide ou tronqué — impossible de parser la sortie du modèle : « ${aperçu(brut)} »` };
   }
+}
+
+function parserObjetJson(brut: string): ResultatChamp<Record<string, unknown>> {
+  const analyse = parserJson(brut);
+  if (!analyse.ok) return analyse;
+  const objet = analyse.valeur;
   if (objet === null || typeof objet !== 'object' || Array.isArray(objet)) {
     return { ok: false, motif: `la sortie doit être un objet JSON — reçu : « ${aperçu(brut)} »` };
   }
@@ -116,6 +134,29 @@ export function validerLeconExtraite(brut: string): ResultatGarde<LeconExtraite>
   };
 }
 
+/** Relation entre une leçon nouvellement extraite et une leçon existante (C-5). */
+export type RelationRapprochement = 'confirme' | 'contredit' | 'aucun_rapport';
+
+export interface VerdictRapprochement {
+  readonly relation: RelationRapprochement;
+}
+
+const RELATIONS_ACCEPTEES = ['confirme', 'contredit', 'aucun_rapport'] as const;
+
+/**
+ * Valide le verdict rendu par le modèle pour départager un cas ambigu de rapprochement
+ * (C-5, SPEC §5 : « le modèle seulement pour les cas ambigus »). Même discipline que
+ * `validerLeconExtraite` : sortie de modèle = entrée non fiable, rejet listant les valeurs
+ * acceptées.
+ */
+export function validerVerdictRapprochement(brut: string): ResultatGarde<VerdictRapprochement> {
+  const objetAnalyse = parserObjetJson(brut);
+  if (!objetAnalyse.ok) return { accepte: false, motif: objetAnalyse.motif };
+  const relation = validerEnum(objetAnalyse.valeur['relation'], 'relation', RELATIONS_ACCEPTEES);
+  if (!relation.ok) return { accepte: false, motif: relation.motif };
+  return { accepte: true, valeur: { relation: relation.valeur } };
+}
+
 /**
  * Valide la forme réellement servie par le modèle : un tableau de 0 à 3 leçons candidates
  * (SPEC §5, C-3 : « rend 0 à 3 leçons candidates »). Délègue à `validerLeconExtraite` pour
@@ -123,12 +164,9 @@ export function validerLeconExtraite(brut: string): ResultatGarde<LeconExtraite>
  * partiel silencieux.
  */
 export function validerLeconsExtraites(brut: string): ResultatGarde<readonly LeconExtraite[]> {
-  let tableau: unknown;
-  try {
-    tableau = JSON.parse(brut);
-  } catch {
-    return { accepte: false, motif: `JSON invalide ou tronqué — impossible de parser la sortie du modèle : « ${aperçu(brut)} »` };
-  }
+  const analyse = parserJson(brut);
+  if (!analyse.ok) return { accepte: false, motif: analyse.motif };
+  const tableau = analyse.valeur;
   if (!Array.isArray(tableau)) {
     return { accepte: false, motif: `la sortie doit être un tableau JSON de 0 à ${MAX_LECONS_PAR_PASSE} leçons` };
   }

@@ -38,13 +38,35 @@ export type {
   VerdictInspectionMission,
 } from './observation/classement-issue.ts';
 
-export { appellerVllm } from './extraction/client-vllm.ts';
-export type { ParametresAppelVllm, ReponseVllm } from './extraction/client-vllm.ts';
+export { creerClientInference, MODELE_APPRENTISSAGE_PAR_DEFAUT } from './extraction/client-inference.ts';
+export type {
+  ClientInference,
+  DependancesClientInference,
+  ParametresAppelModele,
+  ReponseModele,
+} from './extraction/client-inference.ts';
 
-export { validerLeconExtraite, validerLeconsExtraites } from './extraction/garde-sortie.ts';
-export type { LeconExtraite, ResultatGarde } from './extraction/garde-sortie.ts';
+export {
+  validerLeconExtraite,
+  validerLeconsExtraites,
+  validerVerdictRapprochement,
+} from './extraction/garde-sortie.ts';
+export type { LeconExtraite, ResultatGarde, RelationRapprochement, VerdictRapprochement } from './extraction/garde-sortie.ts';
 
 export { construirePromptExtraction, LISTE_NEGATIVE_LECONS } from './extraction/prompts.ts';
+
+export { extraireLecons, respecteListeNegative } from './extraction/extraction-lecons.ts';
+export type { ResultatExtraction } from './extraction/extraction-lecons.ts';
+
+export { rapprocherLecons } from './extraction/rapprochement.ts';
+export type { ActionRapprochement, ParametresRapprochement, ResultatRapprochementUnitaire } from './extraction/rapprochement.ts';
+
+export {
+  confirmerLecon,
+  contredireLecon,
+  listerLeconsServables,
+} from './base/lecons.ts';
+export type { ResultatConfirmation, ResultatContradiction } from './base/lecons.ts';
 
 export type {
   CategorieLecon,
