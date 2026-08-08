@@ -68,6 +68,12 @@ export {
 } from './base/lecons.ts';
 export type { ResultatConfirmation, ResultatContradiction } from './base/lecons.ts';
 
+export { enfilerPasseApprentissage } from './service/file-attente.ts';
+export type { DependancesFileAttente } from './service/file-attente.ts';
+
+export { executerPasseCloture } from './service/passe-cloture.ts';
+export type { EntreePasseCloture, ResultatPasseCloture } from './service/passe-cloture.ts';
+
 export type {
   CategorieLecon,
   Competence,

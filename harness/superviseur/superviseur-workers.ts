@@ -45,7 +45,18 @@ import { CollecteurTelemetrie } from './collecteur-telemetrie.ts';
 import type { TelemetrieWorker } from './types.ts';
 import { estDansRacine, explorerProjets, type ResultatExploration } from './exploration-projets.ts';
 import { existsSync, mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import type { Database } from 'bun:sqlite';
+import type { SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { ActionCoupure } from '../anti-boucle/index.ts';
+import {
+  creerClientInference,
+  enfilerPasseApprentissage,
+  ouvrirBaseApprentissage,
+  type DonneesMissionTerminee,
+  type EntreePasseCloture,
+} from '../apprentissage/index.ts';
 import { rechercherDansProjets, type ResultatRecherche } from './recherche-projets.ts';
 import { lireFichier, type ResultatLectureFichier } from './lecture-fichier.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
@@ -111,6 +122,15 @@ export { GRACE_ARRET_URGENCE_MS_DEFAUT, SuperviseurError, type DemarrerWorkerFn,
  */
 const MARGE_RENOUVELLEMENT_JETON_MS = 3_600_000;
 
+/**
+ * `☠` E6, éteint par défaut — voir le commentaire de `#enfilerApprentissageSiConfigure`.
+ * Un opérateur de production pose `CCREMOTE_APPRENTISSAGE_ACTIF=1` explicitement.
+ */
+function apprentissageActif(): boolean {
+  const valeur = process.env['CCREMOTE_APPRENTISSAGE_ACTIF'];
+  return valeur !== undefined && valeur !== '' && valeur !== '0' && valeur.toLowerCase() !== 'false';
+}
+
 export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession, RepertoireCibles, ArreteurMission, RelanceurMission {
   readonly #registre: RegistreWorkers;
   readonly #compteurRelances: CompteurRelances;
@@ -138,6 +158,14 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   /** Concurrents restaurés depuis la persistance (dette n°1) — voir `fencing-restauration.ts`. */
   readonly #concurrentsRestaures = new ConcurrentsRestaures();
   readonly #antiBoucle: CablageAntiBoucle; // juge anti-boucle H-68 — voir anti-boucle-workers.ts
+  /**
+   * Base d'apprentissage (E6) — ouverte paresseusement au premier besoin réel, jamais à la
+   * construction : ce champ ne doit RIEN changer pour les ~40 sites de test existants qui
+   * construisent un `SuperviseurWorkers` sans jamais faire aboutir un `result`. `'indisponible'`
+   * = tentative déjà faite et ratée, on ne réessaie plus pour ce process (évite le bruit de
+   * log répété) ; `null` = jamais tenté.
+   */
+  #baseApprentissage: Database | 'indisponible' | null = null;
 
   constructor(deps: DependancesSuperviseur) {
     this.#compteurRelances = deps.compteurRelances;
@@ -735,12 +763,23 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         log.info({ action: decision.action, motif: decision.motif }, 'terminaison observée, politique de relance appliquée');
         this.#notifierDecision(missionId, decision);
         // ☠ H-68 : `couper`/`escalader` priment sur `deciderRelance`, jamais l'inverse (log déjà émis par `#antiBoucle`).
-        if (decision.action === 'relancer' && actionAntiBoucle !== 'couper' && actionAntiBoucle !== 'escalader') {
+        const relanceProgrammee = decision.action === 'relancer' && actionAntiBoucle !== 'couper' && actionAntiBoucle !== 'escalader';
+        if (relanceProgrammee) {
           this.#planifier(decision.delaiMs, () => {
             this.relancer(missionId, handle.sessionId).catch((erreur: unknown) => {
               log.error({ err: erreur }, 'relance automatique en échec');
             });
           });
+        } else {
+          // ☠☠ E6 (PLAN-PORTAGE.md, SPEC-APPRENTISSAGE.md §6) — ICI, et NULLE PART AILLEURS,
+          // la mission est réellement CONCLUE : jamais sur un `result` seul (fin d'un TOUR,
+          // pas de la session — apprendre là ferait apprendre huit fois sur des transcripts
+          // incomplets), jamais quand une relance est programmée (`relanceProgrammee` :
+          // la session continue sous un nouveau worker, ce n'est pas une conclusion).
+          // `void` : appel STRICTEMENT non bloquant — la clôture de la mission ne doit rien
+          // attendre de la passe d'apprentissage (SPEC §1 : l'invariant qui prime sur tout
+          // le reste). `#enfilerApprentissageSiConfigure` ne lève jamais (try/catch interne).
+          void this.#enfilerApprentissageSiConfigure(missionId, handle, message, decision, actionAntiBoucle);
         }
         break;
       }
@@ -753,6 +792,100 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       // Une exception laisse un worker qu'on ne lit plus : le taire le ferait
       // passer pour vivant à jamais, et l'opérateur piloterait un fantôme.
       this.#marquerMortSiToujoursLeNotre(missionId, handle);
+    }
+  }
+
+  /**
+   * Câblage E6 (PLAN-PORTAGE.md, SPEC-APPRENTISSAGE.md §6) — met en file une passe
+   * d'apprentissage pour la mission qui vient de se conclure. Composé exclusivement de
+   * signaux LOCAUX au PC (ce module ne connaît rien du registre du Pi, cf. l'en-tête de ce
+   * fichier) : c'est la composition qui remplit `DonneesMissionTerminee`, comme documenté
+   * dans `observation/classement-issue.ts`.
+   *
+   * `☠` NE LÈVE JAMAIS (try/catch total) : une exception ici ne doit avoir AUCUN effet sur
+   * le worker déjà marqué mort trois lignes plus haut — c'est la garantie que la preuve
+   * d'innocuité de E6 démontre avec le moteur d'inférence injoignable.
+   *
+   * `☠` Éteint par défaut (`CCREMOTE_APPRENTISSAGE_ACTIF` non posé) : `superviseur-workers.test.ts`
+   * fait aboutir des dizaines de `result` factices sans jamais s'attendre à une écriture
+   * disque ou un appel réseau. Rendre ce câblage actif par défaut aurait pollué chaque run de
+   * `bun test harness/superviseur/` avec de vraies ouvertures de `apprentissage.db` et de
+   * vrais appels SDK — l'exact contraire de l'invariant « jamais bloquant, jamais surprenant »
+   * que E6 est censé garantir. Une machine de production l'active explicitement.
+   */
+  async #enfilerApprentissageSiConfigure(
+    missionId: string,
+    handle: WorkerHandle,
+    message: SDKResultMessage,
+    decision: DecisionRelance,
+    actionAntiBoucle: ActionCoupure | null,
+  ): Promise<void> {
+    if (!apprentissageActif()) return;
+    try {
+      const enregistrement = this.#registre.parMission(missionId);
+      if (enregistrement === null) return; // ne devrait pas arriver ici, mais on ne suppose rien.
+      const db = this.#obtenirBaseApprentissage();
+      if (db === null) return;
+
+      const constat = await releverEtatGit(enregistrement.worktree);
+      const telemetrieMission = this.#telemetrie.tous().find((t) => t.missionId === missionId) ?? null;
+      const enEchecDefinitif = decision.action === 'echec_definitif' || actionAntiBoucle === 'couper';
+
+      const donneesMission: DonneesMissionTerminee = {
+        etatHarness: enEchecDefinitif ? 'echec_definitif' : 'terminee',
+        derniereRaisonTerminale: message.terminal_reason ?? null,
+        constatGit: { fichiersModifies: constat.fichiersModifies, dernierCommit: constat.dernierCommit },
+        compteurRelances: this.#compteurRelances.etat(handle.sessionId).tentativesEffectuees,
+        // ☠ Verdict best-effort : seul un `couper` constaté ICI est un fait mesuré (boucle
+        // confirmée par le juge H-68) ; en dehors de ce cas, ce module n'a pas de verdict à
+        // offrir et rend `null` (« pas jugé »), jamais une valeur inventée.
+        inspection: { verdict: actionAntiBoucle === 'couper' ? 'boucle' : null },
+        budgetConsommeUsd: telemetrieMission?.coutUsd ?? 0,
+        budgetMaxUsd: enregistrement.spec.maxBudgetUsd,
+        contexteTokensUtilises: telemetrieMission?.contexteTokensUtilises ?? null,
+      };
+
+      const entree: EntreePasseCloture = {
+        missionId,
+        sessionId: handle.sessionId,
+        worktree: enregistrement.worktree,
+        configDir: enregistrement.spec.configDir ?? join(homedir(), '.claude'),
+        mandat: enregistrement.spec.mandate,
+        critereArret: null, // non transporté jusqu'ici (`WorkerSpec` ne le porte pas) — honnête, pas deviné.
+        donneesMission,
+      };
+
+      const client = creerClientInference();
+      const resultat = await enfilerPasseApprentissage({ db, client }, entree);
+      if (resultat !== null) {
+        superviseurLogger.info(
+          { missionId, issue: resultat.issue, leconsExtraites: resultat.leconsExtraites, erreur: resultat.erreur },
+          'apprentissage : passe de clôture traitée (E6)',
+        );
+      }
+    } catch (erreur) {
+      // Dernier filet : `enfilerPasseApprentissage` ne lève déjà jamais, mais la composition
+      // locale ci-dessus (`releverEtatGit`, accès au registre) pourrait échouer de façon
+      // imprévue. Ça ne doit JAMAIS remonter jusqu'à la boucle de surveillance des résultats.
+      superviseurLogger.error({ err: erreur, missionId }, 'apprentissage : câblage de clôture en échec — jamais bloquant (E6)');
+    }
+  }
+
+  /**
+   * Ouvre la base d'apprentissage une seule fois par process, paresseusement (voir le champ
+   * `#baseApprentissage`). Ne lève jamais : un répertoire non accessible désactive
+   * silencieusement l'apprentissage pour ce process plutôt que de perturber une clôture.
+   */
+  #obtenirBaseApprentissage(): Database | null {
+    if (this.#baseApprentissage === 'indisponible') return null;
+    if (this.#baseApprentissage !== null) return this.#baseApprentissage;
+    try {
+      this.#baseApprentissage = ouvrirBaseApprentissage();
+      return this.#baseApprentissage;
+    } catch (erreur) {
+      superviseurLogger.warn({ err: erreur }, 'apprentissage : base inaccessible — désactivé pour ce process (E6)');
+      this.#baseApprentissage = 'indisponible';
+      return null;
     }
   }
 
