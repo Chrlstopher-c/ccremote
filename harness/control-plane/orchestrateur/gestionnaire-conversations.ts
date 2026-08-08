@@ -177,6 +177,11 @@ export interface ChoixModele {
   readonly modele?: string | null;
   readonly effort?: string | null;
   readonly modeRapide?: boolean | null;
+  /**
+   * `☠` Portée SESSION, jamais persisté (doc du SDK). Il n'a donc pas de colonne
+   * et ne se lit pas depuis le fil : il vaut ce que l'interface envoie, ou rien.
+   */
+  readonly ultracode?: boolean;
 }
 
 export class GestionnaireConversations {
@@ -340,6 +345,10 @@ export class GestionnaireConversations {
     const effort = choix.effort ?? conv.effort;
     // `☠` `??` et non `||` : `false` est un choix, pas une absence de choix.
     const modeRapide = choix.modeRapide ?? conv.modeRapide;
+    // `☠` Aucun repli sur le fil : `ultracode` n'a pas de colonne, il vaut ce que
+    // l'interface envoie ou rien. C'est la doc du SDK qui l'impose (« interactive
+    // toggles never persist it ») — le retenir ferait revivre un réglage éteint.
+    const ultracode = choix.ultracode;
 
     this.registre.conversations.ajouterEvenement({
       conversationId: id,
@@ -357,7 +366,7 @@ export class GestionnaireConversations {
     // fondée sur un état périmé, suivie d'une correction au tour d'après — ce
     // que le canal asynchrone existe précisément pour éviter.
     await this.#rattraper(id);
-    await this.#appliquerChoixModele(session.poignee.query, id, modele, effort, modeRapide);
+    await this.#appliquerChoixModele(session.poignee.query, id, modele, effort, modeRapide, ultracode);
     if (choix.modele !== undefined || choix.effort !== undefined || choix.modeRapide !== undefined) {
       this.registre.conversations.poserModeleEffort(id, modele, effort, modeRapide);
     }
@@ -427,14 +436,20 @@ export class GestionnaireConversations {
     modele: string | null,
     effort: string | null,
     modeRapide: boolean | null = null,
+    ultracode?: boolean,
   ): Promise<void> {
     try {
       if (modele !== null) await query.setModel?.(modele);
       if (effort !== null) await query.applyFlagSettings?.({ effortLevel: effort });
       if (modeRapide !== null) await query.applyFlagSettings?.({ fastMode: modeRapide });
+      // `☠` Même canal, même raison que l'effort : la cascade de réglages
+      // persistés n'est lue qu'au démarrage du process, et `ultracode` n'y figure
+      // de toute façon jamais — c'est un réglage de session, et ce canal-ci est
+      // le seul par lequel il puisse arriver.
+      if (ultracode !== undefined) await query.applyFlagSettings?.({ ultracode });
     } catch (erreur) {
       log.warn(
-        { err: erreur, conversationId, modele, effort, modeRapide },
+        { err: erreur, conversationId, modele, effort, modeRapide, ultracode },
         'réglages de génération non appliqués — message envoyé quand même',
       );
     }

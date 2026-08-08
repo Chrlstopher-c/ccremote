@@ -124,6 +124,37 @@ describe('API web — missions', () => {
   });
 });
 
+describe('API web — catalogue de modèles', () => {
+  /**
+   * `☠` QUATRIÈME occurrence du même défaut sur ce projet, trouvée le 08/08 en
+   * relisant le contrat d'API. L'interface lit `m.ultracode` depuis toujours
+   * (`hSupportsUltracode`) et ce champ n'était servi NULLE PART : `!!undefined`
+   * valait faux, donc la case était grisée sur tous les modèles — y compris ceux
+   * qui le supportent réellement. Rien n'échouait, rien ne le disait.
+   */
+  test('☠ chaque modèle déclare `ultracode`, et il suit la capacité `xhigh`', async () => {
+    const { corps } = await lire('/modeles');
+    const modeles = corps['data'] as readonly Record<string, unknown>[];
+    expect(modeles.length).toBeGreaterThan(0);
+    for (const m of modeles) {
+      expect(typeof m['ultracode']).toBe('boolean');
+      // La capacité EST la présence de `xhigh` : le SDK exige « an xhigh-capable
+      // model ». Un champ qui divergerait de cette liste mentirait à l'écran.
+      const efforts = m['effort'] as readonly string[];
+      expect(m['ultracode']).toBe(efforts.includes('xhigh'));
+    }
+  });
+
+  test('☠ Haiku n’accepte aucun effort — donc ni xhigh, ni ultracode', async () => {
+    const { corps } = await lire('/modeles');
+    const modeles = corps['data'] as readonly Record<string, unknown>[];
+    const haiku = modeles.find((m) => String(m['id']).includes('haiku'));
+    if (haiku === undefined) return; // catalogue sans Haiku : rien à prouver ici
+    expect(haiku['effort']).toEqual([]);
+    expect(haiku['ultracode']).toBe(false);
+  });
+});
+
 describe('API web — comptes', () => {
   test('un compte sans relevé de quota ⇒ jauges à 0 et reset « — », jamais une valeur inventée', async () => {
     semerMission();

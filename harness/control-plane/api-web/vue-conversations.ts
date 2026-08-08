@@ -188,7 +188,7 @@ export interface PortConversations {
   envoyer(
     id: string,
     texte: string,
-    choix?: { readonly modele?: string; readonly effort?: string; readonly modeRapide?: boolean },
+    choix?: { readonly modele?: string; readonly effort?: string; readonly modeRapide?: boolean; readonly ultracode?: boolean },
     /** Pièces jointes brutes du navigateur (migration 24) — validées côté domaine, jamais ici. */
     pieces?: readonly { readonly nom: unknown; readonly type: unknown; readonly donneesBase64: unknown }[],
   ): Promise<void>;

@@ -158,6 +158,12 @@ const HarnessAPI = (() => {
         // grisait sur les modèles qui ne le déclarent pas — et n'était transmise
         // NULLE PART. Câblée bout en bout (migration 28, `applyFlagSettings`).
         fastMode: choix?.fastMode,
+        // ☠ MÊME PANNE que `fastMode`, trouvée le 08/08 en relisant le contrat :
+        // la case existait, son état vivait, le libellé annonçait « ultracode
+        // actif » — et rien ne partait. Portée SESSION, donc renvoyé à CHAQUE
+        // message : c'est ce qui le réapplique après un redémarrage de session,
+        // là où le serveur n'a aucune colonne pour s'en souvenir.
+        ultracode: choix?.ultracode,
         // ☠ Absentes plutôt que `[]` : le corps d'un message sans capture ne
         // grossit pas d'un champ vide, et la route distingue les deux cas.
         ...(pieces !== undefined && pieces.length > 0 ? { pieces } : {}),

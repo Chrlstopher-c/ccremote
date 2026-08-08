@@ -1094,6 +1094,7 @@ async function hSendOrchMessage() {
     model: HarnessState.orchModel.model,
     effort: HarnessState.orchModel.effort,
     fastMode: HarnessState.orchModel.fastMode,
+    ultracode: HarnessState.orchModel.ultracode,
   }, pieces);
   // ☠ Un échec est AFFICHÉ (session inactive, PC/Pi injoignable), jamais avalé.
   if (!r.ok) {

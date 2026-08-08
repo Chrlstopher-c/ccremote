@@ -351,6 +351,15 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
         effort: [...m.efforts],
         effortDefaut: m.effortDefaut,
         fastMode: m.modeRapide,
+        // `☠` DÉRIVÉ, jamais une colonne de catalogue à maintenir en double : le
+        // SDK exige « an xhigh-capable model », donc la capacité EST la présence
+        // de `xhigh` dans les efforts. Un champ séparé aurait fini par diverger
+        // de la liste qui le conditionne.
+        //
+        // `☠` L'interface lisait déjà `m.ultracode` (`hSupportsUltracode`) et ce
+        // champ n'a JAMAIS été servi : `!!undefined` valait faux, donc la case
+        // était grisée sur TOUS les modèles, y compris ceux qui le supportent.
+        ultracode: m.efforts.includes('xhigh'),
         note: m.note,
       })),
     );
@@ -646,11 +655,17 @@ async function routerEcritureConversation(chemin: string, req: Request, deps: De
     // mode rapide à chaque message qui n'en parle pas, y compris ceux que le
     // harness enfile lui-même.
     const modeRapide = typeof corps['fastMode'] === 'boolean' ? corps['fastMode'] : undefined;
+    // `☠` `ultracode` est de portée SESSION et n'est JAMAIS persisté (doc du SDK :
+    // « Session-scoped — interactive toggles never persist it »). Contrairement à
+    // `fastMode`, il n'a donc aucune colonne : l'interface le renvoie à chaque
+    // message, ce qui le réapplique tout seul après un redémarrage de session. Le
+    // persister ferait revivre un réglage que Chris croirait éteint.
+    const ultracode = typeof corps['ultracode'] === 'boolean' ? corps['ultracode'] : undefined;
     // `☠` NE bloque pas jusqu'à la réponse : `envoyer` enfile puis rend la main.
     // La réponse remonte par le streaming (GET .../events). Un POST bloquant
     // jusqu'au `result` immobiliserait le relais et Cloudflare le couperait.
     try {
-      await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort, modeRapide }, pieces);
+      await conv.envoyer(decodeURIComponent(message[1]), texte, { modele, effort, modeRapide, ultracode }, pieces);
     } catch (erreur) {
       // `☠` 400 et le message TEL QUEL : il nomme les types acceptés et les
       // plafonds. Le remplacer par « requête invalide » obligerait l'opérateur à
