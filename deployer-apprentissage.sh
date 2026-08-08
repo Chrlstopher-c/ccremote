@@ -7,6 +7,9 @@
 # Usage :
 #   ./deployer-apprentissage.sh              # allume, persistant, redémarre
 #   ./deployer-apprentissage.sh --eteindre   # retire l'interrupteur, redémarre
+#   ./deployer-apprentissage.sh --simulation # contrôles préalables seulement —
+#                                             # arrêt avant toute écriture et
+#                                             # avant le redémarrage
 #
 # Séquence, dans l'ordre, chacune bloquant la suivante :
 #   1. arbre de travail propre (git status)
@@ -34,12 +37,14 @@ SERVICE="ccremote-pc"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
 MODE="allumer"
+SIMULATION=0
 case "${1:-}" in
   "") ;;
   --eteindre) MODE="eteindre" ;;
+  --simulation) SIMULATION=1 ;;
   *)
     echo "✗ argument inconnu : '$1'" >&2
-    echo "  usage : ./deployer-apprentissage.sh [--eteindre]" >&2
+    echo "  usage : ./deployer-apprentissage.sh [--eteindre|--simulation]" >&2
     exit 64
     ;;
 esac
@@ -155,6 +160,14 @@ controler_interrupteur_reel() {
 
 controler_arbre_propre
 controler_tests
+
+if [ "$SIMULATION" = "1" ]; then
+  echo ""
+  echo "✓ Mode simulation : arbre propre, tests et types au vert."
+  echo "  Arrêt volontaire ici — aucune écriture, aucun redémarrage."
+  exit 0
+fi
+
 appliquer_interrupteur
 redemarrer_detache
 controler_fraicheur
