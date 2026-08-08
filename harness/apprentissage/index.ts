@@ -27,6 +27,9 @@ export {
   obtenirPasse,
 } from './base/lecons.ts';
 
+export { estimerTokensResumeMission, reduireTranscript } from './observation/reduction-transcript.ts';
+export type { ParametresReduction } from './observation/reduction-transcript.ts';
+
 export type {
   CategorieLecon,
   Competence,

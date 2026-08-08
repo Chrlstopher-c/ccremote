@@ -45,3 +45,17 @@ export function executer<T>(operation: string, fn: () => T, contexte?: Record<st
     throw new ErreurApprentissage(operation, cause);
   }
 }
+
+/** Variante asynchrone de `executer` — même garantie, pour l'I/O disque/réseau non bloquante. */
+export async function executerAsync<T>(
+  operation: string,
+  fn: () => Promise<T>,
+  contexte?: Record<string, unknown>,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (cause) {
+    journal.error({ operation, contexte, err: cause }, 'opération apprentissage en échec');
+    throw new ErreurApprentissage(operation, cause);
+  }
+}
