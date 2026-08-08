@@ -50,7 +50,12 @@ function dessinerBarre(position: PositionBarre, echelle: Echelle, domaineMax: nu
       `stroke="${couleur}" stroke-width="1" />`
     : '';
   const etiquette = jamais ? 'jamais' : String(execution.tentativesAvantSucces);
-  const valeur = texteSvg(position.x + LARGEUR_BARRE / 2, y - 6, etiquette, { ancre: 'middle', taille: 10 });
+  // Une exécution jamais réussie porte un mot, pas un chiffre : plus long que la barre,
+  // donc rendu plus petit pour ne pas empiéter sur ses voisines.
+  const valeur = texteSvg(position.x + LARGEUR_BARRE / 2, y - 6, etiquette, {
+    ancre: 'middle',
+    taille: jamais ? 8 : 10,
+  });
   const repetition = texteSvg(position.x + LARGEUR_BARRE / 2, baseline + 14, `r${execution.repetition}`, {
     ancre: 'middle',
     taille: 9,
@@ -97,7 +102,7 @@ export function dessinerGraphiqueTentatives(executions: readonly Execution[]): s
     .map((g) => defsHachures(`hachure-tentatives-${g.condition}`, couleurCondition(g.condition)))
     .join('');
   const barres = positions.map((p) => dessinerBarre(p, echelle, domaineMax, baseline)).join('\n');
-  const axeY = texteSvg(6, MARGE_HAUT + 4, 'tentatives', { ancre: 'start', taille: 10, couleur: 'var(--texte-faible)' });
+  const axeY = texteSvg(6, MARGE_HAUT - 8, 'tentatives', { ancre: 'start', taille: 10, couleur: 'var(--texte-faible)' });
   const svg = ouvrirSvg(
     largeurSvg,
     HAUTEUR_SVG,
