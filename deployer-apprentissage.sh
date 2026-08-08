@@ -158,30 +158,49 @@ appliquer_interrupteur() {
 # cgroup, cgroup stoppé) : le travail fire-and-forget survit, un client attaché
 # via --wait ne survit pas.
 redemarrer_detache() {
-  local unite journal fin
+  local unite journal_soumission fin sortie
   unite="ccremote-apprentissage-deploiement-$(date +%s)-$$"
-  journal="$(mktemp /tmp/ccremote-deploiement-apprentissage.XXXXXX.log)"
+  journal_soumission="$(mktemp /tmp/ccremote-deploiement-apprentissage.XXXXXX.log)"
   echo "→ Redémarrage de $SERVICE, détaché (unité transitoire $unite)"
   local commande_interne
   commande_interne="systemctl --user restart $SERVICE; sleep 6"
   commande_interne="$commande_interne; echo etat=\$(systemctl --user show $SERVICE -p ActiveState --value)"
   commande_interne="$commande_interne; echo TERMINE"
-  systemd-run --user --unit="$unite" --collect \
+  if ! systemd-run --user --unit="$unite" --collect \
     --description="deployer-apprentissage.sh : redémarrage détaché de $SERVICE" \
     /bin/bash -c "$commande_interne" \
-    >"$journal" 2>&1
+    >"$journal_soumission" 2>&1; then
+    echo "✗ soumission de l'unité transitoire $unite en échec :" >&2
+    cat "$journal_soumission" >&2
+    exit 1
+  fi
+  # `☠` Sans --pipe (volontaire, voir le commentaire ci-dessus sur le
+  # fire-and-forget) la sortie de la commande détachée part dans LE JOURNAL
+  # SYSTEMD DE L'UNITÉ TRANSITOIRE, jamais dans $journal_soumission — qui ne
+  # capture que la soumission elle-même et reste sans TERMINE indéfiniment,
+  # succès ou échec confondus. --pipe relierait le stdout de l'unité au
+  # stdout de CE script, exactement le couplage que le fire-and-forget évite :
+  # si ce script tourne comme enfant du cgroup de $SERVICE, un redémarrage
+  # casserait ce pipe autant qu'un `--wait`. On lit donc le résultat à la
+  # source, dans le journal de l'unité transitoire elle-même.
   fin=$(( $(date +%s) + 60 ))
-  until grep -q '^TERMINE$' "$journal" 2>/dev/null || [ "$(date +%s)" -ge "$fin" ]; do sleep 2; done
-  if ! grep -q '^TERMINE$' "$journal"; then
-    echo "✗ le redémarrage détaché n'a pas terminé sous 60s — journal : $journal" >&2
+  sortie=""
+  while true; do
+    sortie="$(journalctl --user -u "$unite" --no-pager -o cat 2>/dev/null)"
+    printf '%s\n' "$sortie" | grep -q '^TERMINE$' && break
+    [ "$(date +%s)" -ge "$fin" ] && break
+    sleep 2
+  done
+  if ! printf '%s\n' "$sortie" | grep -q '^TERMINE$'; then
+    echo "✗ le redémarrage détaché n'a pas terminé sous 60s — journal : journalctl --user -u $unite" >&2
     exit 1
   fi
-  if ! grep -q '^etat=active$' "$journal"; then
+  if ! printf '%s\n' "$sortie" | grep -q '^etat=active$'; then
     echo "✗ service $SERVICE pas actif après redémarrage" >&2
-    cat "$journal" >&2
+    printf '%s\n' "$sortie" >&2
     exit 1
   fi
-  echo "  ✓ $SERVICE actif (journal : $journal)"
+  echo "  ✓ $SERVICE actif (journal : journalctl --user -u $unite)"
 }
 
 # --- 6. Contrôles après coup --------------------------------------------------
