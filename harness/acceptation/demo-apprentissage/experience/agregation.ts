@@ -11,8 +11,15 @@ import { chercherInjection, extraireLignesTrace } from './extraction-jsonl.ts';
 
 /** Cap d'affichage des extraits de trace — jamais une mesure, juste une borne d'UI. */
 const MAX_LIGNES_TRACE = 30;
-/** Longueur de l'aiguille cherchée dans le transcript suivant, pour prouver l'injection. */
-const LONGUEUR_AIGUILLE_INJECTION = 60;
+/**
+ * `☠ MESURÉ le 2026-08-08` — le mandat système (`systemPrompt.append`) n'est PAS
+ * réécrit dans le transcript JSONL : y chercher le texte de la leçon ne trouve rien.
+ * Ce qu'on y trouve, et qui prouve mieux, c'est la VALEUR que seule la leçon
+ * transportait — le jeton du banc. Aucune lecture du projet ne peut la produire :
+ * si elle apparaît dans le transcript d'une équipe, elle est entrée par le mandat,
+ * et par nulle autre voie.
+ */
+export const AIGUILLE_INJECTION = 'ARDOISE-7719';
 
 const PIEGE_DECRIT =
   'La suite de tests ne passe que si `banc/amorce.ts` est préchargé ' +
@@ -71,7 +78,7 @@ export function calculerAgregats(
 async function traceInjection(executions: readonly Execution[]): Promise<Traces['injection']> {
   const cible = executions.find((e) => e.condition === 'avec_lecon' && e.succesVerifie);
   if (cible === undefined) return null;
-  const aiguille = LECON_DU_PIEGE.slice(0, LONGUEUR_AIGUILLE_INJECTION);
+  const aiguille = AIGUILLE_INJECTION;
   const trouve = await chercherInjection(cible.transcript, aiguille);
   return trouve === null ? null : { transcript: cible.transcript, ...trouve };
 }
