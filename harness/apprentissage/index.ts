@@ -74,6 +74,8 @@ export type { DependancesFileAttente } from './service/file-attente.ts';
 export { executerPasseCloture } from './service/passe-cloture.ts';
 export type { EntreePasseCloture, ResultatPasseCloture } from './service/passe-cloture.ts';
 
+export { composerBlocLecons } from './injection/bloc-lecons.ts';
+
 export type {
   CategorieLecon,
   Competence,
