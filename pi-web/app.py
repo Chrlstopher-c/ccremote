@@ -15,10 +15,11 @@ from pathlib import Path
 from agent import usage as agent_usage
 from agent.chat import run_agent_stream
 from agent.client import (
-    AVAILABLE_MODELS,
-    MODEL_CONTEXT_TOKENS,
     active_key_label,
+    available_models,
     configured_key_labels,
+    context_tokens,
+    refresh_catalogue,
     resolve_model,
     warm_up_usage,
 )
@@ -167,7 +168,15 @@ async def api_agent_chat(body: dict = Body(...), _: str = Depends(check_session)
 
 @app.get("/api/config")
 async def api_config(_: str = Depends(check_session)):
-    return {"pc_host": PC_HOST, "pc_mac": PC_MAC, "default_model": AGENT_MODEL, "models": AVAILABLE_MODELS}
+    # Le catalogue est demandé au serveur de modèles à chaque appel : en local, il reflète
+    # ce qui est chargé maintenant sur le PC, et non une liste figée dans le code.
+    modeles = await refresh_catalogue()
+    return {
+        "pc_host": PC_HOST,
+        "pc_mac": PC_MAC,
+        "default_model": AGENT_MODEL or (modeles[0] if modeles else ""),
+        "models": modeles,
+    }
 
 
 @app.get("/api/agent/usage")
@@ -182,7 +191,7 @@ async def api_agent_context_usage(body: dict = Body(...), _: str = Depends(check
     return {
         "model": model,
         "tokens_used": estimate_messages_tokens(history),
-        "tokens_limit": MODEL_CONTEXT_TOKENS.get(model, 32_000),
+        "tokens_limit": context_tokens(model),
     }
 
 

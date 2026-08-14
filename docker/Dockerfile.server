@@ -1,0 +1,27 @@
+# ccremote — serveur de sessions, tourne sur la machine qui héberge les modèles.
+#
+# C'est lui qui détient tmux et l'autorité sur les sessions. Conteneurisé en Linux plutôt que
+# porté sur Windows : tmux n'existe pas nativement sur Windows, et réécrire la gestion de
+# sessions (ConPTY, pas de capture-pane) reviendrait à casser la partie du projet qui
+# fonctionne déjà. Le conteneur apporte l'environnement Unix dont le code a besoin, sans
+# toucher au code.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# tmux : indispensable, tout le pilotage de sessions passe par lui.
+# procps / iproute2 : métriques (psutil s'appuie dessus pour certaines lectures).
+# curl, git, unzip, ca-certificates : nécessaires pour installer un agent de code dans une session.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tmux procps iproute2 curl git unzip ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY server/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY server/ ./
+
+EXPOSE 8765
+
+CMD ["python", "server.py"]

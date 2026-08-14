@@ -1,4 +1,4 @@
-from agent.client import MODEL_CONTEXT_TOKENS, create_completion, resolve_model
+from agent.client import context_tokens, create_completion, resolve_model
 
 COMPACT_TRIGGER_RATIO = 0.75
 KEEP_RECENT_MESSAGES = 12
@@ -51,7 +51,7 @@ async def summarize(messages: list[dict], model: str) -> str:
 
 
 async def maybe_compact(history: list[dict], model: str) -> tuple[list[dict], str | None]:
-    limit = MODEL_CONTEXT_TOKENS.get(resolve_model(model), 32_000)
+    limit = context_tokens(resolve_model(model))
     if len(history) <= KEEP_RECENT_MESSAGES or estimate_messages_tokens(history) < limit * COMPACT_TRIGGER_RATIO:
         return history, None
 

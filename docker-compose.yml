@@ -1,0 +1,65 @@
+# ccremote — déploiement local, tout en Linux.
+#
+# Répartition cible : `web` ira sur le Mac, `sessions` reste sur la machine qui héberge les
+# modèles. Pour l'instant les deux tournent ici, ce qui permet de valider la chaîne complète
+# avant de la répartir. Passer à la cible ne demandera que de changer PC_HOST et AGENT_BASE_URL.
+services:
+
+  # Interface web et agent IA. Le seul composant exposé à l'utilisateur.
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    image: ccremote:web
+    container_name: ccremote-web
+    restart: unless-stopped
+
+    ports:
+      - "8080:8000"
+
+    environment:
+      # Serveur de sessions : le conteneur voisin de cette composition.
+      - PC_HOST=sessions
+      - PC_PORT=8765
+      - PC_MAC=${PC_MAC:-}
+
+      # Modèles locaux servis par EchoHub sur l'hôte. `host.docker.internal` est résolu par
+      # l'entrée extra_hosts ci-dessous — depuis un conteneur, `localhost` désigne le
+      # conteneur lui-même, jamais la machine.
+      - AGENT_BASE_URL=${AGENT_BASE_URL:-http://host.docker.internal:37821/v1}
+      - AGENT_API_KEY=${AGENT_API_KEY:-local}
+      # Vide = le premier modèle annoncé par /v1/models est retenu, c'est-à-dire celui qui est
+      # réellement chargé sur le PC à cet instant.
+      - AGENT_MODEL=${AGENT_MODEL:-}
+
+      - UI_USER=${UI_USER:-chris}
+      - UI_PASSWORD=${UI_PASSWORD:?UI_PASSWORD doit etre defini dans .env}
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      - sessions
+
+  # Serveur de sessions : tmux, métriques, pilotage. Autorité sur l'état réel.
+  sessions:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    image: ccremote:sessions
+    container_name: ccremote-sessions
+    restart: unless-stopped
+
+    # Port publié pour permettre un diagnostic direct au websocket depuis l'hôte.
+    ports:
+      - "8765:8765"
+
+    volumes:
+      # Espace de travail des sessions, persistant hors du conteneur.
+      - ccremote_workspace:/workspace
+
+    environment:
+      - WORKSPACE=/workspace
+
+volumes:
+  ccremote_workspace:

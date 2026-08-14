@@ -1,0 +1,27 @@
+# ccremote — interface web et agent IA.
+#
+# Ce composant est volontairement en Linux uniquement : il est destiné à tourner sur le Mac
+# ou sur une machine du réseau, jamais sur le poste Windows. Aucune dépendance système
+# particulière — c'est du FastAPI pur, l'agent parle OpenAI par le réseau.
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# curl sert au HEALTHCHECK ci-dessous ; rien d'autre n'est nécessaire.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pi-web/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY pi-web/ ./
+
+EXPOSE 8000
+
+# Le point de santé interroge l'application réelle, pas seulement le port : un uvicorn qui
+# répond alors que l'application a échoué à démarrer serait un faux positif.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8000/login || exit 1
+
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

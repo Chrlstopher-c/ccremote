@@ -5,10 +5,10 @@ from loguru import logger
 
 from agent import usage as agent_usage
 from agent.client import (
-    MODEL_CONTEXT_TOKENS,
     SYSTEM_PROMPT,
     active_key_label,
     configured_key_labels,
+    context_tokens,
     create_completion_stream,
     is_configured,
     resolve_model,
@@ -23,7 +23,7 @@ def _usage_payload(messages: list[dict], model: str | None) -> dict:
     resolved = resolve_model(model)
     return {
         "tokens_used": estimate_messages_tokens(messages),
-        "tokens_limit": MODEL_CONTEXT_TOKENS.get(resolved, 32_000),
+        "tokens_limit": context_tokens(resolved),
         "model": resolved,
         **agent_usage.get_all(configured_key_labels(), active_key_label()),
     }
@@ -65,7 +65,7 @@ async def run_agent_stream(history: list[dict], message: str, model: str | None 
     if not is_configured():
         yield {
             "type": "done",
-            "reply": "L'agent n'est pas configuré — CEREBRAS_API_KEY manquante côté serveur.",
+            "reply": "L'agent n'est pas configuré — AGENT_BASE_URL/AGENT_API_KEY manquants côté serveur.",
             "tool_calls": [],
             "reasoning": [],
             "history": history,

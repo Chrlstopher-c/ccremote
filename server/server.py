@@ -12,7 +12,7 @@ from pathlib import Path
 import psutil
 import websockets
 from loguru import logger
-from config import HOST, PORT, TMUX_SESSION
+from config import HOST, LAUNCH_SCRIPT, PORT, TMUX_SESSION, WORKSPACE
 
 _net_prev: dict = {}
 
@@ -105,8 +105,8 @@ def launch_claude(name: str = TMUX_SESSION) -> dict:
         return {"status": "already_running", "session": name}
     try:
         subprocess.Popen(
-            ["tmux", "new-session", "-d", "-s", name,
-             "bash -l /mnt/projects/ccremote/server/launch-claude.sh"],
+            ["tmux", "new-session", "-d", "-s", name, "-c", WORKSPACE,
+             f"bash -l {LAUNCH_SCRIPT}"],
         )
         return {"status": "launched", "session": name}
     except Exception as e:
