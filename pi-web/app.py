@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import hashlib
+import os
 
 import json
 from collections.abc import AsyncIterator
@@ -61,12 +62,32 @@ async def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
 
 
+def _cookie_secure(request: Request) -> bool:
+    """Le cookie doit-il être marqué `secure` ?
+
+    `secure=True` était imposé en dur : le navigateur refuse alors de conserver le cookie sur
+    une connexion non chiffrée, ce qui renvoie silencieusement sur la page de connexion — le
+    mot de passe est pourtant accepté (302), seule la session est perdue. Invisible tant que
+    le déploiement était derrière TLS, bloquant dès qu'on sert en HTTP sur le réseau local.
+
+    On suit donc le protocole réellement utilisé, en tenant compte d'un éventuel proxy TLS
+    en amont. COOKIE_SECURE permet de forcer le comportement si besoin.
+    """
+    force = os.environ.get("COOKIE_SECURE")
+    if force is not None:
+        return force.strip().lower() in ("1", "true", "yes", "oui")
+    return request.headers.get("x-forwarded-proto", request.url.scheme).lower() == "https"
+
+
 @app.post("/login")
-async def do_login(password: str = Form(...)):
+async def do_login(request: Request, password: str = Form(...)):
     if password != UI_PASSWORD:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Mauvais mot de passe")
     response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-    response.set_cookie("session", SESSION_TOKEN, httponly=True, samesite="strict", secure=True)
+    response.set_cookie(
+        "session", SESSION_TOKEN,
+        httponly=True, samesite="strict", secure=_cookie_secure(request),
+    )
     return response
 
 
