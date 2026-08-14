@@ -70,6 +70,10 @@ services:
     environment:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - CCREMOTE_LIEN_SECRET=${CCREMOTE_LIEN_SECRET:?CCREMOTE_LIEN_SECRET doit etre defini dans .env}
+      # Le canal de liaison écoute sur toutes les interfaces : contrairement à l'API web, il
+      # est authentifié par secret partagé (fermeture 4401 si invalide), donc exposable aux
+      # machines de travail — c'est sa raison d'être.
+      - CCREMOTE_LIEN_HOST=0.0.0.0
       - CCREMOTE_LIEN_PORT=8721
       - CCREMOTE_API_WEB_PORT=8722
       - CCREMOTE_PI_REGISTRE_DB=/var/lib/ccremote/pi/registre.sqlite
@@ -97,6 +101,36 @@ services:
     environment:
       - WORKSPACE=/workspace
 
+  # Superviseur de la machine de travail. C'est lui qui fait exister le « PC » aux yeux du
+  # control plane : sans lui, toutes les routes du harness répondent « PC absent ».
+  # Il n'exige aucune clé d'un fournisseur distant pour démarrer — le SDK n'intervient qu'au
+  # spawn d'une session, ce que nous ne faisons pas ici.
+  pc:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.harness
+    image: ccremote:harness
+    container_name: ccremote-pc
+    restart: unless-stopped
+
+    command: ["bun", "run", "composition/pc/bin-pc.ts"]
+
+    volumes:
+      - ccremote_pc:/var/lib/ccremote
+
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CCREMOTE_LIEN_SECRET=${CCREMOTE_LIEN_SECRET:?CCREMOTE_LIEN_SECRET doit etre defini dans .env}
+      # Le PC initie toujours le lien, jamais l'inverse (contrat H-75). `web` porte le port
+      # 8721 puisque `harness` partage sa pile réseau.
+      - CCREMOTE_LIEN_URL_PI=ws://web:8721
+      - CCREMOTE_PC_REGISTRE_DB=/var/lib/ccremote/pc/registre-workers.sqlite
+      - CCREMOTE_MACHINE_ID=${CCREMOTE_MACHINE_ID:-pc-local}
+
+    depends_on:
+      - web
+
 volumes:
   ccremote_workspace:
   ccremote_harness:
+  ccremote_pc:
