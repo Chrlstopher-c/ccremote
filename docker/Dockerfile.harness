@@ -1,0 +1,25 @@
+# ccremote — harness, plan de contrôle (control plane).
+#
+# C'est l'autorité du système : registre des missions, bus de permissions, projets, quotas.
+# `pi-web` interroge son API web (port 8722) — sans lui, les panneaux « Pi » et « control
+# plane » de l'interface restent vides.
+#
+# Le superviseur de workers (composition/pc) n'est volontairement PAS lancé ici : il pilote
+# des sessions Claude Code via le SDK Anthropic, donc un fournisseur distant. Le rendre local
+# est un chantier distinct, et le control plane fonctionne sans lui, en mode dégradé.
+FROM oven/bun:1-slim
+
+WORKDIR /app
+
+COPY harness/package.json harness/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY harness/ ./
+
+# Les chemins de persistance sont dans un volume : le registre SQLite et l'identité de
+# l'orchestrateur doivent survivre au conteneur.
+RUN mkdir -p /var/lib/ccremote/pi/projets
+
+EXPOSE 8721 8722
+
+CMD ["bun", "run", "composition/pi/bin-pi.ts"]

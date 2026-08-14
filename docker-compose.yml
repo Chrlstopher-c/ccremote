@@ -35,11 +35,47 @@ services:
       - UI_USER=${UI_USER:-chris}
       - UI_PASSWORD=${UI_PASSWORD:?UI_PASSWORD doit etre defini dans .env}
 
+      # Plan de contrôle du harness — alimente les panneaux « Pi » et « control plane ».
+      # Sur 127.0.0.1 : le conteneur `harness` partage la pile réseau de celui-ci
+      # (network_mode ci-dessous), les deux processus se voient donc en boucle locale.
+      - HARNESS_API_URL=http://127.0.0.1:8722
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
     depends_on:
       - sessions
+
+  # Plan de contrôle du harness : registre des missions, permissions, projets, quotas.
+  # Autorité du système — `web` l'interroge, il ne décide rien lui-même.
+  harness:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.harness
+    image: ccremote:harness
+    container_name: ccremote-harness
+    restart: unless-stopped
+
+    # Partage la pile réseau de `web`. L'API du harness n'a AUCUNE authentification propre et
+    # refuse délibérément d'écouter sur une adresse publique (serveur-api.ts) : c'est pi-web
+    # qui l'expose et l'authentifie. Plutôt que de contourner ce garde-fou, on donne aux deux
+    # processus la même boucle locale — exactement la topologie pour laquelle il a été écrit.
+    # Conséquence : ce service ne publie pas de ports, il hérite de ceux de `web`.
+    network_mode: "service:web"
+
+    volumes:
+      # Registre SQLite, identité de l'orchestrateur, projets : doivent survivre au conteneur.
+      - ccremote_harness:/var/lib/ccremote
+
+    environment:
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CCREMOTE_LIEN_SECRET=${CCREMOTE_LIEN_SECRET:?CCREMOTE_LIEN_SECRET doit etre defini dans .env}
+      - CCREMOTE_LIEN_PORT=8721
+      - CCREMOTE_API_WEB_PORT=8722
+      - CCREMOTE_PI_REGISTRE_DB=/var/lib/ccremote/pi/registre.sqlite
+      - CCREMOTE_PI_IDENTITE_ORCHESTRATEUR=/var/lib/ccremote/pi/identite-orchestrateur.json
+      - CCREMOTE_PI_INCIDENTS_ORCHESTRATEUR=/var/lib/ccremote/pi/incidents-orchestrateur.jsonl
+      - CCREMOTE_PI_REPERTOIRE_PROJETS=/var/lib/ccremote/pi/projets
 
   # Serveur de sessions : tmux, métriques, pilotage. Autorité sur l'état réel.
   sessions:
@@ -63,3 +99,4 @@ services:
 
 volumes:
   ccremote_workspace:
+  ccremote_harness:
