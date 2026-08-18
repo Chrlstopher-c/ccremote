@@ -118,13 +118,77 @@ export interface EnregistrementAPersister {
  * permissions — une extinction silencieuse de garde-fous (H-74), par le seul
  * fait d'un redémarrage.
  *
+ * `☠` `mcpServers` (H-76, panne du 18/08 20h19) n'est PAS de la même famille que
+ * les ports ci-dessus : ce n'est pas une fonction que `JSON.stringify` efface
+ * silencieusement, c'est un objet — potentiellement une INSTANCE `McpServer` du
+ * SDK (`McpSdkServerConfigWithInstance.instance`, rendue par
+ * `createSdkMcpServer()`) porteuse de références circulaires, qui fait LEVER
+ * `JSON.stringify` (`TypeError: cyclic structures`). `construire-worker-spec.ts`
+ * en place une dans chaque `WorkerSpec` de production (`ccremote-depense`). Ce
+ * champ est donc remplacé ici par une trace minimale et TOUJOURS sérialisable
+ * (voir `McpServeurPersiste`) — jamais l'objet d'origine.
+ *
  * ⇒ La restauration rend des **données**. Les ports sont réinjectés par la
  * composition (`composition/pc/`), jamais relus du disque.
  */
 export type WorkerSpecPersistee = Omit<
   WorkerSpec,
-  'portAuditPermissions' | 'portBusPermissions' | 'sessionStore' | 'spawnProcess' | 'onStderr'
->;
+  'portAuditPermissions' | 'portBusPermissions' | 'sessionStore' | 'spawnProcess' | 'onStderr' | 'mcpServers'
+> & {
+  readonly mcpServers: Readonly<Record<string, McpServeurPersiste>>;
+};
+
+/**
+ * Trace persistée d'UN serveur MCP — nom (clé du record) et type de transport
+ * seulement, jamais la configuration complète ni l'instance (H-76). Suffisant
+ * pour la restauration : `restauration-registre.ts` ne relance JAMAIS un worker
+ * depuis une spec relue, elle sert uniquement de trace pour le fencing et le
+ * diagnostic (`ConcurrentRestaure.spec`) — savoir QUELS serveurs un worker avait
+ * lui suffit, pas les reconstruire.
+ */
+export interface McpServeurPersiste {
+  readonly type: string;
+}
+
+/**
+ * Projette `mcpServers` vers une forme TOUJOURS sérialisable. `☠` Ne fait
+ * confiance à AUCUNE variante du SDK : même les transports aujourd'hui plats
+ * (`stdio`/`sse`/`http`) ne sont retenus que par leur `type` — si l'un d'eux
+ * gagnait un jour un champ fonction ou instance, cette projection resterait
+ * sûre, elle ne recopie jamais la configuration entière.
+ */
+function projeterMcpServeurs(mcpServers: WorkerSpec['mcpServers']): Readonly<Record<string, McpServeurPersiste>> {
+  const projection: Record<string, McpServeurPersiste> = {};
+  for (const [nom, config] of Object.entries(mcpServers)) {
+    projection[nom] = { type: config.type ?? 'stdio' };
+  }
+  return projection;
+}
+
+/**
+ * Construit RÉELLEMENT ce qui part sur disque, à l'exécution — l'idiome déjà en
+ * place pour les ports-fonctions (`WorkerSpecPersistee`), rendu effectif.
+ *
+ * `☠` `WorkerSpecPersistee` seul n'avait AUCUN effet à l'exécution : rien ne
+ * projetait `enregistrement.spec` dessus avant `sauvegarder()` appelait
+ * `JSON.stringify(enregistrement.spec)` tel quel, en confiant à `JSON.stringify`
+ * lui-même l'effacement des fonctions — silencieux pour une fonction, mais une
+ * `TypeError` non catchée pour un objet cyclique comme `mcpServers` (H-76). Cette
+ * fonction est désormais le SEUL point qui construit la projection persistée :
+ * toute nouvelle instance non sérialisable ajoutée à `WorkerSpec` doit être
+ * traitée ICI, explicitement, jamais laissée à la sérialisation par défaut.
+ */
+function projeterSpecPersistee(spec: WorkerSpec): WorkerSpecPersistee {
+  const {
+    portAuditPermissions: _portAuditPermissions,
+    sessionStore: _sessionStore,
+    spawnProcess: _spawnProcess,
+    onStderr: _onStderr,
+    mcpServers,
+    ...donnees
+  } = spec;
+  return { ...donnees, mcpServers: projeterMcpServeurs(mcpServers) };
+}
 
 /** Port injecté dans `RegistreWorkers` (optionnel, défaut `null` — voir B.1.4). */
 export interface PersistanceRegistre {
@@ -187,7 +251,7 @@ export class PersistanceRegistreSqlite implements PersistanceRegistre {
           enregistrement.pidStarttime,
           enregistrement.bootId ?? null,
           enregistrement.vivant ? 1 : 0,
-          JSON.stringify(enregistrement.spec),
+          JSON.stringify(projeterSpecPersistee(enregistrement.spec)),
           Date.now(),
         );
     } catch (erreur) {

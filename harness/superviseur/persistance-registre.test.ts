@@ -55,9 +55,14 @@ describe('PersistanceRegistreSqlite', () => {
     // JSON.stringify efface sans rien signaler. C'est un fait de conception, pas un
     // détail de test — relancer un worker depuis cette spec sans réinjecter les ports
     // donnerait un worker sans audit ni arbitrage de permissions (H-74).
+    //
+    // `mcpServers` n'est pas non plus recopié tel quel (H-76) : `donneesSeules` en
+    // porte encore la forme `Record<string, McpServerConfig>` (le type d'entrée),
+    // la ligne relue en base porte la forme projetée `Record<string, McpServeurPersiste>`
+    // — ici `{}` des deux côtés puisque `specFactice()` ne pose aucun serveur.
     const { portAuditPermissions, ...donneesSeules } = specFactice();
     expect(typeof portAuditPermissions).toBe('function');
-    expect(lignes[0]?.spec).toEqual(donneesSeules);
+    expect(lignes[0]?.spec).toEqual({ ...donneesSeules, mcpServers: {} });
     expect(lignes[0]?.spec).not.toHaveProperty('portAuditPermissions');
   });
 
@@ -119,6 +124,39 @@ describe('PersistanceRegistreSqlite', () => {
     });
     const [ligne] = persistance.tous();
     expect(ligne?.bootId).toBeNull();
+  });
+
+  test('H-76 : mcpServers portant une instance SDK à référence circulaire n\'empêche plus l\'écriture (panne du 18/08 20h19)', () => {
+    // Reproduit la forme réelle de `McpSdkServerConfigWithInstance.instance`
+    // (`creerServeurMcpDepense()` → `createSdkMcpServer()`) : un objet à
+    // référence circulaire suffit à reproduire `TypeError: JSON.stringify
+    // cannot serialize cyclic structures` — pas besoin du SDK complet.
+    const instanceCyclique: Record<string, unknown> = { name: 'ccremote-depense' };
+    instanceCyclique.self = instanceCyclique;
+
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    persistance.sauvegarder({
+      sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 1,
+      pid: null, pidStarttime: null, bootId: 'boot-abc', vivant: true,
+      spec: specFactice({
+        mcpServers: {
+          // `as unknown as ...` justifié : on simule volontairement la forme
+          // NON sérialisable que rend `createSdkMcpServer()` en production,
+          // que le type `McpServerConfig` normal exclut par construction.
+          'ccremote-depense': { type: 'sdk', name: 'ccremote-depense', instance: instanceCyclique } as unknown as WorkerSpec['mcpServers'][string],
+        },
+      }),
+    });
+
+    // ☠ La preuve n'est pas « sauvegarder() n'a pas levé » (elle catch déjà
+    // tout en interne) mais que la LIGNE est réellement en base — avant ce
+    // correctif, sauvegarder() catchait la TypeError et n'écrivait rien : ce
+    // test aurait vu `toHaveLength(0)`, silencieusement, comme en production.
+    const lignes = persistance.tous();
+    expect(lignes).toHaveLength(1);
+    // Le nom du serveur survit (utile à la restauration), jamais l'instance.
+    expect(lignes[0]?.spec.mcpServers).toEqual({ 'ccremote-depense': { type: 'sdk' } });
+    persistance.fermer();
   });
 
   test('H-75 : une base écrite AVANT la colonne boot_id migre sans corrompre ni perdre de lignes', () => {
