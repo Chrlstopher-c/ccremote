@@ -95,6 +95,14 @@ export function restaurerRegistre(persistance: PersistanceRegistre, deps: Depend
           : revaliderProcess(ligne.pid, ligne.pidStarttime, deps.lireStarttime);
     }
     compteurs[etat] += 1;
+    if (etat === 'mort_confirme') {
+      // `☠` Le verdict calculé ci-dessus ne vivait qu'en mémoire jusqu'ici : la
+      // colonne `vivant` d'une ligne périmée restait à 1 indéfiniment sur disque,
+      // le filtre par boot_id ne rattrapant jamais un simple redémarrage de
+      // SERVICE (même boot machine). Persister ICI, via le mécanisme existant,
+      // ferme la cause racine de la ligne fantôme (dette n°1).
+      persistance.marquerMort(ligne.sessionId);
+    }
 
     resultat.push({
       sessionId: ligne.sessionId,

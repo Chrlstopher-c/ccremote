@@ -290,6 +290,14 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       handle,
       entree,
       vivant: true,
+      // `☠` Sans ces deux champs, `pid`/`pidStarttime` restaient toujours NULL en
+      // base : `revaliderProcess(null, null)` ne peut JAMAIS conclure « mort
+      // confirmé », rendant la revalidation structurellement inopérante pour tout
+      // redémarrage de SERVICE (même boot machine, dette n°1). `handle.pid`/
+      // `.pidStarttime` sont déjà capturés au spawn par `process-spawner.ts` —
+      // il ne manquait que ce câblage.
+      pid: handle.pid,
+      pidStarttime: handle.pidStarttime,
     });
     log.info(
       { sessionId: handle.sessionId, epoch: demande.epoch, worktree: specEffectif.cwd },
@@ -632,6 +640,34 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees },
       missionId,
       missionLogger(missionId),
+    );
+  }
+
+  /**
+   * Extinction propre du PROCESS superviseur (bin-pc.ts, SIGINT/SIGTERM) — à
+   * appeler UNE FOIS juste avant que le process ne meure, jamais en cours de
+   * fonctionnement normal. `☠` Défaut principal de la dette n°1 (TODO.md) :
+   * sans cet appel, chaque worker encore `vivant` au moment de l'arrêt restait
+   * marqué vivant EN BASE indéfiniment — le filtre par boot_id ne le rattrape
+   * jamais pour un redémarrage de SERVICE (même boot machine), ce qui accumule
+   * une ligne fantôme à chaque déploiement.
+   *
+   * Volontairement SYNCHRONE et minimal : marque mort dans le registre
+   * (persisté à travers `RegistreWorkers.marquerMort()`), sans tenter de fermer
+   * proprement chaque flux ni de libérer chaque worktree — le process meurt de
+   * toute façon juste après, et une fermeture asynchrone risquerait de ne
+   * jamais s'exécuter avant `process.exit()`. Les process OS eux-mêmes ne sont
+   * PAS terminés ici : c'est hors du périmètre de cette dette, qui porte sur le
+   * REGISTRE, pas sur la terminaison des workers.
+   */
+  arreterProprementLeParc(): void {
+    const vivants = this.#registre.tous().filter((e) => e.vivant);
+    for (const enregistrement of vivants) {
+      this.#registre.marquerMort(enregistrement.sessionId);
+    }
+    superviseurLogger.info(
+      { nombreWorkersMarquesMorts: vivants.length },
+      'extinction propre du superviseur PC : workers vivants marqués morts dans le registre persisté (dette n°1, TODO.md)',
     );
   }
 
