@@ -859,7 +859,12 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       if (db === null) return;
 
       const constat = await releverEtatGit(enregistrement.worktree);
-      const telemetrieMission = this.#telemetrie.tous().find((t) => t.missionId === missionId) ?? null;
+      // `☠` `lire()`, PAS `tous()` : `tous()` est DRAINANT pour TOUTES les
+      // missions du process — il viderait `activitesEnAttente` (donc le message
+      // final du lead, tout juste ingéré) avant que le balayage du Pi (5 s) ne
+      // vienne l'écrire en base. `lire()` rend l'état courant sans vider aucune
+      // file (voir `collecteur-telemetrie.ts`).
+      const telemetrieMission = this.#telemetrie.lire(missionId);
       const enEchecDefinitif = decision.action === 'echec_definitif' || actionAntiBoucle === 'couper';
 
       const donneesMission: DonneesMissionTerminee = {

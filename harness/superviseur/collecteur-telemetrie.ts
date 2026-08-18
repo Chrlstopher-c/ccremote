@@ -396,21 +396,50 @@ export class CollecteurTelemetrie {
       // laisser en place ferait réappliquer les mêmes résultats à chaque passage.
       const resultats = e.resultatsEnAttente;
       e.resultatsEnAttente = [];
-      // `☠` L'état SDK est calculé À LA LECTURE, pas mémorisé : la péremption des
-      // tâches de fond dépend du TEMPS QUI PASSE, et aucun message n'arrive pour
-      // l'annoncer. Un état figé à la dernière ingestion resterait « running »
-      // pour toujours derrière une tâche qui ne s'éteint jamais.
-      // `tourFini` et `tachesFondVuesA` restent internes : ils n'ont de sens
-      // qu'ici, et le relevé traverse le lien vers le Pi.
-      const { tourFini, tachesFondVuesA, ...vue } = e;
-      return {
-        missionId,
-        ...vue,
-        etatSdk: etatSdkEffectif(e, maintenant),
-        activitesEnAttente: activites,
-        resultatsEnAttente: resultats,
-      };
+      return this.#construireVue(missionId, e, maintenant, activites, resultats);
     });
+  }
+
+  /**
+   * `☠` NON drainant, contrairement à `tous()` : rend l'état COURANT d'UNE
+   * mission sans vider ses files d'activités ni de résultats.
+   *
+   * Existe pour tout appelant qui ne veut lire qu'un champ scalaire (coût,
+   * contexte…) sans participer au balayage périodique qui rapatrie le fil vers
+   * le Pi — `tous()` PURGE ce fil pour la mission entière du process, pas
+   * seulement pour l'appelant. Un appel de fin de mission qui utiliserait
+   * `tous()` détruirait, avant que le balayage suivant (5 s) ne l'écrive en
+   * base, la dernière activité tout juste ingérée — y compris le message final
+   * du lead (mesuré : c'est exactement ce que faisait `#enfilerApprentissageSiConfigure`
+   * avant ce correctif).
+   */
+  lire(missionId: string, maintenant: number = Date.now()): TelemetrieWorker | null {
+    const e = this.#par.get(missionId);
+    if (e === undefined) return null;
+    return this.#construireVue(missionId, e, maintenant, e.activitesEnAttente, e.resultatsEnAttente);
+  }
+
+  #construireVue(
+    missionId: string,
+    e: Etat,
+    maintenant: number,
+    activites: Etat['activitesEnAttente'],
+    resultats: Etat['resultatsEnAttente'],
+  ): TelemetrieWorker {
+    // `☠` L'état SDK est calculé À LA LECTURE, pas mémorisé : la péremption des
+    // tâches de fond dépend du TEMPS QUI PASSE, et aucun message n'arrive pour
+    // l'annoncer. Un état figé à la dernière ingestion resterait « running »
+    // pour toujours derrière une tâche qui ne s'éteint jamais.
+    // `tourFini` et `tachesFondVuesA` restent internes : ils n'ont de sens
+    // qu'ici, et le relevé traverse le lien vers le Pi.
+    const { tourFini, tachesFondVuesA, ...vue } = e;
+    return {
+      missionId,
+      ...vue,
+      etatSdk: etatSdkEffectif(e, maintenant),
+      activitesEnAttente: activites,
+      resultatsEnAttente: resultats,
+    };
   }
 
   #appliquer(etat: Etat, message: SDKMessage, maintenant: number): void {
