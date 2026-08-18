@@ -25,6 +25,12 @@ import type { ConcurrentRestaure } from './types.ts';
 
 export class ConcurrentsRestaures {
   #liste: ConcurrentRestaure[] = [];
+  /**
+   * Conservée depuis `restaurer()` pour que `evincer()` puisse persister le
+   * verdict de mort qu'il prononce — sans cette référence, l'éviction ne
+   * changeait `vivant` qu'en RAM (`#liste`), jamais sur disque (dette n°1).
+   */
+  #persistance: PersistanceRegistre | null = null;
 
   /**
    * Restaure depuis la persistance (dette n°1, TODO.md). `☠` Volontairement PAS
@@ -34,6 +40,7 @@ export class ConcurrentsRestaures {
    * (un worktree réellement occupé traité comme libre).
    */
   restaurer(persistance: PersistanceRegistre): void {
+    this.#persistance = persistance;
     this.#liste = [...restaurerRegistre(persistance)];
     superviseurLogger.info(
       { concurrentsRestaures: this.#liste.length },
@@ -66,6 +73,12 @@ export class ConcurrentsRestaures {
 
     const log = missionLogger(fantome.missionId);
     fantome.vivant = false;
+    // `☠` Persisté ICI, inconditionnellement — avant même de savoir si une
+    // terminaison réelle est possible : l'éviction elle-même est la décision
+    // (epoch supérieur détecté), pas la revalidation pid/starttime ci-dessous.
+    // Sans cet appel, `marquerMort()` n'était jamais atteint pour un concurrent
+    // restauré évincé (dette n°1, cause racine de la ligne fantôme).
+    this.#persistance?.marquerMort(fantome.sessionId);
 
     if (fantome.pid === null || fantome.pidStarttime === null) {
       log.warn(

@@ -159,6 +159,14 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
     lien,
     recepteurControle,
     observationParc,
-    arreter: (): void => lien.fermer(),
+    // `☠` Dette n°1 (TODO.md) : sans `arreterProprementLeParc()` AVANT la
+    // fermeture du lien, aucun worker vivant n'était marqué mort avant que le
+    // process ne meure — défaut principal de la ligne fantôme accumulée à
+    // chaque redémarrage de service. Ordre : registre d'abord (rapide,
+    // synchrone), lien ensuite.
+    arreter: (): void => {
+      superviseur.arreterProprementLeParc();
+      lien.fermer();
+    },
   };
 }

@@ -30,6 +30,25 @@ function fakeQuery(messages: readonly SDKMessage[] = []): Query {
   }) as unknown as Query;
 }
 
+/**
+ * `☠` Flux qui ne se termine JAMAIS naturellement — nécessaire pour tester
+ * l'extinction PROPRE du superviseur pendant qu'un worker est encore vivant :
+ * avec `fakeQuery()` (flux vide), le `for await` de `#surveillerResultats` sort
+ * immédiatement et marque le worker mort de lui-même (constat de fin de flux),
+ * avant même que le test n'ait la main pour appeler `arreterProprementLeParc()`.
+ */
+function fakeQueryJamaisTermine(): Query {
+  async function* flux(): AsyncGenerator<SDKMessage, void> {
+    await new Promise<void>(() => {}); // ne se résout jamais — le flux reste ouvert
+  }
+  const iterateur = flux();
+  return Object.assign(iterateur, {
+    interrupt: async () => ({ still_queued: [] }),
+    close: (): void => {},
+    reinitialize: async () => ({ commands: [], agents: [], models: [] }),
+  }) as unknown as Query;
+}
+
 function specFactice(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
   return {
     sessionId: 'sess-intrus',
@@ -43,7 +62,10 @@ function specFactice(overrides: Partial<WorkerSpec> = {}): WorkerSpec {
   };
 }
 
-function demarrerWorkerFactice(): DemarrerWorkerFn {
+function demarrerWorkerFactice(
+  identiteProcess: { pid: number | null; pidStarttime: string | null } = { pid: null, pidStarttime: null },
+  query: Query = fakeQuery(),
+): DemarrerWorkerFn {
   return (async (workerSpec: WorkerSpec) => {
     const handle: WorkerHandle = {
       sessionId: workerSpec.sessionId,
@@ -59,10 +81,10 @@ function demarrerWorkerFactice(): DemarrerWorkerFn {
         effectiveModel: 'sonnet',
         failures: [],
       },
-      pid: null,
-      pidStarttime: null,
+      pid: identiteProcess.pid,
+      pidStarttime: identiteProcess.pidStarttime,
       abortController: new AbortController(),
-      query: fakeQuery(),
+      query,
     };
     return handle;
   }) as unknown as DemarrerWorkerFn;
@@ -200,5 +222,38 @@ describe('restaurer() câblé sur le fencing — fermeture de M-53', () => {
 
     const handle = await superviseur.demarrer(demande({ epoch: 1 })); // worktree alpha, sans rapport avec beta
     expect(handle.sessionId).toBe('sess-intrus');
+  });
+});
+
+describe('cause racine de la ligne fantôme (mission « fantôme de registre ») — les DEUX mécanismes', () => {
+  test('le pid est réellement enregistré à la création, et l’extinction propre le marque mort SUR DISQUE', async () => {
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      // `☠` Le handle rend un pid/starttime réels (comme le fait `process-spawner.ts`
+      // au vrai spawn) — c'est ce câblage-là, dans `demarrer()`, que ce test vérifie.
+      // Flux jamais terminé : le worker doit rester réellement `vivant` jusqu'à ce
+      // que le test appelle explicitement l'extinction propre, pas se marquer mort
+      // tout seul (constat de fin de flux) avant qu'on ait eu la main.
+      demarrerWorker: demarrerWorkerFactice({ pid: 4242, pidStarttime: '987654' }, fakeQueryJamaisTermine()),
+      persistance,
+    });
+
+    await superviseur.demarrer(demande());
+
+    // Mécanisme 1 : le pid capturé au spawn est bien celui écrit en base — sans
+    // le câblage de `superviseur-workers.ts`, ces deux colonnes restent NULL et
+    // `revaliderProcess(null, null)` ne peut jamais conclure « mort confirmé »
+    // au redémarrage suivant sur le même boot (dette n°1, point 3).
+    const ligneApresDemarrage = persistance.tous().find((l) => l.sessionId === 'sess-intrus');
+    expect(ligneApresDemarrage).toMatchObject({ pid: 4242, pidStarttime: '987654', vivant: true });
+
+    // Mécanisme 2 : extinction propre (bin-pc.ts SIGTERM → assemble.arreter()) —
+    // AVANT ce correctif, aucun appel de ce type n'existait : le worker restait
+    // marqué `vivant=1` en base indéfiniment (dette n°1, point 2).
+    superviseur.arreterProprementLeParc();
+
+    const ligneApresExtinction = persistance.tous().find((l) => l.sessionId === 'sess-intrus');
+    expect(ligneApresExtinction).toMatchObject({ pid: 4242, pidStarttime: '987654', vivant: false });
   });
 });

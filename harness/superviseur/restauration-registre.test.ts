@@ -51,6 +51,21 @@ describe('restaurerRegistre — trois issues, biais asymétrique non négociable
     expect(restaures[0]).toMatchObject({ etat: 'mort_confirme', vivant: false });
   });
 
+  test('☠ le verdict mort_confirme est PERSISTÉ sur disque, pas seulement calculé en mémoire (cause racine de la ligne fantôme)', () => {
+    const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
+    persistance.sauvegarder({
+      sessionId: 's1', missionId: 'm1', worktree: '/tmp/a', epoch: 3,
+      pid: 4242, pidStarttime: '987654', bootId: 'boot-actuel', vivant: true, spec: specFactice(),
+    });
+
+    restaurerRegistre(persistance, { lireStarttime: () => null, lireBootId: () => 'boot-actuel' });
+
+    // Avant ce correctif, `persistance.marquerMort()` n'était jamais appelé ici :
+    // relire la même base montrerait encore `vivant: true`, indéfiniment.
+    const ligneSurDisque = persistance.tous().find((l) => l.sessionId === 's1');
+    expect(ligneSurDisque).toMatchObject({ vivant: false });
+  });
+
   test('☠ mort_confirme : même boot, pid recyclé (existe mais starttime différent) ⇒ jamais confondu avec vivant', () => {
     const persistance = new PersistanceRegistreSqlite({ chemin: ':memory:' });
     persistance.sauvegarder({
