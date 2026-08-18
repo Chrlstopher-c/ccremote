@@ -3,8 +3,8 @@
 Gestionnaire de sessions Claude Code distantes avec un canal d'approbation humaine asynchrone
 (`Upgrade/03-couche-1.md`). Deux process distincts, deux machines :
 
-- **Pi — control plane** : autorité unique (registre, bus de permissions, projets, garde-fous,
-  session orchestrateur maître — celle avec qui Chris discute depuis l'app).
+- **Pi — control plane** : autorité unique (registre, notifications, autonomie, projets,
+  garde-fous, session orchestrateur maître — celle avec qui Chris discute depuis l'app).
 - **PC — plan d'exécution** : superviseur de workers (spawn/vie/mort des sessions Claude Code),
   ne décide rien, exécute des ordres du Pi et rapporte des faits.
 
@@ -40,8 +40,8 @@ bun run start:pi      # composition/pi/bin-pi.ts
 Vérifications avant tout lancement réel :
 
 ```bash
-bun run typecheck     # doit être silencieux (4 erreurs préexistantes, hors périmètre — voir ARCHITECTURE.md)
-bun test              # 865 tests verts au moment de la clôture de cette mission
+bun run typecheck     # doit être silencieux
+bun test              # doit être vert (chiffre non retenu ici : évolue à chaque mission, voir REPRISE.md)
 ```
 
 ## Ports / réseau
@@ -70,9 +70,7 @@ gèrent l'app cliente — hors zone de cette mission, non touchés.
 
 ## Ce que ce dépôt n'est pas encore
 
-Voir `REPRISE.md` (racine du dépôt) pour l'état détaillé, `TODO.md` pour le registre des dettes, et
-le rapport de la mission de composition (session du 2026-07-22) pour l'inventaire exhaustif des
-ports non branchés et des incompatibilités d'assemblage trouvées en construisant `composition/`.
-Résumé le plus important : **le canal D.1 par worker (transport des données d'une session) n'a pas
-de client composé depuis le Pi** — `RepertoireCibles`/`DefinisseurBudget` refusent explicitement
-(`composition/pi/ports-non-cables.ts`) plutôt que de simuler un succès.
+Voir `REPRISE.md` (dans ce dossier, `harness/REPRISE.md`) pour l'état détaillé et `TODO.md`
+(racine du dépôt) pour le registre des dettes. Résumé le plus important, toujours vrai : **le
+canal D.1 par worker (transport des données d'une session) n'a pas de client composé depuis le
+Pi** — un client D.1 par mission active reste un sous-système à part entière, non construit.
