@@ -1,9 +1,56 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-08-08*
+*Dernière mise à jour : 2026-08-18*
 
 ## ⚡ Harness d'orchestration — chantier actif
 
 **Contexte complet : `harness/REPRISE.md`.**
+
+### 🆕 18/08 — `trinity-portable` rejoint le parc comme machine de travail
+
+Décidé par Chris : le portable est une machine de travail « quasi autant que le
+PC fixe ». Sa racine de projets est `/home/trinity` (les dépôts sont directement
+sous le home), et il n'a **pas** de Wake-on-LAN.
+
+Fait dans ce dépôt :
+
+- `CCREMOTE_PC_RACINE_PROJETS` (optionnel) lu par `bin-pc.ts`, passé à
+  `assemblerSuperviseurPc`. Défaut inchangé `/mnt/projects` : `trinityarch` et
+  `vps-e411b5c7` n'ont **rien à redéployer**. Le Pi demandait déjà la racine à la
+  machine (`resoudreRacineProjets`, correctif du 07/08) — c'est le superviseur
+  qui la figeait.
+- `deploy-superviseur-portable.sh` : même contrôle de fraîcheur que les autres,
+  plus un contrôle de configuration AVANT de toucher au service.
+- `☠` L'unité systemd versionnée s'installe **telle quelle** sur le portable
+  (le dépôt est en `~/ccremote`) : le `sed` obligatoire sur le PC fixe serait
+  ici une erreur.
+
+Posé sur la machine : `~/.config/ccremote/pc.env` (600),
+`~/.config/systemd/user/ccremote-pc.service`, `loginctl enable-linger`,
+`bun install`. Essai à blanc : le process s'arrête bien en `EnvManquantError` sur
+le seul champ vide, donc tout le reste du câblage est bon.
+
+**Deux trous, tous deux hors de portée depuis le portable :**
+
+- [ ] **`CCREMOTE_LIEN_SECRET`** à recopier depuis le Pi dans
+      `~/.config/ccremote/pc.env`. `☠` Le Pi est injoignable en SSH depuis le
+      portable (il est en partage de connexion 4G, `pi.exemple` sans route) —
+      seul le tunnel public répond. À faire depuis le PC fixe ou en collant la
+      valeur à la main.
+- [ ] **Un compte Claude sous `~/.claude-comptes/<id>/`** (`claude login`,
+      interactif). Sans lui la machine répond à l'inventaire et explore les
+      projets, mais **aucune équipe ne peut y démarrer** — c'est journalisé en
+      `error` au démarrage.
+      `☠` **L'identifiant doit être distinct de ceux du PC fixe** (ex.
+      `portable-a`, pas `compte-a`) : `DepotComptes.enregistrer` fait un upsert
+      sur `id` et **écrase `config_dir`**. Un id partagé entre deux machines
+      ferait dispatcher le PC fixe sur un chemin du portable — le bug H-44,
+      repayé.
+      `☠` Et si c'est le **même compte Anthropic** que sur une autre machine, le
+      parc croira avoir deux quotas là où il n'y en a qu'un : les jauges 5 h/7 j
+      mentiront et une équipe partira sur un compte déjà saturé.
+
+- [ ] Vérifier après coup : `bun harness/pilotage/pilote.ts machines` doit lister
+      **trois** machines, et `GET /machines` doit rendre `trinity-portable`.
 
 ### 🎯 DEMANDÉ PAR CHRIS LE 08/08 — l'orchestrateur doit pouvoir présenter un fichier
 

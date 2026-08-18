@@ -58,6 +58,23 @@ export interface OptionsAssemblageSuperviseurPc {
    * permanence jusqu'au 23/07.
    */
   readonly comptesASonder?: readonly { readonly id: string; readonly configDir: string }[];
+  /**
+   * Racine des projets DE CETTE MACHINE. Défaut : `/mnt/projects` (inchangé pour
+   * `trinityarch` et `vps-e411b5c7`, qui n'ont donc rien à redéployer).
+   *
+   * `☠` Elle n'est PAS une convention partagée : le Pi la DEMANDE à la machine
+   * (`assembler-control-plane.ts` → `resoudreRacineProjets`, correctif du
+   * 2026-08-07) précisément parce qu'elle diffère d'une machine à l'autre. La
+   * figer à `/mnt/projects` obligeait toute nouvelle machine à créer ce chemin
+   * même quand ses projets vivent ailleurs — c'est le cas de `trinity-portable`,
+   * dont les dépôts sont directement sous le home.
+   *
+   * `☠` Un lien symbolique aurait été l'autre voie, et c'est la mauvaise : le
+   * CLI Claude Code écrit sous le **realpath**, pas sous le chemin demandé. C'est
+   * exactement ce qui a rendu les sous-agents invisibles sur le VPS le 01/08
+   * (`/mnt/projects` → `~/dev`). Une racine réelle n'a pas ce piège.
+   */
+  readonly racineProjets?: string;
   /** Racine sous laquelle créer les worktrees git dédiés (F.2). Défaut : `<racineProjets>/.worktrees`. */
   readonly racineWorktrees?: string;
 }
@@ -106,6 +123,7 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
     jugeBoucle,
     gestionnaireWorktrees,
     observateurFlux: observationParc,
+    ...(options.racineProjets ? { racineProjets: options.racineProjets } : {}),
     ...(options.racineWorktrees ? { racineWorktrees: options.racineWorktrees } : {}),
     ...(options.comptesASonder ? { comptesASonder: options.comptesASonder } : {}),
   });
