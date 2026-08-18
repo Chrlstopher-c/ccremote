@@ -19,11 +19,26 @@
 #
 #   Sans `--demarrer` : déploie les fichiers, n'active RIEN. C'est le défaut,
 #   pour qu'un déploiement de routine ne puisse pas provoquer d'éviction.
+#
+#   Surcharge de l'URL du Pi (rare, ex. tunnel alternatif) : `CCREMOTE_VPS_LIEN_URL_PI`
+#   — jamais `CCREMOTE_LIEN_URL_PI`, qui n'est plus lue ici (voir ☠ plus bas).
 set -e
 
 CIBLE="${CCREMOTE_VPS_CIBLE:-vps}"
 DISTANT="/home/ubuntu/ccremote"
-URL_PI="${CCREMOTE_LIEN_URL_PI:-wss://lien.exemple.com/}"
+# ☠ VÉCU LE 18/08 (deux fois, 45 min hors ligne la seconde) — ce script lisait
+# `CCREMOTE_LIEN_URL_PI`, qui traîne LÉGITIMEMENT dans l'environnement du PC
+# avec l'adresse LAN du Pi (`ws://pi.exemple:8721/`) : correcte pour le PC,
+# injoignable depuis le VPS. Un déploiement lancé depuis un shell qui l'a
+# exportée héritait donc SILENCIEUSEMENT de la mauvaise URL et écrivait une
+# config qui ne peut pas fonctionner : le service démarre, se déclare actif,
+# et échoue à se connecter en boucle. Le nom d'entrée est donc VOLONTAIREMENT
+# distinct de celui que `bin-pc.ts` consomme sur la machine cible (même motif
+# que `CCREMOTE_VPS_CIBLE`/`CCREMOTE_VPS_RACINE_DEV`/`CCREMOTE_VPS_MACHINE_ID`
+# juste au-dessus et plus bas) : `CCREMOTE_LIEN_URL_PI` du poste qui LANCE ce
+# script n'est plus jamais lue ici, il n'y a donc plus de collision possible.
+# Le défaut reste le tunnel public — inchangé si rien n'est précisé.
+URL_PI="${CCREMOTE_VPS_LIEN_URL_PI:-wss://lien.exemple.com/}"
 DEMARRER=0
 [ "${1:-}" = "--demarrer" ] && DEMARRER=1
 
