@@ -53,6 +53,7 @@ const spec = construireWorkerSpec(
     configDir: CONFIG_DIR,
   },
   () => ({}),
+  () => null,
 );
 
 horodate('mandat composé (extrait autour du bloc de leçons) :');

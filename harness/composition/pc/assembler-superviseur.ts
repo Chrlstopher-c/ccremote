@@ -136,6 +136,11 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
           const collecteur = new CollecteurAuditPermissions();
           return creerHooksAuditPermissions(collecteur);
         },
+        // ☠ Port de consultation de sa propre dépense (`mcp-depense/serveur.ts`) :
+        // le PC fait autorité (B.1.4) sur la télémétrie, donc `superviseur.lireDepenseMission`
+        // — jamais un aller-retour vers le registre du Pi, qui ne ferait que recopier avec
+        // le retard du balayage (5 s).
+        (sessionId) => superviseur.lireDepenseMission(sessionId),
         // ☠ Les comptes de CETTE machine (H-44). Sans eux, un mandat routé vers
         // une autre machine que celle dont le Pi tient la liste démarre sur un
         // répertoire inexistant — mesuré le 01/08 sur le VPS.

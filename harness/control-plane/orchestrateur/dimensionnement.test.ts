@@ -25,6 +25,7 @@ import { composerMandatSysteme } from './dispatch-mandat.ts';
 import { MANDAT_ORCHESTRATEUR } from './processus/mandat.ts';
 import { normaliserModele } from '../../shared/modeles-claude.ts';
 import { MCP_EQUIPE } from '../../workers/mcp-du-poste.ts';
+import { NOM_SERVEUR_MCP_DEPENSE } from '../../workers/mcp-depense/serveur.ts';
 import type { Proposition } from '../registre/index.ts';
 
 const MANDAT: Proposition = {
@@ -112,13 +113,21 @@ describe('ce que le lead doit savoir pour ne pas payer le prix fort', () => {
  * contourne, et brûle des tours à le faire.
  */
 describe('☠ tout outil NOMMÉ au lead doit exister réellement', () => {
+  // `☠` La liste des serveurs RÉELLEMENT transmis à une équipe n'est plus
+  // `MCP_EQUIPE` seule depuis le 18/08 : `ccremote-depense` est un serveur
+  // en-process maison (`workers/mcp-depense/serveur.ts`), assemblé directement
+  // par `construireWorkerSpec` — jamais lu depuis `~/.claude.json` du poste,
+  // donc structurellement absent de `MCP_EQUIPE`. La liste blanche reste
+  // FERMÉE : on l'étend nommément, on ne l'ouvre pas.
+  const SERVEURS_REELLEMENT_TRANSMIS = [...MCP_EQUIPE, NOM_SERVEUR_MCP_DEPENSE];
+
   test('chaque serveur MCP cité dans le mandat est bien transmis aux équipes', () => {
     // On lit les serveurs cités sous la forme `mcp__<serveur>__*` dans le prompt,
     // et on exige que chacun figure dans la liste réellement transmise.
     const cites = [...mandatSysteme.matchAll(/mcp__([a-z-]+)__/g)].map((m) => m[1]);
     expect(cites.length).toBeGreaterThan(0);
     for (const serveur of cites) {
-      expect(MCP_EQUIPE).toContain(serveur as string);
+      expect(SERVEURS_REELLEMENT_TRANSMIS).toContain(serveur as string);
     }
   });
 
@@ -128,6 +137,13 @@ describe('☠ tout outil NOMMÉ au lead doit exister réellement', () => {
     for (const serveur of ['codeindex', 'playwright', 'log-watcher']) {
       expect(mandatSysteme).toContain(`mcp__${serveur}__`);
     }
+  });
+
+  test('☠ l’outil de consultation de sa propre dépense est bien annoncé (mandat 18/08)', () => {
+    // Le second livrable du mandat : un outil que le modèle ignore n'existe pas
+    // pour lui. Sans cette ligne, `ccremote-depense` serait transmis mais jamais
+    // cité — exactement le motif « écrit, testé, branché sur rien ».
+    expect(mandatSysteme).toContain(`mcp__${NOM_SERVEUR_MCP_DEPENSE}__ma_depense`);
   });
 
   test('☠ l’écriture en mémoire sémantique est cadrée par H-66', () => {

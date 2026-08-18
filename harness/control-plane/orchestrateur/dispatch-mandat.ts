@@ -238,6 +238,10 @@ const BLOC_OUTILS = [
   '    leurs erreurs (`process_get_errors`). Ne laisse jamais un serveur tourner sans surveillance.',
   '  · pty-mcp (`mcp__pty-mcp__*`) — pour tout ce qui est interactif en terminal.',
   '  · Mémoire sémantique (`mcp__semantic-memory__*`) — le contexte durable du projet.',
+  '  · Ta dépense (`mcp__ccremote-depense__ma_depense`) — ce que ta mission a coûté jusqu’ici, ton',
+  '    plafond, la part déjà consommée. Appelle-le avant d’engager un travail long, ou dès que tu',
+  '    hésites à approfondir une piste — ne bâtis jamais une hypothèse sur un dépassement de',
+  '    budget supposé sans l’avoir vérifié ici. Lecture seule, appelle-le aussi souvent que tu veux.',
   '',
   '`☠` La mémoire sémantique est PARTAGÉE avec l’humain et avec les autres équipes.',
   'Tu peux y lire librement. Si tu y écris, écris dans le projet sur lequel tu travailles,',
@@ -379,10 +383,20 @@ function ligneAcces(acces: AccesMandat): string {
  */
 function ligneBudget(budgetUsd: number): string {
   const montant = plafondEffectifUsd(budgetUsd);
+  // `☠` Le montant seul ne suffit pas — l'incident qui a motivé ce bloc (18/08) :
+  // une équipe de diagnostic a bâti son hypothèse principale sur un supposé
+  // dépassement de budget alors qu'elle était à 15 % de son plafond. Dire
+  // D'OÙ VIENT le plafond (mission propre, ou parc par défaut) évite qu'un
+  // lead le devine — ou pire, suppose qu'il n'y en a pas.
+  const origine =
+    budgetUsd > 0
+      ? 'plafond propre à cette mission'
+      : 'aucun plafond propre n’a été fixé pour cette mission — tu cours sous le plafond de parc';
   return (
-    `Budget : ${montant.toFixed(2)} $. Au-delà, ta session est coupée net, où que tu en sois. ` +
+    `Budget : ${montant.toFixed(2)} $ (${origine}). Au-delà, ta session est coupée net, où que tu en sois. ` +
     'Dimensionne ton travail en conséquence : mieux vaut un rapport honnête à mi-parcours ' +
-    'qu’un chantier tranché en deux par le plafond.'
+    'qu’un chantier tranché en deux par le plafond. Pour savoir où tu en es à tout moment sans ' +
+    'attendre une coupure : `ma_depense`, voir TES OUTILS ci-dessous.'
   );
 }
 
@@ -746,6 +760,10 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       mandate: composerMandatSysteme(p, acces),
       deniedToolPatterns: composerDenis(acces, deps.deniedToolPatterns),
       maxBudgetUsd: plafondEffectifUsd(p.budgetMaxUsd),
+      // `☠` Même condition que `ligneBudget()` et `plafondEffectifUsd` — une
+      // SEULE source, jamais deux calculs indépendants qui pourraient diverger
+      // sur ce qu'ils disent au lead. Consommé par `mcp-depense/serveur.ts`.
+      budgetMaxUsdPropre: p.budgetMaxUsd > 0,
       model: modele,
       effortLevel: effort,
       configDir: compte.configDir,

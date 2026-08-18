@@ -413,6 +413,17 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   }
 
   /**
+   * Dépense et contexte d'UNE mission, identifiée par `sessionId` — c'est tout
+   * ce qu'un worker connaît de lui-même. `☠` Passe par `lireParSessionId()`,
+   * NON drainant, jamais `tous()` : ce dernier viderait la file d'activités en
+   * attente de TOUTES les missions du process à chaque consultation d'une
+   * équipe sur SA PROPRE dépense (voir `collecteur-telemetrie.ts`).
+   */
+  lireDepenseMission(sessionId: string): TelemetrieWorker | null {
+    return this.#telemetrie.lireParSessionId(sessionId);
+  }
+
+  /**
    * Jetons d'accès OAuth des comptes, pour que le Pi sonde les quotas lui-même
    * en HTTP — c'est ce qui garde les jauges vivantes PC ÉTEINT, et ce qui a
    * permis de tomber de 10 min de retard à quelques secondes.

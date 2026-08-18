@@ -419,6 +419,23 @@ export class CollecteurTelemetrie {
     return this.#construireVue(missionId, e, maintenant, e.activitesEnAttente, e.resultatsEnAttente);
   }
 
+  /**
+   * `☠` NON drainante, même contrat que `lire()` — voir son en-tête. Existe
+   * pour l'appelant qui ne connaît qu'un `sessionId` (le worker lui-même, via
+   * son serveur MCP de consultation, `workers/mcp-depense/serveur.ts`) : la clé
+   * primaire de ce collecteur est `missionId`, que le worker n'a jamais reçu.
+   * Balayage linéaire sur `#par` — quelques missions vivantes au plus, jamais
+   * un volume qui justifierait un second index.
+   */
+  lireParSessionId(sessionId: string, maintenant: number = Date.now()): TelemetrieWorker | null {
+    for (const [missionId, e] of this.#par) {
+      if (e.sessionId === sessionId) {
+        return this.#construireVue(missionId, e, maintenant, e.activitesEnAttente, e.resultatsEnAttente);
+      }
+    }
+    return null;
+  }
+
   #construireVue(
     missionId: string,
     e: Etat,

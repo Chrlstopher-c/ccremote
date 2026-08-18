@@ -8,9 +8,15 @@
  */
 
 import { hostname } from 'node:os';
+import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type { WorkerSpec } from '../../workers/index.ts';
 import type { PortAuditPermissions } from '../../workers/types.ts';
 import { resoudreMcpEquipe } from '../../workers/mcp-du-poste.ts';
+import {
+  creerServeurMcpDepense,
+  NOM_SERVEUR_MCP_DEPENSE,
+  type LecteurDepenseMission,
+} from '../../workers/mcp-depense/serveur.ts';
 import { superviseurLogger } from '../../superviseur/logger.ts';
 import { composerBlocLecons } from '../../apprentissage/index.ts';
 
@@ -20,6 +26,13 @@ export interface ParametresWorkerSpec {
   readonly mandate: string;
   readonly deniedToolPatterns: readonly string[];
   readonly maxBudgetUsd: number;
+  /**
+   * `true` si `maxBudgetUsd` a été fixé explicitement pour cette mission,
+   * `false`/absent s'il retombe sur le plafond de parc (`plafondEffectifUsd`,
+   * `shared/budget-equipe.ts`). Consommé par `mcp-depense/serveur.ts` — sans
+   * lui l'outil de consultation ne peut pas distinguer les deux cas.
+   */
+  readonly budgetMaxUsdPropre?: boolean;
   readonly model?: string;
   readonly effortLevel?: 'low' | 'medium' | 'high' | 'xhigh';
   readonly configDir?: string;
@@ -35,27 +48,12 @@ export interface ParametresWorkerSpec {
  */
 export type ComptesDuPoste = readonly { readonly id: string; readonly configDir: string }[];
 
-export function construireWorkerSpec(
-  parametres: ParametresWorkerSpec,
-  portAuditPermissions: PortAuditPermissions,
-  comptesDuPoste: ComptesDuPoste = [],
-): WorkerSpec {
-  // ☠ Les serveurs MCP sont résolus ICI, au point unique d'assemblage, pour la
-  // même raison que le port d'audit : le type peut exiger le champ, il ne peut
-  // pas empêcher un appelant de passer `{}`. Résolus à la source du poste, ils
-  // ne peuvent plus être « oubliés » — et l'absence est DITE, jamais subie.
-  const mcp = resoudreMcpEquipe();
-  if (mcp.manquants.length > 0) {
-    // ☠ `warn` et non `debug` : c'est exactement le signal qui a manqué pendant
-    // toute la vie du harness. Une équipe démarre quand même — elle travaillera
-    // au shell — mais plus jamais en silence.
-    superviseurLogger.warn(
-      { manquants: mcp.manquants, source: mcp.source, presents: Object.keys(mcp.serveurs) },
-      'serveurs MCP absents du poste — l’équipe démarre sans eux, ses validations E2E seront dégradées',
-    );
-  } else {
-    superviseurLogger.info({ mcp: Object.keys(mcp.serveurs) }, 'serveurs MCP transmis à l’équipe');
-  }
+/**
+ * Résout le `configDir` réellement utilisable sur CETTE machine (H-44). Extrait
+ * de `construireWorkerSpec` pour rester sous la limite de fonction — la logique
+ * elle-même est inchangée depuis sa correction.
+ */
+function resoudreConfigDir(parametres: ParametresWorkerSpec, comptesDuPoste: ComptesDuPoste): string | undefined {
   // ☠ H-44 RENDUE EFFECTIVE. Le `configDir` reçu du Pi est le chemin d'UNE
   // machine ; depuis le multi-machines il peut ne pas exister ici. Mesuré en
   // réel le 01/08 : un mandat routé vers le VPS portait
@@ -78,20 +76,74 @@ export function construireWorkerSpec(
       'compte inconnu de cette machine — le chemin du Pi est conservé tel quel ; le pré-vol échouera s’il n’existe pas ici',
     );
   }
-  const configDir = local?.configDir ?? parametres.configDir;
+  return local?.configDir ?? parametres.configDir;
+}
 
-  // ☠ E7 (SPEC-APPRENTISSAGE.md C-6, PLAN-PORTAGE.md) — LE point de réinjection : le
-  // domaine `apprentissage/` expose une fonction pure et en lecture seule, ce fichier
-  // l'appelle et concatène ; `workers/` reste ignorant de tout ceci (il ne connaît qu'un
-  // `mandate: string`). `parametres.cwd` est ICI le chemin du DÉPÔT (pas encore substitué
-  // par l'allocation de worktree, qui n'intervient que plus tard dans
+/**
+ * Résout les MCP du poste et journalise l'absence (jamais le silence). Extrait
+ * pour la même raison que `resoudreConfigDir` — rester sous la limite de fonction.
+ */
+function resoudreMcpAvecLog(): Record<string, McpServerConfig> {
+  // ☠ Les serveurs MCP sont résolus ICI, au point unique d'assemblage, pour la
+  // même raison que le port d'audit : le type peut exiger le champ, il ne peut
+  // pas empêcher un appelant de passer `{}`. Résolus à la source du poste, ils
+  // ne peuvent plus être « oubliés » — et l'absence est DITE, jamais subie.
+  const mcp = resoudreMcpEquipe();
+  if (mcp.manquants.length > 0) {
+    // ☠ `warn` et non `debug` : c'est exactement le signal qui a manqué pendant
+    // toute la vie du harness. Une équipe démarre quand même — elle travaillera
+    // au shell — mais plus jamais en silence.
+    superviseurLogger.warn(
+      { manquants: mcp.manquants, source: mcp.source, presents: Object.keys(mcp.serveurs) },
+      'serveurs MCP absents du poste — l’équipe démarre sans eux, ses validations E2E seront dégradées',
+    );
+  } else {
+    superviseurLogger.info({ mcp: Object.keys(mcp.serveurs) }, 'serveurs MCP transmis à l’équipe');
+  }
+  return mcp.serveurs;
+}
+
+/**
+ * Concatène le bloc de leçons apprises au mandat (E7). `☠` Jamais bloquant :
+ * `composerBlocLecons` ne lève jamais, chaîne vide si rien à servir.
+ */
+function composerMandatAvecLecons(parametres: ParametresWorkerSpec): string {
+  // `parametres.cwd` est ICI le chemin du DÉPÔT (pas encore substitué par
+  // l'allocation de worktree, qui n'intervient que plus tard dans
   // `SuperviseurWorkers.demarrer()`) — exactement ce que C-6 attend comme `projet`.
-  // Jamais bloquant : `composerBlocLecons` ne lève jamais, chaîne vide si rien à servir.
   const blocLecons = composerBlocLecons(parametres.cwd, hostname());
-  const mandate = blocLecons.length > 0 ? `${parametres.mandate}\n\n${blocLecons}` : parametres.mandate;
+  return blocLecons.length > 0 ? `${parametres.mandate}\n\n${blocLecons}` : parametres.mandate;
+}
+
+export function construireWorkerSpec(
+  parametres: ParametresWorkerSpec,
+  portAuditPermissions: PortAuditPermissions,
+  lecteurDepense: LecteurDepenseMission,
+  comptesDuPoste: ComptesDuPoste = [],
+): WorkerSpec {
+  const serveursDuPoste = resoudreMcpAvecLog();
+  const configDir = resoudreConfigDir(parametres, comptesDuPoste);
+  const mandate = composerMandatAvecLecons(parametres);
+
+  // ☠ Serveur de consultation de SA PROPRE dépense (mandat opérateur, 18/08) —
+  // assemblé ICI, au même point unique que les MCP du poste : le plafond
+  // (`parametres.maxBudgetUsd`) est celui RÉELLEMENT transmis au SDK juste en
+  // dessous, jamais une valeur relue séparément qui pourrait diverger.
+  const depense = creerServeurMcpDepense({
+    sessionId: parametres.sessionId,
+    plafondUsd: parametres.maxBudgetUsd,
+    plafondPropre: parametres.budgetMaxUsdPropre === true,
+    lecteurDepense,
+  });
 
   // ☠ Le port d'audit est un paramètre OBLIGATOIRE, jamais un champ optionnel
   // de `parametres` (H-74) : un worker assemblé sans audit passerait tous les
   // tests en n'observant rien.
-  return { ...parametres, mandate, configDir, mcpServers: mcp.serveurs, portAuditPermissions };
+  return {
+    ...parametres,
+    mandate,
+    configDir,
+    mcpServers: { ...serveursDuPoste, [NOM_SERVEUR_MCP_DEPENSE]: depense },
+    portAuditPermissions,
+  };
 }

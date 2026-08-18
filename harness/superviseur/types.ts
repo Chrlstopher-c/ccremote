@@ -41,6 +41,14 @@ export interface ParametresSpecTransportables {
   readonly mandate: string;
   readonly deniedToolPatterns: readonly string[];
   readonly maxBudgetUsd: number;
+  /**
+   * `true` si `maxBudgetUsd` a été fixé explicitement pour cette mission par
+   * l'opérateur, `false`/absent s'il retombe sur le plafond de parc dérivé
+   * (`plafondEffectifUsd`, `shared/budget-equipe.ts`). Consommé par le serveur
+   * MCP de consultation de la dépense (`workers/mcp-depense/serveur.ts`) — sans
+   * lui, l'outil ne peut pas dire au lead LEQUEL des deux plafonds s'applique.
+   */
+  readonly budgetMaxUsdPropre?: boolean;
   readonly model?: string;
   /**
    * Niveau de raisonnement du lead, posé via `Options.settings`.
