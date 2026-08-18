@@ -643,6 +643,14 @@ function hBlocNode(type, contenu, live, extra) {
     d.innerHTML = hMarkdown(String(contenu).replace(/^\[HARNESS\]\s*/, ''));
     return d;
   }
+  // ☠ Un artefact (mandat « artefacts ») porte sa pièce dans `extra.pieces[0]` —
+  // `contenu` n'est qu'un libellé. Rendu par `harness-artefacts.js`, pas ici :
+  // code lisible, téléchargement, bascule code/rendu pour le HTML sont un
+  // sous-système à eux seuls, hors du fichier des blocs génériques du fil.
+  if (type === 'artefact') {
+    const piece = (extra && Array.isArray(extra.pieces) ? extra.pieces : [])[0];
+    return window.HArtefacts ? window.HArtefacts.carte(piece) : null;
+  }
   return null;
 }
 

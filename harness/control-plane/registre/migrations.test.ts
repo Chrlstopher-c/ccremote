@@ -38,7 +38,7 @@ describe('migration 29 — reconstruction de demande_rallonge', () => {
               ('r-tranchee', 'conv-2', 'illimite', 'nuit longue', 'accordee', 900, 950, 'accordée')`,
     );
 
-    expect(migrer(db)).toBe(29);
+    expect(migrer(db)).toBe(30);
 
     const lignes = db
       .query<{ id: string; plafond_demande: string | null; motif: string; statut: string; detail: string | null }, []>(
@@ -114,8 +114,73 @@ describe('migration 29 — reconstruction de demande_rallonge', () => {
     ).toThrow();
   });
 
+});
+
+describe('migration 30 — reconstruction de conversation_evenement (type artefact)', () => {
+  test('☠ un évènement existant, avec toutes ses colonnes, SURVIT à la reconstruction', () => {
+    migrerJusqua(29);
+    db.run(`INSERT INTO conversation (id, titre, session_id, statut, cree_a, maj_a) VALUES ('c1', 'Fil', NULL, 'active', 1, 1)`);
+    db.run(
+      `INSERT INTO conversation_evenement
+         (conversation_id, type, contenu, cree_a, modele, effort, tool_use_id, detail, resultat, pieces)
+       VALUES ('c1', 'outil', 'lister_equipes', 1000, 'sonnet', 'high', 'tu-1', '{"etat":"actives"}', '{"ok":true}', NULL)`,
+    );
+
+    expect(migrer(db)).toBe(30);
+
+    const ligne = db
+      .query<
+        { type: string; contenu: string; modele: string | null; tool_use_id: string | null; resultat: string | null },
+        [string]
+      >('SELECT type, contenu, modele, tool_use_id, resultat FROM conversation_evenement WHERE conversation_id = ?')
+      .get('c1');
+    expect(ligne).toEqual({
+      type: 'outil',
+      contenu: 'lister_equipes',
+      modele: 'sonnet',
+      tool_use_id: 'tu-1',
+      resultat: '{"ok":true}',
+    });
+  });
+
+  test('un évènement de type « artefact » est désormais accepté par la base', () => {
+    migrerJusqua(29);
+    migrer(db);
+    db.run(`INSERT INTO conversation (id, titre, session_id, statut, cree_a, maj_a) VALUES ('c1', 'Fil', NULL, 'active', 1, 1)`);
+    expect(() =>
+      db.run(
+        `INSERT INTO conversation_evenement (conversation_id, type, contenu, cree_a, pieces)
+         VALUES ('c1', 'artefact', 'demo.html', 1000, '[{"fichier":"f.html","nom":"demo.html","type":"text/html","taille":10}]')`,
+      ),
+    ).not.toThrow();
+  });
+
+  test('☠ un type hors liste reste refusé par la base après la migration', () => {
+    migrerJusqua(29);
+    migrer(db);
+    db.run(`INSERT INTO conversation (id, titre, session_id, statut, cree_a, maj_a) VALUES ('c1', 'Fil', NULL, 'active', 1, 1)`);
+    expect(() =>
+      db.run(`INSERT INTO conversation_evenement (conversation_id, type, contenu, cree_a) VALUES ('c1', 'fantome', 'x', 1000)`),
+    ).toThrow();
+  });
+
+  test('les deux index sont recréés, la table de travail ne survit pas', () => {
+    migrerJusqua(29);
+    migrer(db);
+    const index = db
+      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'conversation_evenement'")
+      .all()
+      .map((l) => l.name);
+    expect(index).toContain('idx_conv_evt');
+    expect(index).toContain('idx_conv_evt_tool');
+    const restes = db
+      .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE name = 'conversation_evenement_v30'")
+      .all();
+    expect(restes).toHaveLength(0);
+  });
+
   test('une migration complète depuis zéro atteint la même version', () => {
-    expect(migrer(db)).toBe(29);
-    expect(versionSchema(db)).toBe(29);
+    expect(migrer(db)).toBe(30);
+    expect(versionSchema(db)).toBe(30);
   });
 });

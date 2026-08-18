@@ -912,6 +912,47 @@ DROP TABLE demande_rallonge_v27;
 CREATE INDEX idx_demande_rallonge_attente ON demande_rallonge(statut, cree_a DESC);
 `;
 
+/**
+ * Migration 30 — type d'évènement `artefact` : un contenu que l'orchestrateur
+ * produit lui-même (script shell/Python/Lua, page HTML) et qui s'affiche dans
+ * le fil au lieu d'être noyé dans un bloc de texte.
+ *
+ * `☠` Même geste qu'en migrations 17 et 4 (H-17 documente déjà la panne : un
+ * type ajouté au TS sans élargir le CHECK SQL écrit un fait que la base
+ * refuse). SQLite ne sait pas modifier un CHECK : la table est recréée avec
+ * TOUTES ses colonnes actuelles (`tool_use_id`, `detail`, `resultat`, `pieces`
+ * — ajoutées après la dernière recréation, migrations 21 et 24), pas seulement
+ * celles de la migration 17.
+ */
+const MIGRATION_30 = `
+CREATE TABLE conversation_evenement_v30 (
+  seq             INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id TEXT NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL CHECK (type IN ('operateur', 'reflexion', 'texte', 'outil',
+                                                'resultat', 'erreur', 'compaction', 'mandat',
+                                                'notification', 'artefact')),
+  contenu         TEXT NOT NULL,
+  cree_a          INTEGER NOT NULL,
+  modele          TEXT,
+  effort          TEXT,
+  tool_use_id     TEXT,
+  detail          TEXT,
+  resultat        TEXT,
+  pieces          TEXT
+) STRICT;
+
+INSERT INTO conversation_evenement_v30
+  (seq, conversation_id, type, contenu, cree_a, modele, effort, tool_use_id, detail, resultat, pieces)
+SELECT seq, conversation_id, type, contenu, cree_a, modele, effort, tool_use_id, detail, resultat, pieces
+  FROM conversation_evenement;
+
+DROP TABLE conversation_evenement;
+ALTER TABLE conversation_evenement_v30 RENAME TO conversation_evenement;
+
+CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
+CREATE INDEX idx_conv_evt_tool ON conversation_evenement(tool_use_id);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -942,6 +983,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 27, nom: 'demande-rallonge-autonomie', sql: MIGRATION_27 },
   { version: 28, nom: 'mode-rapide-conversation', sql: MIGRATION_28 },
   { version: 29, nom: 'demande-rallonge-fenetre', sql: MIGRATION_29 },
+  { version: 30, nom: 'evenement-artefact', sql: MIGRATION_30 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(
