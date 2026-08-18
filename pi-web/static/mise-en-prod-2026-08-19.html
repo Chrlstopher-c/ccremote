@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mise en production — 19 août 2026</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0a0a0b;
+    --bg-card: #16161a;
+    --bg-code: #101013;
+    --border: #26262c;
+    --text: #ededf0;
+    --text-dim: #a3a3ad;
+    --text-faint: #6b6b76;
+    --accent: #e0794a;
+    --accent-soft: rgba(224, 121, 74, 0.14);
+    --good: #6fbf8b;
+    --warn: #e0b84a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 40px 22px 64px;
+  }
+
+  header {
+    margin-bottom: 40px;
+  }
+
+  .eyebrow {
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin: 0 0 12px;
+  }
+
+  h1 {
+    font-size: 28px;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    font-weight: 650;
+    color: #fff;
+  }
+
+  .intro {
+    color: var(--text-dim);
+    font-size: 16px;
+    margin: 0;
+  }
+
+  .intro strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  h2.part {
+    font-size: 15px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-faint);
+    font-weight: 700;
+    margin: 48px 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  h2.part:first-of-type { margin-top: 0; }
+
+  section.theme {
+    margin-bottom: 22px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-card);
+    padding: 22px 20px;
+  }
+
+  .theme-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+
+  .theme-num {
+    font-size: 13px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
+  h3 {
+    font-size: 17px;
+    margin: 0;
+    font-weight: 620;
+    color: #fff;
+    letter-spacing: -0.005em;
+  }
+
+  .theme-lead {
+    color: var(--text-dim);
+    font-size: 15px;
+    margin: 4px 0 16px;
+  }
+
+  ul.points {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  ul.points li {
+    padding-left: 20px;
+    position: relative;
+    font-size: 15px;
+    color: var(--text);
+  }
+
+  ul.points li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  ul.points li .label {
+    display: block;
+    color: var(--text-faint);
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+    font-weight: 600;
+  }
+
+  /* -- Mise en production -- */
+
+  .step {
+    margin-bottom: 22px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--bg-card);
+    padding: 20px 20px 22px;
+  }
+
+  .step-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 7px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .step h3 { font-size: 16px; }
+
+  .step-machine {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin: 2px 0 14px 32px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  pre {
+    margin: 0 0 12px;
+    padding: 14px 16px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  pre:last-child { margin-bottom: 0; }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #d6e8d9;
+    white-space: pre;
+  }
+
+  .note {
+    display: flex;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--text-dim);
+    margin: 0 0 12px;
+    padding-left: 2px;
+  }
+
+  .note .dot {
+    flex-shrink: 0;
+    margin-top: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+
+  .note.coupe .dot { background: var(--warn); }
+  .note.verif .dot { background: var(--good); }
+
+  .note strong { color: var(--text); font-weight: 600; }
+
+  .warnbox {
+    margin-top: 40px;
+    padding: 18px 20px;
+    border-radius: 14px;
+    background: rgba(224, 184, 74, 0.08);
+    border: 1px solid rgba(224, 184, 74, 0.28);
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .warnbox strong { color: var(--warn); }
+
+  .minor {
+    margin-top: 24px;
+    padding: 16px 20px;
+    border-radius: 14px;
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-faint);
+    font-size: 13.5px;
+  }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 12.5px;
+  }
+
+  @media (min-width: 700px) {
+    h1 { font-size: 32px; }
+    .wrap { padding-top: 56px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Mise en production ccremote — 19 août 2026</p>
+    <h1>Ce que la nuit a changé, et ce qu'il vous reste à faire</h1>
+    <p class="intro">
+      Trois chantiers cette nuit — deux sur <strong>ccremote</strong>, un sur <strong>Vigie</strong> —
+      tous fusionnés localement et testés. Il ne vous reste qu'<strong>une seule machine à mettre à
+      jour : le Pi</strong>. Le reste du parc (PC, portable, serveur) est remis à jour par ailleurs
+      cette nuit, sans redémarrage de votre côté à prévoir demain matin.
+    </p>
+  </header>
+
+  <h2 class="part">Ce qui a été fait</h2>
+
+  <section class="theme">
+    <div class="theme-head">
+      <span class="theme-num">01</span>
+      <h3>Une décision qui vous attend ne se cache plus</h3>
+    </div>
+    <p class="theme-lead">Quand l'orchestrateur propose un mandat qui exige votre feu vert, ce fait est désormais écrit tout de suite.</p>
+    <ul class="points">
+      <li>
+        <span class="label">Avant</span>
+        Une proposition en attente de votre autorisation n'existait nulle part avant que vous
+        n'ouvriez l'app — vous ne pouviez découvrir qu'une décision vous attendait qu'en tombant
+        dessus par hasard dans le fil.
+      </li>
+      <li>
+        <span class="label">Maintenant</span>
+        Le fait est journalisé au moment même où la proposition est écrite, sans attendre que vous
+        ouvriez quoi que ce soit — c'est ce qui permettra de vous le signaler activement.
+      </li>
+    </ul>
+  </section>
+
+  <section class="theme">
+    <div class="theme-head">
+      <span class="theme-num">02</span>
+      <h3>Une session expirée se le dit clairement, sur iPhone</h3>
+    </div>
+    <p class="theme-lead">Le client iOS (Vigie) sait maintenant reconnaître une déconnexion pour ce qu'elle est.</p>
+    <ul class="points">
+      <li>
+        <span class="label">Avant</span>
+        Quand votre session avait expiré, le serveur répondait à Vigie par la page web de
+        connexion — que l'app tentait de lire comme si c'était sa réponse normale, sans rien
+        comprendre à ce qu'elle recevait.
+      </li>
+      <li>
+        <span class="label">Maintenant</span>
+        Le serveur répond clairement « session expirée » à Vigie, qui peut vous le dire
+        proprement et vous proposer de vous reconnecter. Le reste de l'interface web (le
+        navigateur) continue de fonctionner exactement comme avant.
+      </li>
+    </ul>
+  </section>
+
+  <section class="theme">
+    <div class="theme-head">
+      <span class="theme-num">03</span>
+      <h3>Les notifications rattrapent une absence, sans trou</h3>
+    </div>
+    <p class="theme-lead">Revenir après un moment d'absence ne vous fait plus perdre les plus anciennes.</p>
+    <ul class="points">
+      <li>
+        <span class="label">Avant</span>
+        Seules les notifications les plus récentes étaient renvoyées à l'ouverture. Après une
+        absence un peu longue, tout ce qui dépassait ce plafond disparaissait silencieusement —
+        jamais vu, jamais rattrapé.
+      </li>
+      <li>
+        <span class="label">Maintenant</span>
+        Vigie peut demander « tout ce qui est arrivé depuis ma dernière notification vue » : le
+        serveur renvoie la suite complète, dans l'ordre, sans plafond qui en perdrait en route.
+      </li>
+    </ul>
+  </section>
+
+  <section class="theme">
+    <div class="theme-head">
+      <span class="theme-num">04</span>
+      <h3>L'orchestrateur peut vous montrer un script ou une page, dans le fil</h3>
+    </div>
+    <p class="theme-lead">Un contenu que l'orchestrateur produit lui-même s'affiche désormais comme une pièce du fil, pas comme un pavé de texte.</p>
+    <ul class="points">
+      <li>
+        <span class="label">Avant</span>
+        Un script ou une page HTML produits par l'orchestrateur n'avaient pas de forme dédiée :
+        soit du texte brut noyé dans la réponse, soit rien de consultable directement dans la
+        conversation.
+      </li>
+      <li>
+        <span class="label">Maintenant</span>
+        Sur le web comme dans Vigie, ce contenu apparaît comme une carte du fil — nom, langage,
+        code en clair, et pour une page HTML un aperçu rendu à côté du code. Dans Vigie, ce rendu
+        est isolé (mémoire non persistante, aucune navigation possible en dehors, votre session ne
+        lui est jamais exposée) puisque le contenu vient de l'orchestrateur et n'est pas fiable
+        par défaut.
+      </li>
+    </ul>
+  </section>
+
+  <div class="minor">
+    Les quatre chantiers sont fusionnés sur les branches principales locales de <code>ccremote</code>
+    et de <code>vigie</code>, avec leurs suites de tests au vert (1 797 tests côté harness, 135 côté
+    Vigie) et l'IPA de Vigie recompilée sans erreur. Pour voir la carte d'artefact dans Vigie sur
+    votre iPhone, il faudra réinstaller l'app via votre flux habituel (<code>build.sh</code> /
+    Impactor) — ce n'est pas lié à la mise en production du Pi ci-dessous.
+  </div>
+
+  <h2 class="part">Mise en production sur le Pi</h2>
+
+  <p class="intro" style="margin-bottom: 22px;">
+    Tout se lance depuis le <strong>PC</strong>, dans <code>/mnt/projects/ccremote</code> — c'est
+    de là que les scripts de déploiement envoient les fichiers vers le Pi. Une seule commande fait
+    tout le travail ; le détail ci-dessous vous dit ce qu'elle redémarre et comment vérifier après
+    coup.
+  </p>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">1</span>
+      <h3>Vérifier que le PC a bien le code de cette nuit</h3>
+    </div>
+    <p class="step-machine">Sur le PC — /mnt/projects/ccremote</p>
+    <pre><code>cd /mnt/projects/ccremote
+git status
+git log -1 --oneline</code></pre>
+    <p class="note">
+      <span class="dot"></span>
+      <span><code>git status</code> doit répondre « rien à valider, la copie de travail est propre » —
+      <code>deployer-pi.sh</code> refuse de partir sur un arbre sale. Si une équipe suivante a fait
+      son travail cette nuit, le dernier commit doit être visible ici.</span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">2</span>
+      <h3>Prévisualiser (facultatif, mais gratuit)</h3>
+    </div>
+    <p class="step-machine">Sur le PC — /mnt/projects/ccremote</p>
+    <pre><code>./deployer-pi.sh --simulation</code></pre>
+    <p class="note">
+      <span class="dot"></span>
+      <span>N'exécute rien : affiche si le secret du lien est résoluble et si l'interface web
+      (<code>pi-web/</code>) sera redéployée ou non.</span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">3</span>
+      <h3>Déployer, pour de vrai</h3>
+    </div>
+    <p class="step-machine">Sur le PC — /mnt/projects/ccremote</p>
+    <pre><code>./deployer-pi.sh</code></pre>
+    <p class="note">
+      <span class="dot"></span>
+      <span>Enchaîne deux choses automatiquement : le <strong>control plane</strong> du Pi
+      (toujours), puis l'<strong>interface web</strong> (<code>pi-web</code>) <strong>seulement si
+      elle a changé</strong> depuis son dernier déploiement — c'est le cas cette nuit
+      (notifications, session iOS, artefacts y touchent tous).</span>
+    </p>
+    <p class="note coupe">
+      <span class="dot"></span>
+      <span><strong>Ce qui redémarre et se coupe brièvement (quelques secondes chacun) :</strong>
+      le service <code>ccremote-harness</code> sur le Pi (registre, API web du harness, lien avec
+      le PC/le VPS — ces derniers se reconnectent seuls après coup), puis le service
+      <code>ccremote-web</code> (l'interface publique <code>ccremote.exemple.com</code>,
+      y compris ce que Vigie consomme). Les autres tunnels du Pi (StockIOP, CRM, license-server) ne
+      sont pas touchés sauf si une règle d'exposition change — pas le cas ici.</span>
+    </p>
+    <p class="note">
+      <span class="dot"></span>
+      <span>Le secret du lien PC↔Pi est résolu tout seul depuis
+      <code>~/.config/ccremote/pc.env</code> — rien à saisir à la main.</span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">4</span>
+      <h3>Vérifier que ça a réellement pris</h3>
+    </div>
+    <p class="step-machine">Sur le PC — la commande elle-même vérifie déjà une partie</p>
+    <pre><code>✓ process démarré le &lt;heure&gt;, postérieur à toutes les sources
+✓ Pi déployé : control plane actif, redémarré, postérieur à ses sources.</code></pre>
+    <p class="note verif">
+      <span class="dot"></span>
+      <span>Ces deux lignes doivent apparaître dans la sortie du script — pas seulement « ça s'est
+      terminé sans erreur ». Si l'une manque, le déploiement a échoué quelque part au-dessus dans
+      le journal du terminal.</span>
+    </p>
+    <p class="step-machine" style="margin-top:18px;">Pour l'interface web (pas de vérification automatique intégrée)</p>
+    <pre><code>curl -sI https://ccremote.exemple.com/ | head -1</code></pre>
+    <p class="note verif">
+      <span class="dot"></span>
+      <span>Doit répondre <code>HTTP/2 200</code> (ou une redirection <code>303</code> vers
+      <code>/login</code> si vous n'êtes pas connecté depuis ce poste — les deux prouvent que le
+      service répond). Un <code>curl: (7) Failed to connect</code> ou un <code>502</code> veut dire
+      que <code>ccremote-web</code> n'est pas remonté.</span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">5</span>
+      <h3>Si ça ne prend pas</h3>
+    </div>
+    <p class="step-machine">Sur le PC, selon le message affiché par le script</p>
+    <pre><code># arbre de travail sale
+git status                      # commit ou stash, puis relancer
+
+# secret introuvable
+cat ~/.config/ccremote/pc.env | grep CCREMOTE_LIEN_SECRET
+# doit être NON VIDE et identique à celui déjà sur le Pi — jamais en régénérer un
+
+# process périmé / échec du health check
+ssh -i ~/.ssh/id_ed25519_ccremote pi@pi.exemple \
+  "sudo journalctl -u ccremote-harness -n 80 --no-pager"</code></pre>
+    <p class="note">
+      <span class="dot"></span>
+      <span>Pour l'interface web, même idée avec le service <code>ccremote-web</code> :
+      <code>sudo journalctl -u ccremote-web -n 80 --no-pager</code> sur le Pi. Dans les deux cas,
+      relancer <code>./deployer-pi.sh</code> une fois la cause corrigée est sans risque — le
+      script est idempotent et refuse de partir sur un état qu'il ne comprend pas plutôt que de
+      deviner.</span>
+    </p>
+  </div>
+
+  <div class="warnbox">
+    <strong>Ce que cette commande ne touche pas</strong> — le PC, le portable et le VPS (leurs
+    superviseurs de workers) ne sont pas concernés par <code>deployer-pi.sh</code>, qui ne parle
+    qu'au Pi. Rien de ce document ne suppose que vous avez à y toucher demain.
+  </div>
+
+  <footer>
+    Comparatif entre l'état déployé au 18 août 2026 et le travail fusionné localement dans la nuit
+    du 19 août 2026 — control plane du harness, interface web, client iOS Vigie.
+  </footer>
+
+</div>
+</body>
+</html>
