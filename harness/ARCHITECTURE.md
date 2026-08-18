@@ -9,12 +9,18 @@ Ce document en est la traduction en dossiers réels, plus le contrat anti-pourri
 ```
 composition/            racine d'assemblage — construit le graphe réel, expose les bin-*.ts
 control-plane/          tout ce qui vit sur le Pi (autorité unique)
-  ├─ registre/           E.1 — état persistant SQLite (missions, comptes, quotas)
+  ├─ registre/           E.1 — état persistant SQLite (missions, comptes, quotas, conversations)
   ├─ session-store/       E.3 — miroir best-effort des sessions (H-15, jamais l'autorité)
-  ├─ bus-permissions/     C.2/C.3 — machine à états des demandes de permission
-  ├─ audit-permissions/   C.5 — trace d'audit, arbitrage délégué
+  ├─ audit-permissions/   C.5 — trace d'audit des décisions de permission (hooks SDK réels)
+  ├─ autonomie/           qui autorise un mandat, fenêtre et plafond d'autonomie d'un fil
+  ├─ cloture/             ce qui empêche une équipe au repos de verrouiller son projet (H-56)
+  ├─ inspection/          H-68 — inspection à la demande, verdict du juge anti-boucle persisté
+  ├─ notifications/       canal asynchrone Chris/orchestrateur, deux textes par fait
   ├─ observabilite/       E.2/C.4.2 — client temps réel, flux par mission/sous-agent
+  ├─ pieces-jointes/      fichiers joints à un message opérateur, écrits sur disque, jamais en mémoire
+  ├─ rappels/             ce qui permet à l'orchestrateur d'agir sur le temps
   ├─ reconciliation/      E.1.4/A.4.2/D.2.4 — registre Pi ↔ inventaire réel du PC
+  ├─ api-web/             API HTTP loopback lue par pi-web, jamais authentifiée elle-même
   └─ orchestrateur/       A — la session Agent SDK avec qui Chris parle
       ├─ entree/           A.1.3 — flux d'entrée asynchrone, un seul lecteur
       ├─ mcp-controle/     A.2 — serveur MCP de contrôle du parc
@@ -30,6 +36,10 @@ discipline-contexte/    A.1.4 — échantillonnage et compaction de contexte
 relance/                B.3.2 — politique de relance après terminaison de tour
 projets/                F — projet ↔ worktree ↔ équipe, cycle de vie git
 pause/                  B.4 — pause/reprise d'un worker sans perte ni duplication
+apprentissage/          boucle post-mission : observer → extraire → confirmer → réinjecter
+shared/                 règles transverses partagées entre domaines, une par fichier, sans I/O
+config-equipe/          configuration Claude Code installée sur un compte d'équipe
+pilotage/               banc de pilotage du harness de production depuis une session de code
 test-harness/           outillage de test (contrats de pannes, doublures, déterminisme)
 validation-proprietes/  M-53 — preuve des cinq propriétés de couche 1
 acceptation/            bancs d'essai réels (hors bun test, jamais en CI)
@@ -37,105 +47,67 @@ acceptation/            bancs d'essai réels (hors bun test, jamais en CI)
 
 **Règle de lecture** : la profondeur d'un dossier suit le risque (`03-couche-1.md`), pas une
 convention uniforme. `plancher-deni/` est plat parce que le risque y est simple à énoncer ;
-`superviseur/` est large parce que c'est là que vivent la persistance, le fencing et l'arrêt
-d'urgence en même temps.
+`control-plane/` est large parce que c'est là que vivent tout ce qui n'existe qu'en un seul
+exemplaire faisant autorité (registre, quotas, orchestrateur maître) en même temps.
 
 ## Définition non ambiguë de chaque dossier racine
 
 | Dossier | Ce qu'il contient | Ce qu'il ne contient PAS |
 |---|---|---|
-| `composition/` | Construction du graphe d'objets réel, points d'entrée exécutables, ports qui ne peuvent être fournis QUE par assemblage (ex. `LecteurUtilisationParc` réel, client réseau D.3) | Aucune règle métier nouvelle — une règle qui vivrait ici et nulle part ailleurs est un signe qu'elle est au mauvais endroit |
-| `control-plane/` | Tout ce qui s'exécute physiquement sur le Pi | Rien qui décide d'un spawn/arrêt de process — ça appartient à `superviseur/` |
+| `composition/` | Construction du graphe d'objets réel, points d'entrée exécutables (`bin-pc.ts`, `bin-pi.ts`), ports qui ne peuvent être fournis QUE par assemblage (client réseau D.3, unités systemd de déploiement) | Aucune règle métier nouvelle — une règle qui vivrait ici et nulle part ailleurs est un signe qu'elle est au mauvais endroit |
+| `control-plane/` | Tout ce qui s'exécute physiquement sur le Pi : registre SQLite, orchestrateur maître, API web, notifications, rappels, clôture, autonomie, réconciliation | Rien qui décide d'un spawn/arrêt de process sur le PC — ça appartient à `superviseur/` |
 | `workers/` | Cycle de vie d'UN worker (spawn, options SDK, capacités, `canUseTool`) | La notion de plusieurs workers, de parc, de fencing — ça appartient à `superviseur/` |
-| `superviseur/` | Le parc de workers du PC : registre, persistance, fencing, arrêt d'urgence, canal D.3 | Aucune connaissance du registre SQLite du Pi (frontière A↔B inexistante, `03-couche-1.md`) |
+| `superviseur/` | Le parc de workers du PC : registre local, persistance, fencing, arrêt d'urgence, canal D.3 | Aucune connaissance du registre SQLite du Pi (frontière A↔B inexistante, `03-couche-1.md`) |
 | `transport/` | Le canal D.1 (données) : trames, reprise, ping/pong | Toute sémantique de contrôle (D.3, dans `superviseur/canal-controle.ts`) |
-| `plancher-deni/` | Motifs Bash structurellement interdits, quel que soit le mode de permission | Tout arbitrage dynamique — c'est `bus-permissions/` |
+| `plancher-deni/` | Motifs Bash structurellement interdits, quel que soit le mode de permission — refus statique | Tout arbitrage dynamique ou dépendant d'un mandat — c'est `shared/acces-mandat.ts` |
 | `budgets/` | Ce qui est réellement mesurable (pourcentage de quota, catégories de message d'usage) | Un anti-boucle — un montant en $ ne mesure pas une boucle (H-68) |
 | `anti-boucle/` | Le juge Haiku, ses paliers, sa décision de coupure | L'appel réel au SDK en dehors de `juge-haiku.ts` (règle non négociable H-68) |
+| `arret-urgence/` | Le drill récurrent (canari process réel, vérificateur périodique) qui prouve que l'arrêt d'urgence fonctionne encore | La commande d'arrêt elle-même — ça appartient à `superviseur/` |
+| `discipline-contexte/` | Échantillonnage et compaction de contexte d'une session (A.1.4) | Toute décision de contenu du mandat — ça appartient à `control-plane/orchestrateur/` |
+| `relance/` | La politique de relance après terminaison de tour (B.3.2/M-34) | Le déclenchement du relancement réel — ça appartient à `superviseur/` |
 | `projets/` | Le triplet projet/worktree/équipe et son cycle de vie git | Toute décision de spawn de process — ça appartient à `superviseur/` |
+| `pause/` | Pause/reprise d'UN worker sans perte ni duplication de tour (B.4) | Le cycle de vie complet d'un worker — ça appartient à `workers/` |
+| `apprentissage/` | La boucle post-mission (observation → extraction → confirmation → injection) et sa propre base SQLite `apprentissage.db`, indépendante du registre | Toute connaissance du registre `control-plane/registre/` — un type d'entrée propre lui est dédié, jamais importé de là |
+| `shared/` | Règles transverses consommées par plusieurs domaines (accès mandat, budget d'équipe, modèles Claude, saturation de compte, routage machine), sans I/O | Toute logique propre à un seul domaine — la duplication tolérée bat une mutualisation prématurée (DRY, `code-standards.md`) |
+| `config-equipe/` | La configuration Claude Code installée sur un compte d'équipe (CLAUDE.md dérivé, script d'installation par liens symboliques) | Le code du harness lui-même — ce dossier est livré à un compte, pas importé par un module |
+| `pilotage/` | Client et rendu terminal pour piloter le harness de production DEPUIS une session de code (hors mandat d'équipe) | Toute logique de décision du harness — ce dossier ne fait qu'afficher/relayer |
 | `test-harness/` | Doublures et contrats de pannes injectables | Toute logique consommée par un module de production (règle 1, `test-harness/README.md`) |
+| `validation-proprietes/` | La preuve exécutable des cinq propriétés de couche 1 (M-53) | Toute implémentation des propriétés elles-mêmes — c'est un banc de vérification, pas un domaine métier |
+| `acceptation/` | Bancs d'essai RÉELS (aucune doublure), hors `bun test`, jamais lancés en CI | Tout ce qui doit tourner en CI ou sans quota réel — ça vit dans les `*.test.ts` du domaine concerné |
 
 **Frontière A↔B inexistante, appliquée deux fois** : ni `control-plane/` n'importe de fichier de
 `superviseur/`/`workers/`, ni l'inverse. Tout passage entre les deux traverse un port défini dans
 `control-plane/reconciliation/types.ts` ou `control-plane/orchestrateur/mcp-controle/types.ts`, et
 n'est composé que dans `composition/`.
 
+**Frontière `apprentissage/` ↔ `control-plane/registre/`** : `apprentissage/` a sa propre base
+(`apprentissage.db`, migrations et connexion dédiées) et son propre type d'observation d'issue de
+mission — jamais le type du registre. Le seul lien entre les deux est la lecture, en fin de
+mission, d'un transcript JSONL déjà écrit sur disque par le SDK ; aucun import croisé de code.
+
+**Frontière `shared/` ↔ tout le reste** : `shared/` ne contient que des règles pures, sans I/O,
+consommées à l'identique par au moins deux domaines (ex. `acces-mandat.ts` par `plancher-deni/` et
+par `control-plane/`). Une règle qui ne sert qu'à un seul domaine n'y entre pas, même si elle
+semble transverse — c'est le domaine appelant qui la porte.
+
+**`config-equipe/` n'est pas un domaine de code** : c'est un livrable (fichiers de config +
+script shell) installé SUR un compte d'équipe, jamais importé par un `import` TypeScript depuis
+un autre dossier de `harness/`. C'est ce qui le distingue de `shared/`, qui est du code importé.
+
 **`service`/`manager`/`helper` non utilisés dans ce dépôt** — le nommage suit le vocabulaire
 métier français déjà établi (mission, garde-fou, port, câblage). Pas de définition
 supplémentaire nécessaire ici : aucun de ces trois mots n'apparaît comme nom de dossier.
 
-## Ce que la composition a révélé (2026-07-22)
+## Historique de composition — ce qui a changé de forme depuis
 
-Avant cette mission, aucun exécutable ne construisait le graphe complet — chaque domaine avait ses
-tests et parfois un banc `acceptation/*.ts` isolé, mais rien ne les assemblait avec des dépendances
-réelles. `composition/assemblage.test.ts` est le premier test qui échoue si un garde-fou cesse
-d'être branché (H-74).
-
-### Assemblé et vérifié par composition
-- **G.1.3, plafond de parc** — `composition/pi/port-utilisation-parc.ts` fournit un
-  `LecteurUtilisationParc` réel (source : `Registre.comptes`), consommé par `proposerCreationEquipe`
-  et prouvé par assemblage (refuse/autorise selon un vrai relevé de quota).
-- **H-73.1, bus de permissions → `canUseTool`** — `composition/bus-permissions/port-colocalise.ts`
-  route réellement vers `MachineEtatsDemandes`, dans le cas colocalisé (voir limite ci-dessous).
-- **Dette n°1, persistance du registre PC** — `composition/pc/assembler-superviseur.ts` construit
-  `PersistanceRegistreSqlite` et appelle `superviseur.restaurer()` au démarrage ; prouvé par
-  assemblage (un worker écrit par une instance précédente survit à un redémarrage).
-- **H-68, juge anti-boucle** — `composition/pc/assembler-superviseur.ts` est le premier site de
-  production à fournir `jugeBoucle: creerJugeHaiku()` à `SuperviseurWorkers`.
-- **G.4, arrêt d'urgence** — prouvé par assemblage : `arret_urgence` traverse réellement
-  `CanalControle` → `SuperviseurWorkers.arretUrgence()`.
-- **A.1.2, identité de session Pi** — `composition/pi/verificateur-session-sdk.ts` fournit le
-  premier `VerificateurSessionExistante` réel (`getSessionInfo` du SDK, jusqu'ici jamais appelé
-  hors doublure).
-- **D.3, canal de contrôle réseau — INVERSÉ (H-75, 2026-07-22)** — le Pi héberge désormais le lien
-  unique (`composition/pi/serveur-lien-pc.ts`), le PC initie (`composition/pc/client-lien-pi.ts`).
-  `composition/pi/client-superviseur-pc.ts` (Pi) et `composition/pc/canal-controle-recepteur.ts`
-  (PC, remplace `serveur-controle.ts` supprimé) multiplexent `controle_requete`/`controle_reponse`
-  sur ce lien (`composition/lien-pc-pi/protocole.ts`).
-
-### Ce qui ne s'assemble PAS — documenté, pas contourné
-
-1. **`workers/index.ts` n'exporte pas `DemandeCanUseTool`/`PortBusPermissions`/`VerdictCanUseTool`.**
-   Un autre domaine (`composition/`) qui doit fournir ce port est obligé d'importer directement
-   `workers/types.ts` (fichier interne), en violation de la règle « aucun autre module n'importe les
-   fichiers internes de ce dossier » énoncée dans `workers/index.ts` lui-même. Corriger revient à
-   ajouter trois exports à `workers/index.ts` — hors zone de cette mission (écriture interdite hors
-   `composition/`), signalé ici pour action.
-
-2. **`PortBusPermissions` (H-73.1) cross-machine — RÉSOLU par H-75 (2026-07-22).** L'inversion du
-   lien (Pi héberge, PC initie, `LienWebSocket` symétrique et bidirectionnel une fois établi) ouvre
-   exactement le canal qui manquait ici. `composition/pc/port-bus-permissions-distant.ts` (PC) et
-   `composition/pi/permission-verdict-distant.ts` (Pi) multiplexent `permission_demande`/
-   `permission_verdict` sur le MÊME lien que D.3, corrélés par id (`lien-pc-pi/correlateur.ts`).
-   `composition/bus-permissions/port-colocalise.ts` reste valide et inchangée pour le mode
-   « tout-en-un » colocalisé — les deux implémentations coexistent, un site de dispatch choisit
-   laquelle fournir à `construireWorkerSpec` selon le déploiement.
-
-3. **`RepertoireCibles` (parler à une équipe en cours) et `DefinisseurBudget` (`definir_budget`)
-   n'ont aucune implémentation réseau possible avec les contrats existants.** Le premier exigerait un
-   canal D.1 par worker composé depuis le Pi (non construit — portée trop large pour cette mission,
-   un client D.1 par mission active est un sous-système à part entière). Le second exigerait une
-   septième variante à `OperationControle` (D.3) qui n'existe pas — l'ajouter est une extension de
-   contrat d'un autre domaine, hors mandat. `composition/pi/ports-non-cables.ts` les implémente en
-   REFUS EXPLICITE et journalisé (`warn`), jamais en faux succès (H-74, principe 2).
-
-4. **`workers/options-composition.ts` (`composeWorkerOptions`, le seul site de production qui
-   compose les `Options` d'un worker) ne fixe jamais `options.hooks`.** Conséquence concrète : les
-   hooks d'audit (`control-plane/audit-permissions/hooks-sdk.ts`, `creerHooksAuditPermissions`,
-   mission M-22) — présentés comme « branché sur `PreToolUse`, exhaustivité vérifiée à 100 % » dans
-   `REPRISE.md` — ne sont en réalité RACCORDÉS À AUCUN worker en production : le test qui le prouve
-   (`acceptation/audit-permissions-reel.ts`) construit son propre `query()` avec ses propres hooks,
-   pas via `composeWorkerOptions`. C'est structurellement le même défaut que H-74, découvert par
-   cette mission, sur un module que H-74 ne visait pas. Corriger appartient au domaine `workers/`
-   (hors zone d'écriture de cette mission) : fusionner un jeu de hooks fourni par l'appelant avec
-   ceux, éventuels, déjà posés par `WorkerSpec`.
-
-5. **`DependancesServeurControle.utilisationParc`/`configPlafondParc` restent typés optionnels**
-   dans `control-plane/orchestrateur/mcp-controle/types.ts`, avec repli
-   `UTILISATION_PARC_DESACTIVEE`/`{}` dans `serveur.ts` — exactement l'occurrence n°2 citée par H-74
-   elle-même. `composition/pi/assembler-control-plane.ts` fournit toujours les deux réellement, mais
-   le TYPE laisse encore un futur appelant les omettre en silence. Corriger (les rendre obligatoires)
-   appartient au domaine `mcp-controle/`, hors zone d'écriture de cette mission.
+`composition/` a livré la première preuve que le graphe s'assemble réellement avec des
+dépendances réelles (H-74, 22/07 : `composition/assemblage.test.ts`), puis l'inversion du lien
+Pi↔PC (H-75, 22/07 : le Pi héberge `composition/pi/serveur-lien-pc.ts`, le PC initie
+`composition/pc/client-lien-pi.ts`), toujours en vigueur. Le détail mission par mission de ce
+qui s'est assemblé, ce qui restait en refus explicite, et ce qui a changé depuis (dont le retrait
+du bus de permissions `control-plane/bus-permissions/` le 31/07 — jamais câblé à un producteur
+réel, ce qui protège en pratique un mandat est `plancher-deni/` + `shared/acces-mandat.ts`) vit
+dans `REPRISE.md`, journal de reprise à froid, plutôt que dupliqué et daté ici.
 
 ## Test d'assemblage — ce qu'il couvre, ce qu'il ne couvre pas
 
