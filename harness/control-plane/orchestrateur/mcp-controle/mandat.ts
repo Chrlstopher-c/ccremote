@@ -6,6 +6,7 @@
  */
 
 import type { AccesMandat } from '../../../shared/acces-mandat.ts';
+import { plafondEffectifUsd } from '../../../shared/budget-equipe.ts';
 
 export interface PropositionMandat {
   readonly projet: string;
@@ -63,12 +64,33 @@ function libelleAcces(acces: AccesMandat): string {
     : 'lecture et écriture';
 }
 
+/**
+ * `☠` Le budget est ANNONCÉ au lead, pas seulement appliqué (mandat opérateur,
+ * 18/08) : une équipe de diagnostic a bâti son hypothèse principale sur un
+ * supposé dépassement de budget alors qu'elle était à 15 % de son plafond —
+ * rien ne le lui disait. `plafondEffectifUsd` (même calcul que `dispatch-mandat.ts`,
+ * une seule source pour ne jamais diverger) : le montant réel, propre à la
+ * mission ou dérivé du plafond de parc si aucun n'a été fixé.
+ */
+function ligneBudget(budgetMaxUsd: number | null): string {
+  const montant = plafondEffectifUsd(budgetMaxUsd);
+  const origine =
+    budgetMaxUsd !== null && budgetMaxUsd > 0
+      ? 'plafond propre à cette mission'
+      : 'aucun plafond propre n’a été fixé pour cette mission — tu cours sous le plafond de parc';
+  return (
+    `Budget : ${montant.toFixed(2)} $ (${origine}). Au-delà, ta session est coupée net, où que ` +
+    'tu en sois, et le travail non commité serait perdu.'
+  );
+}
+
 export function construireMandatPropose(
   projet: string,
   objectif: string,
   critereArret: string | null,
   perimetre: string,
   acces: AccesMandat,
+  budgetMaxUsd: number | null,
 ): PropositionMandat {
   const lignes = [
     `Objectif : ${objectif}`,
@@ -78,6 +100,13 @@ export function construireMandatPropose(
     // change le plus la portée de ce qu'il approuve d'un clic.
     `Accès accordé : ${libelleAcces(acces)}`,
     `Critère d'arrêt : ${critereArret ?? '⚠ non fourni — à compléter avant approbation'}`,
+    ligneBudget(budgetMaxUsd),
+    // `☠` L'outil existe depuis le 18/08 (`ccremote-depense`/`ma_depense`) mais
+    // restait invisible à ce texte-ci : un lead qui ignore qu'il l'a ne l'appelle
+    // jamais. Même incident que la ligne budget — le dire ici, pas seulement le câbler.
+    'Outil de consultation : `ma_depense` te donne ta dépense en dollars, ton plafond et la part ' +
+      "déjà consommée. Appelle-le avant d'engager un travail long, dès que tu hésites à " +
+      'approfondir une piste, ou avant de lancer une exploration coûteuse.',
     ...CLAUSES_FIXES,
   ];
   return { projet, objectif, critereArret, perimetre, acces, texte: lignes.join('\n\n') };
