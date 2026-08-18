@@ -405,7 +405,15 @@ export type TypeEvenementConversation =
    * d'ouvrage des instructions que le harness a fabriquées — la confusion
    * précise que H-66 existe pour empêcher.
    */
-  | 'notification';
+  | 'notification'
+  /**
+   * Artefact présenté à Chris (migration 30) — un contenu que l'orchestrateur
+   * produit lui-même (script shell/Python/Lua, page HTML) et qui s'affiche
+   * dans le fil au lieu d'être noyé dans un bloc de texte. `contenu` porte le
+   * nom d'affichage, la pièce elle-même vit dans `pieces` — même descriptif
+   * que pour un message opérateur, un seul élément.
+   */
+  | 'artefact';
 
 export type StatutProposition = 'en_attente' | 'approuvee' | 'refusee';
 
@@ -496,7 +504,9 @@ export interface EvenementConversation {
   readonly detail: string | null;
   readonly resultat: string | null;
   /**
-   * Pièces jointes du message opérateur (migration 24) — vide partout ailleurs.
+   * Pièces jointes du message opérateur (migration 24), ou l'artefact d'un
+   * événement `artefact` (migration 30, un seul élément) — vide partout
+   * ailleurs.
    *
    * `☠` Descriptif seulement : les octets vivent sur le disque du Pi, pas en
    * base. Et pas de chemin absolu ici — il se recalcule depuis la racine

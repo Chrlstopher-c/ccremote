@@ -47,6 +47,7 @@ import {
   supprimerRappel,
 } from './outils-rappels.ts';
 import { nommerFil } from './outils-fil.ts';
+import { creerArtefact } from './outils-artefact.ts';
 import { demanderRallongeAutonomie } from './outils-rallonge.ts';
 import { ajusterAutonomie, demanderFenetreAutonomie, terminerAutonomie } from './outils-autonomie.ts';
 import { AUTO_APPROBATIONS_MAX } from '../../autonomie/index.ts';
@@ -176,6 +177,14 @@ export interface DependancesServeurControle {
    * valeur la comparaison a été faite.
    */
   readonly plafondAutonomieParc?: number | null;
+  /**
+   * Racine de stockage des artefacts (`creer_artefact`) — la MÊME que celle des
+   * pièces jointes du navigateur (`CCREMOTE_PI_PIECES_JOINTES`), même route de
+   * lecture. Absent ⇒ l'outil n'est pas exposé DU TOUT, même règle que les
+   * ports optionnels ci-dessus : mieux vaut un outil que le modèle ne voit pas
+   * qu'un outil qui refuserait systématiquement.
+   */
+  readonly racinePiecesJointes?: string;
 }
 
 /** Port de compaction du contexte de la session appelante. */
@@ -554,6 +563,39 @@ function outilsFil(deps: DependancesServeurControle) {
 }
 
 /**
+ * Groupe « artefact » — l'orchestrateur présente à Chris un contenu qu'il
+ * produit lui-même, affiché dans le fil plutôt que noyé dans un bloc de texte
+ * (mandat « artefacts »). Absent si la racine des pièces jointes n'est pas
+ * câblée (voir `DependancesServeurControle.racinePiecesJointes`).
+ */
+function outilsArtefact(deps: DependancesServeurControle) {
+  if (deps.racinePiecesJointes === undefined) return [];
+  return [
+    tool(
+      'creer_artefact',
+      'Présente à Chris un contenu que TU produis — un script (shell, Python, Lua) ou une page HTML — ' +
+        'comme un ARTEFACT affiché dans le fil : code lisible, bouton de téléchargement, et pour le HTML ' +
+        'une bascule code / rendu (le rendu tourne dans un cadre isolé, sans accès à la session de Chris). ' +
+        'Préfère cet outil à un bloc de code collé dans ta réponse dès que Chris doit pouvoir le lire au ' +
+        'propre, le télécharger, ou l’exécuter tel quel — un extrait de quelques lignes en discussion ' +
+        "reste plus simple en texte. `nom_fichier` porte l'extension qui décide du rendu — .html, .sh, " +
+        '.py ou .lua, aucune autre n’est acceptée. Chaque appel crée un nouvel artefact : pas de version, ' +
+        'pas d’édition — pour corriger, rappelle l’outil avec le contenu corrigé.',
+      {
+        nom_fichier: z
+          .string()
+          .describe("Nom avec extension : .html, .sh, .py ou .lua — décide comment l'artefact s'affiche."),
+        contenu: z.string().describe('Le contenu complet du fichier, tel qu’il doit être écrit — sans troncature.'),
+      },
+      async ({ nom_fichier, contenu }) =>
+        protege('creer_artefact', () =>
+          creerArtefact(deps.registre, deps.racinePiecesJointes, deps.conversationId ?? null, nom_fichier, contenu),
+        ),
+    ),
+  ];
+}
+
+/**
  * Groupe « rallonge » — l'orchestrateur DEMANDE un relèvement de son plafond
  * d'autonomie (migration 27). Jamais un octroi : voir `outils-rallonge.ts`.
  */
@@ -888,6 +930,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsBudget(deps),
     ...outilsRappels(deps),
     ...outilsFil(deps),
+    ...outilsArtefact(deps),
     ...outilsRallonge(deps),
     ...outilsAutonomie(deps),
     ...outilsContexte(deps),

@@ -345,6 +345,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       // sans lui, `ajuster_autonomie` comparerait une baisse de plafond à la
       // valeur d'usine et refuserait une baisse réelle sur un parc affranchi.
       plafondAutonomieParc: plafondParcDefaut,
+      // `☠` MÊME racine que celle qui sert les pièces jointes du navigateur
+      // (`racinePiecesJointes`, ci-dessous) : `creer_artefact` en réutilise le
+      // pipeline d'écriture ET la route de lecture — un artefact et une pièce
+      // jointe sont indiscernables une fois posés sur le disque.
+      racinePiecesJointes,
       repertoireProjets: options.repertoireProjets,
       // `☠` Le MÊME chemin que celui qui sert l'interface depuis le 01/08
       // (`pilotage` sur le canal de contrôle), et non plus un port fantôme :

@@ -15,3 +15,12 @@ export {
   type PieceJointeEntrante,
   type PieceJointeValidee,
 } from './pieces-jointes.ts';
+
+/** Écriture d'artefact — même racine, même route de lecture, pipeline distinct (voir `artefacts.ts`). */
+export {
+  ecrireArtefact,
+  ErreurArtefact,
+  MAX_OCTETS_ARTEFACT,
+  typesArtefactAcceptes,
+  type ArtefactEcrit,
+} from './artefacts.ts';
