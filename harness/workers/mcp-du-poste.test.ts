@@ -25,7 +25,7 @@
  * l'absence se DISE au lieu de se subir.
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -35,6 +35,39 @@ import { assertOptionsInvariants, composeWorkerOptions } from './options-composi
 import type { ResolvedModel, WorkerSpec } from './types.ts';
 
 const MODELE: ResolvedModel = { requested: 'sonnet', resolved: 'claude-sonnet-5', tier: 'sonnet', viaInheritance: false };
+
+/**
+ * `☠` Isolation forcée de `process.env`, pas hypothèse d'environnement propre.
+ *
+ * `CCREMOTE_MEMOIRE_URL_LECTURE` / `_JETON_LECTURE` sont de VRAIES variables de
+ * production, posées sur l'environnement des superviseurs (commit `dd6ed30`) —
+ * pas censées atteindre un process `bun test`. Sur un poste où elles fuient
+ * quand même (un superviseur, une équipe qui hérite de son environnement), les
+ * tests qui supposent leur absence devenaient rouges pour une raison qui n'a
+ * rien à voir avec ce qu'ils prétendent vérifier. On sauvegarde l'état ambiant
+ * une fois, on repart d'un environnement vidé avant chaque test, et chaque test
+ * qui a besoin d'une valeur la pose lui-même dans son propre corps — jamais
+ * d'hypothèse implicite sur ce que le poste qui exécute la suite contient.
+ */
+const NOMS_ENV_MEMOIRE = ['CCREMOTE_MEMOIRE_URL_LECTURE', 'CCREMOTE_MEMOIRE_JETON_LECTURE'] as const;
+const ENV_MEMOIRE_AMBIANT: Record<string, string | undefined> = {};
+for (const nom of NOMS_ENV_MEMOIRE) ENV_MEMOIRE_AMBIANT[nom] = process.env[nom];
+
+beforeEach(() => {
+  for (const nom of NOMS_ENV_MEMOIRE) delete process.env[nom];
+});
+
+afterEach(() => {
+  for (const nom of NOMS_ENV_MEMOIRE) delete process.env[nom];
+});
+
+afterAll(() => {
+  for (const nom of NOMS_ENV_MEMOIRE) {
+    const valeur = ENV_MEMOIRE_AMBIANT[nom];
+    if (valeur === undefined) delete process.env[nom];
+    else process.env[nom] = valeur;
+  }
+});
 
 function specAvec(mcpServers: WorkerSpec['mcpServers']): WorkerSpec {
   return {
