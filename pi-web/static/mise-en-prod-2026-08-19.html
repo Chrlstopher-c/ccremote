@@ -289,11 +289,96 @@
     <h1>Ce que la nuit a changé, et ce qu'il vous reste à faire</h1>
     <p class="intro">
       Trois chantiers cette nuit — deux sur <strong>ccremote</strong>, un sur <strong>Vigie</strong> —
-      tous fusionnés localement et testés. Il ne vous reste qu'<strong>une seule machine à mettre à
-      jour : le Pi</strong>. Le reste du parc (PC, portable, serveur) est remis à jour par ailleurs
-      cette nuit, sans redémarrage de votre côté à prévoir demain matin.
+      tous fusionnés localement et testés. Mais le <strong>PC du parc (trinityarch) était éteint
+      cette nuit</strong>, et le déploiement vers le Pi part toujours de ce PC. Avant de lire le
+      reste de ce document, faites d'abord l'<strong>étape 0</strong> ci-dessous : allumer le PC et
+      le mettre à jour. Sans ça, la mise en production du Pi enverrait une version du dépôt qui n'a
+      pas le travail de cette nuit.
     </p>
   </header>
+
+  <h2 class="part">Étape 0 — avant tout, remettre le PC à jour</h2>
+
+  <p class="intro" style="margin-bottom: 22px;">
+    Cette étape se fait <strong>à la main, sur place</strong> : le paquet de réveil réseau envoyé
+    cette nuit n'a pas suffi à rallumer le PC. Elle ne prend que quelques minutes, et elle
+    conditionne tout le reste — ne passez à la mise en production du Pi qu'une fois les quatre
+    points ci-dessous validés.
+  </p>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">1</span>
+      <h3>Allumer le PC</h3>
+    </div>
+    <p class="step-machine">Sur place — la tour du PC (trinityarch)</p>
+    <p class="note">
+      <span class="dot"></span>
+      <span>Appuyez sur le bouton d'alimentation de la tour, comme pour n'importe quel démarrage.
+      Attendez l'affichage complet du bureau (une petite minute) avant de passer à la suite.</span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">2</span>
+      <h3>Ouvrir un terminal et récupérer le travail de cette nuit</h3>
+    </div>
+    <p class="step-machine">Sur le PC — /mnt/projects/ccremote</p>
+    <pre><code>cd /mnt/projects/ccremote
+git pull --ff-only origin master
+bun install</code></pre>
+    <p class="note">
+      <span class="dot"></span>
+      <span>La première commande vous place dans le dossier du projet. La deuxième va chercher le
+      travail de la nuit sans jamais rien écraser sur le PC — si elle affiche un message d'erreur
+      au lieu d'une liste de fichiers modifiés, <strong>arrêtez-vous là</strong>, quelque chose
+      d'anormal s'est produit. La troisième installe ce dont ce travail a besoin pour fonctionner.
+      </span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">3</span>
+      <h3>Redémarrer le superviseur du PC sur ce nouveau code</h3>
+    </div>
+    <p class="step-machine">Sur le PC — /mnt/projects/ccremote</p>
+    <pre><code>./deploy-superviseur-pc.sh</code></pre>
+    <p class="note coupe">
+      <span class="dot"></span>
+      <span>Ce script redémarre le service qui fait tourner le PC — une coupure de quelques
+      secondes, sans conséquence : aucune équipe n'y travaille à cette heure-là.</span>
+    </p>
+    <p class="note verif">
+      <span class="dot"></span>
+      <span>Deux lignes doivent apparaître dans ce qu'affiche la commande : une qui commence par
+      <code>✓ process démarré le</code>, une qui commence par <code>✓ Superviseur du PC actif</code>.
+      Si l'une des deux manque, ou si un message d'erreur apparaît à la place, le PC n'est pas à
+      jour — ne passez pas à la suite.</span>
+    </p>
+  </div>
+
+  <div class="step">
+    <div class="step-head">
+      <span class="step-num">4</span>
+      <h3>Vérifier que le PC est bien reconnecté</h3>
+    </div>
+    <p class="step-machine">Sur le PC — /mnt/projects/ccremote</p>
+    <pre><code>bun harness/pilotage/pilote.ts machines</code></pre>
+    <p class="note verif">
+      <span class="dot"></span>
+      <span>Cherchez la ligne qui contient <code>pc</code> : elle doit commencer par un point plein
+      <strong>●</strong>, pas un point vide <strong>○</strong>. Le point plein confirme que le PC
+      est bien en ligne avec le code du jour. S'il est vide, attendez une minute et relancez la
+      commande avant de continuer.</span>
+    </p>
+  </div>
+
+  <div class="minor">
+    Une fois ces quatre points validés, le PC porte le travail de cette nuit — vous pouvez
+    enchaîner directement sur la mise en production du Pi plus bas, exactement comme décrit.
+  </div>
 
   <h2 class="part">Ce qui a été fait</h2>
 
@@ -515,9 +600,10 @@ ssh -i ~/.ssh/id_ed25519_ccremote pi@pi.exemple \
   </div>
 
   <div class="warnbox">
-    <strong>Ce que cette commande ne touche pas</strong> — le PC, le portable et le VPS (leurs
+    <strong>Ce que cette commande ne touche pas</strong> — le portable et le VPS (leurs
     superviseurs de workers) ne sont pas concernés par <code>deployer-pi.sh</code>, qui ne parle
-    qu'au Pi. Rien de ce document ne suppose que vous avez à y toucher demain.
+    qu'au Pi. En dehors de l'étape 0 en tête de ce document (qui remet le PC à jour), rien ici ne
+    suppose que vous avez à toucher au portable ou au VPS demain.
   </div>
 
   <footer>
