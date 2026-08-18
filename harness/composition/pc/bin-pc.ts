@@ -73,12 +73,19 @@ async function main(): Promise<void> {
     process.env['CCREMOTE_PC_COMPTES'],
   );
 
+  // `☠` Racine des projets DE CETTE MACHINE, jamais une convention du parc : le
+  // Pi la demande à la machine au moment du dispatch (`resoudreRacineProjets`).
+  // Absente ⇒ `/mnt/projects`, donc `trinityarch` et `vps-e411b5c7` gardent
+  // exactement le comportement qu'ils avaient — rien à redéployer chez eux.
+  const racineProjets = process.env['CCREMOTE_PC_RACINE_PROJETS'];
+
   const assemble = assemblerSuperviseurPc({
     cheminRegistrePersistance,
     urlPi,
     secretLienPi,
     machineId,
     comptesASonder,
+    ...(racineProjets === undefined || racineProjets === '' ? {} : { racineProjets }),
     // `☠` Fermeture terminale (ex. secret invalide) : jamais de reconnexion
     // interne — H-75. On arrête le PROCESS ; systemd décide seul de la suite,
     // après `RestartSec=60`, jamais un martèlement du Pi.
@@ -100,7 +107,7 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => arreterProprement('SIGTERM'));
 
   log.info(
-    { urlPi, machineId, comptes: comptesASonder.map((c) => c.id) },
+    { urlPi, machineId, racineProjets: racineProjets ?? '/mnt/projects (défaut)', comptes: comptesASonder.map((c) => c.id) },
     'process machine de travail démarré — connexion sortante vers le Pi (H-75)',
   );
   if (comptesASonder.length === 0) {
