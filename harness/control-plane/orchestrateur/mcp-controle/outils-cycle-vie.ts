@@ -97,7 +97,7 @@ export async function proposerCreationEquipe(
     }
     const plafond = evaluerPlafondParc(lecteur, config);
     if (!plafond.autorise) return refuse(intention, plafond.motif);
-    const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre, acces);
+    const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre, acces, budgetMaxUsd ?? null);
     // `☠` Sans enregistreur, la proposition ne survit pas à ce tour : l'interface
     // n'aurait rien à autoriser et H-61 deviendrait une impasse. On le DIT au
     // modèle plutôt que de le laisser annoncer un bouton qui n'existe pas.
