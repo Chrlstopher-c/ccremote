@@ -1,5 +1,314 @@
 # TODO — ccremote
 *Dernière mise à jour : 2026-08-08*
+*Synthèse ajoutée le 2026-08-18 — voir section suivante. Rien n'a été retiré du fichier d'origine :
+tout ce qui suit `## ⚡ Harness d'orchestration — chantier actif` (ligne ~150) est le TODO.md tel
+qu'il existait avant cette passe, inchangé. Décompte fait ce jour-là : le fichier d'origine contient
+67 cases `- [ ]`, dont une (« Rien d'ouvert sur le harness ») n'est pas un point actionnable et trois
+sont des doublons exacts d'un autre point du même fichier (l'écart de ~4 061 tokens cité deux fois,
+« créer/supprimer un projet » et son corollaire « élévation hors périmètre » comptés séparément dans
+le fichier d'origine mais un seul et même arbitrage, le résumé/la fluidité de timeline comptés en deux
+lignes pour un seul chantier) — soit **63 points ouverts distincts préexistants**. Plus les **5
+défauts neufs** diagnostiqués aujourd'hui (A-E) = **68 points ouverts au total**. Nettement plus que
+les ~23 estimés — l'écart tient au fait qu'une bonne partie du fichier d'origine liste des sous-tâches
+d'un même chantier une par une plutôt qu'un point par chantier (ex. les 5 cases du chantier « présenter
+un fichier », comptées séparément ci-dessous par fidélité au fichier d'origine).*
+
+## 🗂️ SYNTHÈSE — problèmes récurrents rencontrés avec les équipes, et correction en face
+
+*Regroupement par NATURE du problème, pas par ordre chronologique. Chaque point porte : le problème
+en une phrase, la correction envisagée, un effort grossier (XS = config/quelques lignes · S = < 1
+jour · M = 1-3 jours · L = chantier dédié · XL = chantier structurant), et sa provenance (référence
+de ligne dans le détail plus bas, ou « NOUVEAU » pour les cinq défauts diagnostiqués aujourd'hui).
+Un point sans piste de correction crédible est marqué `SANS CORRECTIF CONNU` plutôt que maquillé.*
+
+### Groupe A — Ce qu'une équipe (ou l'orchestrateur) ignore d'elle-même
+
+Une équipe autonome qui ne sait pas ce qu'elle a dépensé, ce qu'il lui reste, ou ce qu'elle a le
+droit de faire construit ses décisions sur des suppositions — et une décision de diagnostic bâtie sur
+une supposition fausse coûte une deuxième équipe pour la corriger.
+
+1. **NOUVEAU B — une équipe ne connaît pas sa propre consommation.** Aucun outil de consultation
+   temps réel de son propre coût (dollars dépensés, plafond, %, contexte consommé). Constaté : une
+   équipe de diagnostic a bâti son hypothèse principale sur un dépassement de budget supposé, à 15 %
+   de son plafond réel — hypothèse fausse, réfutée par une seconde équipe.
+   **Correction** : exposer un outil MCP de consultation temps réel à l'équipe elle-même (dollars
+   dépensés, plafond, %, contexte). **Effort : M** — le relevé existe déjà côté télémétrie
+   (`#telemetrie`), il s'agit de l'exposer en lecture à l'équipe plutôt qu'au seul superviseur.
+2. **NOUVEAU C — le plafond de dépense n'est pas annoncé à l'équipe.** Corollaire direct de B : le
+   montant décidé au mandat n'apparaît nulle part dans le briefing du lead. Une équipe qui ignore son
+   plafond ne peut ni le respecter ni raisonner dessus.
+   **Correction** : inscrire le plafond dans le texte du briefing de départ (`mandate`/`systemPrompt`),
+   en plus de l'outil de consultation du point 1. **Effort : XS** — un champ à interpoler dans un
+   gabarit de texte déjà existant.
+3. **H-63 — pas de jauge dollars par fenêtre de rate limit, par compte** (détail L997). Le point 1
+   couvre le coût de la MISSION ; celui-ci couvre le quota du COMPTE, partagé entre plusieurs
+   missions. Les deux sont distincts et les deux manquent. **Correction** : jauge par compte, remise
+   à zéro sur `resetsAt` uniquement. **Effort : M**.
+4. **Crédits `extra_usage` non affichés dans une jauge** (détail L826). Des crédits offerts restent
+   finis ; un parc autonome les consomme sans que ça se voie. **Correction** : afficher la
+   consommation dans la jauge H-63 ci-dessus (visibilité, pas blocage). **Effort : XS**, une fois H-63
+   posée.
+5. **H-71 — pas de choix de modèle/raisonnement dans le fil de l'orchestrateur** (détail L958). Backlog
+   acté par Chris, pas prioritaire. **Correction** : sélecteur dans le fil, modèles éligibles déjà
+   identifiés (`opus-4-8`, `sonnet-5`, `fable-5`, `opus-4-7`). **Effort : M**.
+
+### Groupe B — Ce qui se perd entre le PC et le Pi (les deux moitiés du système divergent)
+
+Le PC ingère, le Pi écrit en base par balayage périodique. Chaque fois que ces deux moitiés ne sont
+pas synchronisées par construction, quelque chose se perd ou se déforme silencieusement.
+
+6. **NOUVEAU A — PRIORITÉ HAUTE — le rapport final d'une équipe est détruit avant d'être enregistré.**
+   `#enfilerApprentissageSiConfigure` (`superviseur-workers.ts` ~813) invoque `#telemetrie.tous()`
+   (~862), DRAINANTE : elle vide `activitesEnAttente` de toutes les missions du process pour ne garder
+   que `coutUsd`/`contexteTokensUtilises`, et jette le reste — dont le message final du lead tout
+   juste ingéré. Le balayage du Pi (toutes les 5 s, seul à écrire en base) perd systématiquement la
+   course. Actif seulement si `CCREMOTE_APPRENTISSAGE_ACTIF=1` (posé par `deployer-apprentissage.sh`).
+   Mesuré aujourd'hui : 2 missions sur 5 ont perdu leur rapport, dont une relance à 2,26 $ pour refaire
+   un travail déjà payé 0,99 $.
+   **Correction** : ajouter au collecteur de télémétrie une lecture NON drainante (ex. `lire(missionId)`)
+   qui rend coût et contexte sans vider les files, et l'utiliser dans `#enfilerApprentissageSiConfigure`
+   à la place de `tous()`. **Vérification** : apprentissage actif, dernier message à texte distinctif
+   présent en base avant le premier balayage ; annuler le correctif doit faire réapparaître la perte.
+   **Effort : S** — un ajout de méthode au collecteur + un point d'appel changé.
+7. **NOUVEAU D — le message de clôture automatique est enregistré comme s'il venait du lead.**
+   `service-cloture.ts` (~43-49) appelle `ajouterActivite()` avec 3 arguments seulement : le type
+   retombe sur sa valeur par défaut `'texte'`. Le bandeau « [HARNESS] Équipe close automatiquement... »
+   devient indiscernable de la parole de l'équipe, et `dernierTexte()` peut le restituer comme rapport.
+   Recoupe directement **H-66 — attribution de l'émetteur** (détail L989, encore ouvert) : c'est un cas
+   particulier du manque général « rien ne dit qui a réellement parlé ».
+   **Correction** : passer explicitement un type distinct de `'texte'` à l'appel. **Effort : XS**, une
+   ligne. Traiter en même temps que H-66 si ce chantier est repris, sinon corriger isolément.
+8. **NOUVEAU E — deux horloges alimentent le même horodatage.** `activite_mission.survenu_a` reçoit
+   tantôt l'heure du PC (chemin normal, à l'ingestion), tantôt celle du Pi (clôture automatique).
+   `dernierTexte()` trie dessus. Une dérive PC/Pi peut inverser l'ordre des textes. Défaut latent,
+   jamais observé.
+   **Correction** : une seule source d'horloge pour cette colonne, ou un ordre de tri qui ne dépende
+   pas de l'horodatage (ex. compteur/séquence). **Effort : S**.
+9. **Remontée `subagents`/`inspection` du PC vers le Pi incomplète** (détail L604-606, ancien — la
+   partie `subagents` semble résolue depuis par un chantier ultérieur, `inspection` — les verdicts du
+   juge H-68 — reste non confirmé remonté). **Correction : SANS CORRECTIF CONNU à ce stade** — d'abord
+   revérifier sur artefact réel si `inspection` est toujours manquante avant de concevoir un correctif.
+   **Effort : S** pour la vérification, indéterminé pour le correctif.
+10. **`semantic-memory`/`codeindex` absents du VPS** (détail L402, recoupe L386 marqué obsolète/à
+    vérifier). `semantic-memory` résolu en lecture distante ; `codeindex` reste absent (CUDA, pas de
+    GPU sur le VPS). **Correction** : version CPU de `codeindex`, chantier à part. **Effort : L**.
+11. **Aucune surveillance du service de mémoire sémantique** (détail L405). S'il tombe, les équipes
+    perdent l'outil sans qu'aucune jauge ne le dise. **Correction** : sonde de santé + alerte, même
+    patron que les autres services surveillés. **Effort : S**.
+12. **Bun désaligné entre PC (1.3.13) et VPS (1.3.14)** (détail L400). Sans conséquence connue à ce
+    jour. **Correction** : aligner les deux sur la même version au prochain déploiement. **Effort : XS**.
+13. **Timeline : résumé de séquence en tête manquant** (détail L397) et **fluidité limitée aux pages
+    Mission/Agent** (détail L399) — la timeline riche ne couvre que la vue Orchestrateur.
+    **Correction** : porter le même rendu aux deux autres vues. **Effort : M**.
+14. **Persistance du registre de workers côté PC : trou résiduel** (détail L905) — si le superviseur
+    PC lui-même redémarre (pas seulement le Pi), il perd son `RegistreWorkers` en mémoire ; aucun
+    fencing ne peut y remédier. **Correction : SANS CORRECTIF CONNU** — axe reconnu distinct de M-11,
+    jamais chiffré. **Effort : indéterminé, probablement L/XL**.
+
+### Groupe C — Ce qui échappe au contrôle de l'orchestrateur (gouvernance, permissions, hiérarchie)
+
+15. **Étage manquant : le lead ne peut pas interpeller l'orchestrateur** (détail L491). Hiérarchie
+    voulue « sous-agents → lead → orchestrateur → humain » ; les deux premiers étages sont natifs du
+    SDK, le troisième (le lead a une question et attend une réponse) n'existe pas.
+    **Correction** : canal de conversation remontante dédié, distinct du bus de permissions (déjà
+    retiré). **Effort : L** — nouveau canal de bout en bout (port, table, UI).
+16. **Créer/supprimer un projet depuis l'orchestrateur, non fait volontairement** (détail L282/L287).
+    Création jugée sans risque ; suppression en autonomie nocturne = mode de panne déjà payé
+    (`rm -rf sessions/*`, agora, irrécupérable).
+    **Correction** : création libre, suppression réservée à un clic humain explicite, jamais
+    auto-approuvable. **Effort : M**, arbitrage déjà tranché, reste l'implémentation.
+17. **`reponse-reinitialize.ts` rend toujours `[]`, code mort dangereux** (détail L678) — pire qu'une
+    erreur : la réconciliation en conclut « rien en attente » et se croit à jour.
+    **Correction** : supprimer le module ou le réorienter vers une source réelle. **Effort : S**.
+18. **Devenir des demandes rejouées en `permissionMode: 'auto'` inconnu** (détail L681) — la
+    redélivrance passe par `canUseTool`, mesuré comme jamais appelé dans ce mode. Trou le plus
+    sérieux de la dette n°3 du registre. **Correction : SANS CORRECTIF CONNU sans mesure préalable** —
+    à trancher par banc réel avant tout code. **Effort : M** pour la mesure seule.
+19. **`pending_user_dialog_requests` totalement ignoré** (détail L685), famille jumelle du point 18.
+    **Correction : SANS CORRECTIF CONNU** tant que 18 n'est pas mesuré. **Effort : indéterminé**.
+20. **Arbitrages maquette v3 restants** (détail L717/L719) : Sonnet 4.6 grisé/masqué, jauge de contexte
+    dans la vue Orchestrateur, et l'atterrissage par mission qui contredit H-70 (la décision doit
+    revenir au superviseur, jamais au lead isolément — fenêtre de quota partagée par compte).
+    **Correction** : trancher les deux premiers points UI ; retirer le déclencheur par mission dès que
+    l'atterrissage superviseur (H-70, point 26) devient réel. **Effort : M**.
+21. **Parler à une mission en cours, absent de l'UI** (détail L924) — `envoyer_a_equipe` existe côté
+    outil, la maquette v2 ne l'expose nulle part. **Correction** : bouton d'intervention sur la carte
+    mission en cours. **Effort : S**.
+22. **Composer un mandat depuis l'UI, bouton mort** (détail L928) — pièce centrale du système (but /
+    critère d'arrêt / périmètre), rien ne le compose à l'écran. **Correction** : formulaire réel
+    câblé sur la route de dispatch existante. **Effort : M**.
+23. **Barre de sûreté absente de 2 vues sur 6** (détail L931) — Orchestrateur et Paramètres. H-57
+    exige qu'elle reste joignable partout. **Correction** : la porter aux deux vues manquantes.
+    **Effort : S**.
+24. **Règles de notification non réglables/visibles** (détail L945) — groupement, seuil de rappel,
+    silence sur ce que le lead a résolu seul : aujourd'hui un simple interrupteur Discord.
+    **Correction** : panneau de réglage dédié. **Effort : M**.
+25. **H-61 — autorisation humaine au dispatch, backlog acté** (détail L986) — dernier garde-fou humain
+    du système, décision de Chris de le garder pour après le MVP. **Correction** : proposition +
+    clic déjà spécifiée. **Effort : M**. *(Backlog explicite, pas prioritaire.)*
+26. **H-66 — attribution de l'émetteur, backlog acté** (détail L989) — préfixe structurel
+    `orchestrateur`/`operateur` sur tout message entrant. Recoupe directement le défaut NOUVEAU D
+    ci-dessus (point 7), qui en est une instance concrète déjà mesurée. **Correction** : traiter les
+    deux ensemble — D est le cas le plus visible et le moins cher à corriger de ce chantier plus
+    large. **Effort : M** pour H-66 complet, **XS** pour la seule instance D.
+27. **H-52 complété — hiérarchie non enseignée au lead** (détail L992) : il doit savoir qu'il est une
+    équipe parmi d'autres, que ses instructions viennent normalement de l'orchestrateur, et que
+    l'opérateur peut lui parler directement (identifié comme tel). **Correction** : ajout au system
+    prompt du lead. **Effort : XS**. *(Ce point recoupe très directement ce que `CLAUDE-equipe.md`
+    couvre déjà en partie — à vérifier avant de dupliquer.)*
+28. **H-70 — atterrissage propre avant saturation de quota, backlog acté** (détail L952) : décision
+    prise par le SUPERVISEUR (jamais le lead seul), fenêtre partagée par compte. **Effort : L**.
+29. **H-72 — jauges de quota + navigation par agent, backlog acté** (détail L965). **Effort : L**.
+30. **H-72.1 — cloisonnement à trois niveaux, à MESURER avant de concevoir** (détail L970) : établir
+    d'abord si `forwardSubagentText`/`agentProgressSummaries` alimentent le flux lu par le programme
+    ou le contexte du modèle parent. **Correction : mesure d'abord (banc réel), design ensuite.**
+    **Effort : S** pour la mesure.
+31. **H-64 — permissions dans le fil de la mission, backlog acté** (détail L1002). **Effort : M**.
+32. **H-67 — sidebar arborescente + messages en file, backlog acté** (détail L995). **Effort : L**.
+33. **H-62 — orchestrateur maître : autocompaction + bouton manuel, backlog acté** (détail L1000).
+    **Effort : M**.
+34. **Métriques machine supprimées de la maquette v2** (détail L942) — alors que les process enfants
+    survivent à la pause et s'accumulent (H-57). **Correction** : une ligne de charge dans la carte
+    lien (compromis déjà proposé). **Effort : S**.
+35. **M-41 — alarme réelle manquante sur `surFermetureImprevue`** (détail L1006, H-60). L'instrumentation
+    existe, ne sert à rien sans alarme branchée. **Effort : S**.
+36. **Manifeste PWA + service worker pour Web Push absents** (détail L1008, H-59). **Effort : M**.
+
+### Groupe J — Fiabilité du SDK/transport : mesures et câblages jamais terminés
+
+Une famille de points où l'implémentation existe mais où le chemin réel de production n'a jamais été
+mesuré ou câblé bout en bout — distincte du groupe C (gouvernance) parce qu'il s'agit ici de fiabilité
+technique du transport et du cycle de vie, pas de qui décide quoi.
+
+65. **Contexte du parent à cinq sous-agents, jamais mesuré** (H-72.3, détail L693) — vérifié sur UN
+    sous-agent (inchangé), la lecture à cinq a échoué sur le piège `getContextUsage()` dans la boucle.
+    **Correction** : refaire la mesure en lisant le contexte hors de la boucle. **Effort : S**.
+66. **Flux de sous-agents non déterministe, aggravé** (H-72.4, détail L703) — deux exécutions d'un
+    banc à cinq sous-agents, session saine, ont donné 0 ligne là où trois exécutions antérieures en
+    donnaient 3 à 4 ; `forwardSubagentText` n'offre aucun plancher garanti. **Correction : SANS
+    CORRECTIF CONNU** — la divergence flux/store n'est pas un cas limite mais peut-être le cas
+    nominal ; nécessite un design distinct (H-72.1, point 30) avant tout correctif. **Effort :
+    indéterminé, dépend du point 30**.
+67. **M-10 — pas de ping/pong applicatif** (détail L755) — une coupure silencieuse (ni `close` ni
+    `error`) n'est pas détectée : le lien paraît vivant, ne transporte plus rien.
+    **Correction** : ping/pong au niveau transport, indépendant du process Claude Code.
+    **Effort : M**.
+68. **M-10 — latence de reconnexion jamais mesurée en réel** (détail L758) — le critère « coupure de
+    30 s, zéro octet perdu ou dupliqué » n'est prouvé que sur doublures. **Correction** : banc réel
+    avec coupure réseau simulée, mesuré par le parent (interdiction de réseau réel en sous-agent).
+    **Effort : S**.
+69. **`deciderRelance()` écrit et testé en isolation, jamais câblé** (M-34/M-30, détail L811 et L919 —
+    même sujet cité deux fois dans le fichier d'origine). Le point de câblage est le gestionnaire du
+    flux live côté superviseur de workers, jamais construit. **Correction** : brancher sur
+    `SDKResultMessage.terminal_reason` réel. **Effort : M**.
+70. **Ports `InventairePc`/`ReinitialisateurSession` sans implémentation réelle** (M-30, détail L910)
+    — la réconciliation ne tourne donc pas de bout en bout. **Correction** : implémenter les deux
+    ports contre le vrai superviseur PC. **Effort : M**.
+
+### Groupe D — Ce qui coûte de l'argent pour rien
+
+37. **NOUVEAU A (rappel, voir point 6)** — le défaut le plus cher mesuré : relance à 2,26 $ pour un
+    travail déjà payé 0,99 $, sur seulement 5 missions observées le même jour.
+38. **NOUVEAU B/C (rappel, voir points 1-2)** — une équipe qui ne connaît pas son coût peut soit se
+    croire à l'abri et déraper, soit conclure à tort à un dépassement (coût d'une deuxième équipe pour
+    réfuter une fausse piste).
+39. **Fenêtre de grâce de l'arrêt d'urgence non alignée** (détail L657) — `GRACE_ARRET_URGENCE_MS_DEFAUT
+    = 5000` choisi par défaut, jamais vérifié contre `05-arbre-B`. Trop court : coupe une écriture en
+    cours. Trop long : l'urgence n'est plus urgente. **Correction** : trancher sur mesure réelle, pas
+    au jugé. **Effort : S** pour la mesure.
+
+### Groupe E — Dette de code et de qualité (fichiers hors standard, code non exercé)
+
+40. **`serveur.ts` — 781 lignes** (détail L64, standard : 500 max). Touche le câblage de tous les
+    outils de contrôle de l'orchestrateur. **Correction** : scinder par famille d'outils (inspection,
+    mandat, rappels, fil, machine, service…). **Effort : M**, mérite son propre mandat.
+41. **`superviseur-workers.ts` — 801 lignes** (détail L503, remonté de 710 malgré des extractions déjà
+    faites). **Correction** : nouvelle extraction ciblée. **Effort : M**.
+42. **Index de rotation du master en mémoire + `harness-orchestrateur.js` ~796 lignes** (détail L569).
+    **Correction** : persister l'index de rotation (repart sur le compte A même saturé après un
+    redémarrage — un vrai bug fonctionnel, pas seulement une dette) ; scinder le fichier JS.
+    **Effort : S** pour l'index, **M** pour le découpage.
+43. **App v1 — reasoning fusionné en un seul bloc par échange** (détail L1040), simplification assumée.
+    **Effort : L** si on veut la granularité par round de tool-calling.
+44. **App v1 — tailles de contexte Cerebras non confirmées** (détail L1042, `zai-glm-4.7`/`gpt-oss-120b`
+    /`gemma-4-31b`). **Correction : SANS CORRECTIF CONNU sans documentation Cerebras publique.**
+    **Effort : XS** si Cerebras publie un jour la donnée, sinon rester sur l'estimation prudente.
+
+### Groupe F — Outillage et infrastructure à finir (gestes opérateur, pas du code)
+
+45. **Règle sudoers à poser sur le Pi pour `piloter_service`** (détail L45) — geste opérateur, jamais
+    automatisé par ce harness. Sans elle, l'outil échoue en `refuse` explicite. **Effort : XS**, un
+    fichier à déposer en root sur le Pi, ligne exacte déjà fournie dans le détail plus bas.
+46. **Revalidation de la liste blanche des services** (`outils-service.ts`, détail L57) contre l'état
+    réel du Pi — dernier inventaire du 17/07, complété le 01/08, jamais revérifié en direct
+    (`stockiop-api` a par exemple migré vers le VPS). **Correction** : passage `systemctl list-units`
+    comparé aux trois seaux. **Effort : S**.
+
+### Groupe G — Chantier « présenter un fichier » (demandé par Chris le 08/08, non commencé)
+
+Cinq sous-tâches d'un seul chantier — comptées séparément dans le décompte car ce sont des cases
+distinctes du fichier d'origine, mais à traiter comme un tout cohérent.
+
+47. **Outil MCP de présentation** (détail L21) — remettre un contenu nommé/typé à Chris SANS que ce
+    soit un fichier écrit sur disque (ne pas rendre `Write` par la bande). **Effort : M**.
+48. **Persistance de l'artéfact** (détail L27) — examiner le mécanisme de pièces jointes existant
+    (migration 24, sens Chris → orchestrateur) avant d'en construire un second. **Effort : S**
+    d'investigation, **M** pour l'implémentation qui en découle.
+49. **Composant d'affichage dans la conversation** (détail L31) — réutiliser `HValise`. **Effort : S**.
+50. **Bascule code source / rendu pour le cas HTML** (détail L35) — seul point à risque réel : `iframe
+    sandbox` sans `allow-same-origin`, jamais d'injection directe dans le DOM de l'app. **Effort : M**,
+    la décision de sûreté doit être prise avant la première ligne.
+51. **Annoncer l'outil dans le mandat le jour de la livraison** (détail L40) — sinon il n'existe pas
+    pour le modèle. **Effort : XS**, mais à ne pas oublier (quatre occurrences passées du même oubli).
+
+### Groupe H — Validations manuelles restantes (à faire par Chris ou en conditions réelles, pas du code)
+
+52. **Inspection à la demande sur une équipe VIVANTE, jamais exercée en vrai** (détail L266) — livrée
+    et déployée, mais seul le chemin d'une équipe close a été vérifié. **Effort : S**, un test réel.
+53. **Anti-boucle qui n'inspecte que sur `SDKResultMessage`** (détail L270) — une équipe qui travaille
+    15 min sur une seule instruction n'est pas inspectée pendant ce temps. **Correction** : brancher
+    sur le coût live (déjà relevé en continu), chemin de contrôle à changer sur mesure réelle, jamais
+    par déduction. **Effort : M**.
+54. **Test bout en bout complet par Chris, jamais rejoué depuis** (détail L276) — fil neuf obligatoire
+    (le prompt système a changé). **Effort : néant côté code**, juste à faire.
+55. **Choix `acces` (lecture/écriture) par l'orchestrateur seul, jamais confirmé en conditions
+    réelles récentes** (détail L488). **Effort : néant côté code**, juste à faire.
+56. **Mode rapide et ultracode — probablement résolus depuis, à confirmer.** Le TODO d'origine (détail
+    L496) les marque « jamais exercés », daté du 31/07. Un commit plus récent trouvé sur la branche
+    (`91130f9`, « ultracode était réglable et ne partait nulle part ») corrige explicitement ce
+    défaut pour `ultracode`, et `STATE.md` du 07/08 documente `fastMode` câblé de bout en bout
+    (migration 28). **Aucune des deux corrections n'a été observée en conditions réelles par Chris**,
+    et le point n'a jamais été retiré du TODO — probablement un oubli de mise à jour plutôt qu'un
+    défaut persistant. **Effort : XS**, une vérification en conditions réelles pour confirmer et
+    cocher.
+57. **(E-bis) Revoir les autres opt-in de `deploy-harness-pi.sh`** (détail L498) — seul
+    `CCREMOTE_PI_ORCHESTRATEUR` a été vérifié après réécriture complète de `.env`. **Effort : S**.
+58. **(D) Écart de ~4 061 tokens entre `totalTokens` et la somme des postes chargés** (détail L501,
+    dupliqué en L565 dans le fichier d'origine — même point, cité deux fois). Le total reste la
+    référence en attendant. **Correction : SANS CORRECTIF CONNU sans mesure supplémentaire** — deux
+    relevés successifs d'une même session vivante. **Effort : S** pour la mesure.
+59. **Confirmer que le refresh token s'écrit dans le bon dossier isolé** (détail L844), à la première
+    bascule de compte réelle. **Effort : néant côté code**, observation à faire.
+60. **Purger les deux snapshots périmés `credentials_account{1,2}.json`** (détail L846). **Effort : XS**.
+61. **App v1 — bouton extinction PC jamais re-testé en réel** (détail L1014) après le fix polkit,
+    action irréversible. **Effort : néant côté code**, à faire par Chris.
+62. **App v1 — reset des quotas à zéro jamais observé sur un vrai cycle** (détail L1016). **Effort :
+    néant côté code**, à observer.
+
+### Groupe I — Repoussé explicitement, à ne pas insérer dans une prochaine vague sans décision de Chris
+
+63. **Interface « table de jeu » (AI Town / AgentVerse ?)** (détail L289) — purement visuel, ne
+    contraint rien en amont.
+64. **`⚠` doublon/obsolescence probable** (détail L386) — l'entrée « les serveurs MCP n'existent pas
+    sur le VPS » est barrée dans le texte d'origine mais la case n'est pas cochée ; son contenu réel
+    (porter `codeindex`/`semantic-memory`) est déjà couvert par le point 10 ci-dessus. **Probablement
+    une entrée à fusionner/retirer par Chris — laissée intacte dans le détail plus bas.**
+
+*Décompte final : 70 points numérotés ci-dessus, moins 2 qui sont des rappels explicites d'un point
+déjà compté ailleurs (37 renvoie à 6, 38 renvoie à 1-2, tous deux marqués « rappel » plutôt que
+numérotés comme neufs) = **68 points ouverts distincts**, dont 5 nouveaux (A-E) et 63 préexistants.*
+
+---
 
 ## ⚡ Harness d'orchestration — chantier actif
 
