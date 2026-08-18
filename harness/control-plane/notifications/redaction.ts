@@ -15,7 +15,7 @@
  *      noté » et le fil s'arrête là.
  */
 
-import type { Mission, TypeNotification } from '../registre/index.ts';
+import type { Mission, Proposition, TypeNotification } from '../registre/index.ts';
 
 export interface TexteNotification {
   readonly titre: string;
@@ -145,4 +145,23 @@ export function redigerPour(
 ): TexteNotification {
   if (type === 'equipe_echouee') return redigerEchecEquipe(mission, raison ?? 'inconnue');
   return redigerFinEquipe(mission, maintenant);
+}
+
+/** Ce que Chris seul lit — aucun texte pour l'orchestrateur, ce fait ne lui est jamais remis. */
+export interface TexteChrisSeul {
+  readonly titre: string;
+  readonly corps: string;
+}
+
+/**
+ * Un mandat proposé attend une autorisation humaine (H-61). `☠` PAS de Mission
+ * ici : une proposition n'en a pas, elle en désigne une future — c'est
+ * exactement ce que Chris doit trancher. Chemin distinct de `redigerPour`,
+ * qui exige une Mission et ne sait rédiger que deux issues d'équipe.
+ */
+export function redigerMandatEnAttente(proposition: Proposition, raison: string): TexteChrisSeul {
+  return {
+    titre: `Mandat en attente d'autorisation — ${proposition.projet}`,
+    corps: `${proposition.objectif} · ${raison}`,
+  };
 }

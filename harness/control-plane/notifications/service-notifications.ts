@@ -84,6 +84,41 @@ export class ServiceNotifications {
   }
 
   /**
+   * Journalise un fait SANS MISSION — typiquement un mandat proposé qui attend
+   * une autorisation humaine — et ne tente JAMAIS la remise à l'orchestrateur.
+   *
+   * `☠` Chemin distinct de `signaler()`, volontairement : ce fait est écrit au
+   * moment même où l'orchestrateur rédige la proposition. Emprunter le chemin
+   * de remise l'informerait, dans son propre tour, de ce qu'il vient d'écrire —
+   * du bruit, du quota brûlé, au pire une relance. Chris le voit via `luA` dans
+   * l'interface ; `remisA` reste NULL, et c'est la marque correcte : rien n'a
+   * jamais été proposé à l'orchestrateur par ce chemin, il n'y a pas d'échec à
+   * consigner.
+   */
+  public journaliserSansRemettre(params: {
+    readonly type: TypeNotification;
+    readonly conversationId: string | null;
+    readonly titre: string;
+    readonly corps: string;
+  }): Notification | null {
+    try {
+      const notification = this.registre.notifications.creer({
+        id: randomUUID(),
+        type: params.type,
+        missionId: null,
+        conversationId: params.conversationId,
+        titre: params.titre,
+        corps: params.corps,
+      });
+      log.info({ type: params.type, conversationId: params.conversationId }, 'notification journalisée sans remise');
+      return notification;
+    } catch (erreur) {
+      log.error({ err: erreur, type: params.type }, 'notification NON journalisée');
+      return null;
+    }
+  }
+
+  /**
    * Rattrapage : remet à ce fil tout ce qu'il n'a pas encore reçu. Appelé quand
    * une session s'ouvre — `☠` ce qui s'est produit pendant qu'elle dormait est
    * précisément ce qu'elle ignore, et personne d'autre ne le lui dira.
@@ -93,7 +128,12 @@ export class ServiceNotifications {
     const attente = this.registre.notifications.nonRemises(conversationId);
     let remises = 0;
     for (const n of attente) {
-      const mission = n.missionId === null ? null : this.registre.missions.lire(n.missionId);
+      // `☠` Sans mission DÈS L'ORIGINE (`journaliserSansRemettre`) — pas une
+      // mission purgée : ce fait n'a jamais été destiné à ce chemin, quel que
+      // soit l'état du fil. Le marquer « remis » sans rien avoir transmis
+      // romprait la distinction que la base porte déjà entre lu et remis.
+      if (n.missionId === null) continue;
+      const mission = this.registre.missions.lire(n.missionId);
       if (mission === null) {
         // La mission a disparu (purge, cascade) : le fait n'a plus de sujet.
         // On le marque remis pour ne pas le représenter à chaque réveil.

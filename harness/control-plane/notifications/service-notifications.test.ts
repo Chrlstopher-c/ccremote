@@ -10,9 +10,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ouvrirRegistre, type Mission, type Registre } from '../registre/index.ts';
+import { ouvrirRegistre, type Mission, type Proposition, type Registre } from '../registre/index.ts';
 import { ServiceNotifications, type PortRemiseOrchestrateur } from './service-notifications.ts';
-import { redigerFinEquipe } from './redaction.ts';
+import { redigerFinEquipe, redigerMandatEnAttente } from './redaction.ts';
 
 let repertoire: string;
 let registre: Registre;
@@ -211,6 +211,56 @@ describe('contenu remis à l’orchestrateur', () => {
   });
 });
 
+describe('journalisation sans remise (mandat en attente d’autorisation)', () => {
+  test('écrit le fait, ne tente aucune remise même sur une session vivante', async () => {
+    const remise = new RemiseFactice();
+    remise.active = true;
+    const service = new ServiceNotifications(registre, remise);
+
+    const n = service.journaliserSansRemettre({
+      type: 'mandat_en_attente',
+      conversationId: 'conv-a',
+      titre: 'Mandat en attente d’autorisation — projet-x',
+      corps: 'objectif · raison',
+    });
+
+    expect(n).not.toBeNull();
+    // `☠` Le cœur du chantier : le fil de l'orchestrateur ne reçoit RIEN,
+    // même si sa session tourne déjà — contrairement à `signaler()`.
+    expect(remise.recus).toHaveLength(0);
+    const enBase = registre.notifications.recentes();
+    expect(enBase).toHaveLength(1);
+    expect(enBase[0]?.type).toBe('mandat_en_attente');
+    expect(enBase[0]?.missionId).toBeNull();
+    // La marque « non remise » que la base porte déjà — rien n'a été inventé.
+    expect(enBase[0]?.remisA).toBeNull();
+    expect(enBase[0]?.echecRemise).toBeNull();
+  });
+
+  test('reste marquée non remise après un réveil du fil — jamais rattrapée par erreur', async () => {
+    const remise = new RemiseFactice();
+    remise.active = false;
+    const service = new ServiceNotifications(registre, remise);
+    service.journaliserSansRemettre({
+      type: 'mandat_en_attente',
+      conversationId: 'conv-a',
+      titre: 'Mandat en attente',
+      corps: 'objectif · raison',
+    });
+
+    remise.active = true;
+    // `☠` Sans mission dès l'origine — pas une mission purgée. Le rattrapage ne
+    // doit ni l'envoyer (elle n'a pas de texte pour l'orchestrateur), ni la
+    // marquer remise à tort (ça romprait la distinction lu/remis).
+    const remises = await service.remettreEnAttente('conv-a');
+    expect(remises).toBe(0);
+    expect(remise.recus).toHaveLength(0);
+    expect(registre.notifications.recentes()[0]?.remisA).toBeNull();
+    // Toujours listée en attente : le rattrapage ne l'a pas consommée.
+    expect(registre.notifications.nonRemises('conv-a')).toHaveLength(1);
+  });
+});
+
 describe('marquage lu — indépendant de la remise', () => {
   test('lu par Chris ne veut pas dire remis à l’orchestrateur', async () => {
     const remise = new RemiseFactice();
@@ -263,5 +313,36 @@ describe('rédaction — travail non commité (migration 23)', () => {
     const texte = redigerFinEquipe(missionAvecConstat(null), MAINTENANT);
     expect(texte.pourOrchestrateur).toContain('non relevé');
     expect(texte.pourOrchestrateur).not.toContain('ÉTAT DU DÉPÔT : propre');
+  });
+});
+
+describe('rédaction — mandat en attente d’autorisation', () => {
+  const PROPOSITION: Proposition = {
+    id: 'prop-1',
+    conversationId: 'conv-a',
+    projet: 'projet-x',
+    objectif: 'auditer la config nginx',
+    critereArret: null,
+    perimetre: 'lecture seule',
+    acces: 'lecture',
+    budgetMaxUsd: 5,
+    modele: null,
+    effort: null,
+    statut: 'en_attente',
+    missionId: null,
+    detail: null,
+    creeA: 1_785_000_000_000,
+    majA: 1_785_000_000_000,
+  };
+
+  test('rédige un texte pour Chris, jamais pour l’orchestrateur (pas de Mission requise)', () => {
+    const texte = redigerMandatEnAttente(PROPOSITION, "premier mandat de cette conversation : Chris l'autorise à la main.");
+    expect(texte.titre).toContain('projet-x');
+    expect(texte.titre).toContain('attente');
+    expect(texte.corps).toContain('auditer la config nginx');
+    expect(texte.corps).toContain("Chris l'autorise à la main");
+    // `☠` Contrairement à `TexteNotification`, aucun champ `pourOrchestrateur` :
+    // ce texte n'est structurellement pas destiné à ce chemin.
+    expect('pourOrchestrateur' in texte).toBe(false);
   });
 });
