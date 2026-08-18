@@ -543,6 +543,12 @@ export type TypeNotification =
   | 'equipe_terminee'
   /** Une équipe s'est arrêtée sur un échec ou a disparu. */
   | 'equipe_echouee'
+  /**
+   * Un mandat proposé attend une autorisation humaine (H-61). Pas de mission
+   * pour ce type — elle n'existe pas encore, `missionId` reste `null`. Journalisée
+   * SANS être remise à l'orchestrateur : c'est lui qui vient de l'écrire.
+   */
+  | 'mandat_en_attente'
   | (string & {});
 
 /**

@@ -636,6 +636,45 @@ describe('notifications — le canal asynchrone est réellement servi', () => {
     // précisément la nuit qu'on vient les lire.
     expect((corps['data'] as { notifications: unknown[] }).notifications).toHaveLength(1);
   });
+
+  /**
+   * `☠` Rattrapage garanti (curseur `since`) — sans lui, le plafond
+   * d'affichage fait sortir en silence les plus anciennes de la fenêtre après
+   * deux jours sans ouvrir l'app. Ce banc part du VRAI serveur, comme le reste
+   * du fichier : il prouve le câblage `since` → dépôt, pas juste la requête SQL.
+   */
+  test('GET /notifications?since= ne rend que ce qui est arrivé après le curseur', async () => {
+    registre.lots.creer({ id: 'lot-1', intention: 'banc since' });
+    registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/a' });
+    registre.missions.creer({
+      id: 'm1',
+      lotId: 'lot-1',
+      nom: 'équipe 1',
+      projet: 'projet-1',
+      compteId: 'compte-a',
+      conversationId: 'conv-a',
+    });
+    registre.notifications.creer(
+      { id: 'ancienne', type: 'equipe_terminee', missionId: 'm1', conversationId: 'conv-a', titre: 't', corps: 'c' },
+      1000,
+    );
+    registre.notifications.creer(
+      { id: 'recente', type: 'equipe_terminee', missionId: 'm1', conversationId: 'conv-a', titre: 't', corps: 'c' },
+      2000,
+    );
+
+    const { statut, corps } = await lire('/notifications?since=1000');
+    expect(statut).toBe(200);
+    const data = corps['data'] as { notifications: { id: string }[] };
+    expect(data.notifications.map((n) => n.id)).toEqual(['recente']);
+  });
+
+  test('GET /notifications sans since : comportement inchangé (les plus récentes, plafond par défaut)', async () => {
+    semerNotification();
+    const { statut, corps } = await lire('/notifications');
+    expect(statut).toBe(200);
+    expect((corps['data'] as { notifications: unknown[] }).notifications).toHaveLength(1);
+  });
 });
 
 /**

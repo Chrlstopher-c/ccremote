@@ -112,6 +112,36 @@ export class DepotNotifications {
     });
   }
 
+  /**
+   * Notifications créées APRÈS `curseur`, triées par ancienneté croissante —
+   * ça garantit de ne rien sauter tant que le client rappelle avec le `creeA`
+   * du DERNIER élément reçu comme nouveau curseur.
+   *
+   * `☠` Le curseur porte sur `cree_a`, JAMAIS sur `id` : les identifiants sont
+   * des UUID (migration 4), sans ordre naturel — un curseur sur `id` sauterait
+   * ou redoublerait des lignes au hasard, plafond ou pas. C'est `nonRemises()`
+   * qui a déjà posé ce même choix, pour la même raison.
+   *
+   * `☠` Trié ASCENDANT, contrairement à `recentes()` (DESC, plafond
+   * d'affichage) : un tri DESC sous LIMIT laisserait un trou permanent entre
+   * le curseur et la coupure dès que plus de `limite` faits se sont produits
+   * depuis — exactement le rattrapage que cette méthode existe pour garantir.
+   */
+  public posterieures(curseur: number, limite: number = LISTE_DEFAUT): readonly Notification[] {
+    return executer(
+      'notifications.posterieures',
+      () => {
+        const lignes = this.db
+          .query<LigneNotification, [number, number]>(
+            'SELECT * FROM notification WHERE cree_a > ? ORDER BY cree_a ASC LIMIT ?',
+          )
+          .all(curseur, limite);
+        return lignes.map(versNotification);
+      },
+      { curseur },
+    );
+  }
+
   public nombreNonLues(): number {
     return executer('notifications.nombreNonLues', () => {
       const ligne = this.db

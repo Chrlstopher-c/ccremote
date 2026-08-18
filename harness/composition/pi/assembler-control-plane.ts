@@ -37,7 +37,7 @@
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
 import { ouvrirRegistre, type Mission, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
-import { ServiceNotifications } from '../../control-plane/notifications/index.ts';
+import { redigerMandatEnAttente, ServiceNotifications } from '../../control-plane/notifications/index.ts';
 import { EtatPartielsMissions } from '../../control-plane/observabilite/index.ts';
 import {
   AUTO_APPROBATIONS_MAX,
@@ -662,6 +662,16 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
                 plafond: plafondEffectif(conv?.plafondAutonomie ?? HERITE, plafondParcDefaut),
               });
               if (decision.mode === 'humain') {
+                // `☠` Capacité n°1 attendue : une décision qui exige un humain
+                // doit exister ailleurs que dans ce tour de conversation. Chemin
+                // SANS remise (voir `journaliserSansRemettre`) — l'orchestrateur
+                // vient d'écrire cette proposition, la lui re-signaler serait du
+                // bruit dans son propre fil.
+                serviceNotifications?.journaliserSansRemettre({
+                  type: 'mandat_en_attente',
+                  conversationId,
+                  ...redigerMandatEnAttente(p, decision.raison),
+                });
                 return { ref: p.id, autoApprouve: false, detail: decision.raison };
               }
 

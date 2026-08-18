@@ -7,6 +7,6 @@
 
 export { ServiceNotifications } from './service-notifications.ts';
 export type { OptionsSignalement, PortRemiseOrchestrateur } from './service-notifications.ts';
-export { redigerEchecEquipe, redigerFinEquipe, redigerPour } from './redaction.ts';
-export type { TexteNotification } from './redaction.ts';
+export { redigerEchecEquipe, redigerFinEquipe, redigerMandatEnAttente, redigerPour } from './redaction.ts';
+export type { TexteChrisSeul, TexteNotification } from './redaction.ts';
 export { detecterFinDeTour } from './detecteur-fin-equipe.ts';

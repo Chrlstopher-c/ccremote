@@ -393,8 +393,20 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
     // une notification une redirection vers le BON fil. Sans lui, l'interface
     // n'aurait qu'un texte à afficher et Chris devrait retrouver la
     // conversation lui-même — la moitié de l'intérêt de la fonctionnalité.
+    //
+    // `☠` `since` (migration du rattrapage) : sans lui, le plafond d'affichage
+    // fait sortir en silence les plus anciennes de la fenêtre après deux jours
+    // sans ouvrir l'app — pas un coût de bande passante, un trou de justesse.
+    // Absent ⇒ comportement INCHANGÉ (les `LISTE_DEFAUT` plus récentes) ; fourni
+    // ⇒ tout ce qui est arrivé depuis, sans plafond arbitraire qui en perdrait.
+    const depuis = url.searchParams.get('since');
+    const curseur = depuis === null ? null : Number.parseInt(depuis, 10);
+    const liste =
+      curseur !== null && Number.isFinite(curseur)
+        ? deps.registre.notifications.posterieures(curseur)
+        : deps.registre.notifications.recentes();
     return enveloppe(pcOnline, {
-      notifications: deps.registre.notifications.recentes().map(versNotificationApi),
+      notifications: liste.map(versNotificationApi),
       unread: deps.registre.notifications.nombreNonLues(),
     });
   }

@@ -49,8 +49,14 @@ async def no_cache(request: Request, call_next):
 SESSION_TOKEN = hashlib.sha256(UI_PASSWORD.encode()).hexdigest()
 
 
-def check_session(session: str | None = Cookie(default=None)) -> str:
+def check_session(request: Request, session: str | None = Cookie(default=None)) -> str:
     if session != SESSION_TOKEN:
+        # `☠` Un client sous `/api/` attend du JSON : le laisser suivre la
+        # redirection 303 lui rend la page HTML de connexion en 200, qu'il
+        # tente de décoder comme si c'était sa réponse. Les routes HTML, elles,
+        # gardent la redirection — c'est ce qui pose Chris sur /login.
+        if request.url.path.startswith("/api/"):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="session expirée")
         raise HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/login"})
     return session
 
