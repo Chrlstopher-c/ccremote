@@ -13,6 +13,32 @@ les ~23 estimés — l'écart tient au fait qu'une bonne partie du fichier d'ori
 d'un même chantier une par une plutôt qu'un point par chantier (ex. les 5 cases du chantier « présenter
 un fichier », comptées séparément ci-dessous par fidélité au fichier d'origine).*
 
+## ✅ Fait le soir du 18/08 — voir `STATE.md` pour le détail vérifié
+
+- [x] **`deployer-pi.sh`** — une seule commande pour le control plane du Pi, résout seule le secret
+      du lien, n'appelle l'interface web que si elle a changé.
+- [x] **`CCREMOTE_VPS_LIEN_URL_PI`** ferme l'héritage silencieux de `CCREMOTE_LIEN_URL_PI` sur le
+      déploiement VPS — panne réelle de 45 min ce jour-là, piège fermé (`deploy-superviseur-vps.sh`).
+- [x] **Point 14 ci-dessous (« trou résiduel » de persistance du registre PC), FERMÉ** — trois
+      défauts corrigés dans `harness/superviseur/` : verdict de mort désormais persisté sur disque
+      (pas seulement calculé en mémoire), extinction propre du superviseur marquant morts les
+      workers gérés, `pid`/`pidStarttime` enregistrés au spawn (revalidation opérante après un
+      simple redémarrage de service). Validé dans les deux sens (git stash).
+- [x] **`H-76` — défaut neuf, diagnostiqué et fermé le jour même** : un objet MCP non sérialisable
+      placé dans la fiche du worker faisait échouer silencieusement TOUTE écriture au registre PC
+      depuis 20h19 (`JSON.stringify` levait, catché sans effet). Corrigé (`projeterSpecPersistee()`
+      exclut réellement `mcpServers` désormais) et vérifié en production le soir même.
+- [x] **Page de nouveautés opérateur** — `pi-web/static/nouveautes-2026-08-18.html`, déployée sur le Pi.
+
+### 🆕 Défaut de documentation découvert en documentant (18/08, non corrigé — hors périmètre de cette passe)
+
+- [ ] **`harness/ARCHITECTURE.md` et `harness/ARBORESCENCE.md` datent du 2026-08-07** et n'ont pas
+      suivi la création du domaine `harness/apprentissage/` (44 fichiers, créé le 08/08 — extraction
+      de leçons entre missions), ni `harness/shared/` (9 fichiers) ni `harness/config-equipe/`
+      (2 fichiers), absents de leur carte des domaines. **Correction** : mettre à jour les deux
+      fichiers (hors périmètre d'une mission de documentation racine — ce sont des fichiers sous
+      `harness/`, pas à la racine du dépôt). **Effort : S**.
+
 ## 🗂️ SYNTHÈSE — problèmes récurrents rencontrés avec les équipes, et correction en face
 
 *Regroupement par NATURE du problème, pas par ordre chronologique. Chaque point porte : le problème
@@ -100,10 +126,12 @@ pas synchronisées par construction, quelque chose se perd ou se déforme silenc
 13. **Timeline : résumé de séquence en tête manquant** (détail L397) et **fluidité limitée aux pages
     Mission/Agent** (détail L399) — la timeline riche ne couvre que la vue Orchestrateur.
     **Correction** : porter le même rendu aux deux autres vues. **Effort : M**.
-14. **Persistance du registre de workers côté PC : trou résiduel** (détail L905) — si le superviseur
-    PC lui-même redémarre (pas seulement le Pi), il perd son `RegistreWorkers` en mémoire ; aucun
-    fencing ne peut y remédier. **Correction : SANS CORRECTIF CONNU** — axe reconnu distinct de M-11,
-    jamais chiffré. **Effort : indéterminé, probablement L/XL**.
+14. ~~**Persistance du registre de workers côté PC : trou résiduel**~~ (détail L905) — **FERMÉ le
+    2026-08-18** : trois défauts corrigés (`harness/superviseur/`) — verdict de mort désormais
+    persisté sur disque au moment où il est tranché (pas seulement calculé en mémoire), extinction
+    propre du superviseur marquant morts les workers qu'il gérait, `pid`/`pidStarttime` enregistrés
+    au démarrage d'un worker (revalidation opérante après un simple redémarrage de SERVICE, même
+    boot machine). Validé dans les deux sens (git stash des fichiers de production). Voir `STATE.md`.
 
 ### Groupe C — Ce qui échappe au contrôle de l'orchestrateur (gouvernance, permissions, hiérarchie)
 
