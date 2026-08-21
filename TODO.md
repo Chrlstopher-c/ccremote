@@ -13,6 +13,175 @@ les ~23 estimés — l'écart tient au fait qu'une bonne partie du fichier d'ori
 d'un même chantier une par une plutôt qu'un point par chantier (ex. les 5 cases du chantier « présenter
 un fichier », comptées séparément ci-dessous par fidélité au fichier d'origine).*
 
+## 🚨 URGENT 21/08/2026 — suite directe de l'audit du parc (393 mandats), à traiter avant tout le reste
+
+*Chris a mesuré le parc le 21/08 (393 mandats) et a explicitement choisi de NE PAS lancer les équipes
+de réparation aujourd'hui : cette section est le seul endroit où les constats de cette passe
+survivront. Chaque pointeur ci-dessous a été revérifié dans le dépôt le jour même, pas recopié tel
+quel. `☠` Pendant cette vérification, une équipe travaillait EN PARALLÈLE sur du code touchant
+plusieurs de ces mêmes points, sur la branche `equipe/5cfebe27-c8b2-46ee-b0ee-e51836c8f668`
+(commits `936e65a`..`4ed34e1`, non fusionnée à `master` au moment de cette passe). Deux points prévus
+dans cette liste se sont révélés déjà clos par ce travail (7 et une partie du 4/5c) — c'est noté sous
+chacun, pas caché. Si cette branche est fusionnée sans incident avant la reprise, revérifier que ces
+points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantiers à part entière.*
+
+1. **CLOISONNER L'INSPECTION PAR CONVERSATION** — le plus urgent, demande explicite de Chris le 21/08.
+   Aujourd'hui, les outils d'inspection de l'orchestrateur rendent le contenu de N'IMPORTE QUELLE
+   mission du parc, y compris lancée depuis une autre conversation sur un projet qui ne la regarde
+   pas. **Vérifié dans le dépôt** : `lister_equipes` a déjà résolu ce problème pour lui-même
+   (`harness/control-plane/orchestrateur/mcp-controle/outils-inspection.ts:44-118`) — un type
+   `PorteeListe = 'fil' | 'parc'` et un `conversationId` filtrent les équipes TERMINÉES au fil
+   courant. Exception à préserver, déjà en place et documentée dans le code (lignes 54-68) : les
+   équipes ACTIVES restent globales, car le parc est une ressource partagée (plafond, quota) et
+   qu'elles ne rendent que noms/projets/états, jamais de contenu. Mais `resoudreMission()` (même
+   fichier, ligne 135) — utilisée par `etat_equipe`, `rapport_equipe`, `suivre_equipe`,
+   `suivre_equipes`, `historique_equipe`, et par le tout nouveau `transcript_equipe` (livré ce jour
+   même par l'équipe en parallèle, commit `bd547b1`, toujours SANS cloisonnement) — cherche sur TOUT
+   le registre sans jamais recevoir de `conversationId`. Confirmé côté câblage serveur
+   (`harness/control-plane/orchestrateur/mcp-controle/serveur.ts`) : `deps.conversationId` existe déjà
+   en closure (lignes 168/445/692) et alimente `lister_equipes` (243) et `retirer_mandat` (399), mais
+   PAS `etat_equipe` (255), `rapport_equipe` (262), `suivre_equipe` (277), `suivre_equipes` (293),
+   `historique_equipe` (336), ni `transcript_equipe`.
+   **Piège à noter** : la notion de fil existe déjà (`PorteeListe`/`conversationId` de
+   `listerEquipes`) — la réutiliser, ne pas en inventer une seconde.
+   **Correction** : faire passer `conversationId` dans `resoudreMission` (ou un wrapper qui l'entoure)
+   et refuser/filtrer par fil sur toute mission non active, avec un refus explicite qui ne confirme ni
+   n'infirme l'existence d'une mission hors fil (« aucune équipe ne correspond à cette désignation »,
+   jamais « elle existe mais tu n'y as pas accès »). **Effort : M** — six points d'appel dans deux
+   fichiers, sur un patron déjà écrit une fois dans le même fichier.
+
+2. **REFUSER À LA CRÉATION UN CRITÈRE D'ARRÊT NON VÉRIFIABLE.** Mesuré sur 393 mandats : 34 portent
+   encore un critère que l'équipe ne peut pas contrôler elle-même (« rapport rendu », « conforme à la
+   densité »). **Vérifié** : `proposerCreationEquipe`
+   (`harness/control-plane/orchestrateur/mcp-controle/outils-cycle-vie.ts:72-100`) valide déjà
+   `budgetMaxUsd` avant toute écriture et refuse avec un message qui nomme la valeur attendue (lignes
+   87-97) — c'est exactement le patron à reproduire pour `critereArret` : refuser tout critère qui ne
+   contient ni commande, ni chemin de fichier, ni valeur numérique attendue, avec un refus actionnable
+   qui dit ce qui manque et donne un exemple acceptable (même doctrine que
+   `shared/acces-mandat.ts::messageAccesInconnu` — un refus s'adresse à un modèle, pas à un humain).
+   **Effort : S**.
+
+3. **AJOUTER UN CHAMP `latitude` AU MANDAT.** Constat contre-intuitif de l'audit : la dérive de
+   périmètre n'existe presque pas (1 cas sur 393), mais 12 équipes ont vu un défaut, s'en sont
+   abstenues parce qu'il était hors périmètre, et ce défaut est devenu le mandat du lendemain — la
+   discipline de périmètre alimente le gaspillage. Le champ nommerait ce que l'équipe a le droit de
+   corriger si elle le rencontre ; le périmètre l'emporte en cas de recouvrement. **Trois points
+   d'ancrage vérifiés** : le type du mandat (`harness/control-plane/registre/types.ts:428`, juste à
+   côté de `perimetre`), la composition du texte envoyé au lead
+   (`harness/control-plane/orchestrateur/mcp-controle/mandat.ts:15,91-97`, fonction
+   `construireMandatPropose`), le schéma zod de l'outil `creer_equipe`
+   (`harness/control-plane/orchestrateur/mcp-controle/serveur.ts:367`). **Effort : M** — champ
+   optionnel à faire traverser type → texte du mandat → schéma d'outil → UI d'approbation (UI hors
+   périmètre de cette vérification, non contrôlée).
+
+4. **METTRE À JOUR LE TEXTE DE CAPACITÉS DE L'ORCHESTRATEUR sur les droits d'accès.**
+   `harness/control-plane/orchestrateur/processus/mandat.ts` (section « LES DROITS D'UNE ÉQUIPE »,
+   lignes 159-161) décrit encore l'accès d'une équipe comme n'ayant que deux valeurs
+   (`lecture`/`ecriture`) — **vérifié dans le dépôt ce jour, toujours vrai sur `master`**. `☠` Ne pas
+   confondre avec `harness/control-plane/orchestrateur/mcp-controle/mandat.ts` (nom presque identique,
+   fichier différent) : CELUI-LÀ a déjà été mis à jour aujourd'hui par l'équipe en parallèle (commit
+   `c3868ff`, branche `equipe/5cfebe27-...`, pas encore fusionnée) pour décrire le troisième accès
+   `rapport` — lecture sur le projet, écriture confinée au worktree de l'équipe — livré le même jour
+   avec son verrou réel (voir point 6). Mais `processus/mandat.ts` — le texte qui apprend à
+   L'ORCHESTRATEUR LUI-MÊME ce qu'il a le droit de proposer, pas ce que le lead reçoit — n'a pas
+   bougé. Tant qu'il ne connaît que deux valeurs, l'orchestrateur ne proposera jamais `rapport` : un
+   verrou déjà payé et inutilisable. **Effort : XS** — un paragraphe à réécrire dans un fichier de
+   prose déjà établie, une fois que `rapport` a atterri sur `master`.
+
+5. **QUATRE CORRECTIONS DE CONDUITE NON PORTÉES**, dans `harness/composition/deploiement/config-orchestrateur/`
+   (chemin vérifié — `CLAUDE.md` + `skills/*/SKILL.md`) :
+   - **(a)** Fixer le plafond de dépense d'une mission à environ 1,6× l'estimation — 30 missions
+     terminent au-delà de 90 % de leur plafond et sacrifient alors leur vérification finale. Rien de
+     chiffré aujourd'hui : `skills/mandate-framing/SKILL.md:50` dit seulement « sized to the work »,
+     aucun multiplicateur. **Effort : XS**.
+   - **(b)** Interdire les commandes shell adressées à Chris (24 en un mois) au profit d'un script qui
+     s'exécute en une seule ligne — ce qu'il a lui-même demandé le 18/08. Aucune règle de ce type
+     trouvée dans `CLAUDE.md` (recherché). Le patron à citer en exemple existe déjà dans le dépôt :
+     `deployer-pi.sh` (« une seule commande… résout seule le secret », voir plus bas « Fait le soir du
+     18/08 »). **Effort : S**.
+   - **(c)** Documenter dans la conduite les deux capacités livrées aujourd'hui par l'équipe en
+     parallèle (branche non fusionnée `equipe/5cfebe27-...`) : lire le transcript d'une équipe morte
+     AVANT d'envisager de la relancer (`transcript_equipe`, commit `bd547b1`) et le troisième droit
+     d'accès `rapport` (commit `c3868ff`, voir point 4) — sans quoi l'orchestrateur relance à l'aveugle
+     et paie deux fois. **Effort : XS**, mais seulement une fois les points 1 et 4 posés (rien à
+     documenter tant que le cloisonnement par fil n'existe pas sur `transcript_equipe`).
+   - **(d)** Reformuler la règle interdisant d'ouvrir par « tu as raison » (`CLAUDE.md:54`, texte
+     exact : « Never open with `Absolument`, `Excellente question`, `Tu as raison`, `Bien sûr` »),
+     violée 6 fois après sa mise en place contre 4 avant. La règle dit aujourd'hui seulement
+     l'interdiction — rien sur quoi faire à la place quand Chris a effectivement raison. **Effort :
+     XS**.
+
+6. **ÉPROUVER POUR DE VRAI LE VERROU D'ÉCRITURE CONFINÉE.** Le troisième accès `rapport` (points 4 et
+   5c) repose sur `harness/workers/confinement-ecriture.ts` — hook `PreToolUse` réel, testé
+   unitairement (5 tests, commit `c3868ff`, branche `equipe/5cfebe27-...` non fusionnée), mais
+   l'équipe qui l'a écrit le signale explicitement dans le fichier lui-même : « AUCUN banc
+   `acceptation/*-reel.ts` de ce dépôt n'exerce ce chemin contre le vrai binaire CLI ». Le patron à
+   répliquer existe déjà pour d'autres refus d'outils, cité par le fichier lui-même :
+   `harness/acceptation/bypass-denis-reel.ts` et `harness/acceptation/plancher-moteur-reel.ts`. Tant
+   que ce banc n'existe pas, ce verrou est une promesse, pas une garantie. **Effort : S** — sur un
+   patron déjà écrit deux fois, plus la mise en place d'un mandat de test dont l'écriture hors-worktree
+   doit être tentée et refusée en vrai.
+
+7. **LES DEUX SILENCES DU CYCLE DE VIE — DÉJÀ FERMÉS, à ne pas réinscrire tels quels.** Vérifié dans le
+   dépôt : le préavis à 80 % du plafond ET l'événement visible sur un mandat mort au démarrage sont
+   tous deux livrés aujourd'hui par l'équipe en parallèle (commit `4ed34e1`, branche
+   `equipe/5cfebe27-...`, non fusionnée à `master`). Préavis câblé dans
+   `harness/composition/pi/balayage-telemetrie.ts` (nouvelle option `avertirBudget80`, idempotente) et
+   branché sur le même canal que `envoyer_a_equipe` ; démarrage refusé notifié via une nouvelle option
+   `signalerEchecDemarrage` sur `dispatch-mandat.ts`, câblée sur le type `equipe_echouee` déjà prévu.
+   Les deux validés dans les deux sens selon le message de commit (git diff temporaire du
+   déclenchement, rouge constaté, restauré), 1854 tests verts, `tsc --noEmit` propre. **Rien à faire
+   ici tant que cette branche n'a pas révélé un défaut après fusion** — si elle n'est jamais fusionnée,
+   ce point redevient un chantier à part entière.
+
+8. **HUIT MISSIONS RÉELLEMENT DÉMARRÉES N'ONT LAISSÉ AUCUNE TRACE de télémétrie** (~2 % du parc).
+   Piste déjà posée dans le dépôt : le balayage qui persiste l'activité tourne toutes les 5 s
+   (`harness/composition/pi/balayage-telemetrie.ts:27`, `PERIODE_BALAYAGE_MS`). Rapprochement à
+   noter : la mesure faite aujourd'hui par l'équipe en parallèle pour livrer `transcript_equipe`
+   (commit `bd547b1`) trouve, sur les ~129 missions sans rapport (sur 395 mandats mesurés côté
+   telemetrie), que 85 % ont quand même leur activité dans `activite_mission` — soit ~15 % (~19) qui
+   n'en ont aucune, plus large que les huit mesurées ici mais dans la même direction. Le « chantier 4 »
+   de cette même mission — creuser précisément pourquoi — a été explicitement SACRIFIÉ faute de budget
+   (dit dans le message de commit `bd547b1`) : c'est bien le seul angle mort qui reste sur la lecture
+   des transcripts. **Effort : S** pour la mesure, indéterminé pour le correctif selon ce qu'elle
+   trouve.
+
+9. **QUESTION TRANCHÉE AUJOURD'HUI PAR L'ÉQUIPE EN PARALLÈLE — à documenter, pas à réinvestiguer.**
+   Vérifié : le choix décrit ici est déjà fait (commit `bd547b1`, branche `equipe/5cfebe27-...`, non
+   fusionnée). `DepotMissions.aRapportFinal()` (`harness/control-plane/registre/missions.ts`) rend vrai
+   si le dernier acte est un texte postérieur au dernier appel d'outil ; câblé aux deux points qui
+   écrivaient `'terminee'` (`reconciliation.ts`, `service-cloture.ts`) — sans rapport qualifiant,
+   l'état devient `echec_definitif` (existant), jamais un état dédié. Le message de commit donne
+   exactement la raison attendue : un nouvel état aurait exigé de recréer la table `mission` sous
+   contrainte FK, « vérifié dangereux par expérience directe sur SQLite avant d'écarter cette voie ».
+   Le choix est honnête, documenté, et évite une migration risquée — mais il fusionne deux sémantiques
+   différentes (« a tourné sans rien restituer » vs « échec réel »). **Question qui reste ouverte** :
+   si ce besoin de distinction se fait sentir plus tard, la migration délicate décrite ici (renommer la
+   table mission casse les tables filles même FK désactivées, mesuré) reste entière — à trancher par
+   Chris le jour où l'ambiguïté coûte réellement quelque chose, pas avant.
+
+10. **TROIS POINTS OUVERTS SUR LA LECTURE DES FILS — déjà inscrits plus tôt aujourd'hui, non
+    dupliqués ici.** Vérifié : ils sont déjà dans ce fichier, juste en dessous, sous
+    « 🆕 Trois points laissés ouverts par cette passe, non traités (21/08) » (index absent sur les
+    événements de conversation, recherche insensible aux accents faite en mémoire faute de voie
+    indexée en lecture seule, fils sans message soumis au filtre de plage de dates). Rien à ajouter.
+
+11. **LA COPIE DE TRAVAIL PRINCIPALE DU DÉPÔT (`/mnt/projects/ccremote`) EST DÉSYNCHRONISÉE.** Vérifié
+    en direct ce jour : `HEAD` est sur `master` (`6a484b7`), mais `git status` y montre des
+    suppressions STAGÉES sur des fichiers que `master` contient bel et bien
+    (`ARBORESCENCE.md`, `STATE.md`, `TODO.md`,
+    `harness/control-plane/orchestrateur/mcp-controle/outils-historique-fils.ts` + son test,
+    `harness/control-plane/registre/fils-historique.ts`, plus des modifications sur `serveur.ts` /
+    `serveur.test.ts` / `processus/mandat.ts` / `registre/index.ts`) — les fichiers sur disque sont
+    restés à un état antérieur aux commits `5240965`/`78b2c7e`/`6a484b7`. **Aucun script de réparation
+    livré** : recherché dans les scripts racine (`*.sh`) et dans les commits de l'équipe en parallèle
+    (`936e65a`..`4ed34e1`) — rien n'y touche ce problème. Déployer dans cet état enverrait l'ancien code
+    sur le Pi sans la moindre erreur. **Correction** : sur cette copie, vérifier d'abord qu'aucun
+    travail non commité ne s'y cache (`git stash` par précaution), puis `git restore --staged .` suivi
+    d'un `git checkout -- .` (ou `git reset --hard HEAD` si la copie ne sert qu'au déploiement).
+    **Effort : XS** pour la remise en état — mais un geste d'opérateur, à faire AVANT le prochain
+    déploiement Pi, pas une tâche de code.
+
 ## ✅ Fait le 21/08 — deux outils MCP de relecture des fils, fusionnés dans `master`
 
 - [x] **`lister_fils`/`lire_fil`** — outils lecture seule de relecture de l'historique des fils
