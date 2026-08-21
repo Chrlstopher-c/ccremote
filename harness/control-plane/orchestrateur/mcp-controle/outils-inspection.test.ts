@@ -4,7 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import type { InterrogateurGit } from '../../../projets/index.ts';
-import { etatEquipe, historiqueEquipe, listerEquipes, listerProjets, rapportEquipe, resoudreMission } from './outils-inspection.ts';
+import {
+  etatEquipe,
+  historiqueEquipe,
+  listerEquipes,
+  listerProjets,
+  rapportEquipe,
+  resoudreMission,
+  transcriptEquipe,
+} from './outils-inspection.ts';
 
 const GIT_FACTICE_NON_GIT: InterrogateurGit = {
   estDepotGit: async () => false,
@@ -204,6 +212,64 @@ describe('rapport_equipe — ce que l’équipe a écrit', () => {
     registre.missions.ajouterActivite('m-t', 'pattern=TODO', 3_000, 'outil', 'Grep');
     // Le dernier ÉVÉNEMENT est un outil ; le dernier TEXTE reste la synthèse.
     expect(rapportEquipe(registre, 'flux').etat).toBe('la vraie synthèse');
+  });
+});
+
+describe('transcript_equipe — la fin d’un transcript, en un seul appel (chantier 1, 21/08)', () => {
+  function semer(id: string, projet: string, n = 12): void {
+    registre.missions.creer({ id, lotId: 'lot-1', nom: id, projet, compteId: 'compte1' });
+    for (let i = 0; i < n; i += 1) {
+      registre.missions.ajouterActivite(id, `activité ${i}`, 1_000 + i, i % 4 === 0 ? 'outil' : 'texte');
+    }
+  }
+
+  test('☠ par défaut, rend déjà la FIN — le geste n°1 : une équipe sans rapport', () => {
+    semer('m-tx1', 'transcript-1');
+    const resultat = transcriptEquipe(registre, 'transcript-1');
+    expect(resultat.ok).toBe(true);
+    // Les 12 dernières activités tiennent sous la limite par défaut (50) : tout y est,
+    // dans l'ordre chronologique — la plus ancienne d'abord, la plus récente en dernier.
+    expect(resultat.etat).toContain('activité 0');
+    expect((resultat.etat ?? '').indexOf('activité 0')).toBeLessThan((resultat.etat ?? '').indexOf('activité 11'));
+  });
+
+  test('borne la page à `limite`, et dit ce qu’il reste plus ancien', () => {
+    semer('m-tx2', 'transcript-2');
+    const resultat = transcriptEquipe(registre, 'transcript-2', { limite: 3 });
+    expect(resultat.etat).toContain('3 ligne(s) sur 12 au total');
+    expect(resultat.etat).toContain('+9 plus ancienne(s)');
+    // decalage=0 par défaut ⇒ les 3 DERNIÈRES, pas les 3 premières.
+    expect(resultat.etat).toContain('activité 11');
+    expect(resultat.etat).not.toContain('activité 0\n');
+  });
+
+  test('decalage remonte le temps sans repasser par le début', () => {
+    semer('m-tx3', 'transcript-3');
+    const fin = transcriptEquipe(registre, 'transcript-3', { limite: 3, decalage: 0 });
+    const avant = transcriptEquipe(registre, 'transcript-3', { limite: 3, decalage: 3 });
+    expect(fin.etat).toContain('activité 11');
+    expect(avant.etat).toContain('activité 8');
+    expect(avant.etat).not.toContain('activité 11');
+  });
+
+  test('filtre par type : ne garde que les appels d’outils', () => {
+    semer('m-tx4', 'transcript-4');
+    const resultat = transcriptEquipe(registre, 'transcript-4', { type: 'outil', limite: 50 });
+    expect(resultat.etat).toContain('3 ligne(s) sur 3 au total'); // i = 0, 4, 8
+    expect(resultat.etat).not.toContain('activité 1\n');
+  });
+
+  test('équipe sans aucune activité : le dit, sans exception', () => {
+    registre.missions.creer({ id: 'm-tx5', lotId: 'lot-1', nom: 'vide', projet: 'transcript-5', compteId: 'compte1' });
+    const resultat = transcriptEquipe(registre, 'transcript-5');
+    expect(resultat.ok).toBe(true);
+    expect(resultat.etat).toContain('aucune activité');
+  });
+
+  test('équipe introuvable : refus nommé, jamais un transcript vide', () => {
+    const resultat = transcriptEquipe(registre, 'fantome-inexistant');
+    expect(resultat.ok).toBe(false);
+    expect(resultat.raison).toContain('aucune équipe');
   });
 });
 

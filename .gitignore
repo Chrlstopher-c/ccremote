@@ -6,3 +6,4 @@ logs/
 .env
 harness/node_modules/
 harness/*.tsbuildinfo
+.mesure-pi/

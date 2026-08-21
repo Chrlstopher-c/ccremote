@@ -20,7 +20,12 @@ import {
   plafondEffectif,
   seuilComptageAutonomie,
 } from '../../autonomie/index.ts';
-import { ETATS_HARNESS_TERMINAUX, type Mission, type Registre } from '../../registre/index.ts';
+import {
+  ETATS_HARNESS_TERMINAUX,
+  type Mission,
+  type NatureActiviteMission,
+  type Registre,
+} from '../../registre/index.ts';
 import { applique, echecInattendu } from './contrat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type { ContratRetour } from './types.ts';
@@ -441,6 +446,78 @@ export function suivreEquipes(registre: Registre, designations: readonly string[
     return applique(intention, blocs.join('\n\n'));
   } catch (erreur) {
     journal.error({ err: erreur, designations }, 'suivre_equipes en échec');
+    return echecInattendu(intention, erreur);
+  }
+}
+
+/** Bornes de `transcript_equipe` — mêmes ordres de grandeur que `lire_fil` : une lecture profonde
+ * assumée, pas un coup d'œil (`suivre_equipe`). */
+export const TRANSCRIPT_LIGNES_DEFAUT = 50;
+export const TRANSCRIPT_LIGNES_MAX = 200;
+
+export interface OptionsTranscriptEquipe {
+  /** `undefined` = tous les types (texte, réflexion, outil). */
+  readonly type?: NatureActiviteMission;
+  /** Compté depuis la FIN du transcript. 0 (défaut) = les lignes les plus récentes. */
+  readonly decalage?: number;
+  readonly limite?: number;
+}
+
+/**
+ * `transcript_equipe` — le transcript complet d'une équipe, paginé, filtrable
+ * par type, ordre chronologique. Fonctionne sur une équipe vivante, terminée,
+ * coupée ou plantée : c'est une lecture de `activite_mission`, jamais du
+ * process — rien à distinguer côté appelant.
+ *
+ * `☠` LE GESTE N°1 EST « DONNE-MOI LA FIN ». Une équipe qui n'a jamais rendu de
+ * rapport (constaté sur la base réelle : 34 % du parc, 08/2026) n'a que ça à
+ * offrir — son dernier acte avant d'être coupée. `suivre_equipe` ne rend que 10
+ * lignes par défaut et `rapport_equipe` exige un texte de type 'texte' qui
+ * n'existe pas forcément. Ici, `decalage` par défaut à 0 rend déjà la FIN du
+ * transcript, dans le SENS chronologique — jamais l'inverse de `suivre_equipe`
+ * qui, lui, résume. Remonter le temps : augmenter `decalage`, jamais reprendre
+ * la pagination depuis le début comme `lire_fil` (le début n'intéresse presque
+ * jamais quand on cherche pourquoi une équipe s'est tue).
+ */
+export function transcriptEquipe(
+  registre: Registre,
+  designation: string,
+  options: OptionsTranscriptEquipe = {},
+): ContratRetour {
+  const intention = `transcript de ${designation}`;
+  try {
+    const resolution = resoudreMission(registre, designation);
+    if ('absent' in resolution) {
+      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
+    }
+    if ('ambigu' in resolution) {
+      const listeCandidats = resolution.ambigu.map((m) => `${m.id} (${m.nom})`).join(' | ');
+      return {
+        ok: false,
+        intention,
+        effet: 'refuse',
+        raison: `désignation ambiguë — préciser l'identifiant parmi : ${listeCandidats}`,
+      };
+    }
+    const mission = resolution.trouve;
+    const decalage = Math.max(Math.trunc(options.decalage ?? 0), 0);
+    const limite = Math.min(Math.max(Math.trunc(options.limite ?? TRANSCRIPT_LIGNES_DEFAUT), 1), TRANSCRIPT_LIGNES_MAX);
+    const page = registre.missions.transcript(mission.id, { type: options.type ?? null, decalage, limite });
+
+    if (page.total === 0) {
+      const cadre = options.type === undefined ? '' : ` de type « ${options.type} »`;
+      return applique(intention, `${resumerMission(mission)} — aucune activité${cadre} rapatriée pour le moment.`);
+    }
+
+    const plusAncien = page.total - decalage - page.activites.length;
+    const entete =
+      `${resumerMission(mission)} · ${page.activites.length} ligne(s) sur ${page.total} au total` +
+      (plusAncien > 0
+        ? ` (+${plusAncien} plus ancienne(s) — augmente \`decalage\` pour remonter)`
+        : ' — début du transcript atteint');
+    return applique(intention, [entete, ...page.activites.map(resumerActivite)].join('\n'));
+  } catch (erreur) {
+    journal.error({ err: erreur, designation, options }, 'transcript_equipe en échec');
     return echecInattendu(intention, erreur);
   }
 }

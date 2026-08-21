@@ -28,8 +28,15 @@ class ArreteurFactice implements ArreteurMission {
 let repertoire: string;
 let registre: Registre;
 
-/** Sème une mission dispatchée, dans l'état SDK demandé, datée. */
-function semer(id: string, etatSdk: EtatSdk | null, sdkMajA: number | null): Mission {
+/**
+ * Sème une mission dispatchée, dans l'état SDK demandé, datée.
+ *
+ * `☠` `idle` porte un texte de fin par défaut (chantier 2, 21/08) : c'est le cas
+ * réel — `idle` survient après un tour du SDK, qui se clôt normalement par un
+ * message. `avecRapport: false` isole le cas contraire (tour coupé sur un appel
+ * d'outil), testé séparément ci-dessous.
+ */
+function semer(id: string, etatSdk: EtatSdk | null, sdkMajA: number | null, avecRapport = true): Mission {
   registre.lots.creer({ id: `lot-${id}`, intention: 'objectif' });
   registre.missions.creer(
     { id, lotId: `lot-${id}`, nom: `équipe ${id}`, projet: `/mnt/projects/${id}`, compteId: 'compte-a' },
@@ -38,6 +45,9 @@ function semer(id: string, etatSdk: EtatSdk | null, sdkMajA: number | null): Mis
   registre.etats.appliquerEtatHarness(id, 'en_cours', { maintenant: T - 3_600_000 });
   if (etatSdk !== null && sdkMajA !== null) {
     registre.etats.appliquerEtatSdk(id, etatSdk, sdkMajA);
+    if (etatSdk === 'idle' && avecRapport) {
+      registre.missions.ajouterActivite(id, 'Rapport de fin : travail terminé.', sdkMajA);
+    }
   }
   return registre.missions.exiger(id);
 }
@@ -180,5 +190,37 @@ describe('effets de la clôture — ce que Chris et H-56 constatent', () => {
     const arreteur = new ArreteurFactice();
     expect(await new ServiceCloture(registre, arreteur).passer(T)).toBe(0);
     expect(arreteur.arretes).toHaveLength(0);
+  });
+});
+
+describe('☠ chantier 2 (21/08) — une mission sans rapport n’est pas « terminee »', () => {
+  test('idle SANS aucun texte ⇒ echec_definitif, jamais terminee', async () => {
+    semer('a', 'idle', T - DELAI_CLOTURE_IDLE_MS - 1000, /* avecRapport */ false);
+    await new ServiceCloture(registre, new ArreteurFactice()).passer(T);
+    expect(registre.missions.exiger('a').etatHarness).toBe('echec_definitif');
+    expect(registre.missions.exiger('a').derniereRaisonTerminale).toBe('cloture_sans_rapport');
+  });
+
+  test('idle avec un texte suivi d’un appel d’outil (coupée en plein geste) ⇒ echec_definitif', async () => {
+    const m = semer('a', 'idle', T - DELAI_CLOTURE_IDLE_MS - 1000, false);
+    registre.missions.ajouterActivite(m.id, 'je commence la vérification', T - DELAI_CLOTURE_IDLE_MS - 2000, 'texte');
+    registre.missions.ajouterActivite(m.id, 'pattern=TODO', T - DELAI_CLOTURE_IDLE_MS - 1500, 'outil', 'Grep');
+    await new ServiceCloture(registre, new ArreteurFactice()).passer(T);
+    expect(registre.missions.exiger('a').etatHarness).toBe('echec_definitif');
+  });
+
+  test('idle AVEC un rapport ⇒ le comportement nominal n’a pas changé', async () => {
+    semer('a', 'idle', T - DELAI_CLOTURE_IDLE_MS - 1000, /* avecRapport */ true);
+    await new ServiceCloture(registre, new ArreteurFactice()).passer(T);
+    expect(registre.missions.exiger('a').etatHarness).toBe('terminee');
+    expect(registre.missions.exiger('a').derniereRaisonTerminale).toBe('repos_sans_instruction');
+  });
+
+  test('la trace [HARNESS] écrite APRÈS coup n’est jamais prise pour le rapport du lead', async () => {
+    // Piège direct : si la vérification lisait l'activité APRÈS l'avoir écrite,
+    // toute mission sans rapport paraîtrait en avoir un — sa propre trace de clôture.
+    semer('a', 'idle', T - DELAI_CLOTURE_IDLE_MS - 1000, false);
+    await new ServiceCloture(registre, new ArreteurFactice()).passer(T);
+    expect(registre.missions.exiger('a').etatHarness).toBe('echec_definitif');
   });
 });

@@ -24,6 +24,7 @@ import { versionSchema } from './migrations.ts';
 import { ETATS_HARNESS_TERMINAUX, type AvancementLot } from './types.ts';
 
 export type {
+  ActiviteMission,
   AvancementLot,
   Capacite,
   Compte,
@@ -37,6 +38,7 @@ export type {
   EvenementConversation,
   Lot,
   Mission,
+  NatureActiviteMission,
   Notification,
   PieceJointeMessage,
   Rappel,
@@ -74,7 +76,7 @@ export { CAPACITES_SURVEILLEES } from './capacites.ts';
 export { ErreurRegistre } from './journal.ts';
 export { VERSION_SCHEMA_CIBLE } from './migrations.ts';
 export type { OptionsConnexion } from './connexion.ts';
-export type { CompteurEtat } from './missions.ts';
+export type { CompteurEtat, OptionsTranscriptMission, PageTranscriptMission } from './missions.ts';
 export type { OptionsTransitionHarness } from './etats.ts';
 
 /**
