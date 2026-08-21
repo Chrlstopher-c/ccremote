@@ -7,12 +7,17 @@
 # horodatée.
 #
 # Ce script N'INVENTE AUCUNE LOGIQUE DE DÉPLOIEMENT : il prépare le dépôt
-# (copie de travail cohérente avec `master`, branches d'équipe fusionnées,
-# suite de tests verte) puis APPELLE `deploy-harness-pi.sh`, qui seul sait
-# parler au Pi — il ne le réécrit pas.
+# (copie de travail cohérente avec `master`, master avancé — avance rapide
+# uniquement — vers UNE branche cible nommée, suite de tests verte) puis
+# APPELLE `deploy-harness-pi.sh`, qui seul sait parler au Pi — il ne le
+# réécrit pas.
+#
+# La branche cible n'est JAMAIS devinée ni découverte : elle est un paramètre
+# explicite, obligatoire, et doit descendre directement de master (avance
+# rapide possible) — sinon refus.
 #
 # Usage :
-#   CCREMOTE_LIEN_SECRET=... ./deployer-en-production.sh [pi-user@pi-ip]
+#   CCREMOTE_LIEN_SECRET=... ./deployer-en-production.sh <branche-cible> [pi-user@pi-ip]
 #
 # Ce que tu verras si tout se passe bien : cinq étapes numérotées, chacune
 # suivie d'un « ✓ », puis « ✓ MISE EN PRODUCTION TERMINÉE » à la toute fin.
@@ -23,9 +28,10 @@
 # équipe ou session en cours là-bas est coupée au même instant, sans reprise
 # automatique — lance-le seulement quand tu es prêt à ce que ça arrive.
 #
-# Idempotent : relancé deux fois de suite, la deuxième fois ne trouve plus
-# rien à corriger ni à fusionner et se contente de revérifier puis
-# redéployer — jamais de double dégât.
+# Idempotent : relancé deux fois de suite avec la même branche cible, la
+# deuxième fois ne trouve plus rien à corriger ni à avancer (master est déjà
+# dessus) et se contente de revérifier puis redéployer — jamais de double
+# dégât.
 #
 # Fonctionne depuis N'IMPORTE QUEL répertoire d'appel, et même si ce fichier
 # n'existe pas encore sur le disque : voir le mode d'emploi dans le dépôt
@@ -35,8 +41,8 @@ set -e
 
 # ── Auto-protection : ce script s'apprête à réorganiser le dépôt sous ses
 #    propres pieds (étapes 1 et 2 : mise de côté, alignement sur master,
-#    fusions). Un shell lit un script AU FIL de son exécution — si le
-#    fichier qu'il est en train de lire est déplacé ou modifié en cours de
+#    avance vers la branche cible). Un shell lit un script AU FIL de son
+#    exécution — si le fichier qu'il est en train de lire est déplacé ou modifié en cours de
 #    route (ce que `git stash`/`git reset --hard`/`git merge` peuvent tous
 #    faire à ce fichier lui-même, puisqu'il est suivi par git), l'exécution
 #    peut dérailler en plein milieu, sur le chemin le plus sensible du
@@ -101,7 +107,8 @@ else
 fi
 
 HARNESS="$RACINE/harness"
-TARGET="${1:-pi@pi.exemple}"
+BRANCHE_CIBLE="${1:-}"
+TARGET="${2:-pi@pi.exemple}"
 
 annoncer() { echo ""; echo "→ Étape $1/5 — $2"; }
 refuser() {
@@ -113,11 +120,19 @@ refuser() {
 
 echo "════════════════════════════════════════════════════════════════════"
 echo " Mise en production du harness ccremote → $TARGET"
+echo " Branche cible : ${BRANCHE_CIBLE:-<absente>}"
 echo "════════════════════════════════════════════════════════════════════"
 
+# ── -1. La branche cible n'est JAMAIS devinée ni découverte — paramètre
+#       explicite obligatoire. Vérifié AVANT le secret : inutile de réclamer
+#       CCREMOTE_LIEN_SECRET si l'appel est de toute façon mal formé. ───────
+if [ -z "$BRANCHE_CIBLE" ]; then
+  refuser "aucune branche cible n'a été passée en paramètre — ce script ne devine jamais la branche à déployer. Usage : CCREMOTE_LIEN_SECRET=... ./deployer-en-production.sh <branche-cible> [pi-user@pi-ip]" 79
+fi
+
 # ── 0. Le secret du lien doit exister AVANT de préparer quoi que ce soit —
-#      inutile de fusionner des branches et de faire tourner 1800+ tests pour
-#      un déploiement qui refusera de toute façon à la toute dernière étape. ─
+#      inutile d'avancer master et de faire tourner 1800+ tests pour un
+#      déploiement qui refusera de toute façon à la toute dernière étape. ──
 if [ -z "$CCREMOTE_LIEN_SECRET" ]; then
   refuser "CCREMOTE_LIEN_SECRET absent. Générer une fois : openssl rand -hex 32 — puis le conserver, il doit être identique sur le Pi et sur le PC." 78
 fi
@@ -154,71 +169,27 @@ else
   echo "  ✓ déjà cohérente avec master ($HEAD_ACTUEL) — rien à corriger"
 fi
 
-# ── 2. Fusion des branches d'équipe restantes, EN LOCAL ──────────────────
-annoncer 2 "fusion des branches d'équipe restantes"
+# ── 2. Avance de master vers LA branche cible nommée, EN LOCAL ───────────
+annoncer 2 "avance de master vers $BRANCHE_CIBLE"
 
-# `☠` Découverte À L'EXÉCUTION, jamais une liste écrite en dur : le nombre de
-# branches d'équipe en attente le jour où Chris lance ce script est inconnu
-# aujourd'hui — une liste figée serait fausse dès la première équipe
-# supplémentaire. On ne garde que celles qui ne sont PAS déjà des ancêtres de
-# master (donc déjà fusionnées), triées par la date de leur DERNIER commit —
-# c'est cet ordre chronologique qui rend une fusion suivante d'un conflit
-# éventuel imputable à la bonne branche, jamais à celle d'avant.
-BRANCHES_A_FUSIONNER=()
-while IFS= read -r branche; do
-  [ -z "$branche" ] && continue
-  git merge-base --is-ancestor "$branche" HEAD 2>/dev/null && continue
-  BRANCHES_A_FUSIONNER+=("$branche")
-done < <(git for-each-ref --sort=committerdate --format='%(refname:short)' 'refs/heads/equipe/*')
-
-if [ ${#BRANCHES_A_FUSIONNER[@]} -eq 0 ]; then
-  echo "  ✓ aucune branche d'équipe en attente — master est déjà à jour"
-else
-  echo "  ${#BRANCHES_A_FUSIONNER[@]} branche(s) candidate(s), dans l'ordre chronologique :"
-  for b in "${BRANCHES_A_FUSIONNER[@]}"; do echo "    · $b"; done
-
-  # `☠` Deux équipes lancées puis arrêtées par Chris quelques secondes après
-  # leur démarrage n'ont produit aucun travail exploitable — leurs branches ne
-  # doivent SURTOUT PAS être fusionnées : au mieux vides, au pire un état
-  # jamais testé. Deux filtres MÉCANIQUES avant toute fusion, jamais une
-  # supposition :
-  #   1. AUCUNE différence de fichier avec master ⇒ rien à fusionner, écartée
-  #      en silence (pas une erreur : une branche créée puis jamais avancée).
-  #   2. Un message de commit qui SENT l'état intermédiaire (WIP, checkpoint,
-  #      brouillon, « ne pas fusionner »…) ⇒ impossible de garantir qu'elle a
-  #      été testée et validée : le script s'ARRÊTE et la NOMME, plutôt que de
-  #      deviner. `todo:` volontairement ABSENT de cette liste — une branche
-  #      qui modifie légitimement TODO.md ne doit jamais être accusée à tort.
-  MOTIFS_INTERMEDIAIRES='(^|[^a-zA-Z])(wip|checkpoint|draft|brouillon|en[ _-]?cours|\btmp\b|\btemp\b|fixup!|squash!|ne pas (fusionner|merger)|do not merge|incomplet|intermédiaire)([^a-zA-Z]|$)'
-
-  BRANCHES_RETENUES=()
-  for b in "${BRANCHES_A_FUSIONNER[@]}"; do
-    if [ -z "$(git diff master.."$b" --stat)" ]; then
-      echo "  = $b écartée : aucune différence avec master (créée puis jamais avancée) — rien à fusionner"
-      continue
-    fi
-    MESSAGES="$(git log --format=%s master.."$b")"
-    if echo "$MESSAGES" | grep -qiE "$MOTIFS_INTERMEDIAIRES"; then
-      refuser "la branche « $b » porte au moins un commit à message d'état intermédiaire (WIP / checkpoint / brouillon / « ne pas fusionner »…) — impossible de garantir mécaniquement qu'elle a été testée. Elle n'est PAS fusionnée. Inspecte-la à la main (git log master..$b), et si elle est bonne : fusionne-la toi-même (git merge $b) avant de relancer ce script."
-    fi
-    BRANCHES_RETENUES+=("$b")
-  done
-
-  if [ ${#BRANCHES_RETENUES[@]} -eq 0 ]; then
-    echo "  ✓ aucune branche retenue après filtrage — master est déjà à jour"
-  else
-    for b in "${BRANCHES_RETENUES[@]}"; do
-      echo "  → fusion de $b"
-      if ! git merge --no-edit "$b" >/tmp/deployer-en-production-merge.log 2>&1; then
-        git merge --abort 2>/dev/null || true
-        echo "" >&2
-        cat /tmp/deployer-en-production-merge.log >&2
-        refuser "CONFLIT en fusionnant « $b » dans master — la fusion a été annulée (git merge --abort), master reste exactement comme avant cette étape. Résous le conflit à la main (git merge $b), commit, puis relance ce script."
-      fi
-      echo "    ✓ $b fusionnée"
-    done
-  fi
+# `☠` Plus de découverte : une seule branche, NOMMÉE en paramètre (jamais
+# devinée). Elle doit exister localement et descendre directement de master —
+# seule une avance rapide est autorisée. Aucune autre branche du dépôt n'est
+# lue, fusionnée, supprimée ni modifiée par cette étape.
+if ! git rev-parse --verify --quiet "refs/heads/$BRANCHE_CIBLE" >/dev/null; then
+  refuser "la branche « $BRANCHE_CIBLE » n'existe pas localement (refs/heads/$BRANCHE_CIBLE introuvable)." 80
 fi
+
+if ! git merge-base --is-ancestor HEAD "$BRANCHE_CIBLE"; then
+  refuser "« $BRANCHE_CIBLE » ne descend pas directement de master (avance rapide impossible) — master a divergé, un humain doit trancher." 81
+fi
+
+echo "  → avance rapide de master vers $BRANCHE_CIBLE"
+if ! git merge --ff-only "$BRANCHE_CIBLE" >/tmp/deployer-en-production-merge.log 2>&1; then
+  cat /tmp/deployer-en-production-merge.log >&2
+  refuser "l'avance rapide de master vers « $BRANCHE_CIBLE » a échoué — voir le détail ci-dessus. master reste exactement comme avant cette étape."
+fi
+echo "  ✓ master avancé jusqu'à $BRANCHE_CIBLE ($(git rev-parse HEAD))"
 
 # ── 3. Suite de tests — REFUS si elle n'est pas verte ────────────────────
 annoncer 3 "suite de tests du harness (bun test)"

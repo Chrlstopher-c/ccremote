@@ -1,24 +1,27 @@
 #!/bin/bash
 # deployer-en-production.test.sh — vérifie MÉCANIQUEMENT, sans jamais toucher
-# au vrai dépôt ccremote ni au Pi, les deux défauts de livraison corrigés
-# dans deployer-en-production.sh :
+# au vrai dépôt ccremote ni au Pi :
 #
 #   1. il retrouve seul la racine du dépôt quel que soit le répertoire ou le
 #      chemin (relatif/absolu) depuis lequel on l'appelle ;
 #   2. avant de toucher au dépôt, il se recopie dans un emplacement HORS du
 #      dépôt et s'y relance — cette copie est ensuite immunisée contre toute
-#      réorganisation du dépôt qui suivrait (stash / reset / merge).
+#      réorganisation du dépôt qui suivrait (stash / reset / merge) ;
+#   3. la branche cible est un paramètre explicite et obligatoire : sans elle,
+#      refus (code 79) ; si elle ne descend pas directement de master, refus
+#      aussi (code 81, avance rapide impossible).
 #
 # Chaque cas construit un dépôt git JETABLE dans /tmp (jamais ccremote), lance
-# le script avec CCREMOTE_LIEN_SECRET volontairement ABSENT — l'exécution
-# s'arrête donc juste après le garde-fou d'auto-protection, au refus normal
-# de l'étape 0 (code 78). Ce point d'arrêt est ce qui permet de tester le
-# garde-fou seul, sans jamais lancer bun/tsc/ssh.
+# le script avec CCREMOTE_LIEN_SECRET volontairement ABSENT (cas 1) ou une
+# branche cible volontairement absente/orpheline (cas 5 et 6) — l'exécution
+# s'arrête donc juste après le garde-fou concerné, sans jamais lancer
+# bun/tsc/ssh.
 #
 # Usage : bash deployer-en-production.test.sh
 set -e
 
 SCRIPT_SOURCE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deployer-en-production.sh"
+BRANCHE_CIBLE_TEST="cible"
 ECHECS=0
 
 verifier() {
@@ -48,6 +51,20 @@ construire_depot_jetable() {
   # bun), mais qu'on l'ATTEIGNE — preuve que RACINE/HARNESS ont été
   # correctement résolus, quel que soit l'endroit d'où le script fut appelé.
   mkdir -p "$depot/harness"
+
+  # Branche cible VALIDE (descend directement de master, un commit d'avance) —
+  # sert aux cas 1 à 4, qui exercent l'auto-protection / la résolution de
+  # racine, pas la validation de la branche elle-même.
+  git -C "$depot" checkout --quiet -b "$BRANCHE_CIBLE_TEST"
+  git -C "$depot" -c user.email=test@test -c user.name=test commit --quiet --allow-empty -m "avance sur $BRANCHE_CIBLE_TEST"
+  git -C "$depot" checkout --quiet master
+
+  # Branche ORPHELINE — ne descend PAS de master — sert au cas 6 (refus
+  # attendu : avance rapide impossible).
+  git -C "$depot" checkout --quiet --orphan orpheline
+  git -C "$depot" -c user.email=test@test -c user.name=test commit --quiet --allow-empty -m "branche sans lien avec master"
+  git -C "$depot" checkout --quiet master
+
   echo "$depot"
 }
 
@@ -80,7 +97,7 @@ lancer_jusquau_refus() {
 echo "═══ Cas 1 — appel normal, depuis l'intérieur du dépôt jetable ═══"
 DEPOT1="$(construire_depot_jetable)"
 AVANT="$(ls /tmp/deployer-en-production.*.sh 2>/dev/null || true)"
-CODE="$(cd "$DEPOT1" && lancer_jusquau_refus ./deployer-en-production.sh)"
+CODE="$(cd "$DEPOT1" && lancer_jusquau_refus ./deployer-en-production.sh "$BRANCHE_CIBLE_TEST")"
 verifier "$CODE" "78" "refus normal à l'étape 0 (secret absent) — le garde-fou n'a pas fait dérailler l'exécution"
 
 APRES="$(ls /tmp/deployer-en-production.*.sh 2>/dev/null || true)"
@@ -106,13 +123,13 @@ echo ""
 echo "═══ Cas 2 — appel par chemin RELATIF depuis un sous-répertoire ═══"
 DEPOT2="$(construire_depot_jetable)"
 mkdir -p "$DEPOT2/un/sous/dossier"
-RESULTAT="$(cd "$DEPOT2/un/sous/dossier" && lancer_et_verifier_racine ../../../deployer-en-production.sh)"
+RESULTAT="$(cd "$DEPOT2/un/sous/dossier" && lancer_et_verifier_racine ../../../deployer-en-production.sh "$BRANCHE_CIBLE_TEST")"
 verifier "$RESULTAT" "OK" "racine retrouvée malgré un appel relatif profond"
 
 echo ""
 echo "═══ Cas 3 — appel par chemin ABSOLU depuis un répertoire hors dépôt ═══"
 DEPOT3="$(construire_depot_jetable)"
-RESULTAT="$(cd /tmp && lancer_et_verifier_racine "$DEPOT3/deployer-en-production.sh")"
+RESULTAT="$(cd /tmp && lancer_et_verifier_racine "$DEPOT3/deployer-en-production.sh" "$BRANCHE_CIBLE_TEST")"
 verifier "$RESULTAT" "OK" "racine retrouvée malgré un cwd totalement étranger au dépôt"
 
 echo ""
@@ -121,8 +138,40 @@ DEPOT4="$(construire_depot_jetable)"
 COPIE_EXTERNE="$(mktemp -t deployer-bootstrap.XXXXXX.sh)"
 cp "$SCRIPT_SOURCE" "$COPIE_EXTERNE"
 chmod +x "$COPIE_EXTERNE"
-RESULTAT="$(cd "$DEPOT4" && lancer_et_verifier_racine "$COPIE_EXTERNE")"
+RESULTAT="$(cd "$DEPOT4" && lancer_et_verifier_racine "$COPIE_EXTERNE" "$BRANCHE_CIBLE_TEST")"
 verifier "$RESULTAT" "OK" "racine retrouvée depuis le cwd quand la source est déjà hors dépôt (cas du bootstrap)"
+
+echo ""
+echo "═══ Cas 5 — secret présent mais AUCUNE branche cible ═══"
+DEPOT5="$(construire_depot_jetable)"
+set +e
+SORTIE5="$(cd "$DEPOT5" && env CCREMOTE_LIEN_SECRET=peu-importe bash ./deployer-en-production.sh 2>&1)"
+CODE5=$?
+set -e
+verifier "$CODE5" "79" "refus au bon code de sortie quand la branche cible est absente"
+case "$SORTIE5" in
+  *"aucune branche cible n'a été passée en paramètre"*)
+    echo "  ✓ message de refus explicite (branche absente)" ;;
+  *)
+    echo "  ✗ message de refus attendu absent de la sortie — obtenu : $SORTIE5" >&2
+    ECHECS=$((ECHECS + 1)) ;;
+esac
+
+echo ""
+echo "═══ Cas 6 — branche cible qui ne descend PAS de master (avance rapide impossible) ═══"
+DEPOT6="$(construire_depot_jetable)"
+set +e
+SORTIE6="$(cd "$DEPOT6" && env CCREMOTE_LIEN_SECRET=peu-importe bash ./deployer-en-production.sh orpheline 2>&1)"
+CODE6=$?
+set -e
+verifier "$CODE6" "81" "refus au bon code de sortie quand la branche cible ne descend pas de master"
+case "$SORTIE6" in
+  *"ne descend pas directement de master"*)
+    echo "  ✓ message de refus explicite (branche non descendante de master)" ;;
+  *)
+    echo "  ✗ message de refus attendu absent de la sortie — obtenu : $SORTIE6" >&2
+    ECHECS=$((ECHECS + 1)) ;;
+esac
 
 echo ""
 if [ "$ECHECS" -eq 0 ]; then
