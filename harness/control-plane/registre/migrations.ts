@@ -953,6 +953,40 @@ CREATE INDEX idx_conv_evt ON conversation_evenement(conversation_id, seq);
 CREATE INDEX idx_conv_evt_tool ON conversation_evenement(tool_use_id);
 `;
 
+/**
+ * Migration 31 — table `observation_parc` (garde 2, mandat opérateur 21/08).
+ *
+ * `☠` Une seule ligne, une seule clé : ce n'est pas un flux d'événements à
+ * agréger (le carburant est aussi déjà journalisé, indirectement, dans
+ * `conversation_evenement`), c'est l'ÉTAT COURANT « quand l'orchestrateur a-t-il
+ * regardé le carburant pour la dernière fois », lu à CHAQUE `creer_equipe` et
+ * écrit à CHAQUE `carburant_parc`. Une requête d'agrégation sur le flux
+ * d'événements referait ce calcul à chaque dispatch — cette table le rend
+ * O(1), cohérent avec le reste du registre (`compte`, `quota_compte`).
+ */
+const MIGRATION_31 = `
+CREATE TABLE observation_parc (
+  id                  INTEGER PRIMARY KEY CHECK (id = 1),
+  carburant_consulte_a INTEGER
+) STRICT;
+
+INSERT INTO observation_parc (id, carburant_consulte_a) VALUES (1, NULL);
+`;
+
+/**
+ * Migration 32 — préavis de plafond (silence (a), mandat opérateur 21/08).
+ *
+ * `☠` `NULL` = préavis jamais envoyé, JAMAIS « déjà envoyé » — même convention
+ * que `constatGit` (migration 23) : l'absence de mesure n'est pas la mesure
+ * inverse. Sans cette colonne, le balayage de télémétrie (`balayage-telemetrie.ts`,
+ * toutes les 5 s) renverrait le même avertissement à chaque tick une fois le
+ * seuil de 80 % franchi, jusqu'à la coupure — un déluge de messages inutiles
+ * au lead plutôt qu'un préavis unique.
+ */
+const MIGRATION_32 = `
+ALTER TABLE mission ADD COLUMN avertissement_budget_80_a INTEGER;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -984,6 +1018,8 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 28, nom: 'mode-rapide-conversation', sql: MIGRATION_28 },
   { version: 29, nom: 'demande-rallonge-fenetre', sql: MIGRATION_29 },
   { version: 30, nom: 'evenement-artefact', sql: MIGRATION_30 },
+  { version: 31, nom: 'observation-parc-carburant', sql: MIGRATION_31 },
+  { version: 32, nom: 'avertissement-budget-80-mission', sql: MIGRATION_32 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

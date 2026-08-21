@@ -113,6 +113,7 @@ export interface LigneMission {
   cree_a: number;
   demarree_a: number | null;
   terminee_a: number | null;
+  avertissement_budget_80_a: number | null;
 }
 
 export interface LigneTransition {
@@ -226,6 +227,7 @@ export function versMission(l: LigneMission): Mission {
     creeA: l.cree_a,
     demarreeA: l.demarree_a,
     termineeA: l.terminee_a,
+    avertissementBudget80A: l.avertissement_budget_80_a,
   };
 }
 

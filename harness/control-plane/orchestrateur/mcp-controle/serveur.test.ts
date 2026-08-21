@@ -38,6 +38,10 @@ beforeEach(() => {
   registre = ouvrirRegistre({ chemin: ':memory:' });
   registre.comptes.enregistrer({ id: 'compte1', configDir: '/tmp/cc-compte1' });
   registre.lots.creer({ id: 'lot-1', intention: 'x' });
+  // Gardes 1/2 de `creer_equipe` : ce fichier teste la SURFACE des outils, pas
+  // ces gardes précises (couvertes par outils-cycle-vie.test.ts) — carburant
+  // frais par défaut pour ne pas faire échouer tout le reste sur un angle mort.
+  registre.observationParc.enregistrerConsultationCarburant(Date.now());
   deps = {
     registre,
     repertoireProjets: '/tmp/mcp-controle-projets-inexistant',

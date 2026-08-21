@@ -241,6 +241,27 @@ export class DepotMissions {
     );
   }
 
+  /**
+   * Missions d'un projet créées depuis `depuis` (borne incluse), tous états
+   * confondus — garde 1 (« la vague de trop », mandat opérateur 21/08). Une
+   * mission déjà échouée ou annulée compte quand même : c'est la RÉPÉTITION du
+   * dispatch qui coûte, pas son issue.
+   */
+  public listerDuProjetDepuis(projet: string, depuis: number): readonly Mission[] {
+    return executer(
+      'missions.listerDuProjetDepuis',
+      () => {
+        const lignes = this.db
+          .query<LigneMission, [string, number]>(
+            'SELECT * FROM mission WHERE projet = ? AND cree_a >= ? ORDER BY cree_a DESC',
+          )
+          .all(projet, depuis);
+        return lignes.map(versMission);
+      },
+      { projet, depuis },
+    );
+  }
+
   public attacherSession(id: string, sessionId: string): Mission {
     return this.majChamp('missions.attacherSession', id, 'session_id', sessionId);
   }
@@ -341,6 +362,26 @@ export class DepotMissions {
         return this.exiger(id);
       },
       { id, fichiersModifies: constat.fichiersModifies },
+    );
+  }
+
+  /**
+   * Marque le préavis de plafond (80 %, silence (a)) comme envoyé — UNE SEULE
+   * FOIS par mission (`WHERE avertissement_budget_80_a IS NULL`), pour que le
+   * balayage de télémétrie (toutes les 5 s) ne le redéclenche pas à chaque
+   * tick une fois le seuil franchi. Rend `true` si CET appel a posé la marque
+   * (donc si le message doit réellement partir), `false` si elle l'était déjà.
+   */
+  public poserAvertissementBudget80(id: string, maintenant: number = Date.now()): boolean {
+    return executer(
+      'missions.poserAvertissementBudget80',
+      () => {
+        const resultat = this.db
+          .query('UPDATE mission SET avertissement_budget_80_a = ? WHERE id = ? AND avertissement_budget_80_a IS NULL')
+          .run(maintenant, id);
+        return resultat.changes > 0;
+      },
+      { id },
     );
   }
 

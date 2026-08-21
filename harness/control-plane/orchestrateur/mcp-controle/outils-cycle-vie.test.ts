@@ -26,6 +26,9 @@ beforeEach(() => {
   registre = ouvrirRegistre({ chemin: ':memory:' });
   registre.comptes.enregistrer({ id: 'compte1', configDir: '/tmp/cc-compte1' });
   registre.lots.creer({ id: 'lot-1', intention: 'corriger le login' });
+  // Carburant consulté par défaut : ce fichier teste d'autres gardes que la
+  // garde 2, qui a son propre `describe` avec ses propres réglages explicites.
+  registre.observationParc.enregistrerConsultationCarburant(Date.now());
 });
 
 afterEach(() => {
@@ -57,6 +60,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
       'tests verts',
       'src/auth/**',
       'ecriture',
+      registre,
       LECTEUR_PERMISSIF,
       PLAFOND_DESACTIVE,
       { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) },
@@ -67,7 +71,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
   });
 
   test('☠ ne touche à AUCUN registre — aucune mission créée', async () => {
-    await proposerCreationEquipe('alpha', 'x', 'y', 'z', 'ecriture', LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    await proposerCreationEquipe('alpha', 'x', 'y', 'z', 'ecriture', registre, LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(registre.missions.listerActives().length).toBe(0);
   });
 });
@@ -77,7 +81,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
     });
-    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 10 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', registre, lecteur, { seuilUtilisationPct: 10 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.effet).toBe('refuse');
     expect(resultat.raison).toContain('compte1');
@@ -88,7 +92,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
     const lecteur = fabriquerLecteur({
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 20, statut: 'allowed' }],
     });
-    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', registre, lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -97,7 +101,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 99, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'five_hour', utilisation: 5, statut: 'allowed' }],
     });
-    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', registre, lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -106,14 +110,14 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       compte1: [{ compteId: 'compte1', typeFenetre: 'five_hour', utilisation: 90, statut: 'allowed' }],
       compte2: [{ compteId: 'compte2', typeFenetre: 'seven_day', utilisation: 95, statut: 'allowed' }],
     });
-    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', registre, lecteur, { seuilUtilisationPct: 85 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('compte1');
     expect(resultat.raison).toContain('compte2');
   });
 
   test('aucun compte connu ⇒ rien à borner, autorisé', async () => {
-    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', registre, LECTEUR_PERMISSIF, { seuilUtilisationPct: 1 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.effet).toBe('differe');
   });
 
@@ -124,7 +128,7 @@ describe('proposerCreationEquipe × plafond de parc (G.1.3 — câblage réel, M
       },
       releves: () => [],
     };
-    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', lecteur, PLAFOND_DESACTIVE, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const resultat = await proposerCreationEquipe('alpha', 'x', null, 'src/**', 'ecriture', registre, lecteur, PLAFOND_DESACTIVE, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
     expect(resultat.ok).toBe(false);
     expect(resultat.raison).toContain('port hors service');
   });
@@ -501,6 +505,7 @@ describe('proposerCreationEquipe × issue RÉELLE du dispatch', () => {
       mandat[2],
       mandat[3],
       mandat[4],
+      registre,
       LECTEUR_PERMISSIF,
       PLAFOND_DESACTIVE,
       { enregistrer: async () => depot },
@@ -565,6 +570,137 @@ describe('proposerCreationEquipe × issue RÉELLE du dispatch', () => {
 
   test('mandat en attente d’un humain ⇒ differe, inchangé (H-61)', async () => {
     const resultat = await proposer({ ref: 'prop-5', autoApprouve: false, detail: 'en attente' });
+    expect(resultat.effet).toBe('differe');
+  });
+});
+
+const ENREGISTREUR_MUET: EnregistreurProposition = {
+  enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }),
+};
+
+/**
+ * Garde 1 — « la vague de trop » (mandat opérateur 21/08, poste à 1 159 $).
+ * `☠` PREUVE DANS LES DEUX SENS exigée par le mandat : refus quand la
+ * condition est réunie, passage quand elle ne l'est pas — jamais l'un sans
+ * l'autre.
+ */
+describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
+  test('projet déjà mandaté il y a 1h, pas de campagne ⇒ refus ACTIONNABLE', async () => {
+    const maintenant = Date.now();
+    registre.missions.creer(
+      { id: 'm-recente', lotId: 'lot-1', nom: 'refaire l’auth', projet: 'alpha', compteId: 'compte1' },
+      maintenant - 60 * 60 * 1000,
+    );
+    registre.missions.ajouterCout('m-recente', 3.5);
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+    );
+
+    expect(resultat.ok).toBe(false);
+    expect(resultat.effet).toBe('refuse');
+    // Objectif tronqué (nom), coût, heure — l'état montré, pas un refus sec.
+    expect(resultat.raison).toContain('refaire l’auth');
+    expect(resultat.raison).toContain('3.50');
+    // Les deux issues, nommées en clair.
+    expect(resultat.raison).toContain('regrouper');
+    expect(resultat.raison).toContain('campagne');
+  });
+
+  test('même situation, mais `campagne` déclarée ⇒ autorisé (differe)', async () => {
+    const maintenant = Date.now();
+    registre.missions.creer(
+      { id: 'm-recente', lotId: 'lot-1', nom: 'refaire l’auth', projet: 'alpha', compteId: 'compte1' },
+      maintenant - 60 * 60 * 1000,
+    );
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null,
+      'refonte auth — vague 2', maintenant,
+    );
+
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('mission recente mais sur un AUTRE projet ⇒ n’entrave pas celui-ci', async () => {
+    const maintenant = Date.now();
+    registre.missions.creer(
+      { id: 'm-autre', lotId: 'lot-1', nom: 'x', projet: 'beta', compteId: 'compte1' },
+      maintenant - 60 * 60 * 1000,
+    );
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+    );
+
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('mission sur ce projet il y a 25h (hors fenêtre) ⇒ n’entrave pas', async () => {
+    const maintenant = Date.now();
+    registre.missions.creer(
+      { id: 'm-vieille', lotId: 'lot-1', nom: 'x', projet: 'alpha', compteId: 'compte1' },
+      maintenant - 25 * 60 * 60 * 1000,
+    );
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+    );
+
+    expect(resultat.effet).toBe('differe');
+  });
+});
+
+/**
+ * Garde 2 — « dispatcher sans regarder le carburant » (mandat opérateur 21/08).
+ * `☠` Registre DÉDIÉ, non celui du `beforeEach` global (qui marque le
+ * carburant frais par défaut pour ne pas gêner les autres blocs) : ici on a
+ * précisément besoin de contrôler cette trace.
+ */
+describe('proposerCreationEquipe × garde 2 (carburant pas regardé depuis 30 min)', () => {
+  test('jamais consulté ⇒ refus qui RETOURNE l’état du carburant', async () => {
+    const registreFrais = ouvrirRegistre({ chemin: ':memory:' });
+    registreFrais.comptes.enregistrer({ id: 'compte1', configDir: '/tmp/x' });
+    registreFrais.lots.creer({ id: 'lot-1', intention: 'x' });
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/**', 'ecriture', registreFrais,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+
+    expect(resultat.ok).toBe(false);
+    expect(resultat.effet).toBe('refuse');
+    expect(resultat.raison).toContain('carburant');
+    expect(resultat.raison).toContain('30 min');
+    registreFrais.fermer();
+  });
+
+  test('consulté il y a 40 min (> 30) ⇒ refus', async () => {
+    const maintenant = Date.now();
+    registre.observationParc.enregistrerConsultationCarburant(maintenant - 40 * 60 * 1000);
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+    );
+
+    expect(resultat.effet).toBe('refuse');
+    expect(resultat.raison).toContain('carburant');
+  });
+
+  test('consulté il y a 10 min (< 30) ⇒ autorisé', async () => {
+    const maintenant = Date.now();
+    registre.observationParc.enregistrerConsultationCarburant(maintenant - 10 * 60 * 1000);
+
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+    );
+
     expect(resultat.effet).toBe('differe');
   });
 });

@@ -396,7 +396,12 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         '`budgetMaxUsd` : le plafond de dépense de CETTE équipe, posé dès maintenant. ' +
         'Le seul moment où tu peux le fixer avant qu’elle ne dépense — `definir_budget` ' +
         'n’opère que sur une équipe déjà démarrée, et une mission courte finit avant tout ' +
-        'réveil. Laissé vide, elle court sous le plafond de parc (250 $).',
+        'réveil. Laissé vide, elle court sous le plafond de parc (250 $). ' +
+        'DEUX GARDES REFUSENT L’APPEL AVANT TOUTE ÉCRITURE : (1) carburant du parc non ' +
+        'consulté depuis plus de 30 min — appelle carburant_parc d’abord ; (2) ce projet a ' +
+        'déjà reçu une mission dans les dernières 24h ET `campagne` est vide — soit tu ' +
+        'regroupes ce travail dans l’équipe existante, soit tu renvoies cet appel en ' +
+        'nommant la campagne.',
       {
         projet: z.string(),
         objectif: z.string(),
@@ -406,8 +411,17 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         modele: z.string().nullable().optional(),
         effort: z.enum(['low', 'medium', 'high', 'xhigh']).nullable().optional(),
         budgetMaxUsd: z.number().nullable().optional().describe('Plafond de dépense en dollars, ex. 5.'),
+        campagne: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "Libellé libre nommant le chantier d'ensemble. Absent + projet déjà mandaté dans les " +
+              "dernières 24h ⇒ REFUS (garde 1, une vague de trop). Renseigne-le pour assumer " +
+              'explicitement une nouvelle vague sur ce projet plutôt que de regrouper.',
+          ),
       },
-      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd }) =>
+      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd, campagne }) =>
         protege('creer_equipe', () =>
           proposerCreationEquipe(
             projet,
@@ -415,12 +429,14 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             critereArret,
             perimetre,
             acces,
+            deps.registre,
             deps.utilisationParc,
             deps.configPlafondParc,
             deps.propositions,
             modele,
             effort,
             budgetMaxUsd,
+            campagne,
           ),
         ),
     ),

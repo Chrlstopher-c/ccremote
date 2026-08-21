@@ -653,6 +653,12 @@ function conseilCarburant(pireUtil: number, compteSain: boolean): string {
 export function carburantParc(registre: Registre, maintenant: number = Date.now()): ContratRetour {
   const intention = 'état du carburant du parc';
   try {
+    // `☠` Garde 2 (dispatcher sans regarder le carburant) : c'est CETTE
+    // consultation, réellement effectuée, que `creer_equipe` relit ensuite
+    // (`evaluerFraicheurCarburant`, `outils-cycle-vie.ts`). Enregistrée même
+    // sur un parc sans compte — l'orchestrateur a bien regardé, il n'y avait
+    // juste rien à voir.
+    registre.observationParc.enregistrerConsultationCarburant(maintenant);
     const comptes = registre.comptes.lister();
     if (comptes.length === 0) return applique(intention, 'aucun compte enregistré au registre.');
 

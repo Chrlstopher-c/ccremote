@@ -43,9 +43,10 @@ describe('assemblage — plafond de parc (G.1.3, H-74 occurrence n°2)', () => {
     const registre = ouvrirRegistre({ chemin: ':memory:' });
     registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/x' });
     registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', utilisation: 95 });
+    registre.observationParc.enregistrerConsultationCarburant(Date.now());
 
     const lecteur = creerLecteurUtilisationParc(registre);
-    const retour = await proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const retour = await proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', registre, lecteur, { seuilUtilisationPct: 90 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
 
     expect(retour.effet).toBe('refuse');
     expect(retour.raison).toContain('90');
@@ -55,9 +56,10 @@ describe('assemblage — plafond de parc (G.1.3, H-74 occurrence n°2)', () => {
     const registre = ouvrirRegistre({ chemin: ':memory:' });
     registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/x' });
     registre.comptes.releverQuota({ compteId: 'compte-a', typeFenetre: 'five_hour', statut: 'allowed', utilisation: 10 });
+    registre.observationParc.enregistrerConsultationCarburant(Date.now());
 
     const lecteur = creerLecteurUtilisationParc(registre);
-    const retour = await proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', lecteur, { seuilUtilisationPct: 90 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
+    const retour = await proposerCreationEquipe('projet-x', 'objectif', null, 'perimetre', 'ecriture', registre, lecteur, { seuilUtilisationPct: 90 }, { enregistrer: async () => ({ ref: 'prop-test', autoApprouve: false, detail: 'en attente' }) });
 
     expect(retour.effet).toBe('differe');
   });
