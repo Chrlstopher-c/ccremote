@@ -119,6 +119,18 @@ describe('lister_fils', () => {
     expect(resultat.ok).toBe(false);
     expect(resultat.effet).toBe('refuse');
   });
+
+  test('☠ un fil SANS AUCUN événement apparaît, avec 0 message(s) — jamais invisible', () => {
+    amorcerFixture(registre);
+    registre.conversations.creer({ id: 'fil-vide', titre: 'Sujet vide' }, BASE + 4_000);
+    // Plage couvrant toute la fixture, y compris la date de création de fil-vide.
+    const resultat = listerFils(registre, String(BASE), String(BASE + 20_000));
+    expect(resultat.ok).toBe(true);
+    const etat = resultat.etat ?? '';
+    const ligneVide = etat.split('\n').find((l) => l.startsWith('fil-vide'));
+    expect(ligneVide).toBeDefined();
+    expect(ligneVide).toContain('0 message(s)');
+  });
 });
 
 describe('lire_fil', () => {
@@ -174,6 +186,20 @@ describe('lire_fil', () => {
     expect(lignesMessage).toBeLessThanOrEqual(LECTURE_FIL_MAX);
     expect(etat).toContain(`${NB_EVENEMENTS}`); // le total réel est dit, pas seulement la page
     expect(etat).toContain('au-delà');
+  });
+
+  test('☠ la recherche est insensible à la casse ET aux accents, dans les deux sens', () => {
+    registre.conversations.creer({ id: 'fil-fr', titre: 'Sujet FR' }, BASE);
+    registre.conversations.ajouterEvenement(
+      { conversationId: 'fil-fr', type: 'texte', contenu: 'notre équipe travaille dessus' },
+      BASE,
+    );
+    // Motif saisi en MAJUSCULE ACCENTUÉE : le LIKE de SQLite ne matcherait que
+    // l'ASCII insensible à la casse, jamais l'accent — sans le correctif, 0 résultat.
+    const resultat = lireFil(registre, 'fil-fr', { recherche: 'ÉQUIPE' });
+    expect(resultat.ok).toBe(true);
+    const etat = resultat.etat ?? '';
+    expect(etat).toContain('notre équipe travaille dessus');
   });
 
   test('un fil inexistant rend un refus explicite, jamais une erreur brute', () => {

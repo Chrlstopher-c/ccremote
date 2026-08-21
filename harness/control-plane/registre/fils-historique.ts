@@ -64,12 +64,21 @@ interface LigneResumeFil {
 }
 
 /**
- * Échappe les caractères spéciaux de `LIKE` (`%`, `_`, l'échappeur lui-même) —
- * sans ça, chercher littéralement « 50% » ou « var_x » se comporterait comme un
- * joker et rendrait des correspondances que personne n'a demandées.
+ * Normalise pour une comparaison insensible à la casse ET aux accents, dans
+ * les deux sens (motif comme contenu). `☠` Le `LIKE` de SQLite ne fait du
+ * insensible-à-la-casse que sur l'ASCII, jamais sur les accents (mesuré sur la
+ * base réelle : « équipe » 1364 lignes, « ÉQUIPE » 50) — `bun:sqlite` ne
+ * permet pas d'enregistrer de fonction SQL custom (pas de `Database.function`,
+ * vérifié sur bun 1.3.13) ni de collation utilisable par `LIKE` (les
+ * collations SQLite n'affectent pas l'opérateur `LIKE`, seulement `=`/`ORDER
+ * BY`) ; `NFD` décompose chaque caractère accentué en lettre de base + marque
+ * combinante, qu'on retire ensuite (plage Unicode U+0300–U+036F).
  */
-function echapperMotifLike(motif: string): string {
-  return motif.replace(/[\\%_]/g, (car) => `\\${car}`);
+function normaliserRecherche(texte: string): string {
+  return texte
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
 }
 
 export class DepotFilsHistorique {
@@ -80,30 +89,46 @@ export class DepotFilsHistorique {
   }
 
   /**
-   * Fils ayant au moins un événement dans `[depuis, jusqua]`, triés par
-   * dernière activité décroissante. `☠` Les dates et le compte RENDUS portent
-   * sur le fil ENTIER, jamais sur la seule tranche filtrée : le filtre ne sert
-   * qu'à choisir QUELS fils apparaissent, pas à tronquer ce qu'on dit d'eux.
+   * Fils ayant au moins un événement dans `[depuis, jusqua]`, PLUS les fils
+   * SANS AUCUN événement dont la dernière activité de leur propre ligne
+   * (`maj_a`) tombe dans la plage — jamais silencieusement absents.
+   * Triés par dernière activité décroissante. `☠` Les dates et le compte
+   * RENDUS portent sur le fil ENTIER, jamais sur la seule tranche filtrée :
+   * le filtre ne sert qu'à choisir QUELS fils apparaissent, pas à tronquer ce
+   * qu'on dit d'eux.
+   *
+   * `☠` `LEFT JOIN` (pas `JOIN`) : un `INNER JOIN` exclut tout fil sans
+   * événement de la sortie entière, quelle que soit la plage demandée — mesuré
+   * sur la base réelle du Pi, 14 fils sur 108 n'apparaissaient JAMAIS. Pour un
+   * fil sans événement, `COALESCE` retombe sur les dates de la ligne
+   * `conversation` elle-même (`cree_a`/`maj_a`) : c'est le seul horodatage
+   * honnête qu'on ait pour un fil qui n'a rien écrit — assumé comme tel, pas
+   * présenté comme un horodatage d'événement. `COUNT(e.seq)`, pas `COUNT(*)` :
+   * la ligne `NULL` que produit le `LEFT JOIN` pour un fil vide ne doit pas se
+   * compter comme un message.
    */
   public lister(options: OptionsListeFils): readonly ResumeFil[] {
     return executer(
       'filsHistorique.lister',
       () => {
         const lignes = this.db
-          .query<LigneResumeFil, [number, number, number]>(
+          .query<LigneResumeFil, [number, number, number, number, number]>(
             `SELECT c.id AS id, c.titre AS titre,
-                    MIN(e.cree_a) AS premier, MAX(e.cree_a) AS dernier, COUNT(*) AS nb
+                    COALESCE(MIN(e.cree_a), c.cree_a) AS premier,
+                    COALESCE(MAX(e.cree_a), c.maj_a) AS dernier,
+                    COUNT(e.seq) AS nb
                FROM conversation c
-               JOIN conversation_evenement e ON e.conversation_id = c.id
+               LEFT JOIN conversation_evenement e ON e.conversation_id = c.id
               WHERE c.id IN (
                       SELECT DISTINCT conversation_id FROM conversation_evenement
                        WHERE cree_a >= ? AND cree_a <= ?
                     )
+                 OR (e.conversation_id IS NULL AND c.maj_a >= ? AND c.maj_a <= ?)
               GROUP BY c.id
               ORDER BY dernier DESC
               LIMIT ?`,
           )
-          .all(options.depuis, options.jusqua, options.limite);
+          .all(options.depuis, options.jusqua, options.depuis, options.jusqua, options.limite);
         return lignes.map((l) => ({
           id: l.id,
           titre: l.titre,
@@ -121,39 +146,37 @@ export class DepotFilsHistorique {
    * dates et recherche textuelle optionnelle. `total` porte le compte SANS la
    * pagination — c'est ce qui permet à l'appelant de dire « il en reste ».
    *
-   * `☠` `recherche` est bindé DEUX FOIS au même motif échappé (une fois pour
-   * `total`, une fois pour la page) plutôt que construit par concaténation de
-   * SQL : c'est ce qui garde la requête paramétrée, jamais une entrée utilisateur
-   * interpolée dans le texte de la requête.
+   * `☠` La recherche textuelle n'est PLUS un `LIKE` SQL : le `LIKE` de SQLite
+   * ne fait de l'insensible-à-la-casse que sur l'ASCII, jamais sur les accents
+   * (mesuré sur la base réelle : un même fil rendait 213 correspondances pour
+   * « équipe » contre 2 pour « ÉQUIPE »). La plage de dates reste filtrée en
+   * SQL (bornée à UN fil, pas un balayage de la table entière) ; la recherche
+   * se fait ensuite en JS via `normaliserRecherche` (NFD + retrait des
+   * accents + minuscule), appliquée au motif ET au contenu — les deux sens.
+   * `bun:sqlite` ne permet pas d'enregistrer de fonction SQL custom pour faire
+   * ce filtre côté moteur (pas de `Database.function`, vérifié) ; une
+   * solution avec index (FTS5 + tokenizer `unicode61 remove_diacritics 2`,
+   * ou une colonne générée normalisée + index dessus) serait plus rapide sur
+   * un très gros fil, mais écrirait le schéma — hors contrainte de ce mandat.
    */
   public evenements(conversationId: string, options: OptionsLectureFil): PageEvenementsFil {
     return executer(
       'filsHistorique.evenements',
       () => {
-        const motif = options.recherche === null ? null : `%${echapperMotifLike(options.recherche)}%`;
-        const clauseBase = 'conversation_id = ? AND cree_a >= ? AND cree_a <= ? AND (? IS NULL OR contenu LIKE ? ESCAPE \'\\\')';
-        const paramsBase: [string, number, number, string | null, string | null] = [
-          conversationId,
-          options.depuis,
-          options.jusqua,
-          motif,
-          motif,
-        ];
-
-        const total =
-          this.db
-            .query<{ total: number }, [string, number, number, string | null, string | null]>(
-              `SELECT COUNT(*) AS total FROM conversation_evenement WHERE ${clauseBase}`,
-            )
-            .get(...paramsBase)?.total ?? 0;
-
         const lignes = this.db
-          .query<LigneEvenement, [string, number, number, string | null, string | null, number, number]>(
-            `SELECT * FROM conversation_evenement WHERE ${clauseBase} ORDER BY seq ASC LIMIT ? OFFSET ?`,
+          .query<LigneEvenement, [string, number, number]>(
+            `SELECT * FROM conversation_evenement
+              WHERE conversation_id = ? AND cree_a >= ? AND cree_a <= ?
+              ORDER BY seq ASC`,
           )
-          .all(...paramsBase, options.limite, options.decalage);
+          .all(conversationId, options.depuis, options.jusqua);
 
-        return { evenements: lignes.map(versEvenement), total };
+        const motif = options.recherche === null ? null : normaliserRecherche(options.recherche);
+        const correspondantes =
+          motif === null ? lignes : lignes.filter((l) => normaliserRecherche(l.contenu).includes(motif));
+
+        const page = correspondantes.slice(options.decalage, options.decalage + options.limite);
+        return { evenements: page.map(versEvenement), total: correspondantes.length };
       },
       { conversationId, ...options },
     );
