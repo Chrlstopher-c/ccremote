@@ -72,7 +72,25 @@ export interface OptionsBalayage {
    * câble pas doit le savoir : c'est journalisé au premier dépassement.
    */
   readonly arreterSurPlafond?: (missionId: string, motif: string) => Promise<unknown>;
+  /**
+   * Transmet le préavis de 80 % du plafond DIRECTEMENT à l'équipe (migration
+   * 32, mandat opérateur 21/08, colonne `avertissement_budget_80_a`) — même
+   * canal que `envoyer_a_equipe` : une instruction utilisateur dans la session
+   * en cours, pas une notification du fil de l'orchestrateur. Absent ⇒ le
+   * préavis reste posé en base (idempotence garantie par
+   * `poserAvertissementBudget80`) mais personne n'est prévenu, journalisé au
+   * premier franchissement — jamais silencieux.
+   *
+   * `☠` Jamais attendu dans la boucle de relevé, même raison que les deux
+   * options ci-dessus : transmettre une instruction peut réveiller une session
+   * SDK, c'est-à-dire des secondes.
+   */
+  readonly avertirBudget80?: (missionId: string, texte: string) => Promise<unknown>;
 }
+
+/** Texte transmis à l'équipe au franchissement du seuil de 80 % (migration 32). */
+export const TEXTE_AVERTISSEMENT_BUDGET_80 =
+  'Il te reste environ 20 % de ton budget alloué à cette mission — écris ton rapport maintenant.';
 
 /** Ce qu'un relevé apprend au Pi, au-delà de ce qu'il vient d'écrire. */
 interface ResultatReleve {
@@ -82,6 +100,8 @@ interface ResultatReleve {
   readonly finDeTour: boolean;
   /** Plafond de dépense franchi — motif prêt à journaliser, `null` sinon. */
   readonly depassementBudget: string | null;
+  /** Le préavis de 80 % vient d'être posé (CET appel) — le message doit partir MAINTENANT. */
+  readonly avertissementBudget80: boolean;
 }
 
 export interface BalayageTelemetrie {
@@ -117,7 +137,9 @@ function marquerCompteSature(registre: Registre, compteId: string, motif: string
 function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   const mission = registre.missions.lire(t.missionId);
   // Mission inconnue du Pi : la réconciliation s'en charge, pas nous.
-  if (mission === null) return { mortEnCoursDeRoute: false, finDeTour: false, depassementBudget: null };
+  if (mission === null) {
+    return { mortEnCoursDeRoute: false, finDeTour: false, depassementBudget: null, avertissementBudget80: false };
+  }
 
   // `☠` Relevé AVANT toute écriture : les valeurs d'un worker mort restent
   // celles de son dernier instant, elles ne mentent pas — mais son état, lui,
@@ -179,6 +201,18 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
       ? `plafond de dépense atteint : ${consomme.toFixed(2)} $ sur ${mission.budgetMaxUsd.toFixed(2)} $ autorisés`
       : null;
 
+  // `☠` Idempotence posée ICI : `poserAvertissementBudget80` est une UPDATE
+  // ... WHERE ... IS NULL atomique — l'appeler à CHAQUE passe (5 s) une fois le
+  // seuil franchi est sans danger, elle ne rend `true` qu'à la toute première
+  // fois. C'est ce qui empêche un déluge de préavis (migration 32) là où
+  // `depassementBudget` se protège lui-même via l'état `en_cours` seul.
+  const avertissementBudget80 =
+    mission.etatHarness === 'en_cours' &&
+    mission.budgetMaxUsd !== null &&
+    mission.budgetMaxUsd > 0 &&
+    consomme >= mission.budgetMaxUsd * 0.8 &&
+    registre.missions.poserAvertissementBudget80(t.missionId);
+
   if (t.contexteTokensUtilises !== null && mission.contexteTokensUtilises !== t.contexteTokensUtilises) {
     registre.missions.definirUsageContexte(
       t.missionId,
@@ -187,7 +221,7 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
       t.contexteVentilation,
     );
   }
-  return { mortEnCoursDeRoute, finDeTour, depassementBudget };
+  return { mortEnCoursDeRoute, finDeTour, depassementBudget, avertissementBudget80 };
 }
 
 /**
@@ -201,6 +235,24 @@ function notifierFinEquipe(options: OptionsBalayage, missionId: string): void {
   if (signaler === undefined) return;
   void signaler(missionId).catch((erreur: unknown) => {
     log.error({ err: erreur, missionId }, 'notification de fin d’équipe en échec — le balayage continue');
+  });
+}
+
+/**
+ * Transmet le préavis de 80 % à l'équipe. `☠` Lancée sans être attendue, même
+ * raison que `notifierFinEquipe` : l'instruction traverse le lien jusqu'à la
+ * machine, et le balayage doit rendre la main en millisecondes. Sans câblage,
+ * le franchissement est JOURNALISÉ en `warn` — jamais silencieux : un préavis
+ * qui ne part pas doit au moins laisser une trace de ce qu'il n'a pas fait.
+ */
+function avertirBudget80(options: OptionsBalayage, missionId: string): void {
+  const avertir = options.avertirBudget80;
+  if (avertir === undefined) {
+    log.warn({ missionId }, 'préavis de budget 80 % franchi mais AUCUN envoi câblé — équipe non prévenue');
+    return;
+  }
+  void avertir(missionId, TEXTE_AVERTISSEMENT_BUDGET_80).catch((erreur: unknown) => {
+    log.error({ err: erreur, missionId }, 'préavis de budget 80 % en échec — le balayage continue');
   });
 }
 
@@ -235,6 +287,7 @@ export function demarrerBalayageTelemetrie(options: OptionsBalayage): BalayageTe
           const resultat = appliquer(options.registre, t);
           if (resultat.mortEnCoursDeRoute) reconciliationRequise = true;
           if (resultat.finDeTour) notifierFinEquipe(options, t.missionId);
+          if (resultat.avertissementBudget80) avertirBudget80(options, t.missionId);
           if (resultat.depassementBudget !== null) {
             couperSurPlafond(options, t.missionId, resultat.depassementBudget);
           }

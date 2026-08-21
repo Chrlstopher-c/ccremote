@@ -201,3 +201,67 @@ describe('balayage-telemetrie — plafond de dépense (G, filet H-68)', () => {
     expect(registre.missions.lire('m-1')?.etatHarness).toBe('en_cours');
   });
 });
+
+/**
+ * `☠` La colonne (migration 32) et `poserAvertissementBudget80` existaient
+ * déjà, posés et testés isolément — rien ne les déclenchait ni ne transmettait
+ * le message. 414 $ du parc sont partis dans des missions coupées net qui
+ * n'ont jamais rendu leur rapport, faute de préavis.
+ */
+describe('balayage-telemetrie — préavis de plafond à 80 % (migration 32)', () => {
+  function balayerAvecPreavis(
+    releve: TelemetrieWorker,
+    preavis: { missionId: string; texte: string }[],
+  ): ReturnType<typeof demarrerBalayageTelemetrie> {
+    return demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [releve] },
+      avertirBudget80: async (missionId, texte) => {
+        preavis.push({ missionId, texte });
+      },
+    });
+  }
+
+  test('☠ 80 % du plafond franchi ⇒ le préavis part, une seule fois', async () => {
+    registre.missions.definirBudgetMax('m-1', 10);
+    const preavis: { missionId: string; texte: string }[] = [];
+    const b = balayerAvecPreavis({ ...RELEVE, coutUsd: 8 }, preavis);
+    await b.passer();
+    await b.passer();
+    b.arreter();
+    expect(preavis).toHaveLength(1);
+    expect(preavis[0]?.missionId).toBe('m-1');
+    expect(preavis[0]?.texte).toContain('rapport');
+  });
+
+  test('sous 80 % ⇒ rien n’est envoyé', async () => {
+    registre.missions.definirBudgetMax('m-1', 10);
+    const preavis: { missionId: string; texte: string }[] = [];
+    const b = balayerAvecPreavis({ ...RELEVE, coutUsd: 5 }, preavis);
+    await b.passer();
+    b.arreter();
+    expect(preavis).toEqual([]);
+  });
+
+  test('☠ la marque en base survit à un second passage même sans plus de câblage', async () => {
+    registre.missions.definirBudgetMax('m-1', 10);
+    const b = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, coutUsd: 8 }] },
+    });
+    await b.passer();
+    b.arreter();
+    expect(registre.missions.lire('m-1')?.avertissementBudget80A).not.toBeNull();
+  });
+
+  test('☠ sans envoi câblé, le franchissement n’explose pas — il est seulement journalisé', async () => {
+    registre.missions.definirBudgetMax('m-1', 10);
+    const b = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, coutUsd: 9 }] },
+    });
+    await b.passer();
+    b.arreter();
+    expect(registre.missions.lire('m-1')?.etatHarness).toBe('en_cours');
+  });
+});

@@ -40,6 +40,8 @@ export interface ParametresSpecTransportables {
   readonly cwd: string;
   readonly mandate: string;
   readonly deniedToolPatterns: readonly string[];
+  /** Garde 3 (accès `rapport`) — voir `WorkerSpec.confinerEcritureCwd`, transporté tel quel. */
+  readonly confinerEcritureCwd?: boolean;
   readonly maxBudgetUsd: number;
   /**
    * `true` si `maxBudgetUsd` a été fixé explicitement pour cette mission par

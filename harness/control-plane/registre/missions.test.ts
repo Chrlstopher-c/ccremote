@@ -299,3 +299,80 @@ describe('constat git d’une mission (migration 23)', () => {
     expect(relu?.constatGit?.fichiersModifies).toBe(0);
   });
 });
+
+// ------------------------------------------------- préavis de plafond (migration 32, 21/08)
+
+describe('préavis de plafond 80 % (migration 32)', () => {
+  function semer(id: string): void {
+    registre.lots.creer({ id: `lot-${id}`, intention: 'préavis budget' });
+    mission(id, `projet-${id}`, `lot-${id}`);
+  }
+
+  test('☠ une mission neuve a `avertissementBudget80A: null` — jamais envoyé', () => {
+    semer('m-av-1');
+    expect(registre.missions.lire('m-av-1')?.avertissementBudget80A).toBeNull();
+  });
+
+  test('le premier appel pose la marque et rend `true`', () => {
+    semer('m-av-2');
+    const posee = registre.missions.poserAvertissementBudget80('m-av-2', 1_785_000_000_000);
+    expect(posee).toBe(true);
+    expect(registre.missions.lire('m-av-2')?.avertissementBudget80A).toBe(1_785_000_000_000);
+  });
+
+  test('☠ un second appel ne repose rien et rend `false` — une seule fois par mission', () => {
+    semer('m-av-3');
+    registre.missions.poserAvertissementBudget80('m-av-3', 1_000);
+    const second = registre.missions.poserAvertissementBudget80('m-av-3', 2_000);
+    expect(second).toBe(false);
+    // La date reste celle du PREMIER appel, jamais réécrasée par le second.
+    expect(registre.missions.lire('m-av-3')?.avertissementBudget80A).toBe(1_000);
+  });
+});
+
+// ------------------------------------------------- transcript() (chantier 1, 21/08)
+
+describe('transcript — lecture paginée du fil complet d’une mission', () => {
+  function semerTranscrit(id: string): void {
+    registre.lots.creer({ id: `lot-${id}`, intention: 'transcript' });
+    mission(id, `projet-${id}`, `lot-${id}`);
+    for (let i = 0; i < 10; i += 1) {
+      registre.missions.ajouterActivite(id, `ligne ${i}`, 1_000 + i, i % 3 === 0 ? 'outil' : 'texte');
+    }
+  }
+
+  test('☠ decalage=0 rend la FIN du transcript — le geste n°1, en un seul appel', () => {
+    semerTranscrit('m-tr-1');
+    const page = registre.missions.transcript('m-tr-1', { type: null, decalage: 0, limite: 3 });
+    expect(page.total).toBe(10);
+    expect(page.activites.map((a) => a.texte)).toEqual(['ligne 7', 'ligne 8', 'ligne 9']);
+  });
+
+  test('rend l’ordre chronologique CROISSANT, même en lisant depuis la fin', () => {
+    semerTranscrit('m-tr-2');
+    const page = registre.missions.transcript('m-tr-2', { type: null, decalage: 0, limite: 4 });
+    const instants = page.activites.map((a) => a.survenuA);
+    expect(instants).toEqual([...instants].sort((a, b) => a - b));
+  });
+
+  test('decalage remonte le temps, page par page, sans repasser par le début', () => {
+    semerTranscrit('m-tr-3');
+    const page = registre.missions.transcript('m-tr-3', { type: null, decalage: 3, limite: 3 });
+    expect(page.activites.map((a) => a.texte)).toEqual(['ligne 4', 'ligne 5', 'ligne 6']);
+  });
+
+  test('filtre par type : ne garde que les activités demandées, total du filtre inclus', () => {
+    semerTranscrit('m-tr-4');
+    const page = registre.missions.transcript('m-tr-4', { type: 'outil', decalage: 0, limite: 10 });
+    expect(page.total).toBe(4); // i = 0, 3, 6, 9
+    expect(page.activites.every((a) => a.type === 'outil')).toBe(true);
+  });
+
+  test('mission sans aucune activité : page vide, total à zéro, jamais une exception', () => {
+    registre.lots.creer({ id: 'lot-vide', intention: 'rien' });
+    mission('m-tr-vide', 'projet-vide', 'lot-vide');
+    const page = registre.missions.transcript('m-tr-vide', { type: null, decalage: 0, limite: 50 });
+    expect(page.total).toBe(0);
+    expect(page.activites).toEqual([]);
+  });
+});

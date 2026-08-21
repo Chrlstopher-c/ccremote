@@ -515,6 +515,15 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       },
       repertoireProjets: racineProjetsMachine,
       plafondEquipesParProjet: options.plafondEquipesParProjet,
+      // `☠` LE câblage qui manquait pour un mandat mort au démarrage (18/08) :
+      // même patron que `signalerFinEquipe` du balayage de télémétrie,
+      // `equipe_echouee` étant déjà le type prévu pour « une équipe s'est
+      // arrêtée sur un échec ou a disparu » — celle-ci n'a jamais vécu.
+      signalerEchecDemarrage: async (missionId, motif) => {
+        const mission = registre.missions.lire(missionId);
+        if (mission === null) return;
+        await notifications.signaler('equipe_echouee', mission, { raison: motif });
+      },
     });
     // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
     // laisserait un mandat consommé sans équipe si le PC refusait.
@@ -886,6 +895,17 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
           maintenant: Date.now(),
         });
       await notifications.signaler('equipe_terminee', mission, { reveiller });
+    },
+    /**
+     * `☠` LE câblage qui manquait pour le préavis de 80 % (migration 32,
+     * mandat opérateur 21/08) : la colonne et `poserAvertissementBudget80`
+     * existaient déjà, posés et testés, mais rien ne les déclenchait ni ne
+     * transmettait le message — même canal que `envoyer_a_equipe`
+     * (`versMission.envoyerInstruction`), directement dans la session en
+     * cours, pas une notification du fil de l'orchestrateur.
+     */
+    avertirBudget80: async (missionId, texte) => {
+      await versMission.envoyerInstruction(missionId, texte);
     },
     /**
      * `☠` LE plafond de dépense devient RÉEL ici. Jusqu'au 02/08, `budgetMaxUsd`

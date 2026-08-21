@@ -38,6 +38,10 @@ beforeEach(() => {
   registre = ouvrirRegistre({ chemin: ':memory:' });
   registre.comptes.enregistrer({ id: 'compte1', configDir: '/tmp/cc-compte1' });
   registre.lots.creer({ id: 'lot-1', intention: 'x' });
+  // Gardes 1/2 de `creer_equipe` : ce fichier teste la SURFACE des outils, pas
+  // ces gardes précises (couvertes par outils-cycle-vie.test.ts) — carburant
+  // frais par défaut pour ne pas faire échouer tout le reste sur un angle mort.
+  registre.observationParc.enregistrerConsultationCarburant(Date.now());
   deps = {
     registre,
     repertoireProjets: '/tmp/mcp-controle-projets-inexistant',
@@ -107,7 +111,14 @@ describe('surface d’outils (A.2.2)', () => {
   //     seul l'historique d'ÉQUIPES lui était accessible (`historique_equipe`),
   //     jamais celui des conversations elles-mêmes. Lecture seule, jamais un
   //     `INSERT`/`UPDATE`/`DELETE`.
-  test('expose exactement les 29 outils spécifiés — ni plus, ni moins', () => {
+  //   `transcript_equipe` (2026-08-21, chantier 1) — `suivre_equipe` ne rend que
+  //     quelques dernières lignes, `rapport_equipe` que le dernier TEXTE. Une
+  //     équipe qui n'a jamais rendu de rapport (34 % du parc réel, mesuré) était
+  //     donc illisible : ni l'un ni l'autre outil ne trouvait quoi que ce soit à
+  //     montrer. Paginé, filtrable par type, rend la FIN du transcript par défaut
+  //     — le geste utile en un seul appel, sans pagination manuelle depuis le
+  //     début.
+  test('expose exactement les 30 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -140,6 +151,7 @@ describe('surface d’outils (A.2.2)', () => {
         'terminer_autonomie',
         'lister_fils',
         'lire_fil',
+        'transcript_equipe',
       ].sort(),
     );
   });

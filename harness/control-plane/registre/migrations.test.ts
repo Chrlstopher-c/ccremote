@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { MIGRATIONS, migrer, versionSchema } from './migrations.ts';
+import { MIGRATIONS, VERSION_SCHEMA_CIBLE, migrer, versionSchema } from './migrations.ts';
 
 let db: Database;
 
@@ -38,7 +38,7 @@ describe('migration 29 — reconstruction de demande_rallonge', () => {
               ('r-tranchee', 'conv-2', 'illimite', 'nuit longue', 'accordee', 900, 950, 'accordée')`,
     );
 
-    expect(migrer(db)).toBe(30);
+    expect(migrer(db)).toBe(VERSION_SCHEMA_CIBLE);
 
     const lignes = db
       .query<{ id: string; plafond_demande: string | null; motif: string; statut: string; detail: string | null }, []>(
@@ -126,7 +126,7 @@ describe('migration 30 — reconstruction de conversation_evenement (type artefa
        VALUES ('c1', 'outil', 'lister_equipes', 1000, 'sonnet', 'high', 'tu-1', '{"etat":"actives"}', '{"ok":true}', NULL)`,
     );
 
-    expect(migrer(db)).toBe(30);
+    expect(migrer(db)).toBe(VERSION_SCHEMA_CIBLE);
 
     const ligne = db
       .query<
@@ -180,7 +180,7 @@ describe('migration 30 — reconstruction de conversation_evenement (type artefa
   });
 
   test('une migration complète depuis zéro atteint la même version', () => {
-    expect(migrer(db)).toBe(30);
-    expect(versionSchema(db)).toBe(30);
+    expect(migrer(db)).toBe(VERSION_SCHEMA_CIBLE);
+    expect(versionSchema(db)).toBe(VERSION_SCHEMA_CIBLE);
   });
 });

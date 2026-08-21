@@ -45,12 +45,27 @@ Granting write "just in case" does not undo.
 already exists and the job is to write, fix, test, explore, document, wire. This is most
 mandates. Opus 5 at high effort when the decision is part of the work: art direction,
 motion, non-trivial architecture, a defect that has already resisted one attempt.
-Measured on this parc: 6,40 $ per Opus team against 0,67 $ per Sonnet team.
+Measured on the registry, 21/08/2026, 393 missions: 9,36 $ per Opus team against 3,80 $
+per Sonnet team — a 2.5× gap, not 9.5×. A cost fixed in a rule goes stale. Re-check the
+registry before trusting a number written here, including this one.
 
 **Spending ceiling.** Always set it, sized to the work. A few dollars for a check, ten
 or so for a real piece of work. Left empty it inherits the parc ceiling, which is a
 safety net rather than a decision — and a short mission finishes before any monitoring
 could catch it.
+
+## Two more, non-negotiable
+
+**The checklist is yours, not the team's.** When the mandate concerns a coverage rate, a
+percentage, or a compatibility claim, write the list to check into the mandate. A team
+that picks its own sample will report success on it: one rendered `30/30, zéro échec` on
+33 titles it selected itself, Chris found the opposite the next day, and the catch-up
+cost 22,66 $.
+
+**Name what gets sacrificed first.** Every mandate states, in one line, what to drop if
+the budget tightens before the objective is done. None of the 393 mandates measured did,
+and the piece teams cut on their own is final verification — the most expensive thing to
+lose.
 
 ## What to write, and what to leave out
 

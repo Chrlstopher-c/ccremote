@@ -344,3 +344,68 @@ describe('dispatch — H-56 conditionné au caractère git du projet (E3)', () =
     expect(mission?.worktree).toBe('/mnt/projects/vela');
   });
 });
+
+/**
+ * `☠` Mesuré le 18/08 : quatre mandats morts au démarrage, zéro événement au
+ * fil, l'orchestrateur n'a rien vu et a posé un diagnostic faux. Ce que ces
+ * tests vérifient : le même échec qui ferme la mission (`echec_definitif`) et
+ * libère le projet doit AUSSI produire un événement visible, sur le même
+ * patron que les fins d'équipe existantes (`signalerFinEquipe`).
+ */
+describe('dispatch — démarrage refusé (rollback) notifie, comme les fins d’équipe', () => {
+  function depsQuiEchoue(
+    appels: { missionId: string; motif: string }[],
+  ): DependancesDispatch {
+    return {
+      registre,
+      demarreur: {
+        demarrer: async () => {
+          throw new Error('PC injoignable');
+        },
+      } as never,
+      repertoireProjets: '/mnt/projects',
+      signalerEchecDemarrage: async (missionId: string, motif: string) => {
+        appels.push({ missionId, motif });
+      },
+    };
+  }
+
+  test('☠ un démarrage refusé déclenche la notification câblée, avec le motif exact', async () => {
+    const appels: { missionId: string; motif: string }[] = [];
+    const erreur = await dispatcherMandat(PROPOSITION, depsQuiEchoue(appels)).catch((e: unknown) => e);
+    expect(erreur).toBeInstanceOf(Error);
+    expect(appels).toHaveLength(1);
+    expect(appels[0]?.motif).toBe('PC injoignable');
+    // La mission notifiée est bien celle que le rollback vient de fermer.
+    const mission = registre.missions.lire(appels[0]!.missionId);
+    expect(mission?.etatHarness).toBe('echec_definitif');
+  });
+
+  test('sans câblage (défaut historique), le rollback ne casse pas — mission close, projet libéré', async () => {
+    const erreur = await dispatcherMandat(PROPOSITION, {
+      registre,
+      demarreur: { demarrer: async () => { throw new Error('PC injoignable'); } } as never,
+      repertoireProjets: '/mnt/projects',
+    }).catch((e: unknown) => e);
+    expect(erreur).toBeInstanceOf(Error);
+    // Une seconde équipe peut redémarrer sur ce projet : le rollback a bien
+    // libéré l'emplacement, câblage de notification ou non.
+    const seconde = await dispatcherMandat(PROPOSITION, deps());
+    expect(seconde.missionId).toBeDefined();
+  });
+
+  test('☠ un échec DE LA NOTIFICATION ELLE-MÊME n’empêche jamais le rollback de se terminer', async () => {
+    const d: DependancesDispatch = {
+      registre,
+      demarreur: { demarrer: async () => { throw new Error('PC injoignable'); } } as never,
+      repertoireProjets: '/mnt/projects',
+      signalerEchecDemarrage: async () => {
+        throw new Error('service de notifications indisponible');
+      },
+    };
+    const erreur = await dispatcherMandat(PROPOSITION, d).catch((e: unknown) => e);
+    // L'erreur relancée est celle du DÉMARRAGE, pas celle de la notification —
+    // le rollback n'est jamais masqué par un échec du canal de notification.
+    expect((erreur as Error).message).toBe('PC injoignable');
+  });
+});

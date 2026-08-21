@@ -71,6 +71,24 @@ export interface DependancesDispatch {
   readonly deniedToolPatterns?: readonly string[];
   /** Plafond d'équipes simultanées sur un projet GIT. Défaut : `PLAFOND_EQUIPES_PROJET_GIT_DEFAUT`. */
   readonly plafondEquipesParProjet?: number;
+  /**
+   * Notifie un démarrage refusé, au même patron que les fins d'équipe
+   * (migration 14, `signalerFinEquipe` de `balayage-telemetrie.ts`) : sans ce
+   * câblage, un mandat mort ICI disparaît en silence — aucun événement dans la
+   * conversation, l'orchestrateur n'apprend l'échec qu'en revenant lire l'état
+   * par lui-même. Mesuré le 18/08 : quatre mandats morts au démarrage, zéro
+   * événement au fil, un diagnostic faux posé sur un parc qui semblait vide.
+   *
+   * `☠` Contrairement aux notifications du balayage de télémétrie, celle-ci
+   * est ATTENDUE : la fonction va de toute façon relancer `erreur` juste après,
+   * il n'y a aucune urgence à rendre la main plus tôt, et attendre rend le
+   * comportement déterministe (utile aux tests). Un échec de la notification
+   * elle-même est journalisé et n'empêche jamais le rollback de se terminer.
+   *
+   * Absent ⇒ la mission est close et le projet libéré comme avant, mais
+   * personne n'est prévenu — comportement d'avant, jamais un défaut qui casse.
+   */
+  readonly signalerEchecDemarrage?: (missionId: string, motif: string) => Promise<unknown>;
 }
 
 export interface ResultatDispatch {
@@ -367,12 +385,24 @@ function ligneAcces(acces: AccesMandat): string {
   // `☠` Vient du MÊME calcul que les refus d'outils (paramètre, jamais relu
   // depuis `p`) : deux lectures indépendantes finiraient par diverger, et le
   // lead brûlerait son budget à retenter des outils qu'on lui a dit d'utiliser.
-  return acces === 'lecture'
-    ? 'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
-        'inutile de les tenter. Bash reste disponible : explore librement au shell ' +
-        '(rg, git log, find…), mais n’écris pas de fichier par ce biais — ce mandat ne ' +
-        'te demande pas de modifier le projet. Rends tes conclusions par écrit.'
-    : 'Accès : lecture et écriture, dans les limites du plancher de déni.';
+  if (acces === 'lecture') {
+    return (
+      'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
+      'inutile de les tenter. Bash reste disponible : explore librement au shell ' +
+      '(rg, git log, find…), mais n’écris pas de fichier par ce biais — ce mandat ne ' +
+      'te demande pas de modifier le projet. Rends tes conclusions par écrit.'
+    );
+  }
+  if (acces === 'rapport') {
+    return (
+      'Accès : LECTURE sur le projet, ÉCRITURE CONFINÉE à ton propre worktree. Write, Edit ' +
+      'et NotebookEdit fonctionnent, mais SEULEMENT sur des chemins à l’intérieur de ton ' +
+      'répertoire de travail — un chemin hors de ce répertoire est refusé par le harness, ' +
+      'pas par consigne. Utilise-les pour tes scripts d’analyse jetables ; ton rapport final ' +
+      'reste ta livraison, pas une modification du projet lui-même.'
+    );
+  }
+  return 'Accès : lecture et écriture, dans les limites du plancher de déni.';
 }
 
 /**
@@ -759,6 +789,11 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       // forme du rapport attendu, au tour précis où il en avait besoin.
       mandate: composerMandatSysteme(p, acces),
       deniedToolPatterns: composerDenis(acces, deps.deniedToolPatterns),
+      // `☠` Garde 3 — le verrou RÉEL de l'accès `rapport` : voir
+      // `workers/confinement-ecriture.ts`. `outilsRefusesPour('rapport')` rend
+      // `[]` (les outils d'écriture ne sont pas refusés par nom), c'est ce
+      // champ, câblé au hook `PreToolUse`, qui confine leur cible au worktree.
+      confinerEcritureCwd: acces === 'rapport',
       maxBudgetUsd: plafondEffectifUsd(p.budgetMaxUsd),
       // `☠` Même condition que `ligneBudget()` et `plafondEffectifUsd` — une
       // SEULE source, jamais deux calculs indépendants qui pourraient diverger
@@ -785,11 +820,25 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     // occupait le projet POUR TOUJOURS : le second clic de l'opérateur se
     // heurtait à « une équipe est déjà active sur ce projet » devant un parc
     // vide. Un échec doit rendre le projet, sinon le premier raté le condamne.
+    const motif = erreur instanceof Error ? erreur.message.slice(0, 300) : String(erreur);
     deps.registre.etats.appliquerEtatHarness(missionId, 'echec_definitif', {
       raisonTerminale: 'demarrage_refuse',
-      motif: erreur instanceof Error ? erreur.message.slice(0, 300) : String(erreur),
+      motif,
     });
     log.error({ err: erreur, missionId, projet: p.projet }, 'démarrage refusé — mission close, projet libéré');
+    // `☠` LE câblage qui manquait (18/08) : sans lui, ce chemin est le seul
+    // échec d'équipe qui ne produit AUCUN événement dans la conversation — voir
+    // la documentation sur `signalerEchecDemarrage` ci-dessus.
+    if (deps.signalerEchecDemarrage !== undefined) {
+      try {
+        await deps.signalerEchecDemarrage(missionId, motif);
+      } catch (erreurNotification) {
+        log.error(
+          { err: erreurNotification, missionId },
+          'notification de démarrage refusé en échec — le rollback continue',
+        );
+      }
+    }
     throw erreur;
   }
   // `☠` Le worktree RÉELLEMENT alloué côté PC (chemin, branche dédiée) peut

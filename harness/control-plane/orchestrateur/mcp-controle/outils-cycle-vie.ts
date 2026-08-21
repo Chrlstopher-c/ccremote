@@ -10,7 +10,7 @@
 import type { Mission, Registre } from '../../registre/index.ts';
 import { deciderCreationMission } from '../../../budgets/index.ts';
 import { accepte, applique, echecInattendu, refuse } from './contrat.ts';
-import { resoudreMission } from './outils-inspection.ts';
+import { carburantParc, resoudreMission } from './outils-inspection.ts';
 import { construireMandatPropose } from './mandat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import { avecPlafond } from './plafond.ts';
@@ -56,6 +56,90 @@ function evaluerPlafondParc(
   return { autorise: false, motif: `plafond de parc (G.1.3) atteint sur tous les comptes connus — ${detail}` };
 }
 
+/** Fenêtre de fraîcheur du carburant du parc (garde 2, mandat opérateur 21/08). */
+const FENETRE_CARBURANT_MS = 30 * 60 * 1000;
+
+/**
+ * Garde 2 — « dispatcher sans regarder le carburant ». `carburant_parc`
+ * enregistre sa propre consultation (`registre.observationParc`, alimenté
+ * dans `outils-inspection.ts`) ; cette garde ne fait que LIRE cette trace et
+ * refuser si elle est absente ou trop vieille.
+ *
+ * `☠` Le refus RETOURNE L'ÉTAT DU CARBURANT LUI-MÊME (même calcul que
+ * `carburant_parc`, une seule source) : le second appel doit être
+ * immédiatement possible et informé, jamais un aller-retour à l'aveugle —
+ * c'est la moitié de la valeur de cette garde, au même titre que la garde 1.
+ */
+function evaluerFraicheurCarburant(
+  registre: Registre,
+  maintenant: number,
+): { readonly autorise: boolean; readonly motif: string } {
+  const consulteA = registre.observationParc.carburantConsulteA();
+  if (consulteA !== null && maintenant - consulteA <= FENETRE_CARBURANT_MS) {
+    return { autorise: true, motif: 'carburant consulté récemment' };
+  }
+  const etatCarburant = carburantParc(registre, maintenant);
+  const anciennete =
+    consulteA === null
+      ? 'jamais consulté depuis le démarrage du registre'
+      : `dernière consultation il y a ${Math.round((maintenant - consulteA) / 60_000)} min`;
+  return {
+    autorise: false,
+    motif:
+      `carburant du parc non consulté depuis plus de 30 min (${anciennete}) — appelle ` +
+      "carburant_parc avant de créer une équipe, puis renvoie ce même appel. État actuel :\n" +
+      (etatCarburant.etat ?? '(indisponible)'),
+  };
+}
+
+/** Fenêtre « vague de trop » (garde 1, mandat opérateur 21/08). */
+const FENETRE_VAGUE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Garde 1 — « la vague de trop ». Refuse une nouvelle équipe sur un projet qui
+ * en a déjà reçu une dans les dernières 24h, SAUF si `campagne` nomme
+ * explicitement le chantier d'ensemble — c'est cette déclaration, pas un
+ * mécanisme, qui autorise la vague.
+ *
+ * `☠` Le refus liste les missions récentes (objectif tronqué, coût, heure),
+ * leur coût cumulé, et nomme les DEUX issues (regrouper, ou nommer la
+ * campagne) — un refus sec ne corrige rien, un refus qui montre l'état et les
+ * options le fait (leçon mesurée sur 1 159 $ de vagues répétées).
+ */
+function evaluerVagueRecente(
+  registre: Registre,
+  projet: string,
+  campagne: string | null | undefined,
+  maintenant: number,
+): { readonly autorise: boolean; readonly motif: string } {
+  if (campagne !== null && campagne !== undefined && campagne.trim().length > 0) {
+    return {
+      autorise: true,
+      motif: `campagne « ${campagne.trim()} » déclarée — vague de plusieurs équipes autorisée`,
+    };
+  }
+  const recentes = registre.missions.listerDuProjetDepuis(projet, maintenant - FENETRE_VAGUE_MS);
+  if (recentes.length === 0) {
+    return { autorise: true, motif: 'aucune mission sur ce projet dans les dernières 24h' };
+  }
+  const cumulUsd = recentes.reduce((somme, m) => somme + m.budgetConsommeUsd, 0);
+  const lignes = recentes.map((m) => {
+    const heure = new Date(m.creeA).toISOString().slice(11, 16);
+    return `  · « ${m.nom} » — ${m.budgetConsommeUsd.toFixed(2)} $ — ${heure} UTC (mission ${m.id.slice(0, 8)})`;
+  });
+  const motif = [
+    `« ${projet} » a déjà reçu ${recentes.length} mission(s) dans les dernières 24h, ` +
+      `${cumulUsd.toFixed(2)} $ cumulés :`,
+    ...lignes,
+    '',
+    'Deux issues : (1) regrouper ce travail dans UNE SEULE équipe plus large plutôt que ' +
+      "d'ouvrir une nouvelle vague, ou (2) si c'est délibérément un chantier suivi qui " +
+      "justifie plusieurs équipes, renvoyer ce même appel creer_equipe en nommant la " +
+      'campagne dans le champ `campagne`.',
+  ].join('\n');
+  return { autorise: false, motif };
+}
+
 /**
  * `creer_equipe` (A.2.2, H-61 — TRANCHÉ, FAIT AUTORITÉ). Ne crée RIEN et ne
  * dispatche RIEN : retourne une proposition de mandat que l'UI présente à
@@ -75,12 +159,16 @@ export async function proposerCreationEquipe(
   critereArret: string | null,
   perimetre: string,
   acces: AccesMandat,
+  registre: Registre,
   lecteur: LecteurUtilisationParc,
   config: ConfigPlafondParc,
   enregistreur?: EnregistreurProposition,
   modele?: string | null,
   effort?: string | null,
   budgetMaxUsd?: number | null,
+  /** Libellé libre nommant un chantier d'ensemble — bypass de la garde 1 (vague de trop). */
+  campagne?: string | null,
+  maintenant: number = Date.now(),
 ): Promise<ContratRetour> {
   const intention = `proposer une équipe sur ${projet}`;
   try {
@@ -95,6 +183,12 @@ export async function proposerCreationEquipe(
         );
       }
     }
+    // Garde 2 — dispatcher sans regarder le carburant (mandat opérateur 21/08).
+    const carburant = evaluerFraicheurCarburant(registre, maintenant);
+    if (!carburant.autorise) return refuse(intention, carburant.motif);
+    // Garde 1 — la vague de trop (mandat opérateur 21/08, poste à 1 159 $).
+    const vague = evaluerVagueRecente(registre, projet, campagne, maintenant);
+    if (!vague.autorise) return refuse(intention, vague.motif);
     const plafond = evaluerPlafondParc(lecteur, config);
     if (!plafond.autorise) return refuse(intention, plafond.motif);
     const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre, acces, budgetMaxUsd ?? null);

@@ -22,6 +22,7 @@
  */
 
 import { ETATS_HARNESS_ACTIFS, ETATS_HARNESS_TERMINAUX, type Registre } from '../registre/index.ts';
+import { detecterRaisonCoupure, RAISON_CLOTURE_SANS_RAPPORT } from '../cloture/index.ts';
 import { reconciliationLogger as logger } from './logger.ts';
 import type {
   DeclencheurReconciliation,
@@ -132,10 +133,35 @@ async function traiterMissionsActives(
 
     if (worker === undefined || !worker.vivant) {
       // Fantôme (E.1.4) : le registre le croit actif, le PC ne le voit pas.
-      registre.etats.appliquerEtatHarness(mission.id, 'terminee', {
-        raisonTerminale: 'fantome_reconciliation',
+      //
+      // `☠` CHANTIER 2 (21/08) : `terminee` est le cas NOMINAL (F2.0.1) — une
+      // mission dont le dernier acte est un appel d'outil, jamais suivi d'un
+      // texte, n'a rendu AUCUN rapport. La marquer `terminee` quand même est
+      // exactement le défaut mesuré sur la base réelle : 34 % du parc (133/393),
+      // 414 $, toutes lues comme des succès alors que leur dernier acte est une
+      // phrase coupée en plein milieu. `echec_definitif` dit la vérité : le
+      // harness ne peut pas confirmer que cette mission a abouti — le TRAVAIL
+      // sous-jacent peut être bon (souvent commité), seule la CLÔTURE a échoué.
+      //
+      // `☠` CHANTIER 3 : le texte candidat au rapport peut LUI-MÊME être le
+      // message de coupure du SDK (« You've hit your session limit… », mesuré :
+      // 60 caractères, injecté comme une activité de type 'texte') — ça n'est pas
+      // un rapport, quand bien même il suit le dernier appel d'outil. Un texte
+      // reconnu comme coupure ne compte donc jamais comme rapport rendu.
+      const dernierTexte = registre.missions.dernierTexte(mission.id)?.texte ?? null;
+      const raisonCoupure = detecterRaisonCoupure(dernierTexte);
+      const rapportRendu = registre.missions.aRapportFinal(mission.id) && raisonCoupure === null;
+      const etatFinal = rapportRendu ? 'terminee' : 'echec_definitif';
+      // La cause réelle, quand le dernier texte la porte — jamais
+      // `fantome_reconciliation` par défaut, qui ne dit rien (mesuré : 365/393).
+      const raisonTerminale = rapportRendu ? 'fantome_reconciliation' : (raisonCoupure ?? RAISON_CLOTURE_SANS_RAPPORT);
+      registre.etats.appliquerEtatHarness(mission.id, etatFinal, { raisonTerminale });
+      journal?.enregistrer('fantome_marque', {
+        missionId: mission.id,
+        sessionId: mission.sessionId,
+        etatFinal,
+        raisonTerminale,
       });
-      journal?.enregistrer('fantome_marque', { missionId: mission.id, sessionId: mission.sessionId });
       compteurs.fantomes.push(mission.id);
       if (deps.libererWorktree && mission.worktree) {
         await deps.libererWorktree.liberer(mission.id, mission.worktree);

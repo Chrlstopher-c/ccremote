@@ -15,7 +15,18 @@
  * Il ne se rédige pas.
  */
 
-export const ACCES_MANDAT = ['lecture', 'ecriture'] as const;
+/**
+ * `☠` `'rapport'` ajouté le 21/08 (mandat opérateur, garde 3) — le cas
+ * majoritaire manquant : une équipe qui doit RENDRE UN RAPPORT mais a besoin
+ * d'écrire ses scripts d'analyse jetables. `lecture` le lui interdisait
+ * entièrement (Write/Edit/NotebookEdit refusés PARTOUT) ; `ecriture` ouvrait
+ * tout le projet pour un besoin qui ne dépasse jamais son propre répertoire
+ * de travail. `rapport` : lecture sur le projet entier, écriture confinée au
+ * SEUL worktree de l'équipe — verrou posé par un hook `PreToolUse` actif
+ * (`workers/confinement-ecriture.ts`), pas par `disallowedTools` (qui ne sait
+ * pas exprimer « refuse hors de X »).
+ */
+export const ACCES_MANDAT = ['lecture', 'ecriture', 'rapport'] as const;
 export type AccesMandat = (typeof ACCES_MANDAT)[number];
 
 /**
@@ -90,6 +101,11 @@ const SYNONYMES: Readonly<Record<string, AccesMandat>> = {
   readwrite: 'ecriture',
   write: 'ecriture',
   rw: 'ecriture',
+  rapport: 'rapport',
+  report: 'rapport',
+  'lecture + rapport': 'rapport',
+  'ecriture confinee': 'rapport',
+  'écriture confinée': 'rapport',
 };
 
 export function estAccesMandat(valeur: unknown): valeur is AccesMandat {
@@ -111,7 +127,14 @@ export function normaliserAcces(brut: string): AccesMandat | null {
   return SYNONYMES[nettoye] ?? null;
 }
 
-/** Motifs à passer à `WorkerSpec.deniedToolPatterns`, en plus du plancher (H-41). */
+/**
+ * Motifs à passer à `WorkerSpec.deniedToolPatterns`, en plus du plancher (H-41).
+ *
+ * `☠` `'rapport'` ne figure PAS ici : ses outils d'écriture ne sont pas
+ * refusés par nom, ils sont CONFINÉS par chemin (`WorkerSpec.confinerEcritureCwd`,
+ * posé séparément par `dispatch-mandat.ts`) — cette grammaire-ci n'a pas de
+ * négation pour exprimer « refuse hors de X ».
+ */
 export function outilsRefusesPour(acces: AccesMandat): readonly string[] {
   return acces === 'lecture' ? OUTILS_ECRITURE : [];
 }
@@ -124,6 +147,9 @@ export function messageAccesInconnu(demande: string): string {
   return (
     `accès « ${demande} » inconnu — valeurs acceptées : ${ACCES_MANDAT.join(', ')}. ` +
     '`lecture` refuse Write, Edit et NotebookEdit au worker (Bash reste ouvert : ' +
-    'explorer au shell est légitime) ; `ecriture` ne laisse que le plancher de déni (H-41).'
+    'explorer au shell est légitime) ; `rapport` autorise ces outils mais CONFINE ' +
+    "leur écriture au worktree de l'équipe (verrou réel, pas une consigne) — pour une " +
+    'équipe qui doit produire un rapport avec des scripts jetables ; `ecriture` ne ' +
+    'laisse que le plancher de déni (H-41).'
   );
 }

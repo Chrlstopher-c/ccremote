@@ -25,6 +25,22 @@ import {
 
 const PLACEHOLDERS_ACTIFS = ETATS_HARNESS_ACTIFS.map(() => '?').join(', ');
 
+/** Options de `DepotMissions.transcript` — voir sa doc pour la sémantique de `decalage`. */
+export interface OptionsTranscriptMission {
+  /** `null` = tous les types (texte, réflexion, outil). */
+  readonly type: NatureActiviteMission | null;
+  /** Compté depuis la FIN du transcript, pas depuis le début — voir doc de la méthode. */
+  readonly decalage: number;
+  readonly limite: number;
+}
+
+export interface PageTranscriptMission {
+  /** Ordre chronologique croissant, quel que soit `decalage`. */
+  readonly activites: readonly ActiviteMission[];
+  /** Compte TOTAL correspondant au filtre de type, au-delà de la page rendue. */
+  readonly total: number;
+}
+
 export interface CompteurEtat {
   readonly etatHarness: EtatHarness;
   readonly nombre: number;
@@ -225,6 +241,27 @@ export class DepotMissions {
     );
   }
 
+  /**
+   * Missions d'un projet créées depuis `depuis` (borne incluse), tous états
+   * confondus — garde 1 (« la vague de trop », mandat opérateur 21/08). Une
+   * mission déjà échouée ou annulée compte quand même : c'est la RÉPÉTITION du
+   * dispatch qui coûte, pas son issue.
+   */
+  public listerDuProjetDepuis(projet: string, depuis: number): readonly Mission[] {
+    return executer(
+      'missions.listerDuProjetDepuis',
+      () => {
+        const lignes = this.db
+          .query<LigneMission, [string, number]>(
+            'SELECT * FROM mission WHERE projet = ? AND cree_a >= ? ORDER BY cree_a DESC',
+          )
+          .all(projet, depuis);
+        return lignes.map(versMission);
+      },
+      { projet, depuis },
+    );
+  }
+
   public attacherSession(id: string, sessionId: string): Mission {
     return this.majChamp('missions.attacherSession', id, 'session_id', sessionId);
   }
@@ -325,6 +362,26 @@ export class DepotMissions {
         return this.exiger(id);
       },
       { id, fichiersModifies: constat.fichiersModifies },
+    );
+  }
+
+  /**
+   * Marque le préavis de plafond (80 %, silence (a)) comme envoyé — UNE SEULE
+   * FOIS par mission (`WHERE avertissement_budget_80_a IS NULL`), pour que le
+   * balayage de télémétrie (toutes les 5 s) ne le redéclenche pas à chaque
+   * tick une fois le seuil franchi. Rend `true` si CET appel a posé la marque
+   * (donc si le message doit réellement partir), `false` si elle l'était déjà.
+   */
+  public poserAvertissementBudget80(id: string, maintenant: number = Date.now()): boolean {
+    return executer(
+      'missions.poserAvertissementBudget80',
+      () => {
+        const resultat = this.db
+          .query('UPDATE mission SET avertissement_budget_80_a = ? WHERE id = ? AND avertissement_budget_80_a IS NULL')
+          .run(maintenant, id);
+        return resultat.changes > 0;
+      },
+      { id },
     );
   }
 
@@ -623,6 +680,62 @@ export class DepotMissions {
   }
 
   /**
+   * Une PAGE du transcript d'une équipe, filtrable par type, ordre chronologique.
+   *
+   * `☠` `decalage` compte depuis la FIN, jamais depuis le début — c'est l'inverse
+   * de `filsHistorique.evenements()`. Raison : le geste n°1 sur un transcript de
+   * mission est « donne-moi la fin d'une équipe qui n'a pas rendu de rapport », et
+   * ce geste doit tenir en UN appel, `decalage` à sa valeur par défaut (0), sans
+   * connaître d'avance la longueur totale du transcript pour calculer un offset
+   * depuis le début. Augmenter `decalage` remonte le temps, page par page.
+   *
+   * Lecture seule : `activite_mission` n'est écrite qu'à l'ingestion de
+   * télémétrie (`balayage-telemetrie.ts`) ou en clôture — jamais ici.
+   */
+  public transcript(missionId: string, options: OptionsTranscriptMission): PageTranscriptMission {
+    return executer(
+      'missions.transcript',
+      () => {
+        const filtreType = options.type === null ? '' : 'AND type = ?';
+        const parametresFiltre: (string | number)[] = options.type === null ? [] : [options.type];
+
+        const total = this.db
+          .query<{ n: number }, (string | number)[]>(
+            `SELECT COUNT(*) AS n FROM activite_mission WHERE mission_id = ? ${filtreType}`,
+          )
+          .get(missionId, ...parametresFiltre);
+
+        const lignes = this.db
+          .query<{ texte: string; survenu_a: number; type: string; outil: string | null;
+                   outil_id: string | null; resultat: string | null; resultat_erreur: number },
+                 (string | number)[]>(
+            `SELECT texte, survenu_a, type, outil, outil_id, resultat, resultat_erreur FROM (
+               SELECT texte, survenu_a, type, outil, outil_id, resultat, resultat_erreur, id
+                 FROM activite_mission
+                WHERE mission_id = ? ${filtreType}
+                ORDER BY survenu_a DESC, id DESC LIMIT ? OFFSET ?
+             ) ORDER BY survenu_a, id`,
+          )
+          .all(missionId, ...parametresFiltre, options.limite, options.decalage);
+
+        return {
+          activites: lignes.map((l) => ({
+            texte: l.texte,
+            survenuA: l.survenu_a,
+            type: l.type as NatureActiviteMission, // valeurs closes par NatureActiviteMission, colonne alimentée par ce dépôt seul
+            outilId: l.outil_id,
+            resultat: l.resultat,
+            resultatErreur: Number(l.resultat_erreur ?? 0) === 1,
+            outil: l.outil,
+          })),
+          total: total?.n ?? 0,
+        };
+      },
+      { missionId, ...options },
+    );
+  }
+
+  /**
    * Dernier TEXTE produit par l'équipe, entier. `☠` Ni tronqué ni résumé : c'est
    * la synthèse de fin, et une synthèse coupée en deux ne vaut rien (décision de
    * l'opérateur, 23/07). Les réflexions et appels d'outils sont écartés — on veut
@@ -640,6 +753,34 @@ export class DepotMissions {
           .get(missionId);
         if (l === null || l === undefined) return null;
         return { texte: l.texte, survenuA: l.survenu_a, type: 'texte', outil: l.outil };
+      },
+      { missionId },
+    );
+  }
+
+  /**
+   * Vrai si le dernier ACTE de la mission est un texte, postérieur à son
+   * dernier appel d'outil — c'est-à-dire si un rapport de fin existe (chantier 2,
+   * 21/08). Faux si le dernier acte enregistré est un appel d'outil (l'équipe a
+   * été coupée en plein geste) ou si aucun texte n'a jamais été écrit.
+   *
+   * `☠` Comparé par `id` (autoincrement, ordre total garanti), jamais par
+   * `survenu_a` seul : deux activités peuvent partager le même horodatage à la
+   * milliseconde, et `MAX(id)` ne ment jamais sur l'ordre d'écriture.
+   */
+  public aRapportFinal(missionId: string): boolean {
+    return executer(
+      'missions.aRapportFinal',
+      () => {
+        const ligne = this.db
+          .query<{ dernier_texte: number | null; dernier_outil: number | null }, [string, string]>(
+            `SELECT
+               (SELECT MAX(id) FROM activite_mission WHERE mission_id = ? AND type = 'texte') AS dernier_texte,
+               (SELECT MAX(id) FROM activite_mission WHERE mission_id = ? AND type = 'outil') AS dernier_outil`,
+          )
+          .get(missionId, missionId);
+        if (ligne === null || ligne === undefined || ligne.dernier_texte === null) return false;
+        return ligne.dernier_outil === null || ligne.dernier_texte > ligne.dernier_outil;
       },
       { missionId },
     );

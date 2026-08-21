@@ -59,9 +59,9 @@ const CLAUSES_FIXES = [
  */
 /** Ce que l'opérateur lit avant de cliquer — jamais un code, toujours l'effet réel. */
 function libelleAcces(acces: AccesMandat): string {
-  return acces === 'lecture'
-    ? 'LECTURE SEULE (Write, Edit et NotebookEdit refusés ; Bash reste ouvert pour explorer)'
-    : 'lecture et écriture';
+  if (acces === 'lecture') return 'LECTURE SEULE (Write, Edit et NotebookEdit refusés ; Bash reste ouvert pour explorer)';
+  if (acces === 'rapport') return 'lecture + écriture CONFINÉE au worktree de l’équipe (rapport avec scripts jetables)';
+  return 'lecture et écriture';
 }
 
 /**

@@ -267,6 +267,12 @@ export interface Mission {
   readonly creeA: number;
   readonly demarreeA: number | null;
   readonly termineeA: number | null;
+  /**
+   * `null` : préavis de plafond (80 %, silence (a)) jamais envoyé à cette
+   * équipe. Posé UNE SEULE FOIS par `balayage-telemetrie.ts` pour ne pas
+   * marteler le lead à chaque tick une fois le seuil franchi.
+   */
+  readonly avertissementBudget80A: number | null;
 }
 
 export interface CreationMission {

@@ -19,11 +19,13 @@ import { DepotRappels } from './rappels.ts';
 import { DepotEtats } from './etats.ts';
 import { DepotLots } from './lots.ts';
 import { DepotMissions } from './missions.ts';
+import { DepotObservationParc } from './observation-parc.ts';
 import { executer } from './journal.ts';
 import { versionSchema } from './migrations.ts';
 import { ETATS_HARNESS_TERMINAUX, type AvancementLot } from './types.ts';
 
 export type {
+  ActiviteMission,
   AvancementLot,
   Capacite,
   Compte,
@@ -37,6 +39,7 @@ export type {
   EvenementConversation,
   Lot,
   Mission,
+  NatureActiviteMission,
   Notification,
   PieceJointeMessage,
   Rappel,
@@ -66,6 +69,7 @@ export { DepotRallonges } from './rallonges.ts';
 export type { CreationDemandeRallonge } from './rallonges.ts';
 export { DepotNotifications } from './notifications.ts';
 export { DepotRappels } from './rappels.ts';
+export { DepotObservationParc } from './observation-parc.ts';
 export type { CreationRappel } from './rappels.ts';
 export type { CreationNotification } from './notifications.ts';
 export type { AjoutEvenement, CreationConversation } from './conversations.ts';
@@ -74,7 +78,7 @@ export { CAPACITES_SURVEILLEES } from './capacites.ts';
 export { ErreurRegistre } from './journal.ts';
 export { VERSION_SCHEMA_CIBLE } from './migrations.ts';
 export type { OptionsConnexion } from './connexion.ts';
-export type { CompteurEtat } from './missions.ts';
+export type { CompteurEtat, OptionsTranscriptMission, PageTranscriptMission } from './missions.ts';
 export type { OptionsTransitionHarness } from './etats.ts';
 
 /**
@@ -93,6 +97,7 @@ export class Registre {
   public readonly rallonges: DepotRallonges;
   public readonly notifications: DepotNotifications;
   public readonly rappels: DepotRappels;
+  public readonly observationParc: DepotObservationParc;
 
   private readonly db: Database;
 
@@ -109,6 +114,7 @@ export class Registre {
     this.rallonges = new DepotRallonges(db);
     this.notifications = new DepotNotifications(db);
     this.rappels = new DepotRappels(db);
+    this.observationParc = new DepotObservationParc(db);
   }
 
   public get version(): number {
