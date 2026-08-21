@@ -17,6 +17,11 @@ had already made, because no wave inherited them in writing.
 
 The cost of the plan that would have prevented it: one turn.
 
+The trigger that matters is not only before the first team — it is a team finishing in a
+state that creates the need for another one. That moment is a wave forming in real time.
+Stop there and decide whether the rest is now a campaign, before framing the next mandate
+as if it were a one-off.
+
 ## Design once, at the front
 
 Anything that is a judgement call — art direction, architecture, data model, the shape of
