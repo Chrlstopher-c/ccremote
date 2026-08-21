@@ -88,7 +88,26 @@ points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantie
    verrou déjà payé et inutilisable. **Effort : XS** — un paragraphe à réécrire dans un fichier de
    prose déjà établie, une fois que `rapport` a atterri sur `master`.
 
-5. **QUATRE CORRECTIONS DE CONDUITE NON PORTÉES**, dans `harness/composition/deploiement/config-orchestrateur/`
+5. **LE SCRIPT DE MISE EN PRODUCTION NE VÉRIFIE PAS MÉCANIQUEMENT QU'AUCUNE ÉQUIPE NE TOURNE.**
+   Signalé par l'orchestrateur en cours de journée. `deployer-en-production.sh`, livré aujourd'hui à
+   la racine du dépôt (commit `9412472`, branche `equipe/5cfebe27-...`, non fusionnée) redémarre le
+   service du harness sur le Pi (son étape 4) et coupe donc net toute équipe en cours de travail
+   là-bas. **Vérifié dans le script lui-même** : il AVERTIT en clair (en-tête, « ☠ CE SCRIPT REDÉMARRE
+   LE SERVICE DU HARNESS SUR LE PI… Toute équipe ou session en cours là-bas est coupée au même
+   instant, sans reprise automatique »), mais ne le VÉRIFIE nulle part mécaniquement — aucun appel au
+   parc, aucun comptage. Le garde-fou existe déjà ailleurs dans le même dépôt, à la racine :
+   `deployer-tout.sh::verifier_equipes_actives()` (~ligne 146) interroge les équipes actives et
+   **s'exclut lui-même de son propre comptage** (sinon la garde se refuserait toujours à elle-même),
+   avec un échappatoire explicite et nommé (`--malgre-equipes-actives`, destructeur, à utiliser en
+   connaissance de cause).
+   **Correction** : décider si `deployer-en-production.sh` doit reprendre ce filet plutôt que le
+   réécrire — une logique de self-exclusion improvisée serait un bug non testé sur le chemin le plus
+   sensible du dépôt (celui qui coupe des équipes en vol). Si la réponse est oui, brancher l'appel à
+   `verifier_equipes_actives()` (ou l'extraire en fonction partagée entre les deux scripts) avant
+   l'étape 4. **Effort : S** — la fonction existe déjà et fonctionne, il s'agit de la brancher, pas de
+   la concevoir.
+
+6. **QUATRE CORRECTIONS DE CONDUITE NON PORTÉES**, dans `harness/composition/deploiement/config-orchestrateur/`
    (chemin vérifié — `CLAUDE.md` + `skills/*/SKILL.md`) :
    - **(a)** Fixer le plafond de dépense d'une mission à environ 1,6× l'estimation — 30 missions
      terminent au-delà de 90 % de leur plafond et sacrifient alors leur vérification finale. Rien de
@@ -111,7 +130,7 @@ points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantie
      l'interdiction — rien sur quoi faire à la place quand Chris a effectivement raison. **Effort :
      XS**.
 
-6. **ÉPROUVER POUR DE VRAI LE VERROU D'ÉCRITURE CONFINÉE.** Le troisième accès `rapport` (points 4 et
+7. **ÉPROUVER POUR DE VRAI LE VERROU D'ÉCRITURE CONFINÉE.** Le troisième accès `rapport` (points 4 et
    5c) repose sur `harness/workers/confinement-ecriture.ts` — hook `PreToolUse` réel, testé
    unitairement (5 tests, commit `c3868ff`, branche `equipe/5cfebe27-...` non fusionnée), mais
    l'équipe qui l'a écrit le signale explicitement dans le fichier lui-même : « AUCUN banc
@@ -122,7 +141,7 @@ points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantie
    patron déjà écrit deux fois, plus la mise en place d'un mandat de test dont l'écriture hors-worktree
    doit être tentée et refusée en vrai.
 
-7. **LES DEUX SILENCES DU CYCLE DE VIE — DÉJÀ FERMÉS, à ne pas réinscrire tels quels.** Vérifié dans le
+8. **LES DEUX SILENCES DU CYCLE DE VIE — DÉJÀ FERMÉS, à ne pas réinscrire tels quels.** Vérifié dans le
    dépôt : le préavis à 80 % du plafond ET l'événement visible sur un mandat mort au démarrage sont
    tous deux livrés aujourd'hui par l'équipe en parallèle (commit `4ed34e1`, branche
    `equipe/5cfebe27-...`, non fusionnée à `master`). Préavis câblé dans
@@ -134,7 +153,7 @@ points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantie
    ici tant que cette branche n'a pas révélé un défaut après fusion** — si elle n'est jamais fusionnée,
    ce point redevient un chantier à part entière.
 
-8. **HUIT MISSIONS RÉELLEMENT DÉMARRÉES N'ONT LAISSÉ AUCUNE TRACE de télémétrie** (~2 % du parc).
+9. **HUIT MISSIONS RÉELLEMENT DÉMARRÉES N'ONT LAISSÉ AUCUNE TRACE de télémétrie** (~2 % du parc).
    Piste déjà posée dans le dépôt : le balayage qui persiste l'activité tourne toutes les 5 s
    (`harness/composition/pi/balayage-telemetrie.ts:27`, `PERIODE_BALAYAGE_MS`). Rapprochement à
    noter : la mesure faite aujourd'hui par l'équipe en parallèle pour livrer `transcript_equipe`
@@ -146,7 +165,7 @@ points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantie
    des transcripts. **Effort : S** pour la mesure, indéterminé pour le correctif selon ce qu'elle
    trouve.
 
-9. **QUESTION TRANCHÉE AUJOURD'HUI PAR L'ÉQUIPE EN PARALLÈLE — à documenter, pas à réinvestiguer.**
+10. **QUESTION TRANCHÉE AUJOURD'HUI PAR L'ÉQUIPE EN PARALLÈLE — à documenter, pas à réinvestiguer.**
    Vérifié : le choix décrit ici est déjà fait (commit `bd547b1`, branche `equipe/5cfebe27-...`, non
    fusionnée). `DepotMissions.aRapportFinal()` (`harness/control-plane/registre/missions.ts`) rend vrai
    si le dernier acte est un texte postérieur au dernier appel d'outil ; câblé aux deux points qui
@@ -160,13 +179,13 @@ points tiennent toujours ; si elle ne l'est jamais, ils redeviennent des chantie
    table mission casse les tables filles même FK désactivées, mesuré) reste entière — à trancher par
    Chris le jour où l'ambiguïté coûte réellement quelque chose, pas avant.
 
-10. **TROIS POINTS OUVERTS SUR LA LECTURE DES FILS — déjà inscrits plus tôt aujourd'hui, non
+11. **TROIS POINTS OUVERTS SUR LA LECTURE DES FILS — déjà inscrits plus tôt aujourd'hui, non
     dupliqués ici.** Vérifié : ils sont déjà dans ce fichier, juste en dessous, sous
     « 🆕 Trois points laissés ouverts par cette passe, non traités (21/08) » (index absent sur les
     événements de conversation, recherche insensible aux accents faite en mémoire faute de voie
     indexée en lecture seule, fils sans message soumis au filtre de plage de dates). Rien à ajouter.
 
-11. **LA COPIE DE TRAVAIL PRINCIPALE DU DÉPÔT (`/mnt/projects/ccremote`) EST DÉSYNCHRONISÉE.** Vérifié
+12. **LA COPIE DE TRAVAIL PRINCIPALE DU DÉPÔT (`/mnt/projects/ccremote`) EST DÉSYNCHRONISÉE.** Vérifié
     en direct ce jour : `HEAD` est sur `master` (`6a484b7`), mais `git status` y montre des
     suppressions STAGÉES sur des fichiers que `master` contient bel et bien
     (`ARBORESCENCE.md`, `STATE.md`, `TODO.md`,
