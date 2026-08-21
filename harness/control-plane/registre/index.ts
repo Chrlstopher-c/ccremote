@@ -11,6 +11,7 @@ import { fermerBase, ouvrirBase, type OptionsConnexion } from './connexion.ts';
 import { DepotCapacites } from './capacites.ts';
 import { DepotComptes } from './comptes.ts';
 import { DepotConversations } from './conversations.ts';
+import { DepotFilsHistorique } from './fils-historique.ts';
 import { DepotPropositions } from './propositions.ts';
 import { DepotRallonges } from './rallonges.ts';
 import { DepotNotifications } from './notifications.ts';
@@ -57,6 +58,8 @@ export type {
   TypeFenetreQuota,
 } from './types.ts';
 export { DepotConversations } from './conversations.ts';
+export { DepotFilsHistorique } from './fils-historique.ts';
+export type { OptionsListeFils, OptionsLectureFil, PageEvenementsFil, ResumeFil } from './fils-historique.ts';
 export { DepotPropositions } from './propositions.ts';
 export type { CreationProposition } from './propositions.ts';
 export { DepotRallonges } from './rallonges.ts';
@@ -85,6 +88,7 @@ export class Registre {
   public readonly comptes: DepotComptes;
   public readonly capacites: DepotCapacites;
   public readonly conversations: DepotConversations;
+  public readonly filsHistorique: DepotFilsHistorique;
   public readonly propositions: DepotPropositions;
   public readonly rallonges: DepotRallonges;
   public readonly notifications: DepotNotifications;
@@ -100,6 +104,7 @@ export class Registre {
     this.comptes = new DepotComptes(db);
     this.capacites = new DepotCapacites(db);
     this.conversations = new DepotConversations(db);
+    this.filsHistorique = new DepotFilsHistorique(db);
     this.propositions = new DepotPropositions(db);
     this.rallonges = new DepotRallonges(db);
     this.notifications = new DepotNotifications(db);

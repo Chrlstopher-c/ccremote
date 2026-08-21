@@ -102,7 +102,12 @@ describe('surface d’outils (A.2.2)', () => {
   //     chose : resserrer et terminer partent seuls, ouvrir et prolonger passent
   //     par un clic — une fenêtre est exactement ce qui dispense l'orchestrateur
   //     de demander l'autorisation, il ne peut donc pas se l'accorder.
-  test('expose exactement les 27 outils spécifiés — ni plus, ni moins', () => {
+  //   `lister_fils`, `lire_fil` (2026-08-21) — l'orchestrateur ne pouvait relire
+  //     AUCUN fil déjà enregistré, ni le sien ni celui d'une autre conversation :
+  //     seul l'historique d'ÉQUIPES lui était accessible (`historique_equipe`),
+  //     jamais celui des conversations elles-mêmes. Lecture seule, jamais un
+  //     `INSERT`/`UPDATE`/`DELETE`.
+  test('expose exactement les 29 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
@@ -133,6 +138,8 @@ describe('surface d’outils (A.2.2)', () => {
         'demander_fenetre_autonomie',
         'ajuster_autonomie',
         'terminer_autonomie',
+        'lister_fils',
+        'lire_fil',
       ].sort(),
     );
   });
@@ -373,7 +380,7 @@ describe('surface d’outils (A.2.2)', () => {
   });
 
   test('(c) readOnlyHint est posé sur tout le groupe inspection', () => {
-    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'suivre_equipes', 'mon_autonomie', 'carburant_parc', 'lister_projets', 'historique_equipe'];
+    const inspection = ['lister_equipes', 'etat_equipe', 'rapport_equipe', 'suivre_equipe', 'suivre_equipes', 'mon_autonomie', 'carburant_parc', 'lister_projets', 'historique_equipe', 'lister_fils', 'lire_fil'];
     const outils = construireOutilsControle(deps);
     for (const nom of inspection) {
       const outil = outils.find((o) => o.name === nom);

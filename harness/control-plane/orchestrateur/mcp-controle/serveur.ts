@@ -47,6 +47,7 @@ import {
   supprimerRappel,
 } from './outils-rappels.ts';
 import { nommerFil } from './outils-fil.ts';
+import { listerFils, lireFil } from './outils-historique-fils.ts';
 import { creerArtefact } from './outils-artefact.ts';
 import { demanderRallongeAutonomie } from './outils-rallonge.ts';
 import { ajusterAutonomie, demanderFenetreAutonomie, terminerAutonomie } from './outils-autonomie.ts';
@@ -563,6 +564,57 @@ function outilsFil(deps: DependancesServeurControle) {
 }
 
 /**
+ * Groupe « historique des fils » — l'orchestrateur relit des conversations
+ * déjà enregistrées au registre, lecture SEULE (A.2.2). `☠` Aucun paramètre ne
+ * vient de la closure ici (contrairement à `outilsFil` ci-dessus) : relire le
+ * fil d'une AUTRE conversation, ou une conversation archivée, est le but même
+ * de ces deux outils.
+ */
+function outilsHistoriqueFils(deps: DependancesServeurControle) {
+  const instant =
+    'Formats acceptés : « maintenant », un décalage relatif (« +8h », « +90min », « +3j »), ' +
+    'ou un instant ISO 8601 avec l’heure (« 2026-08-09T02:00 »). Une date sans heure est refusée.';
+  return [
+    tool(
+      'lister_fils',
+      'Les fils de discussion déjà enregistrés au registre — celui-ci comme les autres, sur tout ' +
+        'l’historique. Pour chaque fil : identifiant, titre, dates de premier et de dernier ' +
+        'message, nombre de messages. `depuis`/`jusqua` filtrent QUELS fils apparaissent (au moins ' +
+        'un message dans la plage) — les dates et le compte rendus restent ceux du fil ENTIER, pas ' +
+        'de la plage. Trié par activité la plus récente. Lecture seule.',
+      {
+        depuis: z.string().optional().describe(`Début de la plage. Défaut : depuis toujours. ${instant}`),
+        jusqua: z.string().optional().describe(`Fin de la plage. Défaut : maintenant. ${instant}`),
+        limite: z.number().int().positive().optional().describe('Nombre de fils. Défaut 20, maximum 100.'),
+      },
+      async ({ depuis, jusqua, limite }) =>
+        protege('lister_fils', () => listerFils(deps.registre, depuis, jusqua, limite)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'lire_fil',
+      "Le contenu d'un fil enregistré au registre : ses messages dans l'ordre chronologique, avec " +
+        "leur émetteur (Chris, orchestrateur, notification) et leur horodatage. Filtrable par plage " +
+        'de dates, paginé (`decalage`/`limite`, bornés à 200), et cherchable par un motif texte ' +
+        '(`recherche`, insensible à la casse). Utilise `lister_fils` pour trouver l’identifiant ' +
+        '`fil`. Un fil inexistant est refusé explicitement, jamais rendu comme une page vide. ' +
+        'Lecture seule.',
+      {
+        fil: z.string().describe('Identifiant du fil, tel que rendu par `lister_fils`.'),
+        depuis: z.string().optional().describe(`Début de la plage. Défaut : depuis toujours. ${instant}`),
+        jusqua: z.string().optional().describe(`Fin de la plage. Défaut : maintenant. ${instant}`),
+        recherche: z.string().optional().describe('Motif recherché dans le contenu des messages.'),
+        decalage: z.number().int().nonnegative().optional().describe('Messages à sauter. Défaut 0.'),
+        limite: z.number().int().positive().optional().describe('Nombre de messages. Défaut 50, maximum 200.'),
+      },
+      async ({ fil, depuis, jusqua, recherche, decalage, limite }) =>
+        protege('lire_fil', () => lireFil(deps.registre, fil, { depuis, jusqua, recherche, decalage, limite })),
+      { annotations: { readOnlyHint: true } },
+    ),
+  ];
+}
+
+/**
  * Groupe « artefact » — l'orchestrateur présente à Chris un contenu qu'il
  * produit lui-même, affiché dans le fil plutôt que noyé dans un bloc de texte
  * (mandat « artefacts »). Absent si la racine des pièces jointes n'est pas
@@ -930,6 +982,7 @@ export function construireOutilsControle(deps: DependancesServeurControle) {
     ...outilsBudget(deps),
     ...outilsRappels(deps),
     ...outilsFil(deps),
+    ...outilsHistoriqueFils(deps),
     ...outilsArtefact(deps),
     ...outilsRallonge(deps),
     ...outilsAutonomie(deps),
