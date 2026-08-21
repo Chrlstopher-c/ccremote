@@ -103,6 +103,15 @@ export interface WorkerSpec {
   readonly mandate: string;
   /** Plancher de déni, motifs **scopés** (H-41, panne #21). Champ obligatoire. */
   readonly deniedToolPatterns: readonly string[];
+  /**
+   * Garde 3 (accès `rapport`, mandat opérateur 21/08) — `true` confine
+   * Write/Edit/NotebookEdit au `cwd` de cette équipe via un hook `PreToolUse`
+   * actif (`workers/confinement-ecriture.ts`), le seul canal du SDK qui reçoit
+   * le chemin ET peut le refuser (`disallowedTools` ne sait refuser que par nom
+   * d'outil ou motif glob positif — jamais « hors de X », voir
+   * `shared/acces-mandat.ts`). Absent/`false` : aucun confinement posé.
+   */
+  readonly confinerEcritureCwd?: boolean;
   /** Anti-boucle par mission (H-58). */
   readonly maxBudgetUsd: number;
   /** Alias ou identifiant de modèle ; résolu puis comparé au plancher (H-43). */

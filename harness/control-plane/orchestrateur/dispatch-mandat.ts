@@ -367,12 +367,24 @@ function ligneAcces(acces: AccesMandat): string {
   // `☠` Vient du MÊME calcul que les refus d'outils (paramètre, jamais relu
   // depuis `p`) : deux lectures indépendantes finiraient par diverger, et le
   // lead brûlerait son budget à retenter des outils qu'on lui a dit d'utiliser.
-  return acces === 'lecture'
-    ? 'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
-        'inutile de les tenter. Bash reste disponible : explore librement au shell ' +
-        '(rg, git log, find…), mais n’écris pas de fichier par ce biais — ce mandat ne ' +
-        'te demande pas de modifier le projet. Rends tes conclusions par écrit.'
-    : 'Accès : lecture et écriture, dans les limites du plancher de déni.';
+  if (acces === 'lecture') {
+    return (
+      'Accès : LECTURE SEULE. Write, Edit et NotebookEdit te sont refusés par le harness — ' +
+      'inutile de les tenter. Bash reste disponible : explore librement au shell ' +
+      '(rg, git log, find…), mais n’écris pas de fichier par ce biais — ce mandat ne ' +
+      'te demande pas de modifier le projet. Rends tes conclusions par écrit.'
+    );
+  }
+  if (acces === 'rapport') {
+    return (
+      'Accès : LECTURE sur le projet, ÉCRITURE CONFINÉE à ton propre worktree. Write, Edit ' +
+      'et NotebookEdit fonctionnent, mais SEULEMENT sur des chemins à l’intérieur de ton ' +
+      'répertoire de travail — un chemin hors de ce répertoire est refusé par le harness, ' +
+      'pas par consigne. Utilise-les pour tes scripts d’analyse jetables ; ton rapport final ' +
+      'reste ta livraison, pas une modification du projet lui-même.'
+    );
+  }
+  return 'Accès : lecture et écriture, dans les limites du plancher de déni.';
 }
 
 /**
@@ -759,6 +771,11 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       // forme du rapport attendu, au tour précis où il en avait besoin.
       mandate: composerMandatSysteme(p, acces),
       deniedToolPatterns: composerDenis(acces, deps.deniedToolPatterns),
+      // `☠` Garde 3 — le verrou RÉEL de l'accès `rapport` : voir
+      // `workers/confinement-ecriture.ts`. `outilsRefusesPour('rapport')` rend
+      // `[]` (les outils d'écriture ne sont pas refusés par nom), c'est ce
+      // champ, câblé au hook `PreToolUse`, qui confine leur cible au worktree.
+      confinerEcritureCwd: acces === 'rapport',
       maxBudgetUsd: plafondEffectifUsd(p.budgetMaxUsd),
       // `☠` Même condition que `ligneBudget()` et `plafondEffectifUsd` — une
       // SEULE source, jamais deux calculs indépendants qui pourraient diverger

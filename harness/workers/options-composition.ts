@@ -15,10 +15,11 @@
  * l'audit de permissions (C.5, M-22, H-74) — jamais une customisation projet.
  */
 
-import type { Options } from '@anthropic-ai/claude-agent-sdk';
+import type { HookCallbackMatcher, HookEvent, Options } from '@anthropic-ai/claude-agent-sdk';
 import { assertRetryWatchdogCoherent } from '../budgets/index.ts';
 import { buildAuditHooks } from './audit-hooks.ts';
 import { buildCanUseTool } from './can-use-tool.ts';
+import { creerHooksConfinementEcriture } from './confinement-ecriture.ts';
 import { DEFAULT_SETTING_SOURCES } from './preflight-config.ts';
 import { sessionLogger } from './logger.ts';
 import type { ResolvedModel, WorkerSpec } from './types.ts';
@@ -71,6 +72,33 @@ function buildStderrSink(spec: WorkerSpec): (data: string) => void {
 
 /** Mode d'identité de session transmis au SDK — `sessionId` (neuf) ou `resume` (relance, M-13/B.3.3). */
 export type ModeIdentiteSession = 'nouvelle' | 'reprise';
+
+/**
+ * Fusionne deux jeux de hooks par événement — les matchers se CONCATÈNENT,
+ * jamais un n'écrase l'autre (l'audit et le confinement doivent tous deux
+ * recevoir `PreToolUse`).
+ */
+function fusionnerHooks(
+  a: Partial<Record<HookEvent, HookCallbackMatcher[]>>,
+  b: Partial<Record<HookEvent, HookCallbackMatcher[]>>,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const fusion: Partial<Record<HookEvent, HookCallbackMatcher[]>> = { ...a };
+  for (const [evenement, matchers] of Object.entries(b) as [HookEvent, HookCallbackMatcher[] | undefined][]) {
+    if (matchers === undefined) continue;
+    fusion[evenement] = [...(fusion[evenement] ?? []), ...matchers];
+  }
+  return fusion;
+}
+
+/**
+ * Tous les hooks structurels d'un worker : l'audit (toujours) et, pour
+ * l'accès `rapport` (garde 3), le confinement d'écriture au worktree.
+ */
+function buildHooks(spec: WorkerSpec): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const audit = buildAuditHooks(spec);
+  if (spec.confinerEcritureCwd !== true) return audit;
+  return fusionnerHooks(audit, creerHooksConfinementEcriture(spec.cwd));
+}
 
 /**
  * Compose les options structurelles. Le modèle reçu est déjà résolu (H-43).
@@ -156,7 +184,7 @@ export function composeWorkerOptions(
     // Obligatoire dans le type (WorkerSpec.portAuditPermissions), enveloppé par
     // buildAuditHooks pour qu'une panne de l'audit ne bloque ni ne fasse échouer
     // le tour (propriété n°1 du harness).
-    hooks: buildAuditHooks(spec),
+    hooks: buildHooks(spec),
     ...(spec.sessionStore !== undefined ? { sessionStore: spec.sessionStore } : {}),
     ...(spec.spawnProcess !== undefined ? { spawnClaudeCodeProcess: spec.spawnProcess } : {}),
   };
