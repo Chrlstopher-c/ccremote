@@ -300,6 +300,36 @@ describe('constat git d’une mission (migration 23)', () => {
   });
 });
 
+// ------------------------------------------------- préavis de plafond (migration 32, 21/08)
+
+describe('préavis de plafond 80 % (migration 32)', () => {
+  function semer(id: string): void {
+    registre.lots.creer({ id: `lot-${id}`, intention: 'préavis budget' });
+    mission(id, `projet-${id}`, `lot-${id}`);
+  }
+
+  test('☠ une mission neuve a `avertissementBudget80A: null` — jamais envoyé', () => {
+    semer('m-av-1');
+    expect(registre.missions.lire('m-av-1')?.avertissementBudget80A).toBeNull();
+  });
+
+  test('le premier appel pose la marque et rend `true`', () => {
+    semer('m-av-2');
+    const posee = registre.missions.poserAvertissementBudget80('m-av-2', 1_785_000_000_000);
+    expect(posee).toBe(true);
+    expect(registre.missions.lire('m-av-2')?.avertissementBudget80A).toBe(1_785_000_000_000);
+  });
+
+  test('☠ un second appel ne repose rien et rend `false` — une seule fois par mission', () => {
+    semer('m-av-3');
+    registre.missions.poserAvertissementBudget80('m-av-3', 1_000);
+    const second = registre.missions.poserAvertissementBudget80('m-av-3', 2_000);
+    expect(second).toBe(false);
+    // La date reste celle du PREMIER appel, jamais réécrasée par le second.
+    expect(registre.missions.lire('m-av-3')?.avertissementBudget80A).toBe(1_000);
+  });
+});
+
 // ------------------------------------------------- transcript() (chantier 1, 21/08)
 
 describe('transcript — lecture paginée du fil complet d’une mission', () => {
