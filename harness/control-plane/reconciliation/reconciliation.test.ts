@@ -112,8 +112,9 @@ beforeEach(() => {
 // ------------------------------------------------------------------- fantômes
 
 describe('fantômes (acceptation a)', () => {
-  test('mission active au registre, absente du PC ⇒ marquée terminée', async () => {
+  test('mission active au registre, absente du PC, AVEC un rapport ⇒ marquée terminée', async () => {
     creerMission('m-1', 'projet-alpha', 'sess-1');
+    registre.missions.ajouterActivite('m-1', 'Rapport final : tout est vert.', 1_000);
     inventairePc.definir([]);
 
     const rapport = await reconcilier(registre, deps(), 'demarrage', { journal });
@@ -122,6 +123,49 @@ describe('fantômes (acceptation a)', () => {
     expect(registre.missions.exiger('m-1').etatHarness).toBe('terminee');
     expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('fantome_reconciliation');
     expect(journal.contient('fantome_marque')).toBe(true);
+  });
+
+  /**
+   * `☠` CHANTIER 2 (21/08) — LE défaut mesuré sur le parc réel : 133/393 missions
+   * (34 %, 414 $) marquées `terminee` alors que leur dernier acte est un appel
+   * d'outil, jamais suivi d'un texte. `terminee` est le cas NOMINAL (F2.0.1) —
+   * une mission dont personne ne peut confirmer qu'elle a rendu quelque chose
+   * n'est plus lue comme un succès silencieux.
+   */
+  test('☠ mission active au registre, absente du PC, SANS rapport ⇒ echec_definitif, pas terminee', async () => {
+    creerMission('m-1', 'projet-alpha', 'sess-1');
+    inventairePc.definir([]);
+
+    const rapport = await reconcilier(registre, deps(), 'demarrage', { journal });
+
+    expect(rapport.fantomes).toEqual(['m-1']); // toujours détectée comme fantôme : seul l'état d'arrivée change
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('echec_definitif');
+    expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('cloture_sans_rapport');
+  });
+
+  test('☠ chantier 3 (21/08) — un dernier texte de saturation de quota est reconnu et écrit', async () => {
+    creerMission('m-1', 'projet-alpha', 'sess-1');
+    registre.missions.ajouterActivite('m-1', "You've hit your session limit · resets 8:10am (Europe/Paris)", 1_000);
+    inventairePc.definir([]);
+
+    await reconcilier(registre, deps(), 'demarrage', { journal });
+
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('echec_definitif');
+    expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('plafond_quota');
+  });
+
+  test('☠ un long rapport qui CITE « session limit » en exemple n’est jamais pris pour une coupure', async () => {
+    // Faux positif réellement observé sur le parc : un rapport d'audit de 20 630
+    // caractères mentionnant « session limit » comme exemple dans son analyse.
+    creerMission('m-1', 'projet-alpha', 'sess-1');
+    const rapportLong = `# Analyse\n${'Le parc a mesuré des cas de session limit. '.repeat(20)}\nFin.`;
+    registre.missions.ajouterActivite('m-1', rapportLong, 1_000);
+    inventairePc.definir([]);
+
+    await reconcilier(registre, deps(), 'demarrage', { journal });
+
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('terminee');
+    expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('fantome_reconciliation');
   });
 
   test('mission active au registre, worker mort sur le PC ⇒ fantôme aussi', async () => {

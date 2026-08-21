@@ -25,6 +25,9 @@ import {
   rapportEquipe,
   suivreEquipe,
   suivreEquipes,
+  transcriptEquipe,
+  TRANSCRIPT_LIGNES_DEFAUT,
+  TRANSCRIPT_LIGNES_MAX,
   autonomieDuFil,
   carburantParc,
   listerProjets,
@@ -291,6 +294,40 @@ function outilsInspection(deps: DependancesServeurControle) {
         lignes: z.number().int().positive().optional().describe('Budget TOTAL réparti entre elles. Défaut 10, maximum 200.'),
       },
       async ({ equipes, lignes }) => protege('suivre_equipes', () => suivreEquipes(deps.registre, equipes, lignes)),
+      { annotations: { readOnlyHint: true } },
+    ),
+    tool(
+      'transcript_equipe',
+      "Le transcript ENTIER d'une équipe (texte, réflexions, appels d'outils), paginé, filtrable " +
+        "par type. Fonctionne aussi bien sur une équipe vivante que terminée, COUPÉE ou PLANTÉE — " +
+        "c'est la seule façon de savoir ce qu'une équipe a dit en dernier quand elle n'a jamais " +
+        "rendu de rapport (`rapport_equipe` reste vide dans ce cas précis, faute de texte final). " +
+        "Par défaut, rend déjà la FIN du transcript (les dernières lignes, dans l'ordre " +
+        "chronologique) : c'est le geste utile, aucune pagination manuelle depuis le début n'est " +
+        "nécessaire. Pour remonter plus loin dans le passé, augmente `decalage` (compté depuis la " +
+        "fin, pas depuis le début) — pas `suivre_equipe` pour ça, qui résume et ne va jamais plus " +
+        "loin que ses dernières lignes. Lecture seule.",
+      {
+        equipe: z.string().describe("Identifiant, nom ou projet de l'équipe."),
+        type: z
+          .enum(['texte', 'reflexion', 'outil'])
+          .optional()
+          .describe("Ne garder qu'un type d'activité. Défaut : tous."),
+        decalage: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe('Lignes à sauter, comptées depuis la FIN. Défaut 0 (les plus récentes).'),
+        limite: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(`Nombre de lignes. Défaut ${TRANSCRIPT_LIGNES_DEFAUT}, maximum ${TRANSCRIPT_LIGNES_MAX}.`),
+      },
+      async ({ equipe, type, decalage, limite }) =>
+        protege('transcript_equipe', () => transcriptEquipe(deps.registre, equipe, { type, decalage, limite })),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
