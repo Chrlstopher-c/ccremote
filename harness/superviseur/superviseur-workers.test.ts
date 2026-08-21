@@ -11,7 +11,7 @@
  * session Claude Code réelle en unitaire).
  */
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { EvenementQuotaObserve, ObservateurUsage } from '../budgets/index.ts';
 import { CompteurRelances } from '../relance/compteur-relances.ts';
@@ -351,6 +351,29 @@ describe('fencing par epoch (D.2.3, panne #2) — demarrer() arbitre AVANT tout 
 });
 
 describe('câblage de deciderRelance() sur un SDKResultMessage réel', () => {
+  // `☠` Ces tests fournissent un `planifier` SYNCHRONE (`tache()` immédiate, sans attente de
+  // backoff réel) pour observer la relance sans délai. Or `#planifier` est le MÊME champ que
+  // celui qui pilote le tick périodique de consolidation d'apprentissage
+  // (`demarrerConsolidationPeriodiqueSiConfigure`, câblé à la construction) — si
+  // `CCREMOTE_APPRENTISSAGE_ACTIF` est vrai au moment de cette construction, ce tick se
+  // reprogramme lui-même via le même `planifier` synchrone, donc de façon synchrone et
+  // immédiate, en boucle : `RangeError: Maximum call stack size exceeded`. Rien à voir avec ce
+  // que ce bloc teste — l'ambiant (variable héritée du shell, ou laissée par un autre fichier
+  // de test dans le même process bun) ne doit jamais décider si CE bloc-ci est vert. On force
+  // donc l'extinction, en restaurant la valeur d'origine ensuite plutôt qu'en la supprimant à
+  // l'aveugle (ce qui casserait un test qui l'attendrait active).
+  const AVAIT_APPRENTISSAGE_ACTIF = process.env['CCREMOTE_APPRENTISSAGE_ACTIF'];
+  beforeEach(() => {
+    delete process.env['CCREMOTE_APPRENTISSAGE_ACTIF'];
+  });
+  afterEach(() => {
+    if (AVAIT_APPRENTISSAGE_ACTIF === undefined) {
+      delete process.env['CCREMOTE_APPRENTISSAGE_ACTIF'];
+    } else {
+      process.env['CCREMOTE_APPRENTISSAGE_ACTIF'] = AVAIT_APPRENTISSAGE_ACTIF;
+    }
+  });
+
   function resultMessage(terminal_reason: string): SDKMessage {
     return {
       type: 'result',
