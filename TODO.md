@@ -13,6 +13,35 @@ les ~23 estimés — l'écart tient au fait qu'une bonne partie du fichier d'ori
 d'un même chantier une par une plutôt qu'un point par chantier (ex. les 5 cases du chantier « présenter
 un fichier », comptées séparément ci-dessous par fidélité au fichier d'origine).*
 
+## ✅ Fait le 21/08 — deux outils MCP de relecture des fils, fusionnés dans `master`
+
+- [x] **`lister_fils`/`lire_fil`** — outils lecture seule de relecture de l'historique des fils
+      (`mcp-controle/outils-historique-fils.ts` + dépôt `registre/fils-historique.ts`), fusionnés
+      depuis `equipe/c86e5a2c-a7e0-42fe-9c6e-88f0b2ffcb4f` (fast-forward pur). Détail complet,
+      bornes et défauts déjà corrigés dans cette même passe : voir `STATE.md`.
+
+### 🆕 Trois points laissés ouverts par cette passe, non traités (21/08)
+
+- [ ] **Index sur les événements de conversation, non ajouté.** `lister()` balaie
+      `conversation_evenement` sans filtre d'index dédié — inutile au volume actuel du registre
+      (un parc personnel, pas un historique de production à grande échelle : mesuré 108 fils,
+      7 864 événements, 42 ms sans index). L'index qui conviendrait si le volume grossit est décrit
+      en tête de `harness/control-plane/registre/fils-historique.ts`. **Effort : XS** le jour où le
+      volume le justifie.
+- [ ] **Recherche insensible aux accents faite en mémoire, pas en base.** `lire_fil` normalise
+      (NFD + retrait des diacritiques) côté code JS plutôt qu'en SQL, faute d'une voie purement en
+      lecture côté base : `bun:sqlite` n'expose ni fonction SQL custom (`Database.function`) ni
+      collation utilisable par `LIKE`. Une solution indexée (FTS5 avec tokenizer
+      `unicode61 remove_diacritics 2`, ou une colonne normalisée + index dessus) exigerait une
+      écriture de schéma — décision de coût qui revient à Chris. **Effort : S** (FTS5) à **M**
+      (colonne + migration), au jugement de Chris.
+- [ ] **Fils sans message, toujours soumis au filtre de plage via `maj_a` du fil.** `lister_fils`
+      rend désormais les fils sans aucun événement (correctif LEFT JOIN ci-dessus), mais un fil vide
+      n'apparaît que si sa date de mise à jour tombe dans la plage demandée. S'il faut qu'un fil vide
+      apparaisse TOUJOURS, quelle que soit la plage, c'est un changement d'une ligne dans
+      `DepotFilsHistorique.lister()` (retirer la borne sur `c.maj_a` de la clause `OR`). **Effort :
+      XS**, arbitrage de Chris à trancher avant de la faire.
+
 ## ✅ Fait le soir du 18/08 — voir `STATE.md` pour le détail vérifié
 
 - [x] **`deployer-pi.sh`** — une seule commande pour le control plane du Pi, résout seule le secret

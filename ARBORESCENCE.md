@@ -481,6 +481,8 @@ Arbre complet du dossier `harness/`, un fichier par ligne, chemins relatifs à `
 - `control-plane/orchestrateur/mcp-controle/outils-cycle-vie.ts` — `creer_equipe`/`envoyer_a_equipe`/`interrompre`/`arreter`/`relancer`
 - `control-plane/orchestrateur/mcp-controle/outils-fil.test.ts` — tests de `outils-fil.ts`
 - `control-plane/orchestrateur/mcp-controle/outils-fil.ts` — groupe « fil » : l'orchestrateur nomme la conversation dans laquelle il parle, borné à LA conversation appelante via la closure du serveur
+- `control-plane/orchestrateur/mcp-controle/outils-historique-fils.test.ts` — tests de `outils-historique-fils.ts`, dont la propriété lecture seule (base fixture octet pour octet identique avant/après)
+- `control-plane/orchestrateur/mcp-controle/outils-historique-fils.ts` — groupe « historique des fils » : `lister_fils`/`lire_fil`, lecture seule (readOnlyHint), prennent un identifiant de fil en paramètre — relire un fil ARCHIVÉ ou celui d'une autre session, contrairement à `outils-fil.ts`
 - `control-plane/orchestrateur/mcp-controle/outils-inspection.test.ts` — outils en lecture (lister/état/historique/permissions)
 - `control-plane/orchestrateur/mcp-controle/outils-inspection.ts` — outils en lecture (lister/état/historique/permissions)
 - `control-plane/orchestrateur/mcp-controle/outils-machine.test.ts` — groupe « machine » (A.2.2) : `etat_machine`/`reveiller_machine`
@@ -553,6 +555,7 @@ Arbre complet du dossier `harness/`, un fichier par ligne, chemins relatifs à `
 - `control-plane/registre/conversations.test.ts` — tests de `conversations.ts`
 - `control-plane/registre/conversations.ts` — fils de discussion de l'orchestrateur (migration 2) et leur journal d'événements ; écrire un événement bouge `conversation.maj_a` dans la MÊME transaction
 - `control-plane/registre/etats.ts` — transitions d'état harness/SDK
+- `control-plane/registre/fils-historique.ts` — dépôt lecture seule des fils et de leurs événements pour `outils-historique-fils.ts` ; que des `SELECT`, jamais d'écriture ni de migration ; recherche insensible aux accents faite en JS (NFD), `bun:sqlite` n'a pas de fonction SQL custom
 - `control-plane/registre/index.ts` — interface publique + `ouvrirRegistre()`
 - `control-plane/registre/journal.ts` — wrapper d'exécution + erreurs (`ErreurRegistre`)
 - `control-plane/registre/lignes-conversation.ts` — forme SQL d'un fil et de ses événements, et sa traduction vers le domaine, extrait mécaniquement de `conversations.ts` pour tenir la limite de 500 lignes
