@@ -171,6 +171,90 @@ export function resoudreMission(registre: Registre, designation: string): Resolu
 }
 
 /**
+ * Chantier 1 (mandat opérateur 24/08, demande directe de Chris) — RÉSOLUTION
+ * CLOISONNÉE PAR CONVERSATION, réservée aux outils qui rendent du CONTENU
+ * (transcript, rapport, état détaillé, historique, suivi en direct). Le
+ * contenu d'une équipe appartient à la conversation qui l'a lancée, et à elle
+ * seule — pas d'échappatoire, pas de paramètre pour élargir.
+ *
+ * `☠` Deux surfaces de fuite à fermer, pas une seule : (1) un identifiant
+ * EXACT (id, session) désignant une mission d'un autre fil doit produire un
+ * refus explicite, sans jamais révéler nom, projet ni contenu ; (2) une
+ * recherche par NOM/PROJET/FRAGMENT ne doit même pas CONSIDÉRER les missions
+ * d'un autre fil — les lister dans un message d'ambiguïté révélerait déjà leur
+ * nom, exactement la fuite que ce chantier ferme. D'où un filtrage par
+ * conversation AVANT le fuzzy match, jamais après.
+ *
+ * Distincte de `resoudreMission`, volontairement : les outils de CYCLE DE VIE
+ * (`envoyer_a_equipe`, `arreter_equipe`…) restent hors périmètre de ce
+ * chantier — Chris n'a demandé de cloisonner que la lecture de contenu, pas
+ * le pilotage du parc (même raison que l'exception de `lister_equipes` sur
+ * les actives, voir plus haut).
+ */
+export type ResolutionMissionFil =
+  | { readonly trouve: Mission }
+  | { readonly ambigu: readonly Mission[] }
+  | { readonly absent: true }
+  | { readonly autreFil: true };
+
+/** `☠` Volontairement muet sur le fond : ni objectif, ni projet, ni contenu. */
+export const REFUS_AUTRE_FIL =
+  "cette équipe appartient à une autre conversation — son contenu n'est visible que depuis celle qui l'a lancée.";
+
+export function resoudreMissionDuFil(
+  registre: Registre,
+  conversationId: string | null,
+  designation: string,
+): ResolutionMissionFil {
+  const exact = registre.missions.lire(designation);
+  if (exact !== null) return exact.conversationId === conversationId ? { trouve: exact } : { autreFil: true };
+  // Même remarque que `resoudreMission` : l'identifiant du worker désigne
+  // aussi son équipe, et c'est un identifiant EXACT — la même garde s'applique.
+  const parSession = registre.missions.lireParSession(designation);
+  if (parSession !== null) {
+    return parSession.conversationId === conversationId ? { trouve: parSession } : { autreFil: true };
+  }
+  const aiguille = designation.trim().toLowerCase();
+  if (aiguille.length === 0) return { absent: true };
+  // Filtré AVANT le fuzzy match : une mission d'un autre fil n'apparaît jamais,
+  // pas même comme candidat d'une désignation ambiguë.
+  const candidats = registre.missions.listerRecentes(200).filter((m) => m.conversationId === conversationId);
+  const parChamp = candidats.filter((m) => m.nom.toLowerCase() === aiguille || m.projet.toLowerCase() === aiguille);
+  const retenus =
+    parChamp.length > 0
+      ? parChamp
+      : candidats.filter(
+          (m) =>
+            m.id.toLowerCase().includes(aiguille) ||
+            m.nom.toLowerCase().includes(aiguille) ||
+            m.projet.toLowerCase().includes(aiguille),
+        );
+  if (retenus.length === 0) return { absent: true };
+  if (retenus.length === 1) return { trouve: retenus[0] as Mission };
+  return { ambigu: retenus.slice(0, 10) };
+}
+
+/** Traduit une `ResolutionMissionFil` négative en refus uniforme (A.2.3). */
+function refusResolutionFil(
+  intention: string,
+  resolution: Exclude<ResolutionMissionFil, { readonly trouve: Mission }>,
+): ContratRetour {
+  if ('autreFil' in resolution) {
+    return { ok: false, intention, effet: 'refuse', raison: REFUS_AUTRE_FIL };
+  }
+  if ('ambigu' in resolution) {
+    const listeCandidats = resolution.ambigu.map((m) => `${m.id} (${m.nom})`).join(' | ');
+    return {
+      ok: false,
+      intention,
+      effet: 'refuse',
+      raison: `désignation ambiguë — préciser l'identifiant parmi : ${listeCandidats}`,
+    };
+  }
+  return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
+}
+
+/**
  * Les sous-agents d'une équipe, tels que le disque de sa machine les montre.
  *
  * `☠ L'ORCHESTRATEUR NE POUVAIT PAS RÉPONDRE À LA QUESTION` (03/08). Interrogé
@@ -201,23 +285,16 @@ function resumerSousAgents(registre: Registre, mission: Mission): string {
   return `sous-agents=${agents.length} (${actifs} actif${actifs > 1 ? 's' : ''})`;
 }
 
-/** `etat_equipe` (A.2.2) — détail d'une équipe : tâche, coût, contexte, capacités manquantes. */
-export function etatEquipe(registre: Registre, designation: string): ContratRetour {
+/**
+ * `etat_equipe` (A.2.2) — détail d'une équipe : tâche, coût, contexte, capacités manquantes.
+ * Cloisonné par conversation (chantier 1) : `conversationId` est celui de la SESSION APPELANTE,
+ * jamais un paramètre du modèle — voir `resoudreMissionDuFil`.
+ */
+export function etatEquipe(registre: Registre, conversationId: string | null, designation: string): ContratRetour {
   const intention = `état de ${designation}`;
   try {
-    const resolution = resoudreMission(registre, designation);
-    if ('absent' in resolution) {
-      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
-    }
-    if ('ambigu' in resolution) {
-      const listeCandidats = resolution.ambigu.map((m) => `${m.id} (${m.nom})`).join(' | ');
-      return {
-        ok: false,
-        intention,
-        effet: 'refuse',
-        raison: `désignation ambiguë — préciser l'identifiant parmi : ${listeCandidats}`,
-      };
-    }
+    const resolution = resoudreMissionDuFil(registre, conversationId, designation);
+    if (!('trouve' in resolution)) return refusResolutionFil(intention, resolution);
     const mission = resolution.trouve;
     const manquantes = registre.capacites.manquantesSurveillees(mission.id);
     const etat = [
@@ -293,14 +370,20 @@ export async function listerProjets(
   }
 }
 
-/** `historique_equipe` (A.2.2) — dernières transitions d'état, résumées (jamais le flux brut). */
-export function historiqueEquipe(registre: Registre, designation: string, limite = 20): ContratRetour {
+/**
+ * `historique_equipe` (A.2.2) — dernières transitions d'état, résumées (jamais le flux brut).
+ * Cloisonné par conversation (chantier 1) — voir `resoudreMissionDuFil`.
+ */
+export function historiqueEquipe(
+  registre: Registre,
+  conversationId: string | null,
+  designation: string,
+  limite = 20,
+): ContratRetour {
   const intention = `historique de ${designation}`;
   try {
-    const resolution = resoudreMission(registre, designation);
-    if (!('trouve' in resolution)) {
-      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
-    }
+    const resolution = resoudreMissionDuFil(registre, conversationId, designation);
+    if (!('trouve' in resolution)) return refusResolutionFil(intention, resolution);
     const missionId = resolution.trouve.id;
     const transitions = registre.etats.historique(missionId, limite);
     if (transitions.length === 0) return applique(intention, 'aucune transition connue');
@@ -322,14 +405,16 @@ export function historiqueEquipe(registre: Registre, designation: string, limite
  * produits, déjà bornés à l'écriture, et seulement les derniers. Sans lui,
  * l'orchestrateur n'avait accès qu'aux états et compteurs — il pouvait dire
  * qu'une équipe avait fini, jamais ce qu'elle avait trouvé (constaté le 23/07).
+ *
+ * Cloisonné par conversation (chantier 1) — voir `resoudreMissionDuFil`. C'est
+ * l'outil le plus sensible du groupe : le rapport de fin EST le contenu qu'une
+ * autre conversation ne doit jamais recevoir.
  */
-export function rapportEquipe(registre: Registre, designation: string): ContratRetour {
+export function rapportEquipe(registre: Registre, conversationId: string | null, designation: string): ContratRetour {
   const intention = `rapport de ${designation}`;
   try {
-    const resolution = resoudreMission(registre, designation);
-    if (!('trouve' in resolution)) {
-      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
-    }
+    const resolution = resoudreMissionDuFil(registre, conversationId, designation);
+    if (!('trouve' in resolution)) return refusResolutionFil(intention, resolution);
     const dernier = registre.missions.dernierTexte(resolution.trouve.id);
     if (dernier === null) {
       return applique(intention, "aucun texte produit n'a encore été rapatrié pour cette équipe");
@@ -378,13 +463,17 @@ function resumerActivite(a: { texte: string; type: string; outil: string | null 
  * synthèse — trop tard pour la corriger d'un message, alors que `envoyer_a_equipe`
  * existe et n'interrompt même pas son tour.
  */
-export function suivreEquipe(registre: Registre, designation: string, lignes?: number): ContratRetour {
+/** Cloisonné par conversation (chantier 1) — voir `resoudreMissionDuFil`. */
+export function suivreEquipe(
+  registre: Registre,
+  conversationId: string | null,
+  designation: string,
+  lignes?: number,
+): ContratRetour {
   const intention = `suivi de ${designation}`;
   try {
-    const resolution = resoudreMission(registre, designation);
-    if (!('trouve' in resolution)) {
-      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
-    }
+    const resolution = resoudreMissionDuFil(registre, conversationId, designation);
+    if (!('trouve' in resolution)) return refusResolutionFil(intention, resolution);
     const mission = resolution.trouve;
     // Borné des deux côtés : une valeur absurde donne un résultat utile, jamais
     // un refus — un modèle qui demande 5000 lignes veut « le plus possible ».
@@ -417,8 +506,17 @@ export function suivreEquipe(registre: Registre, designation: string, lignes?: n
  * par leur nombre : lire quatre transcrits entiers saturerait le contexte de
  * l'orchestrateur, et un orchestrateur saturé oublie sa mission. Une équipe
  * introuvable ne fait pas échouer les autres — elle est signalée à sa ligne.
+ *
+ * Cloisonné par conversation (chantier 1) — voir `resoudreMissionDuFil`. Une
+ * équipe d'un autre fil est signalée à sa ligne comme une autre, sans jamais
+ * faire échouer l'appel ni révéler son contenu.
  */
-export function suivreEquipes(registre: Registre, designations: readonly string[], lignes?: number): ContratRetour {
+export function suivreEquipes(
+  registre: Registre,
+  conversationId: string | null,
+  designations: readonly string[],
+  lignes?: number,
+): ContratRetour {
   const intention = `suivi de ${designations.length} équipe(s)`;
   if (designations.length === 0) {
     return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe désignée' };
@@ -430,9 +528,10 @@ export function suivreEquipes(registre: Registre, designations: readonly string[
     const parEquipe = Math.max(3, Math.floor(total / designations.length));
     const blocs: string[] = [];
     for (const designation of designations) {
-      const resolution = resoudreMission(registre, designation);
+      const resolution = resoudreMissionDuFil(registre, conversationId, designation);
       if (!('trouve' in resolution)) {
-        blocs.push(`— ${designation} : aucune équipe ne correspond à cette désignation.`);
+        const detail = 'autreFil' in resolution ? REFUS_AUTRE_FIL : 'aucune équipe ne correspond à cette désignation.';
+        blocs.push(`— ${designation} : ${detail}`);
         continue;
       }
       const mission = resolution.trouve;
@@ -478,27 +577,19 @@ export interface OptionsTranscriptEquipe {
  * qui, lui, résume. Remonter le temps : augmenter `decalage`, jamais reprendre
  * la pagination depuis le début comme `lire_fil` (le début n'intéresse presque
  * jamais quand on cherche pourquoi une équipe s'est tue).
+ *
+ * Cloisonné par conversation (chantier 1) — voir `resoudreMissionDuFil`.
  */
 export function transcriptEquipe(
   registre: Registre,
+  conversationId: string | null,
   designation: string,
   options: OptionsTranscriptEquipe = {},
 ): ContratRetour {
   const intention = `transcript de ${designation}`;
   try {
-    const resolution = resoudreMission(registre, designation);
-    if ('absent' in resolution) {
-      return { ok: false, intention, effet: 'refuse', raison: 'aucune équipe ne correspond à cette désignation' };
-    }
-    if ('ambigu' in resolution) {
-      const listeCandidats = resolution.ambigu.map((m) => `${m.id} (${m.nom})`).join(' | ');
-      return {
-        ok: false,
-        intention,
-        effet: 'refuse',
-        raison: `désignation ambiguë — préciser l'identifiant parmi : ${listeCandidats}`,
-      };
-    }
+    const resolution = resoudreMissionDuFil(registre, conversationId, designation);
+    if (!('trouve' in resolution)) return refusResolutionFil(intention, resolution);
     const mission = resolution.trouve;
     const decalage = Math.max(Math.trunc(options.decalage ?? 0), 0);
     const limite = Math.min(Math.max(Math.trunc(options.limite ?? TRANSCRIPT_LIGNES_DEFAUT), 1), TRANSCRIPT_LIGNES_MAX);

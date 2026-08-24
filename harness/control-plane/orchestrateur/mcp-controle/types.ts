@@ -156,6 +156,13 @@ export interface EnregistreurProposition {
     readonly modele?: string | null;
     readonly effort?: string | null;
     /**
+     * Chantier 3 (mandat opérateur 24/08) — liste NOMMÉE des choses adjacentes
+     * que l'équipe est autorisée à corriger si elle les rencontre. La latitude
+     * AUTORISE, le périmètre (`perimetre`) INTERDIT, et le périmètre l'emporte
+     * en cas de recouvrement. Absent ou `null` ⇒ aucune latitude accordée.
+     */
+    readonly latitude?: string | null;
+    /**
      * `☠` Plafond de dépense POSÉ AU DÉPÔT (03/08). `definir_budget` n'opère que
      * sur une mission déjà démarrée : entre l'autorisation et le premier réveil
      * de l'orchestrateur, une équipe courait donc toujours sous le plafond de

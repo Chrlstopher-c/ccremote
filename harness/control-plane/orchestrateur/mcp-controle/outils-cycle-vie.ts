@@ -141,6 +141,43 @@ function evaluerVagueRecente(
 }
 
 /**
+ * Chantier 2 (mandat opérateur 24/08, mesuré sur 393 mandats : 34 portent un
+ * critère que l'équipe ne peut pas vérifier elle-même — « rapport rendu »,
+ * « conforme à la densité »). Un critère d'arrêt VÉRIFIABLE porte au moins un
+ * des trois marqueurs objectifs qu'une équipe peut constater SEULE, sans
+ * arbitrage : une commande entre accents graves, un chemin de fichier, ou une
+ * valeur numérique attendue. Sans l'un des trois, seule l'équipe elle-même
+ * peut juger si elle a fini — exactement ce que ce chantier ferme.
+ *
+ * `☠` Un refus SEC ne corrige pas un modèle — c'est la leçon de tout cet
+ * audit, et les deux gardes déjà en place (vague de trop, carburant) suivent
+ * ce principe : celui-ci dit ce qui manque et donne un exemple recevable.
+ */
+const MOTIF_COMMANDE = /`[^`]+`/;
+const MOTIF_CHEMIN = /(?:\.{1,2}\/|\/)?[\w-]+(?:\/[\w.-]+)+/;
+const MOTIF_VALEUR_NUMERIQUE = /\d/;
+
+function evaluerCritereArret(critereArret: string | null): { readonly autorise: boolean; readonly motif: string } {
+  if (critereArret === null || critereArret.trim().length === 0) {
+    // `☠` L'absence est déjà signalée ailleurs (carte d'autorisation, « ⚠ non
+    // fourni ») : ce chantier ferme un critère qui SEMBLE en être un et ne
+    // l'est pas, pas l'absence pure, déjà traitée.
+    return { autorise: true, motif: 'critère absent — signalé séparément sur la carte d’autorisation' };
+  }
+  const verifiable =
+    MOTIF_COMMANDE.test(critereArret) || MOTIF_CHEMIN.test(critereArret) || MOTIF_VALEUR_NUMERIQUE.test(critereArret);
+  if (verifiable) return { autorise: true, motif: 'critère vérifiable par l’équipe elle-même' };
+  return {
+    autorise: false,
+    motif:
+      `critère d'arrêt « ${critereArret} » invérifiable par l'équipe elle-même — il ne porte ni commande entre ` +
+      'accents graves, ni chemin de fichier, ni valeur numérique attendue. Reformule avec l’un des trois, par ' +
+      'exemple : « `bun test` au vert sur harness/control-plane, sans test ignoré », « README.md créé et ' +
+      'docs/API.md mis à jour », ou « moins de 5 erreurs de lint restantes ».',
+  };
+}
+
+/**
  * `creer_equipe` (A.2.2, H-61 — TRANCHÉ, FAIT AUTORITÉ). Ne crée RIEN et ne
  * dispatche RIEN : retourne une proposition de mandat que l'UI présente à
  * l'approbation humaine explicite. La création effective part du clic de
@@ -168,6 +205,15 @@ export async function proposerCreationEquipe(
   budgetMaxUsd?: number | null,
   /** Libellé libre nommant un chantier d'ensemble — bypass de la garde 1 (vague de trop). */
   campagne?: string | null,
+  /**
+   * Chantier 3 (mandat opérateur 24/08, audit sur 393 mandats : 12 équipes ont
+   * vu un défaut hors périmètre, s'en sont abstenues, et ce défaut est devenu
+   * le mandat du lendemain — la discipline de périmètre alimente le
+   * gaspillage). Liste NOMMÉE des choses adjacentes que l'équipe peut corriger
+   * SI elle les rencontre. La latitude AUTORISE, le périmètre INTERDIT, et le
+   * périmètre l'emporte en cas de recouvrement — voir `enregistreur.enregistrer`.
+   */
+  latitude?: string | null,
   maintenant: number = Date.now(),
 ): Promise<ContratRetour> {
   const intention = `proposer une équipe sur ${projet}`;
@@ -183,6 +229,9 @@ export async function proposerCreationEquipe(
         );
       }
     }
+    // Chantier 2 — critère d'arrêt invérifiable par l'équipe elle-même (24/08).
+    const critere = evaluerCritereArret(critereArret);
+    if (!critere.autorise) return refuse(intention, critere.motif);
     // Garde 2 — dispatcher sans regarder le carburant (mandat opérateur 21/08).
     const carburant = evaluerFraicheurCarburant(registre, maintenant);
     if (!carburant.autorise) return refuse(intention, carburant.motif);
@@ -191,7 +240,15 @@ export async function proposerCreationEquipe(
     if (!vague.autorise) return refuse(intention, vague.motif);
     const plafond = evaluerPlafondParc(lecteur, config);
     if (!plafond.autorise) return refuse(intention, plafond.motif);
-    const proposition = construireMandatPropose(projet, objectif, critereArret, perimetre, acces, budgetMaxUsd ?? null);
+    const proposition = construireMandatPropose(
+      projet,
+      objectif,
+      critereArret,
+      perimetre,
+      acces,
+      budgetMaxUsd ?? null,
+      latitude ?? null,
+    );
     // `☠` Sans enregistreur, la proposition ne survit pas à ce tour : l'interface
     // n'aurait rien à autoriser et H-61 deviendrait une impasse. On le DIT au
     // modèle plutôt que de le laisser annoncer un bouton qui n'existe pas.
@@ -207,6 +264,7 @@ export async function proposerCreationEquipe(
       modele,
       effort,
       budgetMaxUsd,
+      latitude,
     });
     // `☠` `applique` quand l'équipe est PARTIE, `differe` quand elle attend un
     // clic. Le contrat A.2.3 distingue les deux justement pour que le modèle ne

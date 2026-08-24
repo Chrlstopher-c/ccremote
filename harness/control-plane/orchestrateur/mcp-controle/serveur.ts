@@ -255,14 +255,15 @@ function outilsInspection(deps: DependancesServeurControle) {
           .string()
           .describe("Identifiant, nom ou projet de l'équipe — le nom suffit si aucune autre ne lui ressemble."),
       },
-      async ({ equipe }) => protege('etat_equipe', () => etatEquipe(deps.registre, equipe)),
+      async ({ equipe }) => protege('etat_equipe', () => etatEquipe(deps.registre, deps.conversationId ?? null, equipe)),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
       'rapport_equipe',
       "Le dernier message du team leader, ENTIER : sa synthèse de fin. À utiliser dès qu'on demande le RÉSULTAT d'une équipe, et pas seulement son état.",
       { equipe: z.string().describe("Identifiant, nom ou projet de l'équipe.") },
-      async ({ equipe }) => protege('rapport_equipe', () => rapportEquipe(deps.registre, equipe)),
+      async ({ equipe }) =>
+        protege('rapport_equipe', () => rapportEquipe(deps.registre, deps.conversationId ?? null, equipe)),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
@@ -277,7 +278,8 @@ function outilsInspection(deps: DependancesServeurControle) {
         equipe: z.string().describe("Identifiant, nom ou projet de l'équipe."),
         lignes: z.number().int().positive().optional().describe('Défaut 10, maximum 200.'),
       },
-      async ({ equipe, lignes }) => protege('suivre_equipe', () => suivreEquipe(deps.registre, equipe, lignes)),
+      async ({ equipe, lignes }) =>
+        protege('suivre_equipe', () => suivreEquipe(deps.registre, deps.conversationId ?? null, equipe, lignes)),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
@@ -293,7 +295,8 @@ function outilsInspection(deps: DependancesServeurControle) {
         equipes: z.array(z.string()).min(1).describe('Identifiants, noms ou projets des équipes.'),
         lignes: z.number().int().positive().optional().describe('Budget TOTAL réparti entre elles. Défaut 10, maximum 200.'),
       },
-      async ({ equipes, lignes }) => protege('suivre_equipes', () => suivreEquipes(deps.registre, equipes, lignes)),
+      async ({ equipes, lignes }) =>
+        protege('suivre_equipes', () => suivreEquipes(deps.registre, deps.conversationId ?? null, equipes, lignes)),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
@@ -327,7 +330,9 @@ function outilsInspection(deps: DependancesServeurControle) {
           .describe(`Nombre de lignes. Défaut ${TRANSCRIPT_LIGNES_DEFAUT}, maximum ${TRANSCRIPT_LIGNES_MAX}.`),
       },
       async ({ equipe, type, decalage, limite }) =>
-        protege('transcript_equipe', () => transcriptEquipe(deps.registre, equipe, { type, decalage, limite })),
+        protege('transcript_equipe', () =>
+          transcriptEquipe(deps.registre, deps.conversationId ?? null, equipe, { type, decalage, limite }),
+        ),
       { annotations: { readOnlyHint: true } },
     ),
     tool(
@@ -370,7 +375,9 @@ function outilsInspection(deps: DependancesServeurControle) {
         limite: z.number().int().positive().optional(),
       },
       async ({ equipe, limite }) =>
-        protege('historique_equipe', () => historiqueEquipe(deps.registre, equipe, limite)),
+        protege('historique_equipe', () =>
+          historiqueEquipe(deps.registre, deps.conversationId ?? null, equipe, limite),
+        ),
       { annotations: { readOnlyHint: true } },
     ),
   ];
@@ -401,11 +408,24 @@ function outilsCycleVie(deps: DependancesServeurControle) {
         'consulté depuis plus de 30 min — appelle carburant_parc d’abord ; (2) ce projet a ' +
         'déjà reçu une mission dans les dernières 24h ET `campagne` est vide — soit tu ' +
         'regroupes ce travail dans l’équipe existante, soit tu renvoies cet appel en ' +
-        'nommant la campagne.',
+        'nommant la campagne. ' +
+        '`critereArret` DOIT être vérifiable PAR L’ÉQUIPE ELLE-MÊME : il porte au moins une ' +
+        'commande entre accents graves, un chemin de fichier, ou une valeur numérique attendue ' +
+        '— « rapport rendu » ou « conforme à la densité » sont refusés (mesuré sur 393 mandats : ' +
+        '34 portaient un critère de ce genre, invérifiable sans arbitrage humain). ' +
+        '`latitude` : liste NOMMÉE de choses adjacentes que l’équipe peut corriger SI elle les ' +
+        'rencontre, transmise telle quelle au lead. Elle AUTORISE, le périmètre INTERDIT, et le ' +
+        'périmètre l’emporte en cas de recouvrement — n’en fais pas un second périmètre.',
       {
         projet: z.string(),
         objectif: z.string(),
-        critereArret: z.string().nullable(),
+        critereArret: z
+          .string()
+          .nullable()
+          .describe(
+            "Vérifiable par l'équipe seule : au moins une commande entre accents graves, un chemin " +
+              'de fichier, ou une valeur numérique attendue. Ex. « `bun test` au vert, 0 échec ».',
+          ),
         perimetre: z.string(),
         acces: z.enum(ACCES_MANDAT),
         modele: z.string().nullable().optional(),
@@ -420,8 +440,16 @@ function outilsCycleVie(deps: DependancesServeurControle) {
               "dernières 24h ⇒ REFUS (garde 1, une vague de trop). Renseigne-le pour assumer " +
               'explicitement une nouvelle vague sur ce projet plutôt que de regrouper.',
           ),
+        latitude: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'Liste NOMMÉE de choses adjacentes que l’équipe peut corriger si elle les rencontre. ' +
+              'Autorise, ne remplace jamais le périmètre : celui-ci l’emporte en cas de recouvrement.',
+          ),
       },
-      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd, campagne }) =>
+      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd, campagne, latitude }) =>
         protege('creer_equipe', () =>
           proposerCreationEquipe(
             projet,
@@ -437,6 +465,7 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             effort,
             budgetMaxUsd,
             campagne,
+            latitude,
           ),
         ),
     ),

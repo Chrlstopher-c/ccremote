@@ -55,3 +55,32 @@ describe('construireMandatPropose (A.3.1, H-52, H-66)', () => {
     expect(mandat.texte).toContain('hésites à approfondir une piste');
   });
 });
+
+/**
+ * Chantier 3 (mandat opérateur 24/08) — la latitude doit atteindre la carte
+ * d'autorisation, formulée sans ambiguïté vis-à-vis du périmètre.
+ */
+describe('construireMandatPropose × champ `latitude` (chantier 3)', () => {
+  test('absente ⇒ le dit explicitement, jamais un silence', () => {
+    const mandat = construireMandatPropose('alpha', 'x', 'y', 'z', 'ecriture', null);
+    expect(mandat.texte).toContain('Latitude : aucune');
+    expect(mandat.latitude).toBeNull();
+  });
+
+  test('fournie ⇒ portée telle quelle, avec la règle périmètre > latitude', () => {
+    const mandat = construireMandatPropose(
+      'alpha', 'x', 'y', 'z', 'ecriture', null,
+      'corriger les imports cassés rencontrés en route',
+    );
+    expect(mandat.texte).toContain('corriger les imports cassés rencontrés en route');
+    expect(mandat.texte).toContain('choses adjacentes');
+    expect(mandat.texte).toContain('emporte en cas de recouvrement');
+    expect(mandat.latitude).toBe('corriger les imports cassés rencontrés en route');
+  });
+
+  test('ne produit aucun effet de bord — pur, latitude comprise', () => {
+    const a = construireMandatPropose('alpha', 'x', 'y', 'z', 'ecriture', 5, 'x adjacent');
+    const b = construireMandatPropose('alpha', 'x', 'y', 'z', 'ecriture', 5, 'x adjacent');
+    expect(a).toEqual(b);
+  });
+});

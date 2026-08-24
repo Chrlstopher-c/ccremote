@@ -14,6 +14,7 @@ export interface PropositionMandat {
   readonly critereArret: string | null;
   readonly perimetre: string;
   readonly acces: AccesMandat;
+  readonly latitude: string | null;
   readonly texte: string;
 }
 
@@ -91,6 +92,12 @@ export function construireMandatPropose(
   perimetre: string,
   acces: AccesMandat,
   budgetMaxUsd: number | null,
+  /**
+   * Chantier 3 (mandat opérateur 24/08) — liste NOMMÉE des choses adjacentes
+   * que l'équipe peut corriger SI elle les rencontre. `null` : aucune latitude
+   * accordée, seul le périmètre fait foi.
+   */
+  latitude: string | null = null,
 ): PropositionMandat {
   const lignes = [
     `Objectif : ${objectif}`,
@@ -99,6 +106,13 @@ export function construireMandatPropose(
     // autorisation éclairée, et « lecture seule » ou « écriture » est ce qui
     // change le plus la portée de ce qu'il approuve d'un clic.
     `Accès accordé : ${libelleAcces(acces)}`,
+    // `☠` La latitude AUTORISE, le périmètre INTERDIT — formulé sans ambiguïté
+    // pour le lead qui lira cette ligne : en cas de recouvrement entre les
+    // deux, le périmètre l'emporte toujours (chantier 3, 24/08).
+    latitude === null || latitude.trim().length === 0
+      ? 'Latitude : aucune — seul le périmètre ci-dessus autorise quoi que ce soit.'
+      : `Latitude (choses adjacentes que tu peux corriger SI tu les rencontres, le périmètre ` +
+        `l'emporte en cas de recouvrement) : ${latitude}`,
     `Critère d'arrêt : ${critereArret ?? '⚠ non fourni — à compléter avant approbation'}`,
     ligneBudget(budgetMaxUsd),
     // `☠` L'outil existe depuis le 18/08 (`ccremote-depense`/`ma_depense`) mais
@@ -109,5 +123,5 @@ export function construireMandatPropose(
       'approfondir une piste, ou avant de lancer une exploration coûteuse.',
     ...CLAUSES_FIXES,
   ];
-  return { projet, objectif, critereArret, perimetre, acces, texte: lignes.join('\n\n') };
+  return { projet, objectif, critereArret, perimetre, acces, latitude, texte: lignes.join('\n\n') };
 }

@@ -57,7 +57,7 @@ describe('proposerCreationEquipe (H-61 — FAIT AUTORITÉ, ne crée jamais rien)
     const resultat = await proposerCreationEquipe(
       'alpha',
       'refaire l’auth',
-      'tests verts',
+      'tests verts : `bun test` sans échec',
       'src/auth/**',
       'ecriture',
       registre,
@@ -595,7 +595,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
     );
 
     expect(resultat.ok).toBe(false);
@@ -618,7 +618,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
       LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null,
-      'refonte auth — vague 2', maintenant,
+      'refonte auth — vague 2', null, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -633,7 +633,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -648,7 +648,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -685,7 +685,7 @@ describe('proposerCreationEquipe × garde 2 (carburant pas regardé depuis 30 mi
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'x', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
     );
 
     expect(resultat.effet).toBe('refuse');
@@ -698,9 +698,115 @@ describe('proposerCreationEquipe × garde 2 (carburant pas regardé depuis 30 mi
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'x', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
+  });
+});
+
+/**
+ * Chantier 2 (mandat opérateur 24/08, mesuré sur 393 mandats : 34 portent un
+ * critère que l'équipe ne peut pas vérifier elle-même). `☠` PREUVE DANS LES
+ * DEUX SENS : un critère qui ne porte AUCUN des trois marqueurs est refusé,
+ * un critère qui en porte un — quel qu'il soit — passe.
+ */
+describe('proposerCreationEquipe × chantier 2 (critère d’arrêt invérifiable)', () => {
+  test('☠ « rapport rendu » ⇒ refus ACTIONNABLE, qui donne un exemple recevable', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', 'rapport rendu', 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.ok).toBe(false);
+    expect(resultat.effet).toBe('refuse');
+    expect(resultat.raison).toContain('rapport rendu');
+    expect(resultat.raison).toContain('invérifiable');
+    // Le refus DIT ce qui manque et donne un exemple — jamais un refus sec.
+    expect(resultat.raison).toContain('commande entre');
+    expect(resultat.raison).toContain('chemin de fichier');
+    expect(resultat.raison).toContain('valeur numérique');
+    expect(resultat.raison).toMatch(/`[^`]+`/);
+  });
+
+  test('☠ « conforme à la densité » (mesuré en audit) ⇒ refus, même raison', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', 'conforme à la densité', 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.ok).toBe(false);
+  });
+
+  test('critère avec une commande entre accents graves ⇒ autorisé', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', 'rapport rendu, et `bun test` au vert', 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('critère avec un chemin de fichier ⇒ autorisé', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', 'README.md créé et docs/API.md mis à jour', 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('critère avec une valeur numérique attendue ⇒ autorisé', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', 'moins de 5 erreurs de lint restantes', 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.effet).toBe('differe');
+  });
+
+  test('critère absent (null) ⇒ toujours autorisé — ce chantier ferme un faux critère, pas l’absence', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.effet).toBe('differe');
+  });
+});
+
+/**
+ * Chantier 3 (mandat opérateur 24/08, audit 393 mandats : 12 équipes abstenues
+ * d’un défaut hors périmètre, devenu le mandat du lendemain). `latitude` doit
+ * atteindre le mandat déposé, formulé sans ambiguïté vis-à-vis du périmètre.
+ */
+describe('proposerCreationEquipe × chantier 3 (champ `latitude`)', () => {
+  test('latitude transmise à l’enregistreur, telle quelle', async () => {
+    let recu: string | null | undefined;
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE,
+      { enregistrer: async (mandat) => {
+          recu = mandat.latitude;
+          return { ref: 'prop-lat', autoApprouve: false, detail: 'en attente' };
+        } },
+      null, null, null, null, 'corriger les imports cassés rencontrés en route',
+    );
+    expect(resultat.effet).toBe('differe');
+    expect(recu).toBe('corriger les imports cassés rencontrés en route');
+  });
+
+  test('☠ la carte d’autorisation formule la latitude SANS AMBIGUÏTÉ vis-à-vis du périmètre', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/auth/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+      null, null, null, null, 'renommer les variables mal nommées croisées en chemin',
+    );
+    expect(resultat.etat).toContain('renommer les variables mal nommées croisées en chemin');
+    // Le texte dit explicitement que la latitude AUTORISE et que le périmètre
+    // l'emporte en cas de recouvrement — jamais un second périmètre silencieux.
+    expect(resultat.etat).toContain('emporte en cas de recouvrement');
+  });
+
+  test('latitude absente ⇒ la carte le dit explicitement, jamais un silence', async () => {
+    const resultat = await proposerCreationEquipe(
+      'alpha', 'x', null, 'src/**', 'ecriture', registre,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
+    );
+    expect(resultat.etat).toContain('Latitude : aucune');
   });
 });
