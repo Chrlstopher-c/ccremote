@@ -42,3 +42,19 @@ export function detecterRaisonCoupure(dernierTexte: string | null): RaisonCoupur
 
 /** Raison écrite quand aucune cause précise n'est reconnue — jamais `fantome_reconciliation`, qui ne dit rien. */
 export const RAISON_CLOTURE_SANS_RAPPORT = 'cloture_sans_rapport';
+
+/**
+ * `☠` Chantier 4 (24/08) : mesuré sur la base de production, deux fenêtres compactes (23/07
+ * 00h14-01h40 UTC, 20/08 18h54-19h00 UTC) où 11/401 missions démarrées n'ont laissé AUCUNE
+ * activité — mais plusieurs d'entre elles portent un `budgetConsommeUsd` réellement facturé
+ * (jusqu'à 1,67 $) et des transitions d'état observées. Le worker a tourné et dépensé ; seul
+ * le canal qui transporte son activité n'a rien transmis (panne distincte du canal d'état,
+ * structurellement indépendant dans le code — l'un peut casser sans l'autre).
+ *
+ * `RAISON_CLOTURE_SANS_RAPPORT` ne distingue pas ce cas d'une mission qui n'a jamais démarré
+ * (coût nul, activité nulle elle aussi) : l'orchestrateur relance alors à l'aveugle un travail
+ * déjà payé, en pensant relancer un no-op. Cette raison est le signal explicite : du travail
+ * facturé a probablement été perdu, il n'y a rien à récupérer dans le transcript (il est vide),
+ * et une relance doit en tenir compte plutôt que traiter ce cas comme les autres échecs muets.
+ */
+export const RAISON_COUT_FACTURE_SANS_ACTIVITE = 'cout_facture_sans_activite';

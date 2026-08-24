@@ -7,4 +7,9 @@
 
 export { ServiceCloture } from './service-cloture.ts';
 export { DELAI_CLOTURE_IDLE_MS, MOTIF_CLOTURE_IDLE, missionsAClore } from './politique-cloture.ts';
-export { detecterRaisonCoupure, RAISON_CLOTURE_SANS_RAPPORT, type RaisonCoupure } from './raison-terminale.ts';
+export {
+  detecterRaisonCoupure,
+  RAISON_CLOTURE_SANS_RAPPORT,
+  RAISON_COUT_FACTURE_SANS_ACTIVITE,
+  type RaisonCoupure,
+} from './raison-terminale.ts';

@@ -19,10 +19,23 @@
  * déclencheurs `demarrage`/`reconnexion`. Sans cet appel, les demandes de permission de la
  * coupure ne redeviennent jamais éligibles à la redélivrance côté bus de permissions —
  * l'équipe reste bloquée en paraissant saine. Voir `tenterReinitialiser`.
+ *
+ * `☠` CHANTIER 4 (24/08) : mesuré sur la base de production — 11/401 missions démarrées
+ * sans AUCUNE activité, groupées en deux fenêtres compactes, dont plusieurs portent un coût
+ * réellement facturé (jusqu'à 1,67 $). Le canal d'activité et le canal d'état sont
+ * structurellement indépendants : l'un peut se taire pendant que l'autre continue à
+ * transitionner et à facturer. Un fantôme SANS rapport ET SANS AUCUNE activité, avec un coût
+ * facturé non nul, reçoit `RAISON_COUT_FACTURE_SANS_ACTIVITE` plutôt que
+ * `RAISON_CLOTURE_SANS_RAPPORT` générique — pour que l'orchestrateur sache qu'une relance à
+ * l'aveugle perdrait un travail déjà payé, sans rien à récupérer dans un transcript vide.
  */
 
 import { ETATS_HARNESS_ACTIFS, ETATS_HARNESS_TERMINAUX, type Registre } from '../registre/index.ts';
-import { detecterRaisonCoupure, RAISON_CLOTURE_SANS_RAPPORT } from '../cloture/index.ts';
+import {
+  detecterRaisonCoupure,
+  RAISON_CLOTURE_SANS_RAPPORT,
+  RAISON_COUT_FACTURE_SANS_ACTIVITE,
+} from '../cloture/index.ts';
 import { reconciliationLogger as logger } from './logger.ts';
 import type {
   DeclencheurReconciliation,
@@ -152,9 +165,23 @@ async function traiterMissionsActives(
       const raisonCoupure = detecterRaisonCoupure(dernierTexte);
       const rapportRendu = registre.missions.aRapportFinal(mission.id) && raisonCoupure === null;
       const etatFinal = rapportRendu ? 'terminee' : 'echec_definitif';
+      // `☠` CHANTIER 4 (24/08) : sans rapport, `cloture_sans_rapport` traite pareil
+      // une mission qui n'a jamais démarré (rien facturé, rien à perdre) et une
+      // mission dont le worker a tourné et dépensé — jusqu'à 1,67 $ mesuré sur le
+      // parc réel — sans que le canal d'activité (indépendant du canal d'état)
+      // n'ait rien transmis. La première ne coûte rien à relancer à l'aveugle ;
+      // la seconde perd une seconde fois un travail déjà payé. `aucuneActivite`
+      // distingue les deux sur un fait mécanique (zéro ligne dans le transcript),
+      // jamais sur une conviction.
+      const aucuneActivite = registre.missions.activites(mission.id, 1).length === 0;
+      const travaillePayeSansActivite = aucuneActivite && mission.budgetConsommeUsd > 0;
       // La cause réelle, quand le dernier texte la porte — jamais
       // `fantome_reconciliation` par défaut, qui ne dit rien (mesuré : 365/393).
-      const raisonTerminale = rapportRendu ? 'fantome_reconciliation' : (raisonCoupure ?? RAISON_CLOTURE_SANS_RAPPORT);
+      const raisonTerminale = rapportRendu
+        ? 'fantome_reconciliation'
+        : travaillePayeSansActivite
+          ? RAISON_COUT_FACTURE_SANS_ACTIVITE
+          : (raisonCoupure ?? RAISON_CLOTURE_SANS_RAPPORT);
       registre.etats.appliquerEtatHarness(mission.id, etatFinal, { raisonTerminale });
       journal?.enregistrer('fantome_marque', {
         missionId: mission.id,

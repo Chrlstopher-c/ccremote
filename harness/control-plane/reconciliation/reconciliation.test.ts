@@ -143,6 +143,43 @@ describe('fantômes (acceptation a)', () => {
     expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('cloture_sans_rapport');
   });
 
+  /**
+   * `☠` CHANTIER 4 (24/08) : mesuré sur la base de production — 11/401 missions démarrées
+   * n'ont laissé AUCUNE activité, dont plusieurs avec un coût réellement facturé (jusqu'à
+   * 1,67 $). Le canal d'activité s'est tu, le canal d'état non : le worker a tourné et
+   * dépensé. `cloture_sans_rapport` traiterait ce cas comme une mission qui n'a jamais
+   * démarré — l'orchestrateur relancerait à l'aveugle un travail déjà payé, en pensant
+   * relancer un no-op.
+   */
+  test('☠ chantier 4 (24/08) — fantôme SANS activité mais AVEC un coût facturé ⇒ raison dédiée', async () => {
+    creerMission('m-1', 'projet-alpha', 'sess-1');
+    // Aucune activité écrite : `activite_mission` reste vide pour cette mission.
+    registre.missions.ajouterCout('m-1', 1.67);
+    inventairePc.definir([]);
+
+    const rapport = await reconcilier(registre, deps(), 'demarrage', { journal });
+
+    expect(rapport.fantomes).toEqual(['m-1']);
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('echec_definitif');
+    expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('cout_facture_sans_activite');
+  });
+
+  /**
+   * Contre-épreuve du chantier 4 : une mission jamais réellement démarrée (coût nul, elle
+   * aussi sans aucune activité) garde l'ancienne raison générique — la distinction porte
+   * sur le COÛT facturé, jamais sur la seule absence d'activité.
+   */
+  test('☠ chantier 4 — fantôme sans activité ET sans coût facturé ⇒ raison générique inchangée', async () => {
+    creerMission('m-1', 'projet-alpha', 'sess-1');
+    inventairePc.definir([]);
+
+    const rapport = await reconcilier(registre, deps(), 'demarrage', { journal });
+
+    expect(rapport.fantomes).toEqual(['m-1']);
+    expect(registre.missions.exiger('m-1').etatHarness).toBe('echec_definitif');
+    expect(registre.missions.exiger('m-1').derniereRaisonTerminale).toBe('cloture_sans_rapport');
+  });
+
   test('☠ chantier 3 (21/08) — un dernier texte de saturation de quota est reconnu et écrit', async () => {
     creerMission('m-1', 'projet-alpha', 'sess-1');
     registre.missions.ajouterActivite('m-1', "You've hit your session limit · resets 8:10am (Europe/Paris)", 1_000);
