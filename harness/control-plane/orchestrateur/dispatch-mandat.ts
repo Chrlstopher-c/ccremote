@@ -380,6 +380,41 @@ const BLOC_AUTONOMIE = [
   'rapport final — c’est là qu’elle sera lue, et elle deviendra un autre mandat.',
 ].join('\n');
 
+/**
+ * `☠` Chantier 3 (mandat opérateur 24/08) — la `Proposition` du registre ne
+ * porte pas encore ce champ : persistance (`registre/`) et composition
+ * (`composition/pi/assembler-control-plane.ts`) restent hors périmètre de ce
+ * mandat, qui ne touche QUE la composition du briefing. L'étendre ICI, en
+ * intersection, laisse tout appelant existant intact — un `Proposition` sans
+ * `latitude` reste assignable, la propriété est optionnelle — et fait
+ * apparaître la latitude dans le briefing dès l'instant où l'amont la fournira
+ * réellement, sans autre changement de ce fichier.
+ */
+type PropositionAvecLatitude = Proposition & {
+  readonly latitude?: string | null;
+};
+
+/**
+ * `☠` La latitude AUTORISE, le périmètre INTERDIT, et le périmètre l'emporte
+ * TOUJOURS en cas de recouvrement — même distinction, mêmes mots que la carte
+ * d'autorisation (`mcp-controle/mandat.ts`, `construireMandatPropose`), pour
+ * qu'un lead qui aurait déjà vu l'une ne lise pas l'autre comme contradictoire.
+ *
+ * `☠` Absente, elle ne produit ICI ni ligne ni section — contrairement à la
+ * carte, qui écrit « aucune » noir sur blanc pour l'opérateur avant son clic.
+ * Le lead n'a rien à lire quand rien ne lui a été accordé ; une ligne « aucune
+ * latitude » à chaque mandat serait une phrase inutile répétée sur la quasi-
+ * totalité des dispatchs (mandat opérateur : « aucune section vide ni aucune
+ * phrase inutile »).
+ */
+function ligneLatitude(latitude: string | null | undefined): string | null {
+  if (latitude === null || latitude === undefined || latitude.trim().length === 0) return null;
+  return (
+    `Latitude (choses adjacentes que tu es autorisé à corriger SI tu les rencontres — ` +
+    `le périmètre l'emporte TOUJOURS en cas de recouvrement) : ${latitude}`
+  );
+}
+
 /** Ce que l'accès autorise, annoncé au lead en plus d'être appliqué. */
 function ligneAcces(acces: AccesMandat): string {
   // `☠` Vient du MÊME calcul que les refus d'outils (paramètre, jamais relu
@@ -450,8 +485,9 @@ function ligneBudget(budgetUsd: number): string {
  * Règle qui en découle : tout ce qui doit rester vrai au tour 50 va ICI. Le
  * premier message ne porte que l'amorce.
  */
-export function composerMandatSysteme(p: Proposition, acces: AccesMandat): string {
+export function composerMandatSysteme(p: PropositionAvecLatitude, acces: AccesMandat): string {
   const critere = p.critereArret ?? 'non fixé — rends la main dès que l’objectif est atteint';
+  const latitude = ligneLatitude(p.latitude);
   return [
     'Tu es le team leader d’une équipe ccremote, responsable de A à Z : conception,',
     'développement, tests, debug, validation end-to-end AVANT de déclarer terminé.',
@@ -462,6 +498,7 @@ export function composerMandatSysteme(p: Proposition, acces: AccesMandat): strin
     `Objectif : ${p.objectif}`,
     `Critère d'arrêt : ${critere}`,
     `Périmètre : ${p.perimetre} (interdiction de sortir du worktree)`,
+    ...(latitude === null ? [] : [latitude]),
     ligneAcces(acces),
     ligneBudget(p.budgetMaxUsd),
     '',

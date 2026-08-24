@@ -409,3 +409,56 @@ describe('dispatch — démarrage refusé (rollback) notifie, comme les fins d�
     expect((erreur as Error).message).toBe('PC injoignable');
   });
 });
+
+/**
+ * `☠` Chantier 3 (mandat opérateur 24/08) — le champ existait déjà, validé,
+ * stocké côté carte d'autorisation (`mcp-controle/mandat.ts`), mais une équipe
+ * lancée sans clic (le cas le plus fréquent) ne voyait JAMAIS sa latitude :
+ * cette composition-ci, celle qui devient réellement le `systemPrompt` du
+ * worker, ne lisait pas le champ. Le champ était mort là où il devait servir.
+ */
+describe('☠ la latitude (chantier 3) atteint le briefing RÉELLEMENT transmis au lead', () => {
+  /** Capture ce qui part VRAIMENT vers le PC — seul artefact qui fasse foi. */
+  async function dispatcher(latitude?: string | null): Promise<string> {
+    let mandate = '';
+    const d: DependancesDispatch = {
+      ...deps(),
+      demarreur: {
+        demarrer: async (dem: { parametres: { mandate: string } }) => {
+          mandate = dem.parametres.mandate;
+          return { detail: 'ok' };
+        },
+      } as never,
+    };
+    const proposition = { ...(PROPOSITION as object), latitude } as never;
+    await dispatcherMandat(proposition, d);
+    return mandate;
+  }
+
+  test('renseignée, elle apparaît dans le briefing — AUTORISE, jamais confondue avec le périmètre', async () => {
+    const briefing = await dispatcher('la configuration CI voisine, si elle bloque le déploiement du projet');
+    expect(briefing).toContain(
+      'Latitude (choses adjacentes que tu es autorisé à corriger SI tu les rencontres — ' +
+        "le périmètre l'emporte TOUJOURS en cas de recouvrement) : " +
+        'la configuration CI voisine, si elle bloque le déploiement du projet',
+    );
+    // Elle vit à côté du périmètre, jamais confondue avec lui : l'un INTERDIT,
+    // l'autre AUTORISE, dit sans ambiguïté au lead qui lira les deux lignes.
+    expect(briefing.indexOf('Périmètre :')).toBeLessThan(briefing.indexOf('Latitude ('));
+  });
+
+  test('absente (undefined) — aucune section, aucune phrase parasite', async () => {
+    const briefing = await dispatcher(undefined);
+    expect(briefing).not.toContain('Latitude');
+  });
+
+  test('absente (null explicite) — même absence de section', async () => {
+    const briefing = await dispatcher(null);
+    expect(briefing).not.toContain('Latitude');
+  });
+
+  test('vide ou blanche — traitée comme absente, jamais une section vide', async () => {
+    const briefing = await dispatcher('   ');
+    expect(briefing).not.toContain('Latitude');
+  });
+});
