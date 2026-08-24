@@ -20,8 +20,9 @@
  */
 
 import type { Server } from 'bun';
-import type { Registre } from '../registre/index.ts';
+import type { PreferenceCompte, Registre } from '../registre/index.ts';
 import { enveloppe, ErreurApi, introuvable, requeteInvalide } from './enveloppe.ts';
+import { validerPreference, type CompteValidable } from '../../shared/preference-compte.ts';
 import { versSubagentDetailApi, versMissionApi } from './vue-missions.ts';
 import {
   ErreurMandatDejaTranche,
@@ -327,9 +328,13 @@ function router(chemin: string, url: URL, deps: DependancesApiWeb): unknown {
   }
 
   if (chemin === '/accounts') {
+    // `☠` La préférence est lue UNE fois pour toute la liste : la relire par
+    // compte laisserait passer une écriture concurrente au milieu du rendu et
+    // afficherait deux comptes sélectionnés.
+    const preference = deps.registre.comptes.lirePreference();
     const comptes = deps.registre.comptes
       .lister()
-      .map((c) => versAccountApi(c, deps.registre.comptes.listerQuotas(c.id), maintenant));
+      .map((c) => versAccountApi(c, deps.registre.comptes.listerQuotas(c.id), maintenant, preference));
     return enveloppe(pcOnline, comptes);
   }
 
@@ -787,6 +792,75 @@ async function routerEcriture(chemin: string, req: Request, deps: DependancesApi
   return resultat;
 }
 
+/**
+ * Choix manuel du compte et de son verrou.
+ *
+ * `☠` Traité AVANT le garde « pas de lien vers le PC » de `routerEcriture` :
+ * ce réglage ne touche que le registre du Pi, et le moment où on veut le poser
+ * est précisément celui où le PC dort. Le faire passer par le chemin d'écriture
+ * générique aurait rendu 501 sur la seule action censée débloquer la situation.
+ *
+ * `☠` Valider PUIS écrire, jamais l'inverse : un compte refusé ne doit laisser
+ * aucune trace, et le refus porte la liste des valeurs acceptées.
+ */
+/** Corps JSON d'un ordre, ou objet vide. `☠` Consomme le flux : une seule fois. */
+async function lireCorpsJson(req: Request): Promise<Record<string, unknown>> {
+  try {
+    const brut: unknown = await req.json();
+    if (brut !== null && typeof brut === 'object') return brut as Record<string, unknown>;
+  } catch {
+    // Corps vide ou illisible : accepté, la plupart des ordres n'en ont pas.
+  }
+  return {};
+}
+
+async function routerEcriturePreference(
+  chemin: string,
+  req: Request,
+  deps: DependancesApiWeb,
+): Promise<unknown | null> {
+  // `☠` Sortie AVANT toute lecture du corps : `req.json()` consomme le flux et
+  // ne peut être appelé qu'une fois. Lire ici pour un chemin qui ne nous
+  // concerne pas priverait les routeurs suivants de leur propre corps — un
+  // ordre de conversation arriverait vide, donc invalide, sans rien dire.
+  if (chemin !== '/accounts/preference') return null;
+
+  const corps = await lireCorpsJson(req);
+  const brut = corps['compteId'];
+  if (brut !== null && typeof brut !== 'string') {
+    throw requeteInvalide('compteId doit être une chaîne, ou null pour rendre la main à l’automatique');
+  }
+  const compteId = brut === null || brut === '' ? null : brut;
+  const verrouille = corps['verrouille'] === true;
+
+  const verdict = validerPreference(compteId, comptesValidables(deps));
+  if (!verdict.ok) throw new ErreurApi(409, verdict.raison);
+
+  const posee = deps.registre.comptes.definirPreference(compteId, verrouille);
+  log.info(
+    { compteId: posee.compteId, verrouille: posee.verrouille },
+    'préférence de compte réglée par l’opérateur',
+  );
+  return { ok: true, effet: effetPreference(posee), preference: posee, avertissement: verdict.avertissement };
+}
+
+/** Les comptes tels que la validation a besoin de les voir : identité + fraîcheur du jeton. */
+function comptesValidables(deps: DependancesApiWeb): readonly CompteValidable[] {
+  const jetons = new Map(deps.registre.comptes.listerJetons().map((j) => [j.compteId, j.expireA]));
+  return deps.registre.comptes
+    .lister()
+    .map((c) => ({ id: c.id, email: c.email, jetonExpireA: jetons.get(c.id) ?? null }));
+}
+
+/** `☠` Dit ce qui vient de changer ET ce que ça implique — « ok » n'apprend rien. */
+function effetPreference(posee: PreferenceCompte): string {
+  if (posee.compteId === null) return 'choix manuel levé — le harness reprend la rotation automatique';
+  const suite = posee.verrouille
+    ? 'verrouillé — aucune bascule sans déverrouillage'
+    : 'choisi — bascule encore possible sur saturation';
+  return `compte « ${posee.compteId} » ${suite}`;
+}
+
 export function demarrerServeurApiWeb(options: OptionsServeurApiWeb): ServeurApiWeb {
   const hostname = options.hostname ?? '127.0.0.1';
   if (HOTES_PUBLICS.has(hostname)) {
@@ -807,6 +881,9 @@ export function demarrerServeurApiWeb(options: OptionsServeurApiWeb): ServeurApi
       const chemin = url.pathname.replace(/^\/api\/harness/, '');
       try {
         if (req.method === 'POST') {
+          // Avant tout le reste : seul ordre qui doit rester possible PC éteint.
+          const preference = await routerEcriturePreference(chemin, req, options);
+          if (preference !== null) return json(preference);
           const conversation = await routerEcritureConversation(chemin, req, options);
           if (conversation !== null) return json(conversation);
           return json(await routerEcriture(chemin, req, options));

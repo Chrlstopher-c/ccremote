@@ -1011,3 +1011,78 @@ describe('API web — fenêtre d’autonomie et plafond d’un fil (migrations 1
     expect(liste[0]?.['plafondAutonomie']).toBe('illimite');
   });
 });
+
+/**
+ * Choix manuel du compte (migration 34).
+ *
+ * `☠` L'invariant décisif de ce bloc : ce réglage répond **PC ÉTEINT**. Il est
+ * routé avant le garde 501 de `routerEcriture` parce que le moment où on veut
+ * choisir un compte est exactement celui où le PC dort — un 501 ici aurait
+ * fermé la seule porte de sortie.
+ */
+describe('préférence de compte', () => {
+  async function poser(corps: unknown): Promise<{ statut: number; corps: Record<string, unknown> }> {
+    const s = serveur ?? demarrer();
+    const rep = await fetch(`http://127.0.0.1:${s.port}/api/harness/accounts/preference`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(corps),
+    });
+    return { statut: rep.status, corps: (await rep.json()) as Record<string, unknown> };
+  }
+
+  beforeEach(() => {
+    registre.comptes.enregistrer({ id: 'compte-a', configDir: '/tmp/a', email: 'a@exemple.fr' });
+    registre.comptes.enregistrer({ id: 'compte-b', configDir: '/tmp/b', email: 'b@exemple.fr' });
+  });
+
+  test('aucun choix par défaut : aucun compte n’est marqué selected', async () => {
+    const { corps } = await lire('/accounts');
+    const data = corps['data'] as readonly Record<string, unknown>[];
+    expect(data.every((c) => c['selected'] === false)).toBe(true);
+    expect(data.every((c) => c['locked'] === false)).toBe(true);
+  });
+
+  test('choix puis verrouillage : la lecture le reflète sur le BON compte', async () => {
+    expect((await poser({ compteId: 'compte-b', verrouille: true })).statut).toBe(200);
+    const data = (await lire('/accounts')).corps['data'] as readonly Record<string, unknown>[];
+    const a = data.find((c) => c['id'] === 'compte-a');
+    const b = data.find((c) => c['id'] === 'compte-b');
+    expect(b?.['selected']).toBe(true);
+    expect(b?.['locked']).toBe(true);
+    expect(a?.['selected']).toBe(false);
+    expect(a?.['locked']).toBe(false);
+  });
+
+  test('compte inconnu : 409 et le refus PORTE les valeurs acceptées', async () => {
+    const { statut, corps } = await poser({ compteId: 'compte-z', verrouille: true });
+    expect(statut).toBe(409);
+    expect(String(corps['error'])).toContain('compte-a, compte-b');
+  });
+
+  test('un refus n’écrit RIEN — valider avant la première écriture', async () => {
+    await poser({ compteId: 'compte-a', verrouille: true });
+    await poser({ compteId: 'compte-z', verrouille: true });
+    expect(registre.comptes.lirePreference().compteId).toBe('compte-a');
+  });
+
+  test('null rend la main à l’automatique et fait tomber le verrou', async () => {
+    await poser({ compteId: 'compte-a', verrouille: true });
+    const { statut } = await poser({ compteId: null, verrouille: true });
+    expect(statut).toBe(200);
+    expect(registre.comptes.lirePreference()).toMatchObject({ compteId: null, verrouille: false });
+  });
+
+  test('PC ÉTEINT, le réglage passe quand même — jamais un 501', async () => {
+    pcOnline = false;
+    const { statut, corps } = await poser({ compteId: 'compte-a', verrouille: true });
+    expect(statut).toBe(200);
+    expect(corps['ok']).toBe(true);
+    expect(registre.comptes.lirePreference()).toMatchObject({ compteId: 'compte-a', verrouille: true });
+  });
+
+  test('compte sans jeton relevé : accepté, mais le risque est DIT', async () => {
+    const { corps } = await poser({ compteId: 'compte-a', verrouille: false });
+    expect(String(corps['avertissement'])).toContain('jamais été relevé');
+  });
+});

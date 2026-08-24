@@ -103,6 +103,21 @@ export interface CreationCompte {
   readonly actif?: boolean;
 }
 
+/**
+ * Choix manuel du compte pour tout le harness, et son verrou.
+ *
+ * `verrouille` ne dit pas « ce compte est le meilleur », il dit « ne bascule
+ * pas sans moi » : la rotation automatique sur saturation est court-circuitée,
+ * y compris quand le compte choisi vient de heurter son mur.
+ */
+export interface PreferenceCompte {
+  /** `null` ⇒ aucun choix manuel, l'automatique décide comme avant. */
+  readonly compteId: string | null;
+  readonly verrouille: boolean;
+  /** `0` tant que personne n'a jamais réglé quoi que ce soit. */
+  readonly majA: number;
+}
+
 /** Instantané de quota par (compte, fenêtre), dernier-gagne (H-54). */
 export interface Quota {
   readonly compteId: string;

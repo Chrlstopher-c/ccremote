@@ -22,6 +22,7 @@ function hAccountBlock(a, missionsForAccount) {
       <strong>En dépassement — sur les crédits (extra_usage, H-69).</strong> Le quota d'abonnement a rejeté (<span class="mono">status: rejected</span>) mais la session continue, silencieusement (<span class="mono">isUsingOverage: true</span>, H-63.1).
     </div>` : ''}
     ${qrows}
+    ${hBandeauChoix(a)}
     <div class="qmiss">
       <span style="font-size:10.5px;color:var(--ink-3);align-self:center;">missions :</span>
       ${missionsForAccount.length ? missionsForAccount.map((m) => `<span class="chip" style="${isActive ? '' : 'background:var(--err-soft);color:var(--err);'}">${m.project}${m.landing && m.landing.active ? ' (atterrit)' : ''}</span>`).join('') : '<span class="chip">aucune</span>'}
@@ -32,6 +33,51 @@ function hAccountBlock(a, missionsForAccount) {
          un bouton qui plante, ou pire, qui semble agir sur un vrai compte. -->
   </div>`;
 }
+
+// ============ Choix manuel du compte + verrou ============
+// ☠ MESURÉ LE 24/08. Le harness annonçait « abonnement fini » sur un compte
+// remplacé huit jours plus tôt : le registre gardait un verdict `rejected` sur
+// une fenêtre morte, et RIEN à l'écran ne permettait de dire « prends l'autre ».
+// L'opérateur pouvait constater le mauvais choix, jamais le corriger. Ces deux
+// contrôles existent pour ça — et le verrou est strict : verrouillé, aucune
+// bascule automatique, même sur saturation.
+
+function hBandeauChoix(a) {
+  const choisi = a.selected === true;
+  const verrouille = a.locked === true;
+  const etat = !choisi
+    ? '<span style="color:var(--ink-3);">non utilisé — le harness peut basculer dessus tout seul</span>'
+    : verrouille
+      ? '<span style="color:var(--ok);font-weight:600;">verrouillé</span> <span style="color:var(--ink-3);">— aucune bascule sans déverrouillage, même saturé</span>'
+      : '<span style="font-weight:600;">choisi</span> <span style="color:var(--ink-3);">— bascule encore possible sur saturation</span>';
+
+  const boutonChoix = choisi
+    ? `<button class="btn" onclick="hLeverChoixCompte()">Rendre à l'automatique</button>`
+    : `<button class="btn" onclick="hChoisirCompte('${a.id}')">Utiliser ce compte</button>`;
+  const boutonVerrou = choisi
+    ? `<button class="btn" onclick="hBasculerVerrou('${a.id}', ${verrouille ? 'false' : 'true'})">${verrouille ? 'Déverrouiller' : 'Verrouiller'}</button>`
+    : '';
+
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">
+    <div style="font-size:11px;line-height:1.5;margin-bottom:8px;">${choisi ? (verrouille ? '🔒 ' : '● ') : ''}${etat}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">${boutonChoix}${boutonVerrou}</div>
+  </div>`;
+}
+
+// ☠ Un avertissement du serveur (jeton jamais relevé, jeton expiré) est AFFICHÉ,
+// jamais avalé : c'est la seule chose qui distingue « choisi et jouable » de
+// « choisi et mort au démarrage » — la confusion exacte du compte-b du VPS.
+async function hAppliquerPreference(compteId, verrouille) {
+  const rep = await HarnessAPI.setAccountPreference(compteId, verrouille);
+  if (!rep.ok) { showToast(rep.erreur || 'réglage refusé', 'err'); return; }
+  showToast(rep.effet || 'préférence enregistrée', 'ok');
+  if (rep.avertissement) showToast(rep.avertissement, 'warn');
+  await hRenderComptes();
+}
+
+async function hChoisirCompte(id) { await hAppliquerPreference(id, false); }
+async function hLeverChoixCompte() { await hAppliquerPreference(null, false); }
+async function hBasculerVerrou(id, verrouille) { await hAppliquerPreference(id, verrouille); }
 
 async function hRenderComptes() {
   const el = document.getElementById('hComptesBody');

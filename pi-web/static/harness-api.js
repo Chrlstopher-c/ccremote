@@ -104,6 +104,13 @@ const HarnessAPI = (() => {
 
     async getAccounts() { return lireReel('/accounts'); },
 
+    // ☠ Écriture qui NE PASSE PAS par le PC : le moment où on veut choisir un
+    // compte est précisément celui où le PC dort. Le serveur la route avant son
+    // garde « pas de lien vers le PC », sans quoi elle rendrait 501.
+    async setAccountPreference(compteId, verrouille) {
+      return ecrireReel('/accounts/preference', { compteId: compteId || null, verrouille: !!verrouille });
+    },
+
     /* ---- Conversations orchestrateur (multi-fils, streaming) — RÉEL ---- */
     // ☠ La persistance vit côté serveur : un rechargement dur relit le fil ici,
     // rien n'est perdu. Le streaming = sondage de /events?since=curseur.

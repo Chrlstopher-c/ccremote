@@ -1002,6 +1002,31 @@ const MIGRATION_33 = `
 ALTER TABLE proposition ADD COLUMN latitude TEXT;
 `;
 
+/**
+ * Le compte choisi À LA MAIN pour le harness, et son verrou.
+ *
+ * `☠` Ligne UNIQUE (`CHECK (id = 1)`), insérée ici : une préférence « absente »
+ * doit être un `compte_id NULL` lisible, jamais une table vide. Sans la ligne,
+ * chaque lecteur devrait distinguer « pas encore réglé » de « table jamais
+ * créée » — deux fois la même logique, à deux endroits, qui divergeront.
+ *
+ * `☠` Aucune clé étrangère vers `compte`. Les comptes sont ENREGISTRÉS PAR
+ * OBSERVATION du disque des machines de travail (voir `decouverte-comptes.ts`) :
+ * une préférence posée sur un compte momentanément absent de l'inventaire doit
+ * survivre à son absence, pas être effacée par une cascade. Un `compte_id` qui
+ * ne résout plus est traité comme une préférence inapplicable — dit à l'écran,
+ * jamais silencieusement perdu.
+ */
+const MIGRATION_34 = `
+CREATE TABLE preference_compte (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  compte_id  TEXT,
+  verrouille INTEGER NOT NULL DEFAULT 0,
+  maj_a      INTEGER NOT NULL
+);
+INSERT INTO preference_compte (id, compte_id, verrouille, maj_a) VALUES (1, NULL, 0, 0);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -1036,6 +1061,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 31, nom: 'observation-parc-carburant', sql: MIGRATION_31 },
   { version: 32, nom: 'avertissement-budget-80-mission', sql: MIGRATION_32 },
   { version: 33, nom: 'latitude-proposition', sql: MIGRATION_33 },
+  { version: 34, nom: 'preference-compte', sql: MIGRATION_34 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

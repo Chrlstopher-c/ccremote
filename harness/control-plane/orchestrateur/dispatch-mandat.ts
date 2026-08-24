@@ -15,7 +15,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { Proposition, Registre } from '../registre/index.ts';
+import type { Compte, Proposition, Registre } from '../registre/index.ts';
+import { resoudrePreference, type PreferenceAppliquee } from '../../shared/preference-compte.ts';
 import type { DemandeDemarrageTransportable } from '../../superviseur/index.ts';
 import { effortsDe, messageModeleInconnu, normaliserModele } from '../../shared/modeles-claude.ts';
 import {
@@ -678,23 +679,63 @@ export class ErreurMandatDejaTranche extends Error {
   }
 }
 
-export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
-  // `☠` Rotation (H-53) : `listerDisponibles()` exclut les comptes marqués
-  // `rejected` par le balayage de télémétrie. C'est ici que la bascule se fait —
-  // silencieusement pour l'opérateur, mais tracée.
-  const disponibles = deps.registre.comptes.listerDisponibles();
-  const compte = disponibles[0];
-  if (compte === undefined) {
-    const tous = deps.registre.comptes.lister().length;
-    throw new Error(
-      tous === 0
-        ? 'aucun compte Claude enregistré — impossible de démarrer une équipe'
-        : `les ${tous} comptes connus sont saturés — attends une remise à zéro de fenêtre avant de relancer`,
-    );
+/**
+ * Sur quel compte cette équipe démarre.
+ *
+ * `☠` Rotation (H-53) : `listerDisponibles()` exclut les comptes marqués
+ * `rejected` par le balayage de télémétrie. C'est ici que la bascule se fait —
+ * silencieusement pour l'opérateur, mais tracée.
+ *
+ * `☠` Le CHOIX MANUEL passe devant (24/08). Verrouillé, il passe même devant la
+ * saturation : l'équipe part sur le compte demandé et heurtera son mur, ce qui
+ * est le comportement demandé — « ça ne rebascule que si je le choisis ou si je
+ * déverrouille ». Le refus, lui, NOMME le verrou : un blocage dont on ne voit
+ * pas la cause est ce qui a coûté cette session.
+ */
+function choisirCompteEquipe(registre: DependancesDispatch['registre']): Compte {
+  const preference = registre.comptes.lirePreference();
+  const tous = registre.comptes.lister();
+  const disponibles = registre.comptes.listerDisponibles();
+  const resolution = resoudrePreference(
+    tous,
+    (c) => c.id,
+    preference,
+    (c) => !disponibles.some((d) => d.id === c.id),
+  );
+
+  if (resolution.mode === 'preferee') {
+    const choisi = tous[resolution.index];
+    if (choisi !== undefined) {
+      log.info(
+        { compteId: choisi.id, verrouille: resolution.verrouille },
+        'compte d’équipe imposé par le choix de l’opérateur',
+      );
+      return choisi;
+    }
   }
-  if (deps.registre.comptes.lister()[0]?.id !== compte.id) {
+
+  const compte = disponibles[0];
+  if (compte === undefined) throw new Error(refusFauteDeCompte(tous.length, preference));
+  if (tous[0]?.id !== compte.id) {
     log.info({ compteId: compte.id }, 'rotation de compte : le précédent est saturé');
   }
+  return compte;
+}
+
+/** `☠` Un refus dit pourquoi, et ce qu'il faut faire pour le lever. */
+function refusFauteDeCompte(nbComptes: number, preference: PreferenceAppliquee): string {
+  if (nbComptes === 0) return 'aucun compte Claude enregistré — impossible de démarrer une équipe';
+  if (preference.compteId !== null && preference.verrouille) {
+    return (
+      `le compte « ${preference.compteId} » est verrouillé et introuvable à l’inventaire — ` +
+      'déverrouille-le ou choisis-en un autre dans les paramètres'
+    );
+  }
+  return `les ${nbComptes} comptes connus sont saturés — attends une remise à zéro de fenêtre avant de relancer`;
+}
+
+export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
+  const compte = choisirCompteEquipe(deps.registre);
 
   // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
   // absolu est pris tel quel : le concaténer au répertoire de projets du Pi

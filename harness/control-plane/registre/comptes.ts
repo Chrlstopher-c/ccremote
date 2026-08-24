@@ -10,7 +10,7 @@ import type { Database } from 'bun:sqlite';
 import { fenetreEncoreSaturante } from '../../shared/saturation-compte.ts';
 import { executer } from './journal.ts';
 import { versCompte, versQuota, type LigneCompte, type LigneQuota } from './lignes.ts';
-import type { Compte, CreationCompte, Quota, RelevéQuota } from './types.ts';
+import type { Compte, CreationCompte, PreferenceCompte, Quota, RelevéQuota } from './types.ts';
 
 export class DepotComptes {
   private readonly db: Database;
@@ -233,6 +233,56 @@ export class DepotComptes {
         .all();
       return lignes.map((l) => ({ compteId: l.compte_id, jetonAcces: l.jeton_acces, expireA: l.expire_a }));
     });
+  }
+
+  /**
+   * Le choix manuel de l'opérateur, ou son absence.
+   *
+   * `☠` Rend toujours un objet : « aucune préférence » est un `compteId: null`,
+   * pas un `null` global. L'appelant n'a donc jamais à distinguer « pas réglé »
+   * de « illisible » — les deux se comportent comme l'automatique d'avant.
+   */
+  public lirePreference(): PreferenceCompte {
+    return executer('comptes.lirePreference', () => {
+      const ligne = this.db
+        .query<{ compte_id: string | null; verrouille: number; maj_a: number }, []>(
+          'SELECT compte_id, verrouille, maj_a FROM preference_compte WHERE id = 1',
+        )
+        .get();
+      if (ligne === null || ligne === undefined) return { compteId: null, verrouille: false, majA: 0 };
+      return { compteId: ligne.compte_id, verrouille: ligne.verrouille === 1, majA: ligne.maj_a };
+    });
+  }
+
+  /**
+   * Pose le choix manuel. `compteId: null` rend la main à l'automatique.
+   *
+   * `☠` NE VALIDE PAS que le compte est jouable — ce n'est pas le rôle d'un
+   * dépôt, et le faire ici rendrait la règle invisible depuis l'API qui doit
+   * l'ÉNONCER à l'opérateur. La validation vit dans `validerPreference`
+   * (`shared/preference-compte.ts`), appelée AVANT cette écriture. Voir la règle
+   * « valider avant la première écriture, jamais au point d'usage ».
+   *
+   * `☠` Un verrou sans compte n'a pas de sens : verrouiller « rien » écarterait
+   * tous les comptes au premier choix. On le ramène donc à `false` plutôt que de
+   * persister un état que le sélecteur ne sait pas représenter.
+   */
+  public definirPreference(
+    compteId: string | null,
+    verrouille: boolean,
+    maintenant: number = Date.now(),
+  ): PreferenceCompte {
+    return executer(
+      'comptes.definirPreference',
+      () => {
+        const verrouEffectif = compteId === null ? false : verrouille;
+        this.db
+          .query('UPDATE preference_compte SET compte_id = ?, verrouille = ?, maj_a = ? WHERE id = 1')
+          .run(compteId, verrouEffectif ? 1 : 0, maintenant);
+        return { compteId, verrouille: verrouEffectif, majA: maintenant };
+      },
+      { compteId, verrouille },
+    );
   }
 }
 

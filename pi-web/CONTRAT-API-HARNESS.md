@@ -315,6 +315,8 @@ type Account = {
   isUsingOverage: boolean;           // H-63.1 : rejected ne coupe pas la session, elle continue sur extra_usage
   five_hour: { util: number; resetLabel: string; resetAt: string | null };
   seven_day: { util: number; resetLabel: string; resetAt: string | null };
+  selected: boolean;                 // le compte choisi À LA MAIN par l'opérateur
+  locked: boolean;                   // ce choix est verrouillé : aucune rotation automatique
 }
 ```
 
@@ -353,6 +355,44 @@ la fenêtre.
 `☠` Le gestionnaire de conversations est **opt-in** (`CCREMOTE_PI_ORCHESTRATEUR=1`). Absent, toutes
 les routes `/orchestrator/conversations*` répondent **501** avec un message qui le nomme — jamais
 une conversation fabriquée.
+
+
+### `POST /api/harness/accounts/preference` → `HarnessAPI.setAccountPreference(compteId, verrouille)`
+
+```ts
+// corps
+{ compteId: string | null, verrouille: boolean }
+// réponse 200
+{ ok: true, effet: string, preference: { compteId, verrouille, majA }, avertissement: string | null }
+```
+
+Choisit le compte que le harness utilise — orchestrateur **et** équipes — et verrouille ou non ce
+choix. `compteId: null` rend la main à la rotation automatique et fait tomber le verrou (verrouiller
+« rien » n'a pas de sens).
+
+`☠ POURQUOI CETTE ROUTE EXISTE (mesuré le 24/08).` Le harness annonçait « abonnement fini » sur un
+compte remplacé huit jours plus tôt : le registre gardait `compte-b = compte-b@exemple.fr,
+status: rejected` avec une fenêtre 5 h « expirée » — un verdict figé sur une fenêtre morte. Aucun
+moyen, depuis l'interface, de dire « prends l'autre ». L'opérateur pouvait constater le mauvais
+choix, jamais le corriger.
+
+`☠` **Le verrou est STRICT.** Verrouillé, aucune bascule automatique, y compris quand le compte
+choisi vient de heurter son mur : l'équipe attendra le reset de fenêtre. C'est le comportement
+demandé — « ça ne rebascule que si je le choisis ou si je déverrouille » — et le refus de dispatch
+nomme alors le verrou, au lieu de laisser découvrir un blocage sans cause visible.
+
+`☠` **Cette écriture répond PC ÉTEINT** — elle est routée avant le garde 501 de `routerEcriture`,
+qui exige un lien vers le PC. Le moment où l'on veut choisir un compte est précisément celui où le
+PC dort ; un 501 ici aurait fermé la seule porte de sortie.
+
+`☠` **Valider puis écrire, jamais l'inverse.** Un `compteId` inconnu rend **409** sans rien
+persister, et le message porte la liste des valeurs acceptées — un refus sans liste condamne
+l'appelant, humain ou modèle, à rejouer la même valeur.
+
+`☠` Un jeton **expiré** n'est pas un refus, seulement un `avertissement` : les jetons vivent ~8 h et
+ne sont re-relevés que machine de travail allumée. Refuser dessus reproduirait exactement le défaut
+que cette route corrige — un verdict tiré d'une fenêtre qui survit à la fenêtre. Un jeton **jamais
+relevé**, en revanche, est dit : c'est le signal réel d'un compte sans session valide derrière lui.
 
 ### `GET /api/harness/orchestrator/conversations` → `HarnessAPI.getConversations()`
 

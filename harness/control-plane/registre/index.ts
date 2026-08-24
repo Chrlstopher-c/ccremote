@@ -41,6 +41,7 @@ export type {
   Mission,
   NatureActiviteMission,
   Notification,
+  PreferenceCompte,
   PieceJointeMessage,
   Rappel,
   EtatRappel,

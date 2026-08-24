@@ -13,7 +13,7 @@
  * l'argent réel. D'où `isUsingOverage`, distinct du statut.
  */
 
-import type { Compte, Quota } from '../registre/index.ts';
+import type { Compte, PreferenceCompte, Quota } from '../registre/index.ts';
 
 export interface FenetreApi {
   readonly util: number;
@@ -35,6 +35,15 @@ export interface AccountApi {
   readonly plan: string;
   readonly five_hour: FenetreApi;
   readonly seven_day: FenetreApi;
+  /** `true` sur le compte que l'opérateur a choisi à la main, s'il y en a un. */
+  readonly selected: boolean;
+  /**
+   * `true` quand ce choix est verrouillé : aucune rotation automatique, même
+   * sur saturation. `☠` Porté par le compte et non par l'enveloppe pour que
+   * l'écran puisse dire « verrouillé » LÀ où il montre le compte concerné —
+   * un cadenas global n'aurait pas nommé sa cible.
+   */
+  readonly locked: boolean;
 }
 
 const FENETRE_INCONNUE: FenetreApi = { util: 0, resetLabel: '—', resetAt: null };
@@ -96,7 +105,13 @@ function versFenetre(quota: Quota | undefined, maintenantMs: number, avecJour = 
   };
 }
 
-export function versAccountApi(compte: Compte, quotas: readonly Quota[], maintenantMs: number): AccountApi {
+export function versAccountApi(
+  compte: Compte,
+  quotas: readonly Quota[],
+  maintenantMs: number,
+  preference: PreferenceCompte = { compteId: null, verrouille: false, majA: 0 },
+): AccountApi {
+  const choisi = preference.compteId === compte.id;
   const cinqHeures = quotas.find((q) => q.typeFenetre === 'five_hour');
   const septJours = quotas.find((q) => q.typeFenetre === 'seven_day');
   return {
@@ -114,5 +129,7 @@ export function versAccountApi(compte: Compte, quotas: readonly Quota[], mainten
     five_hour: versFenetre(cinqHeures, maintenantMs),
     // Le jour compte pour la fenêtre hebdomadaire : elle retombe plusieurs jours plus tard.
     seven_day: versFenetre(septJours, maintenantMs, true),
+    selected: choisi,
+    locked: choisi && preference.verrouille,
   };
 }

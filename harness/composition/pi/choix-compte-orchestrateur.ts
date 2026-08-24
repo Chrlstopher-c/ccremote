@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Registre } from '../../control-plane/registre/index.ts';
 import { fenetreEncoreSaturante } from '../../shared/saturation-compte.ts';
+import { resoudrePreference } from '../../shared/preference-compte.ts';
 import { compositionLogger } from '../logger.ts';
 
 const log = compositionLogger.child({ composant: 'choix-compte-orchestrateur' });
@@ -65,12 +66,70 @@ function estSature(registre: Registre, email: string | null, maintenant: number 
  * mieux, l'appelant heurtera le mur et le dira — c'est plus honnête qu'un choix
  * arbitraire présenté comme une solution.
  */
+/**
+ * Identifiant de registre du compte connecté dans ce dossier, ou `null`.
+ *
+ * `☠` Le pont entre les deux mondes reste l'EMAIL (voir l'en-tête) : le choix
+ * manuel, lui, s'exprime en identifiant de compte (`compte-a`) parce que c'est
+ * ce que l'opérateur voit à l'écran et ce que le dispatch d'équipe manipule.
+ * Sans cette traduction, la même préférence désignerait deux choses selon
+ * l'endroit du code qui la lit.
+ */
+function compteIdDuConfigDir(registre: Registre, configDir: string): string | null {
+  const email = emailDuConfigDir(configDir);
+  if (email === null) return null;
+  return registre.comptes.lister().find((c) => c.email === email)?.id ?? null;
+}
+
+/**
+ * Le choix manuel, quand il s'applique.
+ *
+ * `☠` Hors verrou, la préférence ne vaut que pour le choix INITIAL (`depuis
+ * === 0`). Une rotation demandée en cours de route signifie « ce compte vient
+ * de refuser » — un fait que le registre ne connaît pas toujours encore, la
+ * télémétrie ayant un temps de retard. Réappliquer la préférence là renverrait
+ * l'orchestrateur sur le compte qui vient de le rejeter, et la rotation ne se
+ * ferait jamais. Verrouillé, en revanche, c'est exactement ce qu'on veut :
+ * l'opérateur a demandé qu'on ne bascule pas sans lui.
+ */
+function indexPrefereApplicable(
+  configDirs: readonly string[],
+  registre: Registre,
+  depuis: number,
+  maintenant: number,
+): number | null {
+  const preference = registre.comptes.lirePreference();
+  if (preference.compteId === null) return null;
+  if (depuis !== 0 && !preference.verrouille) return null;
+
+  const resolution = resoudrePreference(
+    configDirs,
+    (dir) => compteIdDuConfigDir(registre, dir),
+    preference,
+    (dir) => estSature(registre, emailDuConfigDir(dir), maintenant),
+  );
+  if (resolution.mode === 'automatique') {
+    log.info({ motif: resolution.motif }, 'préférence de compte non appliquée à l’orchestrateur');
+    return null;
+  }
+  log.info(
+    { compteId: preference.compteId, configDir: configDirs[resolution.index], verrouille: resolution.verrouille },
+    resolution.verrouille
+      ? 'compte orchestrateur VERROUILLÉ par l’opérateur — aucune rotation, même sur saturation'
+      : 'compte orchestrateur choisi par l’opérateur',
+  );
+  return resolution.index;
+}
+
 export function choisirCompteDisponible(
   configDirs: readonly string[],
   registre: Registre,
   depuis = 0,
   maintenant: number = Date.now(),
 ): number {
+  const prefere = indexPrefereApplicable(configDirs, registre, depuis, maintenant);
+  if (prefere !== null) return prefere;
+
   for (let i = depuis; i < configDirs.length; i += 1) {
     const dir = configDirs[i];
     if (dir === undefined) continue;
