@@ -17,16 +17,25 @@
 # rapide possible) — sinon refus.
 #
 # Usage :
-#   CCREMOTE_LIEN_SECRET=... ./deployer-en-production.sh <branche-cible> [pi-user@pi-ip]
+#   CCREMOTE_LIEN_SECRET=... CCREMOTE_UI_PASSWORD=... \
+#     ./deployer-en-production.sh <branche-cible> [pi-user@pi-ip] [--malgre-equipes-actives]
 #
 # Ce que tu verras si tout se passe bien : cinq étapes numérotées, chacune
-# suivie d'un « ✓ », puis « ✓ MISE EN PRODUCTION TERMINÉE » à la toute fin.
-# N'importe quelle ligne commençant par « ✗ » veut dire : RIEN n'a été
-# déployé, et le message qui la précède explique pourquoi.
+# suivie d'un « ✓ », plus une garde équipes non numérotée juste avant l'étape
+# 4, puis « ✓ MISE EN PRODUCTION TERMINÉE » à la toute fin. N'importe quelle
+# ligne commençant par « ✗ » veut dire : RIEN n'a été déployé, et le message
+# qui la précède explique pourquoi.
 #
 # ☠ CE SCRIPT REDÉMARRE LE SERVICE DU HARNESS SUR LE PI (étape 4). Toute
 # équipe ou session en cours là-bas est coupée au même instant, sans reprise
 # automatique — lance-le seulement quand tu es prêt à ce que ça arrive.
+#
+# ☠ GARDE ÉQUIPES ACTIVES (avant l'étape 4, CCREMOTE_UI_PASSWORD requis) : le
+# script REFUSE de déployer si une équipe autre que lui-même tourne sur le
+# parc, en la NOMMANT (projet, titre, état). Passage en force explicite :
+# `--malgre-equipes-actives` — en connaissance de cause, ça coupe les équipes
+# listées. Même filet que `deployer-tout.sh` (`verifier_equipes_actives`,
+# API `/missions` en lecture seule), branché ici plutôt que réinventé.
 #
 # Idempotent : relancé deux fois de suite avec la même branche cible, la
 # deuxième fois ne trouve plus rien à corriger ni à avancer (master est déjà
@@ -107,8 +116,22 @@ else
 fi
 
 HARNESS="$RACINE/harness"
-BRANCHE_CIBLE="${1:-}"
-TARGET="${2:-pi@pi.exemple}"
+
+# ── Séparation des drapeaux et des paramètres positionnels ───────────────
+# `--malgre-equipes-actives` : passage en force EXPLICITE de la garde
+# équipes (voir étape 3bis) — jamais deviné, jamais activé par défaut.
+# Peut apparaître n'importe où dans les arguments, sans perturber l'ordre
+# des paramètres positionnels historiques (branche cible, cible SSH).
+ARGS_POSITIONNELS=()
+MALGRE_EQUIPES_ACTIVES=0
+for arg in "$@"; do
+  case "$arg" in
+    --malgre-equipes-actives) MALGRE_EQUIPES_ACTIVES=1 ;;
+    *) ARGS_POSITIONNELS+=("$arg") ;;
+  esac
+done
+BRANCHE_CIBLE="${ARGS_POSITIONNELS[0]:-}"
+TARGET="${ARGS_POSITIONNELS[1]:-pi@pi.exemple}"
 
 annoncer() { echo ""; echo "→ Étape $1/5 — $2"; }
 refuser() {
@@ -219,6 +242,67 @@ if echo "$SORTIE_TESTS" | grep -qE '^ *[1-9][0-9]* skip$'; then
 fi
 echo "$SORTIE_TESTS" | tail -4
 echo "    ✓ suite de tests verte, aucun test ignoré"
+
+# ── 3bis. Garde « aucune équipe active » — AVANT l'étape qui redémarre ───
+# le service (étape 4). Une équipe en cours sur le Pi est coupée net par ce
+# redémarrage, sans reprise automatique, et tout ce qu'elle a dépensé est
+# perdu. `deployer-tout.sh` porte déjà ce filet (`verifier_equipes_actives`) :
+# on le BRANCHE ici à l'identique — même client (`pilotage/client-pilote.ts`,
+# API `/missions` en lecture seule), même auto-exclusion par
+# `CLAUDE_CODE_SESSION_ID` (posé par le SDK, jamais par ce dépôt) — plutôt que
+# d'inventer une détection maison qui serait un défaut non testé sur le
+# chemin le plus sensible du dépôt.
+echo ""
+echo "→ Garde équipes actives — avant l'étape 4 (redémarrage du service sur le Pi)"
+
+if [ -z "${CCREMOTE_UI_PASSWORD:-}" ]; then
+  refuser "CCREMOTE_UI_PASSWORD absent — impossible d'interroger le parc pour vérifier qu'aucune équipe ne tourne. Export CCREMOTE_UI_PASSWORD avant de relancer (refus par prudence : jamais de supposition « personne d'actif »)." 78
+fi
+if [ -z "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  refuser "CLAUDE_CODE_SESSION_ID absent — impossible de déterminer quelle mission exécute CE script pour l'exclure de son propre comptage (ce script tourne peut-être lui-même comme une équipe). Refus par prudence." 78
+fi
+
+# `☠` Point d'injection RÉSERVÉ AUX TESTS (deployer-en-production.test.sh) :
+# si posée, `CCREMOTE_GARDE_EQUIPES_CMD` REMPLACE l'interrogation réelle du
+# parc par une commande qui imite sa sortie JSON — jamais posée en
+# production, où la branche `bun -e` ci-dessous (identique à celle de
+# `deployer-tout.sh`) s'exécute toujours.
+if [ -n "${CCREMOTE_GARDE_EQUIPES_CMD:-}" ]; then
+  BRUT_GARDE="$(eval "$CCREMOTE_GARDE_EQUIPES_CMD" 2>&1)"
+else
+  BRUT_GARDE="$(cd "$HARNESS" && CCREMOTE_MON_SESSION_ID="$CLAUDE_CODE_SESSION_ID" bun -e "
+import { ClientPilote } from './pilotage/client-pilote.ts';
+const mdp = process.env.CCREMOTE_UI_PASSWORD as string;
+const monSessionId = process.env.CCREMOTE_MON_SESSION_ID as string;
+const c = new ClientPilote(mdp, process.env.CCREMOTE_BASE || undefined);
+const { data } = await c.missions();
+const TERMINALES = new Set(['terminee', 'echec']);
+const brutes = data as unknown as Record<string, unknown>[];
+const actives = brutes.filter((m) => !TERMINALES.has(String(m['state'])));
+const autres = actives.filter((m) => String(m['sessionId'] ?? '') !== monSessionId);
+console.log(JSON.stringify({ autres, exclueSoiMeme: autres.length !== actives.length }));
+" 2>&1)"
+fi
+
+if ! echo "$BRUT_GARDE" | jq -e . >/dev/null 2>&1; then
+  refuser "$(printf 'interrogation du parc en échec — voir le détail ci-dessous :\n%s' "$BRUT_GARDE")"
+fi
+
+NB_EQUIPES_AUTRES="$(echo "$BRUT_GARDE" | jq '.autres | length')"
+if [ "$NB_EQUIPES_AUTRES" -eq 0 ]; then
+  echo "  ✓ aucune équipe active en plus de celle qui exécute ce script (le cas échéant)"
+else
+  echo "  ⚠ $NB_EQUIPES_AUTRES équipe(s) active(s) EN PLUS de celle qui exécute ce script —" >&2
+  echo "    le redémarrage du service (étape 4) les coupe net, sans reprise automatique :" >&2
+  echo "$BRUT_GARDE" | jq -r '.autres[] | "    · " + (.project // "?") + " — " + (.title // .id) + "  [état=" + (.state // "?") + "]"' >&2
+  if [ "$MALGRE_EQUIPES_ACTIVES" = "1" ]; then
+    echo "" >&2
+    echo "  ⚠⚠ --malgre-equipes-actives : passage en force. CECI VA COUPER les équipes listées ci-dessus, en connaissance de cause." >&2
+  else
+    echo "" >&2
+    refuser "équipe(s) active(s) listée(s) ci-dessus — le déploiement les couperait net, sans reprise. Relance avec --malgre-equipes-actives pour passer outre, en connaissance de cause." 78
+  fi
+fi
 
 cd "$RACINE"
 

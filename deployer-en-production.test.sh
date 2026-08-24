@@ -173,6 +173,110 @@ case "$SORTIE6" in
     ECHECS=$((ECHECS + 1)) ;;
 esac
 
+# ── Dépôt jetable avec un VRAI mini-harness (bun install/tsc/test passent) —
+#    nécessaire pour ATTEINDRE la garde équipes (étape 3bis, entre l'étape 3
+#    et l'étape 4), que les dépôts jetables ci-dessus n'atteignent jamais
+#    (leur `harness/` vide fait échouer `bun install` avant). Le
+#    `deploy-harness-pi.sh` factice pose un fichier marqueur au lieu d'un
+#    simple `exit 1` : on peut ainsi prouver mécaniquement si l'étape 4 a été
+#    ATTEINTE ou non, ce qui distingue « bloqué par la garde » de « passé au
+#    travers ». ──────────────────────────────────────────────────────────
+construire_depot_jetable_avec_harness() {
+  local depot
+  depot="$(mktemp -d -t deployer-test-depot-garde.XXXXXX)"
+  git -C "$depot" init --quiet -b master
+  git -C "$depot" -c user.email=test@test -c user.name=test commit --quiet --allow-empty -m init
+  cp "$SCRIPT_SOURCE" "$depot/deployer-en-production.sh"
+  chmod +x "$depot/deployer-en-production.sh"
+  printf '#!/bin/bash\ntouch "$(dirname "$0")/DEPLOY_HARNESS_PI_APPELE"\necho "deploy-harness-pi.sh (factice) appelé"\nexit 0\n' \
+    > "$depot/deploy-harness-pi.sh"
+  chmod +x "$depot/deploy-harness-pi.sh"
+
+  mkdir -p "$depot/harness"
+  echo '{"name":"harness-jetable-test","version":"0.0.0"}' > "$depot/harness/package.json"
+  echo '{"compilerOptions":{"strict":true,"skipLibCheck":true}}' > "$depot/harness/tsconfig.json"
+  printf '// @ts-nocheck\nimport {test,expect} from "bun:test";\ntest("ok", () => expect(1).toBe(1));\n' \
+    > "$depot/harness/trivial.test.ts"
+  # `☠` COMMIS, jamais laissé untracked : l'étape 1 du script (copie de
+  # travail cohérente avec master) fait un `git stash --include-untracked`
+  # dès qu'il voit quoi que ce soit de non suivi — ce mini-harness
+  # disparaîtrait avant même d'atteindre l'étape 3 s'il restait untracked.
+  git -C "$depot" add -A
+  git -C "$depot" -c user.email=test@test -c user.name=test commit --quiet -m "mini-harness jetable (fixture de test)"
+
+  git -C "$depot" checkout --quiet -b "$BRANCHE_CIBLE_TEST"
+  git -C "$depot" -c user.email=test@test -c user.name=test commit --quiet --allow-empty -m "avance sur $BRANCHE_CIBLE_TEST"
+  git -C "$depot" checkout --quiet master
+
+  echo "$depot"
+}
+
+echo ""
+echo "═══ Cas 7 — garde équipes : une équipe active AUTRE que soi ⇒ refus, nommée ═══"
+DEPOT7="$(construire_depot_jetable_avec_harness)"
+set +e
+SORTIE7="$(cd "$DEPOT7" && env CCREMOTE_LIEN_SECRET=peu-importe CCREMOTE_UI_PASSWORD=peu-importe \
+  CLAUDE_CODE_SESSION_ID=session-test-7 \
+  CCREMOTE_GARDE_EQUIPES_CMD="echo '{\"autres\":[{\"project\":\"stockiop\",\"title\":\"Mission de nuit\",\"state\":\"en_cours\"}],\"exclueSoiMeme\":true}'" \
+  bash ./deployer-en-production.sh "$BRANCHE_CIBLE_TEST" 2>&1)"
+CODE7=$?
+set -e
+verifier "$CODE7" "78" "refus au bon code de sortie quand une équipe autre est active"
+case "$SORTIE7" in
+  *"stockiop"*"Mission de nuit"*) echo "  ✓ l'équipe active est NOMMÉE dans le refus (projet et titre)" ;;
+  *) echo "  ✗ l'équipe active n'est pas nommée dans le refus — obtenu : $SORTIE7" >&2; ECHECS=$((ECHECS + 1)) ;;
+esac
+if [ -f "$DEPOT7/DEPLOY_HARNESS_PI_APPELE" ]; then
+  echo "  ✗ l'étape 4 (déploiement) a quand même été atteinte — la garde n'a pas bloqué" >&2
+  ECHECS=$((ECHECS + 1))
+else
+  echo "  ✓ l'étape 4 n'a PAS été atteinte — la garde a bien bloqué avant"
+fi
+
+echo ""
+echo "═══ Cas 8 — garde équipes : aucune équipe active ⇒ le déploiement continue ═══"
+DEPOT8="$(construire_depot_jetable_avec_harness)"
+set +e
+SORTIE8="$(cd "$DEPOT8" && env CCREMOTE_LIEN_SECRET=peu-importe CCREMOTE_UI_PASSWORD=peu-importe \
+  CLAUDE_CODE_SESSION_ID=session-test-8 \
+  CCREMOTE_GARDE_EQUIPES_CMD="echo '{\"autres\":[],\"exclueSoiMeme\":false}'" \
+  bash ./deployer-en-production.sh "$BRANCHE_CIBLE_TEST" 2>&1)"
+CODE8=$?
+set -e
+verifier "$CODE8" "0" "le script se termine avec succès quand aucune équipe n'est active"
+if [ -f "$DEPOT8/DEPLOY_HARNESS_PI_APPELE" ]; then
+  echo "  ✓ l'étape 4 a bien été atteinte (fichier marqueur posé par le déploiement factice)"
+else
+  echo "  ✗ l'étape 4 n'a PAS été atteinte alors qu'aucune équipe n'est active" >&2
+  ECHECS=$((ECHECS + 1))
+fi
+case "$SORTIE8" in
+  *"MISE EN PRODUCTION TERMINÉE"*) echo "  ✓ le script va jusqu'au bout (MISE EN PRODUCTION TERMINÉE)" ;;
+  *) echo "  ✗ le script ne s'est pas terminé normalement — obtenu : $SORTIE8" >&2; ECHECS=$((ECHECS + 1)) ;;
+esac
+
+echo ""
+echo "═══ Cas 9 — garde équipes : équipe active + --malgre-equipes-actives ⇒ passage en force ═══"
+DEPOT9="$(construire_depot_jetable_avec_harness)"
+set +e
+SORTIE9="$(cd "$DEPOT9" && env CCREMOTE_LIEN_SECRET=peu-importe CCREMOTE_UI_PASSWORD=peu-importe \
+  CLAUDE_CODE_SESSION_ID=session-test-9 \
+  CCREMOTE_GARDE_EQUIPES_CMD="echo '{\"autres\":[{\"project\":\"stockiop\",\"title\":\"Mission de nuit\",\"state\":\"en_cours\"}],\"exclueSoiMeme\":true}'" \
+  bash ./deployer-en-production.sh "$BRANCHE_CIBLE_TEST" --malgre-equipes-actives 2>&1)"
+CODE9=$?
+set -e
+verifier "$CODE9" "0" "le passage en force explicite laisse le déploiement continuer"
+if [ -f "$DEPOT9/DEPLOY_HARNESS_PI_APPELE" ]; then
+  echo "  ✓ l'étape 4 a été atteinte malgré l'équipe active (passage en force assumé)"
+else
+  echo "  ✗ l'étape 4 n'a pas été atteinte alors que --malgre-equipes-actives était passé" >&2
+  ECHECS=$((ECHECS + 1))
+fi
+case "$SORTIE9" in
+  *"passage en force"*) echo "  ✓ le passage en force est annoncé en clair" ;;
+  *) echo "  ✗ aucune annonce de passage en force dans la sortie — obtenu : $SORTIE9" >&2; ECHECS=$((ECHECS + 1)) ;;
+esac
+
 echo ""
 if [ "$ECHECS" -eq 0 ]; then
   echo "✓ TOUS LES CAS PASSENT (0 échec)"

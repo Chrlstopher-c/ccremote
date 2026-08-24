@@ -187,6 +187,29 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   const ecart = t.coutUsd - mission.budgetConsommeUsd;
   const consomme =
     ecart > 0 ? registre.missions.ajouterCout(t.missionId, ecart).budgetConsommeUsd : mission.budgetConsommeUsd;
+
+  // `☠` GARDE D'OBSERVABILITÉ (chantier 3, 24/08) — un tour qui se termine avec
+  // un coût RÉELLEMENT facturé (`consomme > 0`) sur une mission qui n'a JAMAIS
+  // eu la moindre activité est le symptôme exact mesuré sur la base de
+  // production le 24/08 : 11 missions sur 401 (2,7 %), groupées dans deux
+  // fenêtres compactes (23/07 00:14-01:40 UTC, 20/08 18:54-19:00 UTC — pas une
+  // dispersion aléatoire liée au rythme du balayage), dont plusieurs ont
+  // facturé jusqu'à 1,67 $ sans qu'une seule ligne n'ait jamais atteint
+  // `activite_mission`. Le canal de coût (sonde directe, indépendante de la
+  // boucle de lecture du flux SDK) avait continué de fonctionner ; celui des
+  // activités (drainé uniquement par cette boucle) était resté silencieux
+  // toute la vie de la mission. Rien ne le signalait alors : l'orchestrateur
+  // ne l'a découvert qu'un mois plus tard, sur une requête SQL manuelle. Ce
+  // log le rend visible EN TEMPS RÉEL, dans les logs pino du Pi (persistés),
+  // plutôt que dans le silence d'avant — il ne corrige pas la panne du canal
+  // (hors de ce fichier), il empêche qu'elle redevienne invisible.
+  if (finDeTour && consomme > 0 && registre.missions.activites(t.missionId, 1).length === 0) {
+    log.warn(
+      { missionId: t.missionId, coutUsd: consomme },
+      'tour terminé, coût facturé, mais AUCUNE activité jamais enregistrée pour cette mission — ' +
+        'canal de télémétrie des activités probablement en panne pour ce worker (enquête chantier 3, 24/08)',
+    );
+  }
   // `☠` Comparé APRÈS l'accumulation, sur la valeur du registre et non sur le
   // relevé : c'est le registre qui fait foi sur la dépense (le relevé d'une
   // machine peut arriver en retard, ou repartir de zéro après une relance).

@@ -1,7 +1,24 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../control-plane/registre/index.ts';
 import type { TelemetrieWorker } from '../../superviseur/index.ts';
-import { demarrerBalayageTelemetrie } from './balayage-telemetrie.ts';
+
+// `☠` Espionne le logger AVANT d'importer `balayage-telemetrie.ts` — le
+// module y construit son `log = compositionLogger.child(...)` une seule fois,
+// à l'import. `mock.module` est hissé par Bun en tête de fichier : cet appel
+// s'exécute avant la résolution du graphe d'imports qui suit textuellement.
+const avertissements: { message: string; contexte: unknown }[] = [];
+mock.module('../logger.ts', () => ({
+  compositionLogger: {
+    child: () => ({
+      warn: (contexte: unknown, message: string) => avertissements.push({ message, contexte }),
+      debug: () => {},
+      info: () => {},
+      error: () => {},
+    }),
+  },
+}));
+
+const { demarrerBalayageTelemetrie } = await import('./balayage-telemetrie.ts');
 
 let registre: Registre;
 
@@ -31,6 +48,7 @@ beforeEach(() => {
   registre.lots.creer({ id: 'lot-1', intention: 'analyse' });
   registre.missions.creer({ id: 'm-1', lotId: 'lot-1', nom: 'vela', projet: 'vela', compteId: 'compte1' });
   registre.etats.appliquerEtatHarness('m-1', 'en_cours');
+  avertissements.length = 0;
 });
 
 afterEach(() => registre.fermer());
@@ -263,5 +281,88 @@ describe('balayage-telemetrie — préavis de plafond à 80 % (migration 32)', (
     await b.passer();
     b.arreter();
     expect(registre.missions.lire('m-1')?.etatHarness).toBe('en_cours');
+  });
+});
+
+/**
+ * `☠` GARDE D'OBSERVABILITÉ (chantier 3, 24/08) — le symptôme mesuré sur la
+ * base de production : un tour se termine, un coût est RÉELLEMENT facturé,
+ * mais aucune activité n'a jamais atteint `activite_mission` pour cette
+ * mission. 11 missions sur 401 (2,7 %) dans deux fenêtres compactes (23/07,
+ * 20/08), jamais découvertes avant une requête SQL manuelle un mois plus
+ * tard. Ce garde-fou ne corrige pas le canal cassé (hors de ce fichier) : il
+ * rend l'anomalie visible EN TEMPS RÉEL dans les logs du Pi.
+ */
+describe('balayage-telemetrie — garde d’observabilité « coût facturé sans activité » (chantier 3, 24/08)', () => {
+  test('☠ tour fini + coût facturé + AUCUNE activité jamais vue ⇒ avertissement journalisé', async () => {
+    // Premier passage : le worker démarre un tour (`running`), rien à facturer
+    // encore, aucune activité — exactement le symptôme mesuré (le canal de
+    // coût suit un chemin séparé du canal d'activités).
+    const premier = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, etatSdk: 'running', coutUsd: 0, activitesEnAttente: [] }] },
+    });
+    await premier.passer();
+    premier.arreter();
+    expect(avertissements).toEqual([]);
+
+    // Second passage : le tour se termine (`running → idle`), un coût réel
+    // est facturé, mais toujours aucune activité dans ce relevé NI dans aucun
+    // relevé précédent — le symptôme exact.
+    const second = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, etatSdk: 'idle', coutUsd: 1.67, activitesEnAttente: [] }] },
+    });
+    await second.passer();
+    second.arreter();
+
+    expect(avertissements).toHaveLength(1);
+    expect(avertissements[0]?.message).toContain('AUCUNE activité');
+    expect(avertissements[0]?.contexte).toMatchObject({ missionId: 'm-1', coutUsd: 1.67 });
+  });
+
+  test('tour fini + coût facturé + une activité déjà connue ⇒ rien à signaler', async () => {
+    const premier = demarrerBalayageTelemetrie({
+      registre,
+      source: {
+        telemetrie: async () => [
+          {
+            ...RELEVE,
+            etatSdk: 'running',
+            coutUsd: 0,
+            activitesEnAttente: [{ texte: 'je travaille', survenuA: 1_000, type: 'texte' as const }],
+          },
+        ],
+      },
+    });
+    await premier.passer();
+    premier.arreter();
+
+    const second = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, etatSdk: 'idle', coutUsd: 1.2, activitesEnAttente: [] }] },
+    });
+    await second.passer();
+    second.arreter();
+
+    expect(avertissements).toEqual([]);
+  });
+
+  test('tour fini SANS coût facturé (0 $) ⇒ rien à signaler, même sans activité', async () => {
+    const premier = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, etatSdk: 'running', coutUsd: 0, activitesEnAttente: [] }] },
+    });
+    await premier.passer();
+    premier.arreter();
+
+    const second = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, etatSdk: 'idle', coutUsd: 0, activitesEnAttente: [] }] },
+    });
+    await second.passer();
+    second.arreter();
+
+    expect(avertissements).toEqual([]);
   });
 });
