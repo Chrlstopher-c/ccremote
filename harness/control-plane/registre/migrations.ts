@@ -987,6 +987,21 @@ const MIGRATION_32 = `
 ALTER TABLE mission ADD COLUMN avertissement_budget_80_a INTEGER;
 `;
 
+/**
+ * Migration 33 — la latitude devient une colonne, pas seulement un paramètre en vol.
+ *
+ * `☠` Chantier 3 (mandat opérateur 24/08) : `creer_equipe` accepte `latitude`
+ * depuis deux mandats, la carte d'autorisation l'affiche, `dispatch-mandat.ts`
+ * sait déjà la lire — mais rien entre les deux ne l'écrivait en base. Le champ
+ * valait donc toujours vide en production, et le lead ne le voyait jamais
+ * (audit 24/08, trois équipes payées pour un maillon manquant). ADDITIF pur :
+ * une colonne nullable, même patron que `perimetre` (migration 4) — texte libre,
+ * aucun CHECK, aucune donnée réécrite, aucune table renommée.
+ */
+const MIGRATION_33 = `
+ALTER TABLE proposition ADD COLUMN latitude TEXT;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -1020,6 +1035,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 30, nom: 'evenement-artefact', sql: MIGRATION_30 },
   { version: 31, nom: 'observation-parc-carburant', sql: MIGRATION_31 },
   { version: 32, nom: 'avertissement-budget-80-mission', sql: MIGRATION_32 },
+  { version: 33, nom: 'latitude-proposition', sql: MIGRATION_33 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

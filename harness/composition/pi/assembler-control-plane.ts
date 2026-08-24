@@ -36,7 +36,13 @@
  */
 
 import { demarrerServeurApiWeb, type ServeurApiWeb } from '../../control-plane/api-web/index.ts';
-import { ouvrirRegistre, type Mission, type OrigineApprobation, type Registre } from '../../control-plane/registre/index.ts';
+import {
+  ouvrirRegistre,
+  type CreationProposition,
+  type Mission,
+  type OrigineApprobation,
+  type Registre,
+} from '../../control-plane/registre/index.ts';
 import { redigerMandatEnAttente, ServiceNotifications } from '../../control-plane/notifications/index.ts';
 import { EtatPartielsMissions } from '../../control-plane/observabilite/index.ts';
 import {
@@ -90,6 +96,44 @@ const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' })
  * lui-même (`creer_equipe.budgetMaxUsd`, 03/08) : ceci n'est plus que le filet.
  */
 const BUDGET_MANDAT_DEFAUT_USD = PLAFOND_EQUIPE_USD;
+
+/**
+ * Traduit le mandat reçu par `enregistrer` (port `EnregistreurProposition`) en
+ * objet de création pour le dépôt de propositions. Extrait du corps de la
+ * fermeture `enregistrer` pour rester testable sans démarrer une vraie session
+ * SDK — le reste de cette fermeture dépend de `demarrerOrchestrateur` et de
+ * `registre`, ce sous-ensemble n'en a besoin d'aucun.
+ *
+ * `☠` Chantier 3 (mandat opérateur 24/08) : `mandat.latitude` arrivait déjà
+ * jusqu'ici (port `EnregistreurProposition`, typé depuis le premier maillon) et
+ * repartait aussitôt SANS être transmis à `registre.propositions.creer` — la
+ * proposition en base ne portait donc jamais la latitude que l'opérateur venait
+ * d'autoriser sur la carte. Trois équipes payées pour un maillon manquant ICI.
+ */
+export function construireCreationProposition(
+  conversationId: string,
+  mandat: Parameters<EnregistreurProposition['enregistrer']>[0],
+): CreationProposition {
+  return {
+    id: randomUUID(),
+    conversationId,
+    projet: mandat.projet,
+    objectif: mandat.objectif,
+    critereArret: mandat.critereArret,
+    perimetre: mandat.perimetre,
+    // `☠` Absent ⇒ `lecture`, jamais l'écriture : un chemin qui oublierait de
+    // transmettre l'accès doit RETIRER des droits.
+    acces: mandat.acces ?? ACCES_DEFAUT,
+    // `☠` Le plafond demandé au dépôt prime, et c'est le seul instant où il peut
+    // encore protéger quoi que ce soit : `definir_budget` n'existe qu'après
+    // démarrage, et une mission d'une minute (`96a9c788`, 03/08) finit avant le
+    // premier réveil de l'orchestrateur. Absent ⇒ le filet du parc, jamais l'illimité.
+    budgetMaxUsd: mandat.budgetMaxUsd ?? BUDGET_MANDAT_DEFAUT_USD,
+    modele: mandat.modele ?? null,
+    effort: mandat.effort ?? null,
+    latitude: mandat.latitude ?? null,
+  };
+}
 
 /**
  * Combien de temps `creer_equipe` attend la confirmation d'un dispatch avant de
@@ -631,25 +675,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
             // fil : c'est ce marqueur qui fait apparaître la carte à autoriser au
             // bon endroit, au lieu d'une liste hors contexte.
             enregistrer: async (mandat) => {
-              const p = registre.propositions.creer({
-                id: randomUUID(),
-                conversationId,
-                projet: mandat.projet,
-                objectif: mandat.objectif,
-                critereArret: mandat.critereArret,
-                perimetre: mandat.perimetre,
-                // `☠` Absent ⇒ `lecture`, jamais l'écriture : un chemin qui
-                // oublierait de transmettre l'accès doit RETIRER des droits.
-                acces: mandat.acces ?? ACCES_DEFAUT,
-                // `☠` Le plafond demandé au dépôt prime, et c'est le seul instant
-                // où il peut encore protéger quoi que ce soit : `definir_budget`
-                // n'existe qu'après démarrage, et une mission d'une minute
-                // (`96a9c788`, 03/08) finit avant le premier réveil de
-                // l'orchestrateur. Absent ⇒ le filet du parc, jamais l'illimité.
-                budgetMaxUsd: mandat.budgetMaxUsd ?? BUDGET_MANDAT_DEFAUT_USD,
-                modele: mandat.modele ?? null,
-                effort: mandat.effort ?? null,
-              });
+              const p = registre.propositions.creer(construireCreationProposition(conversationId, mandat));
               registre.conversations.ajouterEvenement({ conversationId, type: 'mandat', contenu: p.id });
 
               // `☠` La décision d'autonomie se prend ICI, au dépôt, et pas plus

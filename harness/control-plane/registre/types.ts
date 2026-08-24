@@ -433,6 +433,14 @@ export interface Proposition {
   /** Cadre de travail en clair, pour le lead. Descriptif — ne porte aucun droit. */
   readonly perimetre: string;
   /**
+   * Chantier 3 (mandat opérateur 24/08, migration 33) — liste NOMMÉE des choses
+   * adjacentes que l'équipe est autorisée à corriger si elle les rencontre. La
+   * latitude AUTORISE, le périmètre INTERDIT, et le périmètre l'emporte en cas
+   * de recouvrement. `null` ⇒ aucune latitude accordée. Requis, comme `modele`
+   * et `effort` ci-dessous : nullable, mais jamais absent.
+   */
+  readonly latitude: string | null;
+  /**
    * Ce que l'équipe pourra RÉELLEMENT faire. `lecture` refuse les outils
    * d'écriture au worker (`shared/acces-mandat.ts`) ; `perimetre` ne l'a jamais
    * fait — il ne partait que dans le prompt initial.

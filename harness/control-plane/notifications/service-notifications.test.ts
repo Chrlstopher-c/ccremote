@@ -328,6 +328,7 @@ describe('rédaction — mandat en attente d’autorisation', () => {
     budgetMaxUsd: 5,
     modele: null,
     effort: null,
+    latitude: null,
     statut: 'en_attente',
     missionId: null,
     detail: null,

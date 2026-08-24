@@ -381,20 +381,6 @@ const BLOC_AUTONOMIE = [
 ].join('\n');
 
 /**
- * `☠` Chantier 3 (mandat opérateur 24/08) — la `Proposition` du registre ne
- * porte pas encore ce champ : persistance (`registre/`) et composition
- * (`composition/pi/assembler-control-plane.ts`) restent hors périmètre de ce
- * mandat, qui ne touche QUE la composition du briefing. L'étendre ICI, en
- * intersection, laisse tout appelant existant intact — un `Proposition` sans
- * `latitude` reste assignable, la propriété est optionnelle — et fait
- * apparaître la latitude dans le briefing dès l'instant où l'amont la fournira
- * réellement, sans autre changement de ce fichier.
- */
-type PropositionAvecLatitude = Proposition & {
-  readonly latitude?: string | null;
-};
-
-/**
  * `☠` La latitude AUTORISE, le périmètre INTERDIT, et le périmètre l'emporte
  * TOUJOURS en cas de recouvrement — même distinction, mêmes mots que la carte
  * d'autorisation (`mcp-controle/mandat.ts`, `construireMandatPropose`), pour
@@ -485,7 +471,7 @@ function ligneBudget(budgetUsd: number): string {
  * Règle qui en découle : tout ce qui doit rester vrai au tour 50 va ICI. Le
  * premier message ne porte que l'amorce.
  */
-export function composerMandatSysteme(p: PropositionAvecLatitude, acces: AccesMandat): string {
+export function composerMandatSysteme(p: Proposition, acces: AccesMandat): string {
   const critere = p.critereArret ?? 'non fixé — rends la main dès que l’objectif est atteint';
   const latitude = ligneLatitude(p.latitude);
   return [

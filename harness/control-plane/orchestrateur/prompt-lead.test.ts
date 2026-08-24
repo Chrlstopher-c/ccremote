@@ -29,6 +29,7 @@ const MANDAT: Proposition = {
   budgetMaxUsd: 8,
   modele: null,
   effort: null,
+  latitude: null,
   statut: 'en_attente',
   missionId: null,
   detail: null,

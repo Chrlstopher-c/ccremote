@@ -183,6 +183,7 @@ function construireProposition(projet: string): Proposition {
     budgetMaxUsd: 5,
     modele: null,
     effort: null,
+    latitude: null,
     statut: 'en_attente',
     missionId: null,
     detail: null,

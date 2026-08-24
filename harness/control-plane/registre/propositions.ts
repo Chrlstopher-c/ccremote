@@ -25,6 +25,7 @@ interface LigneProposition {
   budget_max_usd: number;
   modele: string | null;
   effort: string | null;
+  latitude: string | null;
   statut: string;
   mission_id: string | null;
   detail: string | null;
@@ -47,6 +48,7 @@ function versProposition(l: LigneProposition): Proposition {
     budgetMaxUsd: l.budget_max_usd,
     modele: l.modele,
     effort: l.effort,
+    latitude: l.latitude,
     // as : colonne sous CHECK IN ('en_attente','approuvee','refusee').
     statut: l.statut as StatutProposition,
     missionId: l.mission_id,
@@ -68,6 +70,8 @@ export interface CreationProposition {
   readonly budgetMaxUsd: number;
   readonly modele?: string | null;
   readonly effort?: string | null;
+  /** Chantier 3 (mandat opérateur 24/08). Absent ou `null` ⇒ aucune latitude accordée. */
+  readonly latitude?: string | null;
 }
 
 export class DepotPropositions {
@@ -85,8 +89,8 @@ export class DepotPropositions {
           .query(
             `INSERT INTO proposition
                (id, conversation_id, projet, objectif, critere_arret, perimetre, acces,
-                budget_max_usd, modele, effort, statut, mission_id, detail, cree_a, maj_a)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
+                budget_max_usd, modele, effort, latitude, statut, mission_id, detail, cree_a, maj_a)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
           )
           .run(
             creation.id,
@@ -99,6 +103,7 @@ export class DepotPropositions {
             creation.budgetMaxUsd,
             creation.modele ?? null,
             creation.effort ?? null,
+            creation.latitude ?? null,
             maintenant,
             maintenant,
           );
