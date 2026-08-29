@@ -98,8 +98,12 @@ injoignable (panne réelle de 45 min le 18/08 — voir `STATE.md`).
 
 ## Variables d'environnement
 
-- `.env.example` (racine) — chargées depuis `pi-web/.env` (seul composant du système 1 avec des
-  secrets ; `server/` et `client/` n'ont que des constantes réseau non sensibles).
+- `.env.example` (racine) — chargées depuis `pi-web/.env`.
+  `☠` **Aucune coordonnée réelle n'est présente dans ce dépôt.** Les hôtes (`pc.exemple`,
+  `pi.exemple`), la MAC de Wake-on-LAN, le domaine public (`exemple.com`), les cibles SSH et
+  l'identifiant de l'UI sont des placeholders inertes : un déploiement réel les fournit par
+  l'environnement. Les secrets (`UI_PASSWORD`, `CEREBRAS_API_KEY`, `CCREMOTE_LIEN_SECRET`) n'ont
+  jamais de valeur par défaut utilisable.
 - `harness/.env.example` — variables de composition du système 2 (`CCREMOTE_LIEN_SECRET`,
   `CCREMOTE_PC_REGISTRE_DB`, `CCREMOTE_LIEN_URL_PI`, ports, etc.) — détail dans `harness/README.md`.
 
