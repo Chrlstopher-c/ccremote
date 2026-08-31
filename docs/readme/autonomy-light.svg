@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="352" viewBox="0 0 1040 352" fill="none" role="img">
+  <defs><marker id="stp-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#59636e"/></marker></defs>
+  <rect width="1040" height="352" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="30" y="36" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12" letter-spacing="2.5" fill="#59636e">HOW MUCH YOU ARE ASKED</text>
+  <rect x="30" y="56" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="82" r="13" fill="#d8a35f"/>
+  <text x="56" y="87" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">1</text>
+  <text x="78" y="87" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">The first time, you click</text>
+  
+  <text x="44" y="116" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">A fresh thread has no window, so its first mandate waits for your approval</text><text x="44" y="131" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">and starts nothing until you give it.</text><path d="M512 82 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="56" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="82" r="13" fill="#d8a35f"/>
+  <text x="558" y="87" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">2</text>
+  <text x="580" y="87" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">You open a window</text>
+  <rect x="546" y="108" width="450" height="24" rx="6" fill="#ffffff" stroke="#d0d7de"/>
+    <text x="556" y="124" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="11.5" fill="#9a6b1f">demander_fenetre_autonomie</text>
+  <text x="546" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Between 5 minutes and 14 days, with a ceiling on how many teams may start</text><text x="546" y="165" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">on their own. Bounded on purpose: a window is a loan, not a right.</text>
+  <rect x="30" y="204" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="230" r="13" fill="#d8a35f"/>
+  <text x="56" y="235" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">3</text>
+  <text x="78" y="235" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">It runs without you</text>
+  
+  <text x="44" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Inside the window it starts teams, schedules its own reminders and</text><text x="44" y="279" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">compacts its own context. You watch, you correct course, you do not gate.</text><path d="M512 230 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="204" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="230" r="13" fill="#d8a35f"/>
+  <text x="558" y="235" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">4</text>
+  <text x="580" y="235" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">The clock or the ceiling closes it</text>
+  
+  <text x="546" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Past either one it asks again. Taking the hand back with a manual approval</text><text x="546" y="279" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">reopens the count from that moment.</text>
+</svg>

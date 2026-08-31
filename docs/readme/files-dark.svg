@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="736" viewBox="0 0 1040 736" fill="none" role="img">
+  <rect width="1040" height="736" rx="16" fill="#0a0b0e" stroke="#20242c"/>
+  <rect x="30" y="24" width="980" height="226" rx="12" fill="#161b22" stroke="#2a313c"/>
+  <text x="46" y="46" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="11" letter-spacing="2.5" fill="#8b929c">RASPBERRY PI · THE ONLY MACHINE REACHABLE FROM OUTSIDE</text>
+  <path d="M46 67 h7 l3 3 h10 v12 h-20 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="79" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">/home/pi/ccremote-harness/</text>
+    <text x="500" y="79" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">control plane (Bun), its .env and registre.db</text>
+  <path d="M46 97 h7 l3 3 h10 v12 h-20 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="109" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">/home/pi/ccremote-web/</text>
+    <text x="500" y="109" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">pi-web: FastAPI app, templates, venv, .env</text>
+  <path d="M49 127 h9 l5 5 v11 h-14 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="139" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">/etc/systemd/system/ccremote-{harness,web}.service</text>
+    <text x="500" y="139" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">the two system units</text>
+  <path d="M48 160 h16 M48 165 h16 M48 170 h10" stroke="#d8a35f" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="76" y="169" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">127.0.0.1:8722</text>
+    <text x="500" y="169" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">harness web API, loopback only, no auth of its own</text>
+  <path d="M48 190 h16 M48 195 h16 M48 200 h10" stroke="#d8a35f" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="76" y="199" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">0.0.0.0:8721</text>
+    <text x="500" y="199" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">link the supervisors connect to, published by the tunnel</text>
+  <path d="M48 220 h16 M48 225 h16 M48 230 h10" stroke="#d8a35f" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="76" y="229" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">127.0.0.1:8766</text>
+    <text x="500" y="229" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">pi-web, published as ccremote.exemple.com by the tunnel</text>
+  <rect x="30" y="268" width="980" height="166" rx="12" fill="#161b22" stroke="#2a313c"/>
+  <text x="46" y="290" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="11" letter-spacing="2.5" fill="#8b929c">PC · MAIN WORKSTATION</text>
+  <path d="M46 311 h7 l3 3 h10 v12 h-20 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="323" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">/mnt/projects/ccremote/harness/</text>
+    <text x="500" y="323" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">run in place by the user unit ccremote-pc (linger enabled)</text>
+  <path d="M49 341 h9 l5 5 v11 h-14 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="353" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">~/.config/ccremote/pc.env</text>
+    <text x="500" y="353" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">EnvironmentFile of the supervisor</text>
+  <path d="M49 371 h9 l5 5 v11 h-14 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="383" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">/var/lib/ccremote/pc/registre-workers.sqlite</text>
+    <text x="500" y="383" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">worker registry (CCREMOTE_PC_REGISTRE_DB)</text>
+  <path d="M48 404 h16 M48 409 h16 M48 414 h10" stroke="#d8a35f" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="76" y="413" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">192.168.x.x:8765</text>
+    <text x="500" y="413" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">server.py: tmux, metrics, Wake-on-LAN, LAN only</text>
+  <rect x="30" y="452" width="980" height="106" rx="12" fill="#161b22" stroke="#2a313c"/>
+  <text x="46" y="474" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="11" letter-spacing="2.5" fill="#8b929c">VPS · FALLBACK</text>
+  <path d="M46 495 h7 l3 3 h10 v12 h-20 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="507" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">/home/ubuntu/ccremote/harness/</text>
+    <text x="500" y="507" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">same supervisor, user unit ccremote-pc</text>
+  <path d="M49 525 h9 l5 5 v11 h-14 z" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="537" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">~/.local/share/ccremote/registre-pc.db</text>
+    <text x="500" y="537" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">its own worker registry</text>
+  <rect x="30" y="576" width="980" height="136" rx="12" fill="#161b22" stroke="#2a313c"/>
+  <text x="46" y="598" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="11" letter-spacing="2.5" fill="#8b929c">LOGS</text>
+  <path d="M48 619 h14 v16 h-14 z M51 624 h8 M51 628 h8 M51 632 h5" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="631" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">journalctl -u ccremote-harness / -u ccremote-web</text>
+    <text x="500" y="631" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">on the Pi</text>
+  <path d="M48 649 h14 v16 h-14 z M51 654 h8 M51 658 h8 M51 662 h5" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="661" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">journalctl --user -u ccremote-pc</text>
+    <text x="500" y="661" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">on the PC and the VPS</text>
+  <path d="M48 679 h14 v16 h-14 z M51 684 h8 M51 688 h8 M51 692 h5" fill="none" stroke="#d8a35f" stroke-width="1.4"/>
+    <text x="76" y="691" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12.5" fill="#f4f1ea">logs/pi-web.log</text>
+    <text x="500" y="691" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="12.5" fill="#c3cad3">local development, reset by start.sh</text>
+</svg>

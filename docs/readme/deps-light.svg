@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="232" viewBox="0 0 1040 232" fill="none" role="img">
+  <rect width="1040" height="232" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="30" y="36" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12" letter-spacing="2.5" fill="#59636e">WHAT IT STANDS ON</text>
+  <rect x="30" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="48" y="106" font-family="Georgia,'Times New Roman',serif" font-size="30" font-weight="600" fill="#1f2328">Agent SDK<tspan font-size="16" fill="#59636e"> 0.3.220</tspan></text>
+  <text x="48" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">runs the orchestrator and every</text><text x="48" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">worker</text>
+  <text x="48" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">harness/package.json</text>
+  <rect x="280" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="298" y="106" font-family="Georgia,'Times New Roman',serif" font-size="38" font-weight="600" fill="#1f2328">Bun</text>
+  <text x="298" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">runtime, tests and SQLite for 547</text><text x="298" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">TS files</text>
+  <text x="298" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">strict TypeScript, zod 4, pino</text><text x="298" y="187" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">9</text>
+  <rect x="530" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="548" y="106" font-family="Georgia,'Times New Roman',serif" font-size="30" font-weight="600" fill="#1f2328">FastAPI</text>
+  <text x="548" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">pi-web: the one page that serves</text><text x="548" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">both systems</text>
+  <text x="548" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">uvicorn, jinja2, httpx, loguru</text>
+  <rect x="780" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="798" y="106" font-family="Georgia,'Times New Roman',serif" font-size="38" font-weight="600" fill="#1f2328">3<tspan font-size="16" fill="#59636e"> SQLite files</tspan></text>
+  <text x="798" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">one registry per machine, no</text><text x="798" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">shared database</text>
+  <text x="798" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">Pi, PC, VPS</text>
+</svg>

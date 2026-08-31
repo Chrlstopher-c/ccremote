@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="280" viewBox="0 0 1040 280" fill="none" role="img">
+  <defs><marker id="stp-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#59636e"/></marker></defs>
+  <rect width="1040" height="280" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="30" y="36" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12" letter-spacing="2.5" fill="#59636e">A DAY WITH IT</text>
+  <rect x="30" y="56" width="478" height="88" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="82" r="13" fill="#d8a35f"/>
+  <text x="56" y="87" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">1</text>
+  <text x="78" y="87" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Open pi-web</text>
+  
+  <text x="44" y="116" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">One password, one session cookie. The same page serves the control panel</text><text x="44" y="131" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">and the harness.</text><path d="M512 82 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="56" width="478" height="88" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="82" r="13" fill="#d8a35f"/>
+  <text x="558" y="87" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">2</text>
+  <text x="580" y="87" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Give a team a mandate</text>
+  
+  <text x="546" y="116" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Write what you want done and on which project. The orchestrator drafts the</text><text x="546" y="131" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">team, you approve it, workers spawn on the PC or the VPS.</text>
+  <rect x="30" y="168" width="478" height="88" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="194" r="13" fill="#d8a35f"/>
+  <text x="56" y="199" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">3</text>
+  <text x="78" y="199" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Follow the thread</text>
+  
+  <text x="44" y="228" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Each team is a thread with sub-agents you can open. Talk to the lead from</text><text x="44" y="243" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">the same box; approve pending permissions when it asks.</text><path d="M512 194 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="168" width="478" height="88" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="194" r="13" fill="#d8a35f"/>
+  <text x="558" y="199" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">4</text>
+  <text x="580" y="199" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Watch quotas and machines</text>
+  
+  <text x="546" y="228" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Five-hour and seven-day windows per Claude account, machine gauges, wake</text><text x="546" y="243" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">the PC, switch accounts.</text>
+</svg>

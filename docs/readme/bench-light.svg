@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="232" viewBox="0 0 1040 232" fill="none" role="img">
+  <rect width="1040" height="232" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="30" y="36" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12" letter-spacing="2.5" fill="#59636e">MEASURED, IN PRODUCTION</text>
+  <rect x="30" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="48" y="106" font-family="Georgia,'Times New Roman',serif" font-size="38" font-weight="600" fill="#1f2328">1 814</text>
+  <text x="48" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">harness tests passing, 0 failing,</text><text x="48" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">typecheck clean</text>
+  <text x="48" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">bun test, 2026-08-21, commit</text><text x="48" y="187" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">78b2c7e (STATE.md)</text>
+  <rect x="280" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="298" y="106" font-family="Georgia,'Times New Roman',serif" font-size="30" font-weight="600" fill="#1f2328">108 / 7 864</text>
+  <text x="298" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">threads and events in the</text><text x="298" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">production registry</text>
+  <text x="298" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">2026-08-21 (STATE.md)</text>
+  <rect x="530" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="548" y="106" font-family="Georgia,'Times New Roman',serif" font-size="38" font-weight="600" fill="#1f2328">42<tspan font-size="16" fill="#59636e"> ms</tspan></text>
+  <text x="548" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">to list every thread, without a</text><text x="548" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">dedicated index</text>
+  <text x="548" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">same registry, same day</text>
+  <rect x="780" y="56" width="230" height="152" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="798" y="106" font-family="Georgia,'Times New Roman',serif" font-size="38" font-weight="600" fill="#1f2328">45<tspan font-size="16" fill="#59636e"> min</tspan></text>
+  <text x="798" y="132" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">the one real outage, a deploy</text><text x="798" y="149" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="13" fill="#3b4149">variable inherited from the wrong</text>
+  <text x="798" y="172" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">2026-08-18, fixed in</text><text x="798" y="187" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="10.5" fill="#59636e">deploy-superviseur-vps.sh</text>
+</svg>

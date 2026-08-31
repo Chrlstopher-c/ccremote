@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="648" viewBox="0 0 1040 648" fill="none" role="img">
+  <defs><marker id="stp-light" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#59636e"/></marker></defs>
+  <rect width="1040" height="648" rx="16" fill="#ffffff" stroke="#d0d7de"/>
+  <text x="30" y="36" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="12" letter-spacing="2.5" fill="#59636e">A MISSION, END TO END</text>
+  <rect x="30" y="56" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="82" r="13" fill="#d8a35f"/>
+  <text x="56" y="87" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">1</text>
+  <text x="78" y="87" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">You ask</text>
+  
+  <text x="44" y="116" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Your message joins the orchestrator's input queue, read by one session at</text><text x="44" y="131" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">a time.</text><path d="M512 82 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="56" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="82" r="13" fill="#d8a35f"/>
+  <text x="558" y="87" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">2</text>
+  <text x="580" y="87" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">The orchestrator proposes</text>
+  <rect x="546" y="108" width="450" height="24" rx="6" fill="#ffffff" stroke="#d0d7de"/>
+    <text x="556" y="124" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="11.5" fill="#9a6b1f">creer_equipe</text>
+  <text x="546" y="150" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Two guards run before anything is written: quota read less than 30 minutes</text><text x="546" y="165" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">ago, and no identical wave in the last 24 hours.</text>
+  <rect x="30" y="204" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="230" r="13" fill="#d8a35f"/>
+  <text x="56" y="235" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">3</text>
+  <text x="78" y="235" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">A mandate is written</text>
+  
+  <text x="44" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Objective, scope, access, budget and stop rule, stored as a proposal.</text><text x="44" y="279" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Nothing runs yet: the orchestrator cannot start a team itself.</text><path d="M512 230 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="204" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="230" r="13" fill="#d8a35f"/>
+  <text x="558" y="235" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">4</text>
+  <text x="580" y="235" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">You approve, the first time</text>
+  
+  <text x="546" y="264" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">A new thread has no autonomy window, so its first mandate waits for your</text><text x="546" y="279" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">click. Once you open one, the next mandates start without you.</text>
+  <rect x="30" y="352" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="378" r="13" fill="#d8a35f"/>
+  <text x="56" y="383" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">5</text>
+  <text x="78" y="383" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">The mission is registered</text>
+  
+  <text x="44" y="412" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Written as planned before the worker starts, so a PC that never answers</text><text x="44" y="427" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">still leaves a trace to reconcile.</text><path d="M512 378 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="352" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="378" r="13" fill="#d8a35f"/>
+  <text x="558" y="383" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">6</text>
+  <text x="580" y="383" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">A worker is spawned</text>
+  
+  <text x="546" y="412" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">On the PC: one process, one SDK session, one git worktree. That worker is</text><text x="546" y="427" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">the team.</text>
+  <rect x="30" y="500" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="56" cy="526" r="13" fill="#d8a35f"/>
+  <text x="56" y="531" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">7</text>
+  <text x="78" y="531" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">The lead works</text>
+  
+  <text x="44" y="560" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">It delegates sub-agents inside its own session. Your mid-flight messages</text><text x="44" y="575" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">are course corrections, never orders to stop.</text><path d="M512 526 l16 0" stroke="#59636e" stroke-width="1.4" marker-end="url(#stp-light)"/>
+  <rect x="532" y="500" width="478" height="124" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+  <circle cx="558" cy="526" r="13" fill="#d8a35f"/>
+  <text x="558" y="531" text-anchor="middle" font-family="ui-monospace,'SF Mono',Consolas,monospace" font-size="13" font-weight="700" fill="#ffffff">8</text>
+  <text x="580" y="531" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="14.5" font-weight="600" fill="#1f2328">Closing, then lessons</text>
+  
+  <text x="546" y="560" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">Retry, definitive failure or escalation. Lessons are extracted from the</text><text x="546" y="575" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="11.5" fill="#59636e">transcript and pushed into the next mandate.</text>
+</svg>
