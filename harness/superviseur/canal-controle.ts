@@ -32,6 +32,7 @@ import type {
   TelemetrieWorker,
 } from './types.ts';
 import type { ConstatGit } from './etat-git.ts';
+import type { RevendicationEnVeilleRestauree } from '../projets/index.ts';
 import type { ResultatExploration } from './exploration-projets.ts';
 import type { ResultatLectureFichier } from './lecture-fichier.ts';
 import type { ResultatRecherche } from './recherche-projets.ts';
@@ -75,6 +76,14 @@ export interface PortSuperviseurControle {
    * sur une méthode absente. `SuperviseurWorkers` réel l'implémente.
    */
   libererWorktreeTeam?(teamId: string, worktree: string | null): Promise<void>;
+  /**
+   * Réamorce les revendications de worktree `en_veille` d'après la table `team`
+   * du Pi (axe B, restauration PC). Optionnel : un superviseur qui ne l'implémente
+   * pas fait REFUSER l'opération, jamais planter. `SuperviseurWorkers` réel
+   * l'implémente. `☠` Idempotent (voir `restaurerRevendicationEnVeille`) : rejouer
+   * la liste ne réécrit jamais une revendication déjà présente.
+   */
+  restaurerRevendicationsEnVeille?(revendications: readonly RevendicationEnVeilleRestauree[]): void;
   /** Chemin/branche réellement alloués pour cette mission (worktree git). Absent du port ⇒ non renseigné dans la réponse. */
   worktreeDe?(missionId: string): { readonly chemin: string; readonly branche: string | null } | null;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
@@ -187,6 +196,18 @@ export type OperationControle =
    * libération vers le PC, sans jamais importer le superviseur (frontière A↔B).
    */
   | { readonly type: 'liberer_worktree_team'; readonly teamId: string; readonly worktree: string | null }
+  /**
+   * Réamorçage des revendications de worktree `en_veille` à la (re)connexion du
+   * PC (axe B, restauration PC). `☠` Envoyé par le Pi depuis sa table `team` (les
+   * teams `dormante` porteuses d'un worktree) : sans lui, la Map du gestionnaire de
+   * worktrees du PC est vide après un redémarrage, et le prochain réveil d'une team
+   * retenterait un `git worktree add` sur un répertoire qui existe déjà. Miroir de
+   * `fencing-restauration.ts`, mais l'état vient du registre du Pi, pas du disque PC.
+   */
+  | {
+      readonly type: 'restaurer_revendications_veille';
+      readonly revendications: readonly RevendicationEnVeilleRestauree[];
+    }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
   | { readonly type: 'relancer_worker'; readonly missionId: string; readonly sessionId: string }
   | { readonly type: 'reinitialiser'; readonly sessionId: string }
@@ -518,6 +539,17 @@ export class CanalControle {
           }
           await this.#superviseur.libererWorktreeTeam(operation.teamId, operation.worktree);
           return { ok: true, effet: 'applique', detail: `worktree de team libéré : ${operation.teamId}` };
+        }
+        case 'restaurer_revendications_veille': {
+          if (this.#superviseur.restaurerRevendicationsEnVeille === undefined) {
+            return { ok: false, effet: 'refuse', detail: 'restauration des revendications en veille non câblée sur ce superviseur' };
+          }
+          this.#superviseur.restaurerRevendicationsEnVeille(operation.revendications);
+          return {
+            ok: true,
+            effet: 'applique',
+            detail: `${operation.revendications.length} revendication(s) de worktree réamorcée(s) en veille`,
+          };
         }
         case 'tuer_sans_preavis':
           this.#superviseur.tuerSansPreavis(operation.sessionId);

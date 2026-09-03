@@ -41,6 +41,7 @@ import {
   type CreationProposition,
   type Mission,
   type OrigineApprobation,
+  type Proposition,
   type Registre,
 } from '../../control-plane/registre/index.ts';
 import { redigerMandatEnAttente, ServiceNotifications } from '../../control-plane/notifications/index.ts';
@@ -56,20 +57,29 @@ import {
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
 import type { LiberateurWorktreeTeam } from '../../control-plane/orchestrateur/mcp-controle/outils-cycle-vie.ts';
+import { InterrogateurGitReel } from '../../projets/index.ts';
+import { creerLecteurDomainesEquipe } from './lecteur-domaines-equipe.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import {
   demarrerOrchestrateur,
   JournalIncidentsFichier,
   type StockageIdentite,
 } from '../../control-plane/orchestrateur/processus/index.ts';
-import { reconcilier, type DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
+import {
+  reconcilier,
+  type DependancesReconciliation,
+  type RapportReconciliation,
+} from '../../control-plane/reconciliation/index.ts';
 import {
   GestionnaireConversations,
   type ConstruireSessionConversation,
 } from '../../control-plane/orchestrateur/gestionnaire-conversations.ts';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import { dispatcherMandat, ErreurMandatDejaTranche } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
+import { dispatcherMandat, ErreurMandatDejaTranche, type ResultatDispatch } from '../../control-plane/orchestrateur/dispatch-mandat.ts';
+import { revendicationsEnVeilleDepuisTeams } from '../../control-plane/orchestrateur/restauration-teams-worktrees.ts';
+import { finaliserActivationsTerminees } from '../../control-plane/orchestrateur/finalisation-activations-teams.ts';
+import type { DependancesFinActivation } from '../../control-plane/orchestrateur/fin-activation-team.ts';
 import { ACCES_DEFAUT } from '../../shared/acces-mandat.ts';
 import { PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
 import { ServiceInspection } from '../../control-plane/inspection/index.ts';
@@ -88,6 +98,7 @@ import { demarrerBalayageTelemetrie, type BalayageTelemetrie } from './balayage-
 import { demarrerBalayageQuotas, type BalayageQuotas } from './balayage-quotas.ts';
 import { demarrerBalayageRappels, type BalayageRappels } from './balayage-rappels.ts';
 import { demarrerBalayageCloture, type BalayageCloture } from './balayage-cloture.ts';
+import { demarrerBalayageTtlTeams, type BalayageTtlTeams } from './balayage-ttl-teams.ts';
 import { choisirCompteDisponible } from './choix-compte-orchestrateur.ts';
 
 const log = compositionLogger.child({ composant: 'assembler-control-plane-pi' });
@@ -228,6 +239,8 @@ export interface ControlPlanePiAssemble {
   readonly balayageQuotas: BalayageQuotas;
   readonly balayageRappels: BalayageRappels;
   readonly balayageCloture: BalayageCloture;
+  /** Démantèlement TTL des teams dormantes inactives (axe B). */
+  readonly balayageTtlTeams: BalayageTtlTeams;
 }
 
 /**
@@ -269,6 +282,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   const plafondParcDefaut =
     options.plafondAutonomieDefaut === undefined ? AUTO_APPROBATIONS_MAX : options.plafondAutonomieDefaut;
 
+  // `☠` Lecture des domaines de team déclarés (D3, axe B, branchement #4) — source
+  // que le Pi POSSÈDE DÉJÀ (`chargerProjets` sur `repertoireProjets`, le même que
+  // `lister_projets`). Purement Pi-local, aucune traversée A↔B. Détail et limite en
+  // production : `lecteur-domaines-equipe.ts`.
+  const lecteurDomainesEquipe = creerLecteurDomainesEquipe(options.repertoireProjets, {
+    interrogateurGit: new InterrogateurGitReel(),
+  });
+
   // `☠` Les comptes sont garantis ICI, dans la connexion du service lui-même,
   // idempotent à chaque démarrage. Un script d'enregistrement séparé écrivait
   // dans une autre connexion et se faisait effacer par une course WAL au
@@ -297,7 +318,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     // constructeur, et ce qui circule en premier au rattachement est justement
     // la réconciliation.
     surNouvelleMachine: (machineId, lien) => parcSuperviseurs?.enregistrer(machineId, new ClientSuperviseurPc(lien)),
-    surConnexionAcceptee: (machineId) => declencheurReconciliation?.(machineId),
+    surConnexionAcceptee: (machineId) => {
+      // `☠` Restauration des worktrees en veille AVANT la réconciliation (axe B,
+      // branchement #2) : un réveil de team déclenché ensuite doit retrouver sa
+      // revendication dans la Map du gestionnaire de worktrees du PC, sinon
+      // `allouer()` retenterait un `git worktree add` sur un répertoire existant.
+      void restaurerRevendicationsVeille(machineId);
+      declencheurReconciliation?.(machineId);
+    },
   });
 
   const parc = new ParcSuperviseurs({
@@ -435,6 +463,10 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
       compacteurContexte: compacteur,
       propositions,
+      // `☠` Validation du domaine de team (D3, axe B, branchement #4) : `creer_equipe`
+      // refuse AVANT écriture un domaine hors `domainesEquipe` du projet, avec la
+      // liste des acceptés. Source Pi-locale (`chargerProjets`), voir `domainesDeProjet`.
+      domainesEquipe: lecteurDomainesEquipe,
       // `☠` Libération du worktree d'une team (axe B) — routée vers le PC par le
       // canal, consommée par `dissoudre_team`. Absent ⇒ la dissolution acte quand
       // même `demantelee` au registre (worktree orphelin retrouvable).
@@ -483,7 +515,14 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     const client = parc.pour(machineId);
     return client === null ? null : construireDependancesReconciliation(client, machineId);
   };
-  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(registre, reconciliationDe);
+  // `☠` Le hook `finaliserTeamsDuRapport` (axe B, branchement #1) traite les fins
+  // d'activation de team à la reconnexion : une team dont l'activation tournait
+  // quand le PC est tombé voit son worker fantôme à la reconnexion → endormie.
+  declencheurReconciliation = creerDeclencheurReconciliationSurRattachement(
+    registre,
+    reconciliationDe,
+    finaliserTeamsDuRapport,
+  );
 
   // `☠` Multi-sessions (type ChatGPT) : le gestionnaire construit une session par
   // conversation À LA DEMANDE. Aucune session au boot — le quota ne brûle que
@@ -520,13 +559,18 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     );
   }
 
-  async function dispatcherMandatAutorise(
-    id: string,
-    origine: OrigineApprobation,
-  ): Promise<{ readonly missionId: string | null; readonly detail: string }> {
-    const p = registre.propositions.lire(id);
-    if (p === null) throw new Error('mandat inconnu');
-    if (p.statut !== 'en_attente') throw new ErreurMandatDejaTranche(p.statut, p.missionId);
+  /**
+   * Chemin de dispatch RÉUTILISABLE d'une proposition (H-61 : `dispatcherMandat`
+   * est le seul créateur réel d'équipe). Résout la machine du fil, la racine des
+   * projets sur cette machine, puis dispatche — SANS trancher la proposition.
+   *
+   * `☠` Extrait pour être partagé entre le clic humain / l'auto-approbation
+   * (`dispatcherMandatAutorise`, qui tranche APRÈS) et le DÉPILAGE de la file
+   * d'axe B (`traiterFinActivationTeam.redispatcher`, où la proposition est DÉJÀ
+   * `approuvee` — la re-trancher lèverait `ErreurMandatDejaTranche`). Un seul
+   * chemin de création, jamais deux qui divergeraient.
+   */
+  async function dispatcherProposition(p: Proposition): Promise<ResultatDispatch> {
     // `☠` LA machine du fil qui a proposé ce mandat. Résolue AVANT toute
     // écriture : si elle est hors ligne ou ambiguë, le mandat est refusé en
     // clair plutôt que de partir sur une machine choisie au hasard. Le
@@ -534,7 +578,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     // dissocier produirait une équipe qu'aucun arrêt ne pourrait atteindre.
     const cible =
       p.conversationId === null
-        ? parc.resoudre(null, `mandat ${id}`)
+        ? parc.resoudre(null, `mandat ${p.id}`)
         : parc.pourConversation(p.conversationId);
     // `☠` LA RACINE DES PROJETS EST CELLE DE LA MACHINE CIBLE, JAMAIS CELLE DU PI.
     // Mesuré en production le 2026-08-07 : un mandat sur `ccremote` autorisé
@@ -550,7 +594,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     // du Pi : ce repli EST le bug, et il produirait exactement la même erreur un
     // cran plus loin, en la rendant à nouveau invisible.
     const racineProjetsMachine = await resoudreRacineProjets(cible);
-    const r = await dispatcherMandat(p, {
+    return dispatcherMandat(p, {
       registre,
       demarreur: cible.client,
       machine: cible.machineId,
@@ -592,10 +636,94 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
         await notifications.signaler('equipe_echouee', mission, { raison: motif });
       },
     });
+  }
+
+  /**
+   * Dispatch d'un mandat AUTORISÉ (clic humain ou auto-approbation), qui tranche
+   * la proposition APRÈS le démarrage. `☠` `en_attente` seulement : un mandat déjà
+   * tranché (auto-approuvé, approuvé ailleurs, refusé) lève une erreur nommée.
+   */
+  async function dispatcherMandatAutorise(id: string, origine: OrigineApprobation): Promise<ResultatDispatch> {
+    const p = registre.propositions.lire(id);
+    if (p === null) throw new Error('mandat inconnu');
+    if (p.statut !== 'en_attente') throw new ErreurMandatDejaTranche(p.statut, p.missionId);
+    const r = await dispatcherProposition(p);
     // `☠` Tranché APRÈS le démarrage réussi : marquer « approuvée » avant
     // laisserait un mandat consommé sans équipe si le PC refusait.
     registre.propositions.trancher(id, 'approuvee', r.detail, r.missionId, Date.now(), origine);
     return r;
+  }
+
+  /**
+   * Fenêtre d'autonomie active pour un fil (D4, axe B) — le MÊME prédicat que
+   * `signalerFinEquipe` du balayage : une fin d'activation ne dépile sa file
+   * automatiquement que si le fil qui l'a demandée est SOUS fenêtre d'autonomie,
+   * sinon la feature attend un clic humain (H-61). `☠` `approbationHumaineAnterieure`
+   * et `autoApprouveesDeja` neutres ici : on teste la FENÊTRE seule, pas le plafond
+   * d'auto-approbations (celui-ci est arbitré au dépôt du mandat, pas au dépilage).
+   */
+  function fenetreAutonomieActivePourFil(conversationId: string | null): boolean {
+    if (conversationId === null) return false;
+    const conv = registre.conversations.lire(conversationId);
+    if (conv === null) return false;
+    return fenetreOuverte({
+      approbationHumaineAnterieure: false,
+      autoApprouveesDeja: 0,
+      fenetreDebut: conv.autonomieDebut,
+      fenetreFin: conv.autonomieFin,
+      maintenant: Date.now(),
+    });
+  }
+
+  /**
+   * Dépendances de la finalisation d'une fin d'activation (axe B, LE piège
+   * central). `☠` `conserverWorktreeTeam` route vers la machine de la mission un
+   * `arreter(conserverWorktree:true)` : au point terminal le worker est déjà mort,
+   * et `SuperviseurWorkers.arreter` met malgré tout le worktree en veille dans ce
+   * cas (voir son commentaire). `redispatcher` est `dispatcherProposition` — le
+   * seul créateur (H-61), le dépilage repasse par lui (la proposition est déjà
+   * `approuvee`, on ne la re-tranche pas).
+   */
+  const depsFinActivation: DependancesFinActivation = {
+    registre,
+    conserverWorktreeTeam: async (missionId: string): Promise<void> => {
+      await parc.pourMission(missionId).client.arreter(missionId, { conserverWorktree: true });
+    },
+    fenetreAutonomieActive: fenetreAutonomieActivePourFil,
+    redispatcher: dispatcherProposition,
+  };
+
+  /**
+   * Suite d'une réconciliation (axe B, branchement #1) : traite les fins
+   * d'activation de team pour chaque mission dont la MORT vient d'être CONSTATÉE
+   * (`rapport.fantomes` — état harness terminal posé). `☠` JAMAIS déclenchée par
+   * `running → idle` (`signalerFinEquipe`) : ces missions ne passent pas par
+   * `fantomes`, une équipe qui respire ne s'endort pas. Best-effort par mission
+   * (`finaliserActivationsTerminees`).
+   */
+  async function finaliserTeamsDuRapport(rapport: RapportReconciliation): Promise<void> {
+    await finaliserActivationsTerminees(depsFinActivation, rapport.fantomes);
+  }
+
+  /**
+   * Réamorce sur une machine ses revendications de worktree `en_veille` (axe B,
+   * branchement #2). `☠` Envoyé à la (re)connexion, depuis la table `team` du Pi :
+   * sans lui la Map du gestionnaire de worktrees du PC est vide après un
+   * redémarrage, et le prochain réveil retenterait un `git worktree add` sur un
+   * répertoire persistant existant. Best-effort : un PC injoignable est nominal
+   * (H-75), la restauration retentera à la prochaine reconnexion.
+   */
+  async function restaurerRevendicationsVeille(machineId: string): Promise<void> {
+    try {
+      const client = parc.pour(machineId);
+      if (client === null) return;
+      await client.restaurerRevendicationsEnVeille(revendicationsEnVeilleDepuisTeams(registre));
+    } catch (erreur) {
+      log.error(
+        { err: erreur, machineId },
+        'restauration des revendications en veille en échec — retentée à la prochaine reconnexion',
+      );
+    }
   }
 
   /**
@@ -917,7 +1045,13 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     reconcilier: async () => {
       for (const { machineId } of parc.clientsEnLigne()) {
         const deps = reconciliationDe(machineId);
-        if (deps !== null) await reconcilier(registre, deps, 'reconnexion');
+        if (deps === null) continue;
+        const rapport = await reconcilier(registre, deps, 'reconnexion');
+        // `☠` Axe B, branchement #1 (LE piège central) : la mort d'une activation
+        // constatée ICI (worker fantôme → état harness terminal, `rapport.fantomes`)
+        // endort sa team, conserve son worktree et dépile sa file — JAMAIS un
+        // `running → idle`, qui ne passe pas par `fantomes`.
+        await finaliserTeamsDuRapport(rapport);
       }
     },
     signalerFinEquipe: async (missionId) => {
@@ -1009,6 +1143,12 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   // idle depuis 16 min, parc vide à l'écran, dispatch suivant refusé.
   const balayageCloture = demarrerBalayageCloture({ registre, arreteur: versMission });
 
+  // `☠` Cinquième boucle (axe B, branchement #3) : démantèle les teams `dormante`
+  // inactives depuis plus que le TTL (7 j), leur worktree accumulant du disque
+  // pour rien. Horloge réelle en prod, injectable en test. Le worktree part par le
+  // MÊME port que `dissoudre_team` (`liberateurWorktreeTeam`), routé vers le PC.
+  const balayageTtlTeams = demarrerBalayageTtlTeams({ registre, liberateur: liberateurWorktreeTeam });
+
   log.info(
     { avecOrchestrateur: options.avecOrchestrateur === true, machines: parc.machinesConnues() },
     'control plane Pi assemblé (V2 — plusieurs machines de travail)',
@@ -1024,5 +1164,6 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
     balayageQuotas,
     balayageRappels,
     balayageCloture,
+    balayageTtlTeams,
   };
 }

@@ -34,7 +34,11 @@
  * boucle serrée ni traité comme une alarme distincte d'un PC simplement lent.
  */
 
-import { reconcilier, type DependancesReconciliation } from '../../control-plane/reconciliation/index.ts';
+import {
+  reconcilier,
+  type DependancesReconciliation,
+  type RapportReconciliation,
+} from '../../control-plane/reconciliation/index.ts';
 import type { Registre } from '../../control-plane/registre/index.ts';
 import { compositionLogger } from '../logger.ts';
 
@@ -54,6 +58,14 @@ export function creerDeclencheurReconciliationSurRattachement(
   // l'assemblage ne la connaîtraient pas, et sa toute première réconciliation —
   // celle qui adopte ou solde ce qui tournait avant — n'aurait jamais lieu.
   reconciliationDe: (machineId: string) => DependancesReconciliation | null,
+  /**
+   * Suite de la réconciliation (axe B) — appelée AVEC le rapport, une fois la
+   * passe terminée. `☠` C'est le point où les fins d'activation de team se
+   * traitent : `rapport.fantomes` porte les missions dont la mort vient d'être
+   * constatée (état harness terminal posé). Best-effort assumé par l'appelant ;
+   * absent ⇒ comportement d'avant l'axe B, aucune finalisation.
+   */
+  apresReconciliation?: (rapport: RapportReconciliation, machineId: string) => Promise<void>,
 ): (machineId: string) => void {
   return (machineId: string): void => {
     const deps = reconciliationDe(machineId);
@@ -65,11 +77,17 @@ export function creerDeclencheurReconciliationSurRattachement(
       return;
     }
     void reconcilier(registre, deps, 'reconnexion')
-      .then((rapport) => log.info({ machineId, rapport }, 'réconciliation exécutée sur rattachement d’une machine (H-75)'))
+      .then(async (rapport) => {
+        log.info({ machineId, rapport }, 'réconciliation exécutée sur rattachement d’une machine (H-75)');
+        // `☠` Jamais dans le même `then` que la réconciliation elle-même : une
+        // finalisation de team qui lève ne doit pas se lire « réconciliation en
+        // échec ». Elle a son propre filet, l'appelant la rend best-effort.
+        if (apresReconciliation !== undefined) await apresReconciliation(rapport, machineId);
+      })
       .catch((erreur: unknown) =>
         log.error(
           { err: erreur, machineId },
-          'réconciliation en échec sur rattachement — rattachement conservé, prochain tic la retentera',
+          'réconciliation (ou sa suite) en échec sur rattachement — rattachement conservé, prochain tic la retentera',
         ),
       );
   };

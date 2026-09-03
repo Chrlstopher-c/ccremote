@@ -1102,6 +1102,14 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       resultatDemarrage.worktree.chemin,
       resultatDemarrage.worktree.branche,
     );
+    // `☠` Le worktree RÉEL est aussi porté par la TEAM (axe B) — la résolution
+    // amont active la team AVANT que le PC n'ait alloué le worktree, donc son
+    // chemin n'est connu qu'ICI. Sans cette écriture, `team.worktree` reste NULL :
+    // `revendicationsEnVeilleDepuisTeams` (restauration PC) ne verrait alors aucune
+    // team, et la persistance ne survivrait pas à un redémarrage du PC.
+    if (teamId !== null) {
+      deps.registre.teams.definirWorktree(teamId, resultatDemarrage.worktree.chemin, resultatDemarrage.worktree.branche);
+    }
   }
   // `☠` L'état n'est avancé qu'APRÈS un démarrage confirmé : une mission laissée
   // `planifiee` alors que le worker tourne serait une équipe fantôme, et

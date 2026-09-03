@@ -83,7 +83,7 @@ import type { StartWorkerDeps, WorkerHandle } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
 import { creerPilotage, type Pilotage } from './pilotage-workers.ts';
 import { releverEtatGit, type ConstatGit } from './etat-git.ts';
-import type { GestionnaireCycleVieWorktree } from '../projets/index.ts';
+import type { GestionnaireCycleVieWorktree, RevendicationEnVeilleRestauree } from '../projets/index.ts';
 import {
   allouerWorktreeSiConfigure,
   conserverWorktreeEnVeilleSiConfigure,
@@ -639,29 +639,64 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    */
   async arreter(missionId: string, options: OptionsArret = {}): Promise<void> {
     const enregistrement = this.#registre.parMission(missionId);
-    if (enregistrement === null || !enregistrement.vivant) return;
-    this.#registre.marquerMort(enregistrement.sessionId);
-    enregistrement.entree.fermer();
-    try {
-      enregistrement.handle.query.close();
-    } catch (erreur) {
-      missionLogger(missionId).error({ err: erreur }, "query.close() a levé pendant l'arrêt de la mission");
+    if (enregistrement === null) return;
+    // `☠` Le worker peut être DÉJÀ mort quand `arreter` arrive (axe B) : la fin
+    // d'activation d'une team est déclenchée par le Pi APRÈS que la mort a été
+    // constatée et remontée (réconciliation) — le worker n'est donc plus vivant
+    // au moment où l'ordre de conservation du worktree revient sur cette machine.
+    // On ne ferme la session QUE si elle vit encore (idempotence : re-fermer un
+    // mort n'a aucun effet), mais on traite le worktree DANS TOUS LES CAS quand la
+    // conservation est demandée — sinon la revendication resterait `revendiquee`
+    // et le prochain réveil lèverait `WorktreeDejaRevendiquee`.
+    const etaitVivant = enregistrement.vivant;
+    if (etaitVivant) {
+      this.#registre.marquerMort(enregistrement.sessionId);
+      enregistrement.entree.fermer();
+      try {
+        enregistrement.handle.query.close();
+      } catch (erreur) {
+        missionLogger(missionId).error({ err: erreur }, "query.close() a levé pendant l'arrêt de la mission");
+      }
     }
-    // `☠` APRÈS la fermeture du worker, jamais avant : toucher un worktree
-    // encore écrit par un process vivant serait la panne #9 par un autre
-    // chemin. Best-effort — un échec ici ne doit jamais empêcher `arreter()`
-    // de rendre la main, le worker est déjà mort au moment où on l'atteint.
+    // `☠` APRÈS la fermeture du worker (quand il vivait), jamais avant : toucher un
+    // worktree encore écrit par un process vivant serait la panne #9 par un autre
+    // chemin. Best-effort — un échec ici ne doit jamais empêcher `arreter()` de
+    // rendre la main.
     //
-    // `☠` `conserverWorktree` (axe B) : quand la team reste VIVANTE (fin normale
-    // d'activation), on met le worktree en VEILLE au lieu de le libérer, pour le
-    // réutiliser au réveil. Défaut : libérer — comportement d'avant, préservé
-    // pour toute mission hors team et pour l'arrêt/démantèlement explicite.
+    // `☠` `conserverWorktree` (axe B) : fin d'activation d'une team → le worktree
+    // est mis en VEILLE au lieu d'être libéré, pour le réutiliser au réveil —
+    // INCONDITIONNEL à la vivacité du worker (voir ci-dessus). La LIBÉRATION, elle,
+    // reste conditionnée à `etaitVivant` : le comportement d'avant l'axe B ne
+    // libérait un worktree qu'en coupant un worker RÉELLEMENT vivant, on ne l'élargit
+    // pas à une mission hors team déjà éteinte (aucune régression sur les ~40 bancs).
     const cle = enregistrement.cleWorktree ?? missionId;
     const depsWiring = { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees };
     if (options.conserverWorktree === true) {
       await conserverWorktreeEnVeilleSiConfigure(depsWiring, cle, missionLogger(missionId));
-    } else {
+    } else if (etaitVivant) {
       await libererWorktreeSiConfigure(depsWiring, cle, missionLogger(missionId));
+    }
+  }
+
+  /**
+   * Réamorce les revendications de worktree `en_veille` d'après la table `team`
+   * du Pi (axe B, restauration PC). `☠` Appelé à la (re)connexion, AVANT tout
+   * réveil : la Map du gestionnaire est vide après un redémarrage du superviseur,
+   * et sans ce réamorçage `allouer()` retenterait un `git worktree add` sur un
+   * répertoire persistant qui existe déjà. Miroir de `restaurer()` (concurrents),
+   * mais l'état vient du registre du Pi transporté par le canal, pas du disque PC.
+   * Idempotent par revendication (`restaurerRevendicationEnVeille` n'écrase jamais).
+   */
+  restaurerRevendicationsEnVeille(revendications: readonly RevendicationEnVeilleRestauree[]): void {
+    if (this.#gestionnaireWorktrees === undefined) return;
+    for (const rev of revendications) {
+      this.#gestionnaireWorktrees.restaurerRevendicationEnVeille(rev);
+    }
+    if (revendications.length > 0) {
+      superviseurLogger.info(
+        { nombre: revendications.length },
+        'revendications de worktree en veille réamorcées depuis la table team (axe B, restauration PC)',
+      );
     }
   }
 

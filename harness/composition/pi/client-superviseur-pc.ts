@@ -62,6 +62,7 @@ import type {
 import type { BlocPartielFlux } from '../../control-plane/observabilite/index.ts';
 import type { MetriquesHote } from '../../superviseur/metriques-hote.ts';
 import type { ConstatGit } from '../../superviseur/etat-git.ts';
+import type { RevendicationEnVeilleRestauree } from '../../projets/index.ts';
 import type { ResultatExploration } from '../../superviseur/exploration-projets.ts';
 import type { ResultatRecherche } from '../../superviseur/recherche-projets.ts';
 import type { ResultatLectureFichier } from '../../superviseur/lecture-fichier.ts';
@@ -347,6 +348,27 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
    */
   async libererWorktree(teamId: string, worktree: string | null): Promise<void> {
     await this.#appeler({ type: 'liberer_worktree_team', teamId, worktree });
+  }
+
+  /**
+   * Réamorce sur le PC les revendications de worktree `en_veille` des teams
+   * dormantes (axe B, restauration PC). `☠` À envoyer à la (re)connexion, AVANT
+   * tout réveil : sans ce réamorçage, la Map du gestionnaire de worktrees du PC est
+   * vide après un redémarrage et le prochain réveil retenterait un `git worktree add`
+   * sur un répertoire déjà présent. Liste vide ⇒ appel inutile évité (rien à
+   * restaurer, aucun aller-retour). Best-effort : un PC injoignable est un état
+   * nominal (H-75), la restauration retentera à la prochaine reconnexion.
+   */
+  async restaurerRevendicationsEnVeille(revendications: readonly RevendicationEnVeilleRestauree[]): Promise<void> {
+    if (revendications.length === 0) return;
+    try {
+      await this.#appeler({ type: 'restaurer_revendications_veille', revendications });
+    } catch (erreur) {
+      log.warn(
+        { err: erreur, nombre: revendications.length },
+        'restauration des revendications en veille impossible — PC injoignable, retentée à la prochaine reconnexion',
+      );
+    }
   }
 
   async relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }> {
