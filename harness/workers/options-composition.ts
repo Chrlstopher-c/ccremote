@@ -16,7 +16,7 @@
  */
 
 import type { HookCallbackMatcher, HookEvent, Options } from '@anthropic-ai/claude-agent-sdk';
-import { assertRetryWatchdogCoherent } from '../budgets/index.ts';
+import { assertRetryWatchdogBorne, assertRetryWatchdogCoherent, type CompteurTentativesRetryWatchdog } from '../budgets/index.ts';
 import { buildAuditHooks } from './audit-hooks.ts';
 import { buildCanUseTool } from './can-use-tool.ts';
 import { creerHooksConfinementEcriture } from './confinement-ecriture.ts';
@@ -48,14 +48,28 @@ export interface ComposedWorkerOptions {
  * fusionner. Omettre `...process.env` fait perdre `PATH` : le worker ne trouve
  * plus git, node ni les credentials (panne #19).
  */
-export function buildWorkerEnv(spec: WorkerSpec): Record<string, string | undefined> {
+/**
+ * `compteurRetryWatchdog` : optionnel pour rester compatible avec les appelants existants
+ * (bancs, tests) — mais dès qu'il est fourni, la borne C1 (max N réarmements + backoff,
+ * `budgets/garde-retry-watchdog.ts`) s'applique EN PLUS du budget (H-68), jamais à sa
+ * place. Propriété de l'appelant (superviseur), jamais un état module-level partagé entre
+ * sessions — même règle que `CompteurRelances` (H-11).
+ */
+export function buildWorkerEnv(
+  spec: WorkerSpec,
+  compteurRetryWatchdog?: CompteurTentativesRetryWatchdog,
+): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = { ...process.env, ...spec.extraEnv };
   if (spec.configDir !== undefined) env[CONFIG_DIR_ENV] = spec.configDir;
   if (spec.agentTeams === true) env[AGENT_TEAMS_ENV] = '1';
   // ☠ Panne #15 (G.1.4, acceptation d) — vérifié ICI, au point de composition réel,
   // pas seulement documenté : `CLAUDE_CODE_RETRY_WATCHDOG=1` sans budget actif est une
   // consommation de quota non bornée. `extraEnv` est la seule voie qui pourrait le poser.
-  assertRetryWatchdogCoherent(env, spec.maxBudgetUsd);
+  if (compteurRetryWatchdog !== undefined) {
+    assertRetryWatchdogBorne(env, spec.maxBudgetUsd, spec.sessionId, compteurRetryWatchdog);
+  } else {
+    assertRetryWatchdogCoherent(env, spec.maxBudgetUsd);
+  }
   return env;
 }
 

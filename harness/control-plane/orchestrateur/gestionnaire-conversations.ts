@@ -58,6 +58,29 @@ const PROMPT_RESUME =
 const EVENEMENTS_REPRIS = 30;
 
 /**
+ * Seuil d'auto-compaction (A2, cause 1 de l'audit qualité) — fraction de
+ * `maxTokens` (même échelle que `SeuilsContexte.alerte` de la discipline de
+ * contexte, `discipline-contexte/contrats.ts`). `☠` Sans déclenchement
+ * automatique, `compacter_mon_contexte` ne s'exécute QUE sur demande de Chris
+ * (cf. le mandat, bloc « TON PROPRE CONTEXTE ») : une conversation longue voit
+ * son coût par tour croître sans borne, le transcript entier étant rejoué à
+ * chaque tour. Le seuil est volontairement plus haut que celui d'« alerte »
+ * affiché à l'écran (H-63) : on laisse Chris proposer une compaction lui-même
+ * avant ce point, et on ne force qu'au moment où NE PAS compacter deviendrait
+ * la vraie fuite.
+ */
+export const SEUIL_AUTO_COMPACTION_RATIO = 0.85;
+
+/**
+ * `true` si la mesure de contexte franchit le seuil d'auto-compaction.
+ * Fonction pure, testable sans session ni horloge — `ratio === null` (aucune
+ * mesure encore reçue, cf. `EchantillonneurContexte`) ne déclenche jamais.
+ */
+export function compactionAutoRequise(ratio: number | null, seuil: number = SEUIL_AUTO_COMPACTION_RATIO): boolean {
+  return ratio !== null && ratio >= seuil;
+}
+
+/**
  * Reconstruit un contexte lisible à partir du fil DÉJÀ PERSISTÉ. `☠` On ne peut
  * pas demander de résumé à une session saturée — elle ne répond plus. Mais tout
  * l'historique est en base : c'est lui qui sert de mémoire de secours.
@@ -229,6 +252,14 @@ export class GestionnaireConversations {
      * montrerait une capture transmise que l'orchestrateur n'a jamais reçue.
      */
     private readonly racinePiecesJointes?: string,
+    /**
+     * Seuil d'auto-compaction (A2), configurable pour les tests. `☠` Défaut non
+     * nul : contrairement aux autres dépendances optionnelles de ce
+     * constructeur, laisser ce paramètre à `undefined` NE désactive PAS le
+     * mécanisme — il applique `SEUIL_AUTO_COMPACTION_RATIO`. Un seuil de `1`
+     * (jamais atteignable) est la façon explicite de couper l'auto-compaction.
+     */
+    private readonly seuilAutoCompactionRatio: number = SEUIL_AUTO_COMPACTION_RATIO,
   ) {}
 
   listerConversations(): readonly EntreeListeConversation[] {
@@ -691,6 +722,20 @@ export class GestionnaireConversations {
       for await (const message of poignee.query) {
         poignee.ingererMessage(message);
         collecteur.ingerer(message);
+        // `☠ A2` — déclenchement AUTOMATIQUE de la compaction (cause 1 de l'audit
+        // qualité, 2026-09-03) : jusqu'ici `compacter_mon_contexte` n'était jamais
+        // appelé que sur demande de Chris, et le transcript entier était rejoué à
+        // chaque tour sans borne. On arme la même compaction que le mandat MCP
+        // (`demanderCompaction`) — fin de tour uniquement, jamais en cours de
+        // génération — dès que la mesure réelle (`SentinelleContexte`, échantillonnée
+        // par `getContextUsage()`) franchit le seuil. Le résumé produit reste celui de
+        // `PROMPT_RESUME`/`amorceApresCompaction` : décisions, état du parc,
+        // engagements en cours — jamais une troncature brute.
+        const ratio = poignee.sentinelle.resume().derniereMesure?.ratio ?? null;
+        if (compactionAutoRequise(ratio, this.seuilAutoCompactionRatio) && !this.#compactionDemandee.has(conversationId)) {
+          log.info({ conversationId, ratio }, 'seuil d’auto-compaction franchi — compaction armée pour la fin du tour');
+          this.#compactionDemandee.add(conversationId);
+        }
         // `☠` Compte saturé : la session ne répondra plus. On la ferme pour que
         // le prochain envoi reparte sur le compte de repli — sinon l'orchestrateur
         // reste muet et rien n'explique pourquoi (vécu le 23/07).

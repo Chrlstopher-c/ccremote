@@ -14,11 +14,51 @@
  */
 
 import type { HookCallbackMatcher, HookEvent, McpServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
+import { messageModeleInconnu, normaliserModele } from '../../../shared/modeles-claude.ts';
 import { MANDAT_ORCHESTRATEUR } from './mandat.ts';
 import type { DecisionDemarrage } from './identite.ts';
 
-/** Modèle de l'orchestrateur (H-23, H-62) — alias résolu par le CLI, jamais un id de worker. */
-export const MODELE_ORCHESTRATEUR = 'opus';
+/**
+ * Variable d'environnement pour choisir le modèle du MASTER orchestrateur.
+ *
+ * `☠` À la différence du lead d'équipe (verrouillé `claude-opus-4-8`, A1,
+ * 2026-09-03) et des exécuteurs (verrouillés Sonnet), le master reste choisi
+ * par l'opérateur — Chris pilote directement cette session, contrairement à
+ * une équipe dispatchée sur un mandat qu'il ne relit pas ligne à ligne. Un
+ * réglage configurable ici n'a donc pas le même risque qu'un `modele` suggéré
+ * par un LLM sur `creer_equipe`.
+ */
+export const MODELE_ORCHESTRATEUR_ENV = 'CCREMOTE_MODELE_ORCHESTRATEUR';
+
+/** Défaut si la variable d'environnement est absente. */
+export const MODELE_ORCHESTRATEUR_DEFAUT = 'opus';
+
+export class ModeleOrchestrateurInvalideError extends Error {
+  constructor(readonly demande: string) {
+    super(`${MODELE_ORCHESTRATEUR_ENV} : ${messageModeleInconnu(demande)}`);
+    this.name = 'ModeleOrchestrateurInvalideError';
+  }
+}
+
+/**
+ * Résout le modèle du master depuis l'environnement. `☠` Refus AVANT usage —
+ * même discipline que `dispatch-mandat.ts` pour un modèle d'équipe (panne
+ * « sonnet 5 » du 31/07) : une valeur non normalisable ne doit jamais partir
+ * telle quelle vers le SDK, elle doit lever une erreur actionnable qui rend la
+ * liste des valeurs acceptées.
+ */
+export function resoudreModeleOrchestrateur(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  const brut = env[MODELE_ORCHESTRATEUR_ENV];
+  if (brut === undefined || brut.trim().length === 0) return MODELE_ORCHESTRATEUR_DEFAUT;
+  const normalise = normaliserModele(brut);
+  if (normalise === null) throw new ModeleOrchestrateurInvalideError(brut);
+  return normalise;
+}
+
+/** Modèle de l'orchestrateur (H-23, H-62) — résolu depuis `CCREMOTE_MODELE_ORCHESTRATEUR`, défaut `opus`. */
+export const MODELE_ORCHESTRATEUR = resoudreModeleOrchestrateur();
 
 /**
  * Effort de DÉMARRAGE de la session. `☠` Posé ici le 2026-08-07 parce qu'il ne

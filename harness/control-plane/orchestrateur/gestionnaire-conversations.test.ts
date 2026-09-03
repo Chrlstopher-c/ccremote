@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
 import type { PoigneeOrchestrateur } from './processus/index.ts';
-import { GestionnaireConversations } from './gestionnaire-conversations.ts';
+import { compactionAutoRequise, GestionnaireConversations } from './gestionnaire-conversations.ts';
 import { ErreurPieceJointe } from '../pieces-jointes/index.ts';
 
 let repertoire: string;
@@ -47,14 +47,14 @@ interface FausseSession {
   ferme: boolean;
 }
 
-function fausseSession(sessionId: string): FausseSession {
+function fausseSession(sessionId: string, ratio: { valeur: number | null } = { valeur: 0.42 }): FausseSession {
   const flux = creerFlux();
   const envoyes: string[] = [];
   const etat = { ferme: false } as { ferme: boolean };
   const poignee = {
     sessionId,
     entree: { envoyerOperateur: async (t: string): Promise<void> => { envoyes.push(t); } },
-    sentinelle: { resume: (): unknown => ({ derniereMesure: { ratio: 0.42 } }) },
+    sentinelle: { resume: (): unknown => ({ derniereMesure: ratio.valeur === null ? null : { ratio: ratio.valeur } }) },
     query: flux.gen,
     ingererMessage: (): void => {},
     fermer: (): void => { etat.ferme = true; flux.fermer(); },
@@ -289,5 +289,74 @@ describe('GestionnaireConversations — pièces jointes (migration 24)', () => {
     await gest.envoyer(conv.id, 'juste du texte');
     expect(sess.envoyes[0]).toBe('juste du texte');
     expect(registre.conversations.evenements(conv.id)[0]?.pieces).toEqual([]);
+  });
+});
+
+describe('compactionAutoRequise (fonction pure)', () => {
+  test('sous le seuil : pas de compaction', () => {
+    expect(compactionAutoRequise(0.5, 0.85)).toBe(false);
+  });
+  test('au seuil ou au-dessus : compaction requise', () => {
+    expect(compactionAutoRequise(0.85, 0.85)).toBe(true);
+    expect(compactionAutoRequise(0.95, 0.85)).toBe(true);
+  });
+  test('aucune mesure encore reçue (ratio null) : jamais de déclenchement', () => {
+    expect(compactionAutoRequise(null, 0.85)).toBe(false);
+  });
+});
+
+describe('A2 — auto-compaction de la session orchestrateur (cause 1)', () => {
+  test('sous le seuil : le tour se termine normalement, aucune compaction armée', async () => {
+    const ratio = { valeur: 0.5 };
+    const sess = fausseSession('sess-1', ratio);
+    const gest = new GestionnaireConversations(registre, async () => sess.poignee, undefined, undefined, undefined, 0.85);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, 'question');
+
+    sess.pousser(assistant('réponse normale'));
+    sess.pousser(RESULT);
+    await tick();
+
+    // Un seul message part : la demande, jamais un `PROMPT_RESUME` interne.
+    expect(sess.envoyes).toEqual(['question']);
+    expect(registre.conversations.lire(conv.id)?.compactions).toBe(0);
+  });
+
+  test('☠ au-dessus du seuil : la compaction se déclenche SEULE, sans que Chris la demande', async () => {
+    const ratio = { valeur: 0.9 };
+    const sess = fausseSession('sess-1', ratio);
+    const gest = new GestionnaireConversations(registre, async () => sess.poignee, undefined, undefined, undefined, 0.85);
+    const conv = gest.creer();
+    await gest.envoyer(conv.id, 'question');
+
+    // Fin du premier tour, contexte déjà chargé : la mesure franchit le seuil.
+    sess.pousser(assistant('réponse normale'));
+    sess.pousser(RESULT);
+    await tick();
+
+    // La compaction s'est armée puis exécutée : un tour interne a émis le
+    // `PROMPT_RESUME` (H-62 : jamais visible dans le fil de Chris).
+    expect(sess.envoyes).toHaveLength(2);
+    expect(sess.envoyes[0]).toBe('question');
+    expect(sess.envoyes[1]).toContain('COMPACTION DEMANDÉE PAR LE HARNESS');
+    expect(sess.envoyes[1]).toContain('décisions prises');
+
+    // Le tour interne attend sa réponse : on la fournit — un résumé STRUCTURÉ
+    // (état/décisions/reste), jamais une troncature brute (⚠ B3, garde d'état).
+    sess.pousser(
+      assistant(
+        'État : mission X en cours sur le compte A. Décisions : compte B écarté (saturé). Reste : relire le rapport de l’équipe.',
+      ),
+    );
+    sess.pousser(RESULT);
+    await tick();
+
+    const conv2 = registre.conversations.lire(conv.id);
+    expect(conv2?.compactions).toBe(1);
+    expect(conv2?.resumeContexte).toContain('Décisions');
+    expect(conv2?.resumeContexte).toContain('Reste');
+    // Aucun des deux tours internes n'est jamais entré dans le fil visible.
+    const evts = registre.conversations.evenements(conv.id).filter((e) => e.type === 'operateur' || e.type === 'texte');
+    expect(evts.some((e) => e.contenu.includes('COMPACTION DEMANDÉE'))).toBe(false);
   });
 });

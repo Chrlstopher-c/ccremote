@@ -10,9 +10,15 @@ export {
   RETRY_WATCHDOG_ENV,
   GardeBudgetError,
   assertRetryWatchdogCoherent,
+  assertRetryWatchdogBorne,
   autoriserRetryWatchdog,
+  autoriserTentativeRetryWatchdog,
   budgetEstActif,
+  CompteurTentativesRetryWatchdog,
+  PLAFOND_TENTATIVES_RETRY_WATCHDOG_DEFAUT,
 } from './garde-retry-watchdog.ts';
+
+export type { DecisionTentativeRetryWatchdog, EtatTentativesRetryWatchdog } from './garde-retry-watchdog.ts';
 
 export type {
   CategorieMessageUsage,

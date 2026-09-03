@@ -19,6 +19,7 @@ import type { Compte, Proposition, Registre } from '../registre/index.ts';
 import { resoudrePreference, type PreferenceAppliquee } from '../../shared/preference-compte.ts';
 import type { DemandeDemarrageTransportable } from '../../superviseur/index.ts';
 import { effortsDe, messageModeleInconnu, normaliserModele } from '../../shared/modeles-claude.ts';
+import { assertCompteNonEnSurcoutPayant } from './garde-surcout-payant.ts';
 import {
   ACCES_DEFAUT,
   estAccesMandat,
@@ -753,6 +754,13 @@ function refusFauteDeCompte(nbComptes: number, preference: PreferenceAppliquee):
 
 export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
   const compte = choisirCompteEquipe(deps.registre);
+  // `☠ C2` — AVANT la première écriture (code-standards) : le compte que la rotation vient
+  // de choisir (inchangée, cf. `choisirCompteEquipe` ci-dessus) peut être DÉJÀ en surcoût
+  // payant constaté (H-63.1 : un compte `rejected` continue de tourner en `extra_usage`,
+  // il n'est jamais coupé). Jusqu'ici seule une consigne au modèle (`mandat.ts`, bloc
+  // CARBURANT) portait « ne réessaie pas en boucle » — aucun verrou de code ne l'empêchait
+  // réellement. Refus propre ICI plutôt qu'un dispatch qui bascule en payant en silence.
+  assertCompteNonEnSurcoutPayant(deps.registre, compte.id);
 
   // `☠` Le worktree vit sur le PC, pas sur le Pi. Un projet déjà donné en chemin
   // absolu est pris tel quel : le concaténer au répertoire de projets du Pi
