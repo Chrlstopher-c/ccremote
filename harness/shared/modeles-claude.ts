@@ -57,9 +57,18 @@ export interface ModeleClaude {
  * ignorait `claude-opus-5` — sur les deux comptes, à l'identique. Monter le SDK
  * a fait apparaître Opus 5 et disparaître Opus 4.8.
  *
- * `☠` Conséquence : proposer à l'écran un modèle absent de `supportedModels()`
- * produit une option qui échoue au dispatch. Toute mise à jour du SDK doit être
- * suivie d'un passage du banc, et de la mise à jour de ce repli.
+ * `☠` NUANCE MESURÉE le 2026-09-03 : `supportedModels()` gouverne les
+ * SUGGESTIONS d'interface, PAS la dispatchabilité. Un identifiant VALIDE mais
+ * absent de la liste se dispatche quand même — vérifié en réel : un dispatch
+ * avec `model: 'claude-opus-4-8'` ET `'claude-opus-4-8[1m]'` réussit
+ * (`subtype:success, is_error:false`) sous le SDK 0.3.220, alors que
+ * `supportedModels()` ne liste pas opus-4-8. L'ancienne rédaction (« proposer un
+ * modèle absent de supportedModels() produit une option qui échoue au dispatch »)
+ * confondait deux pannes : un id VALIDE hors liste passe ; seul un id MALFORMÉ
+ * (« sonnet 5 » avec l'espace, 31/07) échoue, et c'est `normaliserModele` qui
+ * l'arrête. Ce catalogue peut donc porter un modèle dispatchable qu'aucune liste
+ * vivante n'expose — c'est même le cas d'opus-4-8, imposé au lead (A1). Toute
+ * mise à jour du SDK reste à suivre d'un passage du banc.
  */
 export const MODELES: readonly ModeleClaude[] = [
   {
@@ -71,6 +80,23 @@ export const MODELES: readonly ModeleClaude[] = [
     modeRapide: true,
     effortDefaut: 'high',
     note: 'Le plus capable pour le code et les missions longues. Seul à déclarer le mode rapide.',
+  },
+  {
+    // `☠` Dispatchable mais ABSENT de `supportedModels()` du CLI embarqué
+    // (0.3.220) — vérifié en réel le 2026-09-03 : un dispatch opus-4-8 réussit.
+    // Imposé au lead d'équipe (verrou A1, `dispatch-mandat.ts`). `alias: null` à
+    // dessein : l'alias `opus` reste sur opus-5 (le plus récent), on ne le
+    // déplace pas — opus-4-8 ne se désigne que par son identifiant complet.
+    id: 'claude-opus-4-8',
+    libelle: 'Opus 4.8',
+    alias: null,
+    // `☠` `xhigh` inclus : 4.8 est postérieur à 4.7, le seuil d'apparition du
+    // niveau. `fastMode` NON déclaré : seul opus-5 le porte dans la mesure du
+    // 31/07 — on ne le prête pas à 4.8 sans preuve.
+    efforts: EFFORTS_COMPLETS,
+    modeRapide: false,
+    effortDefaut: 'high',
+    note: 'Cerveau d’équipe imposé (lead). Absent des suggestions du CLI, dispatchable sans réserve.',
   },
   {
     id: 'claude-sonnet-5',

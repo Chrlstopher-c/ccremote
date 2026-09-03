@@ -411,6 +411,65 @@ describe('dispatch — démarrage refusé (rollback) notifie, comme les fins d�
 });
 
 /**
+ * `☠` VERROU DUR A1 (décision Chris 2026-09-03) : le modèle et l'effort du lead
+ * sont IMPOSÉS au dispatch (Opus 4.8, high), non contournables par le champ
+ * `modele`/`effort` de la proposition. Ces tests lisent ce qui part RÉELLEMENT
+ * vers le PC — `dem.parametres.model`/`effortLevel` — seul artefact qui fasse foi.
+ */
+describe('☠ le modèle du lead est un VERROU au dispatch, pas une entrée héritée (A1)', () => {
+  async function dispatcher(
+    modele: string | null,
+    effort: string | null,
+  ): Promise<{ readonly model: string; readonly effortLevel: string }> {
+    let capture: { model: string; effortLevel: string } = { model: '', effortLevel: '' };
+    const d: DependancesDispatch = {
+      ...deps(),
+      demarreur: {
+        demarrer: async (dem: { parametres: { model: string; effortLevel: string } }) => {
+          capture = { model: dem.parametres.model, effortLevel: dem.parametres.effortLevel };
+          return { detail: 'ok' };
+        },
+      } as never,
+    };
+    const proposition = { ...(PROPOSITION as object), modele, effort } as never;
+    await dispatcherMandat(proposition, d);
+    return capture;
+  }
+
+  test('proposition sans modèle → Opus 4.8, effort high', async () => {
+    const { model, effortLevel } = await dispatcher(null, null);
+    expect(model).toBe('claude-opus-4-8');
+    expect(effortLevel).toBe('high');
+  });
+
+  test('☠ une proposition qui tente `sonnet` est IGNORÉE — le lead reste Opus 4.8', async () => {
+    const { model } = await dispatcher('claude-sonnet-5', 'medium');
+    // Preuve dans les deux sens : le champ change (sonnet/medium), la sortie non.
+    expect(model).toBe('claude-opus-4-8');
+  });
+
+  test('☠ même un effort explicite `low` ne descend pas le lead sous high', async () => {
+    const { effortLevel } = await dispatcher('opus', 'low');
+    expect(effortLevel).toBe('high');
+  });
+
+  test('☠ un `opus 4.8` en langage naturel donne le même verrou, pas une erreur', async () => {
+    // Le champ n'est plus lu, donc même une valeur qui aurait été refusée
+    // autrefois (ou une forme exotique) ne peut plus casser le dispatch du lead.
+    const { model } = await dispatcher('le plus intelligent', null);
+    expect(model).toBe('claude-opus-4-8');
+  });
+
+  test('☠ opus-4-8 PASSE la validation de dispatch bien qu’absent de supportedModels()', async () => {
+    // Item 4 : aucune garde ne rejette un modèle hors liste vivante — la seule
+    // validation est la normalisation, qu'opus-4-8 franchit. Le dispatch aboutit.
+    const r = await dispatcherMandat({ ...(PROPOSITION as object) } as never, deps());
+    expect(r.missionId).toBeDefined();
+    expect(registre.missions.lire(r.missionId)?.modeleResolu).toBe('claude-opus-4-8');
+  });
+});
+
+/**
  * `☠` Chantier 3 (mandat opérateur 24/08) — le champ existait déjà, validé,
  * stocké côté carte d'autorisation (`mcp-controle/mandat.ts`), mais une équipe
  * lancée sans clic (le cas le plus fréquent) ne voyait JAMAIS sa latitude :

@@ -20,6 +20,7 @@ import { assertRetryWatchdogCoherent } from '../budgets/index.ts';
 import { buildAuditHooks } from './audit-hooks.ts';
 import { buildCanUseTool } from './can-use-tool.ts';
 import { creerHooksConfinementEcriture } from './confinement-ecriture.ts';
+import { creerHooksModeleSousAgents } from './modele-sous-agents.ts';
 import { DEFAULT_SETTING_SOURCES } from './preflight-config.ts';
 import { sessionLogger } from './logger.ts';
 import type { ResolvedModel, WorkerSpec } from './types.ts';
@@ -91,13 +92,18 @@ function fusionnerHooks(
 }
 
 /**
- * Tous les hooks structurels d'un worker : l'audit (toujours) et, pour
+ * Tous les hooks structurels d'un worker : l'audit (toujours), le verrou du
+ * modèle des sous-agents (toujours — A1, `modele-sous-agents.ts`) et, pour
  * l'accès `rapport` (garde 3), le confinement d'écriture au worktree.
+ *
+ * `☠` Le verrou des sous-agents est INCONDITIONNEL : tout worker est un lead
+ * susceptible de lancer des Task, et laisser le verrou optionnel serait le même
+ * défaut « écrit, branché sur rien » que le harness a déjà payé plusieurs fois.
  */
 function buildHooks(spec: WorkerSpec): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const audit = buildAuditHooks(spec);
-  if (spec.confinerEcritureCwd !== true) return audit;
-  return fusionnerHooks(audit, creerHooksConfinementEcriture(spec.cwd));
+  const base = fusionnerHooks(buildAuditHooks(spec), creerHooksModeleSousAgents());
+  if (spec.confinerEcritureCwd !== true) return base;
+  return fusionnerHooks(base, creerHooksConfinementEcriture(spec.cwd));
 }
 
 /**

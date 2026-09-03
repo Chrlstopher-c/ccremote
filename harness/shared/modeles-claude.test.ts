@@ -67,6 +67,36 @@ describe('efforts par modèle — la liste n’est pas uniforme', () => {
   });
 });
 
+describe('☠ opus-4-8 au catalogue — dispatchable mais absent de supportedModels() (A1)', () => {
+  test('« opus 4.8 » se normalise vers l’identifiant canonique', () => {
+    expect(normaliserModele('opus 4.8')).toBe('claude-opus-4-8');
+    expect(normaliserModele('Opus-4.8')).toBe('claude-opus-4-8');
+    expect(normaliserModele('claude-opus-4-8')).toBe('claude-opus-4-8');
+  });
+
+  test('la variante [1m] retrouve le même modèle du catalogue', () => {
+    expect(normaliserModele('claude-opus-4-8[1m]')).toBe('claude-opus-4-8[1m]');
+    expect(trouverModele('claude-opus-4-8[1m]')?.libelle).toBe('Opus 4.8');
+    expect(trouverModele('claude-opus-4-8')?.libelle).toBe('Opus 4.8');
+  });
+
+  test('efforts complets, xhigh compris (4.8 est post-4.7)', () => {
+    expect(effortsDe('claude-opus-4-8')).toEqual(['low', 'medium', 'high', 'xhigh', 'max']);
+    expect(effortsDe('claude-opus-4-8[1m]')).toContain('xhigh');
+  });
+
+  test('☠ alias `opus` reste sur opus-5 — opus-4-8 ne se désigne que par son id complet', () => {
+    // L'alias ne bouge pas : `opus` = le plus récent (opus-5), opus-4-8 a alias null.
+    expect(trouverModele('opus')?.id).toBe('claude-opus-5');
+    expect(trouverModele('claude-opus-4-8')?.alias).toBeNull();
+  });
+
+  test('modeRapide NON déclaré pour 4.8 — seul opus-5 le porte dans la mesure', () => {
+    expect(trouverModele('claude-opus-4-8')?.modeRapide).toBe(false);
+    expect(trouverModele('claude-opus-5')?.modeRapide).toBe(true);
+  });
+});
+
 describe('cohérence du catalogue', () => {
   test('tout modèle qui accepte un effort en propose un par défaut, et l’inverse', () => {
     for (const m of MODELES) {

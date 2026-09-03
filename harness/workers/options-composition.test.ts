@@ -173,8 +173,35 @@ describe('composeWorkerOptions', () => {
     );
     expect(options.hooks).toBeDefined();
     const preToolUse = options.hooks?.PreToolUse;
-    expect(preToolUse).toHaveLength(1);
+    // `☠` Deux matchers désormais : l'audit injecté par le port, ET le verrou du
+    // modèle des sous-agents (A1), câblé inconditionnellement. Le matcher d'audit
+    // est le premier (fusionné en tête), le verrou vient ensuite.
+    expect(preToolUse).toHaveLength(2);
     expect(preToolUse?.[0]?.hooks).toHaveLength(1);
+  });
+
+  test('☠ A1 : le verrou du modèle des sous-agents est câblé dans les options, même sans audit', async () => {
+    // `portAuditPermissions: () => ({})` (défaut de spec()) : aucun hook d'audit.
+    // Le verrou sous-agents doit tout de même être présent — il est inconditionnel.
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    const preToolUse = options.hooks?.PreToolUse;
+    expect(preToolUse).toHaveLength(1);
+    const callback = preToolUse?.[0]?.hooks[0];
+    const resultat = (await callback?.(
+      {
+        hook_event_name: 'PreToolUse',
+        tool_name: 'Task',
+        tool_input: { description: 'x', prompt: 'y', model: 'opus' },
+        tool_use_id: 'tu',
+        session_id: '11111111-2222-3333-4444-555555555555',
+        transcript_path: '/tmp/t.jsonl',
+        cwd: '/tmp/worktree-alpha',
+      } as Parameters<NonNullable<typeof callback>>[0],
+      'tu',
+      { signal: new AbortController().signal },
+    )) as { hookSpecificOutput?: { updatedInput?: Record<string, unknown> } } | undefined;
+    // Preuve au point d'assemblage : un Task `model: opus` composé ressort sonnet.
+    expect(resultat?.hookSpecificOutput?.updatedInput?.['model']).toBe('sonnet');
   });
 
   test('☠ H-74 : portAuditPermissions() qui lève ne bloque ni ne fait échouer la composition', () => {

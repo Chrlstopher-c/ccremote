@@ -116,16 +116,20 @@ const BUDGET_DEFAUT_USD = PLAFOND_EQUIPE_USD;
 export const PLAFOND_EQUIPES_PROJET_GIT_DEFAUT = 4;
 
 /**
- * `☠` Défauts du team leader, POSÉS et non hérités du CLI (décision Chris,
- * 2026-07-23). Un lead est le cerveau d'une équipe : le laisser tomber sur le
- * modèle ou l'effort par défaut de la machine le ferait échouer lentement, sans
- * qu'aucun signal ne le dise. L'orchestrateur peut les remplacer si l'opérateur
- * le lui demande (« sonnet 5 medium »), jamais de sa propre initiative.
+ * `☠` VERROU DUR du team leader (A1, décision Chris 2026-09-03), plus un défaut.
+ * Un lead est le cerveau d'une équipe : découpe, coordonne, ET corrige lui-même
+ * le travail d'un exécuteur raté (garde ses outils d'édition). Son modèle et son
+ * effort sont IMPOSÉS ici, jamais hérités du champ `modele`/`effort` de la
+ * proposition — cette entrée est suggérée par un LLM et n'est pas fiable. Le
+ * choix de modèle configurable, c'est le niveau AU-DESSUS (le master
+ * orchestrateur), pas ici.
+ *
+ * `☠` Repassé à `claude-opus-4-8` (l'avait quitté pour opus-5 au SDK 0.3.220,
+ * quand opus-4-8 a disparu de `supportedModels()`). Mesuré le 2026-09-03 : un
+ * dispatch opus-4-8 réussit malgré son absence de la liste de suggestions — la
+ * liste gouverne l'UI, pas la dispatchabilité (voir `shared/modeles-claude.ts`).
  */
-// `☠` Suivait `claude-opus-4-8`, qui a DISPARU de `supportedModels()` au passage
-// au SDK 0.3.220 (CLI 2.1.220) : tout dispatch serait parti sur un modèle que le
-// CLI n'expose plus. Mesuré le 31/07, pas supposé.
-export const MODELE_LEAD_DEFAUT = 'claude-opus-5';
+export const MODELE_LEAD_DEFAUT = 'claude-opus-4-8';
 export const EFFORT_LEAD_DEFAUT = 'high';
 
 /**
@@ -309,51 +313,62 @@ const BLOC_OUTILS = [
 ].join('\n');
 
 /**
- * `☠` LE défaut de coût, mesuré le 01/08 sur la production.
+ * `☠` Le modèle des sous-agents n'est plus un CHOIX du lead : c'est un VERROU du
+ * harness (A1, décision Chris 2026-09-03).
  *
- * Le site lumen a coûté **52,93 $ en six vagues**, aucune sous 3,85 $. Cause
- * lue dans le SDK, pas déduite : `AgentInput.model` est OPTIONNEL et
- * « if omitted, inherits from the parent ». Un lead Opus 5 qui lance trois
- * sous-agents sans rien préciser lance donc trois Opus 5 — et rien, nulle part,
- * ne le lui disait. Moyenne mesurée : 6,40 $ par mission Opus contre 0,67 $ par
- * mission Sonnet.
+ * Contexte du verrou. `AgentInput.model` est OPTIONNEL et « if omitted, inherits
+ * from the parent » : un lead Opus qui lance trois Task sans rien préciser
+ * lançait trois Opus (site lumen, 52,93 $ en six vagues le 01/08 ; 6,40 $ par
+ * mission Opus contre 0,67 $ Sonnet). L'ancienne parade — « ton défaut est
+ * sonnet » — était une CONSIGNE que le lead pouvait oublier. Elle est remplacée
+ * par un hook `PreToolUse` sur `Task` (`workers/modele-sous-agents.ts`) qui
+ * réécrit le modèle de tout sous-agent en `sonnet`, quoi que le lead demande.
  *
- * `☠` Les valeurs sont des ALIAS (`sonnet`, `opus`, `haiku`, `fable`), jamais des
- * identifiants complets. Écrire `claude-sonnet-5` ici est le défaut du 31/07 sous
- * une autre forme — une chaîne plausible refusée par l'outil.
- *
- * `☠` La contrepartie est nommée, sinon la consigne se retourne : Sonnet rend
- * plus souvent un travail non vérifié. La parade n'est PAS une relecture Opus
- * systématique (qui réintroduirait le coût qu'on retire) mais une PREUVE
- * MÉCANIQUE, qui ne coûte aucun token.
+ * `☠` Ce bloc ne DEMANDE donc plus de dimensionner : il DIT que c'est imposé,
+ * pour qu'un lead qui écrit `model: 'opus'` sur un Task ne le lise pas comme une
+ * panne quand son sous-agent tourne quand même sur Sonnet. Le levier du lead
+ * n'est plus le choix du modèle — c'est la qualité du brief, la preuve
+ * mécanique, et sa propre reprise (bloc suivant) quand un rendu ne tient pas.
  */
 const BLOC_DIMENSIONNEMENT = [
-  'DIMENSIONNE TES SOUS-AGENTS — c’est toi qui paies, et par défaut tu paies le prix fort.',
-  'L’outil Task accepte un paramètre `model`. OMIS, le sous-agent HÉRITE DE TON MODÈLE :',
-  'trois sous-agents lancés sans rien préciser par un lead Opus, ce sont trois Opus en',
-  'parallèle. Mesuré le 01/08 : un site vitrine a coûté 52,93 $ de cette façon.',
+  'TES SOUS-AGENTS TOURNENT SUR SONNET — c’est imposé, pas à décider.',
+  'Le harness force le modèle de tout sous-agent Task sur `sonnet`, quel que soit le',
+  '`model` que tu passes : l’écrire `opus` n’y change rien, et un sous-agent `fork`',
+  '(qui hériterait de ton Opus) est refusé — relance-le en sous-agent normal, avec un',
+  'brief explicite. Ce n’est pas une consigne que tu peux oublier, c’est un verrou.',
   '',
-  'Valeurs acceptées — des alias, jamais un identifiant complet : `sonnet`, `opus`, `haiku`.',
-  '',
-  '  · `sonnet` — TON DÉFAUT. Tout ce qui est cadré : écrire du code sur une spec établie,',
-  '    appliquer un correctif décrit, écrire des tests, refactorer, explorer une base,',
-  '    rédiger de la doc, brancher une API connue. C’est la majorité d’un mandat.',
-  '  · `opus` — RÉSERVÉ à deux choses, et tu dois pouvoir dire laquelle : la profondeur de',
-  '    raisonnement (architecture non triviale, diagnostic d’un défaut qui résiste, arbitrage',
-  '    aux conséquences lointaines) et la création (direction artistique, motion design,',
-  '    tout ce qui doit aller loin plutôt que rendre une idée plate).',
-  '  · `haiku` — mécanique et volumineux : renommage massif, extraction, tri, relevé.',
-  '',
-  'Le vrai critère n’est pas la difficulté ressentie, c’est : « ai-je déjà tranché comment',
-  'faire ? » Si oui, c’est de l’exécution — `sonnet`. Si la décision fait partie du travail,',
-  'c’est `opus`. Quand tu hésites, prends `sonnet` et garde la main pour vérifier.',
-  '',
-  'CE QUE TU DOIS À UN RENDU DE SOUS-AGENT — surtout `sonnet`, qui déclare plus souvent',
-  'terminé un travail qu’il n’a pas vérifié. N’accepte JAMAIS un rendu sur sa parole :',
-  'exige une PREUVE MÉCANIQUE et lis-la toi-même. Une commande et sa sortie (`tsc`, les',
-  'tests, le linter), un fichier relu, une page ouverte. Cela ne coûte aucun token de',
-  'modèle et attrape ce qu’une relecture manquerait. Ne repasse derrière avec un sous-agent',
-  '`opus` que si la preuve mécanique est impossible — c’est le second filet, pas le premier.',
+  'Ton levier n’est donc PLUS le choix du modèle, c’est le reste :',
+  '  · un BRIEF serré — périmètre net, contexte pré-digéré, critère d’arrêt vérifiable.',
+  '    Un Sonnet mal briefé rate ; un Sonnet bien briefé fait l’essentiel d’un mandat.',
+  '  · une PREUVE MÉCANIQUE que tu lis toi-même. Sonnet déclare plus souvent terminé un',
+  '    travail qu’il n’a pas vérifié : n’accepte JAMAIS un rendu sur sa parole. Une commande',
+  '    et sa sortie (`tsc`, les tests, le linter), un fichier relu, une page ouverte — cela',
+  '    ne coûte aucun token de modèle et attrape ce qu’une relecture manquerait.',
+  '  · TA propre reprise quand la preuve ne tient pas — tu raisonnes en Opus et tu as les',
+  '    outils d’édition (voir le bloc « TON RÔLE CORRECTIF »). Corriger toi-même vaut mieux',
+  '    que re-dispatcher le même brief en boucle et repayer un sous-agent pour le même raté.',
+].join('\n');
+
+/**
+ * `☠` Le rôle correctif du lead (A1b, décision Chris 2026-09-03). Depuis que les
+ * sous-agents sont verrouillés sur Sonnet, un rendu qui ne tient pas ne se
+ * rattrape pas en relançant un Opus : c'est le LEAD qui reprend. Il en a les
+ * moyens — il raisonne en Opus et garde Write/Edit. Mais c'est un FILET, pas le
+ * mode normal : s'il corrige souvent, le défaut est en amont (mauvais découpage,
+ * brief flou), pas dans le sous-agent, et il paie de l'Opus pour rattraper du
+ * Sonnet en boucle — exactement le coût que ce verrou retire.
+ */
+const BLOC_ROLE_CORRECTIF = [
+  'TON RÔLE CORRECTIF — le filet, jamais le mode normal.',
+  'Tu as les outils d’édition (Write, Edit) et tu raisonnes au niveau le plus haut de',
+  'l’équipe. Quand un sous-agent rend un travail qui ne passe pas ta preuve mécanique, la',
+  'bonne réponse est le plus souvent de REPRENDRE toi-même la correction — un diagnostic,',
+  'une retouche ciblée — plutôt que de re-dispatcher le même brief et repayer un sous-agent',
+  'pour le même raté. C’est ce que ton modèle et tes outils te permettent de faire.',
+  'Mais c’est un FILET. Si tu te retrouves à corriger souvent, ce n’est pas une fatalité du',
+  'sous-agent : c’est le signe d’un découpage ou d’un brief à revoir. Resserre le brief',
+  'suivant plutôt que d’installer la reprise en boucle — sinon tu paies de l’Opus pour',
+  'rattraper du Sonnet, et le gain du verrou s’évapore.',
 ].join('\n');
 
 /**
@@ -494,6 +509,8 @@ export function composerMandatSysteme(p: Proposition, acces: AccesMandat): strin
     BLOC_OUTILS,
     '',
     BLOC_DIMENSIONNEMENT,
+    '',
+    BLOC_ROLE_CORRECTIF,
     '',
     BLOC_ATTRIBUTION,
     '',
@@ -788,12 +805,20 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
   const missionId = randomUUID();
   const sessionId = randomUUID();
   const lotId = randomUUID();
-  // `☠` VALIDÉ ICI, avant la moindre écriture : la valeur vient d'un LLM qui
-  // écrit en langage naturel. « sonnet 5 » partait tel quel au CLI et tuait
-  // l'équipe deux secondes après son démarrage (31/07).
-  const modele = p.modele === null || p.modele === undefined ? MODELE_LEAD_DEFAUT : normaliserModele(p.modele);
-  if (modele === null) throw new ErreurModeleInconnu(p.modele ?? '');
-  const effort = effortValide(p.effort, modele);
+  // `☠` VERROU DUR A1 (2026-09-03) : le modèle ET l'effort du lead sont IMPOSÉS,
+  // en aval de tout override. Le champ `p.modele`/`p.effort` de la proposition —
+  // suggéré par l'orchestrateur, un LLM — n'entre PLUS dans ce choix : il ne
+  // pouvait que remplacer un verrou par une entrée non fiable, exactement la
+  // panne « sonnet 5 » (31/07) sous une autre forme. Le seul niveau où le modèle
+  // se choisit, c'est le master orchestrateur, au-dessus de ce dispatch.
+  //
+  // `☠` La constante passe quand même par `normaliserModele`/`effortValide` : la
+  // validation AVANT écriture reste en place (elle attraperait une faute de
+  // frappe dans MODELE_LEAD_DEFAUT), et `effortValide` cale l'effort sur les
+  // niveaux que ce modèle accepte réellement (catalogue `modeles-claude.ts`).
+  const modele = normaliserModele(MODELE_LEAD_DEFAUT);
+  if (modele === null) throw new ErreurModeleInconnu(MODELE_LEAD_DEFAUT);
+  const effort = effortValide(EFFORT_LEAD_DEFAUT, modele);
   // `☠` Même traitement pour l'accès, et pour la même raison : un appelant qui
   // construirait une proposition sans ce champ (chemin non câblé, restauration,
   // test) ne doit pas obtenir l'écriture par omission. Une seule lecture, servant

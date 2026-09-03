@@ -1,29 +1,26 @@
 /**
- * Le dimensionnement des modèles — ce qui décide du coût réel d'une équipe.
+ * Le modèle des modèles — ce qui décide du coût réel d'une équipe.
  *
  * `☠` Défaut mesuré en production le 01/08 : le site lumen a coûté **52,93 $ en
- * six vagues**, aucune sous 3,85 $. Deux causes, et aucune n'était un bug de
- * code — les deux étaient écrites noir sur blanc dans des prompts :
+ * six vagues**, aucune sous 3,85 $. Cause : `AgentInput.model` est optionnel et,
+ * omis, un sous-agent HÉRITE du modèle du parent — un lead Opus lançant trois
+ * sous-agents en lançait trois en Opus, sans l'avoir décidé. La parade d'alors
+ * était une CONSIGNE dans les prompts (« ton défaut est sonnet », « choisis le
+ * modèle de l'équipe »).
  *
- *   1. l'orchestrateur lisait « laisse `modele` et `effort` vides » et
- *      « ne choisis JAMAIS un modèle inférieur de ta propre initiative ». Il a
- *      obéi. Interrogé le 01/08 par le banc de pilotage, il l'a confirmé mot pour
- *      mot : « Je ne le choisis pas. » ;
- *   2. rien ne disait au lead que `AgentInput.model` est optionnel et que, omis,
- *      un sous-agent HÉRITE du modèle du parent. Un lead Opus lançant trois
- *      sous-agents en lançait donc trois en Opus, sans l'avoir décidé.
- *
- * Ces tests gardent les deux moitiés. La plus importante est la dernière : les
- * alias écrits dans le prompt doivent être ceux que le SDK accepte réellement —
- * c'est la forme exacte du défaut « sonnet 5 » du 31/07, une chaîne plausible
- * que rien ne validait, et du défaut `WebSearch` du 01/08, une capacité promise
- * au modèle et absente de sa liste d'outils.
+ * `☠` VERROU DUR A1 (décision Chris 2026-09-03) : la consigne est remplacée par
+ * une hiérarchie imposée. Le lead est verrouillé sur Opus 4.8 (`dispatch-mandat.ts`),
+ * ses sous-agents sur Sonnet (`workers/modele-sous-agents.ts`), et l'orchestrateur
+ * ne choisit plus rien. Ces tests gardent donc l'invariant INVERSE de la version
+ * précédente : les prompts doivent dire la VÉRITÉ sur la hiérarchie imposée —
+ * le lead qu'il ne choisit pas le modèle de ses sous-agents, l'orchestrateur
+ * qu'il ne choisit pas celui de l'équipe. Un prompt qui promet un choix que le
+ * code retire est le même « écrit, branché sur rien » que ce dépôt a déjà payé.
  */
 
 import { describe, expect, test } from 'bun:test';
 import { composerMandatSysteme } from './dispatch-mandat.ts';
 import { MANDAT_ORCHESTRATEUR } from './processus/mandat.ts';
-import { normaliserModele } from '../../shared/modeles-claude.ts';
 import { MCP_EQUIPE } from '../../workers/mcp-du-poste.ts';
 import { NOM_SERVEUR_MCP_DEPENSE } from '../../workers/mcp-depense/serveur.ts';
 import type { Proposition } from '../registre/index.ts';
@@ -61,45 +58,47 @@ const ALIAS_SDK = ['sonnet', 'opus', 'haiku', 'fable'] as const;
 
 const mandatSysteme = composerMandatSysteme(MANDAT, 'ecriture');
 
-describe('ce que le lead doit savoir pour ne pas payer le prix fort', () => {
-  test('☠ on lui DIT que l’omission fait hériter du modèle parent', () => {
-    // C'est le fait qui explique les 52,93 $ : sans lui, la consigne « choisis »
-    // reste théorique, parce que ne pas choisir semble neutre.
-    expect(mandatSysteme).toContain('HÉRITE');
-    expect(mandatSysteme.toLowerCase()).toContain('sous-agents lancés sans rien préciser');
+describe('ce que le lead doit savoir : le modèle des sous-agents est IMPOSÉ (A1)', () => {
+  test('☠ on lui DIT que le modèle des sous-agents est verrouillé sur Sonnet', () => {
+    // Sans ça, un lead qui écrit `model: opus` sur un Task et voit son sous-agent
+    // tourner sur Sonnet le lit comme une panne, et perd des tours à « corriger ».
+    expect(mandatSysteme).toContain('TES SOUS-AGENTS TOURNENT SUR SONNET');
+    expect(mandatSysteme.toLowerCase()).toContain('imposé');
+    expect(mandatSysteme).toContain('`sonnet`');
   });
 
-  test('☠ les alias cités sont ceux que le SDK accepte, pas des identifiants complets', () => {
-    // Le défaut « sonnet 5 » du 31/07 : une chaîne plausible, refusée à l'usage.
-    for (const alias of ['sonnet', 'opus', 'haiku']) {
-      expect(mandatSysteme).toContain(`\`${alias}\``);
-      expect(ALIAS_SDK).toContain(alias as (typeof ALIAS_SDK)[number]);
-    }
-    // Aucun identifiant complet ne doit apparaître dans la consigne Task.
+  test('☠ le cas `fork` est nommé comme refusé — il hériterait de l’Opus du lead', () => {
+    // C'est le seul trou du verrou (fork ignore `model`) : le lead doit savoir
+    // pourquoi son fork est refusé et quoi faire à la place.
+    expect(mandatSysteme).toContain('`fork`');
+    expect(mandatSysteme).toContain('refusé');
+    // Aucun identifiant complet ne doit apparaître dans la consigne Task — le
+    // champ `model` du Task attend un alias (`sonnet`), jamais `claude-sonnet-5`.
     expect(mandatSysteme).not.toContain('`claude-sonnet-5`');
     expect(mandatSysteme).not.toContain('`claude-opus-5`');
+    expect(ALIAS_SDK).toContain('sonnet');
   });
 
-  test('le critère donné est actionnable — pas « facile / difficile »', () => {
-    // Un modèle ne sait pas juger la difficulté d'une tâche qu'il n'a pas faite.
-    // Il sait dire si la décision est déjà prise. C'est ce qu'on lui demande.
-    expect(mandatSysteme).toContain('ai-je déjà tranché comment');
-  });
-
-  test('☠ la contrepartie de Sonnet est nommée, et la parade ne coûte rien', () => {
-    // Sans ça, la consigne se retourne : des sous-agents moins chers qui rendent
-    // du travail non vérifié coûtent plus qu'ils n'économisent.
+  test('☠ la contrepartie de Sonnet reste nommée, et la parade ne coûte rien', () => {
+    // Sonnet déclare plus souvent terminé un travail non vérifié : la preuve
+    // mécanique est ce qui l'attrape, sans réintroduire le coût d'un modèle cher.
     expect(mandatSysteme).toContain('PREUVE MÉCANIQUE');
     expect(mandatSysteme).toContain('aucun token');
-    // Et la relecture Opus reste le SECOND filet — sinon on réintroduit le coût
-    // qu'on vient de retirer.
-    expect(mandatSysteme).toContain('second filet');
   });
 
-  test('le dimensionnement survit à la compaction — il est dans le systemPrompt', () => {
+  test('☠ le rôle correctif du lead est présent, avec ses outils d’édition (A1b)', () => {
+    // La reprise d'un raté ne passe plus par un second sous-agent Opus (il n'y en
+    // a plus) mais par le lead lui-même — c'est un FILET, pas le mode normal.
+    expect(mandatSysteme).toContain('TON RÔLE CORRECTIF');
+    expect(mandatSysteme).toContain('Write');
+    expect(mandatSysteme).toContain('FILET');
+  });
+
+  test('le verrou survit à la compaction — il est dans le systemPrompt', () => {
     // `☠` Même raison que le rapport et le budget : le premier message NE survit
     // PAS à une compaction, et un lead compacté relance des sous-agents.
-    expect(mandatSysteme).toContain('DIMENSIONNE TES SOUS-AGENTS');
+    expect(mandatSysteme).toContain('TES SOUS-AGENTS TOURNENT SUR SONNET');
+    expect(mandatSysteme).toContain('TON RÔLE CORRECTIF');
   });
 });
 
@@ -156,39 +155,33 @@ describe('☠ tout outil NOMMÉ au lead doit exister réellement', () => {
   });
 });
 
-describe('ce que l’orchestrateur doit savoir pour arbitrer', () => {
-  test('☠ l’interdiction d’arbitrer a bien DISPARU', () => {
-    // Le texte exact qu'il citait le 01/08 en refusant de choisir.
+describe('ce que l’orchestrateur doit savoir : il n’arbitre PLUS le modèle (verrou A1)', () => {
+  test('☠ l’ancienne interdiction d’arbitrer n’est pas revenue', () => {
+    // Le texte exact qu'il citait le 01/08 en refusant de choisir — il ne doit
+    // pas reparaître, mais l'arbitrage qui l'avait remplacé disparaît à son tour.
     expect(MANDAT_ORCHESTRATEUR).not.toContain('laisse \\`modele\\` et \\`effort\\` vides');
     expect(MANDAT_ORCHESTRATEUR).not.toContain('ne choisis JAMAIS un modèle inférieur');
   });
 
-  test('il lui est demandé d’arbitrer, pas de renvoyer la question', () => {
-    // `☠` Insensible à la casse depuis le dégraissage du 07/08 : le mandat a
-    // perdu ses majuscules d'emphase, que le modèle recopiait dans ses réponses
-    // à Chris. Ce qui doit être protégé ici est la CONSIGNE — il choisit, il ne
-    // renvoie pas la question — jamais la typographie qui la portait.
-    expect(MANDAT_ORCHESTRATEUR).toMatch(/sans consigne, tu choisis/i);
-    expect(MANDAT_ORCHESTRATEUR).toMatch(/ne lui renvoie pas la question/i);
+  test('☠ on lui DIT que le modèle de l’équipe est verrouillé, et qu’il ne le choisit pas', () => {
+    // Sinon il propose des `modele`/`effort` que le dispatch ignore, et Chris
+    // croit piloter un réglage qui n'a plus d'effet.
+    expect(MANDAT_ORCHESTRATEUR).toMatch(/verrouill/i);
+    expect(MANDAT_ORCHESTRATEUR.toLowerCase()).toContain('tu n’as pas à le choisir'.toLowerCase());
   });
 
-  test('☠ les identifiants qu’il doit écrire passent le validateur du harness', () => {
-    // Côté `creer_equipe`, ce sont des identifiants COMPLETS qui sont attendus —
-    // l'inverse exact de l'outil Task. Deux surfaces, deux formes : c'est
-    // précisément le genre d'écart qui produit une équipe morte en deux secondes.
-    for (const id of ['claude-sonnet-5', 'claude-opus-5']) {
-      expect(MANDAT_ORCHESTRATEUR).toContain(id);
-      expect(normaliserModele(id)).not.toBeNull();
-    }
+  test('☠ la hiérarchie imposée est nommée : Opus 4.8 au lead, Sonnet aux exécuteurs', () => {
+    expect(MANDAT_ORCHESTRATEUR).toContain('Opus 4.8');
+    expect(MANDAT_ORCHESTRATEUR).toContain('Sonnet');
+    // Il n'écrit plus d'identifiant de modèle : le champ ne sert plus.
+    expect(MANDAT_ORCHESTRATEUR).not.toContain('claude-sonnet-5');
+    expect(MANDAT_ORCHESTRATEUR).not.toContain('claude-opus-5');
   });
 
-  test('une consigne humaine garde la priorité sur son arbitrage', () => {
-    expect(MANDAT_ORCHESTRATEUR).toContain('passe avant tout');
-  });
-
-  test('il doit annoncer son choix — sinon l’arbitrage devient invisible', () => {
-    // La carte d'autorisation est le seul endroit où Chris peut le corriger
-    // avant la dépense. `☠` Insensible à la casse, même raison que ci-dessus.
-    expect(MANDAT_ORCHESTRATEUR).toMatch(/annonce ton choix en une ligne/i);
+  test('☠ une demande humaine d’un autre modèle est renvoyée au bon niveau, pas fausse­ment appliquée', () => {
+    // Le verrou est dur : même Chris ne change pas le modèle d'équipe via
+    // `creer_equipe`. L'orchestrateur doit le dire, pas faire semblant.
+    expect(MANDAT_ORCHESTRATEUR).toMatch(/ne fais pas semblant de l’appliquer/i);
+    expect(MANDAT_ORCHESTRATEUR).toContain('master');
   });
 });
