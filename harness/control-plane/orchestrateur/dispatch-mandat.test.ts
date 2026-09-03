@@ -8,7 +8,6 @@ import {
   dispatcherMandat,
   ErreurPlafondEquipesProjetAtteint,
   ErreurProjetOccupe,
-  ErreurTeamDejaActive,
   PLAFOND_EQUIPES_PROJET_GIT_DEFAUT,
   resoudreTeamPourFeature,
   type DependancesDispatch,
@@ -91,7 +90,8 @@ describe('dispatch — une seule équipe active par projet (H-56)', () => {
 
 describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’autre', () => {
   /** Termine la mission pour libérer le projet (H-56) sans effacer son epoch. */
-  function terminer(missionId: string): void {
+  function terminer(missionId: string | null): void {
+    if (missionId === null) return;
     registre.etats.appliquerEtatHarness(missionId, 'terminee');
   }
 
@@ -115,8 +115,8 @@ describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’aut
     // toujours 1 et les deux workers portaient le MÊME epoch — précisément ce
     // que le fencing (M-11) doit rejeter.
     expect(epochsEnvoyes).toEqual([1, 2]);
-    expect(registre.missions.lire(un.missionId)?.epoch).toBe(1);
-    expect(registre.missions.lire(deux.missionId)?.epoch).toBe(2);
+    expect(registre.missions.lire(un.missionId!)?.epoch).toBe(1);
+    expect(registre.missions.lire(deux.missionId!)?.epoch).toBe(2);
   });
 
   test('☠ l’epoch ENVOYÉ au PC est celui ÉCRIT au registre — deux calculs divergeraient', async () => {
@@ -131,7 +131,7 @@ describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’aut
       } as never,
     };
     const r = await dispatcherMandat(PROPOSITION, d);
-    expect(registre.missions.lire(r.missionId)?.epoch).toBe(envoye);
+    expect(registre.missions.lire(r.missionId!)?.epoch).toBe(envoye);
   });
 
   test('un projet DIFFÉRENT repart à 1 — le fencing est par worktree, pas global', async () => {
@@ -139,13 +139,13 @@ describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’aut
     terminer(premier.missionId);
     const autreProposition = { ...(PROPOSITION as object), projet: '/mnt/projects/agora' } as never;
     const autre = await dispatcherMandat(autreProposition, deps());
-    expect(registre.missions.lire(autre.missionId)?.epoch).toBe(1);
+    expect(registre.missions.lire(autre.missionId!)?.epoch).toBe(1);
   });
 
   test('☠ l’epoch ne REDESCEND pas quand d’autres projets saturent la fenêtre de récence', async () => {
     const premier = await dispatcherMandat(PROPOSITION, deps());
     terminer(premier.missionId);
-    expect(registre.missions.lire(premier.missionId)?.epoch).toBe(1);
+    expect(registre.missions.lire(premier.missionId!)?.epoch).toBe(1);
 
     // `listerRecentes()` ne rend que les 200 dernières missions, TOUS projets
     // confondus, triées par activité. Passé ce seuil la mission ci-dessus en
@@ -164,7 +164,7 @@ describe('☠ l’epoch de fencing CROÎT réellement d’un dispatch à l’aut
     }
 
     const second = await dispatcherMandat(PROPOSITION, deps());
-    expect(registre.missions.lire(second.missionId)?.epoch).toBe(2);
+    expect(registre.missions.lire(second.missionId!)?.epoch).toBe(2);
   });
 });
 
@@ -305,7 +305,7 @@ describe('dispatch — H-56 conditionné au caractère git du projet (E3)', () =
   test('une mission terminée libère un emplacement du plafond git', async () => {
     const d = depsAvecVerdict(true, 1);
     const premiere = await dispatcherMandat(PROPOSITION, d);
-    registre.etats.appliquerEtatHarness(premiere.missionId, 'terminee');
+    registre.etats.appliquerEtatHarness(premiere.missionId!, 'terminee');
     const deuxieme = await dispatcherMandat(PROPOSITION, d);
     expect(deuxieme.missionId).toBeDefined();
   });
@@ -332,7 +332,7 @@ describe('dispatch — H-56 conditionné au caractère git du projet (E3)', () =
       } as never,
     };
     const r = await dispatcherMandat(PROPOSITION, d);
-    const mission = registre.missions.lire(r.missionId);
+    const mission = registre.missions.lire(r.missionId!);
     expect(mission?.worktree).toBe('/mnt/projects/.worktrees/equipe-xyz');
     expect(mission?.branche).toBe('equipe/xyz');
   });
@@ -343,7 +343,7 @@ describe('dispatch — H-56 conditionné au caractère git du projet (E3)', () =
       demarreur: { demarrer: async () => ({ detail: 'ok' }) } as never,
     };
     const r = await dispatcherMandat(PROPOSITION, d);
-    const mission = registre.missions.lire(r.missionId);
+    const mission = registre.missions.lire(r.missionId!);
     // `definirWorktree` n'est PAS appelé — le worktree reste celui composé à la
     // création (le `cwd` provisoire, ici le projet lui-même, mode dégradé).
     expect(mission?.worktree).toBe('/mnt/projects/vela');
@@ -470,7 +470,7 @@ describe('☠ le modèle du lead est un VERROU au dispatch, pas une entrée hér
     // validation est la normalisation, qu'opus-4-8 franchit. Le dispatch aboutit.
     const r = await dispatcherMandat({ ...(PROPOSITION as object) } as never, deps());
     expect(r.missionId).toBeDefined();
-    expect(registre.missions.lire(r.missionId)?.modeleResolu).toBe('claude-opus-4-8');
+    expect(registre.missions.lire(r.missionId!)?.modeleResolu).toBe('claude-opus-4-8');
   });
 });
 
@@ -566,9 +566,9 @@ describe('☠ budget par défaut d’équipe = BUDGET_EQUIPE_DEFAUT_USD (50 $), 
 });
 
 describe('resoudreTeamPourFeature — cycle de vie amont (axe B, B1)', () => {
-  test('inexistante → CRÉATION : nouvelle team active, reveil=false', () => {
+  test('inexistante → CRÉATION : nouvelle team active, statut=creee', () => {
     const res = resoudreTeamPourFeature(registre, 'vela', 'frontend', 1000);
-    expect(res.reveil).toBe(false);
+    expect(res.statut).toBe('creee');
     expect(res.team.etat).toBe('active');
     expect(res.team.projet).toBe('vela');
     expect(res.team.domaine).toBe('frontend');
@@ -576,30 +576,114 @@ describe('resoudreTeamPourFeature — cycle de vie amont (axe B, B1)', () => {
     expect(registre.teams.lireVivantePourDomaine('vela', 'frontend')?.id).toBe(res.team.id);
   });
 
-  test('☠ dormante → RÉVEIL : worktree RÉUTILISÉ, reveil=true', () => {
+  test('☠ dormante → RÉVEIL : worktree RÉUTILISÉ, statut=reveillee', () => {
     const creee = registre.teams.creer({ id: 't-dorm', projet: 'vela', domaine: 'frontend' }, 500);
+    void creee;
     registre.teams.activer('t-dorm', { worktree: '/wt/t-dorm', branche: 'equipe/t-dorm' }, 500);
     registre.teams.endormir('t-dorm', 800);
 
     const res = resoudreTeamPourFeature(registre, 'vela', 'frontend', 2000);
-    expect(res.reveil).toBe(true);
+    expect(res.statut).toBe('reveillee');
     expect(res.team.id).toBe('t-dorm');
     expect(res.team.etat).toBe('active');
     expect(res.team.worktree).toBe('/wt/t-dorm'); // réutilisé, jamais réalloué
   });
 
-  test('☠ active → REFUS NOMMÉ (la file est B2)', () => {
+  test('☠ active → OCCUPEE (plus de refus dur, la feature ira en file — B2)', () => {
     registre.teams.creer({ id: 't-act', projet: 'vela', domaine: 'frontend' }, 500);
     registre.teams.activer('t-act', {}, 500);
-    let capture: unknown;
-    try {
-      resoudreTeamPourFeature(registre, 'vela', 'frontend', 1000);
-    } catch (e) {
-      capture = e;
-    }
-    expect(capture).toBeInstanceOf(ErreurTeamDejaActive);
-    expect((capture as Error).message).toContain('frontend');
-    expect((capture as Error).message).toContain('B2');
+    // B-b : plus d'exception. La résolution CONSTATE l'occupation sans rien écrire.
+    const res = resoudreTeamPourFeature(registre, 'vela', 'frontend', 1000);
+    expect(res.statut).toBe('occupee');
+    expect(res.team.id).toBe('t-act');
+    // Aucune seconde team n'a été créée : l'index unique + le constat le garantissent.
+    expect(registre.teams.listerVivantesDuProjet('vela').length).toBe(1);
+  });
+});
+
+/**
+ * `☠` Câblage vif de l'axe B (lot B-b) : un dispatch portant un `domaine` résout,
+ * active et POSE une team ; l'occupation met la feature en file plutôt que
+ * d'échouer ; un démarrage raté rend la team dormante. Le régime hors team
+ * (proposition sans domaine) reste rigoureusement celui d'avant.
+ */
+describe('dispatch — câblage vif d’une team persistante (axe B, B-b)', () => {
+  /** Team dispatch = projet git (worktrees) : `verifierProjet` rend `estGit: true`. */
+  function depsTeam(): DependancesDispatch {
+    return { ...deps(), verifierProjet: async (): Promise<VerificationProjet> => ({ present: true, estGit: true }) };
+  }
+
+  /** Capture ce qui part RÉELLEMENT vers le PC (le `teamId` transportable). */
+  async function dispatcherTeam(
+    domaine: string | null,
+    id = 'prop-team',
+  ): Promise<{ readonly missionId: string | null; readonly enFile?: string; readonly teamIdTransportable: string | undefined }> {
+    let teamIdTransportable: string | undefined;
+    const d: DependancesDispatch = {
+      ...depsTeam(),
+      demarreur: {
+        demarrer: async (dem: { teamId?: string }) => {
+          teamIdTransportable = dem.teamId;
+          return { detail: 'ok' };
+        },
+      } as never,
+    };
+    const proposition = { ...(PROPOSITION as object), domaine, id } as never;
+    const res = await dispatcherMandat(proposition, d);
+    return { missionId: res.missionId, enFile: res.enFile, teamIdTransportable };
+  }
+
+  test('☠ un dispatch avec domaine ACTIVE la team et pose teamId sur la mission ET le transportable', async () => {
+    const res = await dispatcherTeam('frontend');
+    const team = registre.teams.lireVivantePourDomaine('/mnt/projects/vela', 'frontend');
+    expect(team?.etat).toBe('active');
+    // teamId posé sur la mission (l'activation) ...
+    expect(registre.missions.lire(res.missionId!)?.teamId).toBe(team!.id);
+    // ... ET envoyé au PC comme clé du worktree persistant.
+    expect(res.teamIdTransportable).toBe(team!.id);
+  });
+
+  test('sans domaine, aucune team n’est créée — régime hors team inchangé', async () => {
+    const res = await dispatcherTeam(null);
+    expect(registre.teams.listerVivantesDuProjet('/mnt/projects/vela').length).toBe(0);
+    expect(registre.missions.lire(res.missionId!)?.teamId).toBeNull();
+    expect(res.teamIdTransportable).toBeUndefined();
+  });
+
+  test('☠ team déjà active → la feature entre EN FILE (B2), aucune mission créée (plus de refus dur)', async () => {
+    const premier = await dispatcherTeam('frontend', 'prop-1');
+    expect(premier.missionId).not.toBeNull();
+    const avant = registre.missions.listerActives().length;
+
+    // Seconde proposition sur le MÊME domaine, team encore active.
+    const seconde = { ...(PROPOSITION as object), domaine: 'frontend', id: 'prop-2' } as never;
+    const res2 = await dispatcherMandat(seconde, depsTeam());
+
+    // Aucune mission : la feature attend son tour.
+    expect(res2.missionId).toBeNull();
+    expect(res2.enFile).toBeDefined();
+    expect(registre.missions.listerActives().length).toBe(avant);
+    // Elle est en file sur (projet, domaine), reliée à SA proposition.
+    const enFile = registre.featureQueue.premiereEnAttente('/mnt/projects/vela', 'frontend');
+    expect(enFile?.propositionId).toBe('prop-2');
+    expect(enFile?.id).toBe(res2.enFile);
+  });
+
+  test('☠ rollback : un démarrage qui échoue REND la team dormante, jamais laissée active', async () => {
+    const d: DependancesDispatch = {
+      ...depsTeam(),
+      demarreur: {
+        demarrer: async () => {
+          throw new Error('PC injoignable');
+        },
+      } as never,
+    };
+    const proposition = { ...(PROPOSITION as object), domaine: 'frontend', id: 'prop-r' } as never;
+    await dispatcherMandat(proposition, d).catch(() => undefined);
+    const team = registre.teams.lireVivantePourDomaine('/mnt/projects/vela', 'frontend');
+    // La team existe (créée) mais est DORMANTE : son domaine reste réveillable,
+    // jamais bloqué « active » par une activation qui n'a jamais démarré.
+    expect(team?.etat).toBe('dormante');
   });
 });
 

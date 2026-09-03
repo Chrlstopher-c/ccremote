@@ -330,8 +330,23 @@ export class ClientSuperviseurPc implements InventairePc, ReinitialisateurSessio
     };
   }
 
-  async arreter(missionId: string): Promise<void> {
-    await this.#appeler({ type: 'arreter_worker', missionId });
+  async arreter(missionId: string, options?: { readonly conserverWorktree?: boolean }): Promise<void> {
+    // `☠` `conserverWorktree` (axe B) : à la fin d'une activation de team vivante,
+    // le worktree est mis en veille côté PC au lieu d'être libéré — sans ce champ,
+    // l'ordre d'endormir venu du Pi libérerait le worktree (comportement d'avant).
+    await this.#appeler({ type: 'arreter_worker', missionId, conserverWorktree: options?.conserverWorktree === true });
+  }
+
+  /**
+   * Libère le worktree d'une team DORMANTE (axe B) — satisfait
+   * `LiberateurWorktreeTeam`. `☠` Route la libération vers le PC par le canal
+   * transportable existant, JAMAIS un import direct control-plane ↔ superviseur
+   * (frontière A↔B). Best-effort assumé : un refus du PC (superviseur sans
+   * libération câblée) est journalisé par le canal ; la dissolution acte l'état
+   * côté registre de toute façon (voir `demantelerUneTeam`).
+   */
+  async libererWorktree(teamId: string, worktree: string | null): Promise<void> {
+    await this.#appeler({ type: 'liberer_worktree_team', teamId, worktree });
   }
 
   async relancer(missionId: string, sessionId: string): Promise<{ readonly dejaVivant: boolean }> {

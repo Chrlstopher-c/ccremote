@@ -34,11 +34,14 @@ import {
 } from './outils-inspection.ts';
 import {
   arreterEquipe,
+  dissoudreTeam,
   envoyerAEquipe,
   interrompreEquipe,
   proposerCreationEquipe,
   relancerEquipe,
   retirerMandat,
+  type LecteurDomainesEquipe,
+  type LiberateurWorktreeTeam,
 } from './outils-cycle-vie.ts';
 import { definirBudget } from './outils-budget.ts';
 import {
@@ -116,6 +119,19 @@ export interface DependancesServeurControle {
    * lieu de rendre une proposition que personne ne pourrait autoriser.
    */
   readonly propositions?: EnregistreurProposition;
+  /**
+   * Lecture des domaines de team déclarés par projet (D3, axe B). `☠` Absent ⇒
+   * `creer_equipe` NE VALIDE PAS le domaine (aucune source fiable de la config
+   * projet ici) : il passe tel quel jusqu'à la proposition. Fourni ⇒ un domaine
+   * hors `domainesEquipe` est refusé avant écriture, avec la liste des acceptés.
+   */
+  readonly domainesEquipe?: LecteurDomainesEquipe;
+  /**
+   * Libération du worktree d'une team (axe B) — routée vers le PC. `☠` Absent ⇒
+   * `dissoudre_team` acte quand même `demantelee` au registre (worktree orphelin
+   * retrouvable, team jamais bloquée) ; fourni ⇒ le worktree est réellement libéré.
+   */
+  readonly liberateurWorktreeTeam?: LiberateurWorktreeTeam;
   /**
    * Exploration des projets DU PC. `☠` Sans elle, `lister_projets` lit le
    * répertoire local du Pi et rend une liste vide : l'orchestrateur en conclut
@@ -448,8 +464,17 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             'Liste NOMMÉE de choses adjacentes que l’équipe peut corriger si elle les rencontre. ' +
               'Autorise, ne remplace jamais le périmètre : celui-ci l’emporte en cas de recouvrement.',
           ),
+        domaine: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            'Domaine de team persistante (axe B). DOIT appartenir aux « domainesEquipe » déclarés du ' +
+              'projet (liste fermée ≤ 3) — un domaine hors liste est REFUSÉ avant écriture, avec la liste ' +
+              'des domaines acceptés. Absent ⇒ équipe hors team (comportement classique).',
+          ),
       },
-      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd, campagne, latitude }) =>
+      async ({ projet, objectif, critereArret, perimetre, acces, modele, effort, budgetMaxUsd, campagne, latitude, domaine }) =>
         protege('creer_equipe', () =>
           proposerCreationEquipe(
             projet,
@@ -466,6 +491,8 @@ function outilsCycleVie(deps: DependancesServeurControle) {
             budgetMaxUsd,
             campagne,
             latitude,
+            domaine,
+            deps.domainesEquipe,
           ),
         ),
     ),
@@ -479,6 +506,16 @@ function outilsCycleVie(deps: DependancesServeurControle) {
       { mandatId: z.string().describe('Identifiant du mandat proposé (la ref rendue par creer_equipe).') },
       async ({ mandatId }) =>
         protege('retirer_mandat', async () => retirerMandat(deps.registre, deps.conversationId ?? null, mandatId)),
+    ),
+    tool(
+      'dissoudre_team',
+      'Démantèle une team persistante (axe B) : libère son worktree et rend son ' +
+        '(projet, domaine) de nouveau libre. `☠` Terminal — la team ne se réveillera plus. ' +
+        'À utiliser quand un domaine n’a plus lieu d’être ; sinon, laisse le TTL (7 j d’inactivité) ' +
+        'la démanteler tout seul.',
+      { teamId: z.string().describe('Identifiant de la team à dissoudre.') },
+      async ({ teamId }) =>
+        protege('dissoudre_team', () => dissoudreTeam(deps.registre, deps.liberateurWorktreeTeam, teamId)),
     ),
     tool(
       'envoyer_a_equipe',

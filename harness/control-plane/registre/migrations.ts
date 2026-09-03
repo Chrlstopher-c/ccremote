@@ -1097,6 +1097,63 @@ ALTER TABLE mission ADD COLUMN team_id TEXT;
 CREATE INDEX idx_mission_team ON mission(team_id) WHERE team_id IS NOT NULL;
 `;
 
+/**
+ * Migration 36 — file de features et domaine porté par la proposition (axe B, lot B-b).
+ *
+ * `☠` `feature_queue` matérialise B2 : quand `resoudreTeamPourFeature` trouve une
+ * team DÉJÀ `active` sur un (projet, domaine), la feature n'échoue plus (refus dur
+ * de B-a) — elle ENTRE EN FILE. À la fin réelle de l'activation en cours, la
+ * première `en_attente` du même (projet, domaine) est dépilée et repasse par le
+ * MÊME chemin `dispatcherMandat` (H-61) — automatiquement SOUS FENÊTRE D'AUTONOMIE
+ * (D4), sinon elle attend un clic humain.
+ *
+ * `☠` `etat` est un ÉNUMÉRÉ à cinq valeurs, jamais un booléen : `en_attente`
+ * (dans la file) → `assignee` (choisie pour dépilage, un dispatch va partir) →
+ * `en_cours` (activation lancée) → `terminee` / `annulee` (terminales). Distinguer
+ * `assignee` d'`en_cours` évite qu'un second passage de dépilage reprenne une
+ * feature déjà en cours de dispatch (fenêtre entre le choix et le démarrage réel).
+ *
+ * `☠` `proposition_id` relie l'entrée de file au mandat déjà rédigé et autorisé :
+ * le dépilage RELIT la proposition et la re-dispatche telle quelle, plutôt que de
+ * dupliquer objectif/périmètre/budget dans la file (une seule source de vérité du
+ * mandat). NULLABLE et sans clé étrangère dure : une proposition purgée ne doit
+ * pas faire disparaître la trace de file (best-effort au dépilage : entrée sans
+ * proposition lisible → annulée, jamais un crash).
+ *
+ * `☠` L'index partiel `WHERE etat = 'en_attente'` borne la lecture chaude (« quelle
+ * est la prochaine feature de ce domaine ? ») au nombre de features EN ATTENTE,
+ * jamais à l'historique — même dimensionnement que `idx_mission_actives`.
+ *
+ * `proposition.domaine` (D3) : le domaine choisi par l'orchestrateur à la
+ * proposition, validé contre `ConfigProjet.domainesEquipe` AVANT écriture. Porté
+ * par la proposition parce que c'est elle qui survit au tour et se fait autoriser
+ * plus tard — le dispatch en a besoin pour résoudre la team. NULLABLE : une
+ * proposition hors team (projet sans `domainesEquipe`) n'en porte pas, régime
+ * neutre inchangé. ADDITIF pur, même patron que `latitude` (migration 33).
+ */
+const MIGRATION_36 = `
+ALTER TABLE proposition ADD COLUMN domaine TEXT;
+
+CREATE TABLE feature_queue (
+  id                TEXT PRIMARY KEY,
+  projet            TEXT NOT NULL,
+  domaine           TEXT NOT NULL,
+  objectif          TEXT NOT NULL,
+  proposition_id    TEXT,
+  etat              TEXT NOT NULL DEFAULT 'en_attente'
+                      CHECK (etat IN ('en_attente', 'assignee', 'en_cours', 'terminee', 'annulee')),
+  team_id           TEXT,
+  cree_a            INTEGER NOT NULL,
+  prise_en_charge_a INTEGER
+) STRICT;
+
+CREATE INDEX idx_feature_queue_attente
+  ON feature_queue(projet, domaine, cree_a)
+  WHERE etat = 'en_attente';
+
+CREATE INDEX idx_feature_queue_team ON feature_queue(team_id) WHERE team_id IS NOT NULL;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -1133,6 +1190,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 33, nom: 'latitude-proposition', sql: MIGRATION_33 },
   { version: 34, nom: 'preference-compte', sql: MIGRATION_34 },
   { version: 35, nom: 'teams-persistantes', sql: MIGRATION_35 },
+  { version: 36, nom: 'file-features-et-domaine-proposition', sql: MIGRATION_36 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

@@ -65,6 +65,11 @@ interface Compteurs {
   reinitialiser: number;
   inventaire: number;
   arretUrgence: number;
+  libererWorktreeTeam: number;
+  /** Dernier `conserverWorktree` reçu par `arreter` — la preuve que l'option traverse le canal (axe B). */
+  dernierConserverWorktree: boolean | null;
+  /** Dernier (teamId, worktree) reçu par `libererWorktreeTeam`. */
+  dernierLiberer: { teamId: string; worktree: string | null } | null;
 }
 
 /**
@@ -81,6 +86,9 @@ function superviseurFactice(avecArretUrgence = true): PortSuperviseurControle & 
     reinitialiser: 0,
     inventaire: 0,
     arretUrgence: 0,
+    libererWorktreeTeam: 0,
+    dernierConserverWorktree: null,
+    dernierLiberer: null,
   };
   const base: PortSuperviseurControle & { compteurs: Compteurs } = {
     compteurs,
@@ -92,8 +100,13 @@ function superviseurFactice(avecArretUrgence = true): PortSuperviseurControle & 
       compteurs.demarrer += 1;
       return { sessionId: 's1' };
     },
-    async arreter(_missionId: string) {
+    async arreter(_missionId: string, options?: { readonly conserverWorktree?: boolean }) {
       compteurs.arreter += 1;
+      compteurs.dernierConserverWorktree = options?.conserverWorktree ?? false;
+    },
+    async libererWorktreeTeam(teamId: string, worktree: string | null) {
+      compteurs.libererWorktreeTeam += 1;
+      compteurs.dernierLiberer = { teamId, worktree };
     },
     tuerSansPreavis(_sessionId: string) {
       compteurs.tuerSansPreavis += 1;
@@ -151,6 +164,60 @@ describe('demarrer_worker relaie le worktree alloué (E2)', () => {
     });
 
     expect(reponse.worktree).toBeUndefined();
+  });
+});
+
+/**
+ * `☠` Axe B (lot B-b) : deux ordres nouveaux traversent le canal — l'option
+ * `conserverWorktree` d'`arreter_worker` (mise en veille du worktree à la fin
+ * d'une activation de team vivante) et `liberer_worktree_team` (libération du
+ * worktree d'une team dormante, `LiberateurWorktreeTeam` routé vers le PC). Preuve
+ * que les DONNÉES traversent réellement, jamais un import direct A↔B.
+ */
+describe('axe B — conserverWorktree et liberer_worktree_team traversent le canal', () => {
+  test('arreter_worker { conserverWorktree: true } transmet l’option au superviseur', async () => {
+    const superviseur = superviseurFactice();
+    const canal = new CanalControle(superviseur);
+    const reponse = await canal.traiter({
+      opId: 'op-veille',
+      operation: { type: 'arreter_worker', missionId: 'mission-1', conserverWorktree: true },
+    });
+    expect(reponse.effet).toBe('applique');
+    expect(superviseur.compteurs.dernierConserverWorktree).toBe(true);
+    expect(reponse.detail).toContain('veille');
+  });
+
+  test('arreter_worker sans l’option ⇒ libération (comportement d’avant, conserverWorktree=false)', async () => {
+    const superviseur = superviseurFactice();
+    const canal = new CanalControle(superviseur);
+    await canal.traiter({ opId: 'op-sans', operation: { type: 'arreter_worker', missionId: 'mission-1' } });
+    expect(superviseur.compteurs.dernierConserverWorktree).toBe(false);
+  });
+
+  test('☠ liberer_worktree_team route (teamId, worktree) vers le port du superviseur', async () => {
+    const superviseur = superviseurFactice();
+    const canal = new CanalControle(superviseur);
+    const reponse = await canal.traiter({
+      opId: 'op-lib',
+      operation: { type: 'liberer_worktree_team', teamId: 'team-1', worktree: '/wt/team-1' },
+    });
+    expect(reponse.effet).toBe('applique');
+    expect(superviseur.compteurs.libererWorktreeTeam).toBe(1);
+    expect(superviseur.compteurs.dernierLiberer).toEqual({ teamId: 'team-1', worktree: '/wt/team-1' });
+  });
+
+  test('liberer_worktree_team REFUSÉ si le superviseur ne l’implémente pas (jamais un faux succès)', async () => {
+    const base = superviseurFactice();
+    // Superviseur sans le port : on retire `libererWorktreeTeam`.
+    const { libererWorktreeTeam: _retire, ...sansPort } = base;
+    void _retire;
+    const canal = new CanalControle(sansPort as typeof base);
+    const reponse = await canal.traiter({
+      opId: 'op-lib-refus',
+      operation: { type: 'liberer_worktree_team', teamId: 'team-1', worktree: null },
+    });
+    expect(reponse.ok).toBe(false);
+    expect(reponse.effet).toBe('refuse');
   });
 });
 

@@ -118,11 +118,13 @@ describe('surface d’outils (A.2.2)', () => {
   //     montrer. Paginé, filtrable par type, rend la FIN du transcript par défaut
   //     — le geste utile en un seul appel, sans pagination manuelle depuis le
   //     début.
-  test('expose exactement les 30 outils spécifiés — ni plus, ni moins', () => {
+  test('expose exactement les 31 outils spécifiés — ni plus, ni moins', () => {
     const noms = construireOutilsControle(deps).map((o) => o.name);
     expect(noms.sort()).toEqual(
       [
         'retirer_mandat',
+        // `dissoudre_team` (axe B) — démantèlement manuel d'une team persistante.
+        'dissoudre_team',
         'lister_equipes',
         'etat_equipe',
         'rapport_equipe',

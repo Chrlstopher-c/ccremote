@@ -94,8 +94,15 @@ export interface DependancesDispatch {
 }
 
 export interface ResultatDispatch {
-  readonly missionId: string;
+  /** `null` quand la feature est MISE EN FILE (B2) au lieu d'être dispatchée — voir `enFile`. */
+  readonly missionId: string | null;
   readonly detail: string;
+  /**
+   * Identifiant de l'entrée `feature_queue` créée (B2) quand la team ciblée était
+   * déjà `active` : la feature attend son tour, aucune mission n'a démarré.
+   * `missionId` est alors `null`. Absent ⇒ un dispatch réel a eu lieu.
+   */
+  readonly enFile?: string;
 }
 
 /**
@@ -534,47 +541,29 @@ export function composerPromptInitial(p: Proposition, acces: AccesMandat): strin
 }
 
 /**
- * `☠` Le mandat vise déjà une team ACTIVE, et la mise en file (B2) n'est pas
- * encore ce lot. Erreur NOMMÉE, levée AVANT toute écriture, et actionnable pour
- * un LLM : elle dit pourquoi c'est refusé et ce qui reste possible, plutôt qu'un
- * 500 anonyme. Au lot suivant, ce refus devient une mise en file.
- */
-export class ErreurTeamDejaActive extends Error {
-  constructor(
-    readonly teamId: string,
-    readonly projet: string,
-    readonly domaine: string,
-  ) {
-    super(
-      `une équipe est déjà active sur le domaine « ${domaine} » du projet « ${projet} » ` +
-        `(team ${teamId.slice(0, 8)}). La mise en file des features sur une team occupée est le lot ` +
-        'suivant (B2) : en attendant, attends la fin de l’activation en cours, ou vise un autre domaine.',
-    );
-    this.name = 'ErreurTeamDejaActive';
-  }
-}
-
-/**
- * Résolution d'une team pour une feature (axe B, B1) — l'étape AMONT du dispatch.
+ * Résolution d'une team pour une feature (axe B) — l'étape AMONT du dispatch.
  *
- * `☠` Trois issues, une seule écriture de décision :
- *  - **inexistante** → CRÉATION : une team `dormante` neuve est créée puis activée
- *    (worktree/compte seront renseignés au dispatch, après l'allocation PC) ;
- *  - **dormante** → RÉVEIL : la team existante est réactivée, son `worktree`/
- *    `branche` PRÉSERVÉS (réutilisés, pas réalloués) — `activer` n'écrase jamais
- *    avec `null` ;
- *  - **active** → REFUS NOMMÉ (`ErreurTeamDejaActive`) : la file est B2.
+ * `☠` Trois issues DISTINCTES portées par `statut`, jamais une exception pour le
+ * cas `occupee` (B-b) : le control de flux du dispatch en dépend, et une exception
+ * pour un cas nominal (« la team travaille, mets en file ») coûterait un
+ * try/catch au seul appelant qui compte.
+ *  - **`creee`** : team inexistante → une team `dormante` neuve est créée puis
+ *    activée (worktree/compte renseignés au dispatch, après l'allocation PC) ;
+ *  - **`reveillee`** : team `dormante` → réactivée, son `worktree`/`branche`
+ *    PRÉSERVÉS (réutilisés, pas réalloués) — `activer` n'écrase jamais avec `null` ;
+ *  - **`occupee`** : team déjà `active` → AUCUNE écriture, la feature entre en file
+ *    (B2). C'est le dispatch qui enfile, pas cette fonction — elle ne fait que
+ *    constater l'occupation sans toucher au registre.
  *
  * `☠` L'unicité `(projet, domaine)` est portée par l'index du registre : deux
  * résolutions concurrentes du même domaine ne peuvent pas créer deux teams. Le
  * plafond « ≤ 3 teams vivantes/projet » découle de la liste fermée
- * `ConfigProjet.domainesEquipe` (validée à la proposition, B2).
+ * `ConfigProjet.domainesEquipe` (validée à la proposition, D3).
  */
-export interface ResolutionTeam {
-  readonly team: Team;
-  /** `true` : team dormante réveillée (worktree réutilisé). `false` : team créée. */
-  readonly reveil: boolean;
-}
+export type ResolutionTeam =
+  | { readonly statut: 'creee'; readonly team: Team }
+  | { readonly statut: 'reveillee'; readonly team: Team }
+  | { readonly statut: 'occupee'; readonly team: Team };
 
 export function resoudreTeamPourFeature(
   registre: Registre,
@@ -586,14 +575,16 @@ export function resoudreTeamPourFeature(
   if (existante === null) {
     const creee = registre.teams.creer({ id: randomUUID(), projet, domaine }, maintenant);
     const active = registre.teams.activer(creee.id, {}, maintenant);
-    return { team: active, reveil: false };
+    return { statut: 'creee', team: active };
   }
   if (existante.etat === 'active') {
-    throw new ErreurTeamDejaActive(existante.id, projet, domaine);
+    // `☠` B2 : plus de refus dur. La team travaille, la feature attendra son tour
+    // en file — le dispatch décide de l'enfilage, ici on ne fait que le constater.
+    return { statut: 'occupee', team: existante };
   }
   // dormante → réveil : worktree/branche réutilisés (COALESCE dans `activer`).
   const reveillee = registre.teams.activer(existante.id, {}, maintenant);
-  return { team: reveillee, reveil: true };
+  return { statut: 'reveillee', team: reveillee };
 }
 
 /**
@@ -831,6 +822,51 @@ function refusFauteDeCompte(nbComptes: number, preference: PreferenceAppliquee):
   return `les ${nbComptes} comptes connus sont saturés — attends une remise à zéro de fenêtre avant de relancer`;
 }
 
+/**
+ * Étape amont team du dispatch (axe B, B-b). `☠` Trois issues :
+ *  - proposition SANS domaine → `{ teamId: null, resolution: null }` : régime hors
+ *    team, le dispatch reste celui d'avant l'axe B ;
+ *  - team résolue (créée/réveillée, désormais `active`) → `{ teamId, resolution }` ;
+ *  - team déjà `active` → `{ enFile }` : la feature entre en file (B2), le dispatch
+ *    RENVOIE cette issue et n'inscrit AUCUNE mission.
+ *
+ * `☠` Appelée après les gardes H-56/plafond (défense) mais avant la première
+ * écriture de mission : dans le régime nominal (≤ 3 domaines, plafond 4) une team
+ * active n'atteint jamais le plafond, donc `occupee` enfile toujours au lieu de buter.
+ */
+type PreDispatchTeam =
+  | { readonly enFile: ResultatDispatch }
+  | { readonly teamId: string | null; readonly resolution: ResolutionTeam | null };
+
+function resoudreTeamOuEnfiler(p: Proposition, registre: Registre): PreDispatchTeam {
+  const domaine = p.domaine ?? null;
+  if (domaine === null || domaine.trim().length === 0) return { teamId: null, resolution: null };
+  const resolution = resoudreTeamPourFeature(registre, p.projet, domaine);
+  if (resolution.statut !== 'occupee') return { teamId: resolution.team.id, resolution };
+  const featureId = randomUUID();
+  registre.featureQueue.enfiler({
+    id: featureId,
+    projet: p.projet,
+    domaine,
+    objectif: p.objectif,
+    propositionId: p.id,
+  });
+  log.info(
+    { featureId, projet: p.projet, domaine, teamId: resolution.team.id },
+    'team déjà active — feature mise en file (B2), aucun dispatch',
+  );
+  return {
+    enFile: {
+      missionId: null,
+      enFile: featureId,
+      detail:
+        `équipe déjà active sur le domaine « ${domaine} » — cette feature entre en file (B2) et ` +
+        'démarrera à la fin de l’activation en cours (automatiquement sous fenêtre ' +
+        'd’autonomie, sinon au prochain clic).',
+    },
+  };
+}
+
 export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch): Promise<ResultatDispatch> {
   const compte = choisirCompteEquipe(deps.registre);
   // `☠ C2` — AVANT la première écriture (code-standards) : le compte que la rotation vient
@@ -888,6 +924,14 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       throw new ErreurPlafondEquipesProjetAtteint(p.projet, actives.length, plafond);
     }
   }
+
+  // `☠` RÉSOLUTION DE LA TEAM (axe B, B-b) — AVANT la création de mission, pour
+  // que le cas `occupee` renvoie SANS rien inscrire (ni lot, ni mission) : la
+  // feature entre en file et attend son tour, aucune équipe ne démarre.
+  const preTeam = resoudreTeamOuEnfiler(p, deps.registre);
+  if ('enFile' in preTeam) return preTeam.enFile;
+  const teamId = preTeam.teamId;
+  const resolutionTeam = preTeam.resolution;
 
   const missionId = randomUUID();
   const sessionId = randomUUID();
@@ -949,12 +993,28 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
     machine: deps.machine ?? null,
     // `☠` Conditionne H-56 (mono-équipe non-git vs plafond git) — voir migration 25.
     projetEstGit: estGit,
+    // `☠` La mission devient une ACTIVATION de cette team (axe B) : `null` en régime
+    // hors team, inchangé. C'est ce chaînon qui relie l'activation à l'équipe
+    // persistante, et qui permettra à la fin d'activation d'endormir la bonne team.
+    teamId,
   });
 
   const demande: DemandeDemarrageTransportable = {
     missionId,
     epoch,
-    promptInitial: composerPromptInitial(p, acces),
+    // `☠` CLÉ DU WORKTREE PERSISTANT (axe B) : le PC revendique le worktree par
+    // `teamId`, pas par `missionId` — c'est ce qui fait qu'une activation ultérieure
+    // de la MÊME team réutilise le worktree au lieu d'en allouer un neuf. `undefined`
+    // en régime hors team : le PC retombe sur `missionId`, comportement d'avant.
+    ...(teamId === null ? {} : { teamId }),
+    // `☠` RÉVEIL vs premier démarrage : une team `reveillee` reprend un worktree
+    // déjà en place — pas de re-exploration, on injecte le résumé de reprise (D2)
+    // dans le message JETABLE. `composerPromptReveil` retombe sur l'amorce standard
+    // tant que le résumé est vide (le hook `PreCompact` qui le remplira est B3).
+    promptInitial:
+      resolutionTeam !== null && resolutionTeam.statut === 'reveillee'
+        ? composerPromptReveil(p, resolutionTeam.team, acces)
+        : composerPromptInitial(p, acces),
     parametres: {
       sessionId,
       cwd,
@@ -1001,6 +1061,23 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       raisonTerminale: 'demarrage_refuse',
       motif,
     });
+    // `☠` ROLLBACK DE LA TEAM (axe B) : la résolution amont l'a passée `active`
+    // (créée ou réveillée), mais aucun worker ne tourne — la laisser `active`
+    // bloquerait son domaine pour toujours et empêcherait tout réveil ultérieur
+    // (`resoudreTeamPourFeature` la lirait `occupee` et enfilerait indéfiniment).
+    // On la RENDORT : `dormante` est l'état cohérent d'une team sans activation en
+    // cours, réveillable au prochain dispatch. Best-effort — un échec ici est
+    // journalisé et ne masque jamais l'erreur de démarrage relancée plus bas.
+    if (resolutionTeam !== null) {
+      try {
+        deps.registre.teams.endormir(resolutionTeam.team.id);
+      } catch (erreurEndormissement) {
+        log.error(
+          { err: erreurEndormissement, teamId: resolutionTeam.team.id, missionId },
+          'endormissement de la team au rollback en échec — le rollback continue',
+        );
+      }
+    }
     log.error({ err: erreur, missionId, projet: p.projet }, 'démarrage refusé — mission close, projet libéré');
     // `☠` LE câblage qui manquait (18/08) : sans lui, ce chemin est le seul
     // échec d'équipe qui ne produit AUCUN événement dans la conversation — voir

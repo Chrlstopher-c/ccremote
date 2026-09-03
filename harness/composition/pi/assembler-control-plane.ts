@@ -55,6 +55,7 @@ import {
 } from '../../control-plane/autonomie/index.ts';
 import { creerServeurMcpControle } from '../../control-plane/orchestrateur/mcp-controle/index.ts';
 import type { CompacteurContexte } from '../../control-plane/orchestrateur/mcp-controle/serveur.ts';
+import type { LiberateurWorktreeTeam } from '../../control-plane/orchestrateur/mcp-controle/outils-cycle-vie.ts';
 import type { McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import {
   demarrerOrchestrateur,
@@ -132,6 +133,8 @@ export function construireCreationProposition(
     modele: mandat.modele ?? null,
     effort: mandat.effort ?? null,
     latitude: mandat.latitude ?? null,
+    // D3 : le domaine validé (axe B) — `null` en régime hors team.
+    domaine: mandat.domaine ?? null,
   };
 }
 
@@ -330,6 +333,22 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   };
 
   /**
+   * Libération du worktree d'une team DORMANTE (axe B, point 5) — routée vers le
+   * PC par le canal transportable (`ClientSuperviseurPc.libererWorktree`), JAMAIS
+   * un import direct control-plane ↔ superviseur. `☠` La table `team` ne porte pas
+   * de machine : en parc mono-machine `resoudre(null, …)` tranche sans ambiguïté ;
+   * multi-machine, il lèverait — `demantelerUneTeam` est best-effort et acte
+   * `demantelee` au registre quoi qu'il arrive (worktree orphelin retrouvable, team
+   * jamais bloquée). Consommé par `dissoudre_team` et la passe TTL.
+   */
+  const liberateurWorktreeTeam: LiberateurWorktreeTeam = {
+    libererWorktree: async (teamId: string, worktree: string | null): Promise<void> => {
+      const cible = parc.resoudre(null, `libération du worktree de la team ${teamId}`);
+      await cible.client.libererWorktree(teamId, worktree);
+    },
+  };
+
+  /**
    * État courant du bloc en cours de frappe, PAR MISSION REGARDÉE (E.2).
    *
    * `☠` Aucune cadence n'est posée ici : c'est le GET sur `/missions/:id` qui
@@ -416,6 +435,10 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       configPlafondParc: { seuilUtilisationPct: options.seuilUtilisationPctPlafondParc },
       compacteurContexte: compacteur,
       propositions,
+      // `☠` Libération du worktree d'une team (axe B) — routée vers le PC par le
+      // canal, consommée par `dissoudre_team`. Absent ⇒ la dissolution acte quand
+      // même `demantelee` au registre (worktree orphelin retrouvable).
+      liberateurWorktreeTeam,
       // `☠` Les projets sont ceux de LA MACHINE DU FIL, pas d'une machine par
       // défaut. Deux machines n'hébergent pas les mêmes dépôts (le VPS a
       // `stockiop`, le PC a tout le reste) : explorer la mauvaise ferait cadrer
@@ -500,7 +523,7 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
   async function dispatcherMandatAutorise(
     id: string,
     origine: OrigineApprobation,
-  ): Promise<{ readonly missionId: string; readonly detail: string }> {
+  ): Promise<{ readonly missionId: string | null; readonly detail: string }> {
     const p = registre.propositions.lire(id);
     if (p === null) throw new Error('mandat inconnu');
     if (p.statut !== 'en_attente') throw new ErreurMandatDejaTranche(p.statut, p.missionId);
@@ -626,6 +649,11 @@ export async function assemblerControlPlanePi(options: OptionsAssemblageControlP
       return { ...base, dispatch: { etat: 'en_vol', detail: `pas de confirmation en ${PLAFOND_DISPATCH_MS / 1000} s` } };
     }
     if (issue instanceof Error) return { ...base, dispatch: { etat: 'echec', detail: issue.message } };
+    // `☠` `missionId` null ⇒ la feature est entrée EN FILE (B2, team déjà active) :
+    // aucune mission n'a démarré, on ne peut donc pas rendre un `parti` (qui exige
+    // un identifiant d'équipe). `en_vol` porte le bon sens — « pris en compte, pas
+    // encore une équipe vivante » — et son détail explique la mise en file.
+    if (issue.missionId === null) return { ...base, dispatch: { etat: 'en_vol', detail: issue.detail } };
     return { ...base, dispatch: { etat: 'parti', missionId: issue.missionId, detail: issue.detail } };
   }
 

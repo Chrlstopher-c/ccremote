@@ -13,6 +13,7 @@ export type {
   IdProjet,
   ProjetRejete,
   ResultatChargementProjets,
+  RevendicationEnVeilleRestauree,
   RevendicationWorktree,
 } from './types.ts';
 

@@ -287,3 +287,61 @@ describe('worktree persistant — teams (axe B)', () => {
     expect(gestionnaire.appelsSupprimer).toEqual([{ cheminDepot: rev.cheminDepot, worktreePath: rev.worktreePath }]);
   });
 });
+
+/**
+ * `☠` Restauration PC (axe B) : au démarrage du superviseur, la Map du
+ * gestionnaire est vide alors que les worktrees des teams dormantes survivent sur
+ * disque. Sans réamorçage, un réveil retenterait `git worktree add` sur un
+ * répertoire existant. Preuve : après reconstruction `en_veille`, un réveil
+ * RÉUTILISE le worktree, `git worktree add` n'est jamais rappelé.
+ */
+describe('restaurerRevendicationEnVeille — réamorçage au redémarrage du PC (axe B)', () => {
+  test('☠ Map vide → revendication en veille reconstruite → un réveil NE refait PAS git worktree add', async () => {
+    const interrogateur = new InterrogateurGitFactice();
+    const gestionnaire = new GestionnaireWorktreeGitFactice();
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur, gestionnaire });
+
+    // « Redémarrage » : rien en mémoire, le worktree survit pourtant sur disque.
+    expect(cycle.revendicationDe('team-1')).toBeUndefined();
+
+    cycle.restaurerRevendicationEnVeille({
+      idEquipe: 'team-1',
+      projetId: '/mnt/projects/vela',
+      cheminDepot: '/mnt/projects/vela',
+      worktreePath: '/mnt/projects/.worktrees/team-1',
+      brancheDediee: 'equipe/team-1',
+    });
+    expect(cycle.revendicationDe('team-1')?.etat).toBe('en_veille');
+
+    // Réveil : allouer avec un epoch strictement supérieur (dispatch réel).
+    const reactivee = await cycle.allouer({
+      projet: projetGit(),
+      idEquipe: 'team-1',
+      epoch: 5,
+      racineWorktrees: RACINE_WORKTREES,
+    });
+
+    // Worktree persistant RÉUTILISÉ, aucun git worktree add.
+    expect(reactivee.worktreePath).toBe('/mnt/projects/.worktrees/team-1');
+    expect(reactivee.etat).toBe('revendiquee');
+    expect(gestionnaire.appelsCreer).toHaveLength(0);
+  });
+
+  test('ne remplace JAMAIS une revendication déjà présente (état vivant préservé)', async () => {
+    const gestionnaire = new GestionnaireWorktreeGitFactice();
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire });
+    const vivante = await cycle.allouer({ projet: projetGit(), idEquipe: 'team-1', epoch: 1, racineWorktrees: RACINE_WORKTREES });
+
+    cycle.restaurerRevendicationEnVeille({
+      idEquipe: 'team-1',
+      projetId: '/mnt/projects/vela',
+      cheminDepot: '/mnt/projects/vela',
+      worktreePath: '/autre/chemin',
+      brancheDediee: 'equipe/team-1',
+    });
+
+    // La revendication vivante n'a pas été écrasée par la restauration.
+    expect(cycle.revendicationDe('team-1')?.worktreePath).toBe(vivante.worktreePath);
+    expect(cycle.revendicationDe('team-1')?.etat).toBe('revendiquee');
+  });
+});

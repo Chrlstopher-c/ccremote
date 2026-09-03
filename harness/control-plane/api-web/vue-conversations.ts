@@ -277,6 +277,7 @@ export interface PortMandats {
     readonly missionId: string | null;
     readonly detail: string | null;
   }[];
-  approuver(id: string): Promise<{ readonly missionId: string; readonly detail: string }>;
+  /** `missionId` null ⇒ la feature est entrée en file (B2, team déjà active) — aucune équipe démarrée. */
+  approuver(id: string): Promise<{ readonly missionId: string | null; readonly detail: string }>;
   refuser(id: string): boolean;
 }

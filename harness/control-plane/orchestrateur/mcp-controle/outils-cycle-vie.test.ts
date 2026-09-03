@@ -10,6 +10,7 @@ import {
   relancerEquipe,
   retirerMandat,
   TTL_TEAM_MS,
+  type LecteurDomainesEquipe,
   type LiberateurWorktreeTeam,
 } from './outils-cycle-vie.ts';
 import { definirBudget } from './outils-budget.ts';
@@ -599,7 +600,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, null, undefined, maintenant,
     );
 
     expect(resultat.ok).toBe(false);
@@ -622,7 +623,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
       LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null,
-      'refonte auth — vague 2', null, maintenant,
+      'refonte auth — vague 2', null, null, undefined, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -637,7 +638,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, null, undefined, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -652,7 +653,7 @@ describe('proposerCreationEquipe × garde 1 (vague de trop, 24h)', () => {
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'nouvel objectif', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, null, undefined, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -689,7 +690,7 @@ describe('proposerCreationEquipe × garde 2 (carburant pas regardé depuis 30 mi
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'x', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, null, undefined, maintenant,
     );
 
     expect(resultat.effet).toBe('refuse');
@@ -702,7 +703,7 @@ describe('proposerCreationEquipe × garde 2 (carburant pas regardé depuis 30 mi
 
     const resultat = await proposerCreationEquipe(
       'alpha', 'x', null, 'src/**', 'ecriture', registre,
-      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, maintenant,
+      LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET, null, null, null, null, null, null, undefined, maintenant,
     );
 
     expect(resultat.effet).toBe('differe');
@@ -892,5 +893,82 @@ describe('dissoudre_team + TTL — teams persistantes (axe B)', () => {
     const demantelees = await demantelerTeamsExpirees(registre, undefined, t0 + TTL_TEAM_MS * 10);
     expect(demantelees).toEqual([]);
     expect(registre.teams.lire('active')?.etat).toBe('active');
+  });
+});
+
+/**
+ * `☠` D3 (axe B) — le domaine est validé contre la liste FERMÉE du projet AVANT
+ * toute écriture, et le refus LISTE les domaines acceptés (un LLM se corrige d'une
+ * liste). Preuve dans les deux sens : un domaine hors liste est refusé, un domaine
+ * valide passe et descend jusqu'à la proposition.
+ */
+describe('proposerCreationEquipe × domaine de team (D3)', () => {
+  const DOMAINES: LecteurDomainesEquipe = { domainesDe: async () => ['frontend', 'backend'] };
+
+  async function proposer(
+    domaine: string | null,
+    lecteurDomaines?: LecteurDomainesEquipe,
+    enregistreur: EnregistreurProposition = ENREGISTREUR_MUET,
+  ) {
+    return proposerCreationEquipe(
+      'alpha',
+      'construire le tableau de bord',
+      'critère `bun test` vert',
+      'src/**',
+      'ecriture',
+      registre,
+      LECTEUR_PERMISSIF,
+      PLAFOND_DESACTIVE,
+      enregistreur,
+      null,
+      null,
+      null,
+      null,
+      null,
+      domaine,
+      lecteurDomaines,
+    );
+  }
+
+  test('☠ domaine HORS liste ⇒ refus AVANT écriture, la raison liste les domaines acceptés', async () => {
+    const r = await proposer('infra', DOMAINES);
+    expect(r.ok).toBe(false);
+    expect(r.effet).toBe('refuse');
+    expect(r.raison).toContain('infra');
+    expect(r.raison).toContain('frontend');
+    expect(r.raison).toContain('backend');
+    // Rien n'a été proposé (aucune écriture).
+    expect(registre.propositions.enAttente().length).toBe(0);
+  });
+
+  test('domaine VALIDE ⇒ accepté (differe) et transmis à la proposition', async () => {
+    let domaineVu: string | null | undefined = 'jamais posé';
+    const enregistreur: EnregistreurProposition = {
+      enregistrer: async (mandat) => {
+        domaineVu = mandat.domaine;
+        return { ref: 'prop-d', autoApprouve: false, detail: 'en attente' };
+      },
+    };
+    const r = await proposer('frontend', DOMAINES, enregistreur);
+    expect(r.effet).toBe('differe');
+    // Le domaine validé descend bien jusqu'au dépôt de la proposition (D3).
+    expect(domaineVu).toBe('frontend');
+  });
+
+  test('projet qui ne déclare AUCUN domaine (liste vide) ⇒ refus actionnable', async () => {
+    const vide: LecteurDomainesEquipe = { domainesDe: async () => [] };
+    const r = await proposer('frontend', vide);
+    expect(r.ok).toBe(false);
+    expect(r.raison).toContain('AUCUN domaine');
+  });
+
+  test('domaine absent (hors team) ⇒ accepté même quand le projet déclare des domaines', async () => {
+    const r = await proposer(null, DOMAINES);
+    expect(r.effet).toBe('differe');
+  });
+
+  test('☠ sans lecteur de domaines (config inconnue ici) ⇒ pas de refus inventé, le domaine passe', async () => {
+    const r = await proposer('nimportequoi', undefined);
+    expect(r.effet).toBe('differe');
   });
 });

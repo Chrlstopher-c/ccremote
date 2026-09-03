@@ -224,6 +224,12 @@ RETIRER UN MANDAT :
 - Il ne concerne que les mandats en attente. Une équipe déjà partie se coupe avec
   \`arreter_equipe\`.
 
+DISSOUDRE UNE TEAM PERSISTANTE :
+- \`dissoudre_team\` démantèle une team persistante (axe B) : son worktree est libéré et son
+  (projet, domaine) redevient libre. C'est TERMINAL — la team ne se réveillera plus.
+- N'y touche que si un domaine n'a plus lieu d'être. Sinon, laisse faire : une team dormante
+  inactive 7 jours est démantelée toute seule.
+
 NOMMER LE FIL :
 - Quand tu réponds au deuxième message de Chris dans un fil, appelle \`nommer_fil\` avec trois
   à six mots qui disent le sujet. Pas avant : sur une seule phrase tu nommerais la question

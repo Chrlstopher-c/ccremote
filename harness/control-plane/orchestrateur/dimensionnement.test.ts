@@ -37,6 +37,7 @@ const MANDAT: Proposition = {
   modele: null,
   effort: null,
   latitude: null,
+  domaine: null,
   statut: 'en_attente',
   missionId: null,
   detail: null,

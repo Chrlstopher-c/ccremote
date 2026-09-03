@@ -184,6 +184,7 @@ function construireProposition(projet: string): Proposition {
     modele: null,
     effort: null,
     latitude: null,
+    domaine: null,
     statut: 'en_attente',
     missionId: null,
     detail: null,
@@ -227,7 +228,7 @@ try {
   resultats.push({
     libelle: '(a) deux dispatchs successifs sur le même dépôt git réussissent tous les deux',
     ok: true,
-    detail: `mission1=${r1.missionId.slice(0, 8)} · mission2=${r2.missionId.slice(0, 8)}`,
+    detail: `mission1=${r1.missionId?.slice(0, 8) ?? '(en file)'} · mission2=${r2.missionId?.slice(0, 8) ?? '(en file)'}`,
   })
 } catch (erreur) {
   resultats.push({
@@ -255,7 +256,7 @@ resultats.push({
 // ---------------------------------------------------------------------------
 let mission1: Mission | null = null
 let mission2: Mission | null = null
-if (r1 !== undefined && r2 !== undefined) {
+if (r1 !== undefined && r2 !== undefined && r1.missionId !== null && r2.missionId !== null) {
   mission1 = registre.missions.exiger(r1.missionId)
   mission2 = registre.missions.exiger(r2.missionId)
 
@@ -313,7 +314,7 @@ if (r1 !== undefined && r2 !== undefined) {
 const propositionNonGit = construireProposition(NONGIT)
 try {
   const premiere = await dispatcherMandat(propositionNonGit, deps)
-  horodate(`(g) premier dispatch non-git accepté : mission ${premiere.missionId.slice(0, 8)}`)
+  horodate(`(g) premier dispatch non-git accepté : mission ${premiere.missionId?.slice(0, 8) ?? '(en file)'}`)
   try {
     await dispatcherMandat(propositionNonGit, deps)
     resultats.push({

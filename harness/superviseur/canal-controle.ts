@@ -68,7 +68,13 @@ export interface PortSuperviseurControle {
    * câblage est exactement ce qui ferait laisser tourner une équipe en boucle.
    */
   inspecter?(missionId: string): Promise<{ readonly verdict: string; readonly motif: string }>;
-  arreter(missionId: string): Promise<void>;
+  arreter(missionId: string, options?: { readonly conserverWorktree?: boolean }): Promise<void>;
+  /**
+   * Libère le worktree d'une team dormante (axe B). Optionnel : un superviseur qui
+   * ne l'implémente pas fait REFUSER l'opération (voir `#executer`), jamais planter
+   * sur une méthode absente. `SuperviseurWorkers` réel l'implémente.
+   */
+  libererWorktreeTeam?(teamId: string, worktree: string | null): Promise<void>;
   /** Chemin/branche réellement alloués pour cette mission (worktree git). Absent du port ⇒ non renseigné dans la réponse. */
   worktreeDe?(missionId: string): { readonly chemin: string; readonly branche: string | null } | null;
   tuerSansPreavis(sessionId: string): void | Promise<void>;
@@ -167,7 +173,20 @@ export type OperationControle =
    */
   | { readonly type: 'partiel_flux'; readonly missionId: string }
   | { readonly type: 'demarrer_worker'; readonly demande: DemandeDemarrageTransportable }
-  | { readonly type: 'arreter_worker'; readonly missionId: string }
+  /**
+   * `conserverWorktree` (axe B) : à la fin d'une activation de team VIVANTE, le
+   * worktree est mis EN VEILLE (conservé) au lieu d'être libéré — le prochain
+   * réveil le réutilise. Absent/`false` ⇒ libération, comportement d'avant.
+   */
+  | { readonly type: 'arreter_worker'; readonly missionId: string; readonly conserverWorktree?: boolean }
+  /**
+   * Libération du worktree d'une team DORMANTE (axe B, démantèlement TTL /
+   * `dissoudre_team`). `☠` Distinct d'`arreter_worker` : il n'y a AUCUN worker
+   * vivant à couper, seulement un `git worktree` à supprimer, keyé par `teamId`.
+   * C'est le chemin par lequel `LiberateurWorktreeTeam` (control-plane) route la
+   * libération vers le PC, sans jamais importer le superviseur (frontière A↔B).
+   */
+  | { readonly type: 'liberer_worktree_team'; readonly teamId: string; readonly worktree: string | null }
   | { readonly type: 'tuer_sans_preavis'; readonly sessionId: string }
   | { readonly type: 'relancer_worker'; readonly missionId: string; readonly sessionId: string }
   | { readonly type: 'reinitialiser'; readonly sessionId: string }
@@ -487,8 +506,19 @@ export class CanalControle {
           };
         }
         case 'arreter_worker':
-          await this.#superviseur.arreter(operation.missionId);
-          return { ok: true, effet: 'applique', detail: `mission arrêtée : ${operation.missionId}` };
+          await this.#superviseur.arreter(operation.missionId, { conserverWorktree: operation.conserverWorktree === true });
+          return {
+            ok: true,
+            effet: 'applique',
+            detail: `mission arrêtée : ${operation.missionId}${operation.conserverWorktree === true ? ' (worktree conservé en veille)' : ''}`,
+          };
+        case 'liberer_worktree_team': {
+          if (this.#superviseur.libererWorktreeTeam === undefined) {
+            return { ok: false, effet: 'refuse', detail: 'libération de worktree de team non câblée sur ce superviseur' };
+          }
+          await this.#superviseur.libererWorktreeTeam(operation.teamId, operation.worktree);
+          return { ok: true, effet: 'applique', detail: `worktree de team libéré : ${operation.teamId}` };
+        }
         case 'tuer_sans_preavis':
           this.#superviseur.tuerSansPreavis(operation.sessionId);
           return { ok: true, effet: 'applique', detail: `worker tué sans préavis : ${operation.sessionId}` };

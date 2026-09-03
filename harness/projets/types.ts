@@ -115,6 +115,26 @@ export type EtatRevendicationWorktree = 'revendiquee' | 'en_veille' | 'liberee' 
  * Une instance de cette forme n'existe que pour une revendication enregistrée :
  * il n'y a pas de « cwd » observable sans qu'elle existe (garantie de F.2.1).
  */
+/**
+ * Ce qu'il faut pour RECONSTRUIRE une revendication `en_veille` au démarrage du
+ * superviseur PC (axe B, restauration PC), transporté depuis la table `team` du
+ * Pi. `☠` La Map mémoire du gestionnaire est vide à chaque redémarrage : sans
+ * cette reconstruction, un réveil de team retenterait un `git worktree add` sur un
+ * répertoire déjà existant (échec). Reconstruire la revendication `en_veille` fait
+ * que le réveil la RÉUTILISE (aucun `git worktree add`), exactement comme si le
+ * superviseur n'avait jamais redémarré. Miroir de `superviseur/fencing-restauration.ts`,
+ * appliqué au worktree persistant d'une team au lieu du worker vivant.
+ */
+export interface RevendicationEnVeilleRestauree {
+  /** Clé de revendication = `teamId` (le worktree d'une team est keyé par team). */
+  readonly idEquipe: IdEquipe;
+  readonly projetId: IdProjet;
+  readonly cheminDepot: string;
+  readonly worktreePath: string;
+  /** `null` en mode dégradé non-git. */
+  readonly brancheDediee: string | null;
+}
+
 export interface RevendicationWorktree {
   readonly idEquipe: IdEquipe;
   readonly projetId: IdProjet;

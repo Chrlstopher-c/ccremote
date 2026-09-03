@@ -20,6 +20,7 @@ import { DepotEtats } from './etats.ts';
 import { DepotLots } from './lots.ts';
 import { DepotMissions } from './missions.ts';
 import { DepotTeams } from './teams.ts';
+import { DepotFeatureQueue } from './feature-queue.ts';
 import { DepotObservationParc } from './observation-parc.ts';
 import { executer } from './journal.ts';
 import { versionSchema } from './migrations.ts';
@@ -49,6 +50,9 @@ export type {
   Team,
   CreationTeam,
   EtatTeam,
+  FeatureQueue,
+  CreationFeatureQueue,
+  EtatFeatureQueue,
   TypeNotification,
   OrigineApprobation,
   OrigineTransition,
@@ -77,6 +81,7 @@ export { DepotRappels } from './rappels.ts';
 export { DepotObservationParc } from './observation-parc.ts';
 export { DepotTeams, ErreurTransitionTeam } from './teams.ts';
 export type { ActivationTeam } from './teams.ts';
+export { DepotFeatureQueue } from './feature-queue.ts';
 export type { CreationRappel } from './rappels.ts';
 export type { CreationNotification } from './notifications.ts';
 export type { AjoutEvenement, CreationConversation } from './conversations.ts';
@@ -106,6 +111,7 @@ export class Registre {
   public readonly rappels: DepotRappels;
   public readonly observationParc: DepotObservationParc;
   public readonly teams: DepotTeams;
+  public readonly featureQueue: DepotFeatureQueue;
 
   private readonly db: Database;
 
@@ -124,6 +130,7 @@ export class Registre {
     this.rappels = new DepotRappels(db);
     this.observationParc = new DepotObservationParc(db);
     this.teams = new DepotTeams(db);
+    this.featureQueue = new DepotFeatureQueue(db);
   }
 
   public get version(): number {

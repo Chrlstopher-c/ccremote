@@ -146,6 +146,23 @@ export class DepotTeams {
     );
   }
 
+  /**
+   * Teams `dormante` PORTANT un worktree — la source de la restauration PC (axe B).
+   * `☠` `dormante` seulement, et worktree NON NULL : ce sont exactement les teams
+   * dont le worktree survit sur disque en veille et qu'il faut réamorcer dans la
+   * Map du gestionnaire au démarrage du superviseur, pour qu'un réveil ne retente
+   * pas un `git worktree add`. Une team `active` a un worker vivant (restauré par
+   * une autre voie) ; une team sans worktree n'a rien à réamorcer.
+   */
+  public listerDormantesAvecWorktree(): readonly Team[] {
+    return executer('teams.listerDormantesAvecWorktree', () => {
+      const lignes = this.db
+        .query<LigneTeam, []>("SELECT * FROM team WHERE etat = 'dormante' AND worktree IS NOT NULL ORDER BY cree_a")
+        .all();
+      return lignes.map(versTeam);
+    });
+  }
+
   /** Teams vivantes d'un projet — sert à COMPTER (plafond ≤ 3), jamais l'historique démantelé. */
   public listerVivantesDuProjet(projet: string): readonly Team[] {
     return executer(

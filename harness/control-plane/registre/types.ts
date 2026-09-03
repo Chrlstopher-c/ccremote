@@ -382,6 +382,49 @@ export interface CreationTeam {
   readonly compteId?: string | null;
 }
 
+/**
+ * État d'une feature en file (B2, migration 36).
+ *
+ * `☠` ÉNUMÉRÉ à cinq valeurs, jamais un booléen : `en_attente` (dans la file) →
+ * `assignee` (choisie pour dépilage, un dispatch va partir) → `en_cours`
+ * (activation lancée) → `terminee`/`annulee` (terminales). Distinguer `assignee`
+ * d'`en_cours` empêche un second passage de dépilage de reprendre une feature
+ * déjà en cours de dispatch (fenêtre entre le choix et le démarrage réel).
+ */
+export type EtatFeatureQueue = 'en_attente' | 'assignee' | 'en_cours' | 'terminee' | 'annulee';
+
+/**
+ * Une feature EN FILE pour une team occupée (B2, migration 36). Quand une team
+ * est déjà `active` sur un (projet, domaine), la proposition entre ici au lieu
+ * d'échouer ; la première `en_attente` du même (projet, domaine) est dépilée à la
+ * fin de l'activation en cours et re-dispatchée par le même chemin `dispatcherMandat`.
+ */
+export interface FeatureQueue {
+  readonly id: string;
+  readonly projet: string;
+  readonly domaine: string;
+  readonly objectif: string;
+  /**
+   * Proposition (mandat déjà rédigé et autorisé) à re-dispatcher au dépilage.
+   * `null` ⇒ trace de file sans mandat relisible (proposition purgée) : le
+   * dépilage l'annule plutôt que de crasher.
+   */
+  readonly propositionId: string | null;
+  readonly etat: EtatFeatureQueue;
+  /** Team qui a pris en charge cette feature au dépilage. `null` tant qu'elle attend. */
+  readonly teamId: string | null;
+  readonly creeA: number;
+  readonly priseEnChargeA: number | null;
+}
+
+export interface CreationFeatureQueue {
+  readonly id: string;
+  readonly projet: string;
+  readonly domaine: string;
+  readonly objectif: string;
+  readonly propositionId?: string | null;
+}
+
 /** Historique des transitions — `origine` préserve la distinction même a posteriori. */
 export interface Transition {
   readonly id: number;
@@ -504,6 +547,15 @@ export interface Proposition {
   readonly critereArret: string | null;
   /** Cadre de travail en clair, pour le lead. Descriptif — ne porte aucun droit. */
   readonly perimetre: string;
+  /**
+   * Domaine de team persistante choisi par l'orchestrateur (D3, migration 36) —
+   * validé contre `ConfigProjet.domainesEquipe` AVANT écriture. Porté par la
+   * proposition parce que c'est elle qui survit au tour et se fait autoriser plus
+   * tard : le dispatch en a besoin pour résoudre la team (`resoudreTeamPourFeature`).
+   * `null` ⇒ proposition hors team (projet sans `domainesEquipe`), régime neutre —
+   * le dispatch se comporte comme avant l'axe B.
+   */
+  readonly domaine: string | null;
   /**
    * Chantier 3 (mandat opérateur 24/08, migration 33) — liste NOMMÉE des choses
    * adjacentes que l'équipe est autorisée à corriger si elle les rencontre. La

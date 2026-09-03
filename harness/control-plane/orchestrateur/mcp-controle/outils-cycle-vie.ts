@@ -29,6 +29,53 @@ import type {
 const RAISON_DELAI = "aucune confirmation du port dans le délai — le lien avec l'équipe est peut-être coupé";
 
 /**
+ * Port de lecture des domaines de team déclarés pour un projet (D3, axe B).
+ *
+ * `☠` La config projet (`ConfigProjet.domainesEquipe`) vit sur le PC (frontière
+ * A↔B) : ce port la fait traverser sans que ce module importe quoi que ce soit du
+ * superviseur. `null` ⇒ config inconnue/illisible ICI (machine hors ligne, projet
+ * absent) — on ne FABRIQUE alors aucun refus, le domaine passe tel quel : un refus
+ * inventé sur une config qu'on n'a pas lue serait pire qu'une validation sautée.
+ */
+export interface LecteurDomainesEquipe {
+  domainesDe(projet: string): Promise<readonly string[] | null>;
+}
+
+/**
+ * Valide un domaine de feature contre la liste FERMÉE du projet (D3). `☠` Sortie
+ * de LLM = entrée non fiable : refus AVANT toute écriture, et le motif LISTE les
+ * domaines acceptés — un modèle se corrige d'une liste, un refus muet lui fait
+ * réémettre la même valeur (même discipline que les modèles, A1 ; `code-standards.md`).
+ */
+function evaluerDomaineEquipe(
+  projet: string,
+  domaine: string | null | undefined,
+  domaines: readonly string[] | null,
+): { readonly autorise: boolean; readonly motif: string } {
+  const d = domaine?.trim() ?? '';
+  // Pas de domaine = proposition hors team, régime neutre : rien à valider.
+  if (d.length === 0) return { autorise: true, motif: 'aucun domaine — proposition hors team (régime neutre)' };
+  if (domaines === null) {
+    return { autorise: true, motif: 'domaines du projet inconnus (config non lisible ici) — domaine accepté tel quel' };
+  }
+  if (domaines.length === 0) {
+    return {
+      autorise: false,
+      motif:
+        `le projet « ${projet} » ne déclare AUCUN domaine d'équipe (« domainesEquipe » vide) — ` +
+        'retire le domaine de ta proposition, ou déclare-le dans la config du projet (≤ 3 domaines).',
+    };
+  }
+  if (domaines.includes(d)) return { autorise: true, motif: `domaine « ${d} » valide` };
+  return {
+    autorise: false,
+    motif:
+      `domaine « ${d} » inconnu pour « ${projet} » — domaines acceptés : ` +
+      `${domaines.map((x) => `« ${x} »`).join(', ')}. Choisis l'un d'eux (ou déclare le nouveau dans la config, ≤ 3).`,
+  };
+}
+
+/**
  * Évalue le plafond de parc (G.1.3, `deciderCreationMission`) sur TOUS les comptes
  * connus, faute d'un compte déjà assigné à ce stade (la proposition n'en choisit
  * aucun — H-61). Autorise dès qu'AU MOINS UN compte peut encore héberger une
@@ -214,6 +261,14 @@ export async function proposerCreationEquipe(
    * périmètre l'emporte en cas de recouvrement — voir `enregistreur.enregistrer`.
    */
   latitude?: string | null,
+  /**
+   * Domaine de team choisi par l'orchestrateur (D3, axe B). Validé contre
+   * `domainesEquipe` du projet via `lecteurDomaines`. Absent ⇒ proposition hors
+   * team, régime neutre.
+   */
+  domaine?: string | null,
+  /** Port de lecture des domaines déclarés (D3). Absent ⇒ validation sautée (aucune source). */
+  lecteurDomaines?: LecteurDomainesEquipe,
   maintenant: number = Date.now(),
 ): Promise<ContratRetour> {
   const intention = `proposer une équipe sur ${projet}`;
@@ -228,6 +283,14 @@ export async function proposerCreationEquipe(
           `plafond « ${budgetMaxUsd} » invalide — attendu un nombre de dollars fini et strictement positif (ex. 5)`,
         );
       }
+    }
+    // D3 — domaine de team validé contre la liste fermée du projet, AVANT écriture.
+    // `☠` Une seule lecture de la config (`lecteurDomaines`), et le refus liste les
+    // domaines acceptés : l'orchestrateur est un LLM, il se corrige d'une liste.
+    if (lecteurDomaines !== undefined) {
+      const domaines = await lecteurDomaines.domainesDe(projet);
+      const verdictDomaine = evaluerDomaineEquipe(projet, domaine, domaines);
+      if (!verdictDomaine.autorise) return refuse(intention, verdictDomaine.motif);
     }
     // Chantier 2 — critère d'arrêt invérifiable par l'équipe elle-même (24/08).
     const critere = evaluerCritereArret(critereArret);
@@ -265,6 +328,9 @@ export async function proposerCreationEquipe(
       effort,
       budgetMaxUsd,
       latitude,
+      // D3 : le domaine validé descend jusqu'à la proposition — c'est le dispatch
+      // qui s'en servira pour résoudre la team (`resoudreTeamPourFeature`).
+      domaine,
     });
     // `☠` `applique` quand l'équipe est PARTIE, `differe` quand elle attend un
     // clic. Le contrat A.2.3 distingue les deux justement pour que le modèle ne

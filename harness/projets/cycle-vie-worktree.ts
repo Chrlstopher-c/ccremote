@@ -35,7 +35,7 @@
 import { join } from 'node:path';
 import { equipeLogger } from './logger.ts';
 import type { GestionnaireWorktreeGit, InterrogateurGit } from './git-projet.ts';
-import type { ConfigProjet, IdEquipe, RevendicationWorktree } from './types.ts';
+import type { ConfigProjet, IdEquipe, RevendicationEnVeilleRestauree, RevendicationWorktree } from './types.ts';
 
 export class WorktreeDejaRevendiqueeError extends Error {
   constructor(readonly idEquipe: IdEquipe) {
@@ -136,6 +136,44 @@ export class GestionnaireCycleVieWorktree {
     // ☠ Ligne charnière de la garantie (c) : aucun `return` avant celle-ci.
     this.#revendications.set(params.idEquipe, revendication);
     return revendication;
+  }
+
+  /**
+   * Restaure une revendication `en_veille` au démarrage du superviseur (axe B,
+   * restauration PC). `☠` La Map est vide après un redémarrage : sans ce
+   * réamorçage, `allouer()` ne verrait aucune revendication et retenterait un
+   * `git worktree add` sur un répertoire qui existe déjà (le worktree persistant
+   * survit sur disque). Reconstruite `en_veille` avec un epoch `0` : tout dispatch
+   * réel porte un epoch strictement supérieur (`prochainEpoch`, niveau projet,
+   * ≥ 1), il franchit donc le fencing et RÉUTILISE le worktree via `#reactiverEnVeille`.
+   *
+   * `☠` N'écrase JAMAIS une revendication déjà présente (worker vivant restauré
+   * par une autre voie, ou double appel) : la restauration réamorce un état perdu,
+   * elle ne supplante pas un état vivant. `brancheParent` est inconnue à la
+   * restauration (la table `team` ne la porte pas) — `null`, sans conséquence sur
+   * le réveil, qui ne la lit pas ; le démantèlement d'une team dormante passe par
+   * le port `LiberateurWorktreeTeam` (teamId + worktree), pas par cette branche.
+   */
+  restaurerRevendicationEnVeille(rev: RevendicationEnVeilleRestauree): void {
+    if (this.#revendications.has(rev.idEquipe)) return;
+    const revendication: RevendicationWorktree = {
+      idEquipe: rev.idEquipe,
+      projetId: rev.projetId,
+      cheminDepot: rev.cheminDepot,
+      worktreePath: rev.worktreePath,
+      brancheDediee: rev.brancheDediee,
+      brancheParent: null,
+      epoch: 0,
+      isolationGarantie: rev.brancheDediee !== null,
+      etat: 'en_veille',
+      revendiqueeA: Date.now(),
+      libereeA: null,
+    };
+    this.#revendications.set(rev.idEquipe, revendication);
+    equipeLogger(rev.idEquipe).info(
+      { worktreePath: rev.worktreePath },
+      'revendication en veille restaurée depuis la table team (axe B, restauration PC)',
+    );
   }
 
   /** Réactive une revendication en veille au réveil (axe B) — aucun git worktree add. */

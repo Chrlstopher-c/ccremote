@@ -26,6 +26,7 @@ interface LigneProposition {
   modele: string | null;
   effort: string | null;
   latitude: string | null;
+  domaine: string | null;
   statut: string;
   mission_id: string | null;
   detail: string | null;
@@ -49,6 +50,7 @@ function versProposition(l: LigneProposition): Proposition {
     modele: l.modele,
     effort: l.effort,
     latitude: l.latitude,
+    domaine: l.domaine,
     // as : colonne sous CHECK IN ('en_attente','approuvee','refusee').
     statut: l.statut as StatutProposition,
     missionId: l.mission_id,
@@ -72,6 +74,12 @@ export interface CreationProposition {
   readonly effort?: string | null;
   /** Chantier 3 (mandat opérateur 24/08). Absent ou `null` ⇒ aucune latitude accordée. */
   readonly latitude?: string | null;
+  /**
+   * Domaine de team persistante (D3, migration 36). Validé contre
+   * `ConfigProjet.domainesEquipe` AVANT le dépôt. Absent ou `null` ⇒ proposition
+   * hors team, régime neutre.
+   */
+  readonly domaine?: string | null;
 }
 
 export class DepotPropositions {
@@ -89,8 +97,8 @@ export class DepotPropositions {
           .query(
             `INSERT INTO proposition
                (id, conversation_id, projet, objectif, critere_arret, perimetre, acces,
-                budget_max_usd, modele, effort, latitude, statut, mission_id, detail, cree_a, maj_a)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
+                budget_max_usd, modele, effort, latitude, domaine, statut, mission_id, detail, cree_a, maj_a)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', NULL, NULL, ?, ?)`,
           )
           .run(
             creation.id,
@@ -104,6 +112,7 @@ export class DepotPropositions {
             creation.modele ?? null,
             creation.effort ?? null,
             creation.latitude ?? null,
+            creation.domaine ?? null,
             maintenant,
             maintenant,
           );

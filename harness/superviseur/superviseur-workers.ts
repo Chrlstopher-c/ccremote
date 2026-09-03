@@ -666,6 +666,24 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
   }
 
   /**
+   * Libère le worktree d'une team DORMANTE (axe B, démantèlement TTL /
+   * `dissoudre_team`). `☠` Aucun worker à couper ici — la team n'a pas
+   * d'activation vivante ; on ne fait que supprimer le `git worktree`, keyé par
+   * `teamId`. `libererWorktreeSiConfigure` accepte une revendication `en_veille`
+   * (le cas nominal d'une team dormante) comme `revendiquee`, et est déjà
+   * best-effort : une clé sans revendication (worktree déjà libéré, superviseur
+   * jamais réamorcé) est un no-op journalisé, jamais une panne. Le paramètre
+   * `worktree` sert la trace/diagnostic — la suppression réelle passe par la
+   * revendication que le gestionnaire détient pour cette clé.
+   */
+  async libererWorktreeTeam(teamId: string, worktree: string | null): Promise<void> {
+    const depsWiring = { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees };
+    const log = missionLogger(teamId);
+    log.info({ teamId, worktree }, 'libération du worktree d’une team dormante (axe B)');
+    await libererWorktreeSiConfigure(depsWiring, teamId, log);
+  }
+
+  /**
    * Extinction propre du PROCESS superviseur (bin-pc.ts, SIGINT/SIGTERM) — à
    * appeler UNE FOIS juste avant que le process ne meure, jamais en cours de
    * fonctionnement normal. `☠` Défaut principal de la dette n°1 (TODO.md) :

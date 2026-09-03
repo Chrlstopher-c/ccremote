@@ -171,6 +171,12 @@ export interface EnregistreurProposition {
      * Absent ⇒ le défaut du harness, jamais l'illimité.
      */
     readonly budgetMaxUsd?: number | null;
+    /**
+     * Domaine de team persistante (D3, axe B), déjà validé contre
+     * `ConfigProjet.domainesEquipe`. Descend jusqu'à la proposition : le dispatch
+     * s'en sert pour résoudre la team. Absent ou `null` ⇒ proposition hors team.
+     */
+    readonly domaine?: string | null;
   }): Promise<ResultatEnregistrement>;
 }
 
