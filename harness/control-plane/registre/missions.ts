@@ -72,8 +72,8 @@ export class DepotMissions {
                id, lot_id, nom, projet, worktree, branche, session_id, compte_id,
                mandat, critere_arret, modele_demande, modele_resolu,
                etat_sdk, etat_sdk_maj_a, etat_harness, etat_harness_maj_a,
-               budget_max_usd, cree_a, epoch, conversation_id, machine, projet_est_git
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?, ?, ?)`,
+               budget_max_usd, cree_a, epoch, conversation_id, machine, projet_est_git, team_id
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 'planifiee', ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .run(
             creation.id,
@@ -104,6 +104,9 @@ export class DepotMissions {
             // sont en ligne — voir `parc-superviseurs.ts#resoudre`.
             creation.machine ?? null,
             creation.projetEstGit === true ? 1 : 0,
+            // `☠` Absent ⇒ `null` : une mission hors team (dispatch hérité,
+            // restauration, test) n'invente pas d'appartenance. Régime neutre.
+            creation.teamId ?? null,
           );
         return this.exiger(creation.id);
       },

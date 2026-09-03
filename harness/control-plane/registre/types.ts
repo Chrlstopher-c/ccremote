@@ -288,6 +288,12 @@ export interface Mission {
    * marteler le lead à chaque tick une fois le seuil franchi.
    */
   readonly avertissementBudget80A: number | null;
+  /**
+   * Team persistante dont cette mission est une ACTIVATION (migration 35, axe B).
+   * `null` ⇒ mission hors team (dispatch hérité, restauration, test) — le régime
+   * neutre : rien ne change tant que `team` n'est pas peuplée.
+   */
+  readonly teamId: string | null;
 }
 
 export interface CreationMission {
@@ -323,6 +329,57 @@ export interface CreationMission {
   readonly epoch?: number | null;
   /** Conversation d'origine (migration 14). Absente ⇒ mission sans destinataire. */
   readonly conversationId?: string | null;
+  /** Team dont cette mission est une activation (migration 35). Absente ⇒ mission hors team. */
+  readonly teamId?: string | null;
+}
+
+/**
+ * État d'une team persistante (migration 35, axe B).
+ *
+ * `☠` ÉNUMÉRÉ, jamais un booléen `vivante` : `dormante` et `demantelee` sont
+ * deux terminaisons différentes. Une `dormante` se réveille (worktree réutilisé) ;
+ * une `demantelee` est finie (worktree libéré), son (projet, domaine) est de
+ * nouveau libre pour une team neuve. `active` : une activation (mission) tourne.
+ */
+export type EtatTeam = 'dormante' | 'active' | 'demantelee';
+
+/**
+ * Une équipe persistante : elle survit à ses missions, chacune étant une
+ * ACTIVATION (migration 35). Réutilise son `worktree`/`branche` d'une activation
+ * à l'autre au lieu d'en allouer un neuf.
+ */
+export interface Team {
+  readonly id: string;
+  readonly projet: string;
+  /** Domaine de travail — validé contre `ConfigProjet.domainesEquipe` (≤ 3, liste fermée). */
+  readonly domaine: string;
+  /** Worktree persistant réutilisé au réveil. `null` tant qu'aucune activation n'a alloué de worktree. */
+  readonly worktree: string | null;
+  readonly branche: string | null;
+  /** Compte de la dernière activation. `null` avant la première. */
+  readonly compteId: string | null;
+  readonly etat: EtatTeam;
+  /**
+   * Résumé structuré réinjecté au réveil (D2) — rempli par le hook `PreCompact`
+   * au lot B-b. `null`/vide pour ce lot : le point d'injection est câblé, le
+   * contenu viendra ensuite.
+   */
+  readonly resumeContexte: string | null;
+  readonly resumeMajA: number | null;
+  /** Dernière activation (mission) portée par cette team. `null` avant la première. */
+  readonly derniereMissionId: string | null;
+  readonly creeA: number;
+  /** Horodatage de la dernière activité — base du TTL (7 j d'inactivité). */
+  readonly activeDerniereFoisA: number;
+}
+
+export interface CreationTeam {
+  readonly id: string;
+  readonly projet: string;
+  readonly domaine: string;
+  readonly worktree?: string | null;
+  readonly branche?: string | null;
+  readonly compteId?: string | null;
 }
 
 /** Historique des transitions — `origine` préserve la distinction même a posteriori. */

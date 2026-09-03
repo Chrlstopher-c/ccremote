@@ -32,6 +32,7 @@ function projetGit(surcharge: Partial<ConfigProjet> = {}): ConfigProjet {
     deniedToolPatternsSupplementaires: [],
     agentTeamsActif: false,
     mandatType: 'standard',
+    domainesEquipe: [],
     isolationGarantie: true,
     fichierSource: 'alpha.json',
     ...surcharge,
@@ -236,5 +237,53 @@ describe('revendicationsActives — vue F.2 pour le registre', () => {
     await cycle.liberer('equipe-2');
 
     expect(cycle.revendicationsActives().map((r) => r.idEquipe)).toEqual(['equipe-1']);
+  });
+});
+
+describe('worktree persistant — teams (axe B)', () => {
+  test('☠ mise en veille puis réveil : le worktree est CONSERVÉ et RÉUTILISÉ sans nouveau git worktree add', async () => {
+    const gestionnaire = new GestionnaireWorktreeGitFactice();
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire });
+
+    const premiere = await cycle.allouer({ projet: projetGit(), idEquipe: 'team-1', epoch: 1, racineWorktrees: RACINE_WORKTREES });
+    expect(gestionnaire.appelsCreer).toHaveLength(1);
+
+    // Fin d'activation, team vivante → veille (aucune suppression).
+    const enVeille = cycle.mettreEnVeille('team-1');
+    expect(enVeille.etat).toBe('en_veille');
+    expect(gestionnaire.appelsSupprimer).toHaveLength(0);
+
+    // Réveil : epoch strictement supérieur → réutilisation, PAS de nouveau worktree.
+    const reveil = await cycle.allouer({ projet: projetGit(), idEquipe: 'team-1', epoch: 2, racineWorktrees: RACINE_WORKTREES });
+    expect(reveil.etat).toBe('revendiquee');
+    expect(reveil.worktreePath).toBe(premiere.worktreePath);
+    expect(reveil.brancheDediee).toBe(premiere.brancheDediee);
+    expect(reveil.epoch).toBe(2);
+    expect(gestionnaire.appelsCreer).toHaveLength(1); // toujours 1 : aucun git worktree add au réveil
+  });
+
+  test('☠ le fencing tient au réveil : un epoch qui ne progresse pas est rejeté même en veille', async () => {
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire: new GestionnaireWorktreeGitFactice() });
+    await cycle.allouer({ projet: projetGit(), idEquipe: 'team-1', epoch: 5, racineWorktrees: RACINE_WORKTREES });
+    cycle.mettreEnVeille('team-1');
+    await expect(
+      cycle.allouer({ projet: projetGit(), idEquipe: 'team-1', epoch: 5, racineWorktrees: RACINE_WORKTREES }),
+    ).rejects.toThrow(EpochNonCroissantError);
+  });
+
+  test('mettre en veille une clé sans revendication active lève', () => {
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice(), gestionnaire: new GestionnaireWorktreeGitFactice() });
+    expect(() => cycle.mettreEnVeille('fantome')).toThrow(AucuneRevendicationActiveError);
+  });
+
+  test('☠ démantèlement : un worktree EN VEILLE et propre est bien supprimé', async () => {
+    const gestionnaire = new GestionnaireWorktreeGitFactice();
+    const cycle = new GestionnaireCycleVieWorktree({ interrogateur: new InterrogateurGitFactice({ sale: false }), gestionnaire });
+    const rev = await cycle.allouer({ projet: projetGit(), idEquipe: 'team-1', epoch: 1, racineWorktrees: RACINE_WORKTREES });
+    cycle.mettreEnVeille('team-1');
+
+    const liberee = await cycle.liberer('team-1');
+    expect(liberee.etat).toBe('liberee');
+    expect(gestionnaire.appelsSupprimer).toEqual([{ cheminDepot: rev.cheminDepot, worktreePath: rev.worktreePath }]);
   });
 });

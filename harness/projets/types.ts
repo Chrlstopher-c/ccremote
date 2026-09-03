@@ -22,6 +22,7 @@ export interface ConfigProjetBrute {
   readonly deniedToolPatternsSupplementaires?: unknown;
   readonly agentTeamsActif?: unknown;
   readonly mandatType?: unknown;
+  readonly domainesEquipe?: unknown;
 }
 
 /**
@@ -44,7 +45,9 @@ export type CodeEchecValidationProjet =
   | 'modele_defaut_invalide'
   | 'motif_deni_supplementaire_invalide'
   | 'motif_deni_supplementaire_non_scope'
-  | 'motif_deni_supplementaire_id_duplique';
+  | 'motif_deni_supplementaire_id_duplique'
+  | 'domaines_equipe_invalide'
+  | 'domaines_equipe_trop_nombreux';
 
 export interface EchecValidationProjet {
   readonly code: CodeEchecValidationProjet;
@@ -68,6 +71,14 @@ export interface ConfigProjet {
   readonly deniedToolPatternsSupplementaires: readonly MotifDeni[];
   readonly agentTeamsActif: boolean;
   readonly mandatType: string;
+  /**
+   * Liste FERMÉE des domaines de teams persistantes de ce projet (≤ 3, axe B).
+   * Un domaine de feature est validé contre cette liste à la proposition (D3,
+   * lot B-b) : jamais plus de 3 teams vivantes par projet, l'index unique
+   * `(projet, domaine)` du registre faisant respecter l'unicité par domaine.
+   * `[]` ⇒ projet sans teams persistantes (régime neutre, comportement d'avant).
+   */
+  readonly domainesEquipe: readonly string[];
   /** Miroir de `estGit` — nommé côté sens pour l'UI/le registre (F.1.3). */
   readonly isolationGarantie: boolean;
   readonly fichierSource: string;
@@ -89,7 +100,15 @@ export interface ResultatChargementProjets {
 // F.2 — cycle de vie du worktree
 // ---------------------------------------------------------------------------
 
-export type EtatRevendicationWorktree = 'revendiquee' | 'liberee' | 'terminee_non_liberee';
+/**
+ * `en_veille` (axe B, teams persistantes) : le worktree est CONSERVÉ sans worker
+ * vivant dessus, en attente d'une réactivation au réveil de la team. Distinct de
+ * `revendiquee` (un worker vit dessus, l'invariant « deux workers jamais sur le
+ * même worktree » s'y applique) et de `liberee` (worktree supprimé). Une
+ * revendication `en_veille` est la SEULE que `allouer()` réutilise sans refaire
+ * de `git worktree add` — voir le point sensible de la réutilisation au réveil.
+ */
+export type EtatRevendicationWorktree = 'revendiquee' | 'en_veille' | 'liberee' | 'terminee_non_liberee';
 
 /**
  * Association projet ↔ worktree ↔ équipe (F.1.1, indivisible — H-11).

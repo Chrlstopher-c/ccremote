@@ -15,7 +15,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { Compte, Proposition, Registre } from '../registre/index.ts';
+import type { Compte, Proposition, Registre, Team } from '../registre/index.ts';
 import { resoudrePreference, type PreferenceAppliquee } from '../../shared/preference-compte.ts';
 import type { DemandeDemarrageTransportable } from '../../superviseur/index.ts';
 import { effortsDe, messageModeleInconnu, normaliserModele } from '../../shared/modeles-claude.ts';
@@ -530,6 +530,95 @@ export function composerPromptInitial(p: Proposition, acces: AccesMandat): strin
     `dans tes instructions système : relis-les, elles restent valables jusqu'au bout.`,
     ``,
     `Commence par établir l'état des lieux avant de modifier quoi que ce soit.`,
+  ].join('\n');
+}
+
+/**
+ * `☠` Le mandat vise déjà une team ACTIVE, et la mise en file (B2) n'est pas
+ * encore ce lot. Erreur NOMMÉE, levée AVANT toute écriture, et actionnable pour
+ * un LLM : elle dit pourquoi c'est refusé et ce qui reste possible, plutôt qu'un
+ * 500 anonyme. Au lot suivant, ce refus devient une mise en file.
+ */
+export class ErreurTeamDejaActive extends Error {
+  constructor(
+    readonly teamId: string,
+    readonly projet: string,
+    readonly domaine: string,
+  ) {
+    super(
+      `une équipe est déjà active sur le domaine « ${domaine} » du projet « ${projet} » ` +
+        `(team ${teamId.slice(0, 8)}). La mise en file des features sur une team occupée est le lot ` +
+        'suivant (B2) : en attendant, attends la fin de l’activation en cours, ou vise un autre domaine.',
+    );
+    this.name = 'ErreurTeamDejaActive';
+  }
+}
+
+/**
+ * Résolution d'une team pour une feature (axe B, B1) — l'étape AMONT du dispatch.
+ *
+ * `☠` Trois issues, une seule écriture de décision :
+ *  - **inexistante** → CRÉATION : une team `dormante` neuve est créée puis activée
+ *    (worktree/compte seront renseignés au dispatch, après l'allocation PC) ;
+ *  - **dormante** → RÉVEIL : la team existante est réactivée, son `worktree`/
+ *    `branche` PRÉSERVÉS (réutilisés, pas réalloués) — `activer` n'écrase jamais
+ *    avec `null` ;
+ *  - **active** → REFUS NOMMÉ (`ErreurTeamDejaActive`) : la file est B2.
+ *
+ * `☠` L'unicité `(projet, domaine)` est portée par l'index du registre : deux
+ * résolutions concurrentes du même domaine ne peuvent pas créer deux teams. Le
+ * plafond « ≤ 3 teams vivantes/projet » découle de la liste fermée
+ * `ConfigProjet.domainesEquipe` (validée à la proposition, B2).
+ */
+export interface ResolutionTeam {
+  readonly team: Team;
+  /** `true` : team dormante réveillée (worktree réutilisé). `false` : team créée. */
+  readonly reveil: boolean;
+}
+
+export function resoudreTeamPourFeature(
+  registre: Registre,
+  projet: string,
+  domaine: string,
+  maintenant: number = Date.now(),
+): ResolutionTeam {
+  const existante = registre.teams.lireVivantePourDomaine(projet, domaine);
+  if (existante === null) {
+    const creee = registre.teams.creer({ id: randomUUID(), projet, domaine }, maintenant);
+    const active = registre.teams.activer(creee.id, {}, maintenant);
+    return { team: active, reveil: false };
+  }
+  if (existante.etat === 'active') {
+    throw new ErreurTeamDejaActive(existante.id, projet, domaine);
+  }
+  // dormante → réveil : worktree/branche réutilisés (COALESCE dans `activer`).
+  const reveillee = registre.teams.activer(existante.id, {}, maintenant);
+  return { team: reveillee, reveil: true };
+}
+
+/**
+ * Premier message au RÉVEIL d'une team (axe B, D2). `☠` Le résumé de reprise va
+ * ICI, dans le message JETABLE, JAMAIS dans le `systemPrompt` stable (invariant
+ * A3/caching : le systemPrompt survit à la compaction, il ne doit pas gonfler
+ * d'un résumé qui change à chaque réveil). Pour ce lot, `resume_contexte` peut
+ * être vide — le point d'injection est câblé, le hook `PreCompact` le remplira au
+ * lot B-b. Vide ⇒ on retombe sur l'amorce standard, jamais une section vide.
+ */
+export function composerPromptReveil(p: Proposition, team: Team, acces: AccesMandat): string {
+  const resume = team.resumeContexte?.trim() ?? '';
+  if (resume.length === 0) return composerPromptInitial(p, acces);
+  return [
+    `Réveil d’équipe — projet ${p.projet}, domaine « ${team.domaine} ».`,
+    ``,
+    `Tu reprends un worktree déjà en place : PAS de re-exploration complète, appuie-toi sur ce résumé.`,
+    ligneAcces(acces),
+    ``,
+    `RÉSUMÉ DE TON ÉTAT AU DERNIER ARRÊT (état / décisions / reste à faire) :`,
+    resume,
+    ``,
+    `Objectif de cette activation : ${p.objectif}`,
+    `Le cadre complet (critère d'arrêt, périmètre, budget, forme du rapport) est dans tes`,
+    `instructions système : relis-les, elles restent valables jusqu'au bout.`,
   ].join('\n');
 }
 

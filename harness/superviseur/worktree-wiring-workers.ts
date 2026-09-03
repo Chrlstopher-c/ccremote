@@ -28,6 +28,17 @@ export interface DependancesWorktreeWiring {
 }
 
 /**
+ * Clé de revendication du worktree. `☠` `teamId` d'abord (axe B, worktree
+ * persistant), `missionId` en repli : une mission hors team garde son worktree
+ * keyé par mission, exactement comme avant. La clé décide du chemin
+ * (`racineWorktrees/<clé>`) et de la branche (`equipe/<clé>`) — c'est ce qui rend
+ * le worktree d'une team stable d'une activation à l'autre.
+ */
+function cleRevendication(demande: DemandeDemarrage): string {
+  return demande.teamId ?? demande.missionId;
+}
+
+/**
  * Alloue un worktree git dédié pour cette mission. `null` si aucun gestionnaire
  * n'est configuré — le cwd fourni par le Pi reste alors la seule source, exactement
  * le comportement d'avant ce câblage.
@@ -55,6 +66,7 @@ export async function allouerWorktreeSiConfigure(
     deniedToolPatternsSupplementaires: [],
     agentTeamsActif: false,
     mandatType: '',
+    domainesEquipe: [],
     isolationGarantie: estGit,
     fichierSource: '(dérivé au dispatch — aucun fichier de config F.1.2)',
   };
@@ -62,7 +74,7 @@ export async function allouerWorktreeSiConfigure(
   try {
     return await deps.gestionnaireWorktrees.allouer({
       projet,
-      idEquipe: demande.missionId,
+      idEquipe: cleRevendication(demande),
       epoch: demande.epoch,
       racineWorktrees: deps.racineWorktrees,
     });
@@ -74,19 +86,23 @@ export async function allouerWorktreeSiConfigure(
 
 /**
  * Fin de mission : libère la revendication de worktree si une allocation a eu
- * lieu. No-op si aucun gestionnaire n'est configuré, ou si cette mission n'a
- * jamais revendiqué de worktree (relance restaurée d'avant ce câblage,
- * notamment) — les deux cas sont attendus, pas des pannes. Best-effort : un
- * échec ici ne doit jamais empêcher `arreter()` de rendre la main.
+ * lieu. No-op si aucun gestionnaire n'est configuré, ou si cette clé n'a jamais
+ * revendiqué de worktree (relance restaurée d'avant ce câblage, notamment) — les
+ * deux cas sont attendus, pas des pannes. Best-effort : un échec ici ne doit
+ * jamais empêcher `arreter()` de rendre la main.
+ *
+ * `☠` `cleWorktree` est la CLÉ de revendication (teamId pour une team persistante,
+ * missionId sinon) — la même que celle passée à `allouer()`. Une team dormante
+ * dont on démantèle le worktree est en `en_veille` : `liberer()` l'accepte.
  */
 export async function libererWorktreeSiConfigure(
   deps: DependancesWorktreeWiring,
-  missionId: string,
+  cleWorktree: string,
   log: pino.Logger,
 ): Promise<void> {
   if (deps.gestionnaireWorktrees === undefined) return;
   try {
-    const revendication = await deps.gestionnaireWorktrees.liberer(missionId);
+    const revendication = await deps.gestionnaireWorktrees.liberer(cleWorktree);
     if (revendication.etat === 'terminee_non_liberee') {
       log.warn(
         { worktreePath: revendication.worktreePath },
@@ -97,9 +113,34 @@ export async function libererWorktreeSiConfigure(
     }
   } catch (erreur) {
     if (erreur instanceof AucuneRevendicationActiveError) {
-      log.debug({ missionId }, 'aucune revendication de worktree pour cette mission — rien à libérer');
+      log.debug({ cleWorktree }, 'aucune revendication de worktree pour cette clé — rien à libérer');
       return;
     }
-    log.error({ err: erreur, missionId }, 'libération du worktree échouée');
+    log.error({ err: erreur, cleWorktree }, 'libération du worktree échouée');
+  }
+}
+
+/**
+ * Fin d'activation d'une team VIVANTE (axe B) : le worktree est CONSERVÉ pour le
+ * prochain réveil (`revendiquee` → `en_veille`), jamais supprimé. Distinct de
+ * `libererWorktreeSiConfigure`, réservé au démantèlement. No-op si aucun
+ * gestionnaire, ou si la clé n'a pas de revendication active — mêmes cas attendus
+ * qu'à la libération. Best-effort : un échec ne bloque jamais l'appelant.
+ */
+export async function conserverWorktreeEnVeilleSiConfigure(
+  deps: DependancesWorktreeWiring,
+  cleWorktree: string,
+  log: pino.Logger,
+): Promise<void> {
+  if (deps.gestionnaireWorktrees === undefined) return;
+  try {
+    const revendication = deps.gestionnaireWorktrees.mettreEnVeille(cleWorktree);
+    log.info({ worktreePath: revendication.worktreePath }, 'worktree conservé en veille (team vivante, axe B)');
+  } catch (erreur) {
+    if (erreur instanceof AucuneRevendicationActiveError) {
+      log.debug({ cleWorktree }, 'aucune revendication active pour cette clé — rien à mettre en veille');
+      return;
+    }
+    log.error({ err: erreur, cleWorktree }, 'mise en veille du worktree échouée');
   }
 }

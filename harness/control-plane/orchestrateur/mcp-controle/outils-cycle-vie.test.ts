@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../../registre/index.ts';
 import {
   arreterEquipe,
+  demantelerTeamsExpirees,
+  dissoudreTeam,
   envoyerAEquipe,
   interrompreEquipe,
   proposerCreationEquipe,
   relancerEquipe,
   retirerMandat,
+  TTL_TEAM_MS,
+  type LiberateurWorktreeTeam,
 } from './outils-cycle-vie.ts';
 import { definirBudget } from './outils-budget.ts';
 import type {
@@ -808,5 +812,85 @@ describe('proposerCreationEquipe × chantier 3 (champ `latitude`)', () => {
       LECTEUR_PERMISSIF, PLAFOND_DESACTIVE, ENREGISTREUR_MUET,
     );
     expect(resultat.etat).toContain('Latitude : aucune');
+  });
+});
+
+describe('dissoudre_team + TTL — teams persistantes (axe B)', () => {
+  /** Libérateur de worktree factice : enregistre les appels, réussit par défaut. */
+  function liberateurFactice(): LiberateurWorktreeTeam & { readonly appels: string[] } {
+    const appels: string[] = [];
+    return {
+      appels,
+      async libererWorktree(teamId: string): Promise<unknown> {
+        appels.push(teamId);
+        return undefined;
+      },
+    };
+  }
+
+  test('☠ dissoudre_team démantèle ET libère le worktree', async () => {
+    registre.teams.creer({ id: 't1', projet: 'vela', domaine: 'frontend' }, 1000);
+    registre.teams.activer('t1', { worktree: '/wt/t1' }, 1000);
+    const lib = liberateurFactice();
+
+    const res = await dissoudreTeam(registre, lib, 't1', undefined, 2000);
+    expect(res.ok).toBe(true);
+    expect(lib.appels).toEqual(['t1']);
+    expect(registre.teams.lire('t1')?.etat).toBe('demantelee');
+    // Le (projet, domaine) est de nouveau libre.
+    expect(registre.teams.lireVivantePourDomaine('vela', 'frontend')).toBeNull();
+  });
+
+  test('dissoudre_team sur une team inconnue refuse proprement (jamais un 500)', async () => {
+    const res = await dissoudreTeam(registre, liberateurFactice(), 'fantome');
+    expect(res.ok).toBe(false);
+  });
+
+  test('☠ le démantèlement est ACTÉ même si la libération du worktree échoue', async () => {
+    registre.teams.creer({ id: 't1', projet: 'vela', domaine: 'frontend' }, 1000);
+    const libKO: LiberateurWorktreeTeam = {
+      async libererWorktree(): Promise<unknown> {
+        throw new Error('PC injoignable');
+      },
+    };
+    const res = await dissoudreTeam(registre, libKO, 't1', undefined, 2000);
+    expect(res.ok).toBe(true);
+    expect(registre.teams.lire('t1')?.etat).toBe('demantelee');
+  });
+
+  test('☠ TTL avec horloge injectée : 7 j + 1 ms démantèle, 6 j ne démantèle pas', async () => {
+    const t0 = 1_000_000_000_000;
+    // Deux teams dormantes, dernière activité à t0.
+    registre.teams.creer({ id: 'vieille', projet: 'vela', domaine: 'a' }, t0);
+    registre.teams.activer('vieille', {}, t0);
+    registre.teams.endormir('vieille', t0);
+    registre.teams.creer({ id: 'recente', projet: 'vela', domaine: 'b' }, t0);
+    registre.teams.activer('recente', {}, t0);
+    registre.teams.endormir('recente', t0);
+
+    // À 6 j, aucune n'est expirée.
+    const a6j = await demantelerTeamsExpirees(registre, undefined, t0 + 6 * 24 * 60 * 60 * 1000);
+    expect(a6j).toEqual([]);
+
+    // « recente » réveillée puis rendormie juste avant l'échéance : son horloge repart.
+    registre.teams.activer('recente', {}, t0 + 7 * 24 * 60 * 60 * 1000);
+    registre.teams.endormir('recente', t0 + 7 * 24 * 60 * 60 * 1000);
+
+    // À 7 j + 1 ms depuis t0, « vieille » est expirée, « recente » ne l'est pas.
+    const lib = liberateurFactice();
+    const a7j1 = await demantelerTeamsExpirees(registre, lib, t0 + TTL_TEAM_MS + 1);
+    expect(a7j1).toEqual(['vieille']);
+    expect(lib.appels).toEqual(['vieille']);
+    expect(registre.teams.lire('vieille')?.etat).toBe('demantelee');
+    expect(registre.teams.lire('recente')?.etat).toBe('dormante');
+  });
+
+  test('☠ une team ACTIVE n’est jamais démantelée par TTL, même ancienne', async () => {
+    const t0 = 1_000_000_000_000;
+    registre.teams.creer({ id: 'active', projet: 'vela', domaine: 'a' }, t0);
+    registre.teams.activer('active', {}, t0); // reste active, très ancienne
+    const demantelees = await demantelerTeamsExpirees(registre, undefined, t0 + TTL_TEAM_MS * 10);
+    expect(demantelees).toEqual([]);
+    expect(registre.teams.lire('active')?.etat).toBe('active');
   });
 });

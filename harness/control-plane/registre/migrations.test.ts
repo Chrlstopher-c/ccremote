@@ -184,3 +184,67 @@ describe('migration 30 — reconstruction de conversation_evenement (type artefa
     expect(versionSchema(db)).toBe(VERSION_SCHEMA_CIBLE);
   });
 });
+
+describe('migration 35 — teams persistantes (axe B)', () => {
+  test('la table team et la colonne mission.team_id existent après migration', () => {
+    migrer(db);
+    // Une insertion team valide passe.
+    expect(() =>
+      db.run(
+        `INSERT INTO team (id, projet, domaine, etat, cree_a, active_derniere_fois_a)
+         VALUES ('t1', 'vela', 'frontend', 'dormante', 1000, 1000)`,
+      ),
+    ).not.toThrow();
+    // La colonne mission.team_id est lisible.
+    db.run(`INSERT INTO lot (id, intention, cree_a) VALUES ('l1', 'x', 1)`);
+    db.run(`INSERT INTO compte (id, config_dir, actif, cree_a, maj_a) VALUES ('c1', '/tmp/c1', 1, 1, 1)`);
+    db.run(
+      `INSERT INTO mission (id, lot_id, nom, projet, compte_id, etat_harness, etat_harness_maj_a, cree_a, epoch, high_water_mark, budget_consomme_usd, compteur_relances, projet_est_git, team_id)
+       VALUES ('m1', 'l1', 'm', 'vela', 'c1', 'planifiee', 1, 1, 0, 0, 0, 0, 0, 't1')`,
+    );
+    const ligne = db.query<{ team_id: string | null }, [string]>('SELECT team_id FROM mission WHERE id = ?').get('m1');
+    expect(ligne?.team_id).toBe('t1');
+  });
+
+  test('☠ l’index unique (projet, domaine) refuse une seconde team VIVANTE sur un domaine déjà pris', () => {
+    migrer(db);
+    db.run(
+      `INSERT INTO team (id, projet, domaine, etat, cree_a, active_derniere_fois_a)
+       VALUES ('t1', 'vela', 'frontend', 'dormante', 1, 1)`,
+    );
+    // Une 2e team vivante (active) sur le même (projet, domaine) est refusée.
+    expect(() =>
+      db.run(
+        `INSERT INTO team (id, projet, domaine, etat, cree_a, active_derniere_fois_a)
+         VALUES ('t2', 'vela', 'frontend', 'active', 2, 2)`,
+      ),
+    ).toThrow();
+  });
+
+  test('☠ une team démantelée LIBÈRE son (projet, domaine) — une nouvelle team peut le reprendre', () => {
+    migrer(db);
+    db.run(
+      `INSERT INTO team (id, projet, domaine, etat, cree_a, active_derniere_fois_a)
+       VALUES ('t1', 'vela', 'frontend', 'demantelee', 1, 1)`,
+    );
+    // (projet, domaine) est de nouveau libre : une team vivante s'y installe.
+    expect(() =>
+      db.run(
+        `INSERT INTO team (id, projet, domaine, etat, cree_a, active_derniere_fois_a)
+         VALUES ('t2', 'vela', 'frontend', 'dormante', 2, 2)`,
+      ),
+    ).not.toThrow();
+  });
+
+  test('un domaine DIFFÉRENT sur le même projet est accepté (jusqu’à la liste fermée ≤ 3)', () => {
+    migrer(db);
+    expect(() =>
+      db.run(
+        `INSERT INTO team (id, projet, domaine, etat, cree_a, active_derniere_fois_a) VALUES
+           ('t1', 'vela', 'frontend', 'active', 1, 1),
+           ('t2', 'vela', 'backend', 'active', 2, 2),
+           ('t3', 'vela', 'infra', 'dormante', 3, 3)`,
+      ),
+    ).not.toThrow();
+  });
+});

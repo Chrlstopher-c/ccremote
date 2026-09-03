@@ -15,6 +15,18 @@ import type { ObservateurFlux, ObservateurRelance } from './types.ts';
 import type { GestionnaireCycleVieWorktree } from '../projets/index.ts';
 
 /**
+ * Options d'`arreter()` (axe B, teams persistantes).
+ *
+ * `☠` `conserverWorktree` : quand la team reste VIVANTE en fin d'activation, le
+ * worktree est mis en VEILLE (conservé pour le réveil) au lieu d'être libéré.
+ * Défaut (absent/`false`) : libérer — comportement d'avant, pour toute mission
+ * hors team et pour l'arrêt/démantèlement explicite.
+ */
+export interface OptionsArret {
+  readonly conserverWorktree?: boolean;
+}
+
+/**
  * Fenêtre de grâce par défaut avant le forçage (G.4.2, mission M-52).
  *
  * `⚠ NON TRANCHÉE — dette n°2a, TODO.md`. Relu intégralement contre

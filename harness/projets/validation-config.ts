@@ -232,6 +232,46 @@ function validerMotifsSupplementaires(brute: ConfigProjetBrute): ResultatMotifs 
   return appliquerGardesFouPlancher(valeur as readonly MotifDeni[]);
 }
 
+/**
+ * Domaines de teams persistantes (axe B). `☠` Liste FERMÉE et bornée à 3 : c'est
+ * elle qui plafonne le nombre de teams vivantes par projet. Absente ou vide ⇒
+ * `[]` (projet sans teams, régime neutre). Chaque entrée doit être une chaîne
+ * non vide ; plus de 3 est un REJET, pas une alerte — au-delà, l'invariant « ≤ 3
+ * teams par projet » ne tient plus.
+ */
+const MAX_DOMAINES_EQUIPE = 3;
+
+function validerDomainesEquipe(brute: ConfigProjetBrute): {
+  domaines: readonly string[];
+  echecs: EchecValidationProjet[];
+} {
+  const valeur = brute.domainesEquipe;
+  if (valeur === undefined || valeur === null) return { domaines: [], echecs: [] };
+  if (!Array.isArray(valeur) || !valeur.every((d): d is string => typeof d === 'string' && d.trim().length > 0)) {
+    return {
+      domaines: [],
+      echecs: [echec('domaines_equipe_invalide', '"domainesEquipe" doit être un tableau de chaînes non vides.')],
+    };
+  }
+  const domaines = valeur.map((d) => d.trim());
+  if (new Set(domaines).size !== domaines.length) {
+    return { domaines: [], echecs: [echec('domaines_equipe_invalide', '"domainesEquipe" contient des doublons.')] };
+  }
+  if (domaines.length > MAX_DOMAINES_EQUIPE) {
+    return {
+      domaines: [],
+      echecs: [
+        echec(
+          'domaines_equipe_trop_nombreux',
+          `"domainesEquipe" est limité à ${MAX_DOMAINES_EQUIPE} domaines (reçu : ${domaines.length}) — ` +
+            'au-delà, le plafond de teams vivantes par projet ne tient plus.',
+        ),
+      ],
+    };
+  }
+  return { domaines, echecs: [] };
+}
+
 interface ValidationsCollectees {
   readonly idRes: ReturnType<typeof validerId>;
   readonly cheminRes: Awaited<ReturnType<typeof validerChemin>>;
@@ -239,6 +279,7 @@ interface ValidationsCollectees {
   readonly budgetRes: ReturnType<typeof validerBudget>;
   readonly modeleRes: ReturnType<typeof validerModele>;
   readonly motifsRes: ReturnType<typeof validerMotifsSupplementaires>;
+  readonly domainesRes: ReturnType<typeof validerDomainesEquipe>;
   readonly echecs: readonly EchecValidationProjet[];
 }
 
@@ -252,6 +293,7 @@ async function collecterValidations(b: ConfigProjetBrute, deps: DependancesValid
   const budgetRes = validerBudget(b);
   const modeleRes = validerModele(b);
   const motifsRes = validerMotifsSupplementaires(b);
+  const domainesRes = validerDomainesEquipe(b);
 
   const echecs = [
     ...idRes.echecs,
@@ -260,8 +302,9 @@ async function collecterValidations(b: ConfigProjetBrute, deps: DependancesValid
     ...budgetRes.echecs,
     ...modeleRes.echecs,
     ...motifsRes.echecs,
+    ...domainesRes.echecs,
   ];
-  return { idRes, cheminRes, brancheInfo, budgetRes, modeleRes, motifsRes, echecs };
+  return { idRes, cheminRes, brancheInfo, budgetRes, modeleRes, motifsRes, domainesRes, echecs };
 }
 
 function assemblerConfig(v: ValidationsCollectees, b: ConfigProjetBrute, fichierSource: string): ConfigProjet {
@@ -279,6 +322,7 @@ function assemblerConfig(v: ValidationsCollectees, b: ConfigProjetBrute, fichier
     agentTeamsActif: b.agentTeamsActif === true,
     mandatType: typeof b.mandatType === 'string' && b.mandatType.trim().length > 0 ? b.mandatType : 'standard',
     isolationGarantie: brancheInfo.estGit,
+    domainesEquipe: v.domainesRes.domaines,
     fichierSource,
   };
 }

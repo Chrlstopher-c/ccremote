@@ -1027,6 +1027,76 @@ CREATE TABLE preference_compte (
 INSERT INTO preference_compte (id, compte_id, verrouille, maj_a) VALUES (1, NULL, 0, 0);
 `;
 
+/**
+ * Migration 35 — teams persistantes (axe B, lot B-a).
+ *
+ * `☠` Une `team` est une équipe qui SURVIT à ses missions. Chaque `mission`
+ * devient une ACTIVATION d'une team : `mission.team_id` relie l'activation à
+ * l'équipe qui la porte. Une team réutilise son `worktree`/`branche` d'une
+ * activation à l'autre (réveil), au lieu d'en allouer un neuf à chaque mission.
+ *
+ * `☠` L'index unique partiel `(projet, domaine) WHERE etat != 'demantelee'`
+ * porte l'invariant en base, pas dans le code appelant : jamais deux teams
+ * vivantes pour le même domaine d'un projet. Combiné à une liste fermée de ≤ 3
+ * domaines par projet (`ConfigProjet.domainesEquipe`), il plafonne mécaniquement
+ * à 3 teams vivantes par projet — sans qu'aucun compteur applicatif n'ait à le
+ * garantir. Une team `demantelee` sort de l'index : son (projet, domaine) est
+ * de nouveau libre, une nouvelle team peut le reprendre.
+ *
+ * `☠` `etat` est un ÉNUMÉRÉ à trois valeurs, jamais un booléen : `dormante`
+ * (vivante, pas d'activation en cours — réveillable), `active` (une activation
+ * tourne), `demantelee` (worktree libéré, terminale). Confondre `dormante` et
+ * `demantelee` sous un seul bit ferait réveiller une team dont le worktree
+ * n'existe plus, ou empêcherait une nouvelle team de reprendre le domaine.
+ *
+ * `☠` `resume_contexte` est le RÉSUMÉ réinjecté au réveil (D2) — même rôle que
+ * `conversation.resume_contexte` (migration 3). Pour ce lot il reste vide ; le
+ * hook `PreCompact` qui le remplira est le lot suivant (B3). La colonne existe
+ * dès maintenant pour que le point d'injection soit déjà câblé.
+ *
+ * `☠` `active_derniere_fois_a` porte l'horodatage de la DERNIÈRE activité — la
+ * base du TTL (7 j d'inactivité → démantèlement). Écrit à chaque
+ * création/réveil/endormissement, jamais déduit : un TTL calculé sur `cree_a`
+ * démantèlerait une team très active mais ancienne.
+ *
+ * `mission.team_id` est NULLABLE et sans clé étrangère dure vers `team` : une
+ * mission peut naître hors team (dispatch hérité, restauration, test) — c'est le
+ * régime NEUTRE, rien ne change tant que `team` n'est pas peuplée.
+ */
+const MIGRATION_35 = `
+CREATE TABLE team (
+  id                     TEXT PRIMARY KEY,
+  projet                 TEXT NOT NULL,
+  domaine                TEXT NOT NULL,
+  worktree               TEXT,
+  branche                TEXT,
+  compte_id              TEXT,
+  etat                   TEXT NOT NULL DEFAULT 'dormante'
+                           CHECK (etat IN ('dormante', 'active', 'demantelee')),
+  resume_contexte        TEXT,
+  resume_maj_a           INTEGER,
+  derniere_mission_id    TEXT,
+  cree_a                 INTEGER NOT NULL,
+  active_derniere_fois_a INTEGER NOT NULL
+) STRICT;
+
+CREATE UNIQUE INDEX idx_team_projet_domaine
+  ON team(projet, domaine)
+  WHERE etat != 'demantelee';
+
+CREATE INDEX idx_team_vivantes
+  ON team(projet, etat)
+  WHERE etat != 'demantelee';
+
+CREATE INDEX idx_team_ttl
+  ON team(etat, active_derniere_fois_a)
+  WHERE etat = 'dormante';
+
+ALTER TABLE mission ADD COLUMN team_id TEXT;
+
+CREATE INDEX idx_mission_team ON mission(team_id) WHERE team_id IS NOT NULL;
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, nom: 'schema-initial', sql: MIGRATION_1 },
   { version: 2, nom: 'conversations-orchestrateur', sql: MIGRATION_2 },
@@ -1062,6 +1132,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 32, nom: 'avertissement-budget-80-mission', sql: MIGRATION_32 },
   { version: 33, nom: 'latitude-proposition', sql: MIGRATION_33 },
   { version: 34, nom: 'preference-compte', sql: MIGRATION_34 },
+  { version: 35, nom: 'teams-persistantes', sql: MIGRATION_35 },
 ] as const;
 
 export const VERSION_SCHEMA_CIBLE: number = MIGRATIONS.reduce(

@@ -106,11 +106,23 @@ export class GestionnaireCycleVieWorktree {
     const existante = this.#revendications.get(params.idEquipe);
 
     // ☠ Fencing (D.2.3) : vérifié AVANT le contrôle d'état, et pour TOUT état
-    // connu (active ou déjà libérée) — une équipe déjà libérée avec un epoch
+    // connu (active, en veille, ou déjà libérée) — une équipe avec un epoch
     // rejoué ou stagnant ne doit pas pouvoir se réapproprier le worktree en
     // silence. Égalité traitée comme l'inférieur : jamais une reprise légitime.
+    // INCHANGÉ par les teams persistantes : le réveil d'une team PORTE un epoch
+    // strictement supérieur (`prochainEpoch`, niveau projet), il franchit donc
+    // cette garde comme n'importe quelle reprise légitime.
     if (existante !== undefined && params.epoch <= existante.epoch) {
       throw new EpochNonCroissantError(params.idEquipe, params.epoch, existante.epoch);
+    }
+    // ☠ RÉUTILISATION AU RÉVEIL (axe B) : une revendication `en_veille` est un
+    // worktree CONSERVÉ, sans worker vivant dessus — réactivée sans aucun
+    // `git worktree add`. C'est ce qui évite la collision `WorktreeDejaRevendiquee`
+    // au réveil, SANS toucher au fencing : l'invariant « deux workers jamais sur
+    // le même worktree » reste porté par la branche `revendiquee` ci-dessous,
+    // seule à lever, car elle seule signale un worker RÉELLEMENT vivant.
+    if (existante !== undefined && existante.etat === 'en_veille') {
+      return this.#reactiverEnVeille(existante, params.epoch);
     }
     if (existante !== undefined && existante.etat === 'revendiquee') {
       throw new WorktreeDejaRevendiqueeError(params.idEquipe);
@@ -124,6 +136,42 @@ export class GestionnaireCycleVieWorktree {
     // ☠ Ligne charnière de la garantie (c) : aucun `return` avant celle-ci.
     this.#revendications.set(params.idEquipe, revendication);
     return revendication;
+  }
+
+  /** Réactive une revendication en veille au réveil (axe B) — aucun git worktree add. */
+  #reactiverEnVeille(existante: RevendicationWorktree, epoch: number): RevendicationWorktree {
+    const reactivee: RevendicationWorktree = {
+      ...existante,
+      epoch,
+      etat: 'revendiquee',
+      revendiqueeA: Date.now(),
+      libereeA: null,
+    };
+    this.#revendications.set(existante.idEquipe, reactivee);
+    equipeLogger(existante.idEquipe).info(
+      { worktreePath: reactivee.worktreePath, epoch },
+      'worktree persistant réactivé au réveil de la team (aucun git worktree add)',
+    );
+    return reactivee;
+  }
+
+  /**
+   * Fin d'activation d'une team VIVANTE (axe B) : le worktree est CONSERVÉ pour
+   * le prochain réveil au lieu d'être libéré. `revendiquee` → `en_veille`, aucun
+   * `git worktree remove`. Distinct de `liberer()`, réservé au démantèlement.
+   *
+   * `☠` Ne matche qu'une revendication `revendiquee` : mettre en veille une
+   * revendication déjà libérée ou en veille n'a aucun sens et signalerait une
+   * incohérence de cycle de vie — on lève plutôt que d'acquitter en silence.
+   */
+  mettreEnVeille(idEquipe: IdEquipe): RevendicationWorktree {
+    const existante = this.#revendications.get(idEquipe);
+    if (existante === undefined || existante.etat !== 'revendiquee') {
+      throw new AucuneRevendicationActiveError(idEquipe);
+    }
+    const enVeille: RevendicationWorktree = { ...existante, etat: 'en_veille' };
+    this.#revendications.set(idEquipe, enVeille);
+    return enVeille;
   }
 
   async #allouerWorktreeGit(params: ParametresAllocation, log: ReturnType<typeof equipeLogger>): Promise<RevendicationWorktree> {
@@ -174,10 +222,17 @@ export class GestionnaireCycleVieWorktree {
     };
   }
 
-  /** F.2.3 — ne supprime **jamais** un worktree portant du travail non commité. */
+  /**
+   * F.2.3 — ne supprime **jamais** un worktree portant du travail non commité.
+   *
+   * `☠` Accepte `revendiquee` (fin de vie classique) ET `en_veille`
+   * (démantèlement d'une team dormante, axe B) : dans les deux cas le worktree
+   * existe sur disque et doit être supprimé s'il est propre. Seules `liberee` /
+   * `terminee_non_liberee` (déjà traitées) et l'absence sont refusées.
+   */
   async liberer(idEquipe: IdEquipe): Promise<RevendicationWorktree> {
     const existante = this.#revendications.get(idEquipe);
-    if (existante === undefined || existante.etat !== 'revendiquee') {
+    if (existante === undefined || (existante.etat !== 'revendiquee' && existante.etat !== 'en_veille')) {
       throw new AucuneRevendicationActiveError(idEquipe);
     }
 

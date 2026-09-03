@@ -84,7 +84,11 @@ import { startWorker as startWorkerReel } from '../workers/index.ts';
 import { creerPilotage, type Pilotage } from './pilotage-workers.ts';
 import { releverEtatGit, type ConstatGit } from './etat-git.ts';
 import type { GestionnaireCycleVieWorktree } from '../projets/index.ts';
-import { allouerWorktreeSiConfigure, libererWorktreeSiConfigure } from './worktree-wiring-workers.ts';
+import {
+  allouerWorktreeSiConfigure,
+  conserverWorktreeEnVeilleSiConfigure,
+  libererWorktreeSiConfigure,
+} from './worktree-wiring-workers.ts';
 import { surveillerMessageUsage, surveillerQuota } from './budgets-workers.ts';
 import { ConcurrentsRestaures } from './fencing-restauration.ts';
 import { missionLogger, superviseurLogger } from './logger.ts';
@@ -109,6 +113,7 @@ import {
   SuperviseurError,
   type DemarrerWorkerFn,
   type DependancesSuperviseur,
+  type OptionsArret,
 } from './superviseur-workers-types.ts';
 
 // Ré-exportés pour ne rien changer à l'API publique (`superviseur/index.ts` les
@@ -291,6 +296,10 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       sessionId: demande.spec.sessionId,
       epoch: demande.epoch,
       worktree: specEffectif.cwd,
+      // `☠` Clé de revendication du worktree (axe B) : teamId pour une team
+      // persistante, missionId sinon. C'est elle que `arreter`/`mettreEnVeille`
+      // repasseront au gestionnaire — le worktree d'une team est keyé par team.
+      cleWorktree: demande.teamId ?? demande.missionId,
       branche: revendication?.brancheDediee ?? null,
       spec: specEffectif,
       handle,
@@ -628,7 +637,7 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
    * par défaut, avec fenêtre de grâce (contrairement à `tuerSansPreavis`).
    * Idempotent : une mission déjà arrêtée ne produit aucun effet de plus.
    */
-  async arreter(missionId: string): Promise<void> {
+  async arreter(missionId: string, options: OptionsArret = {}): Promise<void> {
     const enregistrement = this.#registre.parMission(missionId);
     if (enregistrement === null || !enregistrement.vivant) return;
     this.#registre.marquerMort(enregistrement.sessionId);
@@ -638,15 +647,22 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     } catch (erreur) {
       missionLogger(missionId).error({ err: erreur }, "query.close() a levé pendant l'arrêt de la mission");
     }
-    // `☠` APRÈS la fermeture du worker, jamais avant : libérer un worktree
+    // `☠` APRÈS la fermeture du worker, jamais avant : toucher un worktree
     // encore écrit par un process vivant serait la panne #9 par un autre
     // chemin. Best-effort — un échec ici ne doit jamais empêcher `arreter()`
     // de rendre la main, le worker est déjà mort au moment où on l'atteint.
-    await libererWorktreeSiConfigure(
-      { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees },
-      missionId,
-      missionLogger(missionId),
-    );
+    //
+    // `☠` `conserverWorktree` (axe B) : quand la team reste VIVANTE (fin normale
+    // d'activation), on met le worktree en VEILLE au lieu de le libérer, pour le
+    // réutiliser au réveil. Défaut : libérer — comportement d'avant, préservé
+    // pour toute mission hors team et pour l'arrêt/démantèlement explicite.
+    const cle = enregistrement.cleWorktree ?? missionId;
+    const depsWiring = { gestionnaireWorktrees: this.#gestionnaireWorktrees, racineWorktrees: this.#racineWorktrees };
+    if (options.conserverWorktree === true) {
+      await conserverWorktreeEnVeilleSiConfigure(depsWiring, cle, missionLogger(missionId));
+    } else {
+      await libererWorktreeSiConfigure(depsWiring, cle, missionLogger(missionId));
+    }
   }
 
   /**

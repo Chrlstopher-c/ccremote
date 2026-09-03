@@ -52,6 +52,7 @@ const projet: ConfigProjet = {
   deniedToolPatternsSupplementaires: [],
   agentTeamsActif: false,
   mandatType: 'banc',
+  domainesEquipe: [],
   isolationGarantie: true,
   fichierSource: `${RACINE}/banc.json`,
 }

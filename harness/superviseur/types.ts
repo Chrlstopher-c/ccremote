@@ -93,6 +93,14 @@ export interface DemandeDemarrageTransportable {
   readonly epoch: number;
   readonly promptInitial: string;
   readonly parametres: ParametresSpecTransportables;
+  /**
+   * Team persistante dont cette mission est une ACTIVATION (axe B). `☠` C'est la
+   * CLÉ du worktree persistant : le PC revendique le worktree par `teamId`, pas
+   * par `missionId`, pour qu'une activation ultérieure de la MÊME team réutilise
+   * le worktree au lieu d'en allouer un neuf. Absent ⇒ mission hors team, le PC
+   * retombe sur `missionId` — comportement d'avant, inchangé.
+   */
+  readonly teamId?: string;
 }
 
 export interface DemandeDemarrage {
@@ -105,6 +113,11 @@ export interface DemandeDemarrage {
    * silencieux n'émet jamais `init`). Jamais vide.
    */
   readonly promptInitial: string;
+  /**
+   * Team persistante dont cette mission est une activation (axe B) — clé du
+   * worktree persistant. Absent ⇒ mission hors team, worktree keyé par `missionId`.
+   */
+  readonly teamId?: string;
 }
 
 /**
@@ -140,6 +153,14 @@ export interface EnregistrementWorker {
   readonly sessionId: string;
   readonly epoch: number;
   readonly worktree: string;
+  /**
+   * Clé de revendication du worktree (axe B) : `teamId` pour une team persistante,
+   * `missionId` sinon. `☠` C'est elle — pas `missionId` — qu'il faut passer à
+   * `liberer`/`mettreEnVeille` : le worktree d'une team est revendiqué par team,
+   * et `arreter(missionId)` n'a que le missionId sous la main. Absent ⇒ retombe
+   * sur `missionId` (mission hors team, comportement d'avant).
+   */
+  readonly cleWorktree?: string;
   /** Branche git dédiée du worktree alloué (H-11, F.2) — `null` en mode dégradé non-git. */
   readonly branche?: string | null;
   readonly spec: WorkerSpec;

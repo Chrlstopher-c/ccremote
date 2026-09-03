@@ -4,13 +4,17 @@ import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
 import { OUTILS_ECRITURE, OUTILS_INTERACTION_HUMAINE } from '../../shared/acces-mandat.ts';
 import { BUDGET_EQUIPE_DEFAUT_USD, PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
 import {
+  composerPromptReveil,
   dispatcherMandat,
   ErreurPlafondEquipesProjetAtteint,
   ErreurProjetOccupe,
+  ErreurTeamDejaActive,
   PLAFOND_EQUIPES_PROJET_GIT_DEFAUT,
+  resoudreTeamPourFeature,
   type DependancesDispatch,
   type VerificationProjet,
 } from './dispatch-mandat.ts';
+import type { Proposition, Team } from '../registre/index.ts';
 
 let registre: Registre;
 
@@ -558,5 +562,62 @@ describe('☠ budget par défaut d’équipe = BUDGET_EQUIPE_DEFAUT_USD (50 $), 
   test('un budget explicite du mandat est respecté tel quel, jamais écrasé par le défaut', async () => {
     const montant = await dispatcherAvecBudget(17);
     expect(montant).toBe(17);
+  });
+});
+
+describe('resoudreTeamPourFeature — cycle de vie amont (axe B, B1)', () => {
+  test('inexistante → CRÉATION : nouvelle team active, reveil=false', () => {
+    const res = resoudreTeamPourFeature(registre, 'vela', 'frontend', 1000);
+    expect(res.reveil).toBe(false);
+    expect(res.team.etat).toBe('active');
+    expect(res.team.projet).toBe('vela');
+    expect(res.team.domaine).toBe('frontend');
+    // Persistée et vivante.
+    expect(registre.teams.lireVivantePourDomaine('vela', 'frontend')?.id).toBe(res.team.id);
+  });
+
+  test('☠ dormante → RÉVEIL : worktree RÉUTILISÉ, reveil=true', () => {
+    const creee = registre.teams.creer({ id: 't-dorm', projet: 'vela', domaine: 'frontend' }, 500);
+    registre.teams.activer('t-dorm', { worktree: '/wt/t-dorm', branche: 'equipe/t-dorm' }, 500);
+    registre.teams.endormir('t-dorm', 800);
+
+    const res = resoudreTeamPourFeature(registre, 'vela', 'frontend', 2000);
+    expect(res.reveil).toBe(true);
+    expect(res.team.id).toBe('t-dorm');
+    expect(res.team.etat).toBe('active');
+    expect(res.team.worktree).toBe('/wt/t-dorm'); // réutilisé, jamais réalloué
+  });
+
+  test('☠ active → REFUS NOMMÉ (la file est B2)', () => {
+    registre.teams.creer({ id: 't-act', projet: 'vela', domaine: 'frontend' }, 500);
+    registre.teams.activer('t-act', {}, 500);
+    let capture: unknown;
+    try {
+      resoudreTeamPourFeature(registre, 'vela', 'frontend', 1000);
+    } catch (e) {
+      capture = e;
+    }
+    expect(capture).toBeInstanceOf(ErreurTeamDejaActive);
+    expect((capture as Error).message).toContain('frontend');
+    expect((capture as Error).message).toContain('B2');
+  });
+});
+
+describe('composerPromptReveil — injection du résumé (axe B, D2)', () => {
+  const propReveil = { projet: 'vela', objectif: 'Corriger le bug X' } as unknown as Proposition;
+
+  test('résumé présent → injecté dans le PREMIER message (jetable)', () => {
+    const team = { domaine: 'frontend', resumeContexte: 'ÉTAT: build vert. RESTE: brancher le bouton.' } as unknown as Team;
+    const prompt = composerPromptReveil(propReveil, team, 'ecriture');
+    expect(prompt).toContain('RESTE: brancher le bouton');
+    expect(prompt).toContain('Réveil d’équipe');
+    expect(prompt).toContain('Corriger le bug X');
+  });
+
+  test('résumé vide (ce lot) → retombe sur l’amorce standard, jamais de section vide', () => {
+    const team = { domaine: 'frontend', resumeContexte: null } as unknown as Team;
+    const prompt = composerPromptReveil(propReveil, team, 'ecriture');
+    expect(prompt).not.toContain('RÉSUMÉ DE TON ÉTAT');
+    expect(prompt).toContain('Objectif : Corriger le bug X');
   });
 });

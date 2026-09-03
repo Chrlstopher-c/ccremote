@@ -7,7 +7,7 @@
  * ☠ (d) Aucune fonction ici ne laisse une exception s'échapper.
  */
 
-import type { Mission, Registre } from '../../registre/index.ts';
+import type { Mission, Registre, Team } from '../../registre/index.ts';
 import { deciderCreationMission } from '../../../budgets/index.ts';
 import { accepte, applique, echecInattendu, refuse } from './contrat.ts';
 import { carburantParc, resoudreMission } from './outils-inspection.ts';
@@ -594,4 +594,119 @@ export async function relancerEquipe(relanceur: RelanceurMission, registre: Regi
     journal.error({ err: erreur, missionId }, 'relancerEquipe en échec');
     return echecInattendu(intention, erreur);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Teams persistantes (axe B) — démantèlement TTL et dissolution manuelle.
+// ---------------------------------------------------------------------------
+
+/**
+ * TTL d'inactivité d'une team `dormante` avant démantèlement automatique (Rebut,
+ * décision Chris 2026-09-03) : 7 jours. `☠` Une team dormante qui n'a pas servi
+ * depuis 7 j accumule du disque (worktree) pour rien — on la démantèle.
+ */
+export const TTL_TEAM_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Port de libération du worktree d'une team (ressource PC). `☠` Le registre du Pi
+ * ne peut pas supprimer un `git worktree` du PC lui-même (frontière A↔B) : il
+ * délègue par ce port, exactement comme `ArreteurMission`/`RelanceurMission`. La
+ * dissolution ACTE l'état dans le registre même si la libération échoue — un
+ * worktree orphelin se retrouve, une team jamais démantelée bloque son domaine.
+ */
+export interface LiberateurWorktreeTeam {
+  libererWorktree(teamId: string, worktree: string | null): Promise<unknown>;
+}
+
+/**
+ * Démantèle UNE team : libère son worktree (best-effort, borné) puis acte
+ * `demantelee` dans le registre. `☠` L'ordre compte peu — le marquage a lieu même
+ * si la libération lève — mais la libération vient d'abord pour que le worktree
+ * parte tant que la team le référence encore.
+ */
+async function demantelerUneTeam(
+  registre: Registre,
+  liberateur: LiberateurWorktreeTeam | undefined,
+  team: Team,
+  maintenant: number,
+  plafondMs?: number,
+): Promise<void> {
+  if (liberateur !== undefined) {
+    try {
+      await avecPlafond(liberateur.libererWorktree(team.id, team.worktree), plafondMs);
+    } catch (erreur) {
+      // `☠` N'empêche JAMAIS le marquage : une team qui ne se démantèle pas
+      // parce que la libération a raté resterait vivante et bloquerait son
+      // domaine pour toujours. Le worktree orphelin, lui, se retrouve.
+      journal.error(
+        { err: erreur, teamId: team.id },
+        'libération du worktree en échec — démantèlement acté quand même',
+      );
+    }
+  }
+  registre.teams.demanteler(team.id, maintenant);
+}
+
+/**
+ * `dissoudre_team` (A.2.2, axe B) — démantèlement MANUEL d'une team. Libère le
+ * worktree et acte `demantelee` : son (projet, domaine) redevient libre.
+ *
+ * `☠` Idempotent côté lecture : une team déjà démantelée (ou inconnue) rend un
+ * refus lisible, jamais un 500. Le démantèlement lui-même passe par la garde
+ * `WHERE etat != 'demantelee'` du dépôt (`demanteler`).
+ */
+export async function dissoudreTeam(
+  registre: Registre,
+  liberateur: LiberateurWorktreeTeam | undefined,
+  teamId: string,
+  plafondMs?: number,
+  maintenant: number = Date.now(),
+): Promise<ContratRetour> {
+  const intention = `dissoudre la team ${teamId}`;
+  try {
+    const team = registre.teams.lire(teamId);
+    if (team === null) return refuse(intention, 'aucune team ne porte cet identifiant');
+    if (team.etat === 'demantelee') return refuse(intention, 'team déjà démantelée — rien à dissoudre');
+    await demantelerUneTeam(registre, liberateur, team, maintenant, plafondMs);
+    return applique(
+      intention,
+      `team « ${team.domaine} » (projet « ${team.projet} ») démantelée — worktree libéré, ` +
+        'le domaine est de nouveau libre.',
+      teamId,
+    );
+  } catch (erreur) {
+    journal.error({ err: erreur, teamId }, 'dissoudreTeam en échec');
+    return echecInattendu(intention, erreur);
+  }
+}
+
+/**
+ * Passe TTL (Rebut, axe B) — démantèle toutes les teams `dormante` inactives
+ * depuis plus de `ttlMs`. `☠` `maintenant` est INJECTÉ (jamais `Date.now()` en
+ * dur) : c'est ce qui rend la règle « 7 j → démantèlement » testable sans
+ * attendre une semaine. Rend la liste des teams démantelées (pour journal/preuve).
+ */
+export async function demantelerTeamsExpirees(
+  registre: Registre,
+  liberateur: LiberateurWorktreeTeam | undefined,
+  maintenant: number = Date.now(),
+  ttlMs: number = TTL_TEAM_MS,
+): Promise<readonly string[]> {
+  const seuil = maintenant - ttlMs;
+  const expirees = registre.teams.listerDormantesInactivesAvant(seuil);
+  const demantelees: string[] = [];
+  for (const team of expirees) {
+    try {
+      await demantelerUneTeam(registre, liberateur, team, maintenant);
+      demantelees.push(team.id);
+    } catch (erreur) {
+      // Une team qui refuse de se démanteler ne doit pas arrêter la passe : les
+      // autres expirées continuent d'être libérées.
+      journal.error({ err: erreur, teamId: team.id }, 'démantèlement TTL d’une team en échec — passe poursuivie');
+    }
+  }
+  if (demantelees.length > 0) {
+    journal.info({ nombre: demantelees.length, seuil }, 'passe TTL : teams dormantes expirées démantelées (axe B)');
+  }
+  return demantelees;
 }
