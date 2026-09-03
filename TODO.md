@@ -1,5 +1,31 @@
 # TODO — ccremote
-*Dernière mise à jour : 2026-08-08*
+*Dernière mise à jour : 2026-09-03*
+
+## ✅ 2026-09-03 — Chantier optimisation quotas LIVRÉ et DÉPLOYÉ (détail : `STATE.md`)
+
+- [x] **A1 — verrous durs de modèles** : lead opus-4-8 / exécuteurs sonnet imposés (hook `PreToolUse` sur
+      l'outil `Agent`, pas `Task`), master orchestrateur configurable. Prouvé E2E (sous-agent réellement Sonnet).
+- [x] **A2 — autocompact orchestrateur** (85 % de contexte). **A3 — prompt caching** déjà assuré (invariant figé).
+- [x] **C1 — watchdog borné** (partiel) + **C2 — échec propre sur compte en overage**.
+- [x] **Budget par défaut 50 $/activation** (garde-fou catastrophe 250 $ intact).
+- [x] **Axe B — teams persistantes COMPLET** : registre `team`/`feature_queue`, worktree `en_veille`, file sous
+      autonomie, TTL 7 j + `dissoudre_team`, restauration PC, B3 résumé via `compact_summary` natif.
+- [x] **D1 — rapport d'équipe structuré**. **Fusion master + déploiement 4 machines** (2080 tests verts).
+- [x] **Test `cheminTranscriptMission` rendu robuste** au nettoyage des transcripts (débloquait le deploy).
+
+### 🆕 Reste ouvert du chantier optim-quotas (2026-09-03)
+- [ ] **Observer la conso réelle** sur les premières missions (gain prouvé seulement en unitaire) — exécuteurs
+      Sonnet, teams qui survivent/réveillent, budget qui coupe à 50 $. **Effort : néant côté code, observation.**
+- [ ] **D3 — validation du domaine INERTE en prod** tant qu'un projet n'est pas déclaré côté Pi (le Pi n'a pas
+      `ConfigProjet.domainesEquipe`). **Effort : M.**
+- [ ] **C1 partiel** : le CLI ne borne pas ses retries internes — le vrai frein reste le budget. **Limite CLI.**
+- [ ] **Portable sans compte Claude authentifié** → aucune équipe ne peut y démarrer. **Geste opérateur
+      (`claude login`, id distinct du PC).**
+- [ ] **Dette fichiers > 500 l** : `dispatch-mandat.ts` ~1106, `migrations.ts`, `outils-cycle-vie.ts`. **Effort : M.**
+- [ ] **`ARBORESCENCE.md` à régénérer** (modules teams/file/hooks non listés). **Effort : S.**
+
+---
+*(Tout ce qui suit est le TODO tel qu'avant cette session — dernière refonte de fond 21/08.)*
 *Synthèse ajoutée le 2026-08-18 — voir section suivante. Rien n'a été retiré du fichier d'origine :
 tout ce qui suit `## ⚡ Harness d'orchestration — chantier actif` (ligne ~150) est le TODO.md tel
 qu'il existait avant cette passe, inchangé. Décompte fait ce jour-là : le fichier d'origine contient

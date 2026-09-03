@@ -1,5 +1,44 @@
 # STATE — ccremote
-*Dernière mise à jour : 2026-08-21*
+*Dernière mise à jour : 2026-09-03*
+
+## 2026-09-03 — Optimisation quotas + qualité : chantier LIVRÉ et DÉPLOYÉ sur les 4 machines
+
+Branche `optim-quotas` fusionnée sur `master` (fast-forward, `master`=`57cad88`), **2080 tests / 0 fail**,
+tsc propre, déployée en production sur **Pi + PC + VPS + portable** (les quatre rattachées, vérifié via
+`bun pilotage/pilote.ts machines`). Base : `AUDIT-ORCHESTRATION.md`, `AUDIT-QUOTAS-QUALITE.md`,
+`PLAN-OPTIMISATION-QUOTAS.md`, `PLAN-AXE-B.md`. Détail SDK/déploiement : mémoire sémantique `ccremote`.
+
+**Ce qui a changé (grief « bouffe les quotas / rate-limit / qualité moindre ») :**
+- **Verrous DURS de modèles (A1)** : lead = `claude-opus-4-8` high non-overridable ; sous-agents exécuteurs
+  = `claude-sonnet-5` imposé par un hook `PreToolUse` (fin du facteur ×10, 6,40 $→0,67 $) ; master
+  orchestrateur configurable via `CCREMOTE_MODELE_ORCHESTRATEUR`.
+- **Autocompact orchestrateur (A2)** à 85 % de contexte (fin de l'historique rejoué sans borne, cause 1).
+- **Budget par défaut 50 $/ACTIVATION** (le vrai frein ; `PLAFOND_EQUIPE_USD` 250 $ reste le garde-fou
+  catastrophe dérivé de l'échelle anti-boucle, intact — ne pas y toucher).
+- **Watchdog borné (C1)** + **échec propre sur compte en overage (C2)**.
+- **Teams persistantes (axe B, complet)** : tables `team`/`feature_queue`, worktree `en_veille` réutilisé au
+  réveil sans re-exploration, file de features dépilée sous fenêtre d'autonomie, TTL 7 j + `dissoudre_team`,
+  résumé de reprise via le `compact_summary` NATIF du CLI (zéro coût LLM).
+- **Rapport d'équipe structuré (D1)** — 4 marqueurs imposés au lead, extraction regex, zéro coût LLM.
+- **HORS SCOPE ferme (Chris)** : rotation/délégation de comptes — la cause 2 du rate-limit reste en place.
+
+**Trois bugs trouvés EN VALIDATION (pas sur récit d'agent) :** le verrou Sonnet était mort (il ciblait
+l'outil `Task`, mais le SDK 0.3.220 émet le sous-agent sous `Agent`) ; worktree jamais conservé sur un worker
+déjà mort ; `team.worktree` jamais peuplé. Tous corrigés et re-prouvés en réel. Fait SDK clé :
+`claude-opus-4-8` est dispatchable malgré son absence de `supportedModels()` (mesuré par dispatch réel).
+
+**Reste (à observer / traiter) :**
+- **Validation E2E réelle de la CONSO pas encore faite** : à observer sur les premières missions (exécuteurs
+  Sonnet effectifs, teams qui survivent/réveillent, budget qui coupe à 50 $). C'est la vraie preuve du gain.
+- **`D3`** (validation du domaine d'équipe) câblée mais INERTE tant qu'un projet n'est pas déclaré côté Pi
+  (frontière A↔B : le Pi n'a pas la `ConfigProjet.domainesEquipe` du PC).
+- **`C1` partiel** : le CLI ne borne pas ses retries internes ; le vrai frein reste le budget.
+- **Portable sans compte Claude authentifié** → répond à l'inventaire mais ne peut héberger d'équipe.
+- **Dette** : `dispatch-mandat.ts` ~1106 l, `migrations.ts`, `outils-cycle-vie.ts` > 500 l (pré-existant, aggravé).
+- **`ARBORESCENCE.md` en retard** : nouveaux modules non listés (`teams.ts`, `feature-queue.ts`,
+  `modele-sous-agents.ts`, `resumeur-compaction.ts`, `format-rapport.ts`, `fin-activation-team.ts`,
+  `restauration-teams-worktrees.ts`, `balayage-ttl-teams.ts`, `lecteur-domaines-equipe.ts`).
+- **`master` local diverge d'`origin`** : le déploiement se fait par rsync du code local, aucun push nécessaire.
 
 Historique antérieur au 2026-08-07 archivé dans `STATE-ARCHIVE-2026-08-07.md` (598 lignes,
 non tronqué) — ce fichier repart de zéro pour tenir sous 300 lignes. Détail complet du harness :
