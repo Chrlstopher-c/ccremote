@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
-import { GardeBudgetError, RETRY_WATCHDOG_ENV } from '../budgets/index.ts';
+import { CompteurTentativesRetryWatchdog, GardeBudgetError, RETRY_WATCHDOG_ENV } from '../budgets/index.ts';
 import {
   AGENT_TEAMS_ENV,
   CONFIG_DIR_ENV,
@@ -72,6 +72,44 @@ describe('env', () => {
   test('CLAUDE_CODE_RETRY_WATCHDOG=1 avec un maxBudgetUsd actif : autorisé', () => {
     const env = buildWorkerEnv(spec({ maxBudgetUsd: 25, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }));
     expect(env[RETRY_WATCHDOG_ENV]).toBe('1');
+  });
+
+  describe('☠ C1 câblé — compteurRetryWatchdog fourni', () => {
+    test('sans compteur (appelants existants, tests) : comportement historique inchangé, budget seul suffit', () => {
+      const env = buildWorkerEnv(spec({ maxBudgetUsd: 25, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }));
+      expect(env[RETRY_WATCHDOG_ENV]).toBe('1');
+    });
+
+    test('avec compteur, sous le plafond : autorisé et la tentative est enregistrée', () => {
+      const compteur = new CompteurTentativesRetryWatchdog(3);
+      const env = buildWorkerEnv(
+        spec({ sessionId: 's-1', maxBudgetUsd: 25, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }),
+        compteur,
+      );
+      expect(env[RETRY_WATCHDOG_ENV]).toBe('1');
+      expect(compteur.etat('s-1').tentativesEffectuees).toBe(1);
+    });
+
+    test('avec compteur, plafond déjà atteint : la composition refuse (défense en profondeur)', () => {
+      const compteur = new CompteurTentativesRetryWatchdog(1);
+      compteur.enregistrerTentative('s-2');
+      expect(() =>
+        buildWorkerEnv(
+          spec({ sessionId: 's-2', maxBudgetUsd: 25, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }),
+          compteur,
+        ),
+      ).toThrow(GardeBudgetError);
+    });
+
+    test('avec compteur mais budget inactif : refuse toujours (H-68 prioritaire, jamais contourné par C1)', () => {
+      const compteur = new CompteurTentativesRetryWatchdog(3);
+      expect(() =>
+        buildWorkerEnv(
+          spec({ sessionId: 's-3', maxBudgetUsd: Number.POSITIVE_INFINITY, extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }),
+          compteur,
+        ),
+      ).toThrow(GardeBudgetError);
+    });
   });
 });
 
@@ -296,6 +334,36 @@ describe('mode reprise (B.3.3, relance)', () => {
     expect(options.disallowedTools).toEqual(['Bash(rm -rf /*)']);
     expect(options.maxBudgetUsd).toBe(25);
     expect(options.settingSources).toEqual(['user', 'project', 'local']);
+  });
+});
+
+describe('☠ C1 câblé jusqu’à composeWorkerOptions (startWorker → composeWorkerOptions → buildWorkerEnv)', () => {
+  test('sans 4e paramètre : comportement historique — env composé sans le compteur', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.env?.['PATH']).toBe(process.env['PATH']);
+  });
+
+  test('avec un compteur fourni, le refus au plafond remonte bien depuis composeWorkerOptions', () => {
+    const compteur = new CompteurTentativesRetryWatchdog(0);
+    expect(() =>
+      composeWorkerOptions(
+        spec({ extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }),
+        MODEL,
+        'nouvelle',
+        compteur,
+      ),
+    ).toThrow(GardeBudgetError);
+  });
+
+  test('avec un compteur fourni et sous le plafond, l’environnement composé porte le watchdog', () => {
+    const compteur = new CompteurTentativesRetryWatchdog(3);
+    const { options } = composeWorkerOptions(
+      spec({ extraEnv: { [RETRY_WATCHDOG_ENV]: '1' } }),
+      MODEL,
+      'nouvelle',
+      compteur,
+    );
+    expect(options.env?.[RETRY_WATCHDOG_ENV]).toBe('1');
   });
 });
 

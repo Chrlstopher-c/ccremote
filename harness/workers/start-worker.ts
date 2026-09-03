@@ -9,6 +9,7 @@
 import { query as sdkQuery } from '@anthropic-ai/claude-agent-sdk';
 import type { Query, SDKMessage, SDKSystemMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { composeWorkerOptions } from './options-composition.ts';
+import type { CompteurTentativesRetryWatchdog } from '../budgets/index.ts';
 import { sessionLogger } from './logger.ts';
 import { resolveModelWithFloor } from './model-floor.ts';
 import { runPreflight } from './preflight-config.ts';
@@ -44,6 +45,12 @@ export interface StartWorkerDeps {
    * (B.3.3, superviseur/) : même séquence de démarrage, identité différente.
    */
   readonly resume?: boolean;
+  /**
+   * Défense en profondeur C1 — voir `options-composition.ts#buildWorkerEnv`.
+   * Absent en test (comportement historique, `assertRetryWatchdogCoherent`
+   * seul) ; fourni par le superviseur en prod.
+   */
+  readonly compteurRetryWatchdog?: CompteurTentativesRetryWatchdog;
 }
 
 function isInitMessage(message: SDKMessage): message is SDKSystemMessage {
@@ -154,7 +161,12 @@ export async function startWorker(
           }),
         };
 
-  const { options, abortController } = composeWorkerOptions(specPourSpawn, model, deps.resume === true ? 'reprise' : 'nouvelle');
+  const { options, abortController } = composeWorkerOptions(
+    specPourSpawn,
+    model,
+    deps.resume === true ? 'reprise' : 'nouvelle',
+    deps.compteurRetryWatchdog,
+  );
 
   let stream: Query;
   try {

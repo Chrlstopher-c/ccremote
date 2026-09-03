@@ -16,7 +16,7 @@
 import { describe, expect, test } from 'bun:test';
 import { composerMandatSysteme, composerPromptInitial } from './dispatch-mandat.ts';
 import type { Proposition } from '../registre/index.ts';
-import { PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
+import { BUDGET_EQUIPE_DEFAUT_USD } from '../../shared/budget-equipe.ts';
 
 const MANDAT: Proposition = {
   id: 'p1',
@@ -93,7 +93,9 @@ describe('ce que le lead doit savoir de son cadre', () => {
     expect(prompt).not.toContain('Budget : 0.00 $');
     // Le montant annoncé au lead est le plafond RÉELLEMENT transmis au SDK :
     // les deux sortent de `plafondEffectifUsd`, ils ne peuvent plus diverger.
-    expect(prompt).toContain(`Budget : ${PLAFOND_EQUIPE_USD.toFixed(2)} $`);
+    // `☠` Le défaut d'ACTIVATION (50 $), pas le plafond catastrophe dérivé
+    // (250 $) — finition budget par défaut d'équipe.
+    expect(prompt).toContain(`Budget : ${BUDGET_EQUIPE_DEFAUT_USD.toFixed(2)} $`);
   });
 
   test('un message en cours de route n’est pas un ordre d’arrêt', () => {

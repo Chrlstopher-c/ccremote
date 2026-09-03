@@ -22,6 +22,7 @@
  */
 
 import { CompteurRelances } from '../../relance/compteur-relances.ts';
+import { CompteurTentativesRetryWatchdog } from '../../budgets/index.ts';
 import { creerJugeHaiku } from '../../anti-boucle/index.ts';
 import { PersistanceRegistreSqlite, SuperviseurWorkers } from '../../superviseur/index.ts';
 import {
@@ -97,6 +98,12 @@ export interface SuperviseurPcAssemble {
 export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc): SuperviseurPcAssemble {
   const persistance = new PersistanceRegistreSqlite({ chemin: options.cheminRegistrePersistance });
   const compteurRelances = new CompteurRelances(options.plafondRelancesDefaut);
+  // `☠` Défense en profondeur C1 (`budgets/garde-retry-watchdog.ts`) — sans cette
+  // instance, `buildWorkerEnv` retombe silencieusement sur `assertRetryWatchdogCoherent`
+  // seul et la borne « max N réarmements + backoff » reste inerte en prod. Une instance
+  // par superviseur, partagée entre workers (clé par sessionId en interne, comme
+  // `compteurRelances`).
+  const compteurRetryWatchdog = new CompteurTentativesRetryWatchdog();
   const jugeBoucle = creerJugeHaiku();
 
   // `☠` Câblage F.2 (E2) : le gestionnaire réel de cycle de vie worktree
@@ -119,6 +126,7 @@ export function assemblerSuperviseurPc(options: OptionsAssemblageSuperviseurPc):
 
   const superviseur = new SuperviseurWorkers({
     compteurRelances,
+    compteurRetryWatchdog,
     persistance,
     jugeBoucle,
     gestionnaireWorktrees,

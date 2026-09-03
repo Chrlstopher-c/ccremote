@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { ouvrirRegistre, type Registre } from '../registre/index.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
 import { OUTILS_ECRITURE, OUTILS_INTERACTION_HUMAINE } from '../../shared/acces-mandat.ts';
+import { BUDGET_EQUIPE_DEFAUT_USD, PLAFOND_EQUIPE_USD } from '../../shared/budget-equipe.ts';
 import {
   dispatcherMandat,
   ErreurPlafondEquipesProjetAtteint,
@@ -519,5 +520,43 @@ describe('☠ la latitude (chantier 3) atteint le briefing RÉELLEMENT transmis 
   test('vide ou blanche — traitée comme absente, jamais une section vide', async () => {
     const briefing = await dispatcher('   ');
     expect(briefing).not.toContain('Latitude');
+  });
+});
+
+/**
+ * `☠` Finition budget par défaut — quand le mandat ne porte pas de budget,
+ * le worker doit recevoir 50 $ (`BUDGET_EQUIPE_DEFAUT_USD`), jamais 250 $
+ * (`PLAFOND_EQUIPE_USD`, garde-fou catastrophe qui doit rester intact).
+ */
+describe('☠ budget par défaut d’équipe = BUDGET_EQUIPE_DEFAUT_USD (50 $), plafond catastrophe intact', () => {
+  async function dispatcherAvecBudget(budgetMaxUsd: number): Promise<number> {
+    let maxBudgetUsdEnvoye = -1;
+    const d: DependancesDispatch = {
+      ...deps(),
+      demarreur: {
+        demarrer: async (dem: { parametres: { maxBudgetUsd: number } }) => {
+          maxBudgetUsdEnvoye = dem.parametres.maxBudgetUsd;
+          return { detail: 'ok' };
+        },
+      } as never,
+    };
+    const proposition = { ...(PROPOSITION as object), budgetMaxUsd } as never;
+    await dispatcherMandat(proposition, d);
+    return maxBudgetUsdEnvoye;
+  }
+
+  test('un mandat SANS budget (0) résout vers 50 $, pas 250 $', async () => {
+    const montant = await dispatcherAvecBudget(0);
+    expect(montant).toBe(BUDGET_EQUIPE_DEFAUT_USD);
+    expect(montant).not.toBe(PLAFOND_EQUIPE_USD);
+  });
+
+  test('le plafond catastrophe reste 250 $ — inchangé par cette finition', () => {
+    expect(PLAFOND_EQUIPE_USD).toBe(250);
+  });
+
+  test('un budget explicite du mandat est respecté tel quel, jamais écrasé par le défaut', async () => {
+    const montant = await dispatcherAvecBudget(17);
+    expect(montant).toBe(17);
   });
 });

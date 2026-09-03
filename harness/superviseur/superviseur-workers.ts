@@ -203,7 +203,13 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
         cle: e,
       };
     });
-    this.#startWorkerDeps = deps.startWorkerDeps ?? {};
+    this.#startWorkerDeps = {
+      ...(deps.startWorkerDeps ?? {}),
+      // `☠` Défense en profondeur C1 : optionnel dans `DependancesSuperviseur` pour
+      // ne rien changer aux ~40 sites de test qui construisent ce superviseur sans
+      // lui — voir `superviseur-workers-types.ts`.
+      ...(deps.compteurRetryWatchdog ? { compteurRetryWatchdog: deps.compteurRetryWatchdog } : {}),
+    };
     this.#planifier = deps.planifier ?? ((delaiMs, tache) => void setTimeout(tache, delaiMs));
     this.#attendreGrace = deps.attendreGrace ?? ((delaiMs) => new Promise((resolve) => setTimeout(resolve, delaiMs)));
     this.#persistance = deps.persistance;

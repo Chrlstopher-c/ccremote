@@ -5,7 +5,7 @@
  */
 
 import type { JugeBoucle } from '../anti-boucle/index.ts';
-import type { ObservateurUsage } from '../budgets/index.ts';
+import type { CompteurTentativesRetryWatchdog, ObservateurUsage } from '../budgets/index.ts';
 import type { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { StartWorkerDeps } from '../workers/index.ts';
 import { startWorker as startWorkerReel } from '../workers/index.ts';
@@ -57,6 +57,13 @@ export type DemarrerWorkerFn = typeof startWorkerReel;
 
 export interface DependancesSuperviseur {
   readonly compteurRelances: CompteurRelances;
+  /**
+   * Défense en profondeur C1 (`budgets/garde-retry-watchdog.ts`) — optionnel pour
+   * ne pas casser les ~40 sites de test qui construisent `SuperviseurWorkers` sans
+   * lui (comportement historique : `assertRetryWatchdogCoherent` seul). Fourni en
+   * prod par `assembler-superviseur.ts`, sur le même modèle que `compteurRelances`.
+   */
+  readonly compteurRetryWatchdog?: CompteurTentativesRetryWatchdog;
   /** Best-effort (H-15) : la remontée réelle vers le Pi passe par E.2, hors périmètre. */
   readonly observateurRelance?: ObservateurRelance;
   /**

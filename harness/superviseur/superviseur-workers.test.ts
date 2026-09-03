@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { EvenementQuotaObserve, ObservateurUsage } from '../budgets/index.ts';
+import { CompteurTentativesRetryWatchdog } from '../budgets/index.ts';
 import { CompteurRelances } from '../relance/compteur-relances.ts';
 import type { DecisionRelance } from '../relance/types.ts';
 import type { WorkerCapabilities, WorkerHandle, WorkerSpec } from '../workers/index.ts';
@@ -754,5 +755,79 @@ describe('un `result` pendant des tâches de fond ne tue PAS la session', () => 
     // termine. Sans la remise à zéro explicite de `relancer()`, il resterait
     // vivant pour toujours sur une tâche qui n'existe plus — projet verrouillé.
     expect(superviseur.inventaire()[0]?.vivant).toBe(false);
+  });
+});
+
+/**
+ * `☠` Défense en profondeur C1 : sans câblage réel, `compteurRetryWatchdog`
+ * fourni en dépendance du superviseur ne sert à rien s'il n'atteint jamais
+ * `demarrerWorker`. Ces tests inspectent le 3e argument (`StartWorkerDeps`)
+ * RÉELLEMENT reçu par `demarrerWorker` — seul artefact qui fasse foi, sur le
+ * même patron que les tests d'accès du dispatch (« ce qui part vers le PC »).
+ */
+describe('☠ C1 câblé — compteurRetryWatchdog atteint buildWorkerEnv via demarrerWorker', () => {
+  /** Capture le `StartWorkerDeps` réellement reçu par `demarrerWorker`. */
+  function demarrerWorkerCapturant(captures: unknown[]): DemarrerWorkerFn {
+    return (async (workerSpec: WorkerSpec, _prompt: unknown, deps: unknown) => {
+      captures.push(deps);
+      const handle: WorkerHandle = {
+        sessionId: workerSpec.sessionId,
+        cwd: workerSpec.cwd,
+        capabilities: capacites({ sessionId: workerSpec.sessionId }),
+        model: { requested: 'sonnet', resolved: 'claude-sonnet-4-6', tier: 'sonnet', viaInheritance: false },
+        preflight: {
+          ok: true,
+          cwd: workerSpec.cwd,
+          loadedSources: ['user', 'project', 'local'],
+          machineClaudeMdPath: null,
+          projectClaudeMdPaths: [],
+          effectiveModel: 'sonnet',
+          failures: [],
+        },
+        pid: null,
+        pidStarttime: null,
+        abortController: new AbortController(),
+        query: fakeQuery([]),
+      };
+      return handle;
+    }) as unknown as DemarrerWorkerFn;
+  }
+
+  test('fourni au superviseur, il atteint demarrerWorker() dès demarrer()', async () => {
+    const captures: unknown[] = [];
+    const compteurRetryWatchdog = new CompteurTentativesRetryWatchdog();
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      compteurRetryWatchdog,
+      demarrerWorker: demarrerWorkerCapturant(captures),
+    });
+    await superviseur.demarrer(demande());
+    expect(captures).toHaveLength(1);
+    expect((captures[0] as { compteurRetryWatchdog?: unknown }).compteurRetryWatchdog).toBe(compteurRetryWatchdog);
+  });
+
+  test('fourni au superviseur, il atteint demarrerWorker() aussi via relancer()', async () => {
+    const captures: unknown[] = [];
+    const compteurRetryWatchdog = new CompteurTentativesRetryWatchdog();
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      compteurRetryWatchdog,
+      demarrerWorker: demarrerWorkerCapturant(captures),
+    });
+    const handle = await superviseur.demarrer(demande());
+    await superviseur.arreter('mission-1');
+    await superviseur.relancer('mission-1', handle.sessionId);
+    expect(captures).toHaveLength(2);
+    expect((captures[1] as { compteurRetryWatchdog?: unknown }).compteurRetryWatchdog).toBe(compteurRetryWatchdog);
+  });
+
+  test('absent (défaut historique, ~40 sites de test) : StartWorkerDeps ne porte aucun compteurRetryWatchdog', async () => {
+    const captures: unknown[] = [];
+    const superviseur = new SuperviseurWorkers({
+      compteurRelances: new CompteurRelances(),
+      demarrerWorker: demarrerWorkerCapturant(captures),
+    });
+    await superviseur.demarrer(demande());
+    expect((captures[0] as { compteurRetryWatchdog?: unknown }).compteurRetryWatchdog).toBeUndefined();
   });
 });

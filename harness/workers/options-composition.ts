@@ -133,6 +133,7 @@ export function composeWorkerOptions(
   spec: WorkerSpec,
   model: ResolvedModel,
   mode: ModeIdentiteSession = 'nouvelle',
+  compteurRetryWatchdog?: CompteurTentativesRetryWatchdog,
 ): ComposedWorkerOptions {
   const abortController = new AbortController();
   const identiteSession: Pick<Options, 'sessionId' | 'resume'> =
@@ -192,7 +193,7 @@ export function composeWorkerOptions(
     forwardSubagentText: true,
     agentProgressSummaries: true,
     abortController,
-    env: buildWorkerEnv(spec),
+    env: buildWorkerEnv(spec, compteurRetryWatchdog),
     stderr: buildStderrSink(spec),
     // `☠` Fourni quel que soit `permissionMode`, et jamais appelé : en
     // `bypassPermissions` rien ne demande d'autorisation. Il subsiste parce que

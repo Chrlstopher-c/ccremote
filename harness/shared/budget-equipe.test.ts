@@ -9,6 +9,7 @@
 import { describe, expect, test } from 'bun:test';
 import { PALIERS_PAR_DEFAUT } from '../anti-boucle/types.ts';
 import {
+  BUDGET_EQUIPE_DEFAUT_USD,
   DERNIER_PALIER_USD,
   PLAFOND_EQUIPE_USD,
   plafondEffectifUsd,
@@ -54,5 +55,31 @@ describe('plafondEffectifUsd', () => {
 
   test('un budget négatif ne passe pas pour une consigne — il retombe au plafond', () => {
     expect(plafondEffectifUsd(-3)).toBe(PLAFOND_EQUIPE_USD);
+  });
+});
+
+describe('BUDGET_EQUIPE_DEFAUT_USD — budget par défaut par activation', () => {
+  test('vaut 50 $, distinct du plafond catastrophe (250 $)', () => {
+    expect(BUDGET_EQUIPE_DEFAUT_USD).toBe(50);
+    expect(PLAFOND_EQUIPE_USD).toBe(250);
+    expect(BUDGET_EQUIPE_DEFAUT_USD).toBeLessThan(PLAFOND_EQUIPE_USD);
+  });
+
+  test('reste au-dessus du premier palier — l’équipe est inspectable au moins une fois', () => {
+    expect(plafondSousLePremierPalier(BUDGET_EQUIPE_DEFAUT_USD)).toBe(false);
+  });
+
+  test('plafondEffectifUsd(vide, BUDGET_EQUIPE_DEFAUT_USD) résout vers 50 $, jamais 250 $', () => {
+    expect(plafondEffectifUsd(null, BUDGET_EQUIPE_DEFAUT_USD)).toBe(BUDGET_EQUIPE_DEFAUT_USD);
+    expect(plafondEffectifUsd(0, BUDGET_EQUIPE_DEFAUT_USD)).toBe(BUDGET_EQUIPE_DEFAUT_USD);
+    expect(plafondEffectifUsd(undefined, BUDGET_EQUIPE_DEFAUT_USD)).toBe(BUDGET_EQUIPE_DEFAUT_USD);
+  });
+
+  test('un budget de mandat explicite reste respecté tel quel, même avec un défaut différent', () => {
+    expect(plafondEffectifUsd(17, BUDGET_EQUIPE_DEFAUT_USD)).toBe(17);
+  });
+
+  test('sans 2e paramètre, le comportement historique (plafond catastrophe) est inchangé', () => {
+    expect(plafondEffectifUsd(null)).toBe(PLAFOND_EQUIPE_USD);
   });
 });

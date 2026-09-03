@@ -28,7 +28,7 @@ import {
   type AccesMandat,
 } from '../../shared/acces-mandat.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
-import { PLAFOND_EQUIPE_USD, plafondEffectifUsd } from '../../shared/budget-equipe.ts';
+import { BUDGET_EQUIPE_DEFAUT_USD, plafondEffectifUsd } from '../../shared/budget-equipe.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'dispatch-mandat' });
@@ -97,16 +97,6 @@ export interface ResultatDispatch {
   readonly missionId: string;
   readonly detail: string;
 }
-
-/**
- * Budget par défaut d'une équipe, quand le mandat n'en fixe pas.
- *
- * `☠` Valait 12 $ — la valeur exacte du PREMIER palier d'inspection anti-boucle.
- * L'équipe mourait donc au moment précis où le juge devait la regarder pour la
- * première fois. Dérivé de l'échelle depuis (`shared/budget-equipe.ts`), pour
- * que les deux ne puissent plus se croiser en silence.
- */
-const BUDGET_DEFAUT_USD = PLAFOND_EQUIPE_USD;
 
 /**
  * Plafond d'équipes simultanées sur un projet GIT (mandat E3). Motifs : disque
@@ -450,7 +440,7 @@ function ligneAcces(acces: AccesMandat): string {
  * se faire couper au même endroit.
  */
 function ligneBudget(budgetUsd: number): string {
-  const montant = plafondEffectifUsd(budgetUsd);
+  const montant = plafondEffectifUsd(budgetUsd, BUDGET_EQUIPE_DEFAUT_USD);
   // `☠` Le montant seul ne suffit pas — l'incident qui a motivé ce bloc (18/08) :
   // une équipe de diagnostic a bâti son hypothèse principale sur un supposé
   // dépassement de budget alors qu'elle était à 15 % de son plafond. Dire
@@ -891,7 +881,7 @@ export async function dispatcherMandat(p: Proposition, deps: DependancesDispatch
       // `[]` (les outils d'écriture ne sont pas refusés par nom), c'est ce
       // champ, câblé au hook `PreToolUse`, qui confine leur cible au worktree.
       confinerEcritureCwd: acces === 'rapport',
-      maxBudgetUsd: plafondEffectifUsd(p.budgetMaxUsd),
+      maxBudgetUsd: plafondEffectifUsd(p.budgetMaxUsd, BUDGET_EQUIPE_DEFAUT_USD),
       // `☠` Même condition que `ligneBudget()` et `plafondEffectifUsd` — une
       // SEULE source, jamais deux calculs indépendants qui pourraient diverger
       // sur ce qu'ils disent au lead. Consommé par `mcp-depense/serveur.ts`.
