@@ -29,6 +29,12 @@ import {
 } from '../../shared/acces-mandat.ts';
 import { PLANCHER_DENI_SDK } from '../../plancher-deni/motifs.ts';
 import { BUDGET_EQUIPE_DEFAUT_USD, plafondEffectifUsd } from '../../shared/budget-equipe.ts';
+import {
+  MARQUEUR_CHANGEMENTS,
+  MARQUEUR_ETAT,
+  MARQUEUR_OUVERT,
+  MARQUEUR_VERIFICATIONS,
+} from '../../shared/format-rapport.ts';
 import { processusOrchestrateurLogger } from './processus/logger.ts';
 
 const log = processusOrchestrateurLogger.child({ composant: 'dispatch-mandat' });
@@ -189,18 +195,34 @@ export class ErreurModeleInconnu extends Error {
  * d'exploitable, et la décision suivante se prend sur du vide. Le défaut est
  * symétrique de celui corrigé sur l'orchestrateur toute la journée du 01/08 —
  * une information écrite d'un côté, jamais dite à l'autre.
+ *
+ * `☠` (D1, cause 4/5) Les quatre rubriques existaient déjà en prose numérotée, mais rien ne les
+ * rendait REPÉRABLES : `rapport_equipe` ne pouvait que rendre le bloc entier, jamais le
+ * découper par rubrique. Les marqueurs `RAPPORT_ETAT` / `RAPPORT_CHANGEMENTS` /
+ * `RAPPORT_VERIFICATIONS` / `RAPPORT_OUVERT` (définis une seule fois dans
+ * `shared/format-rapport.ts`, partagés avec le parseur côté orchestrateur) sont ce qui rend le
+ * format opposable sans appel LLM : une extraction par marqueur littéral, jamais une inférence de
+ * sens. Un lead qui ignore le format n'est pas bloqué — `rapport_equipe` dégrade vers le texte
+ * brut, comme avant.
  */
 const BLOC_RAPPORT = [
   'TON DERNIER MESSAGE EST TON RAPPORT — ce n’est pas une formule.',
-  'Le harness ne construit aucune synthèse : il transmet littéralement le dernier bloc de',
-  'texte que tu écris, et l’orchestrateur décide de la suite dessus, souvent sans qu’un',
-  'humain le relise. « C’est fait » ne lui apprend rien et lui fait relancer une équipe',
-  'pour rien. Termine donc TOUJOURS par un bloc qui contient, dans cet ordre :',
-  '  1. le critère d’arrêt est-il atteint — oui, non, ou partiellement, et pourquoi ;',
-  '  2. ce que tu as changé, fichier par fichier, sans raconter ta démarche ;',
-  '  3. ce que tu as VÉRIFIÉ et comment (commande lancée, résultat obtenu) — pas',
-  '     « les tests passent », mais ce que tu as exécuté et ce qu’il a rendu ;',
-  '  4. ce qui reste ouvert, et les questions que tu n’as pas pu trancher.',
+  'Le harness ne construit aucune synthèse : par défaut il transmet littéralement le dernier bloc',
+  'de texte que tu écris, et l’orchestrateur décide de la suite dessus, souvent sans qu’un humain',
+  'le relise. « C’est fait » ne lui apprend rien et lui fait relancer une équipe pour rien.',
+  '',
+  `Termine donc TOUJOURS par un bloc qui commence CHACUNE de ses quatre rubriques par son`,
+  `marqueur EXACT, seul en début de ligne (${MARQUEUR_ETAT}, ${MARQUEUR_CHANGEMENTS},`,
+  `${MARQUEUR_VERIFICATIONS}, ${MARQUEUR_OUVERT}) — c’est ce qui permet au harness de rendre`,
+  'chaque rubrique séparément à l’orchestrateur au lieu d’un bloc brut :',
+  `${MARQUEUR_ETAT}: le critère d’arrêt est-il atteint — oui, non, ou partiellement, et pourquoi.`,
+  `${MARQUEUR_CHANGEMENTS}: ce que tu as changé, fichier par fichier, sans raconter ta démarche.`,
+  `${MARQUEUR_VERIFICATIONS}: ce que tu as VÉRIFIÉ et comment (commande lancée, résultat obtenu) —`,
+  '  pas « les tests passent », mais ce que tu as exécuté et ce qu’il a rendu.',
+  `${MARQUEUR_OUVERT}: ce qui reste ouvert, et les questions que tu n’as pas pu trancher.`,
+  '',
+  'Les quatre marqueurs doivent apparaître, dans cet ordre, chacun avec un contenu non vide — un',
+  'bloc sans eux reste transmis tel quel, mais l’orchestrateur perd le découpage par rubrique.',
 ].join('\n');
 
 /**

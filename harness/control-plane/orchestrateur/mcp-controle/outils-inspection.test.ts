@@ -216,6 +216,54 @@ describe('rapport_equipe — ce que l’équipe a écrit', () => {
     // Le dernier ÉVÉNEMENT est un outil ; le dernier TEXTE reste la synthèse.
     expect(rapportEquipe(registre, null, 'flux').etat).toBe('la vraie synthèse');
   });
+
+  test('D1 ☠ rapport au format ⇒ rendu structuré par rubrique, rien de perdu', () => {
+    registre.missions.creer({ id: 'm-struct', lotId: 'lot-1', nom: 'structure', projet: 'struct', compteId: 'compte1' });
+    const texte = [
+      'RAPPORT_ETAT: partiellement atteint — build vert, un test manuel reste à faire.',
+      'RAPPORT_CHANGEMENTS:',
+      '- src/api.ts : ajout du endpoint /health',
+      '- src/api.test.ts : test associé',
+      'RAPPORT_VERIFICATIONS:',
+      '`bun test` → 12 pass, 0 fail',
+      'RAPPORT_OUVERT:',
+      'reste à vérifier le comportement sous charge.',
+    ].join('\n');
+    registre.missions.ajouterActivite('m-struct', texte, 1_000, 'texte');
+    const resultat = rapportEquipe(registre, null, 'structure');
+    expect(resultat.ok).toBe(true);
+    expect(resultat.etat).toContain('Critère d’arrêt');
+    expect(resultat.etat).toContain('partiellement atteint');
+    expect(resultat.etat).toContain('Changements');
+    expect(resultat.etat).toContain('src/api.ts');
+    expect(resultat.etat).toContain('Vérifications');
+    expect(resultat.etat).toContain('bun test');
+    expect(resultat.etat).toContain('Reste ouvert');
+    expect(resultat.etat).toContain('sous charge');
+  });
+
+  test('D1 ☠ format incomplet (rubrique manquante) ⇒ dégrade vers le texte brut, jamais un crash', () => {
+    registre.missions.creer({ id: 'm-partiel', lotId: 'lot-1', nom: 'partiel', projet: 'partiel', compteId: 'compte1' });
+    const texte = [
+      'RAPPORT_ETAT: atteint.',
+      'RAPPORT_CHANGEMENTS:',
+      '- x.ts modifié',
+      // RAPPORT_VERIFICATIONS et RAPPORT_OUVERT absents — le lead n’a pas suivi le format.
+    ].join('\n');
+    registre.missions.ajouterActivite('m-partiel', texte, 1_000, 'texte');
+    const resultat = rapportEquipe(registre, null, 'partiel');
+    expect(resultat.ok).toBe(true);
+    // Dégradation propre : le texte brut intégral, pas une structure à trous.
+    expect(resultat.etat).toBe(texte);
+  });
+
+  test('D1 ☠ le chemin de décision de l’orchestrateur reçoit toujours un rapport non vide (avec ou sans format)', () => {
+    registre.missions.creer({ id: 'm-brut', lotId: 'lot-1', nom: 'brut', projet: 'brut', compteId: 'compte1' });
+    registre.missions.ajouterActivite('m-brut', 'Voilà, c’est fait ✅', 1_000, 'texte');
+    const resultat = rapportEquipe(registre, null, 'brut');
+    expect(resultat.ok).toBe(true);
+    expect((resultat.etat ?? '').length).toBeGreaterThan(0);
+  });
 });
 
 describe('transcript_equipe — la fin d’un transcript, en un seul appel (chantier 1, 21/08)', () => {

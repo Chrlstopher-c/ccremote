@@ -26,6 +26,7 @@ import {
   type NatureActiviteMission,
   type Registre,
 } from '../../registre/index.ts';
+import { extraireRubriquesRapport, formaterRapportStructure } from '../../../shared/format-rapport.ts';
 import { applique, echecInattendu } from './contrat.ts';
 import { mcpControleLogger as journal } from './logger.ts';
 import type { ContratRetour } from './types.ts';
@@ -406,6 +407,18 @@ export function historiqueEquipe(
  * l'orchestrateur n'avait accès qu'aux états et compteurs — il pouvait dire
  * qu'une équipe avait fini, jamais ce qu'elle avait trouvé (constaté le 23/07).
  *
+ * `☠` (D1, cause 4/5) Rendre le dernier bloc TEL QUEL réduisait toute une mission
+ * à son dernier message — souvent lu automatiquement par l'orchestrateur pour
+ * décider la suite, sans relecture humaine (`dispatch-mandat.ts`, `BLOC_RAPPORT`).
+ * Si le lead a respecté le format opposable (les quatre marqueurs de
+ * `shared/format-rapport.ts`), on le rend structuré par rubrique — état /
+ * changements / vérifications / reste ouvert. PAS d'appel LLM : extraction par
+ * marqueur littéral (`extraireRubriquesRapport`), jamais une régénération. Si le
+ * format est absent ou incomplet, on dégrade vers le texte brut d'avant — jamais
+ * un refus, jamais un rapport vide tant qu'un texte existe : c'est ce qui
+ * garantit que le chemin de décision de l'orchestrateur reçoit toujours quelque
+ * chose.
+ *
  * Cloisonné par conversation (chantier 1) — voir `resoudreMissionDuFil`. C'est
  * l'outil le plus sensible du groupe : le rapport de fin EST le contenu qu'une
  * autre conversation ne doit jamais recevoir.
@@ -421,7 +434,10 @@ export function rapportEquipe(registre: Registre, conversationId: string | null,
     }
     // `☠` ENTIER, jamais tronqué : c'est la synthèse de fin de l'équipe. En
     // couper la moitié la rend inutilisable — décision de l'opérateur (23/07).
-    return applique(intention, dernier.texte);
+    // La structuration ne coupe rien non plus : elle réorganise le même texte
+    // par rubrique, elle n'en retire aucun caractère.
+    const structure = extraireRubriquesRapport(dernier.texte);
+    return applique(intention, structure === null ? dernier.texte : formaterRapportStructure(structure));
   } catch (erreur) {
     journal.error({ err: erreur, designation }, 'rapport_equipe en échec');
     return echecInattendu(intention, erreur);
