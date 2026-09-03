@@ -39,6 +39,7 @@ const RELEVE: TelemetrieWorker = {
   tachesFond: [],
   quotaSature: false,
   motifQuota: null,
+  resumeCompactionEnAttente: null,
   observeA: 0,
 };
 
@@ -364,5 +365,69 @@ describe('balayage-telemetrie — garde d’observabilité « coût facturé san
     second.arreter();
 
     expect(avertissements).toEqual([]);
+  });
+});
+
+describe('balayage — résumé de compaction (axe B, B3)', () => {
+  test('☠ un bloc drainé pour une mission de team s’écrit dans team.resume_contexte via majResume', async () => {
+    registre.teams.creer({ id: 'team-1', projet: 'aegis', domaine: 'frontend' });
+    registre.missions.creer({ id: 'm-2', lotId: 'lot-1', nom: 'aegis', projet: 'aegis', compteId: 'compte1', teamId: 'team-1' });
+
+    const balayage = demarrerBalayageTelemetrie({
+      registre,
+      source: {
+        telemetrie: async () => [
+          { ...RELEVE, missionId: 'm-2', resumeCompactionEnAttente: '§RESUME-COMPACTION§ [t1]\nÉTAT: build vert.' },
+        ],
+      },
+    });
+    await balayage.passer();
+    balayage.arreter();
+
+    expect(registre.teams.lire('team-1')?.resumeContexte).toContain('ÉTAT: build vert.');
+  });
+
+  test('deux compactions successives s’ajoutent au résumé existant plutôt que de l’écraser', async () => {
+    registre.teams.creer({ id: 'team-2', projet: 'lattice', domaine: 'backend' });
+    registre.missions.creer({ id: 'm-3', lotId: 'lot-1', nom: 'lattice', projet: 'lattice', compteId: 'compte1', teamId: 'team-2' });
+
+    async function passer(bloc: string): Promise<void> {
+      const b = demarrerBalayageTelemetrie({
+        registre,
+        source: { telemetrie: async () => [{ ...RELEVE, missionId: 'm-3', resumeCompactionEnAttente: bloc }] },
+      });
+      await b.passer();
+      b.arreter();
+    }
+
+    await passer('§RESUME-COMPACTION§ [t1]\nPREMIER');
+    await passer('§RESUME-COMPACTION§ [t2]\nSECOND');
+
+    const resume = registre.teams.lire('team-2')?.resumeContexte ?? '';
+    expect(resume).toContain('PREMIER');
+    expect(resume).toContain('SECOND');
+  });
+
+  test('mission sans team (teamId null) ⇒ aucun résumé écrit nulle part, aucune levée', async () => {
+    const balayage = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, resumeCompactionEnAttente: 'bloc orphelin' }] },
+    });
+    await expect(balayage.passer()).resolves.toBeUndefined();
+    balayage.arreter();
+  });
+
+  test('resumeCompactionEnAttente null (pas de compaction) ⇒ rien ne change', async () => {
+    registre.teams.creer({ id: 'team-3', projet: 'clarion', domaine: 'frontend' });
+    registre.missions.creer({ id: 'm-4', lotId: 'lot-1', nom: 'clarion', projet: 'clarion', compteId: 'compte1', teamId: 'team-3' });
+
+    const balayage = demarrerBalayageTelemetrie({
+      registre,
+      source: { telemetrie: async () => [{ ...RELEVE, missionId: 'm-4', resumeCompactionEnAttente: null }] },
+    });
+    await balayage.passer();
+    balayage.arreter();
+
+    expect(registre.teams.lire('team-3')?.resumeContexte).toBeNull();
   });
 });

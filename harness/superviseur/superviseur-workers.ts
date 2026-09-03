@@ -289,7 +289,17 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
     const entree = new GenerateurEntree({ sessionId: demande.spec.sessionId });
     await entree.envoyer(demande.promptInitial);
 
-    const handle = await this.#demarrerWorker(specEffectif, entree.flux, this.#startWorkerDeps);
+    // `☠` Axe B, B3 : le hook `PostCompact` n'a de sens que pour une team
+    // persistante (`demande.teamId` — une mission ponctuelle n'a pas de
+    // `team.resume_contexte` où écrire). Câblé ICI, pas dans `options-composition.ts`,
+    // pour la même raison que `cleWorktree` juste au-dessus : ce module est le
+    // seul à connaître à la fois `missionId` et le collecteur de télémétrie.
+    const specPourSpawn: typeof specEffectif =
+      demande.teamId === undefined
+        ? specEffectif
+        : { ...specEffectif, onResumeCompaction: (bloc: string) => this.#telemetrie.enregistrerResumeCompaction(demande.missionId, bloc) };
+
+    const handle = await this.#demarrerWorker(specPourSpawn, entree.flux, this.#startWorkerDeps);
     this.#telemetrie.ouvrir(demande.missionId, demande.spec.sessionId);
     this.#registre.enregistrer({
       missionId: demande.missionId,
@@ -301,7 +311,10 @@ export class SuperviseurWorkers implements InventairePc, ReinitialisateurSession
       // repasseront au gestionnaire — le worktree d'une team est keyé par team.
       cleWorktree: demande.teamId ?? demande.missionId,
       branche: revendication?.brancheDediee ?? null,
-      spec: specEffectif,
+      // `☠` `specPourSpawn`, pas `specEffectif` : une relance (`relancer()`, B.3.3)
+      // repart de CE spec enregistré — sans `onResumeCompaction` dedans, une team
+      // relancée perdrait la capture de son résumé de compaction (B3).
+      spec: specPourSpawn,
       handle,
       entree,
       vivant: true,

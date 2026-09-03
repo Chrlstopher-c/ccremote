@@ -146,6 +146,16 @@ export interface WorkerSpec {
   /** Capture stderr — seul canal de diagnostic (B.2.3). */
   readonly onStderr?: (data: string) => void;
   /**
+   * Capture du résumé natif de compaction (axe B, B3) — appelé avec le bloc déjà
+   * formaté (`discipline-contexte/resumeur-compaction.ts::formaterBlocResume`)
+   * chaque fois que le hook `PostCompact` livre un `compact_summary` non vide.
+   * Absent ⇒ aucun hook posé, comportement inchangé (même contrat que
+   * `onStderr`). La fusion avec l'existant et l'écriture dans `team.resume_contexte`
+   * n'ont PAS lieu ici : ce module ne connaît pas `team` (frontière A↔B) — le
+   * bloc transite par le canal de télémétrie existant jusqu'au Pi.
+   */
+  readonly onResumeCompaction?: (bloc: string) => void;
+  /**
    * Port vers le collecteur d'audit des permissions (C.5, M-22) — usine appelée
    * une fois à la composition (`workers/audit-hooks.ts`), qui rend les hooks
    * `Options.hooks` d'un collecteur dédié à ce worker. **Obligatoire** (H-74) :

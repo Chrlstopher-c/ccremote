@@ -111,6 +111,8 @@ interface Etat {
   tourFini: boolean;
   quotaSature: boolean;
   motifQuota: string | null;
+  /** DRAINANT (B3) — vidé à chaque `tous()`, voir `TelemetrieWorker.resumeCompactionEnAttente`. */
+  resumeCompactionEnAttente: string | null;
   observeA: number;
 }
 
@@ -289,6 +291,7 @@ export class CollecteurTelemetrie {
       tourFini: false,
       quotaSature: false,
       motifQuota: null,
+      resumeCompactionEnAttente: null,
       observeA: maintenant,
     });
   }
@@ -375,6 +378,21 @@ export class CollecteurTelemetrie {
     if (ventilation !== null) etat.contexteVentilation = ventilation;
   }
 
+  /**
+   * Enregistre un bloc de résumé de compaction (axe B, B3), déjà formaté par
+   * `discipline-contexte/resumeur-compaction.ts` — appelé depuis le hook SDK
+   * `PostCompact` posé par `workers/options-composition.ts`. `☠` Écrase le bloc
+   * précédent s'il n'a pas encore été drainé par un balayage : une compaction
+   * est rare, la fusion bornée réelle (garder les N derniers) vit côté Pi
+   * (`composition/pi/balayage-telemetrie.ts`), qui seul connaît l'historique
+   * déjà écrit dans `team.resume_contexte`.
+   */
+  enregistrerResumeCompaction(missionId: string, bloc: string): void {
+    const etat = this.#par.get(missionId);
+    if (etat === undefined) return;
+    etat.resumeCompactionEnAttente = bloc;
+  }
+
   /** Le worker est mort : on garde son dernier état connu, marqué non vivant. */
   fermer(missionId: string, maintenant: number = Date.now()): void {
     const etat = this.#par.get(missionId);
@@ -396,7 +414,11 @@ export class CollecteurTelemetrie {
       // laisser en place ferait réappliquer les mêmes résultats à chaque passage.
       const resultats = e.resultatsEnAttente;
       e.resultatsEnAttente = [];
-      return this.#construireVue(missionId, e, maintenant, activites, resultats);
+      // `☠` Drainé de la même façon (B3) : un bloc rapatrié une fois ne doit pas
+      // se réappliquer à chaque passage de balayage sur `team.resume_contexte`.
+      const resumeCompaction = e.resumeCompactionEnAttente;
+      e.resumeCompactionEnAttente = null;
+      return this.#construireVue(missionId, e, maintenant, activites, resultats, resumeCompaction);
     });
   }
 
@@ -442,6 +464,7 @@ export class CollecteurTelemetrie {
     maintenant: number,
     activites: Etat['activitesEnAttente'],
     resultats: Etat['resultatsEnAttente'],
+    resumeCompaction: Etat['resumeCompactionEnAttente'] = e.resumeCompactionEnAttente,
   ): TelemetrieWorker {
     // `☠` L'état SDK est calculé À LA LECTURE, pas mémorisé : la péremption des
     // tâches de fond dépend du TEMPS QUI PASSE, et aucun message n'arrive pour
@@ -456,6 +479,7 @@ export class CollecteurTelemetrie {
       etatSdk: etatSdkEffectif(e, maintenant),
       activitesEnAttente: activites,
       resultatsEnAttente: resultats,
+      resumeCompactionEnAttente: resumeCompaction,
     };
   }
 

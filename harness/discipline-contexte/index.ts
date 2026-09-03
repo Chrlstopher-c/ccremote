@@ -1,6 +1,14 @@
 export { EchantillonneurContexte, MOTIF_TRANSPORT_FERME, type OptionsEchantillonneur } from './echantillonneur-contexte.ts'
 export { ObservateurCompaction, type OptionsObservateurCompaction } from './observateur-compaction.ts'
 export { SentinelleContexte, type OptionsSentinelleContexte, type ResumeDisciplineContexte } from './sentinelle-contexte.ts'
+export {
+  creerHookPostCompactResume,
+  formaterBlocResume,
+  fusionnerResumeBorne,
+  traiterPostCompact,
+  type EntreePostCompact,
+  type OptionsHookResumeCompaction,
+} from './resumeur-compaction.ts'
 export { HORLOGE_REELLE, type AnnulerMinuterie, type Horloge } from './horloge.ts'
 export type {
   EtatEchantillonnage,

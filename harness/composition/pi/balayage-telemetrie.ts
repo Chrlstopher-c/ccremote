@@ -18,6 +18,7 @@
 
 import { ETATS_HARNESS_ACTIFS, type Registre } from '../../control-plane/registre/index.ts';
 import { detecterFinDeTour } from '../../control-plane/notifications/index.ts';
+import { fusionnerResumeBorne } from '../../discipline-contexte/resumeur-compaction.ts';
 import type { TelemetrieWorker } from '../../superviseur/index.ts';
 import { compositionLogger } from '../logger.ts';
 
@@ -130,6 +131,26 @@ function marquerCompteSature(registre: Registre, compteId: string, motif: string
 }
 
 /**
+ * Fusionne un bloc de résumé de compaction (déjà formaté côté PC) dans
+ * `team.resume_contexte` et l'écrit (axe B, B3, D2). Ne lève jamais : un
+ * résumé perdu coûte un cran de reprise au prochain réveil, jamais le
+ * balayage entier — les autres missions doivent quand même être traitées.
+ */
+function appliquerResumeCompaction(registre: Registre, teamId: string, bloc: string): void {
+  try {
+    const team = registre.teams.lire(teamId);
+    if (team === null) {
+      log.warn({ teamId }, 'résumé de compaction reçu pour une team introuvable — bloc perdu');
+      return;
+    }
+    const fusionne = fusionnerResumeBorne(team.resumeContexte, bloc);
+    registre.teams.majResume(teamId, fusionne);
+  } catch (erreur) {
+    log.error({ err: erreur, teamId }, 'écriture du résumé de compaction en échec — le balayage continue');
+  }
+}
+
+/**
  * Applique un relevé à une mission. Ne lève jamais : un mauvais relevé n'arrête
  * pas les autres. Rend `true` si un worker MORT a été vu sur une mission encore
  * tenue pour active — l'appelant en déduit qu'une réconciliation s'impose.
@@ -153,6 +174,15 @@ function appliquer(registre: Registre, t: TelemetrieWorker): ResultatReleve {
   // 23/07, laissait l'opérateur avec « les états et compteurs » et rien d'autre.
   for (const a of t.activitesEnAttente) {
     registre.missions.ajouterActivite(t.missionId, a.texte, a.survenuA, a.type, a.outil ?? null, a.outilId ?? null);
+  }
+
+  // `☠` Axe B, B3 : le bloc de résumé de compaction est drainant côté PC (même
+  // discipline que les activités). La fusion bornée (garder les N derniers)
+  // n'a lieu QU'ICI : seul le Pi connaît `team.resume_contexte` déjà écrit —
+  // le PC n'a jamais reçu cette valeur, il ne fait QUE produire un bloc brut.
+  // Mission sans team (`teamId === null`, mission ponctuelle) ⇒ rien à écrire.
+  if (t.resumeCompactionEnAttente !== null && mission.teamId !== null) {
+    appliquerResumeCompaction(registre, mission.teamId, t.resumeCompactionEnAttente);
   }
 
   // `☠` APRÈS les activités du même passage, jamais avant : un appel et son

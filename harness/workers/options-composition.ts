@@ -11,12 +11,15 @@
  * coexistent (⚠ HYP — non exécuté en réel, déduit des types : deux champs
  * disjoints, `Options.hooks` en callbacks JS d'un côté, `hooks` de
  * `SettingsFileSchema` en commandes shell de l'autre — à revalider sur un banc
- * si un jour l'un semble supprimer l'autre). Ici, il porte exclusivement
- * l'audit de permissions (C.5, M-22, H-74) — jamais une customisation projet.
+ * si un jour l'un semble supprimer l'autre). Ici, il porte exclusivement des
+ * concerns STRUCTURELS du harness (audit de permissions C.5/M-22/H-74,
+ * confinement d'écriture, verrou du modèle des sous-agents, capture du résumé
+ * de compaction B3) — jamais une customisation projet.
  */
 
 import type { HookCallbackMatcher, HookEvent, Options } from '@anthropic-ai/claude-agent-sdk';
 import { assertRetryWatchdogBorne, assertRetryWatchdogCoherent, type CompteurTentativesRetryWatchdog } from '../budgets/index.ts';
+import { creerHookPostCompactResume } from '../discipline-contexte/resumeur-compaction.ts';
 import { buildAuditHooks } from './audit-hooks.ts';
 import { buildCanUseTool } from './can-use-tool.ts';
 import { creerHooksConfinementEcriture } from './confinement-ecriture.ts';
@@ -107,17 +110,41 @@ function fusionnerHooks(
 
 /**
  * Tous les hooks structurels d'un worker : l'audit (toujours), le verrou du
- * modèle des sous-agents (toujours — A1, `modele-sous-agents.ts`) et, pour
- * l'accès `rapport` (garde 3), le confinement d'écriture au worktree.
+ * modèle des sous-agents (toujours — A1, `modele-sous-agents.ts`), pour
+ * l'accès `rapport` (garde 3) le confinement d'écriture au worktree, et pour
+ * une team persistante (axe B, B3) la capture du résumé natif de compaction.
  *
  * `☠` Le verrou des sous-agents est INCONDITIONNEL : tout worker est un lead
  * susceptible de lancer des Task, et laisser le verrou optionnel serait le même
  * défaut « écrit, branché sur rien » que le harness a déjà payé plusieurs fois.
  */
 function buildHooks(spec: WorkerSpec): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const base = fusionnerHooks(buildAuditHooks(spec), creerHooksModeleSousAgents());
-  if (spec.confinerEcritureCwd !== true) return base;
-  return fusionnerHooks(base, creerHooksConfinementEcriture(spec.cwd));
+  let hooks = fusionnerHooks(buildAuditHooks(spec), creerHooksModeleSousAgents());
+  if (spec.confinerEcritureCwd === true) {
+    hooks = fusionnerHooks(hooks, creerHooksConfinementEcriture(spec.cwd));
+  }
+  if (spec.onResumeCompaction !== undefined) {
+    hooks = fusionnerHooks(hooks, buildHooksResumeCompaction(spec));
+  }
+  return hooks;
+}
+
+/**
+ * `PostCompact` ACTIF (B3) — absent si `spec.onResumeCompaction` n'est pas
+ * fourni (même contrat que `onStderr` : un worker sans team persistante ne
+ * porte aucun hook supplémentaire). Le callback ne lève jamais côté hook SDK
+ * (garantie de `creerHookPostCompactResume`) ; `surErreur` journalise ici,
+ * même discipline que `buildAuditHooks` sur une panne de capture.
+ */
+function buildHooksResumeCompaction(spec: WorkerSpec): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const onResumeCompaction = spec.onResumeCompaction;
+  if (onResumeCompaction === undefined) return {};
+  const log = sessionLogger(spec.sessionId);
+  const hook = creerHookPostCompactResume({
+    onResume: onResumeCompaction,
+    surErreur: (erreur) => log.error({ err: erreur }, 'capture_resume_compaction_en_echec — team non mise à jour'),
+  });
+  return { PostCompact: [{ hooks: [hook] }] };
 }
 
 /**

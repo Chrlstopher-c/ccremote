@@ -377,5 +377,13 @@ export interface TelemetrieWorker {
   /** Le compte de ce worker a annoncé une limite atteinte — il faut tourner. */
   readonly quotaSature: boolean;
   readonly motifQuota: string | null;
+  /**
+   * Bloc de résumé de compaction natif (axe B, B3), déjà formaté par
+   * `discipline-contexte/resumeur-compaction.ts`, en attente de rapatriement
+   * vers `team.resume_contexte` (Pi). `☠` DRAINANT comme `activitesEnAttente` :
+   * un relevé le vide — voir `CollecteurTelemetrie.tous()`. `null` hors
+   * compaction ou hors team persistante (`spec.onResumeCompaction` absent).
+   */
+  readonly resumeCompactionEnAttente: string | null;
   readonly observeA: number;
 }

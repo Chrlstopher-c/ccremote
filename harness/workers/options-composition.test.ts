@@ -389,3 +389,48 @@ describe('assertOptionsInvariants', () => {
     );
   });
 });
+
+describe('hook PostCompact — résumé de compaction (axe B, B3)', () => {
+  test('absent quand spec.onResumeCompaction n’est pas fourni (mission hors team)', () => {
+    const { options } = composeWorkerOptions(spec(), MODEL);
+    expect(options.hooks?.PostCompact).toBeUndefined();
+  });
+
+  test('☠ posé et ACTIF quand spec.onResumeCompaction est fourni : capture compact_summary', async () => {
+    const recus: string[] = [];
+    const { options } = composeWorkerOptions(spec({ onResumeCompaction: (bloc) => recus.push(bloc) }), MODEL);
+    const matchers = options.hooks?.PostCompact;
+    expect(matchers).toBeDefined();
+    for (const matcher of matchers ?? []) {
+      for (const hook of matcher.hooks) {
+        await hook(
+          { hook_event_name: 'PostCompact', trigger: 'auto', compact_summary: 'ÉTAT: X. RESTE: Y.' } as never,
+          null as never,
+          {} as never,
+        );
+      }
+    }
+    expect(recus).toHaveLength(1);
+    expect(recus[0]).toContain('ÉTAT: X. RESTE: Y.');
+  });
+
+  test('une capture en échec ne lève jamais côté hook SDK', async () => {
+    const { options } = composeWorkerOptions(
+      spec({
+        onResumeCompaction: () => {
+          throw new Error('panne');
+        },
+      }),
+      MODEL,
+    );
+    const [matcher] = options.hooks?.PostCompact ?? [];
+    const [hook] = matcher?.hooks ?? [];
+    expect(hook).toBeDefined();
+    const sortie = await hook?.(
+      { hook_event_name: 'PostCompact', trigger: 'auto', compact_summary: 'X' } as never,
+      null as never,
+      {} as never,
+    );
+    expect(sortie).toEqual({});
+  });
+});
