@@ -15,7 +15,7 @@ describe('construireMagicPacket (Wake-on-LAN)', () => {
     // Les 6 premiers octets sont le préambule 0xFF.
     for (let i = 0; i < 6; i += 1) expect(paquet[i]).toBe(0xff);
     // Puis 16 répétitions exactes des 6 octets de la MAC.
-    const macAttendue = [0xb4, 0x2e, 0x99, 0x98, 0xaa, 0xf8];
+    const macAttendue = [0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
     for (let rep = 0; rep < 16; rep += 1) {
       for (let octet = 0; octet < 6; octet += 1) {
         expect(paquet[6 + rep * 6 + octet]).toBe(macAttendue[octet] as number);
@@ -25,7 +25,7 @@ describe('construireMagicPacket (Wake-on-LAN)', () => {
 
   test('accepte aussi bien « : » que « - » comme séparateur', () => {
     const avecDeuxPoints = construireMagicPacket('aa:bb:cc:dd:ee:ff');
-    const avecTirets = construireMagicPacket('b4-2e-99-98-aa-f8');
+    const avecTirets = construireMagicPacket('aa-bb-cc-dd-ee-ff');
     expect(avecTirets.equals(avecDeuxPoints)).toBe(true);
   });
 
