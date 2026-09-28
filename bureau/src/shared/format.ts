@@ -6,6 +6,18 @@ export function tokens(n: number): string {
   return String(n);
 }
 
+/** La taille d'un fichier, à l'unité qui lui va : « 68 o », « 1,2 Ko », « 9,0 Mo ». */
+export function tailleFichier(n: number): string {
+  const unites = ['o', 'Ko', 'Mo', 'Go', 'To'];
+  let v = n;
+  let i = 0;
+  while (v >= 1024 && i < unites.length - 1) {
+    v /= 1024;
+    i += 1;
+  }
+  return i === 0 ? `${v} o` : `${v.toFixed(v < 10 ? 1 : 0).replace('.', ',')} ${unites[i]}`;
+}
+
 export function octets(n: number): string {
   const go = n / 1024 ** 3;
   return go >= 100 ? `${Math.round(go)} Go` : `${go.toFixed(1).replace('.', ',')} Go`;

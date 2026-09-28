@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
 import type { EntreeFichier } from '../../../../commun/appareil.ts';
-import { depuis, octets } from '../../shared/format.ts';
+import { depuis, tailleFichier } from '../../shared/format.ts';
 import { IconeBouton } from '../../shared/ui/Bouton.tsx';
 import { type Demandes, useDemande } from '../../shared/ui/useDemande.tsx';
 import type { ApiAppareil } from '../api-appareil.ts';
@@ -141,7 +141,7 @@ function Rangee(p: PropsRangee): ReactNode {
         </IconeBouton>
       </span>
       <span className="w-20 text-right font-mono text-[11px] text-discret">
-        {e.type === 'dossier' ? '' : octets(e.taille)}
+        {e.type === 'dossier' ? '' : tailleFichier(e.taille)}
       </span>
       <span className="w-28 text-right font-mono text-[11px] text-discret">{depuis(e.modifie)}</span>
     </div>

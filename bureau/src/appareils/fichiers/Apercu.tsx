@@ -4,7 +4,7 @@ import { Download, Maximize2, Minimize2, X } from 'lucide-react';
 import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { TAILLE_MAX_EDITION } from '../../../../commun/appareil.ts';
 import { ErreurApi } from '../../shared/api/client.ts';
-import { octets } from '../../shared/format.ts';
+import { tailleFichier } from '../../shared/format.ts';
 import { IconeBouton } from '../../shared/ui/Bouton.tsx';
 import type { ApiAppareil } from '../api-appareil.ts';
 import { apercuDe } from './genre.ts';
@@ -60,7 +60,7 @@ function Corps({
   if (c.genre === 'rien') {
     return (
       <p className="p-4 text-[12.5px] text-discret">
-        Pas d’aperçu pour ce fichier ({octets(f.entree.taille)}) — télécharge-le.
+        Pas d’aperçu pour ce fichier ({tailleFichier(f.entree.taille)}) — télécharge-le.
       </p>
     );
   }
@@ -95,7 +95,7 @@ export function Apercu({
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold" title={fichier.chemin}>
           {fichier.entree.nom}
         </span>
-        <span className="font-mono text-[11px] text-discret">{octets(fichier.entree.taille)}</span>
+        <span className="font-mono text-[11px] text-discret">{tailleFichier(fichier.entree.taille)}</span>
         <IconeBouton aide="Télécharger" onClick={() => void api.telecharger(fichier.chemin, fichier.entree.nom)}>
           <Download size={14} />
         </IconeBouton>
