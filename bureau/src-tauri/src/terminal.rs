@@ -30,7 +30,9 @@ pub fn ouvrir_terminal(machine: String, tmux: String) -> Result<(), String> {
         commande.args(attache).arg(&cible);
     } else {
         // Connexion SSH dédiée (pas la maîtresse partagée) : fermer la fenêtre libère vraiment le client tmux.
-        commande.args(["ssh", "-t", "-o", "ControlPath=none", &machine]).args(attache).arg(&cible);
+        // La commande distante passe par le shell de la machine : `=nom` entre apostrophes, sinon zsh l'expanse.
+        let distante = format!("{} '{cible}'", attache.join(" "));
+        commande.args(["ssh", "-t", "-o", "ControlPath=none", &machine, &distante]);
     }
     commande.spawn().map(|_| ()).map_err(|e| {
         log::error!("kitty introuvable ou refusé : {e}");
