@@ -1,74 +1,50 @@
-// Responsabilité : le rendu d'un appel d'outil et d'un sous-agent dans le fil, dépliables pour tout voir.
+// Responsabilité : un appel d'outil et un sous-agent dans le fil — une rangée compacte qui se déplie pour tout voir.
 import { Bot, ChevronRight, FileText, Globe, Pencil, Search, SquareTerminal, Wrench } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
 import { createContext, type ReactNode, useContext, useState } from 'react';
-import { Tag } from '../../shared/ui/elements.tsx';
+import { Point } from '../../shared/ui/elements.tsx';
 import type { ElementOutil, ElementSousAgent } from './structure.ts';
 
 const ICONES: Record<string, ReactNode> = {
-  Bash: <SquareTerminal size={14} />,
-  Read: <FileText size={14} />,
-  Edit: <Pencil size={14} />,
-  Write: <Pencil size={14} />,
-  Grep: <Search size={14} />,
-  Glob: <Search size={14} />,
-  WebFetch: <Globe size={14} />,
-  WebSearch: <Globe size={14} />,
+  Bash: <SquareTerminal size={12} />, Read: <FileText size={12} />,
+  Edit: <Pencil size={12} />, Write: <Pencil size={12} />,
+  Grep: <Search size={12} />, Glob: <Search size={12} />, WebFetch: <Globe size={12} />, WebSearch: <Globe size={12} />,
 };
 
-// Dossier de travail de la session : les chemins qui y mènent sont affichés relatifs, lisibles d'un coup d'œil.
+// Dossier de travail de la session : les chemins qui y mènent sont affichés relatifs.
 export const ContexteDossier = createContext('');
 
 function raccourcir(texte: string, dossier: string): string {
   return dossier ? texte.split(`${dossier}/`).join('') : texte;
 }
 
-function Volet({ ouvert, children }: { readonly ouvert: boolean; readonly children: ReactNode }): ReactNode {
+function Rangee({ ouvert, basculer, children }: {
+  readonly ouvert: boolean;
+  readonly basculer: () => void;
+  readonly children: ReactNode;
+}): ReactNode {
   return (
-    <AnimatePresence initial={false}>
-      {ouvert && (
-        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-          exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.2, 0.7, 0.2, 1] }} className="overflow-hidden">
-          <div className="pt-2 pl-5">{children}</div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <button type="button" onClick={basculer}
+      className={`flex h-6 w-full min-w-0 cursor-default
+        items-center gap-1.5 rounded-[4px] px-1 text-left hover:bg-survol`}>
+      <ChevronRight size={11} className={`shrink-0 text-discret transition-transform ${ouvert ? 'rotate-90' : ''}`} />
+      {children}
+    </button>
   );
 }
 
-function Depliable({ entete, children }: { readonly entete: ReactNode; readonly children: ReactNode }): ReactNode {
-  const [ouvert, setOuvert] = useState(false);
-  return (
-    <div>
-      <button type="button" onClick={() => setOuvert(!ouvert)}
-        className="group flex w-full min-w-0 cursor-pointer items-center gap-2 text-left">
-        <ChevronRight size={14}
-          className={`shrink-0 text-discret transition-transform duration-200 ${ouvert ? 'rotate-90' : ''}`} />
-        {entete}
-      </button>
-      <Volet ouvert={ouvert}>{children}</Volet>
-    </div>
-  );
-}
-
-function Bloc({
-  titre,
-  texte,
-  erreur,
-}: {
+interface PropsBloc {
   readonly titre: string;
   readonly texte: string;
   readonly erreur?: boolean;
-}): ReactNode {
+}
+
+function Bloc({ titre, texte, erreur }: PropsBloc): ReactNode {
+  const ton = erreur ? 'bg-danger/10 text-danger' : 'bg-champ text-encre-2';
   return (
-    <div className="mb-2">
-      <div className="mb-1 font-mono text-[10.5px] tracking-[0.12em] text-discret uppercase">{titre}</div>
-      <pre
-        className={`max-h-72 overflow-auto rounded-[10px] px-3 py-2 font-mono text-[12px] leading-relaxed
-          whitespace-pre-wrap
-        break-words ${erreur ? 'bg-danger-fond text-danger' : 'bg-surface-2 text-encre-douce'}`}
-      >
+    <div className="mt-1 mb-1.5 ml-4">
+      <div className="etiquette pb-0.5">{titre}</div>
+      <pre className={`selectionnable max-h-64 overflow-auto rounded-[5px] px-2.5 py-1.5 font-mono text-[11.5px]
+        leading-relaxed whitespace-pre-wrap break-words ${ton}`}>
         {texte || '—'}
       </pre>
     </div>
@@ -76,69 +52,55 @@ function Bloc({
 }
 
 export function CarteOutil({ el }: { readonly el: ElementOutil }): ReactNode {
-  const { outil, resultat } = el;
+  const [ouvert, setOuvert] = useState(false);
   const dossier = useContext(ContexteDossier);
-  const enCours = resultat === null;
+  const { outil, resultat } = el;
   return (
-    <div className="rounded-[12px] px-2.5 py-1.5 hover:bg-surface-2/60">
-      <Depliable
-        entete={
-          <span className="flex min-w-0 items-center gap-2 text-[13px]">
-            <span className={`shrink-0 ${resultat?.erreur ? 'text-danger' : 'text-accent-texte'}`}>
-              {ICONES[outil.nom] ?? <Wrench size={14} />}
-            </span>
-            <span className="shrink-0 font-bold">{outil.nom}</span>
-            <span className="truncate font-mono text-[12px] text-discret">{raccourcir(outil.resume, dossier)}</span>
-            {enCours && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-accent-vif" />}
-          </span>
-        }
-      >
-        <Bloc titre="Entrée" texte={outil.detail} />
-        {resultat && (
-          <Bloc titre={resultat.erreur ? 'Erreur' : 'Résultat'} texte={resultat.extrait} erreur={resultat.erreur} />
-        )}
-      </Depliable>
+    <div>
+      <Rangee ouvert={ouvert} basculer={() => setOuvert(!ouvert)}>
+        <span className={`shrink-0 ${resultat?.erreur ? 'text-danger' : 'text-discret'}`}>
+          {ICONES[outil.nom] ?? <Wrench size={12} />}
+        </span>
+        <span className="shrink-0 font-mono text-[11.5px] font-medium text-encre-2">{outil.nom}</span>
+        <span className="truncate font-mono text-[11.5px] text-discret">{raccourcir(outil.resume, dossier)}</span>
+        {resultat === null && <span className="ml-auto pr-1"><Point ton="actif" /></span>}
+      </Rangee>
+      {ouvert && <Bloc titre="entrée" texte={outil.detail} />}
+      {ouvert && resultat && (
+        <Bloc titre={resultat.erreur ? 'erreur' : 'résultat'} texte={resultat.extrait} erreur={resultat.erreur} />
+      )}
     </div>
-  );
-}
-
-function EnTeteSousAgent({ el, fini }: { readonly el: ElementSousAgent; readonly fini: boolean }): ReactNode {
-  const outils = el.interieur.filter((i) => i.genre === 'outil').length;
-  return (
-    <span className="flex min-w-0 flex-1 items-center gap-2.5">
-      <span className="grid size-7 shrink-0 place-items-center rounded-[8px] bg-accent-fond text-accent-texte">
-        <Bot size={15} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-bold">{el.agent.description || 'Sous-agent'}</span>
-        <span className={`block font-mono
-          text-[11px] text-discret`}>{`${el.agent.genre} · ${outils} outil${outils > 1 ? 's' : ''}`}</span>
-      </span>
-      <Tag ton={fini ? 'succes' : 'accent'}>{fini ? 'terminé' : 'en cours'}</Tag>
-      {el.agent.modele && <Tag ton="neutre">{el.agent.modele}</Tag>}
-    </span>
   );
 }
 
 // Le dernier texte du sous-agent est son rapport : il est mis à part, le reste raconte son chemin.
 export function CarteSousAgent({ el }: { readonly el: ElementSousAgent }): ReactNode {
+  const [ouvert, setOuvert] = useState(false);
   const fini = el.resultat !== null;
+  const outils = el.interieur.filter((i) => i.genre === 'outil').length;
   const rapport = el.interieur.findLast((i) => i.genre === 'texte');
   return (
-    <div className="my-1.5 rounded-[16px] bg-surface p-3 ombre-carte">
-      <Depliable entete={<EnTeteSousAgent el={el} fini={fini} />}>
-        <div className="space-y-0.5 border-l-2 border-accent-fond pl-3">
-          {el.interieur.map((i) => {
-            if (i.genre === 'outil') return <CarteOutil key={i.seq} el={i} />;
-            if (i === rapport) return null;
-            return <p key={i.seq} className="px-2.5 py-1 text-[13px] text-encre-douce">{i.evt.texte.slice(0, 600)}</p>;
-          })}
+    <div className="my-1 rounded-[6px] border border-filet">
+      <Rangee ouvert={ouvert} basculer={() => setOuvert(!ouvert)}>
+        <Bot size={12} className="shrink-0 text-accent-texte" />
+        <span className="truncate text-[12.5px] font-semibold">{el.agent.description || 'Sous-agent'}</span>
+        <span className="shrink-0 font-mono text-[10.5px] text-discret">
+          {`${el.agent.genre} · ${outils} outil${outils > 1 ? 's' : ''}`}
+          {el.agent.modele ? ` · ${el.agent.modele}` : ''}
+        </span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5 pr-1 font-mono text-[10.5px] text-discret">
+          <Point ton={fini ? 'calme' : 'actif'} />{fini ? 'terminé' : 'en cours'}
+        </span>
+      </Rangee>
+      {ouvert && (
+        <div className="border-t border-filet px-2 py-1">
+          {el.interieur.map((i) => (i.genre === 'outil' ? <CarteOutil key={i.seq} el={i} /> : null))}
           {rapport?.genre === 'texte' && (
-            <Bloc titre={fini ? 'Rapport rendu' : 'Dernier message'} texte={rapport.evt.texte} />
+            <Bloc titre={fini ? 'rapport' : 'dernier message'} texte={rapport.evt.texte} />
           )}
-          {el.resultat?.erreur && <Bloc titre="Fin en erreur" texte={el.resultat.extrait} erreur />}
+          {el.resultat?.erreur && <Bloc titre="fin en erreur" texte={el.resultat.extrait} erreur />}
         </div>
-      </Depliable>
+      )}
     </div>
   );
 }

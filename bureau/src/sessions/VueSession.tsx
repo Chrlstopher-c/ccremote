@@ -1,11 +1,11 @@
-// Responsabilité : une session ouverte — en-tête (état, contexte, actions), fil, compositeur.
+// Responsabilité : une session choisie — barre d'outils (actions), ligne d'état (contexte), fil, compositeur.
 import { Minimize2, Play, Power, Square, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ResumeSession } from '../../../commun/session.ts';
 import { tokens } from '../shared/format.ts';
 import { estBureau } from '../shared/natif.ts';
-import { Bouton } from '../shared/ui/Bouton.tsx';
-import { Bascule, Jauge, Point, Tag } from '../shared/ui/elements.tsx';
+import { IconeBouton } from '../shared/ui/Bouton.tsx';
+import { Bascule, Jauge, Point } from '../shared/ui/elements.tsx';
 import { Composeur } from './Composeur.tsx';
 import { Fil } from './fil/Fil.tsx';
 import { STATUTS } from './statut.ts';
@@ -14,71 +14,58 @@ import { useActionsSession } from './useActionsSession.ts';
 type Actions = ReturnType<typeof useActionsSession>;
 const pluriel = (n: number, mot: string): string => `${n} ${mot}${n > 1 ? 's' : ''}`;
 
-function Identite({ s }: { readonly s: ResumeSession }): ReactNode {
-  const st = STATUTS[s.statut];
-  const tonTag = st.ton === 'alerte' ? 'alerte' : st.ton === 'eteint' ? 'neutre' : 'accent';
+function BarreOutils({ s, a }: { readonly s: ResumeSession; readonly a: Actions }): ReactNode {
+  const ouverte = s.tmux !== null;
   return (
-    <div className="min-w-0 flex-1">
-      <div className="surtitre mb-1.5">{`${s.machine} · ${s.projet.nom}`}</div>
-      <h1 className="truncate text-[24px] leading-tight font-extrabold tracking-[-0.035em]">{s.titre}</h1>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <Tag ton={tonTag}><Point ton={st.ton} />{st.libelle}</Tag>
-        <Tag ton="neutre">{s.pilotee ? 'pilotée' : 'adoptée'}</Tag>
-        {s.attachee && <Tag ton="neutre">terminal attaché</Tag>}
-        <span className="font-mono text-[11.5px] text-discret">
-          {`${s.modele} · ${pluriel(s.etapes, 'étape')} · ${pluriel(s.compactions, 'compaction')}`}
-        </span>
+    <header className="flex h-11 shrink-0 items-center gap-1 border-b border-filet px-3">
+      <div className="min-w-0 flex-1 pr-3">
+        <h1 className="truncate text-[13.5px] font-bold">{s.titre}</h1>
       </div>
-    </div>
+      {ouverte && estBureau() && (
+        <IconeBouton aide="Ouvrir le terminal" raccourci="Ctrl+T" onClick={() => void a.terminal()}>
+          <SquareTerminal size={15} />
+        </IconeBouton>
+      )}
+      {ouverte && (
+        <IconeBouton aide="Interrompre" onClick={() => void a.agir('interrompre')}><Square size={13} /></IconeBouton>
+      )}
+      {ouverte && (
+        <IconeBouton aide="Compacter" onClick={() => void a.agir('compacter')}><Minimize2 size={14} /></IconeBouton>
+      )}
+      {ouverte ? (
+        <IconeBouton aide="Fermer la session" ton="danger" onClick={() => void a.agir('fermer')}>
+          <Power size={14} />
+        </IconeBouton>
+      ) : (
+        <IconeBouton aide="Reprendre" disabled={!s.claudeSessionId} onClick={() => void a.agir('reprendre')}>
+          <Play size={14} />
+        </IconeBouton>
+      )}
+    </header>
   );
 }
 
 // La jauge vire au rouge au seuil de compaction dure (35 % d'une fenêtre de 1 M) : au-delà, chaque tour coûte cher.
-function Contexte({ s, actions }: { readonly s: ResumeSession; readonly actions: Actions }): ReactNode {
+function LigneEtat({ s, a }: { readonly s: ResumeSession; readonly a: Actions }): ReactNode {
+  const st = STATUTS[s.statut];
   const ratio = s.contexte.max > 0 ? s.contexte.tokens / s.contexte.max : 0;
   return (
-    <div className="w-56 shrink-0 pt-1">
-      <div className="mb-1.5 flex justify-between font-mono text-[11px] text-discret">
-        <span>contexte</span>
-        <span>{`${tokens(s.contexte.tokens)} / ${tokens(s.contexte.max)}`}</span>
-      </div>
-      <Jauge valeur={ratio} alerte={0.35} />
+    <div className={`flex h-8 shrink-0 items-center gap-3 border-b
+      border-filet bg-liste px-4 font-mono text-[11px] text-discret`}>
+      <span className="flex items-center gap-1.5 text-encre-2"><Point ton={st.ton} />{st.libelle.toLowerCase()}</span>
+      <span>{`${s.machine} · ${s.projet.nom}`}</span>
+      <span>{s.modele}</span>
+      <span className="flex items-center gap-1.5">
+        <Jauge valeur={ratio} alerte={0.35} largeur="w-16" />
+        {`${tokens(s.contexte.tokens)} / ${tokens(s.contexte.max)}`}
+      </span>
+      <span>{`${pluriel(s.etapes, 'étape')} · ${pluriel(s.compactions, 'compaction')}`}</span>
+      <span className="flex-1" />
       {s.pilotee && (
-        <label className="mt-3 flex items-center justify-between text-[13px] font-bold text-encre-douce">
-          Autonomie
-          <Bascule active={s.autonomie} onChange={(v) => void actions.autonomie(v)} libelle="Autonomie" />
+        <label className="flex items-center gap-1.5">
+          autonomie <Bascule active={s.autonomie} onChange={(v) => void a.autonomie(v)} libelle="Autonomie" />
         </label>
       )}
-    </div>
-  );
-}
-
-function BarreActions({ s, actions }: { readonly s: ResumeSession; readonly actions: Actions }): ReactNode {
-  if (s.tmux === null) {
-    return (
-      <div className="mt-4 flex justify-end">
-        <Bouton compact variante="plein" icone={<Play size={14} />} disabled={!s.claudeSessionId}
-          onClick={() => void actions.agir('reprendre')}>Reprendre</Bouton>
-      </div>
-    );
-  }
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
-      {estBureau() && (
-        <Bouton compact icone={<SquareTerminal size={15} />} onClick={() => void actions.terminal()}>
-          Ouvrir le terminal
-        </Bouton>
-      )}
-      <Bouton compact variante="discret" icone={<Square size={14} />} onClick={() => void actions.agir('interrompre')}>
-        Interrompre
-      </Bouton>
-      <Bouton compact variante="discret" icone={<Minimize2 size={14} />} onClick={() => void actions.agir('compacter')}>
-        Compacter
-      </Bouton>
-      <span className="flex-1" />
-      <Bouton compact variante="danger" icone={<Power size={14} />} onClick={() => void actions.agir('fermer')}>
-        Fermer
-      </Bouton>
     </div>
   );
 }
@@ -87,16 +74,13 @@ export function VueSession({ session }: { readonly session: ResumeSession }): Re
   const actions = useActionsSession(session);
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-fond">
-      <header className="border-b border-filet bg-surface px-8 py-5">
-        <div className="flex items-start gap-6">
-          <Identite s={session} />
-          <Contexte s={session} actions={actions} />
-        </div>
-        <BarreActions s={session} actions={actions} />
-      </header>
+      <BarreOutils s={session} a={actions} />
+      <LigneEtat s={session} a={actions} />
       {actions.erreur && (
         <button type="button" onClick={actions.effacerErreur}
-          className="bg-danger-fond px-8 py-2 text-left text-[13px] font-semibold text-danger">{actions.erreur}</button>
+          className="cursor-default border-b border-filet px-4 py-1.5 text-left text-[12px] text-danger">
+          {actions.erreur}
+        </button>
       )}
       <Fil sessionId={session.id} dossier={session.cwd} />
       <Composeur session={session} envoyer={actions.envoyer} occupe={actions.occupe} />

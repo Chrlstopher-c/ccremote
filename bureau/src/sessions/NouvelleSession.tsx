@@ -75,10 +75,10 @@ function Consignes({ n }: { readonly n: Etat }): ReactNode {
         <Libelle>Premier message</Libelle>
         <Zone rows={4} required value={n.f.message} onChange={(e) => n.setF({ ...n.f, message: e.target.value })} />
       </label>
-      <div className="flex items-center justify-between rounded-[12px] bg-surface-2 px-4 py-3">
+      <div className="flex items-center justify-between rounded-[6px] bg-champ px-3 py-2">
         <div>
-          <div className="text-[14px] font-bold">Autonomie</div>
-          <div className="text-[12.5px] text-discret">Relance seule jusqu’à l’objectif, compacte aux fins d’étape.</div>
+          <div className="text-[13px] font-semibold">Autonomie</div>
+          <div className="text-[11.5px] text-discret">Relance seule jusqu’à l’objectif, compacte aux fins d’étape.</div>
         </div>
         <Bascule active={n.f.autonomie} onChange={(v) => n.setF({ ...n.f, autonomie: v })} libelle="Autonomie" />
       </div>
@@ -97,22 +97,22 @@ export function NouvelleSession({
 }): ReactNode {
   const n = useNouvelleSession(ouvert, surOuverte);
   return (
-    <Dialogue ouvert={ouvert} surFermer={surFermer} titre="Nouvelle session" surtitre="Claude Code" largeur={620}>
-      <form onSubmit={(e) => void n.soumettre(e)} className="space-y-4">
+    <Dialogue ouvert={ouvert} surFermer={surFermer} titre="Nouvelle session" largeur={560}>
+      <form onSubmit={(e) => void n.soumettre(e)} className="space-y-3">
         <Emplacement n={n} />
         <Consignes n={n} />
         {n.erreur && (
-          <p className="rounded-[10px] bg-danger-fond px-3 py-2 text-[13px] font-semibold text-danger">{n.erreur}</p>
+          <p className="text-[12px] text-danger">{n.erreur}</p>
         )}
         <div className="flex justify-end gap-2 pt-1">
-          <Bouton variante="discret" onClick={surFermer}>
+          <Bouton onClick={surFermer}>
             Annuler
           </Bouton>
           <Bouton
             type="submit"
-            variante="plein"
+            ton="accent"
             disabled={n.envoi || !n.projet || !n.f.message.trim()}
-            icone={<Rocket size={16} />}
+            icone={<Rocket size={13} />}
           >
             {n.envoi ? 'Ouverture…' : 'Lancer la session'}
           </Bouton>

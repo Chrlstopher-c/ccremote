@@ -1,31 +1,49 @@
-// Responsabilité : les boutons de l'app — plein à relief (action principale), fantôme, discret (icône).
+// Responsabilité : les boutons d'outil — icône seule avec bulle d'aide, ou compact avec libellé. Aucun relief de site.
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-type Variante = 'plein' | 'fantome' | 'discret' | 'danger';
+type Ton = 'normal' | 'accent' | 'danger';
 
-const STYLES: Record<Variante, string> = {
-  plein:
-    'bg-accent text-white shadow-[0_3px_0_var(--accent-relief)] hover:brightness-105 ' +
-    'active:translate-y-[3px] active:shadow-none',
-  fantome: 'bg-surface text-encre ring-1 ring-filet-fort hover:bg-surface-2',
-  discret: 'text-encre-douce hover:bg-surface-2 hover:text-encre',
-  danger: 'text-danger ring-1 ring-filet-fort hover:bg-danger-fond',
+const TONS: Record<Ton, string> = {
+  normal: 'text-encre-2 hover:bg-survol hover:text-encre',
+  accent: 'bg-accent text-white hover:brightness-110',
+  danger: 'text-danger hover:bg-survol',
 };
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
-  readonly variante?: Variante;
-  readonly icone?: ReactNode;
-  readonly compact?: boolean;
+interface PropsIcone extends ButtonHTMLAttributes<HTMLButtonElement> {
+  readonly aide: string;
+  readonly raccourci?: string;
+  readonly ton?: Ton;
+  readonly actif?: boolean;
 }
 
-export function Bouton({ variante = 'fantome', icone, compact, className = '', children, ...reste }: Props): ReactNode {
-  const taille = compact ? 'h-8 px-3 text-[13px] rounded-[9px]' : 'h-10 px-4 text-[14px] rounded-[10px]';
+export function IconeBouton(p: PropsIcone): ReactNode {
+  const { aide, raccourci, ton = 'normal', actif, className = '', children, ...reste } = p;
   return (
     <button
       type="button"
-      className={`inline-flex items-center justify-center gap-2 font-bold whitespace-nowrap transition-all duration-150
-        ease-[var(--ease-doux)] disabled:opacity-45 disabled:pointer-events-none cursor-pointer
-        ${taille} ${STYLES[variante]} ${className}`}
+      title={raccourci ? `${aide} (${raccourci})` : aide}
+      aria-label={aide}
+      className={`grid size-7 shrink-0 cursor-default place-items-center rounded-[6px] transition-colors
+        disabled:opacity-35 disabled:hover:bg-transparent ${actif ? 'bg-survol text-encre' : TONS[ton]} ${className}`}
+      {...reste}
+    >
+      {children}
+    </button>
+  );
+}
+
+interface PropsBouton extends ButtonHTMLAttributes<HTMLButtonElement> {
+  readonly ton?: Ton;
+  readonly icone?: ReactNode;
+}
+
+export function Bouton({ ton = 'normal', icone, className = '', children, ...reste }: PropsBouton): ReactNode {
+  const cadre = ton === 'accent' ? '' : 'ring-1 ring-filet';
+  return (
+    <button
+      type="button"
+      className={`inline-flex h-7 shrink-0 cursor-default items-center gap-1.5 rounded-[6px] px-2.5 text-[12.5px]
+        font-semibold transition-colors disabled:opacity-40 ${cadre} ${TONS[ton]} ${className}`}
       {...reste}
     >
       {icone}

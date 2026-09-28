@@ -1,13 +1,12 @@
 // Responsabilité : écrire à une session — Entrée envoie, Maj+Entrée va à la ligne ; reprend une session fermée.
-import { ArrowUp } from 'lucide-react';
-import { type KeyboardEvent, type ReactNode, useState } from 'react';
+import { CornerDownLeft } from 'lucide-react';
+import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { ResumeSession } from '../../../commun/session.ts';
 
 function aide(s: ResumeSession): string {
-  if (s.tmux === null) return 'La session est fermée : ce message la reprendra.';
-  if (s.statut === 'travail' || s.statut === 'compaction')
-    return 'Claude travaille : le message sera lu à la fin de son tour.';
-  return 'Entrée pour envoyer, Maj+Entrée pour aller à la ligne.';
+  if (s.tmux === null) return 'Session fermée : écrire la reprend';
+  if (s.statut === 'travail' || s.statut === 'compaction') return 'Claude travaille : lu à la fin de son tour';
+  return `Écrire à « ${s.titre} »`;
 }
 
 function useComposeur(envoyer: (t: string) => Promise<boolean>, occupe: boolean) {
@@ -25,22 +24,6 @@ function useComposeur(envoyer: (t: string) => Promise<boolean>, occupe: boolean)
   return { texte, setTexte, soumettre, touche };
 }
 
-function BoutonEnvoyer({ actif, surEnvoyer }: { readonly actif: boolean; readonly surEnvoyer: () => void }): ReactNode {
-  return (
-    <button
-      type="button"
-      onClick={surEnvoyer}
-      disabled={!actif}
-      aria-label="Envoyer"
-      className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-accent text-white
-        shadow-[0_3px_0_var(--accent-relief)] transition-all active:translate-y-[3px] active:shadow-none
-        disabled:opacity-40"
-    >
-      <ArrowUp size={19} strokeWidth={2.4} />
-    </button>
-  );
-}
-
 interface PropsComposeur {
   readonly session: ResumeSession;
   readonly envoyer: (t: string) => Promise<boolean>;
@@ -49,22 +32,24 @@ interface PropsComposeur {
 
 export function Composeur({ session, envoyer, occupe }: PropsComposeur): ReactNode {
   const c = useComposeur(envoyer, occupe);
+  const zone = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const focus = (): void => zone.current?.focus();
+    window.addEventListener('ccremote:ecrire', focus);
+    return () => window.removeEventListener('ccremote:ecrire', focus);
+  }, []);
   return (
-    <div className="border-t border-filet bg-surface px-8 py-4">
-      <div className="mx-auto flex max-w-[820px] items-end gap-3">
-        <textarea
-          value={c.texte}
-          onChange={(e) => c.setTexte(e.target.value)}
-          onKeyDown={c.touche}
-          rows={Math.min(8, Math.max(1, c.texte.split('\n').length))}
-          placeholder={`Écrire à « ${session.titre} »`}
-          aria-label="Message"
-          className="min-h-[44px] flex-1 resize-none rounded-[14px] bg-surface-2 px-4 py-3 text-[14.5px]
-            leading-relaxed outline-none placeholder:text-discret focus:ring-2 focus:ring-accent-vif"
-        />
-        <BoutonEnvoyer actif={!!c.texte.trim() && !occupe} surEnvoyer={() => void c.soumettre()} />
-      </div>
-      <p className="mx-auto mt-2 max-w-[820px] pl-1 font-mono text-[11px] text-discret">{aide(session)}</p>
+    <div className="flex shrink-0 items-end gap-2 border-t border-filet px-4 py-2.5">
+      <textarea ref={zone} value={c.texte} onChange={(e) => c.setTexte(e.target.value)} onKeyDown={c.touche}
+        rows={Math.min(8, Math.max(1, c.texte.split('\n').length))} placeholder={aide(session)} aria-label="Message"
+        className={`min-h-[30px] flex-1 resize-none bg-transparent py-1 text-[13px] leading-relaxed outline-none
+          select-text placeholder:text-discret`} />
+      <button type="button" onClick={() => void c.soumettre()} disabled={!c.texte.trim() || occupe}
+        title="Envoyer (Entrée)" aria-label="Envoyer"
+        className={`grid size-7 cursor-default place-items-center
+          rounded-[6px] bg-accent text-white disabled:opacity-30`}>
+        <CornerDownLeft size={14} />
+      </button>
     </div>
   );
 }

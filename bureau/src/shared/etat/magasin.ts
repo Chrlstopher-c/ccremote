@@ -24,8 +24,17 @@ const VIDE: Etat = {
   fils: new Map(),
 };
 
+// Une machine hors ligne n'a plus de session vivante (éteinte, ou son poste injoignable) : ses sessions sont présentées
+// fermées. Dès que le poste se reconnecte, le relais renvoie leur état réel.
+function deriver(brutes: readonly ResumeSession[], machines: readonly VueMachine[]): ResumeSession[] {
+  const horsLigne = new Set(machines.filter((m) => !m.enLigne).map((m) => m.id));
+  const fermee = (s: ResumeSession): ResumeSession => ({ ...s, tmux: null, attachee: false, statut: 'fermee' });
+  return brutes.map((s) => (horsLigne.has(s.machine) && s.tmux !== null ? fermee(s) : s));
+}
+
 export class Magasin {
   private etat: Etat = VIDE;
+  private brutes: readonly ResumeSession[] = [];
   private readonly abonnes = new Set<() => void>();
   private readonly flux: FluxRelais;
   private readonly surNotification = new Set<(n: Notification) => void>();
@@ -76,9 +85,10 @@ export class Magasin {
   private async recharger(): Promise<void> {
     try {
       const e = await this.client.etat();
+      this.brutes = e.sessions;
       this.changer({
         machines: e.machines,
-        sessions: e.sessions,
+        sessions: deriver(e.sessions, e.machines),
         notifications: e.notifications,
         reveilPossible: e.reveilPossible,
       });
@@ -89,8 +99,13 @@ export class Magasin {
   }
 
   private recevoir(m: MessageClient): void {
-    if (m.type === 'machine') this.changer({ machines: remplacer(this.etat.machines, m.machine, (x) => x.id) });
-    else if (m.type === 'session') this.changer({ sessions: remplacer(this.etat.sessions, m.session, (x) => x.id) });
+    if (m.type === 'machine') {
+      const machines = remplacer(this.etat.machines, m.machine, (x) => x.id);
+      this.changer({ machines, sessions: deriver(this.brutes, machines) });
+    } else if (m.type === 'session') {
+      this.brutes = remplacer(this.brutes, m.session, (x) => x.id);
+      this.changer({ sessions: deriver(this.brutes, this.etat.machines) });
+    }
     else if (m.type === 'evenement') {
       if (this.etat.fils.has(m.evenement.sessionId)) this.fusionnerFil(m.evenement.sessionId, [m.evenement], false);
     } else {

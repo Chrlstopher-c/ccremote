@@ -1,119 +1,97 @@
-// Responsabilité : la barre latérale night — marque, navigation, état du lien et des machines.
-import { Bell, LogOut, MessagesSquare, Server } from 'lucide-react';
+// Responsabilité : la barre latérale — sources (sessions, machines, alertes), état du lien, déconnexion.
+import { Bell, Circle, Layers, LogOut, MessagesSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEtat } from '../shared/etat/contexte.tsx';
+import { Point } from '../shared/ui/elements.tsx';
+import { memeSource, nonLues, type Source } from './navigation.ts';
 
-export type Vue = 'sessions' | 'parc' | 'notifications';
-
-function Lien({
-  actif,
-  icone,
-  libelle,
-  compteur,
-  surClic,
-}: {
-  readonly actif: boolean;
+interface PropsEntree {
+  readonly source: Source;
+  readonly courante: Source;
+  readonly surChoisir: (s: Source) => void;
   readonly icone: ReactNode;
   readonly libelle: string;
   readonly compteur?: number;
-  readonly surClic: () => void;
-}): ReactNode {
+}
+
+function Entree({ source, courante, surChoisir, icone, libelle, compteur }: PropsEntree): ReactNode {
+  const choisie = memeSource(source, courante);
   return (
-    <button
-      type="button"
-      onClick={surClic}
-      className={`relative flex h-10 w-full cursor-pointer items-center gap-3 rounded-[10px] px-3 text-[14px]
-        font-bold transition-colors
-        ${actif ? 'bg-night-actif text-night-text' : 'text-night-soft hover:bg-night-3 hover:text-night-text'}`}
-    >
-      {actif && <span className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-brand-400" />}
-      {icone}
-      <span className="flex-1 text-left">{libelle}</span>
-      {compteur !== undefined && compteur > 0 && (
-        <span className="rounded-full bg-white px-2 text-[11px] font-extrabold text-night">{compteur}</span>
-      )}
+    <button type="button" onClick={() => surChoisir(source)}
+      className={`flex h-7 w-full cursor-default items-center gap-2 rounded-[6px] px-2 text-[13px]
+        ${choisie ? 'bg-choix font-semibold text-encre' : 'text-encre-2 hover:bg-survol'}`}>
+      <span className="flex w-4 justify-center text-discret">{icone}</span>
+      <span className="flex-1 truncate text-left">{libelle}</span>
+      {compteur !== undefined && compteur > 0 && <span className="font-mono text-[11px] text-discret">{compteur}</span>}
     </button>
   );
 }
 
-function Machines(): ReactNode {
-  const machines = useEtat((e) => e.machines);
+function Section({ titre, children }: { readonly titre: string; readonly children: ReactNode }): ReactNode {
   return (
-    <>
-      <div className="mt-8 px-3 font-mono text-[10.5px] tracking-[0.14em] text-night-muted uppercase">Machines</div>
-      <ul className="mt-2 space-y-1 px-3">
-        {machines.map((m) => (
-          <li key={m.id} className="flex items-center gap-2.5 text-[13px] text-night-soft">
-            <span className={`size-1.5 rounded-full ${m.enLigne ? 'bg-brand-400' : 'bg-night-4'}`} />
-            {m.id}
-          </li>
-        ))}
-      </ul>
-    </>
+    <div className="mb-4">
+      <div className="etiquette px-2 pb-1">{titre}</div>
+      {children}
+    </div>
+  );
+}
+
+interface PropsMachines {
+  readonly courante: Source;
+  readonly surChoisir: (s: Source) => void;
+}
+
+function Machines({ courante, surChoisir }: PropsMachines): ReactNode {
+  const machines = useEtat((e) => e.machines);
+  const sessions = useEtat((e) => e.sessions);
+  return (
+    <Section titre="Machines">
+      {machines.map((m) => (
+        <Entree key={m.id} source={{ genre: 'machine', id: m.id }} courante={courante} surChoisir={surChoisir}
+          icone={<Point ton={m.enLigne ? 'calme' : 'eteint'} />} libelle={m.id}
+          compteur={sessions.filter((s) => s.machine === m.id && s.tmux !== null).length} />
+      ))}
+    </Section>
   );
 }
 
 function Pied({ surDeconnexion }: { readonly surDeconnexion: () => void }): ReactNode {
   const lien = useEtat((e) => e.lien);
+  const pastille = lien === 'ouvert' ? 'fill-succes text-succes' : 'animate-pulse fill-alerte text-alerte';
   return (
-    <>
-      <div className="flex items-center justify-between px-3 text-[12px] text-night-muted">
-        <span className="flex items-center gap-2">
-          <span
-            className={`size-1.5 rounded-full ${lien === 'ouvert' ? 'bg-brand-light' : 'animate-pulse bg-night-4'}`}
-          />
-          {lien === 'ouvert' ? 'relais connecté' : 'reconnexion…'}
-        </span>
-        <button
-          type="button"
-          onClick={surDeconnexion}
-          aria-label="Se déconnecter"
-          className="cursor-pointer rounded-[8px] p-1.5 hover:bg-night-3 hover:text-night-text"
-        >
-          <LogOut size={15} />
-        </button>
-      </div>
-      <img src="/wordmark.svg" alt="Echo Agency" className="mx-3 mt-5 h-7 w-fit opacity-45 invert" />
-    </>
-  );
-}
-
-function Navigation({ vue, surVue }: { readonly vue: Vue; readonly surVue: (v: Vue) => void }): ReactNode {
-  const ouvertes = useEtat((e) => e.sessions.filter((s) => s.tmux !== null).length);
-  const nonLues = useEtat((e) => e.notifications.filter((n) => !n.lue && n.niveau !== 'info').length);
-  const liens: [Vue, string, ReactNode, number | undefined][] = [
-    ['sessions', 'Sessions', <MessagesSquare key="s" size={17} />, ouvertes],
-    ['parc', 'Parc', <Server key="p" size={17} />, undefined],
-    ['notifications', 'Notifications', <Bell key="n" size={17} />, nonLues],
-  ];
-  return (
-    <div className="space-y-1">
-      {liens.map(([id, libelle, icone, compteur]) => (
-        <Lien key={id} actif={vue === id} icone={icone} libelle={libelle} compteur={compteur}
-          surClic={() => surVue(id)} />
-      ))}
+    <div className="flex items-center justify-between border-t border-filet px-3 py-2 text-[11.5px] text-discret">
+      <span className="flex items-center gap-1.5">
+        <Circle size={7} className={pastille} />
+        {lien === 'ouvert' ? 'relais connecté' : 'reconnexion…'}
+      </span>
+      <button type="button" onClick={surDeconnexion} title="Se déconnecter" aria-label="Se déconnecter"
+        className="cursor-default rounded-[5px] p-1 hover:bg-survol hover:text-encre"><LogOut size={13} /></button>
     </div>
   );
 }
 
-export function BarreLaterale({
-  vue,
-  surVue,
-  surDeconnexion,
-}: {
-  readonly vue: Vue;
-  readonly surVue: (v: Vue) => void;
+export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
+  readonly source: Source;
+  readonly surChoisir: (s: Source) => void;
   readonly surDeconnexion: () => void;
 }): ReactNode {
+  const sessions = useEtat((e) => e.sessions);
+  const alertes = useEtat((e) => nonLues(e.notifications));
+  const ouvertes = sessions.filter((s) => s.tmux !== null).length;
   return (
-    <nav className="flex h-full w-[232px] shrink-0 flex-col bg-night px-3 py-5 text-night-text">
-      <div className="mb-7 px-3">
-        <div className="text-[21px] font-extrabold tracking-[-0.045em]">ccremote</div>
-        <div className="font-mono text-[10.5px] tracking-[0.14em] text-night-muted uppercase">sessions claude</div>
+    <nav className="flex h-full w-[210px] shrink-0 flex-col border-r border-filet bg-cote">
+      <div className="px-4 pt-3.5 pb-3 text-[14px] font-extrabold tracking-[-0.03em]">ccremote</div>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2">
+        <Section titre="Sessions">
+          <Entree source={{ genre: 'sessions', filtre: 'ouvertes' }} courante={source} surChoisir={surChoisir}
+            icone={<MessagesSquare size={14} />} libelle="Ouvertes" compteur={ouvertes} />
+          <Entree source={{ genre: 'sessions', filtre: 'toutes' }} courante={source} surChoisir={surChoisir}
+            icone={<Layers size={14} />} libelle="Toutes" compteur={sessions.length} />
+          <Entree source={{ genre: 'alertes' }} courante={source} surChoisir={surChoisir}
+            icone={<Bell size={14} />} libelle="Alertes" compteur={alertes} />
+        </Section>
+        <Machines courante={source} surChoisir={surChoisir} />
       </div>
-      <Navigation vue={vue} surVue={surVue} />
-      <Machines />
-      <span className="flex-1" />
       <Pied surDeconnexion={surDeconnexion} />
     </nav>
   );

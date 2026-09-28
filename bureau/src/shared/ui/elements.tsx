@@ -1,105 +1,68 @@
-// Responsabilité : petites primitives visuelles — jauge, bascule, point d'état, tag, champ.
-import { motion } from 'motion/react';
+// Responsabilité : petites primitives d'outil — point d'état, jauge fine, bascule, champs, raccourci clavier.
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
 
-export function Jauge({ valeur, alerte = 0.8 }: { readonly valeur: number; readonly alerte?: number }): ReactNode {
+export type TonPoint = 'actif' | 'calme' | 'eteint' | 'alerte';
+
+export function Point({ ton }: { readonly ton: TonPoint }): ReactNode {
+  const c = { actif: 'bg-accent', calme: 'bg-succes', eteint: 'bg-discret/40', alerte: 'bg-danger' }[ton];
+  const pulse = ton === 'actif' ? 'animate-pulse motion-reduce:animate-none' : '';
+  return <span className={`inline-block size-[7px] shrink-0 rounded-full ${c} ${pulse}`} />;
+}
+
+export function Jauge({ valeur, alerte = 0.8, largeur = 'w-full' }: {
+  readonly valeur: number;
+  readonly alerte?: number;
+  readonly largeur?: string;
+}): ReactNode {
   const v = Math.max(0, Math.min(1, valeur));
-  const couleur = v >= alerte ? 'bg-danger' : 'bg-accent-vif';
   return (
-    <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
-      <motion.div
-        className={`h-full rounded-full ${couleur}`}
-        initial={false}
-        animate={{ width: `${v * 100}%` }}
-        transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
-      />
-    </div>
+    <span className={`inline-block h-[3px] overflow-hidden rounded-full bg-filet align-middle ${largeur}`}>
+      <span className={`block h-full rounded-full ${v >= alerte ? 'bg-danger' : 'bg-accent'}`}
+        style={{ width: `${v * 100}%` }} />
+    </span>
   );
 }
 
-export function Bascule({
-  active,
-  onChange,
-  libelle,
-}: {
+export function Bascule({ active, onChange, libelle }: {
   readonly active: boolean;
   readonly onChange: (v: boolean) => void;
   readonly libelle: string;
 }): ReactNode {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={active}
-      aria-label={libelle}
+    <button type="button" role="switch" aria-checked={active} aria-label={libelle} title={libelle}
       onClick={() => onChange(!active)}
-      className={`relative h-6 w-10 shrink-0 cursor-pointer rounded-full transition-colors
-        ${active ? 'bg-accent' : 'bg-surface-3'}`}
-    >
-      <motion.span
-        className="absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow"
-        initial={false}
-        animate={{ x: active ? 16 : 0 }}
-        transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-      />
+      className={`relative h-[18px] w-[30px] shrink-0 cursor-default rounded-full transition-colors
+        ${active ? 'bg-accent' : 'bg-filet'}`}>
+      <span className={`absolute top-[2px] left-[2px] size-[14px] rounded-full bg-white shadow-sm transition-transform
+        ${active ? 'translate-x-[12px]' : ''}`} />
     </button>
   );
 }
 
-export function Point({ ton }: { readonly ton: 'actif' | 'calme' | 'eteint' | 'alerte' }): ReactNode {
-  const c = { actif: 'bg-accent-vif', calme: 'bg-succes', eteint: 'bg-discret/50', alerte: 'bg-danger' }[ton];
-  return (
-    <span className="relative inline-flex size-2">
-      {ton === 'actif' && (
-        <span className="absolute inset-0 animate-ping rounded-full bg-accent-vif opacity-60 motion-reduce:hidden" />
-      )}
-      <span className={`relative inline-flex size-2 rounded-full ${c}`} />
-    </span>
-  );
+export function Touche({ children }: { readonly children: ReactNode }): ReactNode {
+  return <kbd className="rounded-[4px] border border-filet px-1 font-mono text-[10.5px] text-discret">{children}</kbd>;
 }
 
-export function Tag({
-  children,
-  ton = 'accent',
-}: {
-  readonly children: ReactNode;
-  readonly ton?: 'accent' | 'neutre' | 'succes' | 'danger' | 'alerte';
-}): ReactNode {
-  const c = {
-    accent: 'bg-accent-fond text-accent-texte',
-    neutre: 'bg-surface-2 text-encre-douce',
-    succes: 'bg-succes-fond text-succes',
-    danger: 'bg-danger-fond text-danger',
-    alerte: 'bg-alerte-fond text-alerte',
-  }[ton];
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${c}`}>
-      {children}
-    </span>
-  );
-}
-
-const CHAMP =
-  'w-full rounded-[10px] bg-surface px-3 text-[14px] text-encre ring-1 ring-filet-fort outline-none ' +
-  'placeholder:text-discret focus:ring-2 focus:ring-accent-vif transition-shadow';
+const CHAMP = 'w-full rounded-[6px] bg-champ px-2.5 text-[13px] text-encre outline-none ring-1 ring-transparent '
+  + 'placeholder:text-discret focus:ring-accent select-text';
 
 export function Champ(p: InputHTMLAttributes<HTMLInputElement>): ReactNode {
-  return <input {...p} className={`h-10 ${CHAMP} ${p.className ?? ''}`} />;
+  return <input {...p} className={`h-8 ${CHAMP} ${p.className ?? ''}`} />;
 }
 
 export function Zone(p: TextareaHTMLAttributes<HTMLTextAreaElement>): ReactNode {
-  return <textarea {...p} className={`py-2.5 leading-relaxed resize-none ${CHAMP} ${p.className ?? ''}`} />;
+  return <textarea {...p} className={`resize-none py-2 leading-relaxed ${CHAMP} ${p.className ?? ''}`} />;
 }
 
 export function Choix(p: SelectHTMLAttributes<HTMLSelectElement>): ReactNode {
-  return <select {...p} className={`h-10 ${CHAMP} cursor-pointer ${p.className ?? ''}`} />;
+  return <select {...p} className={`h-8 cursor-default ${CHAMP} ${p.className ?? ''}`} />;
 }
 
 export function Libelle({ children, detail }: { readonly children: ReactNode; readonly detail?: string }): ReactNode {
   return (
-    <span className="mb-1.5 flex items-baseline justify-between text-[13px] font-bold text-encre-douce">
+    <span className="mb-1 flex items-baseline justify-between text-[12px] font-semibold text-encre-2">
       {children}
-      {detail && <span className="font-mono text-[11px] font-normal text-discret">{detail}</span>}
+      {detail && <span className="font-mono text-[10.5px] font-normal text-discret">{detail}</span>}
     </span>
   );
 }
