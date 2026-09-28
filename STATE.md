@@ -34,7 +34,10 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
   l'app, jeton du flux en sous-protocole WebSocket (jamais dans l'URL).
 - **App de bureau** : charte Echo Agency clair/night ; sessions, fil détaillé (outils dépliables, sous-agents), parc
   (mesures, réveil, extinction), notifications système, « Ouvrir le terminal » (kitty attaché, local ou SSH dédié).
-- **Qualité** : 42 tests (poste, relais, app), typecheck strict, linter des standards à 0 violation.
+- **Sessions hors tmux** (retour de Chris, 28/09 midi) : le poste lit `<config>/sessions/<pid>.json`, déclaré par
+  Claude lui-même — identifiant de session exact pour les sessions tmux, et sessions lancées dans un terminal ordinaire
+  suivies en **lecture seule**. Machine éteinte : « Réveiller » au lieu d'un 502 ; le relais journalise chaque refus.
+- **Qualité** : 45 tests (poste, relais, app), typecheck strict, linter des standards à 0 violation.
 
 ## Vérifié en réel (production, domaine public)
 
