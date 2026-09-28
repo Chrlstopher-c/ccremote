@@ -17,7 +17,7 @@ import { lancerRetention } from './registre/retention.ts';
 
 const journal = creerJournal('relais');
 const config = chargerConfig();
-const registre = new Registre(ouvrirBase(config.base));
+const registre = new Registre(ouvrirBase(config.base), journal);
 const diffusion = new Diffusion();
 const acces = new Acces(registre, config.empreinteMotDePasse);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);

@@ -1,4 +1,5 @@
 // Responsabilité : lire et écrire l'état du relais — machines, sessions, fil d'événements, notifications, jetons.
+import type { Logger } from 'pino';
 import type { Database } from 'bun:sqlite';
 import type { EvenementDate, Notification, VueMachine } from '../../commun/api-clients.ts';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
@@ -28,7 +29,10 @@ type LigneNotif = {
 };
 
 export class Registre {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly journal?: Logger,
+  ) {}
 
   enregistrerMachine(m: Omit<FicheMachine, 'etat'>): void {
     this.db
@@ -78,12 +82,24 @@ export class Registre {
 
   session(id: string): ResumeSession | null {
     const l = this.db.query('SELECT resume FROM sessions WHERE id = $id').get({ id }) as { resume: string } | null;
-    return l ? ResumeSession.parse(JSON.parse(l.resume)) : null;
+    return l ? this.lireFiche(l.resume) : null;
   }
 
   sessions(): ResumeSession[] {
     const lignes = this.db.query('SELECT resume FROM sessions ORDER BY maj_le DESC').all() as { resume: string }[];
-    return lignes.map((l) => ResumeSession.parse(JSON.parse(l.resume)));
+    return lignes.flatMap((l) => this.lireFiche(l.resume) ?? []);
+  }
+
+  // Une fiche enregistrée par une version antérieure du contrat ne doit jamais faire tomber la lecture de toutes les
+  // autres : le dialogue, éphémère, est abandonné s'il ne se lit plus ; une fiche vraiment illisible est écartée.
+  private lireFiche(brut: string): ResumeSession | null {
+    const objet: unknown = JSON.parse(brut);
+    const r = ResumeSession.safeParse(objet);
+    if (r.success) return r.data;
+    const sansDialogue = ResumeSession.safeParse({ ...(objet as object), dialogue: null });
+    if (sansDialogue.success) return sansDialogue.data;
+    this.journal?.warn({ erreur: r.error.message.slice(0, 300) }, 'fiche de session illisible, écartée');
+    return null;
   }
 
   ajouterEvenement(sessionId: string, ts: string, evt: Evenement): EvenementDate {
@@ -173,3 +189,4 @@ export class Registre {
     this.db.query('DELETE FROM jetons WHERE empreinte = $e').run({ e: empreinte });
   }
 }
+
