@@ -64,12 +64,13 @@ export function nettoyerTitre(titre: string, dossier: string): string {
   return nom && !/^[\w-]+(\.local)?$/.test(nom) ? nom : dossier.split('/').at(-1) || dossier;
 }
 
-export async function nomLibre(dossier: string): Promise<string> {
-  const base = `${PREFIXE}${(dossier.split('/').at(-1) || 'racine').replace(/[^A-Za-z0-9_-]/g, '_')}`;
+// `nom` : un nom de projet ou un chemin (seul son dernier segment compte).
+export async function nomLibre(nom: string): Promise<string> {
+  const base = `${PREFIXE}${(nom.split('/').at(-1) || 'racine').replace(/[^A-Za-z0-9_-]/g, '_')}`;
   const pris = new Set((await lister()).map((p) => p.nom));
-  let nom = base;
-  for (let n = 2; pris.has(nom); n++) nom = `${base}-${n}`;
-  return nom;
+  let libre = base;
+  for (let n = 2; pris.has(libre); n++) libre = `${base}-${n}`;
+  return libre;
 }
 
 export function creer(

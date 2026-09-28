@@ -83,6 +83,15 @@ describe('traduction transcript → événements', () => {
     ]);
   });
 
+  test('erreur d’API (réponse synthétique) : événement d’erreur, fin de tour, contexte ignoré', () => {
+    const l = { type: 'assistant', isApiErrorMessage: true, message: {
+      model: '<synthetic>', stop_reason: 'stop_sequence',
+      content: [{ type: 'text', text: 'Login expired · Please run /login' }], usage: { input_tokens: 0 } } };
+    expect(traduire(l)).toEqual([{ type: 'erreur', message: 'Login expired · Please run /login' }]);
+    expect(travailEnCours(l)).toBe(false);
+    expect(contexteDe(l)).toBeNull();
+  });
+
   test('frontière de compaction (camelCase du transcript)', () => {
     expect(
       traduire({

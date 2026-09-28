@@ -108,6 +108,7 @@ export class SessionTmux {
     if (!this.etat.pilotee && travail !== null && this.etat.tmux)
       this.etat = { ...this.etat, statut: travail ? 'travail' : 'attente' };
     const evts = traduire(l);
+    if (this.etat.pilotee && evts.some((e) => e.type === 'erreur')) this.etat = { ...this.etat, statut: 'erreur' };
     for (const evt of evts) {
       if (evt.type === 'outil' || evt.type === 'sous_agent') this.tour.outils += 1;
       if (evt.type === 'compaction') {
@@ -161,7 +162,7 @@ export class SessionTmux {
     if (!this.etat.claudeSessionId) return 'conversation inconnue : impossible de la reprendre';
     const refus = this.preparer();
     if (refus) return refus;
-    const nom = await tmux.nomLibre(this.etat.cwd);
+    const nom = await tmux.nomLibre(this.etat.projet.nom);
     const commande =
       this.p.consignes === null
         ? [binaireClaude(), '--resume', this.etat.claudeSessionId, '--dangerously-skip-permissions']
@@ -181,7 +182,7 @@ export class SessionTmux {
   async lancer(message: string, modele: string | null): Promise<string | null> {
     const refus = this.preparer();
     if (refus) return refus;
-    const nom = await tmux.nomLibre(this.etat.cwd);
+    const nom = await tmux.nomLibre(this.etat.projet.nom);
     const commande = commandeClaude({
       sessionId: this.etat.id,
       titre: this.etat.titre,

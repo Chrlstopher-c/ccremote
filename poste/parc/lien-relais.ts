@@ -20,6 +20,7 @@ export class LienRelais {
   private tampon: MessagePoste[] = [];
   private attenteMs = 1_000;
   private arrete = false;
+  private ouvertA = 0;
 
   constructor(private readonly p: ParametresLien) {}
 
@@ -53,7 +54,7 @@ export class LienRelais {
 
   private ouvert(ws: WebSocket): void {
     this.p.journal.info({ url: this.p.url }, 'lien au relais établi');
-    this.attenteMs = 1_000;
+    this.ouvertA = Date.now();
     ws.send(JSON.stringify(this.p.bonjour()));
     const enAttente = this.tampon;
     this.tampon = [];
@@ -75,6 +76,8 @@ export class LienRelais {
   private ferme(code: number, raison: string): void {
     this.ws = null;
     if (this.arrete) return;
+    // Une connexion refusée aussitôt ouverte (secret faux, relais d'une autre version) ne remet pas l'attente à zéro.
+    if (Date.now() - this.ouvertA > 10_000) this.attenteMs = 1_000;
     this.p.journal.warn({ code, raison, dansMs: this.attenteMs }, 'lien au relais perdu, reconnexion');
     setTimeout(() => this.connecter(), this.attenteMs);
     this.attenteMs = Math.min(this.attenteMs * 2, ATTENTE_MAX_MS);

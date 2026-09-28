@@ -38,7 +38,9 @@ fiche() { # machine → variables DESCRIPTION RACINES COMPTES URL UNITE
     portable) DESCRIPTION="Portable de Chris (Arch, 8 cœurs, 7 Go) : builds légers seulement"
       RACINES='["~", "~/projects"]'; COMPTES='{"principal": null}'; URL="$LIEN_PUBLIC"; UNITE=utilisateur ;;
     pi) DESCRIPTION="Raspberry Pi, production (sites, relais) : exploitation seulement, aucun build"
-      RACINES='["/mnt/projects"]'; COMPTES='{"principal": null}'; URL="ws://127.0.0.1:8721/poste"; UNITE=systeme ;;
+      # Le ~/.claude de pi n'a plus d'identifiants valides ; le compte de l'ancien orchestrateur, si.
+      RACINES='["/mnt/projects"]'; COMPTES='{"principal": "~/.claude-orchestrateur"}'; URL="ws://127.0.0.1:8721/poste"
+      UNITE=systeme ;;
     vps) DESCRIPTION="VPS OVH, production StockIOP : exploitation seulement, aucun build"
       RACINES='["~/dev", "~"]'; URL="$LIEN_PUBLIC"; UNITE=systeme
       COMPTES='{"compte-a": "~/.claude-comptes/compte-a", "compte-b": "~/.claude-comptes/compte-b"}' ;;

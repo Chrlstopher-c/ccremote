@@ -21,12 +21,22 @@ export interface Ligne {
   readonly compactMetadata?: Objet;
   readonly customTitle?: unknown;
   readonly attachment?: { type?: unknown; prompt?: unknown };
+  readonly isApiErrorMessage?: unknown;
+}
+
+// Erreur d'API (connexion expirée, surcharge…) : le CLI l'écrit comme une réponse synthétique de l'assistant.
+export function estErreurApi(l: Ligne): boolean {
+  return l.type === 'assistant' && (l.isApiErrorMessage === true || l.message?.model === '<synthetic>');
 }
 
 // `agent` fourni : la ligne vient du transcript d'un sous-agent (toutes ses lignes sont `isSidechain`).
 export function traduire(l: Ligne, agent?: string): Evenement[] {
   if (l.isSidechain === true && agent === undefined) return [];
   const marque = agent === undefined ? {} : { agent };
+  if (estErreurApi(l) && agent === undefined) {
+    const texteErreur = blocs(l.message?.content).map((b) => texte(b['text'])).join(' ').trim();
+    return [{ type: 'erreur', message: texteErreur || 'erreur de l’API' }];
+  }
   if (l.type === 'assistant') return blocs(l.message?.content).flatMap((b) => traduireBlocAssistant(b, marque));
   if (l.type === 'user') return agent === undefined ? traduireUtilisateur(l) : resultats(l, marque);
   if (l.type === 'attachment' && agent === undefined) return finDeTache(l);
@@ -154,7 +164,7 @@ function detailEntree(entree: Objet): string {
 
 // Contexte relu au prochain tour = input + cache lu + cache créé du dernier appel du fil principal.
 export function contexteDe(l: Ligne): number | null {
-  if (l.type !== 'assistant' || l.isSidechain === true || !l.message?.usage) return null;
+  if (l.type !== 'assistant' || l.isSidechain === true || !l.message?.usage || estErreurApi(l)) return null;
   const u = l.message.usage;
   return nombre(u['input_tokens']) + nombre(u['cache_read_input_tokens']) + nombre(u['cache_creation_input_tokens']);
 }
@@ -163,6 +173,7 @@ export function contexteDe(l: Ligne): number | null {
 export function travailEnCours(l: Ligne): boolean | null {
   if (l.isSidechain === true) return null;
   if (l.type === 'user' && l.isMeta !== true) return true;
+  if (estErreurApi(l)) return false;
   if (l.type === 'assistant') return l.message?.stop_reason !== 'end_turn';
   if (l.type === 'system' && l.subtype === 'turn_duration') return false;
   return null;
