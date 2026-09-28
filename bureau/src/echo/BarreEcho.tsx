@@ -1,7 +1,14 @@
 // Responsabilité : la barre du mode Echo — état, et les trois bascules : micro, voix, discussion écrite.
 import { AudioLines, MessageSquareText, Mic, MicOff, Square, Volume2, VolumeX } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { CommandeVoix, EtatVoixEcho, McpEcho, ReglagesEcho, UsageEcho } from '../../../commun/echo.ts';
+import type {
+  CommandeVoix,
+  ContexteEcho,
+  EtatVoixEcho,
+  McpEcho,
+  ReglagesEcho,
+  UsageEcho,
+} from '../../../commun/echo.ts';
 import { PanneauOutils } from './PanneauOutils.tsx';
 import { PastilleVoix } from './PastilleVoix.tsx';
 import type { Disponibilite } from './useEcho.ts';
@@ -52,6 +59,8 @@ interface PropsBarre {
   readonly usage: UsageEcho | null;
   readonly mcp: readonly McpEcho[];
   readonly relancer: () => void;
+  readonly contexte: ContexteEcho | null;
+  readonly compacter: () => void;
 }
 
 const milliers = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)} k` : String(n));
@@ -108,7 +117,7 @@ export function BarreEcho(p: PropsBarre): ReactNode {
       <div className="flex-1" />
       <Conso u={p.usage} />
       <PastilleVoix voix={p.voix} commander={p.commanderVoix} />
-      <PanneauOutils mcp={p.mcp} relancer={p.relancer} />
+      <PanneauOutils mcp={p.mcp} relancer={p.relancer} contexte={p.contexte} compacter={p.compacter} />
       <Bascules {...p} />
     </header>
   );

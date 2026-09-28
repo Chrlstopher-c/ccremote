@@ -8,6 +8,7 @@ import type {
   EtatVoixEcho,
   MessageEcho,
   ReglagesEcho,
+  ContexteEcho,
   McpEcho,
   UsageEcho,
 } from '../../../commun/echo.ts';
@@ -45,7 +46,21 @@ function useEtatSysteme() {
   const [voix, setVoix] = useState<EtatVoixEcho | null>(null);
   const [usage, setUsage] = useState<UsageEcho | null>(null);
   const [mcp, setMcp] = useState<readonly McpEcho[]>([]);
-  return { reglages, setReglages, cadres, setCadres, voix, setVoix, usage, setUsage, mcp, setMcp };
+  const [contexte, setContexte] = useState<ContexteEcho | null>(null);
+  return {
+    reglages,
+    setReglages,
+    cadres,
+    setCadres,
+    voix,
+    setVoix,
+    usage,
+    setUsage,
+    mcp,
+    setMcp,
+    contexte,
+    setContexte,
+  };
 }
 
 /** La conversation : historique, réponse en cours, occupation, joignabilité, dernière phrase entendue. */
@@ -80,6 +95,7 @@ function recevoir(e: Etat, m: MessageEcho, relire: () => void): void {
   } else if (m.type === 'voix') e.setVoix(m.etat);
   else if (m.type === 'usage') e.setUsage(m.usage);
   else if (m.type === 'mcp') e.setMcp(m.serveurs);
+  else if (m.type === 'contexte') e.setContexte(m.etat);
   else if (m.type === 'fin') {
     e.setEnCours(VIDE);
     relire();
@@ -103,6 +119,7 @@ export function useEcho() {
       setVoix(etat.voix);
       e.setUsage(etat.usage);
       e.setMcp(etat.mcp);
+      e.setContexte(etat.contexte);
       setHistorique(h);
       setDispo(etat.joignable ? 'ok' : 'injoignable');
     } catch (erreur) {
@@ -181,5 +198,9 @@ function useActionsSysteme(e: Etat, tenter: Tenter) {
     (action: CommandeVoix): void => void tenter(() => client.echoVoix(action), 'commande de voix refusée'),
     [client, tenter],
   );
-  return { relancer, commanderVoix };
+  const compacter = useCallback(
+    (): void => void tenter(() => client.echoCompacter(), 'compaction refusée'),
+    [client, tenter],
+  );
+  return { relancer, commanderVoix, compacter };
 }

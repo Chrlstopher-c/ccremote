@@ -121,6 +121,10 @@ export class ClientRelais {
     return this.appeler('POST', '/api/echo/voix', { action });
   }
 
+  echoCompacter(): Promise<{ ok: boolean }> {
+    return this.appeler('POST', '/api/echo/compacter', {});
+  }
+
   echoRedemarrer(): Promise<{ ok: boolean }> {
     return this.appeler('POST', '/api/echo/redemarrer', {});
   }

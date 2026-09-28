@@ -19,6 +19,7 @@ export type MessageEcho =
   | { readonly type: 'voix'; readonly etat: EtatVoixEcho }
   | { readonly type: 'usage'; readonly usage: UsageEcho }
   | { readonly type: 'mcp'; readonly serveurs: readonly McpEcho[] }
+  | { readonly type: 'contexte'; readonly etat: ContexteEcho }
   | { readonly type: 'voix_commande'; readonly action: CommandeVoix }
   | { readonly type: 'reglages'; readonly reglages: ReglagesEcho }
   | { readonly type: 'cadres'; readonly cadres: readonly CadreEcho[] };
@@ -38,6 +39,18 @@ export interface McpEcho {
   readonly nom: string;
   readonly statut: string;
   readonly machine: string;
+}
+
+// Le contexte de la session d'Echo et ses compactions (autocompact : au repos au-delà de seuilRepos, en fin de tour
+// au-delà de seuilDur).
+export interface ContexteEcho {
+  readonly tokens: number;
+  readonly fenetre: number;
+  readonly seuilRepos: number;
+  readonly seuilDur: number;
+  readonly compactions: number;
+  readonly enCours: boolean;
+  readonly derniere: string | null;
 }
 
 export type CommandeVoix = 'enroler' | 'oublier' | 'annuler';
@@ -73,6 +86,7 @@ export interface EtatEcho {
   readonly voix: EtatVoixEcho | null;
   readonly usage: UsageEcho | null;
   readonly mcp: readonly McpEcho[];
+  readonly contexte: ContexteEcho | null;
 }
 
 export interface EntreeHistoriqueEcho {

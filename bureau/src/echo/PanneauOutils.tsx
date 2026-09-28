@@ -3,7 +3,8 @@
 import { Plug, RotateCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { type ReactNode, useState } from 'react';
-import type { McpEcho } from '../../../commun/echo.ts';
+import type { ContexteEcho, McpEcho } from '../../../commun/echo.ts';
+import { Contexte } from './Contexte.tsx';
 
 const BOUTON = 'grid size-8 cursor-default place-items-center rounded-[10px] transition-colors';
 const PANNEAU =
@@ -33,7 +34,14 @@ function Groupe({ machine, serveurs }: { readonly machine: string; readonly serv
   );
 }
 
-function Panneau(p: { readonly mcp: readonly McpEcho[]; readonly relancer: () => void }): ReactNode {
+interface PropsOutils {
+  readonly mcp: readonly McpEcho[];
+  readonly relancer: () => void;
+  readonly contexte: ContexteEcho | null;
+  readonly compacter: () => void;
+}
+
+function Panneau(p: PropsOutils): ReactNode {
   const machines = [...new Set(p.mcp.map((s) => s.machine))];
   const ok = p.mcp.filter((s) => s.statut === 'connected').length;
   return (
@@ -52,6 +60,7 @@ function Panneau(p: { readonly mcp: readonly McpEcho[]; readonly relancer: () =>
           <Groupe key={m} machine={m} serveurs={p.mcp.filter((s) => s.machine === m)} />
         ))}
       </div>
+      <Contexte c={p.contexte} compacter={p.compacter} />
       <button
         type="button"
         onClick={p.relancer}
@@ -66,7 +75,7 @@ function Panneau(p: { readonly mcp: readonly McpEcho[]; readonly relancer: () =>
   );
 }
 
-export function PanneauOutils(p: { readonly mcp: readonly McpEcho[]; readonly relancer: () => void }): ReactNode {
+export function PanneauOutils(p: PropsOutils): ReactNode {
   const [ouvert, setOuvert] = useState(false);
   const probleme = p.mcp.some((s) => s.statut === 'failed');
   return (
@@ -84,7 +93,7 @@ export function PanneauOutils(p: { readonly mcp: readonly McpEcho[]; readonly re
       <AnimatePresence>
         {ouvert && (
           <Panneau
-            mcp={p.mcp}
+            {...p}
             relancer={() => {
               p.relancer();
               setOuvert(false);

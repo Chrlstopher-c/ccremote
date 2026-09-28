@@ -50,6 +50,8 @@ export function VueEcho(): ReactNode {
         usage={echo.usage}
         mcp={echo.mcp}
         relancer={echo.relancer}
+        contexte={echo.contexte}
+        compacter={echo.compacter}
       />
       <div className="flex min-h-0 flex-1">
         <div className={`flex min-h-0 min-w-0 flex-1 ${avecCadres ? 'flex-row' : 'flex-col'}`}>

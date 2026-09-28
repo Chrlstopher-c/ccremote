@@ -48,6 +48,7 @@ function routesAction(protege: Protege, avec: Avec) {
     '/api/echo/retirer': poster(CorpsRetrait, (lien, c) => lien.retirerCadre(c.id)),
     '/api/echo/interrompre': { POST: protege(avec((lien) => fait(lien.interrompre()))) },
     '/api/echo/redemarrer': { POST: protege(avec((lien) => fait(lien.redemarrer()))) },
+    '/api/echo/compacter': { POST: protege(avec((lien) => fait(lien.compacter()))) },
   };
 }
 

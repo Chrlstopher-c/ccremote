@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import type {
   CadreEcho,
   CommandeVoix,
+  ContexteEcho,
   EntreeHistoriqueEcho,
   EtatEcho,
   EtatVoixEcho,
@@ -23,6 +24,7 @@ export class LienEcho {
   private voix: EtatVoixEcho | null = null;
   private usage: UsageEcho | null = null;
   private mcp: readonly McpEcho[] = [];
+  private contexte: ContexteEcho | null = null;
 
   constructor(
     private readonly url: string,
@@ -41,6 +43,7 @@ export class LienEcho {
       voix: this.voix,
       usage: this.usage,
       mcp: this.mcp,
+      contexte: this.contexte,
     };
   }
 
@@ -73,6 +76,10 @@ export class LienEcho {
 
   commanderVoix(action: CommandeVoix): boolean {
     return this.envoyer({ type: 'voix_commande', action });
+  }
+
+  compacter(): boolean {
+    return this.envoyer({ type: 'compacter' });
   }
 
   redemarrer(): boolean {
@@ -108,6 +115,7 @@ export class LienEcho {
       else if (echo.type === 'voix') this.voix = echo.etat;
       else if (echo.type === 'usage') this.usage = echo.usage;
       else if (echo.type === 'mcp') this.mcp = echo.serveurs;
+      else if (echo.type === 'contexte') this.contexte = echo.etat;
       this.diffusion.diffuser({ type: 'echo', echo });
     } catch (err) {
       this.journal.warn({ err }, 'message d’Echo illisible');
