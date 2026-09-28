@@ -8,6 +8,7 @@ import { depuis, duree, octets } from '../shared/format.ts';
 import { Bouton } from '../shared/ui/Bouton.tsx';
 import { Dialogue } from '../shared/ui/Dialogue.tsx';
 import { Jauge, Point } from '../shared/ui/elements.tsx';
+import { estOuverte } from '../sessions/statut.ts';
 
 function Mesures({ m }: { readonly m: Machine }): ReactNode {
   const e = m.etat;
@@ -58,7 +59,7 @@ function useAlimentation(id: string) {
 type Alimentation = ReturnType<typeof useAlimentation>;
 
 function ConfirmerExtinction({ m, alim }: { readonly m: Machine; readonly alim: Alimentation }): ReactNode {
-  const ouvertes = useEtat((e) => e.sessions.filter((s) => s.machine === m.id && s.tmux !== null).length);
+  const ouvertes = useEtat((e) => e.sessions.filter((s) => s.machine === m.id && estOuverte(s)).length);
   return (
     <Dialogue ouvert={alim.confirmer} surFermer={() => alim.setConfirmer(false)} titre={`Éteindre ${m.id} ?`}
       largeur={420}>

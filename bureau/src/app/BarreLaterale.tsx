@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useEtat } from '../shared/etat/contexte.tsx';
 import { Point } from '../shared/ui/elements.tsx';
 import { memeSource, nonLues, type Source } from './navigation.ts';
+import { estOuverte } from '../sessions/statut.ts';
 
 interface PropsEntree {
   readonly source: Source;
@@ -49,7 +50,7 @@ function Machines({ courante, surChoisir }: PropsMachines): ReactNode {
       {machines.map((m) => (
         <Entree key={m.id} source={{ genre: 'machine', id: m.id }} courante={courante} surChoisir={surChoisir}
           icone={<Point ton={m.enLigne ? 'calme' : 'eteint'} />} libelle={m.id}
-          compteur={sessions.filter((s) => s.machine === m.id && s.tmux !== null).length} />
+          compteur={sessions.filter((s) => s.machine === m.id && estOuverte(s)).length} />
       ))}
     </Section>
   );
@@ -77,7 +78,7 @@ export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
 }): ReactNode {
   const sessions = useEtat((e) => e.sessions);
   const alertes = useEtat((e) => nonLues(e.notifications));
-  const ouvertes = sessions.filter((s) => s.tmux !== null).length;
+  const ouvertes = sessions.filter((s) => estOuverte(s)).length;
   return (
     <nav className="flex h-full w-[210px] shrink-0 flex-col border-r border-filet bg-cote">
       <div className="px-4 pt-3.5 pb-3 text-[14px] font-extrabold tracking-[-0.03em]">ccremote</div>

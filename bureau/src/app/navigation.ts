@@ -1,6 +1,7 @@
 // Responsabilité : où l'on est dans l'app — la source choisie dans la barre latérale et l'élément choisi dans la liste.
 import type { Notification, VueMachine } from '../../../commun/api-clients.ts';
 import type { ResumeSession } from '../../../commun/session.ts';
+import { estOuverte } from '../sessions/statut.ts';
 
 export type Source =
   | { readonly genre: 'sessions'; readonly filtre: 'ouvertes' | 'toutes' }
@@ -22,7 +23,7 @@ export function sessionsDe(source: Source, sessions: readonly ResumeSession[], r
   return sessions
     .filter((s) => {
       if (source.genre === 'machine') return s.machine === source.id;
-      if (source.genre === 'sessions' && source.filtre === 'ouvertes') return s.tmux !== null;
+      if (source.genre === 'sessions' && source.filtre === 'ouvertes') return estOuverte(s);
       return true;
     })
     .filter((s) => !q || `${s.titre} ${s.projet.nom} ${s.machine}`.toLowerCase().includes(q))

@@ -7,6 +7,7 @@ import { estBureau } from '../shared/natif.ts';
 import { IconeBouton } from '../shared/ui/Bouton.tsx';
 import { Bascule, Jauge, Point } from '../shared/ui/elements.tsx';
 import { Composeur } from './Composeur.tsx';
+import { LectureSeule, useLectureSeule } from './LectureSeule.tsx';
 import { Fil } from './fil/Fil.tsx';
 import { STATUTS } from './statut.ts';
 import { useActionsSession } from './useActionsSession.ts';
@@ -32,15 +33,17 @@ function BarreOutils({ s, a }: { readonly s: ResumeSession; readonly a: Actions 
       {ouverte && (
         <IconeBouton aide="Compacter" onClick={() => void a.agir('compacter')}><Minimize2 size={14} /></IconeBouton>
       )}
-      {ouverte ? (
+      {ouverte && (
         <IconeBouton aide="Fermer la session" ton="danger" onClick={() => void a.agir('fermer')}>
           <Power size={14} />
         </IconeBouton>
-      ) : (
+      )}
+      {!ouverte && !s.terminal && (
         <IconeBouton aide="Reprendre" disabled={!s.claudeSessionId} onClick={() => void a.agir('reprendre')}>
           <Play size={14} />
         </IconeBouton>
       )}
+      {s.terminal && <span className="font-mono text-[10.5px] text-discret">terminal · lecture seule</span>}
     </header>
   );
 }
@@ -72,6 +75,7 @@ function LigneEtat({ s, a }: { readonly s: ResumeSession; readonly a: Actions })
 
 export function VueSession({ session }: { readonly session: ResumeSession }): ReactNode {
   const actions = useActionsSession(session);
+  const lectureSeule = useLectureSeule(session);
   return (
     <section className="flex h-full min-w-0 flex-1 flex-col bg-fond">
       <BarreOutils s={session} a={actions} />
@@ -83,7 +87,8 @@ export function VueSession({ session }: { readonly session: ResumeSession }): Re
         </button>
       )}
       <Fil sessionId={session.id} dossier={session.cwd} />
-      <Composeur session={session} envoyer={actions.envoyer} occupe={actions.occupe} />
+      {lectureSeule ? <LectureSeule s={session} raison={lectureSeule} />
+        : <Composeur session={session} envoyer={actions.envoyer} occupe={actions.occupe} />}
     </section>
   );
 }

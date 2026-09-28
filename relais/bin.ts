@@ -21,7 +21,7 @@ const registre = new Registre(ouvrirBase(config.base));
 const diffusion = new Diffusion();
 const acces = new Acces(registre, config.empreinteMotDePasse);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
-const sessions = new ApiSessions(registre, postes, diffusion, config.isolees);
+const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const routes = avecCors(
   construireRoutes({
     acces,

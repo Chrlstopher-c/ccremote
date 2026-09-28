@@ -1,5 +1,6 @@
 // Responsabilité : les routes des sessions — ouvrir, lire le fil, parler, piloter (interrompre, compacter, fermer).
 import { randomUUID } from 'node:crypto';
+import type { Logger } from 'pino';
 import { z } from 'zod';
 import { Projet } from '../../commun/session.ts';
 import type { Postes } from '../parc/postes.ts';
@@ -31,6 +32,7 @@ export class ApiSessions {
     private readonly postes: Postes,
     private readonly diffusion: Diffusion,
     private readonly isolees: ReadonlySet<string>,
+    private readonly journal: Logger,
   ) {}
 
   async ouvrir(req: Request): Promise<Response> {
@@ -50,6 +52,7 @@ export class ApiSessions {
       ...(c.compte ? { compte: c.compte } : {}),
     };
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
+    if (!r.ok) this.journal.warn({ machine: c.machine, erreur: r.erreur }, 'ouverture de session refusée');
     return r.ok ? json(r.donnees, 201) : erreur(r.erreur ?? 'ouverture refusée', 502);
   }
 
@@ -94,6 +97,7 @@ export class ApiSessions {
     const session = this.registre.session(sessionId);
     if (!session) return erreur('session inconnue', 404);
     const r = await this.postes.commander(session.machine, { ...c, sessionId });
+    if (!r.ok) this.journal.warn({ sessionId, commande: c.kind, erreur: r.erreur }, 'commande refusée');
     return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', 502);
   }
 }

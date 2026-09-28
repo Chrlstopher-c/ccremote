@@ -18,3 +18,8 @@ export const STATUTS: Record<
 export function estVivante(s: StatutSession): boolean {
   return s !== 'fermee';
 }
+
+/** Vivante : dans tmux (pilotable) ou dans un terminal ordinaire (lecture seule). */
+export function estOuverte(s: { readonly tmux: string | null; readonly terminal?: boolean }): boolean {
+  return s.tmux !== null || s.terminal === true;
+}

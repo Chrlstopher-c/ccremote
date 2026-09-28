@@ -28,8 +28,10 @@ const VIDE: Etat = {
 // fermées. Dès que le poste se reconnecte, le relais renvoie leur état réel.
 function deriver(brutes: readonly ResumeSession[], machines: readonly VueMachine[]): ResumeSession[] {
   const horsLigne = new Set(machines.filter((m) => !m.enLigne).map((m) => m.id));
-  const fermee = (s: ResumeSession): ResumeSession => ({ ...s, tmux: null, attachee: false, statut: 'fermee' });
-  return brutes.map((s) => (horsLigne.has(s.machine) && s.tmux !== null ? fermee(s) : s));
+  const fermee = (s: ResumeSession): ResumeSession => ({
+    ...s, tmux: null, terminal: false, attachee: false, statut: 'fermee',
+  });
+  return brutes.map((s) => (horsLigne.has(s.machine) && (s.tmux !== null || s.terminal) ? fermee(s) : s));
 }
 
 export class Magasin {

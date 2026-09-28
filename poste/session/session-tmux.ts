@@ -78,6 +78,20 @@ export class SessionTmux {
     }
   }
 
+  /** Session lancée dans un terminal ordinaire : ouverte tant que son processus vit, fermée ensuite. */
+  rattacherTerminal(vivant: boolean): void {
+    if (vivant && (this.etat.statut === 'fermee' || !this.etat.terminal))
+      this.maj({ terminal: true, statut: 'attente' });
+    if (!vivant && this.etat.terminal) this.maj({ terminal: false, statut: 'fermee' });
+  }
+
+  /** Une session dans un terminal n'a pas de tmux : on ne peut que la lire à distance. */
+  private refusTerminal(): string | null {
+    return this.etat.terminal
+      ? 'Session ouverte dans un terminal (hors tmux) : lisible ici, pilotable seulement depuis ce terminal.'
+      : null;
+  }
+
   // Session adoptée : on rejoue ses derniers événements pour que le fil ne s'ouvre pas vide.
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void {
     this.etat = { ...this.etat, claudeSessionId };
@@ -105,7 +119,8 @@ export class SessionTmux {
     if (l.type === 'custom-title' && typeof l.customTitle === 'string')
       this.etat = { ...this.etat, titre: l.customTitle };
     const travail = travailEnCours(l);
-    if (!this.etat.pilotee && travail !== null && this.etat.tmux)
+    const vivante = this.etat.tmux !== null || this.etat.terminal === true;
+    if (!this.etat.pilotee && travail !== null && vivante)
       this.etat = { ...this.etat, statut: travail ? 'travail' : 'attente' };
     const evts = traduire(l);
     if (this.etat.pilotee && evts.some((e) => e.type === 'erreur')) this.etat = { ...this.etat, statut: 'erreur' };
@@ -125,6 +140,8 @@ export class SessionTmux {
   // --- commandes de Chris ---
 
   async envoyer(texte: string): Promise<string | null> {
+    const refus = this.refusTerminal();
+    if (refus) return refus;
     this.drapeaux.objectifAtteint = false;
     this.drapeaux.questionPosee = false;
     this.relancesSansProgres = 0;
@@ -135,12 +152,16 @@ export class SessionTmux {
   }
 
   async interrompre(): Promise<string | null> {
+    const refus = this.refusTerminal();
+    if (refus) return refus;
     if (!this.etat.tmux) return 'session fermée';
     const r = await tmux.touche(this.etat.tmux, 'Escape');
     return r.code === 0 ? null : r.erreur;
   }
 
   async compacter(): Promise<string | null> {
+    const refus = this.refusTerminal();
+    if (refus) return refus;
     if (!this.etat.tmux) return 'session fermée';
     if (this.etat.statut === 'travail') {
       this.drapeaux.compactionDemandee = true;
@@ -150,6 +171,8 @@ export class SessionTmux {
   }
 
   async fermer(): Promise<string | null> {
+    const refus = this.refusTerminal();
+    if (refus) return refus;
     if (!this.etat.tmux) return null;
     const r = await tmux.tuer(this.etat.tmux);
     this.maj({ tmux: null, attachee: false, statut: 'fermee' });
@@ -158,6 +181,8 @@ export class SessionTmux {
 
   // Jamais deux processus sur une conversation : on ne reprend qu'une session sans tmux.
   async reprendre(message?: string): Promise<string | null> {
+    const occupee = this.refusTerminal();
+    if (occupee) return occupee;
     if (this.etat.tmux) return null;
     if (!this.etat.claudeSessionId) return 'conversation inconnue : impossible de la reprendre';
     const refus = this.preparer();

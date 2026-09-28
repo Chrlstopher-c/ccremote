@@ -39,6 +39,7 @@ export const ResumeSession = z.object({
   tmux: z.string().nullable(), // nom de la session tmux (serveur `tmux -L claude`), null si fermée
   attachee: z.boolean(), // un terminal est attaché (kitty, web)
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
+  terminal: z.boolean().optional(), // vivante dans un terminal ordinaire, hors tmux : suivie en lecture seule
   creeLe: z.string(),
   majLe: z.string(),
 });

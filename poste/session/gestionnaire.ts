@@ -10,7 +10,9 @@ import { composerConsignes } from './consignes.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { SessionTmux, type SortieSession } from './session-tmux.ts';
 import * as tmux from './tmux.ts';
-import { cheminTranscript, retrouverTranscript } from './transcript.ts';
+import { type Adoptee, ficheAdoptee, transcriptDuPane, transcriptDuProcessus } from './adoption.ts';
+import { type ProcessusClaude, processusClaude } from './processus.ts';
+import { cheminTranscript } from './transcript.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -128,68 +130,61 @@ export class GestionnaireSessions {
 
   private async decouvrir(): Promise<void> {
     const panes = await tmux.lister();
+    const procs = processusClaude([null, ...Object.values(this.config.comptes)]);
+    const parPid = new Map(procs.map((p) => [p.pid, p]));
     const vus = new Set<string>();
     for (const s of this.sessions.values()) {
       const pane = panes.find((p) => p.nom === s.resume.tmux) ?? null;
       if (pane) vus.add(pane.nom);
       s.rattacher(pane);
-      if (pane && !s.transcriptConnu) this.associer(s, pane, panes);
+      if (pane && !s.transcriptConnu) this.associer(s, transcriptDuPane(pane, panes, parPid.get(pane.pid)));
     }
-    for (const pane of panes.filter((p) => !vus.has(p.nom))) this.adopter(pane, panes);
+    for (const pane of panes.filter((p) => !vus.has(p.nom)))
+      this.adopter(transcriptDuPane(pane, panes, parPid.get(pane.pid)), pane);
+    this.suivreTerminaux(procs.filter((p) => !p.enTmux));
   }
 
-  // Une session tmux lancée hors ccremote (bureau, Atrium, relais) : suivie en lecture, pilotable par tmux.
-  private adopter(pane: tmux.PaneTmux, panes: readonly tmux.PaneTmux[]): void {
-    const voisins = panes.filter((p) => p.dossier === pane.dossier).length;
-    const transcript = retrouverTranscript(pane.dossier, pane.titre, voisins, null);
-    const id = transcript?.id ?? `tmux-${this.config.machine}-${pane.nom}-${pane.creeLe}`;
-    const connue = this.sessions.get(id);
+  // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.
+  private suivreTerminaux(procs: readonly ProcessusClaude[]): void {
+    const vivants = new Set(procs.map((p) => p.sessionId));
+    for (const s of this.sessions.values()) if (s.resume.terminal) s.rattacherTerminal(vivants.has(s.resume.id));
+    for (const p of procs) {
+      const connue = this.sessions.get(p.sessionId);
+      if (connue) connue.rattacherTerminal(true);
+      else this.adopter(transcriptDuProcessus(p), null, p.cwd);
+    }
+  }
+
+  // Une session lancée hors ccremote (bureau, Atrium, terminal) : suivie en lecture ; dans tmux, pilotable par tmux.
+  private adopter(a: Adoptee, pane: tmux.PaneTmux | null, dossier = pane?.dossier ?? ''): void {
+    const connue = this.sessions.get(a.id);
     if (connue) return connue.rattacher(pane);
-    const maintenant = new Date().toISOString();
+    const origine = {
+      machine: this.config.machine,
+      compte: Object.keys(this.config.comptes)[0] ?? 'principal',
+      fenetre: this.config.fenetreContexte,
+    };
+    const titre = pane?.titre ?? dossier.split('/').at(-1) ?? 'Claude';
     const session = this.creer({
-      resume: {
-        id,
-        machine: this.config.machine,
-        projet: {
-          machine: this.config.machine,
-          chemin: pane.dossier,
-          nom: pane.dossier.split('/').at(-1) ?? pane.dossier,
-        },
-        cwd: pane.dossier,
-        titre: pane.titre,
-        objectif: null,
-        modele: 'défaut',
-        compte: Object.keys(this.config.comptes)[0] ?? 'principal',
-        autonomie: false,
-        statut: 'attente',
-        contexte: { tokens: 0, max: this.config.fenetreContexte },
-        etapes: 0,
-        compactions: 0,
-        claudeSessionId: transcript?.id ?? null,
-        tmux: pane.nom,
-        attachee: pane.attachee,
-        pilotee: false,
-        creeLe: maintenant,
-        majLe: maintenant,
-      },
+      resume: ficheAdoptee(origine, a, dossier, titre, pane),
       consignes: null,
       configDir: null,
       transcript: null,
       position: 0,
     });
-    this.sessions.set(id, session);
-    if (transcript) session.definirTranscript(transcript.chemin, HISTORIQUE_ADOPTION, transcript.id);
-    else session.rattacher(pane);
-    this.journal.info({ tmux: pane.nom, id, transcript: transcript?.chemin ?? null }, 'session tmux adoptée');
+    this.sessions.set(a.id, session);
+    if (a.transcript) session.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
+    else if (pane) session.rattacher(pane);
+    this.journal.info({ tmux: pane?.nom ?? null, id: a.id, terminal: pane === null }, 'session adoptée');
   }
 
   // Le transcript d'une session tout juste lancée n'existe qu'après son premier échange : on le cherche à chaque
   // passage.
-  private associer(s: SessionTmux, pane: tmux.PaneTmux, panes: readonly tmux.PaneTmux[]): void {
-    const voisins = panes.filter((p) => p.dossier === pane.dossier).length;
-    const t = retrouverTranscript(pane.dossier, pane.titre, voisins, null);
-    const pris = [...this.sessions.values()].some((autre) => autre !== s && autre.resume.claudeSessionId === t?.id);
-    if (t && !pris) s.definirTranscript(t.chemin, HISTORIQUE_ADOPTION, t.id);
+  private associer(s: SessionTmux, a: Adoptee): void {
+    const pris = [...this.sessions.values()].some(
+      (autre) => autre !== s && autre.resume.claudeSessionId === a.transcript?.id,
+    );
+    if (a.transcript && !pris) s.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
   }
 
   // Projet d'une autre machine : la session travaille via ssh depuis un espace local dédié.
