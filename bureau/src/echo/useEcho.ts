@@ -1,7 +1,14 @@
 // Responsabilité : l'état du mode Echo — historique, réponse en cours, ce qu'Echo a entendu, cadres, réglages, et le
 // niveau sonore (tenu hors de React : l'orbe le lit à chaque image sans re-rendre la vue).
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
-import type { CadreEcho, EntreeHistoriqueEcho, MessageEcho, ReglagesEcho } from '../../../commun/echo.ts';
+import type {
+  CadreEcho,
+  CommandeVoix,
+  EntreeHistoriqueEcho,
+  EtatVoixEcho,
+  MessageEcho,
+  ReglagesEcho,
+} from '../../../commun/echo.ts';
 import { ErreurApi } from '../shared/api/client.ts';
 import { useMagasin } from '../shared/etat/contexte.tsx';
 import { journal } from '../shared/journal.ts';
@@ -20,6 +27,13 @@ export interface Niveaux {
   tVoix: number;
 }
 
+export interface Entendu {
+  readonly texte: string;
+  readonly eveil: boolean;
+  readonly score: number | null;
+  readonly refusee: boolean;
+}
+
 const VIDE: EnCours = { texte: '', outils: [] };
 
 function useEtatEcho() {
@@ -29,7 +43,8 @@ function useEtatEcho() {
   const [dispo, setDispo] = useState<Disponibilite>('chargement');
   const [reglages, setReglages] = useState<ReglagesEcho>({ micro: true, voix: true });
   const [cadres, setCadres] = useState<readonly CadreEcho[]>([]);
-  const [entendu, setEntendu] = useState<{ texte: string; eveil: boolean } | null>(null);
+  const [entendu, setEntendu] = useState<Entendu | null>(null);
+  const [voix, setVoix] = useState<EtatVoixEcho | null>(null);
   const niveaux = useRef<Niveaux>({ micro: 0, voix: 0, tMicro: 0, tVoix: 0 });
   return {
     historique,
@@ -46,6 +61,8 @@ function useEtatEcho() {
     setCadres,
     entendu,
     setEntendu,
+    voix,
+    setVoix,
     niveaux,
   };
 }
@@ -65,7 +82,9 @@ function recevoir(e: Etat, m: MessageEcho, relire: () => void): void {
   else if (m.type === 'etat') e.setOccupe(m.occupe);
   else if (m.type === 'reglages') e.setReglages(m.reglages);
   else if (m.type === 'cadres') e.setCadres(m.cadres);
-  else if (m.type === 'entendu') e.setEntendu({ texte: m.texte, eveil: m.eveil });
+  else if (m.type === 'entendu') {
+    e.setEntendu({ texte: m.texte, eveil: m.eveil, score: m.score ?? null, refusee: m.refusee ?? false });
+  } else if (m.type === 'voix') e.setVoix(m.etat);
   else if (m.type === 'fin') {
     e.setEnCours(VIDE);
     relire();
@@ -79,20 +98,21 @@ function disponibiliteDe(erreur: unknown): Disponibilite {
 export function useEcho() {
   const magasin = useMagasin();
   const e = useEtatEcho();
-  const { setOccupe, setHistorique, setDispo, setReglages, setCadres } = e;
+  const { setOccupe, setHistorique, setDispo, setReglages, setCadres, setVoix } = e;
   const relire = useCallback(async (): Promise<void> => {
     try {
       const [etat, h] = await Promise.all([magasin.client.echoEtat(), magasin.client.echoHistorique()]);
       setOccupe(etat.occupe);
       setReglages(etat.reglages);
       setCadres(etat.cadres);
+      setVoix(etat.voix);
       setHistorique(h);
       setDispo(etat.joignable ? 'ok' : 'injoignable');
     } catch (erreur) {
       journal.warn({ erreur: String(erreur) }, 'Echo non chargée');
       setDispo(disponibiliteDe(erreur));
     }
-  }, [magasin, setOccupe, setReglages, setCadres, setHistorique, setDispo]);
+  }, [magasin, setOccupe, setReglages, setCadres, setHistorique, setDispo, setVoix]);
   const etat = useRef(e);
   etat.current = e;
   useEffect(() => {
@@ -147,5 +167,9 @@ function useActionsEcho(e: Etat) {
     },
     [client, setCadres, tenter],
   );
-  return { envoyer, interrompre, regler, retirer };
+  const commanderVoix = useCallback(
+    (action: CommandeVoix): void => void tenter(() => client.echoVoix(action), 'commande de voix refusée'),
+    [client, tenter],
+  );
+  return { envoyer, interrompre, regler, retirer, commanderVoix };
 }

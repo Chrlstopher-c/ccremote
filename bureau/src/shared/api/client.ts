@@ -1,5 +1,5 @@
 // Responsabilité : parler à l'API du relais (HTTP) avec le jeton de l'appareil.
-import type { EntreeHistoriqueEcho, EtatEcho, ReglagesEcho } from '../../../../commun/echo.ts';
+import type { CommandeVoix, EntreeHistoriqueEcho, EtatEcho, ReglagesEcho } from '../../../../commun/echo.ts';
 import type {
   ActionSession,
   DemandeOuverture,
@@ -115,6 +115,10 @@ export class ClientRelais {
 
   echoRegler(r: Partial<ReglagesEcho>): Promise<{ ok: boolean }> {
     return this.appeler('POST', '/api/echo/reglage', r);
+  }
+
+  echoVoix(action: CommandeVoix): Promise<{ ok: boolean }> {
+    return this.appeler('POST', '/api/echo/voix', { action });
   }
 
   echoRetirer(id: string): Promise<{ ok: boolean }> {

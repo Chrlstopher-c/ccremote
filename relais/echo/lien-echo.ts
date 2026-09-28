@@ -1,6 +1,14 @@
 // Responsabilité : le lien du relais vers Echo (cerveau sur le Pi) — un WebSocket, relayé dans le flux des clients.
 import type { Logger } from 'pino';
-import type { CadreEcho, EntreeHistoriqueEcho, EtatEcho, MessageEcho, ReglagesEcho } from '../../commun/echo.ts';
+import type {
+  CadreEcho,
+  CommandeVoix,
+  EntreeHistoriqueEcho,
+  EtatEcho,
+  EtatVoixEcho,
+  MessageEcho,
+  ReglagesEcho,
+} from '../../commun/echo.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 
 const RECONNEXION_MS = 5_000;
@@ -10,6 +18,7 @@ export class LienEcho {
   private occupe = false;
   private reglages: ReglagesEcho = { micro: true, voix: true };
   private cadres: readonly CadreEcho[] = [];
+  private voix: EtatVoixEcho | null = null;
 
   constructor(
     private readonly url: string,
@@ -20,7 +29,7 @@ export class LienEcho {
 
   get etat(): EtatEcho {
     const joignable = this.ws?.readyState === WebSocket.OPEN;
-    return { joignable, occupe: this.occupe, reglages: this.reglages, cadres: this.cadres };
+    return { joignable, occupe: this.occupe, reglages: this.reglages, cadres: this.cadres, voix: this.voix };
   }
 
   demarrer(): void {
@@ -50,6 +59,10 @@ export class LienEcho {
     return this.envoyer({ type: 'reglage', ...r });
   }
 
+  commanderVoix(action: CommandeVoix): boolean {
+    return this.envoyer({ type: 'voix_commande', action });
+  }
+
   retirerCadre(id: string): boolean {
     return this.envoyer({ type: 'retirer_cadre', id });
   }
@@ -75,6 +88,7 @@ export class LienEcho {
       if (echo.type === 'etat') this.occupe = echo.occupe;
       else if (echo.type === 'reglages') this.reglages = echo.reglages;
       else if (echo.type === 'cadres') this.cadres = echo.cadres;
+      else if (echo.type === 'voix') this.voix = echo.etat;
       this.diffusion.diffuser({ type: 'echo', echo });
     } catch (err) {
       this.journal.warn({ err }, 'message d’Echo illisible');

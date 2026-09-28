@@ -1,7 +1,8 @@
 // Responsabilité : la barre du mode Echo — état, et les trois bascules : micro, voix, discussion écrite.
 import { AudioLines, MessageSquareText, Mic, MicOff, Square, Volume2, VolumeX } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { ReglagesEcho } from '../../../commun/echo.ts';
+import type { CommandeVoix, EtatVoixEcho, ReglagesEcho } from '../../../commun/echo.ts';
+import { PastilleVoix } from './PastilleVoix.tsx';
 import type { Disponibilite } from './useEcho.ts';
 
 const ETATS: Record<Disponibilite, string> = {
@@ -45,6 +46,8 @@ interface PropsBarre {
   readonly regler: (r: Partial<ReglagesEcho>) => void;
   readonly basculerDiscussion: () => void;
   readonly interrompre: () => void;
+  readonly voix: EtatVoixEcho | null;
+  readonly commanderVoix: (a: CommandeVoix) => void;
 }
 
 function Bascules(p: PropsBarre): ReactNode {
@@ -84,6 +87,7 @@ export function BarreEcho(p: PropsBarre): ReactNode {
       <h1 className="text-[14px] font-extrabold tracking-[-0.02em] text-encre">Echo</h1>
       <span className="font-mono text-[10.5px] text-discret">{p.occupe ? 'réfléchit' : ETATS[p.dispo]}</span>
       <div className="flex-1" />
+      <PastilleVoix voix={p.voix} commander={p.commanderVoix} />
       <Bascules {...p} />
     </header>
   );

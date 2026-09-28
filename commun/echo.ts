@@ -9,9 +9,27 @@ export type MessageEcho =
   | { readonly type: 'etat'; readonly occupe: boolean }
   | { readonly type: 'erreur'; readonly message: string }
   | { readonly type: 'niveau'; readonly source: 'micro' | 'voix'; readonly v: number }
-  | { readonly type: 'entendu'; readonly texte: string; readonly eveil: boolean }
+  | {
+      readonly type: 'entendu';
+      readonly texte: string;
+      readonly eveil: boolean;
+      readonly score?: number | null; // ressemblance avec la voix de Chris (null : non vérifiée)
+      readonly refusee?: boolean;
+    }
+  | { readonly type: 'voix'; readonly etat: EtatVoixEcho }
+  | { readonly type: 'voix_commande'; readonly action: CommandeVoix }
   | { readonly type: 'reglages'; readonly reglages: ReglagesEcho }
   | { readonly type: 'cadres'; readonly cadres: readonly CadreEcho[] };
+
+export type CommandeVoix = 'enroler' | 'oublier' | 'annuler';
+
+// L'empreinte vocale de Chris, vue du terminal qui écoute.
+export interface EtatVoixEcho {
+  readonly terminal: string;
+  readonly profil: boolean | null;
+  readonly enrolement: { readonly duree: number; readonly cible: number } | null;
+  readonly seuil: number;
+}
 
 export interface ReglagesEcho {
   readonly micro: boolean;
@@ -33,6 +51,7 @@ export interface EtatEcho {
   readonly occupe: boolean;
   readonly reglages: ReglagesEcho;
   readonly cadres: readonly CadreEcho[];
+  readonly voix: EtatVoixEcho | null;
 }
 
 export interface EntreeHistoriqueEcho {
