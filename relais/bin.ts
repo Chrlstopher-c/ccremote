@@ -12,6 +12,7 @@ import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
 import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
+import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
 import { type DonneesPoste, Postes } from './parc/postes.ts';
@@ -30,6 +31,10 @@ const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
 const terminaux = new TerminauxRelais(postes, journal);
 postes.terminaux = terminaux;
+const echo = config.echo
+  ? new LienEcho(config.echo.url, config.echo.jeton, diffusion, journal.child({ domaine: 'echo' }))
+  : null;
+echo?.demarrer();
 type DonneesClient = { readonly type: 'flux' } | DonneesTerminal;
 const routes = avecCors(
   construireRoutes({
@@ -40,6 +45,7 @@ const routes = avecCors(
     sessions,
     comptes,
     fichiers,
+    echo,
     wol: config.wol,
     diffusionWol: config.diffusionWol,
   }),
@@ -68,9 +74,10 @@ Bun.serve({
     '/api/flux': (req, serveur) => {
       if (!acces.autorise(req)) return erreur('non connecté', 401);
       const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
-      const entetes: Record<string, string> = parProtocole ? { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } : {};
       const data: DonneesClient = { type: 'flux' };
-      return serveur.upgrade(req, { data, headers: entetes }) ? undefined : erreur('WebSocket attendu', 426);
+      // Jamais `headers: {}` : upgrade() de Bun plante dessus (500 pour un client authentifié par en-tête).
+      const options = parProtocole ? { data, headers: { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } } : { data };
+      return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
     },
     '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
     '/api/*': () => erreur('route inconnue', 404),

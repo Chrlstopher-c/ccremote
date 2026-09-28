@@ -91,6 +91,14 @@ pane toutes les 2 s et le publie sur la fiche de session (`dialogue`) ; un nouve
 (alerte). La réponse (index, cases, texte libre) est traduite en touches, mesurées sur le TUI, et tapée seulement si le
 même dialogue est encore affiché. Sessions de terminal hors tmux : non répondables.
 
+## Echo
+
+Echo (dépôt `echo`, cerveau sur le Pi) est le chef d'orchestre des sessions : pour Quart, un client du relais comme un
+autre (jeton de service). En retour, le relais tient **un** WebSocket vers Echo (`relais/echo/`, facultatif :
+`CCREMOTE_ECHO_URL` + `CCREMOTE_ECHO_JETON` dans `relais.env`) : il pousse ses messages dans le flux (`type: 'echo'`,
+WebSocket seulement, le long-poll n'avance pas) et expose `/api/echo/{etat,historique,parler,interrompre}`. L'app
+montre la conversation dans la vue « Echo » (`bureau/src/echo/`) ; l'historique fait foi côté Echo.
+
 ## Thème de l'app
 
 Charte Echo Agency (skill `echo-agency-design`) : **clair** (canvas sable, accent `brand-600`) et **night** (`#1E1830`,

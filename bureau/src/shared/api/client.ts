@@ -1,4 +1,5 @@
 // Responsabilité : parler à l'API du relais (HTTP) avec le jeton de l'appareil.
+import type { EntreeHistoriqueEcho } from '../../../../commun/echo.ts';
 import type {
   ActionSession,
   DemandeOuverture,
@@ -110,6 +111,22 @@ export class ClientRelais {
 
   get jetonFlux(): string {
     return this.jeton;
+  }
+
+  echoEtat(): Promise<{ joignable: boolean; occupe: boolean }> {
+    return this.appeler('GET', '/api/echo/etat');
+  }
+
+  echoHistorique(n = 150): Promise<EntreeHistoriqueEcho[]> {
+    return this.appeler('GET', `/api/echo/historique?n=${n}`);
+  }
+
+  echoParler(texte: string): Promise<{ ok: boolean }> {
+    return this.appeler('POST', '/api/echo/parler', { texte, appareil: 'app' });
+  }
+
+  echoInterrompre(): Promise<{ ok: boolean }> {
+    return this.appeler('POST', '/api/echo/interrompre', {});
   }
 
   private async appeler<T>(methode: 'GET' | 'POST', chemin: string, corps?: unknown): Promise<T> {

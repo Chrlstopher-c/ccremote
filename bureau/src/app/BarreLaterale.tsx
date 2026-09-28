@@ -1,6 +1,6 @@
 // Responsabilité : la barre latérale — sources (sessions, machines, accès à distance, alertes), état du lien,
 // déconnexion.
-import { Bell, Circle, HardDrive, KeyRound, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
+import { AudioLines, Bell, Circle, HardDrive, KeyRound, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEtat } from '../shared/etat/contexte.tsx';
 import { choisirTheme, LIBELLES_THEME, themeSuivant, useTheme } from '../shared/theme.ts';
@@ -116,6 +116,8 @@ export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
       <div className="px-4 pt-3.5 pb-3 text-[14px] font-extrabold tracking-[-0.03em]">Quart</div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
         <Section titre="Sessions">
+          <Entree source={{ genre: 'echo' }} courante={source} surChoisir={surChoisir}
+            icone={<AudioLines size={14} />} libelle="Echo" />
           <Entree source={{ genre: 'sessions', filtre: 'ouvertes' }} courante={source} surChoisir={surChoisir}
             icone={<MessagesSquare size={14} />} libelle="Ouvertes" compteur={ouvertes} />
           <Entree source={{ genre: 'sessions', filtre: 'toutes' }} courante={source} surChoisir={surChoisir}

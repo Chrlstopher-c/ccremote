@@ -13,6 +13,7 @@ export interface ConfigRelais {
   readonly portPostes: number;
   readonly web: string;
   readonly origines: ReadonlySet<string>;
+  readonly echo: { readonly url: string; readonly jeton: string } | null;
 }
 
 // « a=x,b=y » → Map ; « a,b » → Set
@@ -51,6 +52,7 @@ export function chargerConfig(): ConfigRelais {
     portWeb: Number(process.env['CCREMOTE_PORT_WEB'] ?? 8766),
     portPostes: Number(process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
     web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
+    echo: configEcho(),
     origines: new Set(
       (process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420')
         .split(',')
@@ -58,4 +60,11 @@ export function chargerConfig(): ConfigRelais {
         .filter(Boolean),
     ),
   };
+}
+
+// Echo (cerveau sur le Pi) : facultatif ; sans ces deux variables, Quart n'a pas de vue Echo.
+function configEcho(): ConfigRelais['echo'] {
+  const url = process.env['CCREMOTE_ECHO_URL'];
+  const jeton = process.env['CCREMOTE_ECHO_JETON'];
+  return url && jeton ? { url, jeton } : null;
 }

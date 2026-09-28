@@ -4,6 +4,7 @@ import type { ResumeSession } from '../../../commun/session.ts';
 import { estOuverte } from '../sessions/statut.ts';
 
 export type Source =
+  | { readonly genre: 'echo' }
   | { readonly genre: 'sessions'; readonly filtre: 'ouvertes' | 'toutes' }
   | { readonly genre: 'machine'; readonly id: string }
   | { readonly genre: 'appareil'; readonly id: string }
@@ -34,6 +35,7 @@ export function sessionsDe(source: Source, sessions: readonly ResumeSession[], r
 }
 
 export function titreSource(source: Source, machines: readonly VueMachine[]): string {
+  if (source.genre === 'echo') return 'Echo';
   if (source.genre === 'alertes') return 'Alertes';
   if (source.genre === 'comptes') return 'Comptes';
   if (source.genre === 'machine' || source.genre === 'appareil') {

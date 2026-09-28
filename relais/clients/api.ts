@@ -9,6 +9,8 @@ import type { ApiSessions } from './api-sessions.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
+import type { LienEcho } from '../echo/lien-echo.ts';
+import { routesEcho } from '../echo/api-echo.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 export interface DependancesApi {
@@ -19,6 +21,7 @@ export interface DependancesApi {
   readonly sessions: ApiSessions;
   readonly comptes: ApiComptes;
   readonly fichiers: ApiFichiers;
+  readonly echo: LienEcho | null;
   readonly wol: ReadonlyMap<string, string>;
   readonly diffusionWol: string;
 }
@@ -63,6 +66,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/:nom/code': { POST: protege((req) => d.comptes.code(req as never)) },
     '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
     ...routesFichiers(d.fichiers, protege),
+    ...routesEcho(d.echo, protege),
   };
 }
 

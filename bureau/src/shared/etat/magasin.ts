@@ -2,6 +2,7 @@
 // À chaque (re)connexion du flux, tout est relu : aucun événement manqué pendant une coupure.
 import type { EvenementDate, MessageClient, Notification, VueMachine } from '../../../../commun/api-clients.ts';
 import type { ResumeSession } from '../../../../commun/session.ts';
+import type { MessageEcho } from '../../../../commun/echo.ts';
 import type { ClientRelais } from '../api/client.ts';
 import { type EtatLien, FluxRelais } from '../api/flux.ts';
 import { journal } from '../journal.ts';
@@ -40,6 +41,7 @@ export class Magasin {
   private readonly abonnes = new Set<() => void>();
   private readonly flux: FluxRelais;
   private readonly surNotification = new Set<(n: Notification) => void>();
+  private readonly surEcho = new Set<(m: MessageEcho) => void>();
 
   constructor(readonly client: ClientRelais) {
     this.flux = new FluxRelais(
@@ -67,6 +69,11 @@ export class Magasin {
     this.abonnes.add(f);
     return () => this.abonnes.delete(f);
   };
+
+  ecouterEcho(f: (m: MessageEcho) => void): () => void {
+    this.surEcho.add(f);
+    return () => this.surEcho.delete(f);
+  }
 
   ecouterNotifications(f: (n: Notification) => void): () => void {
     this.surNotification.add(f);
@@ -110,6 +117,8 @@ export class Magasin {
     }
     else if (m.type === 'evenement') {
       if (this.etat.fils.has(m.evenement.sessionId)) this.fusionnerFil(m.evenement.sessionId, [m.evenement], false);
+    } else if (m.type === 'echo') {
+      for (const f of this.surEcho) f(m.echo);
     } else {
       this.changer({ notifications: [m.notification, ...this.etat.notifications].slice(0, 200) });
       for (const f of this.surNotification) f(m.notification);
