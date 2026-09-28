@@ -105,6 +105,8 @@ relais/parc/reveil.test.ts                           tests de reveil.ts
 relais/parc/reveil.ts                                réveiller une machine éteinte par Wake-on-LAN (paquet magique en diffusion UDP).
 relais/registre/base.ts                              la base SQLite du relais et ses migrations (numérotées, jamais réécrites).
 relais/registre/registre.ts                          lire et écrire l'état du relais — machines, sessions, fil d'événements, notifications, jet
+relais/registre/retention.test.ts                    tests de la règle de rétention et de la purge du fil.
+relais/registre/retention.ts                         rétention du fil — purger les événements des sessions fermées depuis trop longtemps.
 relais/sessions/composition-parc.test.ts             tests de composition-parc.ts
 relais/sessions/composition-parc.ts                  ce qu'une session a le droit de joindre depuis sa machine. Pur.
 restart.sh                                           arrête puis relance le mode dev

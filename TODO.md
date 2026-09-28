@@ -14,7 +14,7 @@
 - [ ] Terminal intégré à l'app (xterm.js + PTY `Bun.Terminal` sur le poste) pour le web et l'iPhone.
 - [ ] Sessions Claude lancées hors tmux sur le bureau de la tour : les lister (lecture) et proposer « Reprendre dans tmux ».
 - [ ] Comptes : choix du compte à l'ouverture dans l'app (le VPS en a deux : `compte-a`, `compte-b`).
-- [ ] Rétention du fil : purger les événements des sessions fermées depuis plus de N jours.
+- [x] Rétention du fil : purger les événements des sessions fermées depuis plus de 30 jours (démarrage + toutes les 24 h).
 - [ ] Découper le bundle web (un seul fichier de 500 ko+) : Markdown chargé à la demande.
 
 ## Plus tard

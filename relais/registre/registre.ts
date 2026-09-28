@@ -121,6 +121,12 @@ export class Registre {
       .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
   }
 
+  // Supprime le fil des sessions données ; renvoie le nombre d'événements supprimés.
+  purgerEvenements(sessionIds: readonly string[]): number {
+    const supprimer = this.db.query('DELETE FROM evenements WHERE session_id = $s');
+    return this.db.transaction(() => sessionIds.reduce((n, s) => n + supprimer.run({ s }).changes, 0))();
+  }
+
   ajouterNotification(n: Omit<Notification, 'seq' | 'lue'>): Notification {
     const r = this.db
       .query(

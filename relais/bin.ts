@@ -13,6 +13,7 @@ import { chargerConfig } from './config.ts';
 import { type DonneesPoste, Postes } from './parc/postes.ts';
 import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
+import { lancerRetention } from './registre/retention.ts';
 
 const journal = creerJournal('relais');
 const config = chargerConfig();
@@ -91,6 +92,8 @@ Bun.serve({
     maxPayloadLength: 8 * 1024 * 1024,
   },
 });
+
+lancerRetention(registre, journal);
 
 journal.info(
   { web: config.portWeb, postes: config.portPostes, machinesAutorisees: [...config.secretsPostes.keys()] },
