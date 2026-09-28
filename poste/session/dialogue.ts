@@ -43,7 +43,7 @@ function titreDe(lignes: readonly string[]): string {
   return lignes
     .map((l) => l.trim())
     .filter((l) => l && !/^←.*→$/.test(l))
-    .join(' ')
+    .join('\n')
     .slice(0, 400);
 }
 
