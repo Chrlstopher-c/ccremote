@@ -45,6 +45,19 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 - Sur le portable (banc local) : étape → compaction pilotée → relance → objectif atteint, sans intervention.
 - Attache kitty au TUI d'une session lancée par l'API : conforme.
 
+## ccremote a travaillé sur lui-même (dogfooding, 28/09 à 3 h 30)
+
+Une session pilotée, **modèle par défaut de Chris**, autonome, lancée par l'API publique sur la tour :
+« rétention du fil du relais » (purge des événements des sessions fermées depuis 30 jours). Résultat : livrée en
+~2 min, **règle pure + test + branchement + journalisation + TODO**, 0 violation au linter, 43 tests verts, commit sur
+une branche d'essai ; relue puis reprise dans `dev` (`relais/registre/retention.ts`). **Contexte en fin de session :
+67 k** (dont ~60 k de base : CLAUDE.md, outils, MCP de Chris), aucune compaction nécessaire.
+
+Ce que cet essai a trouvé et qui est corrigé :
+- `--mcp-config` est variadique : sans `--model` derrière lui, il avalait le premier message → toute session au modèle
+  par défaut quittait aussitôt. Arguments réordonnés, test qui fige l'ordre.
+- Le modèle affiché restait « défaut » : il se lit désormais dans le transcript.
+
 ## Décisions
 
 | Décision | Raison | Date |
