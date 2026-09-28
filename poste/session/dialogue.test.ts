@@ -96,6 +96,12 @@ describe('dialogues relevés à l’écran', () => {
     expect(touchesReponse(m, { id: '', texte: 'non' })).toBeTypeOf('string');
   });
 
+  test('écran de relecture, sans pied : reconnu', () => {
+    const ecran = [SEP, 'Review your answers', ' ● Couleur ?', '   → Vert', 'Ready to submit your answers?',
+      '❯ 1. Submit answers', '  2. Cancel', ''].join('\n');
+    expect(menu(ecran).options.map((o) => o.libelle)).toEqual(['Submit answers', 'Cancel']);
+  });
+
   test('invite au repos : aucun dialogue', () => {
     expect(menuAffiche(ECRAN_REPOS)).toBeNull();
   });

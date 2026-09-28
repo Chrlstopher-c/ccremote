@@ -102,9 +102,14 @@ export function menuAffiche(ecran: string): MenuAffiche | null {
   while (pied >= 0 && !(lignes[pied] ?? '').trim()) pied--;
   let bas = pied;
   while (bas >= Math.max(0, pied - 3) && !PIED.test(lignes[bas] ?? '')) bas--;
-  if (bas < Math.max(0, pied - 3)) return null;
-  const corps = corpsDuDialogue(lignes, bas);
-  return menuNumerote(corps) ?? menuSimple(corps);
+  if (bas >= Math.max(0, pied - 3)) {
+    const corps = corpsDuDialogue(lignes, bas);
+    return menuNumerote(corps) ?? menuSimple(corps);
+  }
+  // Sans pied (écran de relecture d'AskUserQuestion) : un menu numéroté tout en bas, sous une question.
+  const menu = menuNumerote(corpsDuDialogue(lignes, pied + 1));
+  const derniere = menu?.options.at(-1)?.libelle ?? '';
+  return menu && menu.titre.endsWith('?') && (lignes[pied] ?? '').includes(derniere) ? menu : null;
 }
 
 // La ligne de réponse libre d'AskUserQuestion : « Type something », ou le texte déjà tapé, juste avant « Chat about
