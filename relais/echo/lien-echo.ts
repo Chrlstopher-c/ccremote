@@ -1,6 +1,6 @@
 // Responsabilité : le lien du relais vers Echo (cerveau sur le Pi) — un WebSocket, relayé dans le flux des clients.
 import type { Logger } from 'pino';
-import type { EntreeHistoriqueEcho, MessageEcho } from '../../commun/echo.ts';
+import type { CadreEcho, EntreeHistoriqueEcho, EtatEcho, MessageEcho, ReglagesEcho } from '../../commun/echo.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 
 const RECONNEXION_MS = 5_000;
@@ -8,6 +8,8 @@ const RECONNEXION_MS = 5_000;
 export class LienEcho {
   private ws: WebSocket | null = null;
   private occupe = false;
+  private reglages: ReglagesEcho = { micro: true, voix: true };
+  private cadres: readonly CadreEcho[] = [];
 
   constructor(
     private readonly url: string,
@@ -16,8 +18,9 @@ export class LienEcho {
     private readonly journal: Logger,
   ) {}
 
-  get etat(): { readonly joignable: boolean; readonly occupe: boolean } {
-    return { joignable: this.ws?.readyState === WebSocket.OPEN, occupe: this.occupe };
+  get etat(): EtatEcho {
+    const joignable = this.ws?.readyState === WebSocket.OPEN;
+    return { joignable, occupe: this.occupe, reglages: this.reglages, cadres: this.cadres };
   }
 
   demarrer(): void {
@@ -43,6 +46,14 @@ export class LienEcho {
     return this.envoyer({ type: 'interrompre' });
   }
 
+  regler(r: Partial<ReglagesEcho>): boolean {
+    return this.envoyer({ type: 'reglage', ...r });
+  }
+
+  retirerCadre(id: string): boolean {
+    return this.envoyer({ type: 'retirer_cadre', id });
+  }
+
   async historique(n: number): Promise<EntreeHistoriqueEcho[]> {
     const r = await fetch(`${this.url}/historique?n=${n}`, {
       headers: { Authorization: `Bearer ${this.jeton}` },
@@ -62,6 +73,8 @@ export class LienEcho {
     try {
       const echo = JSON.parse(brut) as MessageEcho; // émis par Echo selon son contrat
       if (echo.type === 'etat') this.occupe = echo.occupe;
+      else if (echo.type === 'reglages') this.reglages = echo.reglages;
+      else if (echo.type === 'cadres') this.cadres = echo.cadres;
       this.diffusion.diffuser({ type: 'echo', echo });
     } catch (err) {
       this.journal.warn({ err }, 'message d’Echo illisible');

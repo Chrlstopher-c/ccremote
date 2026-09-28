@@ -1,7 +1,7 @@
-// Responsabilité : la conversation avec Echo — historique (source de vérité côté Echo), réponse en cours au fil du
-// flux, envoi et interruption.
-import { type Dispatch, type SetStateAction, useCallback, useEffect, useState } from 'react';
-import type { EntreeHistoriqueEcho, MessageEcho } from '../../../commun/echo.ts';
+// Responsabilité : l'état du mode Echo — historique, réponse en cours, ce qu'Echo a entendu, cadres, réglages, et le
+// niveau sonore (tenu hors de React : l'orbe le lit à chaque image sans re-rendre la vue).
+import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import type { CadreEcho, EntreeHistoriqueEcho, MessageEcho, ReglagesEcho } from '../../../commun/echo.ts';
 import { ErreurApi } from '../shared/api/client.ts';
 import { useMagasin } from '../shared/etat/contexte.tsx';
 import { journal } from '../shared/journal.ts';
@@ -13,7 +13,64 @@ export interface EnCours {
   readonly outils: readonly string[];
 }
 
+export interface Niveaux {
+  micro: number;
+  voix: number;
+  tMicro: number;
+  tVoix: number;
+}
+
 const VIDE: EnCours = { texte: '', outils: [] };
+
+function useEtatEcho() {
+  const [historique, setHistorique] = useState<readonly EntreeHistoriqueEcho[]>([]);
+  const [enCours, setEnCours] = useState<EnCours>(VIDE);
+  const [occupe, setOccupe] = useState(false);
+  const [dispo, setDispo] = useState<Disponibilite>('chargement');
+  const [reglages, setReglages] = useState<ReglagesEcho>({ micro: true, voix: true });
+  const [cadres, setCadres] = useState<readonly CadreEcho[]>([]);
+  const [entendu, setEntendu] = useState<{ texte: string; eveil: boolean } | null>(null);
+  const niveaux = useRef<Niveaux>({ micro: 0, voix: 0, tMicro: 0, tVoix: 0 });
+  return {
+    historique,
+    setHistorique,
+    enCours,
+    setEnCours,
+    occupe,
+    setOccupe,
+    dispo,
+    setDispo,
+    reglages,
+    setReglages,
+    cadres,
+    setCadres,
+    entendu,
+    setEntendu,
+    niveaux,
+  };
+}
+
+type Etat = ReturnType<typeof useEtatEcho>;
+
+function noterNiveau(n: RefObject<Niveaux>, m: Extract<MessageEcho, { type: 'niveau' }>): void {
+  const t = performance.now();
+  if (m.source === 'micro') Object.assign(n.current, { micro: m.v, tMicro: t });
+  else Object.assign(n.current, { voix: m.v, tVoix: t });
+}
+
+function recevoir(e: Etat, m: MessageEcho, relire: () => void): void {
+  if (m.type === 'niveau') noterNiveau(e.niveaux, m);
+  else if (m.type === 'delta') e.setEnCours((x) => ({ ...x, texte: x.texte + m.texte }));
+  else if (m.type === 'outil') e.setEnCours((x) => ({ ...x, outils: [...x.outils, m.nom] }));
+  else if (m.type === 'etat') e.setOccupe(m.occupe);
+  else if (m.type === 'reglages') e.setReglages(m.reglages);
+  else if (m.type === 'cadres') e.setCadres(m.cadres);
+  else if (m.type === 'entendu') e.setEntendu({ texte: m.texte, eveil: m.eveil });
+  else if (m.type === 'fin') {
+    e.setEnCours(VIDE);
+    relire();
+  }
+}
 
 function disponibiliteDe(erreur: unknown): Disponibilite {
   return erreur instanceof ErreurApi && erreur.statut === 404 ? 'absente' : 'injoignable';
@@ -21,68 +78,74 @@ function disponibiliteDe(erreur: unknown): Disponibilite {
 
 export function useEcho() {
   const magasin = useMagasin();
-  const [historique, setHistorique] = useState<readonly EntreeHistoriqueEcho[]>([]);
-  const [enCours, setEnCours] = useState<EnCours>(VIDE);
-  const [occupe, setOccupe] = useState(false);
-  const [dispo, setDispo] = useState<Disponibilite>('chargement');
-
+  const e = useEtatEcho();
+  const { setOccupe, setHistorique, setDispo, setReglages, setCadres } = e;
   const relire = useCallback(async (): Promise<void> => {
     try {
       const [etat, h] = await Promise.all([magasin.client.echoEtat(), magasin.client.echoHistorique()]);
       setOccupe(etat.occupe);
+      setReglages(etat.reglages);
+      setCadres(etat.cadres);
       setHistorique(h);
       setDispo(etat.joignable ? 'ok' : 'injoignable');
     } catch (erreur) {
       journal.warn({ erreur: String(erreur) }, 'Echo non chargée');
       setDispo(disponibiliteDe(erreur));
     }
-  }, [magasin]);
-
+  }, [magasin, setOccupe, setReglages, setCadres, setHistorique, setDispo]);
+  const etat = useRef(e);
+  etat.current = e;
   useEffect(() => {
     void relire();
-    return magasin.ecouterEcho((m: MessageEcho) => {
-      if (m.type === 'delta') setEnCours((e) => ({ ...e, texte: e.texte + m.texte }));
-      else if (m.type === 'outil') setEnCours((e) => ({ ...e, outils: [...e.outils, m.nom] }));
-      else if (m.type === 'etat') setOccupe(m.occupe);
-      else if (m.type === 'fin') {
-        setEnCours(VIDE);
-        void relire();
-      }
-    });
+    return magasin.ecouterEcho((m) => recevoir(etat.current, m, () => void relire()));
   }, [magasin, relire]);
-
-  const { envoyer, interrompre } = useActionsEcho(setHistorique, setDispo);
-  return { historique, enCours, occupe, dispo, envoyer, interrompre };
+  return { ...e, ...useActionsEcho(e) };
 }
 
-function useActionsEcho(
-  setHistorique: Dispatch<SetStateAction<readonly EntreeHistoriqueEcho[]>>,
-  setDispo: (d: Disponibilite) => void,
-) {
-  const magasin = useMagasin();
-  const envoyer = useCallback(
-    async (texte: string): Promise<boolean> => {
-      const ts = new Date().toISOString();
-      setHistorique((h) => [...h, { ts, qui: 'chris', origine: 'quart:app', texte }]);
+function useTenter(setDispo: (d: Disponibilite) => void) {
+  return useCallback(
+    async (f: () => Promise<unknown>, quoi: string): Promise<boolean> => {
       try {
-        await magasin.client.echoParler(texte);
+        await f();
         return true;
       } catch (erreur) {
-        journal.warn({ erreur: String(erreur) }, 'message à Echo non envoyé');
+        journal.warn({ erreur: String(erreur) }, quoi);
         setDispo(disponibiliteDe(erreur));
         return false;
       }
     },
-    [magasin],
+    [setDispo],
   );
+}
 
-  const interrompre = useCallback(async (): Promise<void> => {
-    try {
-      await magasin.client.echoInterrompre();
-    } catch (erreur) {
-      journal.warn({ erreur: String(erreur) }, 'interruption d’Echo refusée');
-    }
-  }, [magasin]);
-
-  return { envoyer, interrompre };
+function useActionsEcho(e: Etat) {
+  const client = useMagasin().client;
+  const { setHistorique, setReglages, setCadres } = e;
+  const tenter = useTenter(e.setDispo);
+  const envoyer = useCallback(
+    (texte: string): Promise<boolean> => {
+      setHistorique((h) => [...h, { ts: new Date().toISOString(), qui: 'chris', origine: 'quart:app', texte }]);
+      return tenter(() => client.echoParler(texte), 'message à Echo non envoyé');
+    },
+    [client, setHistorique, tenter],
+  );
+  const interrompre = useCallback(
+    () => void tenter(() => client.echoInterrompre(), 'interruption refusée'),
+    [client, tenter],
+  );
+  const regler = useCallback(
+    (r: Partial<ReglagesEcho>): void => {
+      setReglages((x) => ({ ...x, ...r })); // optimiste : Echo renverra l'état réel
+      void tenter(() => client.echoRegler(r), 'réglage refusé');
+    },
+    [client, setReglages, tenter],
+  );
+  const retirer = useCallback(
+    (id: string): void => {
+      setCadres((c) => c.filter((x) => x.id !== id));
+      void tenter(() => client.echoRetirer(id), 'cadre non retiré');
+    },
+    [client, setCadres, tenter],
+  );
+  return { envoyer, interrompre, regler, retirer };
 }
