@@ -53,17 +53,16 @@ export function commandeReprise(sessionId: string): string[] {
     '--settings', JSON.stringify({ skipDangerousModePermissionPrompt: true })];
 }
 
+// `☠` `--mcp-config` est variadique : placé juste avant le message, il l'avale comme un second fichier de config
+// (« MCP config file not found: …/<message> »). Il vient donc en tête, suivi d'options à valeur unique.
 export function commandeClaude(l: Lancement): string[] {
   return [
     binaireClaude(),
-    ...(l.reprise ? ['--resume', l.sessionId] : ['--session-id', l.sessionId, '--name', l.titre]),
+    '--mcp-config', rythme(),
+    '--settings', crochets(),
     '--dangerously-skip-permissions',
-    '--append-system-prompt',
-    l.consignes,
-    '--settings',
-    crochets(),
-    '--mcp-config',
-    rythme(),
+    '--append-system-prompt', l.consignes,
     ...(l.modele ? ['--model', l.modele] : []),
+    ...(l.reprise ? ['--resume', l.sessionId] : ['--session-id', l.sessionId, '--name', l.titre]),
   ];
 }
