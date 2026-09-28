@@ -7,4 +7,4 @@ export PATH="$HOME/.bun/bin:$HOME/.cargo/bin:$PATH"
 (cd .. && bun install --frozen-lockfile)
 bun install --frozen-lockfile
 bunx tauri build --no-bundle
-ls -la src-tauri/target/release/ccremote
+ls -la src-tauri/target/release/quart

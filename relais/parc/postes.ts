@@ -18,7 +18,7 @@ export interface ReponsePoste {
 }
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
-const DELAI_REPONSE_MS = 20_000;
+const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30 s la confirmation du CLI
 
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
@@ -96,6 +96,10 @@ export class Postes {
       this.registre.majEtatMachine(machine, m.etat);
       return this.diffuserMachine(machine);
     }
+    if (m.kind === 'comptes') {
+      this.registre.majComptes(machine, m.comptes);
+      return this.diffuserMachine(machine);
+    }
     const sessionId = m.kind === 'session' ? m.session.id : m.sessionId;
     if (!this.appartient(sessionId, machine) || (m.kind === 'session' && m.session.machine !== machine)) {
       this.journal.warn({ machine, sessionId }, 'compte rendu refusé : session d’une autre machine');
@@ -119,6 +123,7 @@ export class Postes {
       version: m.version,
       derniereVue: new Date().toISOString(),
     });
+    if (m.etatComptes) this.registre.majComptes(machine, m.etatComptes);
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
       this.registre.enregistrerSession(s);

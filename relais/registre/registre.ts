@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import type { Database } from 'bun:sqlite';
 import type { EvenementDate, Notification, VueMachine } from '../../commun/api-clients.ts';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
+import { EtatCompte } from '../../commun/comptes.ts';
 import { Evenement, ResumeSession } from '../../commun/session.ts';
 
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
@@ -16,6 +17,7 @@ type LigneMachine = {
   comptes: string;
   version: string;
   etat: string | null;
+  etat_comptes: string;
   derniere_vue: string;
 };
 type LigneNotif = {
@@ -34,7 +36,7 @@ export class Registre {
     private readonly journal?: Logger,
   ) {}
 
-  enregistrerMachine(m: Omit<FicheMachine, 'etat'>): void {
+  enregistrerMachine(m: Omit<FicheMachine, 'etat' | 'etatComptes'>): void {
     this.db
       .query(
         `INSERT INTO machines (id, description, racines, projets, comptes, version, derniere_vue)
@@ -58,6 +60,10 @@ export class Registre {
       .run({ id, e: JSON.stringify(etat), vue: new Date().toISOString() });
   }
 
+  majComptes(id: string, comptes: readonly EtatCompte[]): void {
+    this.db.query('UPDATE machines SET etat_comptes = $c WHERE id = $id').run({ id, c: JSON.stringify(comptes) });
+  }
+
   machines(): FicheMachine[] {
     return (this.db.query('SELECT * FROM machines ORDER BY id').all() as LigneMachine[]).map((l) => ({
       id: l.id,
@@ -67,6 +73,7 @@ export class Registre {
       comptes: JSON.parse(l.comptes),
       version: l.version,
       etat: l.etat ? JSON.parse(l.etat) : null,
+      etatComptes: this.lireComptes(l.id, l.etat_comptes),
       derniereVue: l.derniere_vue,
     }));
   }
@@ -88,6 +95,12 @@ export class Registre {
   sessions(): ResumeSession[] {
     const lignes = this.db.query('SELECT resume FROM sessions ORDER BY maj_le DESC').all() as { resume: string }[];
     return lignes.flatMap((l) => this.lireFiche(l.resume) ?? []);
+  }
+
+  private lireComptes(machine: string, brut: string): EtatCompte[] {
+    const r = EtatCompte.array().safeParse(JSON.parse(brut));
+    if (!r.success) this.journal?.warn({ machine }, 'état des comptes illisible, ignoré');
+    return r.success ? r.data : [];
   }
 
   // Une fiche enregistrée par une version antérieure du contrat ne doit jamais faire tomber la lecture de toutes les

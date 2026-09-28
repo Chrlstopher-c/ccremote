@@ -2,6 +2,7 @@
 import { join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import type { CommandeRelais, MessagePoste } from '../commun/protocole-poste.ts';
+import { Comptes } from './comptes/comptes.ts';
 import { chargerConfig } from './config.ts';
 import { eteindreMachine } from './parc/alimentation.ts';
 import { SondeMachine } from './parc/etat-machine.ts';
@@ -31,6 +32,13 @@ const sessions = new GestionnaireSessions(
   journal,
 );
 
+const comptes = new Comptes({
+  config,
+  journal,
+  publier: (etats) => envoyer({ kind: 'comptes', comptes: etats }),
+  enUsage: (compte) => sessions.lister().some((s) => s.compte === compte && s.tmux !== null),
+});
+
 function bonjour(): MessagePoste {
   return {
     kind: 'bonjour',
@@ -39,6 +47,7 @@ function bonjour(): MessagePoste {
     racines: [...config.racines],
     projets: decouvrirProjets(config.machine, config.racines),
     comptes: Object.keys(config.comptes),
+    etatComptes: comptes.lister(),
     sessions: sessions.lister(),
   };
 }
@@ -47,6 +56,10 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
   if (c.kind === 'eteindre') return eteindreMachine(journal);
+  if (c.kind === 'compte_connecter') return comptes.connecter(c.nom);
+  if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);
+  if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
+  if (c.kind === 'comptes_relever') return comptes.relever().then(() => ({ ok: true, donnees: comptes.lister() }));
   return sessions.executer(c);
 }
 
@@ -62,6 +75,7 @@ async function surCommande(c: CommandeRelais): Promise<MessagePoste> {
 
 servirLocal(socket, sessions, journal);
 sessions.demarrer();
+comptes.demarrer();
 lien = new LienRelais({
   url: config.relais,
   machine: config.machine,

@@ -1,7 +1,8 @@
 // Responsabilité : la barre latérale — sources (sessions, machines, alertes), état du lien, déconnexion.
-import { Bell, Circle, Layers, LogOut, MessagesSquare } from 'lucide-react';
+import { Bell, Circle, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEtat } from '../shared/etat/contexte.tsx';
+import { choisirTheme, LIBELLES_THEME, themeSuivant, useTheme } from '../shared/theme.ts';
 import { Point } from '../shared/ui/elements.tsx';
 import { memeSource, nonLues, type Source } from './navigation.ts';
 import { estOuverte } from '../sessions/statut.ts';
@@ -56,6 +57,18 @@ function Machines({ courante, surChoisir }: PropsMachines): ReactNode {
   );
 }
 
+function BoutonTheme(): ReactNode {
+  const theme = useTheme();
+  const suivant = themeSuivant(theme);
+  const Icone = theme === 'clair' ? Sun : theme === 'sombre' ? Moon : Monitor;
+  return (
+    <button type="button" onClick={() => choisirTheme(suivant)} title={`${LIBELLES_THEME[theme]} — passer au suivant`}
+      aria-label={LIBELLES_THEME[theme]} className="cursor-default rounded-[5px] p-1 hover:bg-survol hover:text-encre">
+      <Icone size={13} />
+    </button>
+  );
+}
+
 function Pied({ surDeconnexion }: { readonly surDeconnexion: () => void }): ReactNode {
   const lien = useEtat((e) => e.lien);
   const pastille = lien === 'ouvert' ? 'fill-succes text-succes' : 'animate-pulse fill-alerte text-alerte';
@@ -65,8 +78,11 @@ function Pied({ surDeconnexion }: { readonly surDeconnexion: () => void }): Reac
         <Circle size={7} className={pastille} />
         {lien === 'ouvert' ? 'relais connecté' : 'reconnexion…'}
       </span>
-      <button type="button" onClick={surDeconnexion} title="Se déconnecter" aria-label="Se déconnecter"
-        className="cursor-default rounded-[5px] p-1 hover:bg-survol hover:text-encre"><LogOut size={13} /></button>
+      <span className="flex items-center">
+        <BoutonTheme />
+        <button type="button" onClick={surDeconnexion} title="Se déconnecter" aria-label="Se déconnecter"
+          className="cursor-default rounded-[5px] p-1 hover:bg-survol hover:text-encre"><LogOut size={13} /></button>
+      </span>
     </div>
   );
 }
@@ -81,7 +97,7 @@ export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
   const ouvertes = sessions.filter((s) => estOuverte(s)).length;
   return (
     <nav className="flex h-full w-[210px] shrink-0 flex-col border-r border-filet bg-cote">
-      <div className="px-4 pt-3.5 pb-3 text-[14px] font-extrabold tracking-[-0.03em]">ccremote</div>
+      <div className="px-4 pt-3.5 pb-3 text-[14px] font-extrabold tracking-[-0.03em]">Quart</div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2">
         <Section titre="Sessions">
           <Entree source={{ genre: 'sessions', filtre: 'ouvertes' }} courante={source} surChoisir={surChoisir}

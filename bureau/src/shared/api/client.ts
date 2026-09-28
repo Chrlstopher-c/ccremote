@@ -28,7 +28,7 @@ export class ClientRelais {
     const r = await fetch(`${base}/api/connexion`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ motDePasse, appareil: 'ccremote bureau' }),
+      body: JSON.stringify({ motDePasse, appareil: 'Quart bureau' }),
     });
     const corps = (await r.json()) as { jeton?: string; erreur?: string };
     if (!r.ok || !corps.jeton) throw new ErreurApi(r.status, corps.erreur ?? 'connexion refusée');

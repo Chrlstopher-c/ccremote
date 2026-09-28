@@ -1,5 +1,6 @@
 // Responsabilité : la palette de commandes (Ctrl+K) — aller à une session, une machine, une action, au clavier.
 import { type KeyboardEvent, type ReactNode, useMemo, useState } from 'react';
+import { choisirTheme, LIBELLES_THEME } from '../shared/theme.ts';
 import { useEtat } from '../shared/etat/contexte.tsx';
 import type { Source } from './navigation.ts';
 
@@ -26,6 +27,9 @@ function useCommandes(p: PropsPalette): Commande[] {
   return useMemo(() => [
     { id: 'nouvelle', libelle: 'Nouvelle session', detail: 'Ctrl+N', agir: p.nouvelle },
     { id: 'alertes', libelle: 'Alertes', detail: 'aller à', agir: () => p.allerSource({ genre: 'alertes' }) },
+    ...(['clair', 'sombre', 'systeme'] as const).map((t) => ({
+      id: `theme-${t}`, libelle: LIBELLES_THEME[t], detail: 'apparence', agir: () => choisirTheme(t),
+    })),
     ...machines.map((m) => ({
       id: `m-${m.id}`, libelle: m.id, detail: m.enLigne ? 'machine · en ligne' : 'machine · hors ligne',
       agir: () => p.allerSource({ genre: 'machine', id: m.id }),

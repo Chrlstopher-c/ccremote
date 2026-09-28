@@ -1,6 +1,7 @@
 // Responsabilité : les messages échangés entre un poste (machine de travail) et le relais du Pi.
 // Sens unique du pouvoir : le relais commande, le poste rend compte. Un poste ne commande jamais rien.
 import { z } from 'zod';
+import { EtatCompte, NOM_COMPTE } from './comptes.ts';
 import { DemandeSession, Evenement, Projet, ReponseDialogue, ResumeSession } from './session.ts';
 
 export const EtatMachine = z.object({
@@ -20,9 +21,11 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     racines: z.array(z.string()),
     projets: z.array(Projet),
     comptes: z.array(z.string()),
+    etatComptes: z.array(EtatCompte).optional(),
     sessions: z.array(ResumeSession),
   }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
+  z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
   z.object({ kind: z.literal('session'), session: ResumeSession }),
   z.object({ kind: z.literal('evenement'), sessionId: z.string(), ts: z.string(), evt: Evenement }),
   z.object({ kind: z.literal('flux'), sessionId: z.string(), texte: z.string() }),
@@ -49,6 +52,11 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('repondre'), ...avecSession, reponse: ReponseDialogue }),
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
+  // Comptes Claude Code : connexion OAuth en deux temps (URL, puis code collé par Chris), retrait, relevé immédiat.
+  z.object({ kind: z.literal('compte_connecter'), id: z.string(), nom: z.string().regex(NOM_COMPTE) }),
+  z.object({ kind: z.literal('compte_code'), id: z.string(), nom: z.string(), code: z.string().min(1).max(2000) }),
+  z.object({ kind: z.literal('compte_retirer'), id: z.string(), nom: z.string() }),
+  z.object({ kind: z.literal('comptes_relever'), id: z.string() }),
 ]);
 export type CommandeRelais = z.infer<typeof CommandeRelais>;
 

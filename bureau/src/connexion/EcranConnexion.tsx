@@ -37,11 +37,11 @@ export function EcranConnexion({ surConnecte, basePrecedente }: {
     <div className="grid h-full place-items-center bg-cote">
       <form onSubmit={(e) => void c.soumettre(e)}
         className="w-[340px] rounded-[10px] bg-fond p-6 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.3)] ring-1 ring-filet">
-        <h1 className="text-[18px] font-extrabold tracking-[-0.03em]">ccremote</h1>
+        <h1 className="text-[18px] font-extrabold tracking-[-0.03em]">Quart</h1>
         <p className="mb-5 text-[12.5px] text-discret">Se connecter au relais du parc.</p>
         <label className="mb-3 block">
           <Libelle>Adresse du relais</Libelle>
-          <Champ value={c.adresse} onChange={(e) => c.setAdresse(e.target.value)} placeholder="ccremote.exemple.com"
+          <Champ value={c.adresse} onChange={(e) => c.setAdresse(e.target.value)} placeholder="relais.exemple.com"
             required autoFocus />
         </label>
         <label className="mb-4 block">

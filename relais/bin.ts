@@ -5,6 +5,7 @@ import { creerJournal } from '../commun/journal.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { construireRoutes } from './clients/api.ts';
+import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
 import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
@@ -22,6 +23,7 @@ const diffusion = new Diffusion();
 const acces = new Acces(registre, config.empreinteMotDePasse);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
+const comptes = new ApiComptes(postes, journal);
 const routes = avecCors(
   construireRoutes({
     acces,
@@ -29,6 +31,7 @@ const routes = avecCors(
     postes,
     diffusion,
     sessions,
+    comptes,
     wol: config.wol,
     diffusionWol: config.diffusionWol,
   }),

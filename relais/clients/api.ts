@@ -6,6 +6,7 @@ import type { Postes } from '../parc/postes.ts';
 import { reveiller } from '../parc/reveil.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ApiSessions } from './api-sessions.ts';
+import type { ApiComptes } from './api-comptes.ts';
 import type { Diffusion } from './diffusion.ts';
 import { entier, erreur, json, lireCorps } from './http.ts';
 
@@ -15,6 +16,7 @@ export interface DependancesApi {
   readonly postes: Postes;
   readonly diffusion: Diffusion;
   readonly sessions: ApiSessions;
+  readonly comptes: ApiComptes;
   readonly wol: ReadonlyMap<string, string>;
   readonly diffusionWol: string;
 }
@@ -54,6 +56,10 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/reveiller': { POST: protege((req) => reveil(d, req.params['id'] ?? '')) },
     '/api/machines/:id/eteindre': { POST: protege((req) => machine(d, req.params['id'] ?? '', 'eteindre')) },
     '/api/machines/:id/projets': { GET: protege((req) => machine(d, req.params['id'] ?? '', 'projets')) },
+    '/api/machines/:id/comptes': { POST: protege((req) => d.comptes.connecter(req as never)) },
+    '/api/machines/:id/comptes/relever': { POST: protege((req) => d.comptes.relever(req as never)) },
+    '/api/machines/:id/comptes/:nom/code': { POST: protege((req) => d.comptes.code(req as never)) },
+    '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
   };
 }
 

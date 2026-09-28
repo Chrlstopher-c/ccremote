@@ -10,6 +10,7 @@ const fiche = (id: string): FicheMachine => ({
   comptes: [],
   version: '2',
   etat: null,
+  etatComptes: [],
   derniereVue: '',
 });
 const machines = ['pi', 'portable', 'tour', 'vps'].map(fiche);

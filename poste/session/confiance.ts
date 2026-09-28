@@ -20,3 +20,13 @@ export function approuverDossier(dossier: string, configDir: string | null): voi
   writeFileSync(temporaire, JSON.stringify({ ...config, projects: projets }, null, 2));
   renameSync(temporaire, fichier);
 }
+
+/** Un dossier de config neuf lancerait l'accueil du CLI (choix du thème…) : personne n'est là pour y répondre. */
+export function marquerAccueilFait(configDir: string): void {
+  const fichier = fichierConfigClaude(configDir);
+  const config = existsSync(fichier) ? (JSON.parse(readFileSync(fichier, 'utf8')) as Record<string, unknown>) : {};
+  if (config['hasCompletedOnboarding'] === true) return;
+  const temporaire = `${fichier}.ccremote.tmp`;
+  writeFileSync(temporaire, JSON.stringify({ theme: 'dark', ...config, hasCompletedOnboarding: true }, null, 2));
+  renameSync(temporaire, fichier);
+}

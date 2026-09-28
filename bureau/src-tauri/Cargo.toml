@@ -1,11 +1,11 @@
 [package]
-name = "ccremote"
+name = "quart"
 version = "2.0.0"
-description = "ccremote — sessions Claude Code du parc, depuis le bureau"
+description = "Quart — sessions Claude Code du parc, depuis le bureau"
 edition = "2021"
 
 [lib]
-name = "ccremote_lib"
+name = "quart_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

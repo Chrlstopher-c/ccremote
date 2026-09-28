@@ -1,4 +1,5 @@
 // Responsabilité : le contrat de l'API des clients (app de bureau, iPhone, web) — ce que le relais rend et pousse.
+import type { EtatCompte } from './comptes.ts';
 import type { EtatMachine } from './protocole-poste.ts';
 import type { Evenement, Projet, ResumeSession } from './session.ts';
 
@@ -8,6 +9,7 @@ export interface VueMachine {
   readonly racines: string[];
   readonly projets: Projet[];
   readonly comptes: string[];
+  readonly etatComptes: EtatCompte[]; // identité et usage relevés par le poste (dernière vue, même hors ligne)
   readonly version: string;
   readonly etat: EtatMachine | null;
   readonly derniereVue: string;

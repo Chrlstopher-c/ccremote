@@ -5,7 +5,7 @@
 
 /* Outil natif dense (direction choisie par Chris le 28/09) : trois panneaux, rangées de 28–32 px, filets fins,
    aucune carte ni ombre décorative. La charte Echo Agency tient dans les neutres sable / night et un seul accent violet,
-   réservé à la sélection, au focus et à l'action. Clair ou night selon le système. */
+   réservé à la sélection, au focus et à l'action. Clair ou night : le système, ou le choix de Chris (bascule de thème). */
 @theme {
   --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
@@ -48,8 +48,29 @@
   color-scheme: light;
 }
 
+/* Sombre : forcé par la bascule de thème (data-theme), ou suivi du système quand rien n'est forcé. */
+:root[data-theme="sombre"] {
+  --fond: #1E1830;
+  --cote: #251E38;
+  --liste: #1E1830;
+  --survol: #2E2644;
+  --choix: #3A3150;
+  --champ: #2E2644;
+  --encre: #F3F1F6;
+  --encre-2: #C8C4D0;
+  --discret: #A39DB5;
+  --filet: #362D4D;
+  --accent: #A774D4;
+  --accent-texte: #D5B8F0;
+  --accent-fond: color-mix(in srgb, #A774D4 20%, transparent);
+  --succes: #5FD3A3;
+  --danger: #F2B8B0;
+  --alerte: #FFD99A;
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="clair"]) {
     --fond: #1E1830;
     --cote: #251E38;
     --liste: #1E1830;

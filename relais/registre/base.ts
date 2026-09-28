@@ -17,6 +17,7 @@ const MIGRATIONS: readonly string[] = [
      texte TEXT NOT NULL, ts TEXT NOT NULL, lue INTEGER NOT NULL DEFAULT 0);
    CREATE TABLE jetons (
      empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, appareil TEXT NOT NULL);`,
+  `ALTER TABLE machines ADD COLUMN etat_comptes TEXT NOT NULL DEFAULT '[]';`,
 ];
 
 export function ouvrirBase(chemin: string): Database {
