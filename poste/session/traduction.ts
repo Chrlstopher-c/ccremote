@@ -20,6 +20,7 @@ export interface Ligne {
   readonly message?: { content?: unknown; usage?: Objet; stop_reason?: unknown; model?: unknown };
   readonly compactMetadata?: Objet;
   readonly customTitle?: unknown;
+  readonly attachment?: { type?: unknown; prompt?: unknown };
 }
 
 // `agent` fourni : la ligne vient du transcript d'un sous-agent (toutes ses lignes sont `isSidechain`).
@@ -28,6 +29,7 @@ export function traduire(l: Ligne, agent?: string): Evenement[] {
   const marque = agent === undefined ? {} : { agent };
   if (l.type === 'assistant') return blocs(l.message?.content).flatMap((b) => traduireBlocAssistant(b, marque));
   if (l.type === 'user') return agent === undefined ? traduireUtilisateur(l) : resultats(l, marque);
+  if (l.type === 'attachment' && agent === undefined) return finDeTache(l);
   if (l.type === 'system' && l.subtype === 'compact_boundary' && agent === undefined) {
     const m = l.compactMetadata ?? {};
     return [{ type: 'compaction', avant: nombre(m['preTokens']), apres: nombre(m['postTokens']), declencheur: texte(m['trigger']) }];
@@ -42,6 +44,16 @@ function traduireUtilisateur(l: Ligne): Evenement[] {
   const r = resultats(l, {});
   if (r.length > 0) return r;
   return messageDeChris(blocs(contenu).filter((b) => b.type === 'text').map((b) => texte(b['text'])).join('\n'));
+}
+
+// Fin d'un sous-agent lancé en arrière-plan : le CLI la met en file sous forme de <task-notification>.
+function finDeTache(l: Ligne): Evenement[] {
+  const prompt = l.attachment?.type === 'queued_command' ? texte(l.attachment.prompt) : '';
+  if (!prompt.includes('<task-notification>')) return [];
+  const champ = (nom: string): string => prompt.match(new RegExp(`<${nom}>([\\s\\S]*?)</${nom}>`))?.[1]?.trim() ?? '';
+  const outilId = champ('tool-use-id');
+  if (!outilId) return [];
+  return [{ type: 'resultat_outil', outilId, extrait: champ('summary') || 'terminé', erreur: champ('status') !== 'completed' }];
 }
 
 // Une commande tapée (/compact …) arrive balisée ; ses sorties locales et les rappels système ne sont pas des messages.
@@ -63,7 +75,7 @@ function traduireBlocAssistant(bloc: Bloc, marque: { agent?: string }): Evenemen
   const entree = (bloc['input'] ?? {}) as Objet;
   if (!nom || nom.startsWith(PREFIXE_OUTILS_HARNESS)) return [];
   if (OUTILS_SOUS_AGENT.has(nom) && marque.agent === undefined) {
-    return [{ type: 'sous_agent', id, description: texte(entree['description']), modele: texte(entree['model']) || 'hérité',
+    return [{ type: 'sous_agent', id, description: texte(entree['description']), modele: texte(entree['model']),
       genre: texte(entree['subagent_type']) || 'general-purpose' }];
   }
   return [{ type: 'outil', id, nom, resume: resumerEntree(nom, entree), detail: detailEntree(entree), ...marque }];

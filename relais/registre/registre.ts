@@ -1,30 +1,11 @@
 // Responsabilité : lire et écrire l'état du relais — machines, sessions, fil d'événements, notifications, jetons.
 import type { Database } from 'bun:sqlite';
+import type { EvenementDate, Notification, VueMachine } from '../../commun/api-clients.ts';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
-import { Evenement, type Projet, ResumeSession } from '../../commun/session.ts';
+import { Evenement, ResumeSession } from '../../commun/session.ts';
 
-export interface FicheMachine {
-  readonly id: string;
-  readonly description: string;
-  readonly racines: string[];
-  readonly projets: Projet[];
-  readonly comptes: string[];
-  readonly version: string;
-  readonly etat: EtatMachine | null;
-  readonly derniereVue: string;
-}
-
-export interface EvenementDate { readonly seq: number; readonly sessionId: string; readonly ts: string; readonly evt: Evenement }
-
-export interface Notification {
-  readonly seq: number;
-  readonly sessionId: string | null;
-  readonly niveau: 'info' | 'important' | 'alerte';
-  readonly titre: string;
-  readonly texte: string;
-  readonly ts: string;
-  readonly lue: boolean;
-}
+export type FicheMachine = Omit<VueMachine, 'enLigne'>;
+export type { EvenementDate, Notification };
 
 type LigneMachine = { id: string; description: string; racines: string; projets: string; comptes: string;
   version: string; etat: string | null; derniere_vue: string };

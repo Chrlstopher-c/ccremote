@@ -95,7 +95,7 @@ export class Postes {
       this.journal.warn({ machine, sessionId }, 'compte rendu refusé : session d’une autre machine');
       return;
     }
-    if (m.kind === 'flux') return this.diffusion.diffuser({ type: 'flux', sessionId, texte: m.texte });
+    if (m.kind === 'flux') return; // plus émis depuis le passage au TUI : le fil vient du transcript
     if (m.kind === 'session') {
       this.registre.enregistrerSession(m.session);
       return this.diffusion.diffuser({ type: 'session', session: m.session });

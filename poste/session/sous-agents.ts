@@ -1,6 +1,6 @@
 // Responsabilité : suivre les sous-agents d'une session — chacun a son transcript dans `<session>/subagents/`,
 // rattaché par son `.meta.json` à l'appel d'outil qui l'a lancé : le fil montre ce que fait chaque agent.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Evenement } from '../../commun/session.ts';
 import { LecteurTranscript } from './transcript.ts';
@@ -20,6 +20,20 @@ export class SuiviSousAgents {
     const evts: Evenement[] = [];
     for (const { lecteur, agent } of this.suivis.values()) for (const l of lecteur.lire()) evts.push(...traduire(l, agent));
     return evts;
+  }
+
+  // Un sous-agent qui écrit encore son transcript travaille : on ne relance pas la session pendant qu'il tourne.
+  actifs(fenetreMs = 45_000): number {
+    const seuil = Date.now() - fenetreMs;
+    let n = 0;
+    for (const { lecteur } of this.suivis.values()) {
+      try {
+        if (statSync(lecteur.chemin).mtimeMs > seuil) n += 1;
+      } catch {
+        // transcript supprimé entre-temps : plus actif
+      }
+    }
+    return n;
   }
 
   private suivre(fichier: string): void {

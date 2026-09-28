@@ -20,8 +20,8 @@ const CorpsOuverture = z.object({
 });
 const CorpsMessage = z.object({ texte: z.string().min(1) });
 const CorpsAutonomie = z.object({ active: z.boolean() });
-const ACTIONS = new Set(['interrompre', 'compacter', 'fermer'] as const);
-type Action = 'interrompre' | 'compacter' | 'fermer';
+const ACTIONS = new Set(['interrompre', 'compacter', 'fermer', 'reprendre'] as const);
+type Action = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
 
 type RequeteSession = Request & { params: { id: string; action?: string } };
 

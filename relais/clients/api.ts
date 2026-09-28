@@ -59,16 +59,19 @@ async function connexion(d: DependancesApi, req: Request): Promise<Response> {
 
 function etat(d: DependancesApi) {
   const notifications = d.registre.notifications(0, 50);
-  return { machines: d.postes.vues(), sessions: d.registre.sessions(), notifications, reveilPossible: [...d.wol.keys()] };
+  return { version: d.diffusion.version, machines: d.postes.vues(), sessions: d.registre.sessions(), notifications,
+    reveilPossible: [...d.wol.keys()] };
 }
 
-// Pour l'iPhone : une seule requête longue qui rend la main dès qu'il y a du nouveau.
+// Pour l'iPhone : une seule requête longue qui rend la main dès qu'il y a du nouveau (au-delà de `version`).
 async function attente(d: DependancesApi, req: Request): Promise<Response> {
   const url = new URL(req.url);
+  const version = entier(url.searchParams.get('version'), -1);
+  const echeance = Date.now() + Math.min(entier(url.searchParams.get('attendre'), 25), 30) * 1000;
+  while (d.diffusion.version <= version && Date.now() < echeance) await d.diffusion.attendre(echeance - Date.now());
   const apres = entier(url.searchParams.get('notifications'), 0);
-  const attendre = Math.min(entier(url.searchParams.get('attendre'), 25), 30);
-  if (d.registre.notifications(apres, 1).length === 0) await d.diffusion.attendre(attendre * 1000);
-  return json({ notifications: d.registre.notifications(apres), sessions: d.registre.sessions(), machines: d.postes.vues() });
+  return json({ version: d.diffusion.version, notifications: d.registre.notifications(apres), sessions: d.registre.sessions(),
+    machines: d.postes.vues() });
 }
 
 async function marquerLues(d: DependancesApi, req: Request): Promise<Response> {

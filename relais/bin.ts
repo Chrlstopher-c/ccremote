@@ -3,9 +3,10 @@ import { existsSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
-import { Acces } from './acces/acces.ts';
+import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { construireRoutes } from './clients/api.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
+import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
@@ -20,7 +21,7 @@ const diffusion = new Diffusion();
 const acces = new Acces(registre, config.empreinteMotDePasse);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees);
-const routes = construireRoutes({ acces, registre, postes, diffusion, sessions, wol: config.wol, diffusionWol: config.diffusionWol });
+const routes = avecCors(construireRoutes({ acces, registre, postes, diffusion, sessions, wol: config.wol, diffusionWol: config.diffusionWol }), config.origines);
 
 function fichierStatique(req: Request): Response {
   const chemin = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^(\.\.[/\\])+/, '');
@@ -39,7 +40,9 @@ Bun.serve({
     ...routes,
     '/api/flux': (req, serveur) => {
       if (!acces.autorise(req)) return erreur('non connecté', 401);
-      return serveur.upgrade(req, { data: {} }) ? undefined : erreur('WebSocket attendu', 426);
+      const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
+      const entetes: Record<string, string> = parProtocole ? { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } : {};
+      return serveur.upgrade(req, { data: {}, headers: entetes }) ? undefined : erreur('WebSocket attendu', 426);
     },
     '/api/*': () => erreur('route inconnue', 404),
   },

@@ -1,20 +1,17 @@
 // Responsabilité : pousser en direct ce qui change vers les clients (web en WebSocket, iPhone en long-poll).
 import type { ServerWebSocket } from 'bun';
-import type { ResumeSession } from '../../commun/session.ts';
-import type { EvenementDate, FicheMachine, Notification } from '../registre/registre.ts';
+import type { MessageClient, VueMachine } from '../../commun/api-clients.ts';
 
-export type VueMachine = FicheMachine & { readonly enLigne: boolean };
-
-export type MessageClient =
-  | { readonly type: 'evenement'; readonly evenement: EvenementDate }
-  | { readonly type: 'session'; readonly session: ResumeSession }
-  | { readonly type: 'machine'; readonly machine: VueMachine }
-  | { readonly type: 'flux'; readonly sessionId: string; readonly texte: string }
-  | { readonly type: 'notification'; readonly notification: Notification };
+export type { MessageClient, VueMachine };
 
 export class Diffusion {
   private readonly clients = new Set<ServerWebSocket<unknown>>();
   private attentes = new Set<() => void>();
+  private versionCourante = 0; // n'avance que sur un changement utile (session, fil, notification), pas sur l'état machine
+
+  get version(): number {
+    return this.versionCourante;
+  }
 
   ajouter(ws: ServerWebSocket<unknown>): void {
     this.clients.add(ws);
@@ -27,7 +24,8 @@ export class Diffusion {
   diffuser(m: MessageClient): void {
     const texte = JSON.stringify(m);
     for (const ws of this.clients) ws.send(texte);
-    if (m.type === 'flux') return;
+    if (m.type === 'machine') return;
+    this.versionCourante += 1;
     const reveils = this.attentes;
     this.attentes = new Set();
     for (const r of reveils) r();

@@ -1,0 +1,166 @@
+@import "tailwindcss";
+@import "@fontsource-variable/manrope";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+/* Charte Echo Agency (skill echo-agency-design) : tokens de marque, puis rôles sémantiques qui changent avec le thème.
+   Clair = canvas sable + accent brand-600 ; sombre = night + accent brand-400. La barre latérale est night dans les deux. */
+@theme {
+  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-fond: var(--fond);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-encre: var(--encre);
+  --color-encre-douce: var(--encre-douce);
+  --color-discret: var(--discret);
+  --color-filet: var(--filet);
+  --color-filet-fort: var(--filet-fort);
+  --color-accent: var(--accent);
+  --color-accent-vif: var(--accent-vif);
+  --color-accent-texte: var(--accent-texte);
+  --color-accent-fond: var(--accent-fond);
+  --color-accent-relief: var(--accent-relief);
+  --color-succes: var(--succes);
+  --color-succes-fond: var(--succes-fond);
+  --color-danger: var(--danger);
+  --color-danger-fond: var(--danger-fond);
+  --color-alerte: var(--alerte);
+  --color-alerte-fond: var(--alerte-fond);
+
+  --color-night: #1E1830;
+  --color-night-2: #251E38;
+  --color-night-3: #2E2644;
+  --color-night-4: #3A3150;
+  --color-night-line: #362D4D;
+  --color-night-actif: #342B4A;
+  --color-night-text: #F3F1F6;
+  --color-night-soft: #C8C4D0;
+  --color-night-muted: #A39DB5;
+  --color-brand-400: #A774D4;
+  --color-brand-light: #D5B8F0;
+
+  --radius-carte: 24px;
+  --radius-panneau: 28px;
+  --ease-doux: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --ease-ressort: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+:root {
+  --fond: #FAFAF9;
+  --surface: #FFFFFF;
+  --surface-2: #F7F5F1;
+  --surface-3: #F0EDE8;
+  --encre: #141414;
+  --encre-douce: #3F3C39;
+  --discret: #6B6660;
+  --filet: #EFEDE8;
+  --filet-fort: #E2DED7;
+  --accent: #7D48B5;
+  --accent-vif: #A774D4;
+  --accent-texte: #5E3290;
+  --accent-fond: #F4EDFB;
+  --accent-relief: #56298A;
+  --succes: #0B7A52;
+  --succes-fond: #E3F6EE;
+  --danger: #B42318;
+  --danger-fond: #FDECEA;
+  --alerte: #7A4800;
+  --alerte-fond: #FFF1D6;
+  --ombre-carte: 0 0 0 1px var(--filet), 0 10px 24px -14px rgba(20, 20, 20, 0.3);
+  --ombre-menu: 0 0 0 1px var(--filet), 0 40px 80px -30px rgba(20, 20, 20, 0.35);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fond: #1E1830;
+    --surface: #251E38;
+    --surface-2: #2E2644;
+    --surface-3: #3A3150;
+    --encre: #F3F1F6;
+    --encre-douce: #C8C4D0;
+    --discret: #A39DB5;
+    --filet: #362D4D;
+    --filet-fort: #4A3F63;
+    --accent: #A774D4;
+    --accent-vif: #D5B8F0;
+    --accent-texte: #D5B8F0;
+    --accent-fond: color-mix(in srgb, #A774D4 18%, transparent);
+    --accent-relief: #5E3290;
+    --succes: #5FD3A3;
+    --succes-fond: color-mix(in srgb, #0B7A52 30%, transparent);
+    --danger: #F2B8B0;
+    --danger-fond: color-mix(in srgb, #B42318 30%, transparent);
+    --alerte: #FFD99A;
+    --alerte-fond: color-mix(in srgb, #7A4800 35%, transparent);
+    --ombre-carte: 0 0 0 1px var(--filet);
+    --ombre-menu: 0 0 0 1px var(--filet), 0 40px 80px -30px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+
+html, body, #racine {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--fond);
+  color: var(--encre);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--accent-fond);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--filet-fort) transparent;
+}
+
+@utility ombre-carte {
+  box-shadow: var(--ombre-carte);
+}
+
+@utility ombre-menu {
+  box-shadow: var(--ombre-menu);
+}
+
+/* Surtitre : mono en capitales précédé du carré violet 8×8 (composant signature). */
+@utility surtitre {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-texte);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  &::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent-vif);
+  }
+}
+
+.prose-fil {
+  line-height: 1.6;
+  & p { margin: 0 0 0.6em; }
+  & p:last-child { margin-bottom: 0; }
+  & code { font-family: var(--font-mono); font-size: 0.88em; background: var(--surface-2); padding: 1px 5px; border-radius: 6px; }
+  & pre { background: var(--surface-2); padding: 12px 14px; border-radius: 12px; overflow-x: auto; font-size: 13px; }
+  & pre code { background: none; padding: 0; }
+  & ul, & ol { margin: 0.3em 0 0.6em; padding-left: 1.3em; }
+  & a { color: var(--accent-texte); }
+  & table { border-collapse: collapse; font-size: 14px; margin: 0.4em 0; }
+  & th, & td { border: 1px solid var(--filet); padding: 4px 10px; text-align: left; }
+  & h1, & h2, & h3 { font-weight: 800; letter-spacing: -0.02em; margin: 0.8em 0 0.3em; font-size: 1.05em; }
+}

@@ -240,6 +240,7 @@ export class SessionTmux {
       sortDeCompaction, messagesChrisEnVol: this.enVol.length, ...this.drapeaux, autonomie: this.etat.autonomie,
       aUnObjectif: this.etat.objectif !== null, outilsCeTour: this.tour.outils, relancesSansProgres: this.relancesSansProgres,
       contexte: this.etat.contexte.tokens, maxTokens: this.etat.contexte.max, etapeTerminee: this.tour.etapeTerminee,
+      sousAgentsActifs: this.sousAgents?.actifs() ?? 0,
     });
   }
 
@@ -247,6 +248,10 @@ export class SessionTmux {
     const outils = this.tour.outils;
     this.tour = { outils: 0, etapeTerminee: false, debut: Date.now() };
     if (suite.action === 'laisser') return {};
+    if (suite.action === 'patienter') {
+      this.maj({ statut: 'travail' });
+      return {};
+    }
     if (suite.action === 'compacter') {
       setTimeout(() => void this.lancerCompaction(suite.raison), 800);
       return {};

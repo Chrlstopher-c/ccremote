@@ -51,6 +51,13 @@ describe('traduction transcript → événements', () => {
       .toEqual([{ type: 'resultat_outil', outilId: 't1', extrait: 'x'.repeat(3000), erreur: true }]);
   });
 
+  test('fin d’un sous-agent en arrière-plan (task-notification)', () => {
+    const prompt = '<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>toolu_7</tool-use-id>\n<status>completed</status>\n'
+      + '<summary>Agent "x" finished</summary>\n</task-notification>';
+    expect(traduire({ type: 'attachment', attachment: { type: 'queued_command', prompt } }))
+      .toEqual([{ type: 'resultat_outil', outilId: 'toolu_7', extrait: 'Agent "x" finished', erreur: false }]);
+  });
+
   test('frontière de compaction (camelCase du transcript)', () => {
     expect(traduire({ type: 'system', subtype: 'compact_boundary', compactMetadata: { trigger: 'manual', preTokens: 29954, postTokens: 3720 } }))
       .toEqual([{ type: 'compaction', avant: 29954, apres: 3720, declencheur: 'manual' }]);

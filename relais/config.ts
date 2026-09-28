@@ -11,6 +11,7 @@ export interface ConfigRelais {
   readonly portWeb: number;
   readonly portPostes: number;
   readonly web: string;
+  readonly origines: ReadonlySet<string>;
 }
 
 // « a=x,b=y » → Map ; « a,b » → Set
@@ -40,6 +41,8 @@ export function chargerConfig(): ConfigRelais {
     base: process.env['CCREMOTE_BASE'] ?? join(racine, '.donnees/relais.db'),
     portWeb: Number(process.env['CCREMOTE_PORT_WEB'] ?? 8766),
     portPostes: Number(process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
-    web: process.env['CCREMOTE_WEB'] ?? join(racine, 'web/dist'),
+    web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
+    origines: new Set((process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420')
+      .split(',').map((s) => s.trim()).filter(Boolean)),
   };
 }

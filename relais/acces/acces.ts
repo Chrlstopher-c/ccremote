@@ -60,9 +60,14 @@ function empreinte(jeton: string): string {
   return createHash('sha256').update(jeton).digest('hex');
 }
 
+export const PROTOCOLE_FLUX = 'ccremote';
+
 export function extraireJeton(req: Request): string | null {
   const entete = req.headers.get('authorization');
   if (entete?.startsWith('Bearer ')) return entete.slice(7);
+  // WebSocket du navigateur : pas d'en-tête possible, le jeton voyage en second sous-protocole (jamais dans l'URL).
+  const protocoles = (req.headers.get('sec-websocket-protocol') ?? '').split(',').map((p) => p.trim());
+  if (protocoles[0] === PROTOCOLE_FLUX && protocoles[1]) return protocoles[1];
   const cookie = req.headers.get('cookie') ?? '';
   const m = cookie.match(new RegExp(`(?:^|;\\s*)${NOM_COOKIE}=([^;]+)`));
   return m?.[1] ?? null;

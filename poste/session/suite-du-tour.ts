@@ -17,10 +17,12 @@ export interface EtatFinDeTour {
   readonly maxTokens: number;
   readonly etapeTerminee: boolean;
   readonly compactionDemandee: boolean;
+  readonly sousAgentsActifs: number;
 }
 
 export type Suite =
   | { readonly action: 'laisser' } // un message de Chris est déjà en file : c'est lui qui ouvre le tour suivant
+  | { readonly action: 'patienter' } // un sous-agent tourne en arrière-plan : sa fin réveillera la session
   | { readonly action: 'compacter'; readonly raison: string }
   | { readonly action: 'relancer'; readonly texte: string; readonly raison: string }
   | { readonly action: 'arreter'; readonly statut: 'terminee' | 'question' | 'attente'; readonly note?: string };
@@ -35,6 +37,7 @@ export function deciderSuite(e: EtatFinDeTour): Suite {
     if (compaction.agir) return { action: 'compacter', raison: compaction.raison === 'etape' ? 'fin d’étape' : 'seuil de contexte' };
   }
   if (!e.autonomie || !e.aUnObjectif) return { action: 'arreter', statut: 'attente' };
+  if (e.sousAgentsActifs > 0 && !e.sortDeCompaction) return { action: 'patienter' };
   return relanceAutonome(e);
 }
 
