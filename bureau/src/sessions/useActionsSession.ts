@@ -1,7 +1,7 @@
 // Responsabilité : les actions de Chris sur une session, avec l'erreur éventuelle à afficher.
 import { useCallback, useState } from 'react';
 import type { ActionSession } from '../../../commun/api-clients.ts';
-import type { ResumeSession } from '../../../commun/session.ts';
+import type { ReponseDialogue, ResumeSession } from '../../../commun/session.ts';
 import { ErreurApi } from '../shared/api/client.ts';
 import { useMagasin } from '../shared/etat/contexte.tsx';
 import { ouvrirTerminal } from '../shared/natif.ts';
@@ -31,6 +31,7 @@ export function useActionsSession(session: ResumeSession) {
     effacerErreur: () => setErreur(null),
     envoyer: (texte: string) => executer(() => client.envoyer(session.id, texte)),
     agir: (a: ActionSession) => executer(() => client.agir(session.id, a)),
+    repondre: (r: ReponseDialogue) => executer(() => client.repondre(session.id, r)),
     autonomie: (active: boolean) => executer(() => client.autonomie(session.id, active)),
     terminal: () =>
       executer(async () => {

@@ -1,7 +1,7 @@
 // Responsabilité : UNE session Claude Code dans tmux — son fil (lu dans le transcript), ses commandes (via tmux)
 // et, si ccremote l'a lancée, son rythme : relance autonome, compaction pilotée, garde des sous-agents.
 import type { Logger } from 'pino';
-import type { Evenement, ResumeSession, StatutSession } from '../../commun/session.ts';
+import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
 import { approuverDossier } from './confiance.ts';
 import { GardeSousAgents, type DecisionCrochet } from './garde-sous-agents.ts';
 import { commandeClaude, commandeReprise, VAR_SESSION, VAR_SOCKET } from './lanceur.ts';
@@ -10,6 +10,7 @@ import { CONSIGNE_COMPACTION, deciderCompaction } from './politique-compaction.t
 import { deciderSuite, type Suite } from './suite-du-tour.ts';
 import * as tmux from './tmux.ts';
 import { SuiviSousAgents } from './sous-agents.ts';
+import { SuiviDialogue } from './suivi-dialogue.ts';
 import { LecteurTranscript } from './transcript.ts';
 import { contexteDe, type Ligne, traduire, travailEnCours } from './traduction.ts';
 
@@ -33,6 +34,7 @@ export class SessionTmux {
   private lecteur: LecteurTranscript | null;
   private sousAgents: SuiviSousAgents | null;
   private readonly garde = new GardeSousAgents();
+  private readonly dialogue = new SuiviDialogue();
   private tour = { outils: 0, etapeTerminee: false, debut: Date.now() };
   private drapeaux = { objectifAtteint: false, questionPosee: false, compactionDemandee: false };
   private relancesSansProgres = 0;
@@ -100,6 +102,8 @@ export class SessionTmux {
     const evts: Evenement[] = [];
     for (const l of this.lecteur.lire()) evts.push(...this.absorber(l));
     for (const evt of evts.slice(-historique)) this.env.sortie.evenement(this.etat.id, evt);
+    const vivante = this.etat.tmux !== null || this.etat.terminal === true;
+    this.etat = { ...this.etat, dialogue: vivante ? this.dialogue.courant : null };
     this.publier();
   }
 
@@ -110,10 +114,39 @@ export class SessionTmux {
     const internes = this.sousAgents?.lire() ?? [];
     for (const evt of internes) this.emettre(evt);
     if (internes.length > 0) this.tour.outils += internes.filter((e) => e.type === 'outil').length;
-    if (lignes.length > 0) this.publier();
+    if (lignes.length > 0) this.publierDialogue() || this.publier();
+  }
+
+  // --- dialogues du TUI (AskUserQuestion, permission, plan) ---
+
+  /** Relève l'écran du pane : un menu du TUI qui attend une réponse devient un dialogue répondable de Quart. */
+  async releverEcran(): Promise<void> {
+    if (!this.etat.tmux) return;
+    this.dialogue.releverEcran(await tmux.capturer(this.etat.tmux));
+    this.publierDialogue();
+  }
+
+  async repondre(r: ReponseDialogue): Promise<string | null> {
+    const refus = this.refusTerminal();
+    if (refus) return refus;
+    if (!this.etat.tmux) return 'session fermée';
+    const erreur = await this.dialogue.repondre(this.etat.tmux, r);
+    if (!erreur) void this.releverEcran();
+    return erreur;
+  }
+
+  // Publie le dialogue s'il a changé ; un nouveau dialogue devient aussi une question du fil (et une alerte).
+  private publierDialogue(): boolean {
+    const vivante = this.etat.tmux !== null || this.etat.terminal === true;
+    const d = vivante ? this.dialogue.courant : null;
+    if ((d?.id ?? null) === (this.etat.dialogue?.id ?? null)) return false;
+    if (d) this.emettre({ type: 'question', question: resumeDialogue(d) });
+    this.maj({ dialogue: d });
+    return true;
   }
 
   private absorber(l: Ligne): Evenement[] {
+    this.dialogue.absorber(l);
     const contexte = contexteDe(l);
     if (contexte !== null) this.etat = { ...this.etat, contexte: { ...this.etat.contexte, tokens: contexte } };
     if (l.type === 'custom-title' && typeof l.customTitle === 'string')
@@ -395,4 +428,9 @@ export class SessionTmux {
     this.etat = { ...this.etat, majLe: new Date().toISOString() };
     this.env.sortie.resume(this.etat);
   }
+}
+
+function resumeDialogue(d: NonNullable<ResumeSession['dialogue']>): string {
+  if (d.genre === 'choix') return `${d.titre || 'Choix attendu'} — ${d.options.join(' / ')}`;
+  return d.questions.map((q) => q.question).join('\n');
 }

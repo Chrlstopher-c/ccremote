@@ -21,6 +21,34 @@ export const Projet = z.object({
 });
 export type Projet = z.infer<typeof Projet>;
 
+// Un dialogue affiché par le TUI et bloquant la session tant que personne n'y répond.
+// `questions` : l'outil AskUserQuestion (structuré, lu dans le transcript) ; `choix` : tout autre menu du TUI
+// (permission, validation d'un plan…) relevé à l'écran.
+export const QuestionDialogue = z.object({
+  question: z.string(),
+  entete: z.string(),
+  multiple: z.boolean(),
+  options: z.array(z.object({ libelle: z.string(), description: z.string() })),
+});
+export type QuestionDialogue = z.infer<typeof QuestionDialogue>;
+
+export const Dialogue = z.discriminatedUnion('genre', [
+  z.object({ genre: z.literal('questions'), id: z.string(), questions: z.array(QuestionDialogue).min(1) }),
+  z.object({ genre: z.literal('choix'), id: z.string(), titre: z.string(), options: z.array(z.string()).min(1) }),
+]);
+export type Dialogue = z.infer<typeof Dialogue>;
+
+// `choix` : indices (0 = première option) ; `autre` : réponse libre, qui remplace les choix pour cette question.
+export const ReponseDialogue = z.discriminatedUnion('genre', [
+  z.object({
+    genre: z.literal('questions'),
+    id: z.string(),
+    reponses: z.array(z.object({ choix: z.array(z.number().int().min(0)), autre: z.string().optional() })).min(1),
+  }),
+  z.object({ genre: z.literal('choix'), id: z.string(), index: z.number().int().min(0) }),
+]);
+export type ReponseDialogue = z.infer<typeof ReponseDialogue>;
+
 export const ResumeSession = z.object({
   id: z.string(),
   machine: z.string(),
@@ -40,6 +68,7 @@ export const ResumeSession = z.object({
   attachee: z.boolean(), // un terminal est attaché (kitty, web)
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
   terminal: z.boolean().optional(), // vivante dans un terminal ordinaire, hors tmux : suivie en lecture seule
+  dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
   creeLe: z.string(),
   majLe: z.string(),
 });

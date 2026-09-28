@@ -102,3 +102,14 @@ export function touche(nom: string, cle: string): Promise<Resultat> {
 export function tuer(nom: string): Promise<Resultat> {
   return tmux(['kill-session', '-t', `=${nom}`]);
 }
+
+/** Ce que le pane affiche, lignes repliées recollées (`-J`) : sert à reconnaître un dialogue du TUI. */
+export async function capturer(nom: string): Promise<string | null> {
+  const r = await tmux(['capture-pane', '-p', '-J', '-t', `=${nom}:`]);
+  return r.code === 0 ? r.sortie : null;
+}
+
+/** Des caractères tapés tels quels (`-l`), sans collage : un champ de dialogue les reçoit comme au clavier. */
+export function taper(nom: string, texte: string): Promise<Resultat> {
+  return tmux(['send-keys', '-t', `=${nom}:`, '-l', texte]);
+}

@@ -6,6 +6,7 @@ import { tokens } from '../shared/format.ts';
 import { estBureau } from '../shared/natif.ts';
 import { IconeBouton } from '../shared/ui/Bouton.tsx';
 import { Bascule, Jauge, Point } from '../shared/ui/elements.tsx';
+import { CarteDialogue } from './CarteDialogue.tsx';
 import { Composeur } from './Composeur.tsx';
 import { LectureSeule, useLectureSeule } from './LectureSeule.tsx';
 import { Fil } from './fil/Fil.tsx';
@@ -87,6 +88,9 @@ export function VueSession({ session }: { readonly session: ResumeSession }): Re
         </button>
       )}
       <Fil sessionId={session.id} dossier={session.cwd} />
+      {session.dialogue && (
+        <CarteDialogue dialogue={session.dialogue} repondable={lectureSeule === null} repondre={actions.repondre} />
+      )}
       {lectureSeule ? <LectureSeule s={session} raison={lectureSeule} />
         : <Composeur session={session} envoyer={actions.envoyer} occupe={actions.occupe} />}
     </section>

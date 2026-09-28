@@ -6,7 +6,7 @@ import type {
   EvenementDate,
   Notification,
 } from '../../../../commun/api-clients.ts';
-import type { Projet, ResumeSession } from '../../../../commun/session.ts';
+import type { Projet, ReponseDialogue, ResumeSession } from '../../../../commun/session.ts';
 import { journal } from '../journal.ts';
 
 export class ErreurApi extends Error {
@@ -54,6 +54,10 @@ export class ClientRelais {
 
   agir(sessionId: string, action: ActionSession): Promise<ResumeSession> {
     return this.appeler('POST', `/api/sessions/${sessionId}/${action}`, {});
+  }
+
+  repondre(sessionId: string, reponse: ReponseDialogue): Promise<ResumeSession> {
+    return this.appeler('POST', `/api/sessions/${sessionId}/repondre`, reponse);
   }
 
   autonomie(sessionId: string, active: boolean): Promise<ResumeSession> {

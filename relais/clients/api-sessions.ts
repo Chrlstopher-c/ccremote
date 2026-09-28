@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { Projet } from '../../commun/session.ts';
+import { Projet, ReponseDialogue } from '../../commun/session.ts';
 import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
@@ -84,6 +84,12 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: 'autonomie', active: c.active });
   }
 
+  async repondre(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, ReponseDialogue);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'repondre', reponse: c });
+  }
+
   async action(req: RequeteSession): Promise<Response> {
     const action = req.params.action as Action; // vérifié juste en dessous contre la liste fermée
     if (!ACTIONS.has(action)) return erreur('action inconnue', 404);
@@ -92,7 +98,11 @@ export class ApiSessions {
 
   private async commander(
     sessionId: string,
-    c: { kind: 'envoyer'; texte: string } | { kind: 'autonomie'; active: boolean } | { kind: Action },
+    c:
+      | { kind: 'envoyer'; texte: string }
+      | { kind: 'autonomie'; active: boolean }
+      | { kind: 'repondre'; reponse: ReponseDialogue }
+      | { kind: Action },
   ): Promise<Response> {
     const session = this.registre.session(sessionId);
     if (!session) return erreur('session inconnue', 404);

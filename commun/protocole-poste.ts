@@ -1,7 +1,7 @@
 // Responsabilité : les messages échangés entre un poste (machine de travail) et le relais du Pi.
 // Sens unique du pouvoir : le relais commande, le poste rend compte. Un poste ne commande jamais rien.
 import { z } from 'zod';
-import { DemandeSession, Evenement, Projet, ResumeSession } from './session.ts';
+import { DemandeSession, Evenement, Projet, ReponseDialogue, ResumeSession } from './session.ts';
 
 export const EtatMachine = z.object({
   cpu: z.number(),
@@ -46,6 +46,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('fermer'), ...avecSession }),
   z.object({ kind: z.literal('reprendre'), ...avecSession }),
   z.object({ kind: z.literal('autonomie'), ...avecSession, active: z.boolean() }),
+  z.object({ kind: z.literal('repondre'), ...avecSession, reponse: ReponseDialogue }),
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
 ]);
