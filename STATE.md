@@ -12,6 +12,10 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 
 ## 28/09 soir — Accès à distance (fichiers, terminaux) et terminal kitty réparé
 
+- **iPhone** (dépôt semaphore, onglet Vigie « Accès ») : même accès natif — fichiers, QuickLook, édition, dépôt de
+  photos, terminal SwiftTerm, sessions. Le terminal s'ouvre par jeton en `Authorization` : `upgrade()` de Bun plantait
+  sur `headers: {}` (corrigé, e6af2f2).
+
 - **Terminal kitty qui se refermait aussitôt** (Chris, sur le portable) : deux causes mesurées. Le Pi et le VPS n'ont pas
   la terminfo `xterm-kitty` → tmux refusait (« missing or unsuitable terminal ») ; et le poste du Pi tourne sous `pi`
   alors que l'alias SSH arrive en `trinity` → « no sessions ». Correctifs : repli `TERM=xterm-256color` côté distant,
