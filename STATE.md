@@ -82,4 +82,4 @@ Ce que cet essai a trouvé et qui est corrigé :
 
 ## Prochaines étapes
 
-Voir [`TODO.md`](TODO.md) — en tête : le monde Vigie de Sémaphore refait sur l'API v2.
+Voir [`TODO.md`](TODO.md) — en tête : poser Vigie v2 (Sémaphore, branche `dev`, compilée) sur l’iPhone et valider l’app de bureau connectée.

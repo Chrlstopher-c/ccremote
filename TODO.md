@@ -2,7 +2,7 @@
 
 ## En cours
 
-- [ ] **Sémaphore / Vigie sur l'API v2** : refaire le monde Vigie (sessions, fil, parc, notifications), charte Echo
+- [x] **Sémaphore / Vigie sur l’API v2** : refaite (sessions, fil, parc, alertes, réglages), charte Echo
       Agency clair/sombre selon l'iPhone ; build de l'IPA sur le portable.
 - [ ] Valider l'app de bureau connectée sur le portable (connexion avec le mot de passe, « Ouvrir le terminal » depuis
       l'app, notification système sur un objectif atteint).
