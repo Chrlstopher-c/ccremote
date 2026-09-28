@@ -1,9 +1,0 @@
-fastapi
-uvicorn[standard]
-websockets
-loguru
-jinja2
-python-multipart
-python-dotenv
-openai
-httpx

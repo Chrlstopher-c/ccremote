@@ -1,137 +1,74 @@
-# ARCHITECTURE — ccremote
+# ARCHITECTURE — ccremote v2
 
-## Deux systèmes, un seul dépôt
-
-Ce dépôt porte **deux systèmes distincts**, nés à des périodes différentes, qui ne partagent aucun
-code entre eux mais **partagent la même interface web** (`pi-web/`, sur le Raspberry Pi) :
-
-1. **Panneau de contrôle personnel** (origine du projet) — piloter le PC principal (sessions Claude
-   Code dans tmux, métriques, Wake-on-LAN/extinction) via un agent IA en langage naturel.
-   `client/` + `server/` + la partie « historique » de `pi-web/` (`agent/`, `pc_client.py`,
-   `templates/index.html` hors blocs harness, `static/{core,chat,sessions,pcview,usage,settings,
-   sidebar}.js`).
-2. **Harness d'orchestration d'équipes Claude Code** (`harness/`, chantier actif depuis fin juillet
-   2026) — une conversation avec un orchestrateur qui dispatche, supervise et clôture des équipes
-   d'agents Claude Code autonomes, sur plusieurs projets, sur plusieurs machines (Pi, PC, VPS).
-
-La frontière de premier niveau n'est donc pas un domaine métier unique, mais **la machine qui
-exécute le code + le système auquel le dossier appartient** — déviation assumée de la doctrine
-« Screaming Architecture par domaine métier » : pour un dépôt qui héberge deux produits distincts
-sur des cibles de déploiement physiques distinctes, ce découpage *est* le découpage par domaine.
+ccremote pilote les **sessions Claude Code** du parc (tour, portable, Pi, VPS) depuis l'app de bureau, le web ou
+l'iPhone (Sémaphore). Une session est un **vrai Claude Code en TUI**, dans un serveur tmux dédié, avec toute la config de
+Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la suit ou lui parle à distance.
 
 ```
-client/          CLI Wake-on-LAN + statut, tourne sur le Raspberry Pi, usage direct (hors pi-web)
-server/          Serveur websocket, tourne sur le PC principal, source de vérité pour tmux/métriques/comptes
-pi-web/          App web FastAPI sur le Raspberry Pi — UI UNIQUE pour les deux systèmes (voir plus bas)
-harness/         Orchestrateur d'équipes Claude Code : control plane (Pi) + superviseur de workers (PC)
-Upgrade/         Spécification d'origine du harness — documentation seule, aucun code d'implémentation
-design-v2/       Maquette HTML statique de l'UI harness (DA cream/serif/orange validée par Chris)
-design-v3/       Maquette HTML statique, ajouts H-70/H-71/H-72 sur la base v2 — antérieure au code réel
-design-mission/  Maquette HTML statique de la fiche mission
+ app de bureau (Tauri) ─┐                         ┌─ poste tour ─────┐
+ web (même code)       ─┼─ HTTPS/WSS ─ relais ────┼─ poste portable ─┤  chaque poste : sessions `claude`
+ iPhone (Sémaphore)    ─┘   (Pi, sans IA)          ├─ poste pi ───────┤  dans `tmux -L claude`, fil lu dans
+                                                  └─ poste vps ──────┘  le transcript JSONL
 ```
 
-`design-v2/`, `design-v3/`, `design-mission/` sont des prototypes jetables : ils ne sont jamais
-servis, l'UI harness réelle vit dans `pi-web/templates/_harness_*.html` et `pi-web/static/harness-*.js`.
+## Principes
 
-### `pi-web/` : une UI, deux back-ends
+- **Le relais n'a pas d'IA.** Il authentifie, garde le registre (machines, sessions, fil, notifications) et relaie les
+  commandes. L'ancien orchestrateur LLM du Pi (une session Opus permanente qui dispatchait des équipes) a été retiré :
+  c'était le premier poste de dépense et il ne produisait rien lui-même.
+- **Une session = un Claude Code persistant.** Pas d'équipes, pas de mandats. Le coût d'une session est la taille de son
+  contexte relue à chaque tour : le poste la **compacte aux fins d'étape** (au-delà de 120 k) et **au seuil dur**
+  (350 k sur une fenêtre de 1 M), jamais pour rien.
+- **Le transcript est la source de vérité.** Le fil (messages, texte, outils avec leur entrée complète, résultats,
+  sous-agents) est lu dans `~/.claude/projects/…/<session>.jsonl` et `…/<session>/subagents/*.jsonl`. Ce que Chris tape
+  directement dans le terminal y est aussi.
+- **Le pouvoir ne va que dans un sens.** Les clients commandent le relais, le relais commande les postes, un poste ne
+  commande jamais rien. Le VPS est **isolé** : il ne joint pas la maison et ne travaille que sur ses propres projets.
 
-`pi-web/` est FastAPI, tourne sur le Pi, et sert les deux systèmes derrière la même session/mot de
-passe :
+## Carte des domaines
 
-```
-pi-web/agent/               IA du panneau de contrôle personnel : tools, client Cerebras, streaming.
-                             Ne connaît rien du harness.
-pi-web/pc_client.py          Client websocket vers server.py (système 1 uniquement)
-pi-web/harness_proxy.py      Relais HTTP vers l'API web du harness (Bun, 127.0.0.1:8722, système 2
-                             uniquement) — voir pi-web/CONTRAT-API-HARNESS.md pour le contrat exact
-pi-web/static/harness-*.js   JS front du système 2 (parc, missions, comptes, notifications, dialogue...)
-pi-web/static/{core,chat,   JS front du système 1 (chat agent, sessions tmux, métriques PC, réglages)
-  sessions,pcview,usage,
-  settings,sidebar}.js
-pi-web/templates/_harness_*  Fragments HTML du système 2, injectés dans templates/index.html
-```
-
-`pi-web/CONTRAT-API-HARNESS.md` documente le chemin d'appel complet du système 2 : navigateur →
-`/api/harness/…` → `harness_proxy.py` → `HARNESS_API_URL` (Bun, local) → `harness/control-plane/
-api-web/`.
-
-### `harness/` : carte interne (résumé)
-
-`harness/` a son propre `ARCHITECTURE.md` et `ARBORESCENCE.md` (145 et 366 lignes) qui font
-autorité sur le détail — ce qui suit est un résumé pour la carte racine, pas une redite exhaustive.
-`⚠` Ces deux fichiers datent du 2026-08-07 et sont eux-mêmes en retard sur au moins deux domaines
-créés depuis (`apprentissage/`, complet ce soir-là) — signalé dans `TODO.md`, non corrigé ici
-(hors périmètre : ce ne sont pas des fichiers racine).
-
-```
-composition/            racine d'assemblage — construit le graphe réel, expose les bin-*.ts
-control-plane/          tout ce qui vit sur le Pi (autorité unique : registre, bus de permissions,
-                         observabilité, orchestrateur — la session Agent SDK qui parle à Chris)
-workers/                cycle de vie d'UN worker (spawn, options SDK, capacités, canUseTool)
-superviseur/            parc de workers du PC : registre persistant, fencing, arrêt d'urgence, canal D.3
-apprentissage/          [NOUVEAU depuis le 08/08] extraction de leçons depuis les transcripts
-                         d'équipes, base SQLite dédiée, consolidation périodique, injection au mandat —
-                         inspiré de Hermes Agent (Nous Research), transposition indépendante en TS
-transport/              canaux réseau Pi↔PC (D.1 données, D.3 relayé par superviseur/)
-plancher-deni/          motifs Bash structurellement interdits, quel que soit le mode de permission
-budgets/                plafond de parc, classification d'usage, retry watchdog
-anti-boucle/            juge Haiku, détecteur de boucle (pas un plafond en $)
-arret-urgence/          drill récurrent de l'arrêt d'urgence
-discipline-contexte/    échantillonnage et compaction de contexte
-relance/                politique de relance après terminaison de tour
-projets/                triplet projet/worktree/équipe et son cycle de vie git
-pause/                  pause/reprise d'un worker sans perte ni duplication
-shared/                 utilitaires réellement transverses (budget équipe, modèles Claude, accès mandat)
-config-equipe/          gabarit CLAUDE.md distribué à chaque worker + script d'installation de compte
-test-harness/           outillage de test (contrats de pannes, doublures, déterminisme)
-validation-proprietes/  preuve des cinq propriétés de couche 1
-acceptation/            bancs d'essai réels (hors bun test, jamais en CI) — inclut demo-apprentissage/
-```
-
-## Règles de frontière entre modules
-
-**Entre les deux systèmes** :
-- **`harness/` n'importe jamais rien de `client/`, `server/`, ou `pi-web/agent/`/`pi-web/pc_client.py`**,
-  et réciproquement. Le seul point de contact est HTTP, via `pi-web/harness_proxy.py` →
-  `harness/control-plane/api-web/`.
-- **`pi-web/static/harness-*.js` ne touche jamais `state` du système 1** (défini dans `core.js`) ni
-  l'inverse — les deux fronts coexistent dans la même page sans état partagé.
-
-**À l'intérieur du système 1 (panneau de contrôle personnel)** :
-- **`agent/` ne fait jamais d'appel HTTP/websocket direct** vers le PC — il passe exclusivement
-  par les executors de `tools.py`, qui eux-mêmes ne passent que par `pc_client.ws_cmd()`.
-- **`pc_client.py` est le seul module autorisé à parler au websocket du PC** (`server.py`). Aucun
-  autre fichier de `pi-web/` n'ouvre de connexion réseau vers le PC principal.
-- **`server.py` est la seule source de vérité pour l'état réel** (tmux, métriques, comptes Claude
-  Code, extinction). `pi-web` ne fait jamais d'hypothèse sur cet état sans l'interroger.
-- **Les fichiers `static/{core,chat,sessions,pcview,usage,settings,sidebar}.js` communiquent
-  uniquement via `state`** (défini dans `core.js`, chargé en premier).
-- **`.credentials_account1.json` / `.credentials_account2.json` / `.ccremote-accounts.json`**
-  (sur le PC, hors du repo) ne sont manipulés que par `server.py::switch_claude_account`.
-
-**À l'intérieur du système 2 (harness)** — règles complètes dans `harness/ARCHITECTURE.md` :
-- **Frontière A↔B inexistante, appliquée deux fois** : ni `control-plane/` n'importe de fichier de
-  `superviseur/`/`workers/`, ni l'inverse. Tout passage traverse un port composé dans `composition/`.
-- **`harness_proxy.py` porte l'authentification du côté pi-web** : l'API Bun du harness
-  (`CCREMOTE_API_WEB_PORT`, 8722 par défaut) n'a aucune authentification propre et refuse de
-  démarrer hors boucle locale — dupliquer l'authentification créerait deux vérités sur « qui a le
-  droit », et la plus permissive gagnerait en silence.
-- **`apprentissage/index.ts` est le seul import autorisé de l'extérieur du domaine** — aucun autre
-  module n'importe les fichiers internes de `apprentissage/`.
-
-`service`/`manager`/`helper` non utilisés dans ce dépôt — le nommage suit le vocabulaire métier
-français déjà établi (mission, garde-fou, port, câblage, lien).
-
-## Définitions non-ambiguës (contrat anti-rot)
-
-| Dossier/fichier | Définition | Ne pas confondre avec |
+| Dossier | Ce qu'il contient | Ce qu'il ne contient PAS |
 |---|---|---|
-| `server/` | Processus sur le PC principal, autorité sur tmux/métriques/comptes/poweroff (système 1) | `harness/superviseur/` (autorité sur les WORKERS du harness, système 2, aucun rapport) |
-| `pi-web/agent/` | Logique IA du panneau de contrôle personnel — aucune notion HTTP, aucun lien avec le harness | `harness/control-plane/orchestrateur/` (l'IA du système 2, tourne en Bun, pas en Python) |
-| `pi-web/pc_client.py` | Client websocket vers `server.py` (système 1) | `pi-web/harness_proxy.py` (relais HTTP vers le harness, système 2) |
-| `client/` | CLI autonome pour le Pi (WOL + statut, système 1), invoqué manuellement | `harness/composition/pi/reveil-wol.ts` (WOL du système 2, code TS distinct) |
-| `harness/composition/` | Assemblage du graphe réel du harness, points d'entrée `bin-*.ts` | `harness/control-plane/` (contenu métier assemblé, pas le câblage) |
-| `harness/superviseur/` | Parc de workers PC : registre, persistance, fencing, arrêt d'urgence | `harness/workers/` (cycle de vie d'UN worker, pas du parc) |
-| `harness/apprentissage/` | Extraction/injection de leçons entre missions (base SQLite dédiée) | `harness/control-plane/observabilite/` (télémétrie temps réel, pas de mémoire long terme) |
-| `Upgrade/` | Spécification d'origine du harness, documents seuls | `harness/*/README.md` (doc de mission, à jour au moment de la fermeture) |
-| `design-v2/`, `design-v3/`, `design-mission/` | Maquettes HTML statiques, jamais servies | `pi-web/templates/_harness_*.html` (l'UI réelle, servie en production) |
+| `commun/` | Les contrats partagés : vocabulaire d'une session et de son fil (`session.ts`), protocole poste ↔ relais (`protocole-poste.ts`), API des clients (`api-clients.ts`), journal pino | Aucune logique, aucune I/O |
+| `poste/` | Tout ce qui tourne sur une machine de travail : sessions tmux, lecture des transcripts, crochets et MCP de rythme, politique de compaction/relance, lien sortant vers le relais, état de la machine, découverte des projets | Aucune connaissance des autres machines ni du registre |
+| `relais/` | Tout ce qui tourne sur le Pi : registre SQLite, accès (mot de passe, jetons), API HTTP + flux WebSocket des clients, serveur des postes, notifications, réveil Wake-on-LAN, règle d'isolation du parc | Aucune décision sur le déroulé d'une session (c'est le poste) |
+| `bureau/` | L'app de bureau (Tauri 2 + React) — le même frontend est servi en web par le relais ; `src-tauri/` = coquille native (terminal kitty, notifications) | Aucune règle métier : elle affiche et commande |
+| `deploiement/` | Le script de déploiement (relais + postes) | Aucune valeur réelle : adresses, MAC et secrets viennent de `~/.config/ccremote/deploiement.env` |
+
+### `poste/` en détail
+
+| Fichier / dossier | Rôle |
+|---|---|
+| `session/session-tmux.ts` | UNE session : fil, commandes (via tmux), rythme si elle est pilotée |
+| `session/gestionnaire.ts` | Les sessions du poste : découverte dans tmux, adoption, ouverture, persistance |
+| `session/suite-du-tour.ts` | Pur : que faire à la fin d'un tour (attendre, compacter, relancer, patienter, s'arrêter) |
+| `session/politique-compaction.ts` | Pur : quand compacter (seuils étape / dur) et avec quelle consigne |
+| `session/traduction.ts` | Pur : ligne de transcript → événements du fil |
+| `session/transcript.ts`, `sous-agents.ts` | Lecture incrémentale (octets) des transcripts, principal et sous-agents |
+| `session/lanceur.ts`, `crochet.ts`, `mcp-rythme.ts`, `serveur-local.ts` | La ligne `claude` d'une session pilotée, ses hooks (Stop, SessionStart, UserPromptSubmit, PreToolUse) et ses outils (`etape_terminee`, `objectif_atteint`, `poser_question`), reliés au poste par un socket Unix 0600 |
+| `session/garde-sous-agents.ts` | Sous-agents : Sonnet imposé, pas de fork, 3 par étape au plus |
+| `session/consignes.ts`, `confiance.ts` | Le texte ajouté au prompt système ; l'approbation du dossier (sinon le CLI bloque sur « trust ») |
+| `parc/` | Lien sortant vers le relais, état de la machine, extinction |
+| `projets/` | Découverte des projets dans les racines de la machine |
+
+## Frontières
+
+- `bureau/` et `relais/` ne partagent que `commun/` (types seulement côté app). Un import de `relais/` depuis `bureau/`
+  (ou l'inverse) est une faute.
+- `poste/` et `relais/` ne se parlent que par `commun/protocole-poste.ts`, validé par zod à la réception.
+- Un poste ne rend compte que de SES sessions : le relais refuse un compte rendu d'une session d'une autre machine.
+- Les noms `service` / `manager` / `helper` ne sont pas utilisés : le nommage suit le métier (poste, relais, session,
+  fil, rythme).
+
+## Sessions pilotées et adoptées
+
+- **Pilotée** : ouverte par ccremote. Lancée avec `--session-id`, les consignes (`--append-system-prompt`), les crochets
+  et le MCP de rythme. Autonomie (relance par le hook `Stop` jusqu'à `objectif_atteint`, pause après 3 tours à vide,
+  patience si un sous-agent tourne), compaction pilotée, reprise automatique après compaction.
+- **Adoptée** : lancée hors ccremote (bureau de la tour, Atrium, terminal). Suivie en lecture, pilotable par tmux
+  (message, interruption, compaction, fermeture), sans autonomie.
+
+## Thème de l'app
+
+Charte Echo Agency (skill `echo-agency-design`) : **clair** (canvas sable, accent `brand-600`) et **night** (`#1E1830`,
+accent `brand-400`) selon la préférence du système ; barre latérale night dans les deux.

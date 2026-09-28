@@ -1,25 +1,16 @@
-#!/bin/bash
-# Démarre pi-web en local pour le dev (avant déploiement sur le Pi via deploy-web-pi.sh).
-# server.py tourne en systemd sur cette même machine (ccremote-server) — pas géré ici.
-set -e
+#!/usr/bin/env bash
+# Mode dev : relais local (variables de .env) + interface de l'app (Vite, http://localhost:1420). Logs remis à zéro.
+set -euo pipefail
 cd "$(dirname "$0")"
-
 mkdir -p logs
-: > logs/pi-web.log
-
-if [ -f logs/pi-web.pid ] && kill -0 "$(cat logs/pi-web.pid)" 2>/dev/null; then
-  echo "pi-web tourne déjà (PID $(cat logs/pi-web.pid)) — ./stop.sh d'abord si besoin"
-  exit 0
-fi
-
-cd pi-web
-if [ ! -d venv ]; then
-  python3 -m venv venv
-  venv/bin/pip install -q -r requirements.txt
-fi
-
-nohup venv/bin/python app.py > ../logs/pi-web.log 2>&1 &
-echo $! > ../logs/pi-web.pid
-cd ..
-
-echo "pi-web démarré (PID $(cat logs/pi-web.pid)) sur http://127.0.0.1:8766 — logs/pi-web.log"
+[ -f .env ] || { echo ".env absent : cp .env.example .env puis le remplir"; exit 1; }
+for nom in relais interface; do
+  if [ -f "logs/$nom.pid" ] && kill -0 "$(cat "logs/$nom.pid")" 2>/dev/null; then echo "$nom tourne déjà"; exit 0; fi
+  : > "logs/$nom.log"
+done
+(set -a; source .env; set +a; exec bun run relais/bin.ts) > logs/relais.log 2>&1 &
+echo $! > logs/relais.pid
+(cd bureau && exec bunx vite --port 1420) > logs/interface.log 2>&1 &
+echo $! > logs/interface.pid
+echo "relais : http://localhost:${CCREMOTE_PORT_WEB:-8766} (postes sur ${CCREMOTE_PORT_POSTES:-8721})"
+echo "interface : http://localhost:1420 — logs/ remis à zéro"
