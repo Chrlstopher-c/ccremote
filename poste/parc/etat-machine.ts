@@ -3,7 +3,10 @@ import { statfsSync } from 'node:fs';
 import { cpus, freemem, loadavg, totalmem, uptime } from 'node:os';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
 
-interface Echantillon { readonly actif: number; readonly total: number }
+interface Echantillon {
+  readonly actif: number;
+  readonly total: number;
+}
 
 function echantillonCpu(): Echantillon {
   let actif = 0;

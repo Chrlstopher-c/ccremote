@@ -6,9 +6,14 @@ export const SOCKET = 'claude';
 export const PREFIXE = 'claude-';
 const CONFIG = join(import.meta.dir, 'tmux.conf');
 const FORMAT = ['session_name', 'session_created', 'session_attached', 'pane_current_path', 'pane_title', 'pane_pid']
-  .map((c) => `#{${c}}`).join('\t');
+  .map((c) => `#{${c}}`)
+  .join('\t');
 
-export interface Resultat { readonly code: number; readonly sortie: string; readonly erreur: string }
+export interface Resultat {
+  readonly code: number;
+  readonly sortie: string;
+  readonly erreur: string;
+}
 
 export interface PaneTmux {
   readonly nom: string;
@@ -22,10 +27,16 @@ export interface PaneTmux {
 // -u : UTF-8 forcé (un service n'a pas forcément de LANG) ; -f ne compte qu'au démarrage du serveur tmux.
 export async function tmux(args: readonly string[], entree?: string): Promise<Resultat> {
   const p = Bun.spawn(['tmux', '-L', SOCKET, '-f', CONFIG, '-u', ...args], {
-    stdin: entree === undefined ? 'ignore' : new TextEncoder().encode(entree), stdout: 'pipe', stderr: 'pipe',
+    stdin: entree === undefined ? 'ignore' : new TextEncoder().encode(entree),
+    stdout: 'pipe',
+    stderr: 'pipe',
     env: { ...process.env, LANG: process.env['LANG'] ?? 'C.UTF-8' },
   });
-  const [code, sortie, erreur] = await Promise.all([p.exited, new Response(p.stdout).text(), new Response(p.stderr).text()]);
+  const [code, sortie, erreur] = await Promise.all([
+    p.exited,
+    new Response(p.stdout).text(),
+    new Response(p.stderr).text(),
+  ]);
   return { code, sortie: sortie.trimEnd(), erreur: erreur.trim() };
 }
 
@@ -33,10 +44,17 @@ export async function lister(): Promise<PaneTmux[]> {
   const r = await tmux(['list-panes', '-a', '-F', FORMAT]);
   if (r.code !== 0) return []; // pas de serveur tmux : aucune session
   const vus = new Set<string>();
-  return r.sortie.split('\n').map((l) => l.split('\t'))
+  return r.sortie
+    .split('\n')
+    .map((l) => l.split('\t'))
     .filter(([nom]) => nom?.startsWith(PREFIXE) && !vus.has(nom) && vus.add(nom))
     .map(([nom = '', cree = '0', attachee = '0', dossier = '', titre = '', pid = '0']) => ({
-      nom, creeLe: Number(cree), attachee: attachee !== '0', dossier, titre: nettoyerTitre(titre, dossier), pid: Number(pid),
+      nom,
+      creeLe: Number(cree),
+      attachee: attachee !== '0',
+      dossier,
+      titre: nettoyerTitre(titre, dossier),
+      pid: Number(pid),
     }));
 }
 
@@ -54,12 +72,18 @@ export async function nomLibre(dossier: string): Promise<string> {
   return nom;
 }
 
-export function creer(nom: string, dossier: string, commande: readonly string[], env: Record<string, string>): Promise<Resultat> {
+export function creer(
+  nom: string,
+  dossier: string,
+  commande: readonly string[],
+  env: Record<string, string>,
+): Promise<Resultat> {
   const variables = Object.entries(env).flatMap(([k, v]) => ['-e', `${k}=${v}`]);
   return tmux(['new-session', '-d', '-s', nom, '-c', dossier, ...variables, '--', ...commande]);
 }
 
-// Collage « entre crochets » : un texte multiligne arrive d'un bloc, puis Entrée l'envoie (ou le met en file si Claude travaille).
+// Collage « entre crochets » : un texte multiligne arrive d'un bloc, puis Entrée l'envoie (ou le met en file si Claude
+// travaille).
 export async function envoyerTexte(nom: string, texte: string): Promise<Resultat> {
   const tampon = `ccremote-${nom}`;
   const charge = await tmux(['load-buffer', '-b', tampon, '-'], texte);

@@ -14,7 +14,10 @@ export type ResultatConnexion =
 export class Acces {
   private readonly echecs = new Map<string, { nombre: number; depuis: number }>();
 
-  constructor(private readonly registre: Registre, private readonly empreinteMotDePasse: string) {}
+  constructor(
+    private readonly registre: Registre,
+    private readonly empreinteMotDePasse: string,
+  ) {}
 
   async connecter(motDePasse: string, ip: string, appareil: string): Promise<ResultatConnexion> {
     if (this.bloque(ip)) return { ok: false, raison: 'trop_de_tentatives' };
@@ -24,7 +27,11 @@ export class Acces {
     }
     this.echecs.delete(ip);
     const jeton = randomBytes(32).toString('base64url');
-    this.registre.creerJeton(empreinte(jeton), appareil.slice(0, 120), new Date(Date.now() + DUREE_JETON_MS).toISOString());
+    this.registre.creerJeton(
+      empreinte(jeton),
+      appareil.slice(0, 120),
+      new Date(Date.now() + DUREE_JETON_MS).toISOString(),
+    );
     return { ok: true, jeton };
   }
 

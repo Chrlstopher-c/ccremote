@@ -15,7 +15,8 @@ const MIGRATIONS: readonly string[] = [
    CREATE TABLE notifications (
      seq INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT, niveau TEXT NOT NULL, titre TEXT NOT NULL,
      texte TEXT NOT NULL, ts TEXT NOT NULL, lue INTEGER NOT NULL DEFAULT 0);
-   CREATE TABLE jetons (empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, appareil TEXT NOT NULL);`,
+   CREATE TABLE jetons (
+     empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, appareil TEXT NOT NULL);`,
 ];
 
 export function ouvrirBase(chemin: string): Database {

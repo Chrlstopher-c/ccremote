@@ -1,20 +1,33 @@
 // Responsabilité : parler à l'API du relais (HTTP) avec le jeton de l'appareil.
-import type { ActionSession, DemandeOuverture, EtatRelais, EvenementDate, Notification } from '../../../../commun/api-clients.ts';
+import type {
+  ActionSession,
+  DemandeOuverture,
+  EtatRelais,
+  EvenementDate,
+  Notification,
+} from '../../../../commun/api-clients.ts';
 import type { Projet, ResumeSession } from '../../../../commun/session.ts';
 import { journal } from '../journal.ts';
 
 export class ErreurApi extends Error {
-  constructor(readonly statut: number, message: string) {
+  constructor(
+    readonly statut: number,
+    message: string,
+  ) {
     super(message);
   }
 }
 
 export class ClientRelais {
-  constructor(readonly base: string, private readonly jeton: string) {}
+  constructor(
+    readonly base: string,
+    private readonly jeton: string,
+  ) {}
 
   static async connecter(base: string, motDePasse: string): Promise<string> {
     const r = await fetch(`${base}/api/connexion`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ motDePasse, appareil: 'ccremote bureau' }),
     });
     const corps = (await r.json()) as { jeton?: string; erreur?: string };
@@ -84,7 +97,10 @@ export class ClientRelais {
     try {
       r = await fetch(`${this.base}${chemin}`, {
         method: methode,
-        headers: { authorization: `Bearer ${this.jeton}`, ...(corps === undefined ? {} : { 'content-type': 'application/json' }) },
+        headers: {
+          authorization: `Bearer ${this.jeton}`,
+          ...(corps === undefined ? {} : { 'content-type': 'application/json' }),
+        },
         ...(corps === undefined ? {} : { body: JSON.stringify(corps) }),
       });
     } catch (erreur) {

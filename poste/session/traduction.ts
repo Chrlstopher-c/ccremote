@@ -32,7 +32,14 @@ export function traduire(l: Ligne, agent?: string): Evenement[] {
   if (l.type === 'attachment' && agent === undefined) return finDeTache(l);
   if (l.type === 'system' && l.subtype === 'compact_boundary' && agent === undefined) {
     const m = l.compactMetadata ?? {};
-    return [{ type: 'compaction', avant: nombre(m['preTokens']), apres: nombre(m['postTokens']), declencheur: texte(m['trigger']) }];
+    return [
+      {
+        type: 'compaction',
+        avant: nombre(m['preTokens']),
+        apres: nombre(m['postTokens']),
+        declencheur: texte(m['trigger']),
+      },
+    ];
   }
   return [];
 }
@@ -43,7 +50,12 @@ function traduireUtilisateur(l: Ligne): Evenement[] {
   if (typeof contenu === 'string') return messageDeChris(contenu);
   const r = resultats(l, {});
   if (r.length > 0) return r;
-  return messageDeChris(blocs(contenu).filter((b) => b.type === 'text').map((b) => texte(b['text'])).join('\n'));
+  return messageDeChris(
+    blocs(contenu)
+      .filter((b) => b.type === 'text')
+      .map((b) => texte(b['text']))
+      .join('\n'),
+  );
 }
 
 // Fin d'un sous-agent lancé en arrière-plan : le CLI la met en file sous forme de <task-notification>.
@@ -53,19 +65,29 @@ function finDeTache(l: Ligne): Evenement[] {
   const champ = (nom: string): string => prompt.match(new RegExp(`<${nom}>([\\s\\S]*?)</${nom}>`))?.[1]?.trim() ?? '';
   const outilId = champ('tool-use-id');
   if (!outilId) return [];
-  return [{ type: 'resultat_outil', outilId, extrait: champ('summary') || 'terminé', erreur: champ('status') !== 'completed' }];
+  return [
+    {
+      type: 'resultat_outil',
+      outilId,
+      extrait: champ('summary') || 'terminé',
+      erreur: champ('status') !== 'completed',
+    },
+  ];
 }
 
 // Une commande tapée (/compact …) arrive balisée ; ses sorties locales et les rappels système ne sont pas des messages.
 function messageDeChris(brut: string): Evenement[] {
   if (/^<(local-command|system-reminder|command-message)/.test(brut.trim())) return [];
   const commande = brut.match(/<command-name>([^<]*)<\/command-name>/);
-  const texteFinal = commande ? `${commande[1]} ${brut.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim() : brut.trim();
+  const texteFinal = commande
+    ? `${commande[1]} ${brut.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim()
+    : brut.trim();
   return texteFinal ? [{ type: 'message', texte: texteFinal }] : [];
 }
 
 function traduireBlocAssistant(bloc: Bloc, marque: { agent?: string }): Evenement[] {
-  if (bloc.type === 'text' && texte(bloc['text']).trim()) return [{ type: 'texte', texte: texte(bloc['text']), ...marque }];
+  if (bloc.type === 'text' && texte(bloc['text']).trim())
+    return [{ type: 'texte', texte: texte(bloc['text']), ...marque }];
   if (bloc.type === 'thinking' && texte(bloc['thinking']).trim()) {
     return [{ type: 'reflexion', texte: texte(bloc['thinking']), ...marque }];
   }
@@ -75,24 +97,52 @@ function traduireBlocAssistant(bloc: Bloc, marque: { agent?: string }): Evenemen
   const entree = (bloc['input'] ?? {}) as Objet;
   if (!nom || nom.startsWith(PREFIXE_OUTILS_HARNESS)) return [];
   if (OUTILS_SOUS_AGENT.has(nom) && marque.agent === undefined) {
-    return [{ type: 'sous_agent', id, description: texte(entree['description']), modele: texte(entree['model']),
-      genre: texte(entree['subagent_type']) || 'general-purpose' }];
+    return [
+      {
+        type: 'sous_agent',
+        id,
+        description: texte(entree['description']),
+        modele: texte(entree['model']),
+        genre: texte(entree['subagent_type']) || 'general-purpose',
+      },
+    ];
   }
   return [{ type: 'outil', id, nom, resume: resumerEntree(nom, entree), detail: detailEntree(entree), ...marque }];
 }
 
 function resultats(l: Ligne, marque: { agent?: string }): Evenement[] {
-  return blocs(l.message?.content).filter((b) => b.type === 'tool_result').map((bloc) => {
-    const brut = bloc['content'];
-    const contenu = typeof brut === 'string' ? brut : blocs(brut).map((b) => texte(b['text'])).join('\n');
-    return { type: 'resultat_outil' as const, outilId: texte(bloc['tool_use_id']), extrait: contenu.slice(0, TAILLE_RESULTAT),
-      erreur: bloc['is_error'] === true, ...marque };
-  });
+  return blocs(l.message?.content)
+    .filter((b) => b.type === 'tool_result')
+    .map((bloc) => {
+      const brut = bloc['content'];
+      const contenu =
+        typeof brut === 'string'
+          ? brut
+          : blocs(brut)
+              .map((b) => texte(b['text']))
+              .join('\n');
+      return {
+        type: 'resultat_outil' as const,
+        outilId: texte(bloc['tool_use_id']),
+        extrait: contenu.slice(0, TAILLE_RESULTAT),
+        erreur: bloc['is_error'] === true,
+        ...marque,
+      };
+    });
 }
 
 export function resumerEntree(nom: string, entree: Objet): string {
-  const champ = { Bash: 'command', Read: 'file_path', Edit: 'file_path', Write: 'file_path', Grep: 'pattern',
-    Glob: 'pattern', WebFetch: 'url', WebSearch: 'query', Skill: 'skill' }[nom];
+  const champ = {
+    Bash: 'command',
+    Read: 'file_path',
+    Edit: 'file_path',
+    Write: 'file_path',
+    Grep: 'pattern',
+    Glob: 'pattern',
+    WebFetch: 'url',
+    WebSearch: 'query',
+    Skill: 'skill',
+  }[nom];
   const valeur = champ ? texte(entree[champ]) : JSON.stringify(entree);
   return valeur.length > 200 ? `${valeur.slice(0, 200)}…` : valeur;
 }

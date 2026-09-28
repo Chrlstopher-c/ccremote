@@ -12,11 +12,9 @@ import { Magasin } from '../shared/etat/magasin.ts';
 import { notifierSysteme } from '../shared/natif.ts';
 import { BarreLaterale, type Vue } from './BarreLaterale.tsx';
 
-function Espace({ acces, surDeconnexion }: { readonly acces: Acces; readonly surDeconnexion: () => void }): ReactNode {
+// Un magasin par accès, démarré tant que l'espace est monté ; les notifications importantes remontent au système.
+function useMagasinActif(acces: Acces): Magasin {
   const magasin = useMemo(() => new Magasin(new ClientRelais(acces.base, acces.jeton)), [acces]);
-  const [vue, setVue] = useState<Vue>('sessions');
-  const [session, setSession] = useState<string | null>(null);
-
   useEffect(() => {
     magasin.demarrer();
     const arret = magasin.ecouterNotifications((n) => {
@@ -27,7 +25,13 @@ function Espace({ acces, surDeconnexion }: { readonly acces: Acces; readonly sur
       magasin.arreter();
     };
   }, [magasin]);
+  return magasin;
+}
 
+function Espace({ acces, surDeconnexion }: { readonly acces: Acces; readonly surDeconnexion: () => void }): ReactNode {
+  const magasin = useMagasinActif(acces);
+  const [vue, setVue] = useState<Vue>('sessions');
+  const [session, setSession] = useState<string | null>(null);
   const ouvrirSession = (id: string): void => {
     setSession(id);
     setVue('sessions');
@@ -36,10 +40,14 @@ function Espace({ acces, surDeconnexion }: { readonly acces: Acces; readonly sur
   return (
     <FournisseurMagasin magasin={magasin}>
       <div className="flex h-full">
-        <BarreLaterale vue={vue} surVue={setVue} surDeconnexion={() => {
-          void magasin.client.deconnecter().catch(() => undefined);
-          surDeconnexion();
-        }} />
+        <BarreLaterale
+          vue={vue}
+          surVue={setVue}
+          surDeconnexion={() => {
+            void magasin.client.deconnecter().catch(() => undefined);
+            surDeconnexion();
+          }}
+        />
         {vue === 'sessions' && <EspaceSessions choisie={session} surChoisir={setSession} />}
         {vue === 'parc' && <VueParc />}
         {vue === 'notifications' && <VueNotifications surOuvrirSession={ouvrirSession} />}
@@ -57,9 +65,11 @@ export function App(): ReactNode {
   };
   return (
     <MotionConfig reducedMotion="user">
-      {acces
-        ? <Espace key={acces.jeton} acces={acces} surDeconnexion={() => changer(null)} />
-        : <EcranConnexion surConnecte={changer} basePrecedente={localStorage.getItem('ccremote.base') ?? ''} />}
+      {acces ? (
+        <Espace key={acces.jeton} acces={acces} surDeconnexion={() => changer(null)} />
+      ) : (
+        <EcranConnexion surConnecte={changer} basePrecedente={localStorage.getItem('ccremote.base') ?? ''} />
+      )}
     </MotionConfig>
   );
 }

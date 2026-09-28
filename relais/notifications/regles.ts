@@ -18,7 +18,8 @@ export function notificationPour(titreSession: string, evt: Evenement): Brouillo
       return { niveau: 'alerte', titre: `${titreSession} — erreur`, texte: court(evt.message) };
     case 'relance':
       return evt.raison.startsWith('autonomie en pause')
-        ? { niveau: 'alerte', titre: `${titreSession} — autonomie en pause`, texte: evt.raison } : null;
+        ? { niveau: 'alerte', titre: `${titreSession} — autonomie en pause`, texte: evt.raison }
+        : null;
     default:
       return null;
   }

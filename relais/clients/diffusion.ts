@@ -7,7 +7,8 @@ export type { MessageClient, VueMachine };
 export class Diffusion {
   private readonly clients = new Set<ServerWebSocket<unknown>>();
   private attentes = new Set<() => void>();
-  private versionCourante = 0; // n'avance que sur un changement utile (session, fil, notification), pas sur l'état machine
+  // N'avance que sur un changement utile (session, fil, notification), pas sur l'état machine.
+  private versionCourante = 0;
 
   get version(): number {
     return this.versionCourante;

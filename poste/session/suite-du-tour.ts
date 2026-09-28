@@ -34,7 +34,8 @@ export function deciderSuite(e: EtatFinDeTour): Suite {
   if (!e.sortDeCompaction) {
     const compaction = deciderCompaction(e.contexte, e.maxTokens, e.etapeTerminee);
     if (e.compactionDemandee) return { action: 'compacter', raison: 'demandée par Chris' };
-    if (compaction.agir) return { action: 'compacter', raison: compaction.raison === 'etape' ? 'fin d’étape' : 'seuil de contexte' };
+    if (compaction.agir)
+      return { action: 'compacter', raison: compaction.raison === 'etape' ? 'fin d’étape' : 'seuil de contexte' };
   }
   if (!e.autonomie || !e.aUnObjectif) return { action: 'arreter', statut: 'attente' };
   if (e.sousAgentsActifs > 0 && !e.sortDeCompaction) return { action: 'patienter' };
@@ -43,13 +44,27 @@ export function deciderSuite(e: EtatFinDeTour): Suite {
 
 function relanceAutonome(e: EtatFinDeTour): Suite {
   if (e.sortDeCompaction) {
-    return { action: 'relancer', raison: 'reprise après compaction',
-      texte: 'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), sans refaire le travail livré.' };
+    return {
+      action: 'relancer',
+      raison: 'reprise après compaction',
+      texte:
+        'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), ' +
+        'sans refaire le travail livré.',
+    };
   }
   const sansProgres = e.outilsCeTour === 0 ? e.relancesSansProgres + 1 : 0;
   if (sansProgres > MAX_RELANCES_SANS_PROGRES) {
-    return { action: 'arreter', statut: 'attente', note: `autonomie en pause : ${sansProgres} tours sans aucune action` };
+    return {
+      action: 'arreter',
+      statut: 'attente',
+      note: `autonomie en pause : ${sansProgres} tours sans aucune action`,
+    };
   }
-  return { action: 'relancer', raison: 'objectif non déclaré atteint',
-    texte: 'Continue vers l’objectif. Bloqué par une décision de Chris → poser_question. Fini et vérifié → objectif_atteint.' };
+  return {
+    action: 'relancer',
+    raison: 'objectif non déclaré atteint',
+    texte:
+      'Continue vers l’objectif. Bloqué par une décision de Chris → poser_question. ' +
+      'Fini et vérifié → objectif_atteint.',
+  };
 }

@@ -15,7 +15,14 @@ export interface Etat {
   readonly fils: ReadonlyMap<string, readonly EvenementDate[]>;
 }
 
-const VIDE: Etat = { lien: 'connexion', machines: [], sessions: [], notifications: [], reveilPossible: [], fils: new Map() };
+const VIDE: Etat = {
+  lien: 'connexion',
+  machines: [],
+  sessions: [],
+  notifications: [],
+  reveilPossible: [],
+  fils: new Map(),
+};
 
 export class Magasin {
   private etat: Etat = VIDE;
@@ -24,10 +31,15 @@ export class Magasin {
   private readonly surNotification = new Set<(n: Notification) => void>();
 
   constructor(readonly client: ClientRelais) {
-    this.flux = new FluxRelais(client.urlFlux(), client.jetonFlux, (m) => this.recevoir(m), (lien) => {
-      this.changer({ lien });
-      if (lien === 'ouvert') void this.recharger();
-    });
+    this.flux = new FluxRelais(
+      client.urlFlux(),
+      client.jetonFlux,
+      (m) => this.recevoir(m),
+      (lien) => {
+        this.changer({ lien });
+        if (lien === 'ouvert') void this.recharger();
+      },
+    );
   }
 
   demarrer(): void {
@@ -64,7 +76,12 @@ export class Magasin {
   private async recharger(): Promise<void> {
     try {
       const e = await this.client.etat();
-      this.changer({ machines: e.machines, sessions: e.sessions, notifications: e.notifications, reveilPossible: e.reveilPossible });
+      this.changer({
+        machines: e.machines,
+        sessions: e.sessions,
+        notifications: e.notifications,
+        reveilPossible: e.reveilPossible,
+      });
       await Promise.all([...this.etat.fils.keys()].map((id) => this.chargerFil(id)));
     } catch (erreur) {
       journal.warn({ erreur: String(erreur) }, 'état du relais non chargé');

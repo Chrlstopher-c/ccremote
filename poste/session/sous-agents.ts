@@ -18,7 +18,8 @@ export class SuiviSousAgents {
     if (!existsSync(this.dossier)) return [];
     for (const f of readdirSync(this.dossier)) if (f.endsWith('.jsonl') && !this.suivis.has(f)) this.suivre(f);
     const evts: Evenement[] = [];
-    for (const { lecteur, agent } of this.suivis.values()) for (const l of lecteur.lire()) evts.push(...traduire(l, agent));
+    for (const { lecteur, agent } of this.suivis.values())
+      for (const l of lecteur.lire()) evts.push(...traduire(l, agent));
     return evts;
   }
 

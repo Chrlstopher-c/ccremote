@@ -15,7 +15,10 @@ export function cheminTranscript(dossier: string, sessionId: string, configDir: 
 export class LecteurTranscript {
   private reste: Buffer = Buffer.alloc(0); // octets d'une ligne incomplète (un caractère UTF-8 peut y être coupé)
 
-  constructor(readonly chemin: string, private position = 0) {}
+  constructor(
+    readonly chemin: string,
+    private position = 0,
+  ) {}
 
   get lu(): number {
     return this.position;
@@ -39,32 +42,46 @@ export class LecteurTranscript {
     const fin = tout.lastIndexOf(0x0a);
     this.reste = tout.subarray(fin + 1);
     if (fin < 0) return [];
-    return tout.subarray(0, fin).toString('utf8').split('\n').flatMap((l) => {
-      try {
-        return l ? [JSON.parse(l) as Ligne] : [];
-      } catch {
-        return []; // ligne corrompue : ignorée, le transcript reste lisible au-delà
-      }
-    });
+    return tout
+      .subarray(0, fin)
+      .toString('utf8')
+      .split('\n')
+      .flatMap((l) => {
+        try {
+          return l ? [JSON.parse(l) as Ligne] : [];
+        } catch {
+          return []; // ligne corrompue : ignorée, le transcript reste lisible au-delà
+        }
+      });
   }
 }
 
-interface Candidat { readonly id: string; readonly chemin: string; readonly date: number }
+interface Candidat {
+  readonly id: string;
+  readonly chemin: string;
+  readonly date: number;
+}
 
 function candidats(dossier: string, configDir: string | null): Candidat[] {
   const base = dossierTranscripts(dossier, configDir);
   if (!existsSync(base)) return [];
-  return readdirSync(base).filter((f) => f.endsWith('.jsonl'))
+  return readdirSync(base)
+    .filter((f) => f.endsWith('.jsonl'))
     .map((f) => ({ id: f.slice(0, -6), chemin: join(base, f), date: statSync(join(base, f)).mtimeMs }))
     .sort((a, b) => b.date - a.date);
 }
 
 // Session tmux lancée hors ccremote : sa conversation se retrouve par son nom (/rename), sinon par le transcript
 // le plus récent, seulement s'il n'y a aucune ambiguïté (un seul Claude dans ce dossier).
-export function retrouverTranscript(dossier: string, titre: string, voisins: number, configDir: string | null): Candidat | null {
+export function retrouverTranscript(
+  dossier: string,
+  titre: string,
+  voisins: number,
+  configDir: string | null,
+): Candidat | null {
   const liste = candidats(dossier, configDir);
   const motif = `"customTitle":${JSON.stringify(titre)}`;
   const parNom = liste.find((c) => readFileSync(c.chemin, 'utf8').includes(motif));
   if (parNom) return parNom;
-  return voisins === 1 ? liste[0] ?? null : null;
+  return voisins === 1 ? (liste[0] ?? null) : null;
 }

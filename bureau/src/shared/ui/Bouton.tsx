@@ -4,7 +4,9 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react';
 type Variante = 'plein' | 'fantome' | 'discret' | 'danger';
 
 const STYLES: Record<Variante, string> = {
-  plein: 'bg-accent text-white shadow-[0_3px_0_var(--accent-relief)] hover:brightness-105 active:translate-y-[3px] active:shadow-none',
+  plein:
+    'bg-accent text-white shadow-[0_3px_0_var(--accent-relief)] hover:brightness-105 ' +
+    'active:translate-y-[3px] active:shadow-none',
   fantome: 'bg-surface text-encre ring-1 ring-filet-fort hover:bg-surface-2',
   discret: 'text-encre-douce hover:bg-surface-2 hover:text-encre',
   danger: 'text-danger ring-1 ring-filet-fort hover:bg-danger-fond',

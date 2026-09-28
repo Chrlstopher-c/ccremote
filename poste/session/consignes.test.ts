@@ -36,7 +36,11 @@ describe('consignes de session', () => {
   });
 
   test('machine isolée (vps) : aucune autre machine', () => {
-    const t = composerConsignes({ machine: 'vps', cwd: '/x', demande: demande({ parc: [{ id: 'vps', description: 'VPS', racines: [] }] }) });
+    const t = composerConsignes({
+      machine: 'vps',
+      cwd: '/x',
+      demande: demande({ parc: [{ id: 'vps', description: 'VPS', racines: [] }] }),
+    });
     expect(t).toContain('Aucune autre machine');
   });
 });

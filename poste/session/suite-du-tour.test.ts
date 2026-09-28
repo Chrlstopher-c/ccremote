@@ -2,9 +2,20 @@ import { describe, expect, test } from 'bun:test';
 import { deciderSuite, type EtatFinDeTour } from './suite-du-tour.ts';
 
 const etat = (e: Partial<EtatFinDeTour> = {}): EtatFinDeTour => ({
-  sortDeCompaction: false, messagesChrisEnVol: 0, objectifAtteint: false, questionPosee: false,
-  autonomie: true, aUnObjectif: true, outilsCeTour: 4, relancesSansProgres: 0,
-  contexte: 50_000, maxTokens: 1_000_000, etapeTerminee: false, compactionDemandee: false, sousAgentsActifs: 0, ...e,
+  sortDeCompaction: false,
+  messagesChrisEnVol: 0,
+  objectifAtteint: false,
+  questionPosee: false,
+  autonomie: true,
+  aUnObjectif: true,
+  outilsCeTour: 4,
+  relancesSansProgres: 0,
+  contexte: 50_000,
+  maxTokens: 1_000_000,
+  etapeTerminee: false,
+  compactionDemandee: false,
+  sousAgentsActifs: 0,
+  ...e,
 });
 
 describe('suite du tour', () => {
@@ -36,7 +47,10 @@ describe('suite du tour', () => {
 
   test('tours à vide répétés : l’autonomie se met en pause', () => {
     expect(deciderSuite(etat({ outilsCeTour: 0, relancesSansProgres: 1 }))).toMatchObject({ action: 'relancer' });
-    expect(deciderSuite(etat({ outilsCeTour: 0, relancesSansProgres: 2 }))).toMatchObject({ action: 'arreter', statut: 'attente' });
+    expect(deciderSuite(etat({ outilsCeTour: 0, relancesSansProgres: 2 }))).toMatchObject({
+      action: 'arreter',
+      statut: 'attente',
+    });
   });
 
   test('sous-agent en arrière-plan : on patiente au lieu de relancer', () => {

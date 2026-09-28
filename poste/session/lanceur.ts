@@ -19,12 +19,18 @@ export interface Lancement {
 }
 
 export function binaireClaude(): string {
-  const candidats = [process.env['CCREMOTE_CLAUDE'], join(homedir(), '.bun/bin/claude'), join(homedir(), '.local/bin/claude')];
+  const candidats = [
+    process.env['CCREMOTE_CLAUDE'],
+    join(homedir(), '.bun/bin/claude'),
+    join(homedir(), '.local/bin/claude'),
+  ];
   return candidats.find((c): c is string => !!c && existsSync(c)) ?? 'claude';
 }
 
 function crochets(): string {
-  const commande = (evenement: string) => [{ type: 'command', command: `${process.execPath} ${CROCHET} ${evenement}`, timeout: 30 }];
+  const commande = (evenement: string) => [
+    { type: 'command', command: `${process.execPath} ${CROCHET} ${evenement}`, timeout: 30 },
+  ];
   return JSON.stringify({
     hooks: {
       SessionStart: [{ hooks: commande('SessionStart') }],
@@ -44,9 +50,12 @@ export function commandeClaude(l: Lancement): string[] {
     binaireClaude(),
     ...(l.reprise ? ['--resume', l.sessionId] : ['--session-id', l.sessionId, '--name', l.titre]),
     '--dangerously-skip-permissions',
-    '--append-system-prompt', l.consignes,
-    '--settings', crochets(),
-    '--mcp-config', rythme(),
+    '--append-system-prompt',
+    l.consignes,
+    '--settings',
+    crochets(),
+    '--mcp-config',
+    rythme(),
     ...(l.modele ? ['--model', l.modele] : []),
   ];
 }

@@ -1,4 +1,5 @@
-// Responsabilité : les sessions Claude du poste — découverte dans tmux, ouverture, commandes du relais, crochets, persistance.
+// Responsabilité : les sessions Claude du poste — découverte dans tmux, ouverture, commandes du relais, crochets,
+// persistance.
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
@@ -11,7 +12,11 @@ import { SessionTmux, type SortieSession } from './session-tmux.ts';
 import * as tmux from './tmux.ts';
 import { cheminTranscript, retrouverTranscript } from './transcript.ts';
 
-export interface Reponse { readonly ok: boolean; readonly erreur?: string; readonly donnees?: unknown }
+export interface Reponse {
+  readonly ok: boolean;
+  readonly erreur?: string;
+  readonly donnees?: unknown;
+}
 type CommandeSession = Extract<CommandeRelais, { sessionId: string }>;
 
 const HISTORIQUE_ADOPTION = 150;
@@ -50,13 +55,17 @@ export class GestionnaireSessions {
   async ouvrir(d: DemandeSession): Promise<Reponse> {
     if (this.sessions.has(d.sessionId)) return { ok: false, erreur: 'session déjà ouverte' };
     const compte = d.compte ?? Object.keys(this.config.comptes)[0] ?? 'principal';
-    if (!(compte in this.config.comptes)) return { ok: false, erreur: `compte inconnu sur ${this.config.machine} : ${compte}` };
+    if (!(compte in this.config.comptes))
+      return { ok: false, erreur: `compte inconnu sur ${this.config.machine} : ${compte}` };
     const cwd = this.repertoire(d);
     if (!existsSync(cwd)) return { ok: false, erreur: `projet introuvable sur ${this.config.machine} : ${cwd}` };
     const configDir = this.config.comptes[compte] ?? null;
     const session = this.creer({
-      resume: this.resumeInitial(d, cwd, compte), consignes: composerConsignes({ machine: this.config.machine, cwd, demande: d }),
-      configDir, transcript: cheminTranscript(cwd, d.sessionId, configDir), position: 0,
+      resume: this.resumeInitial(d, cwd, compte),
+      consignes: composerConsignes({ machine: this.config.machine, cwd, demande: d }),
+      configDir,
+      transcript: cheminTranscript(cwd, d.sessionId, configDir),
+      position: 0,
     });
     this.sessions.set(d.sessionId, session);
     const erreur = await session.lancer(d.message, d.modele ?? null);
@@ -139,12 +148,34 @@ export class GestionnaireSessions {
     const maintenant = new Date().toISOString();
     const session = this.creer({
       resume: {
-        id, machine: this.config.machine, projet: { machine: this.config.machine, chemin: pane.dossier, nom: pane.dossier.split('/').at(-1) ?? pane.dossier },
-        cwd: pane.dossier, titre: pane.titre, objectif: null, modele: 'défaut', compte: Object.keys(this.config.comptes)[0] ?? 'principal',
-        autonomie: false, statut: 'attente', contexte: { tokens: 0, max: this.config.fenetreContexte }, etapes: 0, compactions: 0,
-        claudeSessionId: transcript?.id ?? null, tmux: pane.nom, attachee: pane.attachee, pilotee: false, creeLe: maintenant, majLe: maintenant,
+        id,
+        machine: this.config.machine,
+        projet: {
+          machine: this.config.machine,
+          chemin: pane.dossier,
+          nom: pane.dossier.split('/').at(-1) ?? pane.dossier,
+        },
+        cwd: pane.dossier,
+        titre: pane.titre,
+        objectif: null,
+        modele: 'défaut',
+        compte: Object.keys(this.config.comptes)[0] ?? 'principal',
+        autonomie: false,
+        statut: 'attente',
+        contexte: { tokens: 0, max: this.config.fenetreContexte },
+        etapes: 0,
+        compactions: 0,
+        claudeSessionId: transcript?.id ?? null,
+        tmux: pane.nom,
+        attachee: pane.attachee,
+        pilotee: false,
+        creeLe: maintenant,
+        majLe: maintenant,
       },
-      consignes: null, configDir: null, transcript: null, position: 0,
+      consignes: null,
+      configDir: null,
+      transcript: null,
+      position: 0,
     });
     this.sessions.set(id, session);
     if (transcript) session.definirTranscript(transcript.chemin, HISTORIQUE_ADOPTION, transcript.id);
@@ -152,7 +183,8 @@ export class GestionnaireSessions {
     this.journal.info({ tmux: pane.nom, id, transcript: transcript?.chemin ?? null }, 'session tmux adoptée');
   }
 
-  // Le transcript d'une session tout juste lancée n'existe qu'après son premier échange : on le cherche à chaque passage.
+  // Le transcript d'une session tout juste lancée n'existe qu'après son premier échange : on le cherche à chaque
+  // passage.
   private associer(s: SessionTmux, pane: tmux.PaneTmux, panes: readonly tmux.PaneTmux[]): void {
     const voisins = panes.filter((p) => p.dossier === pane.dossier).length;
     const t = retrouverTranscript(pane.dossier, pane.titre, voisins, null);
@@ -171,10 +203,25 @@ export class GestionnaireSessions {
   private resumeInitial(d: DemandeSession, cwd: string, compte: string): ResumeSession {
     const maintenant = new Date().toISOString();
     return {
-      id: d.sessionId, machine: this.config.machine, projet: d.projet, cwd, titre: d.titre, objectif: d.objectif,
-      modele: d.modele ?? 'défaut', compte, autonomie: d.autonomie, statut: 'demarrage',
-      contexte: { tokens: 0, max: this.config.fenetreContexte }, etapes: 0, compactions: 0, claudeSessionId: d.sessionId,
-      tmux: null, attachee: false, pilotee: true, creeLe: maintenant, majLe: maintenant,
+      id: d.sessionId,
+      machine: this.config.machine,
+      projet: d.projet,
+      cwd,
+      titre: d.titre,
+      objectif: d.objectif,
+      modele: d.modele ?? 'défaut',
+      compte,
+      autonomie: d.autonomie,
+      statut: 'demarrage',
+      contexte: { tokens: 0, max: this.config.fenetreContexte },
+      etapes: 0,
+      compactions: 0,
+      claudeSessionId: d.sessionId,
+      tmux: null,
+      attachee: false,
+      pilotee: true,
+      creeLe: maintenant,
+      majLe: maintenant,
     };
   }
 }

@@ -17,7 +17,9 @@ export async function lireCorps<S extends z.ZodType>(req: Request, schema: S): P
     return erreur('corps JSON attendu');
   }
   const r = schema.safeParse(brut);
-  return r.success ? r.data : erreur(`requête invalide : ${r.error.issues.map((i) => i.path.join('.') + ' ' + i.message).join(' ; ')}`);
+  return r.success
+    ? r.data
+    : erreur(`requête invalide : ${r.error.issues.map((i) => i.path.join('.') + ' ' + i.message).join(' ; ')}`);
 }
 
 export function entier(v: string | null, defaut: number): number {

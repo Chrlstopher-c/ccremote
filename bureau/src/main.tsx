@@ -5,4 +5,9 @@ import { App } from './app/App.tsx';
 import './index.css';
 
 const racine = document.getElementById('racine');
-if (racine) createRoot(racine).render(<StrictMode><App /></StrictMode>);
+if (racine)
+  createRoot(racine).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );

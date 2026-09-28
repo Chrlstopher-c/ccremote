@@ -3,7 +3,14 @@ import type { FicheMachine } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from './composition-parc.ts';
 
 const fiche = (id: string): FicheMachine => ({
-  id, description: `machine ${id}`, racines: [`/${id}`], projets: [], comptes: [], version: '2', etat: null, derniereVue: '',
+  id,
+  description: `machine ${id}`,
+  racines: [`/${id}`],
+  projets: [],
+  comptes: [],
+  version: '2',
+  etat: null,
+  derniereVue: '',
 });
 const machines = ['pi', 'portable', 'tour', 'vps'].map(fiche);
 const isolees = new Set(['vps']);

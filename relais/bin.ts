@@ -21,14 +21,27 @@ const diffusion = new Diffusion();
 const acces = new Acces(registre, config.empreinteMotDePasse);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees);
-const routes = avecCors(construireRoutes({ acces, registre, postes, diffusion, sessions, wol: config.wol, diffusionWol: config.diffusionWol }), config.origines);
+const routes = avecCors(
+  construireRoutes({
+    acces,
+    registre,
+    postes,
+    diffusion,
+    sessions,
+    wol: config.wol,
+    diffusionWol: config.diffusionWol,
+  }),
+  config.origines,
+);
 
 function fichierStatique(req: Request): Response {
   const chemin = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^(\.\.[/\\])+/, '');
   const cible = join(config.web, chemin);
   if (cible.startsWith(config.web) && existsSync(cible) && !cible.endsWith('/')) {
     const immuable = chemin.startsWith('/assets/');
-    return new Response(Bun.file(cible), { headers: immuable ? { 'cache-control': 'public, max-age=31536000, immutable' } : {} });
+    return new Response(Bun.file(cible), {
+      headers: immuable ? { 'cache-control': 'public, max-age=31536000, immutable' } : {},
+    });
   }
   const index = join(config.web, 'index.html');
   return existsSync(index) ? new Response(Bun.file(index)) : new Response('interface non construite', { status: 503 });
@@ -79,4 +92,7 @@ Bun.serve({
   },
 });
 
-journal.info({ web: config.portWeb, postes: config.portPostes, machinesAutorisees: [...config.secretsPostes.keys()] }, 'relais démarré');
+journal.info(
+  { web: config.portWeb, postes: config.portPostes, machinesAutorisees: [...config.secretsPostes.keys()] },
+  'relais démarré',
+);

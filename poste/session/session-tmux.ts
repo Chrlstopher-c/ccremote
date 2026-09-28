@@ -24,8 +24,9 @@ export interface EnvironnementSession {
   readonly sortie: SortieSession;
 }
 
-const RELANCE_APRES_COMPACTION = 'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), '
-  + 'sans refaire le travail livré.';
+const RELANCE_APRES_COMPACTION =
+  'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), ' +
+  'sans refaire le travail livré.';
 
 export class SessionTmux {
   private etat: ResumeSession;
@@ -38,7 +39,10 @@ export class SessionTmux {
   private readonly enVol: string[] = []; // textes envoyés par Chris pendant un tour, pas encore soumis par Claude
   private readonly internes = new Set<string>(); // textes collés par le poste lui-même (relance, compaction)
 
-  constructor(private readonly p: SessionPersistee, private readonly env: EnvironnementSession) {
+  constructor(
+    private readonly p: SessionPersistee,
+    private readonly env: EnvironnementSession,
+  ) {
     this.etat = p.resume;
     this.lecteur = p.transcript ? new LecteurTranscript(p.transcript, p.position) : null;
     this.sousAgents = p.transcript ? new SuiviSousAgents(p.transcript) : null;
@@ -65,7 +69,12 @@ export class SessionTmux {
     }
     const titre = this.p.consignes === null ? pane.titre : this.etat.titre;
     if (pane.nom !== this.etat.tmux || pane.attachee !== this.etat.attachee || titre !== this.etat.titre) {
-      this.maj({ tmux: pane.nom, attachee: pane.attachee, titre, ...(this.etat.statut === 'fermee' ? { statut: 'attente' } : {}) });
+      this.maj({
+        tmux: pane.nom,
+        attachee: pane.attachee,
+        titre,
+        ...(this.etat.statut === 'fermee' ? { statut: 'attente' } : {}),
+      });
     }
   }
 
@@ -93,14 +102,20 @@ export class SessionTmux {
   private absorber(l: Ligne): Evenement[] {
     const contexte = contexteDe(l);
     if (contexte !== null) this.etat = { ...this.etat, contexte: { ...this.etat.contexte, tokens: contexte } };
-    if (l.type === 'custom-title' && typeof l.customTitle === 'string') this.etat = { ...this.etat, titre: l.customTitle };
+    if (l.type === 'custom-title' && typeof l.customTitle === 'string')
+      this.etat = { ...this.etat, titre: l.customTitle };
     const travail = travailEnCours(l);
-    if (!this.etat.pilotee && travail !== null && this.etat.tmux) this.etat = { ...this.etat, statut: travail ? 'travail' : 'attente' };
+    if (!this.etat.pilotee && travail !== null && this.etat.tmux)
+      this.etat = { ...this.etat, statut: travail ? 'travail' : 'attente' };
     const evts = traduire(l);
     for (const evt of evts) {
       if (evt.type === 'outil' || evt.type === 'sous_agent') this.tour.outils += 1;
       if (evt.type === 'compaction') {
-        this.etat = { ...this.etat, compactions: this.etat.compactions + 1, contexte: { ...this.etat.contexte, tokens: evt.apres } };
+        this.etat = {
+          ...this.etat,
+          compactions: this.etat.compactions + 1,
+          contexte: { ...this.etat.contexte, tokens: evt.apres },
+        };
       }
     }
     return evts;
@@ -147,10 +162,16 @@ export class SessionTmux {
     const refus = this.preparer();
     if (refus) return refus;
     const nom = await tmux.nomLibre(this.etat.cwd);
-    const commande = this.p.consignes === null
-      ? [binaireClaude(), '--resume', this.etat.claudeSessionId, '--dangerously-skip-permissions']
-      : commandeClaude({ sessionId: this.etat.claudeSessionId, titre: this.etat.titre, consignes: this.p.consignes,
-        modele: null, reprise: true });
+    const commande =
+      this.p.consignes === null
+        ? [binaireClaude(), '--resume', this.etat.claudeSessionId, '--dangerously-skip-permissions']
+        : commandeClaude({
+            sessionId: this.etat.claudeSessionId,
+            titre: this.etat.titre,
+            consignes: this.p.consignes,
+            modele: null,
+            reprise: true,
+          });
     const r = await tmux.creer(nom, this.etat.cwd, message ? [...commande, message] : commande, this.variables());
     if (r.code !== 0) return `tmux refuse la reprise : ${r.erreur}`;
     this.maj({ tmux: nom, statut: message ? 'travail' : 'attente' });
@@ -161,8 +182,13 @@ export class SessionTmux {
     const refus = this.preparer();
     if (refus) return refus;
     const nom = await tmux.nomLibre(this.etat.cwd);
-    const commande = commandeClaude({ sessionId: this.etat.id, titre: this.etat.titre, consignes: this.p.consignes ?? '',
-      modele, reprise: false });
+    const commande = commandeClaude({
+      sessionId: this.etat.id,
+      titre: this.etat.titre,
+      consignes: this.p.consignes ?? '',
+      modele,
+      reprise: false,
+    });
     const r = await tmux.creer(nom, this.etat.cwd, [...commande, message], this.variables());
     if (r.code !== 0) return `tmux refuse la session : ${r.erreur}`;
     this.maj({ tmux: nom, statut: 'travail' });
@@ -184,8 +210,11 @@ export class SessionTmux {
   }
 
   private variables(): Record<string, string> {
-    return { [VAR_SESSION]: this.etat.id, [VAR_SOCKET]: this.env.socket,
-      ...(this.p.configDir ? { CLAUDE_CONFIG_DIR: this.p.configDir } : {}) };
+    return {
+      [VAR_SESSION]: this.etat.id,
+      [VAR_SOCKET]: this.env.socket,
+      ...(this.p.configDir ? { CLAUDE_CONFIG_DIR: this.p.configDir } : {}),
+    };
   }
 
   // --- crochets du CLI (sessions pilotées seulement) ---
@@ -237,9 +266,16 @@ export class SessionTmux {
 
   private suite(sortDeCompaction: boolean): Suite {
     return deciderSuite({
-      sortDeCompaction, messagesChrisEnVol: this.enVol.length, ...this.drapeaux, autonomie: this.etat.autonomie,
-      aUnObjectif: this.etat.objectif !== null, outilsCeTour: this.tour.outils, relancesSansProgres: this.relancesSansProgres,
-      contexte: this.etat.contexte.tokens, maxTokens: this.etat.contexte.max, etapeTerminee: this.tour.etapeTerminee,
+      sortDeCompaction,
+      messagesChrisEnVol: this.enVol.length,
+      ...this.drapeaux,
+      autonomie: this.etat.autonomie,
+      aUnObjectif: this.etat.objectif !== null,
+      outilsCeTour: this.tour.outils,
+      relancesSansProgres: this.relancesSansProgres,
+      contexte: this.etat.contexte.tokens,
+      maxTokens: this.etat.contexte.max,
+      etapeTerminee: this.tour.etapeTerminee,
       sousAgentsActifs: this.sousAgents?.actifs() ?? 0,
     });
   }
@@ -294,8 +330,10 @@ export class SessionTmux {
       if (!deciderCompaction(this.etat.contexte.tokens, this.etat.contexte.max, true).agir) {
         return `Étape enregistrée. Contexte léger (${k}k) : pas de compaction, enchaîne directement sur la suite.`;
       }
-      return `Étape enregistrée. Contexte lourd (${k}k) : termine ton tour par une phrase de bilan ; le harness compacte `
-        + 'puis te relance sur la suite.';
+      return (
+        `Étape enregistrée. Contexte lourd (${k}k) : termine ton tour par une phrase de bilan ; le harness compacte ` +
+        'puis te relance sur la suite.'
+      );
     }
     if (outil === 'objectif_atteint') {
       this.drapeaux.objectifAtteint = true;
@@ -312,7 +350,8 @@ export class SessionTmux {
 
   private dernierMessage = '';
 
-  // Le CLI réécrit la commande /compact dans le transcript après la compaction : un message identique au précédent est tu.
+  // Le CLI réécrit la commande /compact dans le transcript après la compaction : un message identique au précédent est
+  // tu.
   private emettre(evt: Evenement): void {
     if (evt.type === 'message') {
       if (evt.texte === this.dernierMessage) return;

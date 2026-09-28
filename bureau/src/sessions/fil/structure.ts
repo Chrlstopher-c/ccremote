@@ -5,12 +5,24 @@ import type { Evenement } from '../../../../commun/session.ts';
 
 type De<T extends Evenement['type']> = Extract<Evenement, { type: T }>;
 
-export interface ElementOutil { readonly genre: 'outil'; readonly seq: number; readonly ts: string; readonly outil: De<'outil'>; resultat: De<'resultat_outil'> | null }
-export interface ElementSousAgent {
-  readonly genre: 'sous_agent'; readonly seq: number; readonly ts: string; readonly agent: De<'sous_agent'>;
-  readonly interieur: ElementInterne[]; resultat: De<'resultat_outil'> | null;
+export interface ElementOutil {
+  readonly genre: 'outil';
+  readonly seq: number;
+  readonly ts: string;
+  readonly outil: De<'outil'>;
+  resultat: De<'resultat_outil'> | null;
 }
-export type ElementInterne = ElementOutil | { readonly genre: 'texte'; readonly seq: number; readonly ts: string; readonly evt: De<'texte'> | De<'reflexion'> };
+export interface ElementSousAgent {
+  readonly genre: 'sous_agent';
+  readonly seq: number;
+  readonly ts: string;
+  readonly agent: De<'sous_agent'>;
+  readonly interieur: ElementInterne[];
+  resultat: De<'resultat_outil'> | null;
+}
+export type ElementInterne =
+  | ElementOutil
+  | { readonly genre: 'texte'; readonly seq: number; readonly ts: string; readonly evt: De<'texte'> | De<'reflexion'> };
 export type ElementFil =
   | ElementOutil
   | ElementSousAgent
@@ -43,7 +55,8 @@ export function structurer(evts: readonly EvenementDate[]): ElementFil[] {
       fil.push(el);
       continue;
     }
-    if (agent && (evt.type === 'texte' || evt.type === 'reflexion')) agent.interieur.push({ genre: 'texte', seq, ts, evt });
+    if (agent && (evt.type === 'texte' || evt.type === 'reflexion'))
+      agent.interieur.push({ genre: 'texte', seq, ts, evt });
     else if (!('agent' in evt && evt.agent)) fil.push({ genre: 'simple', seq, ts, evt });
   }
   return fil;

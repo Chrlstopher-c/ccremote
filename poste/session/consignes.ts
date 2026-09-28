@@ -21,25 +21,33 @@ export function composerConsignes(c: ContexteConsignes): string {
 }
 
 function enteteSession(c: ContexteConsignes): string {
-  return `# Session ccremote\nTu tournes sur la machine \`${c.machine}\`, session « ${c.demande.titre} ». ` +
-    'Chris te suit et te parle depuis son téléphone ou le web ; il peut être absent des heures.';
+  return (
+    `# Session ccremote\nTu tournes sur la machine \`${c.machine}\`, session « ${c.demande.titre} ». ` +
+    'Chris te suit et te parle depuis son téléphone ou le web ; il peut être absent des heures.'
+  );
 }
 
 function blocProjet(c: ContexteConsignes): string {
   const { projet } = c.demande;
-  if (projet.machine === c.machine) return `## Projet\n\`${projet.nom}\`, dans \`${projet.chemin}\` (ton répertoire courant).`;
-  return `## Projet\n\`${projet.nom}\` vit sur \`${projet.machine}\`, dans \`${projet.chemin}\`. ` +
+  if (projet.machine === c.machine)
+    return `## Projet\n\`${projet.nom}\`, dans \`${projet.chemin}\` (ton répertoire courant).`;
+  return (
+    `## Projet\n\`${projet.nom}\` vit sur \`${projet.machine}\`, dans \`${projet.chemin}\`. ` +
     `Ton répertoire courant (\`${c.cwd}\`) n'est qu'un espace de travail local : ` +
-    `lis, modifie et lance les commandes du projet via \`ssh ${projet.machine}\`.`;
+    `lis, modifie et lance les commandes du projet via \`ssh ${projet.machine}\`.`
+  );
 }
 
 function blocParc(c: ContexteConsignes): string {
   const autres = c.demande.parc.filter((m) => m.id !== c.machine);
   if (autres.length === 0) return '## Parc\nAucune autre machine ne t’est accessible depuis celle-ci.';
   const lignes = autres.map((m) => `- \`ssh ${m.id}\` — ${m.description} (projets : ${m.racines.join(', ') || '—'})`);
-  return ['## Parc — machines joignables par SSH, sans mot de passe', ...lignes,
+  return [
+    '## Parc — machines joignables par SSH, sans mot de passe',
+    ...lignes,
     'Les builds et compilations lourdes se font sur `tour` ou `portable`, jamais sur `pi` ni `vps` ' +
-    '(petites machines de production) : là-bas, seulement du déploiement et de l’exploitation.'].join('\n');
+      '(petites machines de production) : là-bas, seulement du déploiement et de l’exploitation.',
+  ].join('\n');
 }
 
 const REGLES_TRAVAIL = `## Règles de travail

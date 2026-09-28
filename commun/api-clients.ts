@@ -14,7 +14,12 @@ export interface VueMachine {
   readonly enLigne: boolean;
 }
 
-export interface EvenementDate { readonly seq: number; readonly sessionId: string; readonly ts: string; readonly evt: Evenement }
+export interface EvenementDate {
+  readonly seq: number;
+  readonly sessionId: string;
+  readonly ts: string;
+  readonly evt: Evenement;
+}
 
 export interface Notification {
   readonly seq: number;

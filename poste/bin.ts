@@ -21,15 +21,25 @@ const socket = join(config.donnees, 'poste.sock');
 let lien: LienRelais | null = null;
 const envoyer = (m: MessagePoste): void => lien?.envoyer(m);
 
-const sessions = new GestionnaireSessions(config, {
-  evenement: (sessionId, evt) => envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
-  resume: (session) => envoyer({ kind: 'session', session }),
-}, socket, journal);
+const sessions = new GestionnaireSessions(
+  config,
+  {
+    evenement: (sessionId, evt) => envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
+    resume: (session) => envoyer({ kind: 'session', session }),
+  },
+  socket,
+  journal,
+);
 
 function bonjour(): MessagePoste {
   return {
-    kind: 'bonjour', version: VERSION, description: config.description, racines: [...config.racines],
-    projets: decouvrirProjets(config.machine, config.racines), comptes: Object.keys(config.comptes), sessions: sessions.lister(),
+    kind: 'bonjour',
+    version: VERSION,
+    description: config.description,
+    racines: [...config.racines],
+    projets: decouvrirProjets(config.machine, config.racines),
+    comptes: Object.keys(config.comptes),
+    sessions: sessions.lister(),
   };
 }
 
@@ -52,7 +62,14 @@ async function surCommande(c: CommandeRelais): Promise<MessagePoste> {
 
 servirLocal(socket, sessions, journal);
 sessions.demarrer();
-lien = new LienRelais({ url: config.relais, machine: config.machine, secret: config.secret, journal, bonjour, surCommande });
+lien = new LienRelais({
+  url: config.relais,
+  machine: config.machine,
+  secret: config.secret,
+  journal,
+  bonjour,
+  surCommande,
+});
 lien.demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);
 journal.info({ machine: config.machine, relais: config.relais }, 'poste démarré');

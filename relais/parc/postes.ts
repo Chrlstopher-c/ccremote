@@ -8,8 +8,14 @@ import type { Diffusion, VueMachine } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import type { Registre } from '../registre/registre.ts';
 
-export interface DonneesPoste { readonly machine: string }
-export interface ReponsePoste { readonly ok: boolean; readonly erreur?: string; readonly donnees?: unknown }
+export interface DonneesPoste {
+  readonly machine: string;
+}
+export interface ReponsePoste {
+  readonly ok: boolean;
+  readonly erreur?: string;
+  readonly donnees?: unknown;
+}
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 const DELAI_REPONSE_MS = 20_000;
@@ -104,8 +110,15 @@ export class Postes {
   }
 
   private bonjour(machine: string, m: Extract<MessagePoste, { kind: 'bonjour' }>): void {
-    this.registre.enregistrerMachine({ id: machine, description: m.description, racines: m.racines, projets: m.projets,
-      comptes: m.comptes, version: m.version, derniereVue: new Date().toISOString() });
+    this.registre.enregistrerMachine({
+      id: machine,
+      description: m.description,
+      racines: m.racines,
+      projets: m.projets,
+      comptes: m.comptes,
+      version: m.version,
+      derniereVue: new Date().toISOString(),
+    });
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
       this.registre.enregistrerSession(s);
@@ -124,7 +137,8 @@ export class Postes {
     this.diffusion.diffuser({ type: 'notification', notification });
   }
 
-  // Une session inconnue est acceptée (le compte rendu peut précéder l'enregistrement) ; celle d'une autre machine, jamais.
+  // Une session inconnue est acceptée (le compte rendu peut précéder l'enregistrement) ; celle d'une autre machine,
+  // jamais.
   private appartient(sessionId: string, machine: string): boolean {
     const s = this.registre.session(sessionId);
     return s === null || s.machine === machine;

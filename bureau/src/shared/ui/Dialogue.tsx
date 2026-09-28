@@ -11,16 +11,19 @@ interface Props {
   readonly children: ReactNode;
 }
 
-export function Dialogue({ ouvert, surFermer, titre, surtitre, largeur = 560, children }: Props): ReactNode {
+function useEchap(actif: boolean, surFermer: () => void): void {
   useEffect(() => {
-    if (!ouvert) return;
+    if (!actif) return;
     const echap = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') surFermer();
     };
     window.addEventListener('keydown', echap);
     return () => window.removeEventListener('keydown', echap);
-  }, [ouvert, surFermer]);
+  }, [actif, surFermer]);
+}
 
+export function Dialogue({ ouvert, surFermer, titre, surtitre, largeur = 560, children }: Props): ReactNode {
+  useEchap(ouvert, surFermer);
   return (
     <AnimatePresence>
       {ouvert && (

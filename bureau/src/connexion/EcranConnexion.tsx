@@ -7,9 +7,7 @@ import { Bouton } from '../shared/ui/Bouton.tsx';
 import { Champ, Libelle } from '../shared/ui/elements.tsx';
 import { type Acces, normaliserBase } from './acces.ts';
 
-export function EcranConnexion({ surConnecte, basePrecedente }: {
-  readonly surConnecte: (a: Acces) => void; readonly basePrecedente: string;
-}): ReactNode {
+function useConnexion(basePrecedente: string, surConnecte: (a: Acces) => void) {
   const [adresse, setAdresse] = useState(basePrecedente);
   const [motDePasse, setMotDePasse] = useState('');
   const [erreur, setErreur] = useState<string | null>(null);
@@ -29,27 +27,59 @@ export function EcranConnexion({ surConnecte, basePrecedente }: {
     }
   }
 
+  return { adresse, setAdresse, motDePasse, setMotDePasse, erreur, envoi, soumettre };
+}
+
+function Champs({ c }: { readonly c: ReturnType<typeof useConnexion> }): ReactNode {
+  return (
+    <>
+      <label className="mb-4 block">
+        <Libelle>Adresse du relais</Libelle>
+        <Champ
+          value={c.adresse}
+          onChange={(e) => c.setAdresse(e.target.value)}
+          placeholder="ccremote.exemple.com"
+          required
+          autoFocus
+        />
+      </label>
+      <label className="mb-6 block">
+        <Libelle>Mot de passe</Libelle>
+        <Champ type="password" value={c.motDePasse} onChange={(e) => c.setMotDePasse(e.target.value)} required />
+      </label>
+      {c.erreur && (
+        <p className="mb-4 rounded-[10px] bg-danger-fond px-3 py-2 text-[13px] font-semibold text-danger">{c.erreur}</p>
+      )}
+    </>
+  );
+}
+
+export function EcranConnexion({
+  surConnecte,
+  basePrecedente,
+}: {
+  readonly surConnecte: (a: Acces) => void;
+  readonly basePrecedente: string;
+}): ReactNode {
+  const c = useConnexion(basePrecedente, surConnecte);
   return (
     <div className="grid h-full place-items-center bg-fond p-8">
-      <motion.form onSubmit={(e) => void soumettre(e)} className="w-full max-w-[420px] rounded-[var(--radius-panneau)] bg-surface p-9 ombre-carte"
-        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}>
+      <motion.form
+        onSubmit={(e) => void c.soumettre(e)}
+        className="w-full max-w-[420px] rounded-[var(--radius-panneau)] bg-surface p-9 ombre-carte"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
+      >
         <div className="surtitre mb-3">Sessions Claude Code</div>
         <h1 className="text-[34px] leading-[1.05] font-extrabold tracking-[-0.045em]">ccremote</h1>
         <p className="mt-2 mb-7 text-[15px] text-encre-douce">Toutes les sessions du parc, depuis un seul endroit.</p>
-        <label className="mb-4 block">
-          <Libelle>Adresse du relais</Libelle>
-          <Champ value={adresse} onChange={(e) => setAdresse(e.target.value)} placeholder="ccremote.exemple.com" required autoFocus />
-        </label>
-        <label className="mb-6 block">
-          <Libelle>Mot de passe</Libelle>
-          <Champ type="password" value={motDePasse} onChange={(e) => setMotDePasse(e.target.value)} required />
-        </label>
-        {erreur && <p className="mb-4 rounded-[10px] bg-danger-fond px-3 py-2 text-[13px] font-semibold text-danger">{erreur}</p>}
-        <Bouton type="submit" variante="plein" disabled={envoi} className="w-full" icone={<ArrowRight size={17} />}>
-          {envoi ? 'Connexion…' : 'Se connecter'}
+        <Champs c={c} />
+        <Bouton type="submit" variante="plein" disabled={c.envoi} className="w-full" icone={<ArrowRight size={17} />}>
+          {c.envoi ? 'Connexion…' : 'Se connecter'}
         </Bouton>
         <p className="mt-7 flex items-center justify-center gap-2 text-[12px] text-discret">
-          un outil <img src="/wordmark.svg" alt="Echo Agency" className="h-4 opacity-70 dark:invert" />
+          un outil <img src="/wordmark.svg" alt="Echo Agency" className="h-6 opacity-70 dark:invert" />
         </p>
       </motion.form>
     </div>

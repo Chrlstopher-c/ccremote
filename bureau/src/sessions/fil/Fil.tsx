@@ -20,14 +20,16 @@ export function Fil({ sessionId, dossier }: { readonly sessionId: string; readon
   return (
     <div ref={zone} className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
       <ContexteDossier.Provider value={dossier}>
-      <div className="mx-auto max-w-[820px]">
-        {elements.length === 0 && <p className="py-16 text-center text-[14px] text-discret">Rien dans le fil pour l’instant.</p>}
-        {elements.map((el) => {
-          if (el.genre === 'outil') return <CarteOutil key={el.seq} el={el} />;
-          if (el.genre === 'sous_agent') return <CarteSousAgent key={el.seq} el={el} />;
-          return <ElementSimple key={el.seq} evt={el.evt} ts={el.ts} />;
-        })}
-      </div>
+        <div className="mx-auto max-w-[820px]">
+          {elements.length === 0 && (
+            <p className="py-16 text-center text-[14px] text-discret">Rien dans le fil pour l’instant.</p>
+          )}
+          {elements.map((el) => {
+            if (el.genre === 'outil') return <CarteOutil key={el.seq} el={el} />;
+            if (el.genre === 'sous_agent') return <CarteSousAgent key={el.seq} el={el} />;
+            return <ElementSimple key={el.seq} evt={el.evt} ts={el.ts} />;
+          })}
+        </div>
       </ContexteDossier.Provider>
     </div>
   );

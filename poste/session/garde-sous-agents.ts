@@ -25,15 +25,24 @@ export class GardeSousAgents {
   decider(nomOutil: string, entree: unknown): DecisionCrochet {
     if (!OUTILS_SOUS_AGENT.has(nomOutil)) return {};
     const champs = typeof entree === 'object' && entree !== null ? (entree as Record<string, unknown>) : {};
-    if (champs['subagent_type'] === 'fork') return refus('fork refusé : il hérite de ton modèle et de tout ton contexte.');
+    if (champs['subagent_type'] === 'fork')
+      return refus('fork refusé : il hérite de ton modèle et de tout ton contexte.');
     if (this.lances >= MAX_SOUS_AGENTS_PAR_ETAPE) {
       return refus(`déjà ${this.lances} sous-agents dans cette étape : fais-le toi-même, ou termine l’étape d’abord.`);
     }
     this.lances += 1;
-    return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { ...champs, model: 'sonnet' } } };
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { ...champs, model: 'sonnet' },
+      },
+    };
   }
 }
 
 function refus(raison: string): DecisionCrochet {
-  return { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: raison } };
+  return {
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: raison },
+  };
 }

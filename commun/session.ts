@@ -1,4 +1,5 @@
-// Responsabilité : le vocabulaire d'une session Claude Code persistante, partagé par le poste, le relais et les clients.
+// Responsabilité : le vocabulaire d'une session Claude Code persistante, partagé par le poste, le relais et les
+// clients.
 import { z } from 'zod';
 
 export const StatutSession = z.enum([
@@ -50,9 +51,28 @@ export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message'), texte: z.string() }),
   z.object({ type: z.literal('texte'), texte: z.string(), ...deAgent }),
   z.object({ type: z.literal('reflexion'), texte: z.string(), ...deAgent }),
-  z.object({ type: z.literal('outil'), id: z.string(), nom: z.string(), resume: z.string(), detail: z.string(), ...deAgent }),
-  z.object({ type: z.literal('resultat_outil'), outilId: z.string(), extrait: z.string(), erreur: z.boolean(), ...deAgent }),
-  z.object({ type: z.literal('sous_agent'), id: z.string(), description: z.string(), modele: z.string(), genre: z.string() }),
+  z.object({
+    type: z.literal('outil'),
+    id: z.string(),
+    nom: z.string(),
+    resume: z.string(),
+    detail: z.string(),
+    ...deAgent,
+  }),
+  z.object({
+    type: z.literal('resultat_outil'),
+    outilId: z.string(),
+    extrait: z.string(),
+    erreur: z.boolean(),
+    ...deAgent,
+  }),
+  z.object({
+    type: z.literal('sous_agent'),
+    id: z.string(),
+    description: z.string(),
+    modele: z.string(),
+    genre: z.string(),
+  }),
   z.object({ type: z.literal('etape'), resume: z.string(), suite: z.string() }),
   z.object({ type: z.literal('objectif_atteint'), bilan: z.string() }),
   z.object({ type: z.literal('question'), question: z.string() }),

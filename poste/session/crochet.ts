@@ -9,7 +9,10 @@ async function relayer(): Promise<string> {
   if (!evenement || !session || !socket) return '';
   const corps = await Bun.stdin.text();
   const r = await fetch(`http://poste/crochet/${evenement}?session=${encodeURIComponent(session)}`, {
-    method: 'POST', body: corps, unix: socket, signal: AbortSignal.timeout(20_000),
+    method: 'POST',
+    body: corps,
+    unix: socket,
+    signal: AbortSignal.timeout(20_000),
   } as RequestInit);
   return r.ok ? r.text() : '';
 }

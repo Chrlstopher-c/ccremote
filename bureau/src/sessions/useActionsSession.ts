@@ -26,14 +26,17 @@ export function useActionsSession(session: ResumeSession) {
   }, []);
 
   return {
-    erreur, occupe, effacerErreur: () => setErreur(null),
+    erreur,
+    occupe,
+    effacerErreur: () => setErreur(null),
     envoyer: (texte: string) => executer(() => client.envoyer(session.id, texte)),
     agir: (a: ActionSession) => executer(() => client.agir(session.id, a)),
     autonomie: (active: boolean) => executer(() => client.autonomie(session.id, active)),
-    terminal: () => executer(async () => {
-      if (!session.tmux) throw new Error('session fermée : reprends-la d’abord');
-      const refus = await ouvrirTerminal(session.machine, session.tmux);
-      if (refus) throw new Error(refus);
-    }),
+    terminal: () =>
+      executer(async () => {
+        if (!session.tmux) throw new Error('session fermée : reprends-la d’abord');
+        const refus = await ouvrirTerminal(session.machine, session.tmux);
+        if (refus) throw new Error(refus);
+      }),
   };
 }

@@ -1,0 +1,70 @@
+// Responsabilité : l'état du formulaire d'ouverture — machine, projet joignable depuis elle, envoi au relais.
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import type { Projet } from '../../../commun/session.ts';
+import { ErreurApi } from '../shared/api/client.ts';
+import { useEtat, useMagasin } from '../shared/etat/contexte.tsx';
+
+const ISOLEE = 'vps'; // règle du parc : le VPS ne travaille que sur ses propres projets
+const VIERGE = { titre: '', objectif: '', message: '', modele: '', autonomie: true };
+export type Formulaire = typeof VIERGE;
+
+const cle = (p: Projet): string => `${p.machine}:${p.chemin}`;
+
+// Machine choisie + projet joignable depuis elle (le VPS isolé ne voit que ses propres projets).
+function useEmplacement(ouvert: boolean) {
+  const machines = useEtat((e) => e.machines);
+  const enLigne = useMemo(() => machines.filter((m) => m.enLigne), [machines]);
+  const [machine, setMachine] = useState('');
+  const [cleProjet, setCleProjet] = useState('');
+  useEffect(() => {
+    if (ouvert && !enLigne.some((m) => m.id === machine)) setMachine(enLigne[0]?.id ?? '');
+  }, [ouvert, enLigne, machine]);
+  const projets = useMemo(
+    () => machines.filter((m) => machine !== ISOLEE || m.id === ISOLEE).map((m) => [m.id, m.projets] as const),
+    [machines, machine],
+  );
+  const projet = projets.flatMap(([, p]) => p).find((p) => cle(p) === cleProjet);
+  useEffect(() => {
+    const premier = projets.find(([id]) => id === machine)?.[1][0];
+    if (!projet && premier) setCleProjet(cle(premier));
+  }, [projets, machine, projet]);
+  const choisirMachine = (id: string): void => {
+    setMachine(id);
+    setCleProjet('');
+  };
+  return { enLigne, machine, choisirMachine, projets, projet, cleProjet, setCleProjet, cle };
+}
+
+export function useNouvelleSession(ouvert: boolean, surOuverte: (id: string) => void) {
+  const { client } = useMagasin();
+  const lieu = useEmplacement(ouvert);
+  const [f, setF] = useState<Formulaire>(VIERGE);
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+
+  async function soumettre(e: FormEvent): Promise<void> {
+    e.preventDefault();
+    if (!lieu.projet) return;
+    setEnvoi(true);
+    setErreur(null);
+    try {
+      const s = await client.ouvrir({
+        machine: lieu.machine,
+        projet: lieu.projet,
+        message: f.message,
+        titre: f.titre || undefined,
+        objectif: f.objectif.trim() || null,
+        autonomie: f.autonomie,
+        ...(f.modele ? { modele: f.modele } : {}),
+      });
+      setF(VIERGE);
+      surOuverte(s.id);
+    } catch (err) {
+      setErreur(err instanceof ErreurApi ? err.message : String(err));
+    } finally {
+      setEnvoi(false);
+    }
+  }
+
+  return { ...lieu, f, setF, erreur, envoi, soumettre };
+}

@@ -39,9 +39,15 @@ export class ApiSessions {
     const refus = verifierOuverture(c.machine, c.projet, this.isolees);
     if (refus) return erreur(refus, 403);
     const demande = {
-      sessionId: randomUUID(), projet: c.projet, message: c.message, objectif: c.objectif ?? null, autonomie: c.autonomie,
-      titre: c.titre?.trim() || titreDepuis(c.message), parc: parcPour(c.machine, this.registre.machines(), this.isolees),
-      ...(c.modele ? { modele: c.modele } : {}), ...(c.compte ? { compte: c.compte } : {}),
+      sessionId: randomUUID(),
+      projet: c.projet,
+      message: c.message,
+      objectif: c.objectif ?? null,
+      autonomie: c.autonomie,
+      titre: c.titre?.trim() || titreDepuis(c.message),
+      parc: parcPour(c.machine, this.registre.machines(), this.isolees),
+      ...(c.modele ? { modele: c.modele } : {}),
+      ...(c.compte ? { compte: c.compte } : {}),
     };
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
     return r.ok ? json(r.donnees, 201) : erreur(r.erreur ?? 'ouverture refusée', 502);
@@ -81,8 +87,10 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: action });
   }
 
-  private async commander(sessionId: string, c: { kind: 'envoyer'; texte: string } | { kind: 'autonomie'; active: boolean }
-    | { kind: Action }): Promise<Response> {
+  private async commander(
+    sessionId: string,
+    c: { kind: 'envoyer'; texte: string } | { kind: 'autonomie'; active: boolean } | { kind: Action },
+  ): Promise<Response> {
     const session = this.registre.session(sessionId);
     if (!session) return erreur('session inconnue', 404);
     const r = await this.postes.commander(session.machine, { ...c, sessionId });

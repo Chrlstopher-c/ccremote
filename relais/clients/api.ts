@@ -27,13 +27,18 @@ export function ipDe(req: Request): string {
 }
 
 export function construireRoutes(d: DependancesApi) {
-  const protege = (g: Gestionnaire): Gestionnaire => (req) => (d.acces.autorise(req) ? g(req) : erreur('non connecté', 401));
+  const protege =
+    (g: Gestionnaire): Gestionnaire =>
+    (req) =>
+      d.acces.autorise(req) ? g(req) : erreur('non connecté', 401);
   return {
     '/api/connexion': { POST: (req: Request) => connexion(d, req) },
-    '/api/deconnexion': { POST: protege((req) => {
-      d.acces.deconnecter(req);
-      return json({ ok: true }, 200, { 'set-cookie': 'ccremote=; Path=/; Max-Age=0' });
-    }) },
+    '/api/deconnexion': {
+      POST: protege((req) => {
+        d.acces.deconnecter(req);
+        return json({ ok: true }, 200, { 'set-cookie': 'ccremote=; Path=/; Max-Age=0' });
+      }),
+    },
     '/api/etat': { GET: protege(() => json(etat(d))) },
     '/api/attente': { GET: protege((req) => attente(d, req)) },
     '/api/sessions': { POST: protege((req) => d.sessions.ouvrir(req)) },
@@ -41,7 +46,9 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/messages': { POST: protege((req) => d.sessions.envoyer(req as never)) },
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
     '/api/sessions/:id/:action': { POST: protege((req) => d.sessions.action(req as never)) },
-    '/api/notifications': { GET: protege((req) => json(d.registre.notifications(entier(new URL(req.url).searchParams.get('apres'), 0)))) },
+    '/api/notifications': {
+      GET: protege((req) => json(d.registre.notifications(entier(new URL(req.url).searchParams.get('apres'), 0)))),
+    },
     '/api/notifications/lues': { POST: protege((req) => marquerLues(d, req)) },
     '/api/machines/:id/reveiller': { POST: protege((req) => reveil(d, req.params['id'] ?? '')) },
     '/api/machines/:id/eteindre': { POST: protege((req) => machine(d, req.params['id'] ?? '', 'eteindre')) },
@@ -53,14 +60,23 @@ async function connexion(d: DependancesApi, req: Request): Promise<Response> {
   const c = await lireCorps(req, CorpsConnexion);
   if (c instanceof Response) return c;
   const r = await d.acces.connecter(c.motDePasse, ipDe(req), c.appareil ?? req.headers.get('user-agent') ?? 'inconnu');
-  if (!r.ok) return erreur(r.raison === 'trop_de_tentatives' ? 'trop de tentatives, réessaie dans 15 minutes' : 'mot de passe refusé', r.raison === 'trop_de_tentatives' ? 429 : 401);
+  if (!r.ok)
+    return erreur(
+      r.raison === 'trop_de_tentatives' ? 'trop de tentatives, réessaie dans 15 minutes' : 'mot de passe refusé',
+      r.raison === 'trop_de_tentatives' ? 429 : 401,
+    );
   return json({ jeton: r.jeton }, 200, { 'set-cookie': cookieDeSession(r.jeton) });
 }
 
 function etat(d: DependancesApi) {
   const notifications = d.registre.notifications(0, 50);
-  return { version: d.diffusion.version, machines: d.postes.vues(), sessions: d.registre.sessions(), notifications,
-    reveilPossible: [...d.wol.keys()] };
+  return {
+    version: d.diffusion.version,
+    machines: d.postes.vues(),
+    sessions: d.registre.sessions(),
+    notifications,
+    reveilPossible: [...d.wol.keys()],
+  };
 }
 
 // Pour l'iPhone : une seule requête longue qui rend la main dès qu'il y a du nouveau (au-delà de `version`).
@@ -70,8 +86,12 @@ async function attente(d: DependancesApi, req: Request): Promise<Response> {
   const echeance = Date.now() + Math.min(entier(url.searchParams.get('attendre'), 25), 30) * 1000;
   while (d.diffusion.version <= version && Date.now() < echeance) await d.diffusion.attendre(echeance - Date.now());
   const apres = entier(url.searchParams.get('notifications'), 0);
-  return json({ version: d.diffusion.version, notifications: d.registre.notifications(apres), sessions: d.registre.sessions(),
-    machines: d.postes.vues() });
+  return json({
+    version: d.diffusion.version,
+    notifications: d.registre.notifications(apres),
+    sessions: d.registre.sessions(),
+    machines: d.postes.vues(),
+  });
 }
 
 async function marquerLues(d: DependancesApi, req: Request): Promise<Response> {

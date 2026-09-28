@@ -1,7 +1,10 @@
 // Responsabilité : comment se dit et se montre le statut d'une session.
 import type { StatutSession } from '../../../commun/session.ts';
 
-export const STATUTS: Record<StatutSession, { readonly libelle: string; readonly ton: 'actif' | 'calme' | 'eteint' | 'alerte' }> = {
+export const STATUTS: Record<
+  StatutSession,
+  { readonly libelle: string; readonly ton: 'actif' | 'calme' | 'eteint' | 'alerte' }
+> = {
   demarrage: { libelle: 'Démarre', ton: 'actif' },
   travail: { libelle: 'Travaille', ton: 'actif' },
   compaction: { libelle: 'Compacte', ton: 'actif' },
@@ -12,4 +15,6 @@ export const STATUTS: Record<StatutSession, { readonly libelle: string; readonly
   fermee: { libelle: 'Fermée', ton: 'eteint' },
 };
 
-export const estVivante = (s: StatutSession): boolean => s !== 'fermee';
+export function estVivante(s: StatutSession): boolean {
+  return s !== 'fermee';
+}
