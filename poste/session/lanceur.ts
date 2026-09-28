@@ -32,6 +32,8 @@ function crochets(): string {
     { type: 'command', command: `${process.execPath} ${CROCHET} ${evenement}`, timeout: 30 },
   ];
   return JSON.stringify({
+    // Sans lui, un dossier de config neuf affiche l'avertissement du mode bypass (option par défaut : quitter).
+    skipDangerousModePermissionPrompt: true,
     hooks: {
       SessionStart: [{ hooks: commande('SessionStart') }],
       UserPromptSubmit: [{ hooks: commande('UserPromptSubmit') }],
@@ -43,6 +45,12 @@ function crochets(): string {
 
 function rythme(): string {
   return JSON.stringify({ mcpServers: { ccremote: { type: 'stdio', command: process.execPath, args: [MCP_RYTHME] } } });
+}
+
+// Reprise d'une session adoptée : sa config d'origine, sans crochets ; seulement de quoi démarrer sans question.
+export function commandeReprise(sessionId: string): string[] {
+  return [binaireClaude(), '--resume', sessionId, '--dangerously-skip-permissions',
+    '--settings', JSON.stringify({ skipDangerousModePermissionPrompt: true })];
 }
 
 export function commandeClaude(l: Lancement): string[] {

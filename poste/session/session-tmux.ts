@@ -4,7 +4,7 @@ import type { Logger } from 'pino';
 import type { Evenement, ResumeSession, StatutSession } from '../../commun/session.ts';
 import { approuverDossier } from './confiance.ts';
 import { GardeSousAgents, type DecisionCrochet } from './garde-sous-agents.ts';
-import { commandeClaude, binaireClaude, VAR_SESSION, VAR_SOCKET } from './lanceur.ts';
+import { commandeClaude, commandeReprise, VAR_SESSION, VAR_SOCKET } from './lanceur.ts';
 import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION, deciderCompaction } from './politique-compaction.ts';
 import { deciderSuite, type Suite } from './suite-du-tour.ts';
@@ -165,7 +165,7 @@ export class SessionTmux {
     const nom = await tmux.nomLibre(this.etat.projet.nom);
     const commande =
       this.p.consignes === null
-        ? [binaireClaude(), '--resume', this.etat.claudeSessionId, '--dangerously-skip-permissions']
+        ? commandeReprise(this.etat.claudeSessionId)
         : commandeClaude({
             sessionId: this.etat.claudeSessionId,
             titre: this.etat.titre,
