@@ -104,14 +104,15 @@ EOF
 
 installer_unite() {
   local m=$1 user home unite
+  local bun
+  home=$(echo 'echo $HOME' | executer "$m")
+  bun=$(echo 'PATH=$HOME/.bun/bin:$PATH command -v bun' | executer "$m")
   if [ "$UNITE" = utilisateur ]; then
-    home=$(echo 'echo $HOME' | executer "$m")
-    installer_unite_utilisateur "$m" "$home"
+    installer_unite_utilisateur "$m" "$home" "$bun"
     return
   fi
   user=$([ "$m" = pi ] && echo pi || echo ubuntu)
-  home=/home/$user
-  unite=$(unite_poste "$home" "$home/.bun/bin/bun" multi-user.target "$user")
+  unite=$(unite_poste "$home" "$bun" multi-user.target "$user")
   executer_root "$m" <<EOF
 cat > /etc/systemd/system/ccremote-poste.service <<'UNITE'
 $unite
@@ -123,9 +124,9 @@ systemctl restart ccremote-poste.service && sleep 3 && systemctl is-active ccrem
 EOF
 }
 
-installer_unite_utilisateur() { # machine, home — écrit l'unité puis (re)démarre le poste
+installer_unite_utilisateur() { # machine, home, bun — écrit l'unité puis (re)démarre le poste
   local m=$1 home=$2 unite
-  unite=$(unite_poste "$home" "$home/.bun/bin/bun" default.target "")
+  unite=$(unite_poste "$home" "$3" default.target "")
   executer "$m" <<EOF
 mkdir -p \$HOME/.config/systemd/user
 cat > \$HOME/.config/systemd/user/ccremote-poste.service <<'UNITE'

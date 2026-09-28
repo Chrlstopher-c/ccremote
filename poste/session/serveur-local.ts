@@ -1,10 +1,12 @@
 // Responsabilité : le socket Unix local par lequel les crochets et le MCP de rythme des sessions joignent le poste.
 // Local à la machine, fichier en 0600 : seul l'utilisateur du poste (donc ses Claude) peut y parler.
-import { chmodSync, existsSync, unlinkSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type { Logger } from 'pino';
 import type { GestionnaireSessions } from './gestionnaire.ts';
 
 export function servirLocal(socket: string, sessions: GestionnaireSessions, journal: Logger): void {
+  mkdirSync(dirname(socket), { recursive: true }); // premier démarrage : le dossier de données n'existe pas encore
   if (existsSync(socket)) unlinkSync(socket);
   Bun.serve({
     unix: socket,
