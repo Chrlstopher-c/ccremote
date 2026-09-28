@@ -10,13 +10,15 @@
 - [ ] Chris : poser le nouvel IPA (dialogues répondables dans Vigie).
 - [ ] Brancher `claude-tmux.zsh` sur la tour (son lanceur actuel vit dans `/mnt/projects/relais/sessions/`).
 - [x] App de bureau Quart installée et connectée sur le portable (lanceur d'apps, thème, écran Comptes).
-- [ ] Chris : valider « Ouvrir le terminal » depuis Quart et la notification système sur un objectif atteint.
+- [ ] Chris : valider « Ouvrir le terminal » (kitty, corrigé le 28/09 soir) depuis Quart et la notification système sur un objectif atteint.
 
 ## Ensuite
 
 - [ ] Relever la consommation réelle d'une vraie session autonome longue (contexte avant/après chaque compaction,
       nombre de relances) et ajuster les seuils 120 k / 350 k si besoin.
-- [ ] Terminal intégré à l'app (xterm.js + PTY `Bun.Terminal` sur le poste) pour le web et l'iPhone.
+- [x] Terminal intégré à l'app (xterm.js + PTY `Bun.Terminal` sur le poste) pour le web et le bureau (28/09).
+- [x] Accès à distance par appareil : fichiers (aperçu, édition, dépôt) + terminaux + sessions (28/09).
+- [ ] Accès à distance dans Sémaphore (iPhone) : fichiers, aperçu, édition, terminal (SwiftTerm).
 - [x] Sessions Claude lancées hors tmux : listées en lecture seule (déclaration `sessions/<pid>.json`).
 - [ ] Session de terminal : proposer « Reprendre dans tmux » une fois le terminal fermé.
 - [x] Comptes : choix du compte à l'ouverture dans l'app ; écran Comptes (usage, ajout OAuth, retrait).

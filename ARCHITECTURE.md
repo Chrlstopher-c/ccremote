@@ -32,7 +32,7 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 
 | Dossier | Ce qu'il contient | Ce qu'il ne contient PAS |
 |---|---|---|
-| `commun/` | Les contrats partagés : vocabulaire d'une session et de son fil (`session.ts`), protocole poste ↔ relais (`protocole-poste.ts`), API des clients (`api-clients.ts`), journal pino | Aucune logique, aucune I/O |
+| `commun/` | Les contrats partagés : vocabulaire d'une session et de son fil (`session.ts`), accès à un appareil — fichiers et terminaux (`appareil.ts`), protocole poste ↔ relais (`protocole-poste.ts`), API des clients (`api-clients.ts`), journal pino | Aucune logique, aucune I/O |
 | `poste/` | Tout ce qui tourne sur une machine de travail : sessions tmux, lecture des transcripts, crochets et MCP de rythme, politique de compaction/relance, lien sortant vers le relais, état de la machine, découverte des projets | Aucune connaissance des autres machines ni du registre |
 | `relais/` | Tout ce qui tourne sur le Pi : registre SQLite, accès (mot de passe, jetons), API HTTP + flux WebSocket des clients, serveur des postes, notifications, réveil Wake-on-LAN, règle d'isolation du parc | Aucune décision sur le déroulé d'une session (c'est le poste) |
 | `bureau/` | L'app de bureau (Tauri 2 + React) — le même frontend est servi en web par le relais ; `src-tauri/` = coquille native (terminal kitty, notifications) | Aucune règle métier : elle affiche et commande |
@@ -56,6 +56,8 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 | `session/claude-tmux.zsh` | Lanceur à sourcer dans `~/.zshrc` : tout `claude` interactif tapé au clavier démarre dans `tmux -L claude` |
 | `comptes/` | Les comptes Claude Code de la machine : relevé (identité par `claude auth status`, usage par l'API OAuth, jeton jamais renouvelé ici), connexion OAuth en deux temps (URL puis code, dans un tmux `quart-connexion-*` invisible des sessions), retrait, persistance dans `poste.json` |
 | `parc/` | Lien sortant vers le relais, état de la machine, extinction |
+| `fichiers/` | Les fichiers de la machine vus depuis Quart : lister, lire/écrire par morceaux, renommer (sans jamais écraser), supprimer, créer un dossier |
+| `terminal/` | Les terminaux à distance : un PTY par terminal (shell, ou client attaché à `tmux -L claude`), sortie regroupée vers le relais |
 | `projets/` | Découverte des projets dans les racines de la machine |
 
 ## Frontières

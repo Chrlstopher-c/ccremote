@@ -1,6 +1,6 @@
 # STATE — ccremote
 
-*Dernière mise à jour : 2026-09-28 (après-midi), branche `dev`*
+*Dernière mise à jour : 2026-09-28 (soir), branche `dev`*
 
 ## Résumé
 
@@ -9,6 +9,25 @@
 tourner un poste (`ccremote-poste`) qui gère les **vrais Claude Code en TUI** dans `tmux -L claude` — le même serveur que
 relais/Atrium. L'app de bureau (Tauri) est installée sur le portable ; le même frontend est servi en web sur le domaine
 public. `master` reste la version publique précédente ; `dev` porte le v2.
+
+## 28/09 soir — Accès à distance (fichiers, terminaux) et terminal kitty réparé
+
+- **Terminal kitty qui se refermait aussitôt** (Chris, sur le portable) : deux causes mesurées. Le Pi et le VPS n'ont pas
+  la terminfo `xterm-kitty` → tmux refusait (« missing or unsuitable terminal ») ; et le poste du Pi tourne sous `pi`
+  alors que l'alias SSH arrive en `trinity` → « no sessions ». Correctifs : repli `TERM=xterm-256color` côté distant,
+  chaque poste annonce son compte Unix (`etat.utilisateur`) et kitty vise `-l <compte>`.
+- **Catégorie « Accès à distance »** (barre latérale, palette Ctrl+K) : par appareil, onglets **Fichiers** (fil d'Ariane,
+  cachés, créer, déposer par glisser-déposer, renommer, télécharger, supprimer ; aperçu image/vidéo/son/PDF, Markdown
+  rendu, éditeur CodeMirror avec Ctrl+S), **Terminal** (xterm.js, onglets multiples, reconnecter) et **Sessions**
+  (lancer ici, voir le fil, s'attacher dans l'app ou dans kitty). Tout passe par le relais : marche en 4G et en web.
+- **Protocole** : `commun/appareil.ts` — fichiers par morceaux de 4 Mo (lecture en flux, dépôt en ajouts), terminaux =
+  vrais PTY `Bun.Terminal` sur le poste (`poste/terminal/`), frappe en binaire sur `/api/terminal` (jeton en
+  sous-protocole), sans réponse par touche. Relais : `relais/appareils/`.
+- **Vérifié en réel depuis le VPS (hors maison)** : fichier de 9 Mo déposé puis relu à l'identique sur les 4 machines
+  (1,5–3,8 s), renommer/supprimer/type MIME ; shell distant sur les 4 (< 1 s) ; attache à une session tmux de la tour :
+  la frappe y arrive, la session survit à la fermeture, plus aucun client attaché. Captures de l'app web (Playwright,
+  tour) : fichiers, Markdown, image, script, terminal, sessions — 0 erreur console.
+- **Qualité** : 77 tests, typecheck strict, linter 0 violation.
 
 ## 28/09 après-midi — Quart, dialogues, comptes
 
