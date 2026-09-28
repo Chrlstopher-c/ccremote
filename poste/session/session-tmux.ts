@@ -45,7 +45,7 @@ export class SessionTmux {
     private readonly p: SessionPersistee,
     private readonly env: EnvironnementSession,
   ) {
-    this.etat = p.resume;
+    this.etat = { ...p.resume, dialogue: null }; // éphémère : relu à l'écran, jamais repris d'une sauvegarde
     this.lecteur = p.transcript ? new LecteurTranscript(p.transcript, p.position) : null;
     this.sousAgents = p.transcript ? new SuiviSousAgents(p.transcript) : null;
   }
