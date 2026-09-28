@@ -6,6 +6,7 @@ import type {
   EntreeHistoriqueEcho,
   EtatEcho,
   EtatVoixEcho,
+  McpEcho,
   MessageEcho,
   ReglagesEcho,
   UsageEcho,
@@ -21,6 +22,7 @@ export class LienEcho {
   private cadres: readonly CadreEcho[] = [];
   private voix: EtatVoixEcho | null = null;
   private usage: UsageEcho | null = null;
+  private mcp: readonly McpEcho[] = [];
 
   constructor(
     private readonly url: string,
@@ -38,6 +40,7 @@ export class LienEcho {
       cadres: this.cadres,
       voix: this.voix,
       usage: this.usage,
+      mcp: this.mcp,
     };
   }
 
@@ -72,6 +75,11 @@ export class LienEcho {
     return this.envoyer({ type: 'voix_commande', action });
   }
 
+  redemarrer(): boolean {
+    this.mcp = [];
+    return this.envoyer({ type: 'redemarrer' });
+  }
+
   retirerCadre(id: string): boolean {
     return this.envoyer({ type: 'retirer_cadre', id });
   }
@@ -99,6 +107,7 @@ export class LienEcho {
       else if (echo.type === 'cadres') this.cadres = echo.cadres;
       else if (echo.type === 'voix') this.voix = echo.etat;
       else if (echo.type === 'usage') this.usage = echo.usage;
+      else if (echo.type === 'mcp') this.mcp = echo.serveurs;
       this.diffusion.diffuser({ type: 'echo', echo });
     } catch (err) {
       this.journal.warn({ err }, 'message d’Echo illisible');

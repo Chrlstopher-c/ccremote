@@ -18,6 +18,7 @@ export type MessageEcho =
     }
   | { readonly type: 'voix'; readonly etat: EtatVoixEcho }
   | { readonly type: 'usage'; readonly usage: UsageEcho }
+  | { readonly type: 'mcp'; readonly serveurs: readonly McpEcho[] }
   | { readonly type: 'voix_commande'; readonly action: CommandeVoix }
   | { readonly type: 'reglages'; readonly reglages: ReglagesEcho }
   | { readonly type: 'cadres'; readonly cadres: readonly CadreEcho[] };
@@ -30,6 +31,13 @@ export interface UsageEcho {
   readonly sortie: number;
   readonly cache: number;
   readonly dollars: number;
+}
+
+// Un serveur MCP d'Echo et son état (machine : d'où il vient ; « echo » = outils internes, « pi » = connecteurs).
+export interface McpEcho {
+  readonly nom: string;
+  readonly statut: string;
+  readonly machine: string;
 }
 
 export type CommandeVoix = 'enroler' | 'oublier' | 'annuler';
@@ -64,6 +72,7 @@ export interface EtatEcho {
   readonly cadres: readonly CadreEcho[];
   readonly voix: EtatVoixEcho | null;
   readonly usage: UsageEcho | null;
+  readonly mcp: readonly McpEcho[];
 }
 
 export interface EntreeHistoriqueEcho {

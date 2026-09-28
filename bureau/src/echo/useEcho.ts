@@ -8,6 +8,7 @@ import type {
   EtatVoixEcho,
   MessageEcho,
   ReglagesEcho,
+  McpEcho,
   UsageEcho,
 } from '../../../commun/echo.ts';
 import { ErreurApi } from '../shared/api/client.ts';
@@ -37,38 +38,26 @@ export interface Entendu {
 
 const VIDE: EnCours = { texte: '', outils: [] };
 
+/** Ce qui décrit Echo elle-même : réglages, cadres, voix, consommation, outils. */
+function useEtatSysteme() {
+  const [reglages, setReglages] = useState<ReglagesEcho>({ micro: true, voix: true });
+  const [cadres, setCadres] = useState<readonly CadreEcho[]>([]);
+  const [voix, setVoix] = useState<EtatVoixEcho | null>(null);
+  const [usage, setUsage] = useState<UsageEcho | null>(null);
+  const [mcp, setMcp] = useState<readonly McpEcho[]>([]);
+  return { reglages, setReglages, cadres, setCadres, voix, setVoix, usage, setUsage, mcp, setMcp };
+}
+
+/** La conversation : historique, réponse en cours, occupation, joignabilité, dernière phrase entendue. */
 function useEtatEcho() {
   const [historique, setHistorique] = useState<readonly EntreeHistoriqueEcho[]>([]);
   const [enCours, setEnCours] = useState<EnCours>(VIDE);
   const [occupe, setOccupe] = useState(false);
   const [dispo, setDispo] = useState<Disponibilite>('chargement');
-  const [reglages, setReglages] = useState<ReglagesEcho>({ micro: true, voix: true });
-  const [cadres, setCadres] = useState<readonly CadreEcho[]>([]);
   const [entendu, setEntendu] = useState<Entendu | null>(null);
-  const [voix, setVoix] = useState<EtatVoixEcho | null>(null);
-  const [usage, setUsage] = useState<UsageEcho | null>(null);
   const niveaux = useRef<Niveaux>({ micro: 0, voix: 0, tMicro: 0, tVoix: 0 });
-  return {
-    historique,
-    setHistorique,
-    enCours,
-    setEnCours,
-    occupe,
-    setOccupe,
-    dispo,
-    setDispo,
-    reglages,
-    setReglages,
-    cadres,
-    setCadres,
-    entendu,
-    setEntendu,
-    voix,
-    setVoix,
-    usage,
-    setUsage,
-    niveaux,
-  };
+  const conversation = { historique, setHistorique, enCours, setEnCours, occupe, setOccupe, dispo, setDispo };
+  return { ...conversation, entendu, setEntendu, niveaux, ...useEtatSysteme() };
 }
 
 type Etat = ReturnType<typeof useEtatEcho>;
@@ -90,6 +79,7 @@ function recevoir(e: Etat, m: MessageEcho, relire: () => void): void {
     e.setEntendu({ texte: m.texte, eveil: m.eveil, score: m.score ?? null, refusee: m.refusee ?? false });
   } else if (m.type === 'voix') e.setVoix(m.etat);
   else if (m.type === 'usage') e.setUsage(m.usage);
+  else if (m.type === 'mcp') e.setMcp(m.serveurs);
   else if (m.type === 'fin') {
     e.setEnCours(VIDE);
     relire();
@@ -112,6 +102,7 @@ export function useEcho() {
       setCadres(etat.cadres);
       setVoix(etat.voix);
       e.setUsage(etat.usage);
+      e.setMcp(etat.mcp);
       setHistorique(h);
       setDispo(etat.joignable ? 'ok' : 'injoignable');
     } catch (erreur) {
@@ -173,9 +164,22 @@ function useActionsEcho(e: Etat) {
     },
     [client, setCadres, tenter],
   );
+  return { envoyer, interrompre, regler, retirer, ...useActionsSysteme(e, tenter) };
+}
+
+type Tenter = ReturnType<typeof useTenter>;
+
+/** Relancer Echo, piloter son empreinte vocale. */
+function useActionsSysteme(e: Etat, tenter: Tenter) {
+  const client = useMagasin().client;
+  const { setMcp } = e;
+  const relancer = useCallback((): void => {
+    setMcp([]);
+    void tenter(() => client.echoRedemarrer(), 'relance refusée');
+  }, [client, tenter, setMcp]);
   const commanderVoix = useCallback(
     (action: CommandeVoix): void => void tenter(() => client.echoVoix(action), 'commande de voix refusée'),
     [client, tenter],
   );
-  return { envoyer, interrompre, regler, retirer, commanderVoix };
+  return { relancer, commanderVoix };
 }

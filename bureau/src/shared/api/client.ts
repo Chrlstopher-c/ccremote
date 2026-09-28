@@ -121,6 +121,10 @@ export class ClientRelais {
     return this.appeler('POST', '/api/echo/voix', { action });
   }
 
+  echoRedemarrer(): Promise<{ ok: boolean }> {
+    return this.appeler('POST', '/api/echo/redemarrer', {});
+  }
+
   echoRetirer(id: string): Promise<{ ok: boolean }> {
     return this.appeler('POST', '/api/echo/retirer', { id });
   }
