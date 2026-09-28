@@ -8,6 +8,7 @@ import type {
   EtatVoixEcho,
   MessageEcho,
   ReglagesEcho,
+  UsageEcho,
 } from '../../../commun/echo.ts';
 import { ErreurApi } from '../shared/api/client.ts';
 import { useMagasin } from '../shared/etat/contexte.tsx';
@@ -45,6 +46,7 @@ function useEtatEcho() {
   const [cadres, setCadres] = useState<readonly CadreEcho[]>([]);
   const [entendu, setEntendu] = useState<Entendu | null>(null);
   const [voix, setVoix] = useState<EtatVoixEcho | null>(null);
+  const [usage, setUsage] = useState<UsageEcho | null>(null);
   const niveaux = useRef<Niveaux>({ micro: 0, voix: 0, tMicro: 0, tVoix: 0 });
   return {
     historique,
@@ -63,6 +65,8 @@ function useEtatEcho() {
     setEntendu,
     voix,
     setVoix,
+    usage,
+    setUsage,
     niveaux,
   };
 }
@@ -85,6 +89,7 @@ function recevoir(e: Etat, m: MessageEcho, relire: () => void): void {
   else if (m.type === 'entendu') {
     e.setEntendu({ texte: m.texte, eveil: m.eveil, score: m.score ?? null, refusee: m.refusee ?? false });
   } else if (m.type === 'voix') e.setVoix(m.etat);
+  else if (m.type === 'usage') e.setUsage(m.usage);
   else if (m.type === 'fin') {
     e.setEnCours(VIDE);
     relire();
@@ -106,6 +111,7 @@ export function useEcho() {
       setReglages(etat.reglages);
       setCadres(etat.cadres);
       setVoix(etat.voix);
+      e.setUsage(etat.usage);
       setHistorique(h);
       setDispo(etat.joignable ? 'ok' : 'injoignable');
     } catch (erreur) {

@@ -47,6 +47,7 @@ export function VueEcho(): ReactNode {
         interrompre={echo.interrompre}
         voix={echo.voix}
         commanderVoix={echo.commanderVoix}
+        usage={echo.usage}
       />
       <div className="flex min-h-0 flex-1">
         <div className={`flex min-h-0 min-w-0 flex-1 ${avecCadres ? 'flex-row' : 'flex-col'}`}>

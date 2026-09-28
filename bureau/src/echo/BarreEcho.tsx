@@ -1,7 +1,7 @@
 // Responsabilité : la barre du mode Echo — état, et les trois bascules : micro, voix, discussion écrite.
 import { AudioLines, MessageSquareText, Mic, MicOff, Square, Volume2, VolumeX } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { CommandeVoix, EtatVoixEcho, ReglagesEcho } from '../../../commun/echo.ts';
+import type { CommandeVoix, EtatVoixEcho, ReglagesEcho, UsageEcho } from '../../../commun/echo.ts';
 import { PastilleVoix } from './PastilleVoix.tsx';
 import type { Disponibilite } from './useEcho.ts';
 
@@ -48,6 +48,20 @@ interface PropsBarre {
   readonly interrompre: () => void;
   readonly voix: EtatVoixEcho | null;
   readonly commanderVoix: (a: CommandeVoix) => void;
+  readonly usage: UsageEcho | null;
+}
+
+const milliers = (n: number): string => (n >= 1000 ? `${Math.round(n / 1000)} k` : String(n));
+
+/** Ce qu'Echo a consommé aujourd'hui : discret, le détail au survol. */
+function Conso({ u }: { readonly u: UsageEcho | null }): ReactNode {
+  if (!u || u.tours === 0) return null;
+  const detail = `Aujourd'hui : ${u.tours} tours, ${milliers(u.entree)} jetons en entrée, ${milliers(u.sortie)} en sortie, ${milliers(u.cache)} relus du cache — équivalent API ${u.dollars.toFixed(2)} $`;
+  return (
+    <span title={detail} className="font-mono text-[10.5px] text-discret">
+      {u.tours} tours · {u.dollars.toFixed(2)} $
+    </span>
+  );
 }
 
 function Bascules(p: PropsBarre): ReactNode {
@@ -89,6 +103,7 @@ export function BarreEcho(p: PropsBarre): ReactNode {
         {p.occupe ? 'réfléchit' : p.dispo === 'ok' && !p.reglages.micro ? 'micro coupé' : ETATS[p.dispo]}
       </span>
       <div className="flex-1" />
+      <Conso u={p.usage} />
       <PastilleVoix voix={p.voix} commander={p.commanderVoix} />
       <Bascules {...p} />
     </header>

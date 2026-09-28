@@ -8,6 +8,7 @@ import type {
   EtatVoixEcho,
   MessageEcho,
   ReglagesEcho,
+  UsageEcho,
 } from '../../commun/echo.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 
@@ -19,6 +20,7 @@ export class LienEcho {
   private reglages: ReglagesEcho = { micro: true, voix: true };
   private cadres: readonly CadreEcho[] = [];
   private voix: EtatVoixEcho | null = null;
+  private usage: UsageEcho | null = null;
 
   constructor(
     private readonly url: string,
@@ -29,7 +31,14 @@ export class LienEcho {
 
   get etat(): EtatEcho {
     const joignable = this.ws?.readyState === WebSocket.OPEN;
-    return { joignable, occupe: this.occupe, reglages: this.reglages, cadres: this.cadres, voix: this.voix };
+    return {
+      joignable,
+      occupe: this.occupe,
+      reglages: this.reglages,
+      cadres: this.cadres,
+      voix: this.voix,
+      usage: this.usage,
+    };
   }
 
   demarrer(): void {
@@ -89,6 +98,7 @@ export class LienEcho {
       else if (echo.type === 'reglages') this.reglages = echo.reglages;
       else if (echo.type === 'cadres') this.cadres = echo.cadres;
       else if (echo.type === 'voix') this.voix = echo.etat;
+      else if (echo.type === 'usage') this.usage = echo.usage;
       this.diffusion.diffuser({ type: 'echo', echo });
     } catch (err) {
       this.journal.warn({ err }, 'message d’Echo illisible');

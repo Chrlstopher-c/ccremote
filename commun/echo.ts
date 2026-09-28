@@ -17,9 +17,20 @@ export type MessageEcho =
       readonly refusee?: boolean;
     }
   | { readonly type: 'voix'; readonly etat: EtatVoixEcho }
+  | { readonly type: 'usage'; readonly usage: UsageEcho }
   | { readonly type: 'voix_commande'; readonly action: CommandeVoix }
   | { readonly type: 'reglages'; readonly reglages: ReglagesEcho }
   | { readonly type: 'cadres'; readonly cadres: readonly CadreEcho[] };
+
+// Consommation d'Echo chez Anthropic sur la journée (dollars : équivalent API, non facturés par l'abonnement).
+export interface UsageEcho {
+  readonly jour: string;
+  readonly tours: number;
+  readonly entree: number;
+  readonly sortie: number;
+  readonly cache: number;
+  readonly dollars: number;
+}
 
 export type CommandeVoix = 'enroler' | 'oublier' | 'annuler';
 
@@ -52,6 +63,7 @@ export interface EtatEcho {
   readonly reglages: ReglagesEcho;
   readonly cadres: readonly CadreEcho[];
   readonly voix: EtatVoixEcho | null;
+  readonly usage: UsageEcho | null;
 }
 
 export interface EntreeHistoriqueEcho {
