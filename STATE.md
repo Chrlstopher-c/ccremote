@@ -102,4 +102,18 @@ Ce que cet essai a trouvé et qui est corrigé :
 
 ## Prochaines étapes
 
-Voir [`TODO.md`](TODO.md) — en tête : poser Vigie v2 (Sémaphore, branche `dev`, compilée) sur l’iPhone et valider l’app de bureau connectée.
+1. Chris : poser le nouvel IPA (`~/semaphore/deploy.sh`) — Vigie sait répondre aux dialogues.
+2. Chris : ajouter un vrai compte depuis l'écran Comptes de Quart, puis ouvrir une session avec ce compte (vérifier
+   qu'aucun écran d'accueil du CLI ne bloque sur un dossier de config neuf — `marquerAccueilFait` est censé l'éviter).
+3. Brancher `claude-tmux.zsh` sur la tour à la place du lanceur de `relais/sessions/`.
+4. Ensuite : [`TODO.md`](TODO.md).
+
+## Points en suspens
+
+- **Répondre aux sessions lancées hors tmux** (comme la session de refonte du 28/09) : impossible sans le pilotage à
+  distance de kitty (`allow_remote_control` + `listen_on`), non activé — décision de Chris (toute app locale pourrait
+  alors taper dans ses terminaux). Le lanceur zsh rend le cas rare.
+- `compte-b` du VPS est déconnecté : à reconnecter ou retirer depuis l'écran Comptes.
+- La tour est restée allumée en fin de session (28/09, 15 h 50) : une session du portable (« semaphore ») y pilotait le
+  récepteur Iris. Pas allumée par moi.
+- Titre des sessions : la liste montre encore « CCremote Refactor in Portable » (titre posé par Claude Code, pas par Quart).

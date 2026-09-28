@@ -1,4 +1,5 @@
-# TODO — ccremote
+# TODO — Quart (dépôt ccremote)
+*Dernière mise à jour : 2026-09-28*
 
 ## En cours
 
@@ -8,8 +9,8 @@
       session avec ce compte ; vérifier qu'aucun écran d'accueil du CLI ne bloque sur un dossier de config neuf.
 - [ ] Chris : poser le nouvel IPA (dialogues répondables dans Vigie).
 - [ ] Brancher `claude-tmux.zsh` sur la tour (son lanceur actuel vit dans `/mnt/projects/relais/sessions/`).
-- [ ] Valider l'app de bureau connectée sur le portable (connexion avec le mot de passe, « Ouvrir le terminal » depuis
-      l'app, notification système sur un objectif atteint).
+- [x] App de bureau Quart installée et connectée sur le portable (lanceur d'apps, thème, écran Comptes).
+- [ ] Chris : valider « Ouvrir le terminal » depuis Quart et la notification système sur un objectif atteint.
 
 ## Ensuite
 
@@ -21,6 +22,8 @@
 - [x] Comptes : choix du compte à l'ouverture dans l'app ; écran Comptes (usage, ajout OAuth, retrait).
 - [ ] Comptes : `compte-b` du VPS est déconnecté — le reconnecter ou le retirer depuis l'écran Comptes.
 - [x] Rétention du fil : purger les événements des sessions fermées depuis plus de 30 jours (démarrage + toutes les 24 h).
+- [ ] Décider avec Chris du pilotage à distance de kitty (répondre aux sessions lancées hors tmux).
+- [ ] Nettoyer du registre les sessions d'essai fermées (« essai dialogues », « essai dialogues 2 »).
 - [ ] Découper le bundle web (un seul fichier de 500 ko+) : Markdown chargé à la demande.
 
 ## Plus tard
