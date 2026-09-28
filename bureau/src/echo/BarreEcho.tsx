@@ -85,7 +85,9 @@ export function BarreEcho(p: PropsBarre): ReactNode {
     <header className="flex shrink-0 items-center gap-2 border-b border-filet px-4 py-2">
       <AudioLines size={15} className="text-accent-texte" />
       <h1 className="text-[14px] font-extrabold tracking-[-0.02em] text-encre">Echo</h1>
-      <span className="font-mono text-[10.5px] text-discret">{p.occupe ? 'réfléchit' : ETATS[p.dispo]}</span>
+      <span className="font-mono text-[10.5px] text-discret">
+        {p.occupe ? 'réfléchit' : p.dispo === 'ok' && !p.reglages.micro ? 'micro coupé' : ETATS[p.dispo]}
+      </span>
       <div className="flex-1" />
       <PastilleVoix voix={p.voix} commander={p.commanderVoix} />
       <Bascules {...p} />
