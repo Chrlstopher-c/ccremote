@@ -9,6 +9,10 @@ export function erreur(message: string, statut = 400): Response {
   return json({ erreur: message }, statut);
 }
 
+// Refus d'un poste (machine hors ligne, session fermée, commande invalide) : 409 et jamais 502, que Cloudflare
+// remplace par sa propre page — le message du poste n'arriverait plus jusqu'à Chris.
+export const REFUS_POSTE = 409;
+
 export async function lireCorps<S extends z.ZodType>(req: Request, schema: S): Promise<z.infer<S> | Response> {
   let brut: unknown;
   try {

@@ -7,7 +7,7 @@ import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
-import { entier, erreur, json, lireCorps } from './http.ts';
+import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 const CorpsOuverture = z.object({
   machine: z.string(),
@@ -53,7 +53,7 @@ export class ApiSessions {
     };
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
     if (!r.ok) this.journal.warn({ machine: c.machine, erreur: r.erreur }, 'ouverture de session refusée');
-    return r.ok ? json(r.donnees, 201) : erreur(r.erreur ?? 'ouverture refusée', 502);
+    return r.ok ? json(r.donnees, 201) : erreur(r.erreur ?? 'ouverture refusée', REFUS_POSTE);
   }
 
   async evenements(req: RequeteSession): Promise<Response> {
@@ -108,7 +108,7 @@ export class ApiSessions {
     if (!session) return erreur('session inconnue', 404);
     const r = await this.postes.commander(session.machine, { ...c, sessionId });
     if (!r.ok) this.journal.warn({ sessionId, commande: c.kind, erreur: r.erreur }, 'commande refusée');
-    return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', 502);
+    return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', REFUS_POSTE);
   }
 }
 

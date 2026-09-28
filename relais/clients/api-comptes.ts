@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { NOM_COMPTE } from '../../commun/comptes.ts';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { Postes } from '../parc/postes.ts';
-import { erreur, json, lireCorps } from './http.ts';
+import { erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
 type RequeteCompte = Request & { params: { id: string; nom?: string } };
@@ -42,6 +42,6 @@ export class ApiComptes {
   private async commander(machine: string, c: SansId<CommandeRelais>): Promise<Response> {
     const r = await this.postes.commander(machine, c);
     if (!r.ok) this.journal.warn({ machine, commande: c.kind, erreur: r.erreur }, 'commande de compte refusée');
-    return r.ok ? json(r.donnees ?? { ok: true }) : erreur(r.erreur ?? 'refusé', 502);
+    return r.ok ? json(r.donnees ?? { ok: true }) : erreur(r.erreur ?? 'refusé', REFUS_POSTE);
   }
 }

@@ -48,11 +48,19 @@ export async function validerConnexion(compte: string, configDir: string, code: 
   const tape = await tmux.taper(pane, code.trim());
   if (tape.code !== 0) return `tmux refuse le code : ${tape.erreur}`;
   await tmux.touche(pane, 'Enter');
-  const ok = await attendre(ATTENTE_VALIDATION_MS, async () => ((await identite(configDir)).connecte ? true : null));
+  // Le CLI signale tout de suite un code refusé ; sinon, on attend qu'il déclare le compte connecté.
+  const issue = await attendre(ATTENTE_VALIDATION_MS, async () => {
+    if (/Invalid code|error/i.test((await tmux.capturer(pane)) ?? '')) return 'refuse' as const;
+    return (await identite(configDir)).connecte ? ('ok' as const) : null;
+  });
   const ecran = (await tmux.capturer(pane)) ?? '';
-  if (ok) {
+  if (issue === 'ok') {
     await tmux.tuer(pane);
     return null;
+  }
+  if (issue === 'refuse') {
+    await tmux.tuer(pane);
+    return 'code refusé par Claude : relance la connexion et copie le code en entier';
   }
   const derniere = ecran.split('\n').map((l) => l.trim()).filter(Boolean).at(-1) ?? '';
   return `connexion non confirmée${derniere ? ` : ${derniere.slice(0, 200)}` : ''}`;

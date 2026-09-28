@@ -8,7 +8,7 @@ import type { Registre } from '../registre/registre.ts';
 import type { ApiSessions } from './api-sessions.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import type { Diffusion } from './diffusion.ts';
-import { entier, erreur, json, lireCorps } from './http.ts';
+import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -121,5 +121,5 @@ async function reveil(d: DependancesApi, id: string): Promise<Response> {
 
 async function machine(d: DependancesApi, id: string, kind: 'eteindre' | 'projets'): Promise<Response> {
   const r = await d.postes.commander(id, { kind });
-  return r.ok ? json(r.donnees ?? { ok: true }) : erreur(r.erreur ?? 'refusé', 502);
+  return r.ok ? json(r.donnees ?? { ok: true }) : erreur(r.erreur ?? 'refusé', REFUS_POSTE);
 }
