@@ -102,8 +102,6 @@ export class SessionTmux {
     const evts: Evenement[] = [];
     for (const l of this.lecteur.lire()) evts.push(...this.absorber(l));
     for (const evt of evts.slice(-historique)) this.env.sortie.evenement(this.etat.id, evt);
-    const vivante = this.etat.tmux !== null || this.etat.terminal === true;
-    this.etat = { ...this.etat, dialogue: vivante ? this.dialogue.courant : null };
     this.publier();
   }
 
@@ -114,15 +112,14 @@ export class SessionTmux {
     const internes = this.sousAgents?.lire() ?? [];
     for (const evt of internes) this.emettre(evt);
     if (internes.length > 0) this.tour.outils += internes.filter((e) => e.type === 'outil').length;
-    if (lignes.length > 0) this.publierDialogue() || this.publier();
+    if (lignes.length > 0) this.publier();
   }
 
   // --- dialogues du TUI (AskUserQuestion, permission, plan) ---
 
   /** Relève l'écran du pane : un menu du TUI qui attend une réponse devient un dialogue répondable de Quart. */
   async releverEcran(): Promise<void> {
-    if (!this.etat.tmux) return;
-    this.dialogue.releverEcran(await tmux.capturer(this.etat.tmux));
+    this.dialogue.releverEcran(this.etat.tmux ? await tmux.capturer(this.etat.tmux) : null);
     this.publierDialogue();
   }
 
@@ -136,17 +133,14 @@ export class SessionTmux {
   }
 
   // Publie le dialogue s'il a changé ; un nouveau dialogue devient aussi une question du fil (et une alerte).
-  private publierDialogue(): boolean {
-    const vivante = this.etat.tmux !== null || this.etat.terminal === true;
-    const d = vivante ? this.dialogue.courant : null;
-    if ((d?.id ?? null) === (this.etat.dialogue?.id ?? null)) return false;
+  private publierDialogue(): void {
+    const d = this.etat.tmux !== null ? this.dialogue.courant : null;
+    if ((d?.id ?? null) === (this.etat.dialogue?.id ?? null)) return;
     if (d) this.emettre({ type: 'question', question: resumeDialogue(d) });
     this.maj({ dialogue: d });
-    return true;
   }
 
   private absorber(l: Ligne): Evenement[] {
-    this.dialogue.absorber(l);
     const contexte = contexteDe(l);
     if (contexte !== null) this.etat = { ...this.etat, contexte: { ...this.etat.contexte, tokens: contexte } };
     if (l.type === 'custom-title' && typeof l.customTitle === 'string')
@@ -431,6 +425,6 @@ export class SessionTmux {
 }
 
 function resumeDialogue(d: NonNullable<ResumeSession['dialogue']>): string {
-  if (d.genre === 'choix') return `${d.titre || 'Choix attendu'} — ${d.options.join(' / ')}`;
-  return d.questions.map((q) => q.question).join('\n');
+  const options = d.options.map((o) => o.libelle).join(' / ');
+  return d.titre ? `${d.titre}\n${options}` : options;
 }

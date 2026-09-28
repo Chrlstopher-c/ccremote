@@ -21,32 +21,25 @@ export const Projet = z.object({
 });
 export type Projet = z.infer<typeof Projet>;
 
-// Un dialogue affiché par le TUI et bloquant la session tant que personne n'y répond.
-// `questions` : l'outil AskUserQuestion (structuré, lu dans le transcript) ; `choix` : tout autre menu du TUI
-// (permission, validation d'un plan…) relevé à l'écran.
-export const QuestionDialogue = z.object({
-  question: z.string(),
-  entete: z.string(),
-  multiple: z.boolean(),
-  options: z.array(z.object({ libelle: z.string(), description: z.string() })),
+// Un dialogue affiché par le TUI et bloquant la session tant que personne n'y répond (AskUserQuestion, permission,
+// validation d'un plan…), relevé à l'écran du pane : une question à la fois, comme au clavier.
+export const Dialogue = z.object({
+  id: z.string(),
+  titre: z.string(),
+  options: z.array(z.object({ libelle: z.string(), description: z.string() })).min(1),
+  multiple: z.boolean(), // cases à cocher (AskUserQuestion multiSelect)
+  saisie: z.number().int().nullable(), // l'option « Type something » : réponse libre
+  coches: z.array(z.number().int()), // cases déjà cochées
 });
-export type QuestionDialogue = z.infer<typeof QuestionDialogue>;
-
-export const Dialogue = z.discriminatedUnion('genre', [
-  z.object({ genre: z.literal('questions'), id: z.string(), questions: z.array(QuestionDialogue).min(1) }),
-  z.object({ genre: z.literal('choix'), id: z.string(), titre: z.string(), options: z.array(z.string()).min(1) }),
-]);
 export type Dialogue = z.infer<typeof Dialogue>;
 
-// `choix` : indices (0 = première option) ; `autre` : réponse libre, qui remplace les choix pour cette question.
-export const ReponseDialogue = z.discriminatedUnion('genre', [
-  z.object({
-    genre: z.literal('questions'),
-    id: z.string(),
-    reponses: z.array(z.object({ choix: z.array(z.number().int().min(0)), autre: z.string().optional() })).min(1),
-  }),
-  z.object({ genre: z.literal('choix'), id: z.string(), index: z.number().int().min(0) }),
-]);
+// Choix unique : `index`. Choix multiple : `cases` (état voulu de toutes les cases). `texte` : réponse libre.
+export const ReponseDialogue = z.object({
+  id: z.string(),
+  index: z.number().int().min(0).optional(),
+  cases: z.array(z.number().int().min(0)).optional(),
+  texte: z.string().optional(),
+});
 export type ReponseDialogue = z.infer<typeof ReponseDialogue>;
 
 export const ResumeSession = z.object({

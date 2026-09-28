@@ -1,9 +1,8 @@
 // Responsabilité : les dialogues du TUI qui bloquent une session (AskUserQuestion, permission, validation de plan) —
-// les reconnaître (transcript ou écran du pane) et traduire une réponse en touches. Pur, sans I/O.
-import type { Dialogue, QuestionDialogue, ReponseDialogue } from '../../commun/session.ts';
-import type { Ligne } from './traduction.ts';
+// les reconnaître à l'écran du pane et traduire une réponse en touches. Pur, sans I/O.
+// L'écran est la seule source fiable : le CLI n'écrit l'appel AskUserQuestion au transcript qu'une fois répondu.
+import type { Dialogue, ReponseDialogue } from '../../commun/session.ts';
 
-type Objet = Record<string, unknown>;
 export type Touche = { readonly touche: string } | { readonly texte: string };
 
 const PIED = /Esc to (cancel|exit)|Enter to (confirm|select)/;
@@ -12,50 +11,15 @@ const NUMEROTEE = /^\s*(❯\s*)?(\d+)\.\s+(.*\S)\s*$/;
 const CURSEUR = /^\s*❯\s*(.*\S)\s*$/;
 const HAUTEUR_MAX = 40;
 
-function blocs(contenu: unknown): Objet[] {
-  return Array.isArray(contenu) ? contenu.filter((b): b is Objet => typeof b === 'object' && b !== null) : [];
-}
-
-const chaine = (v: unknown): string => (typeof v === 'string' ? v : '');
-
-function question(brut: unknown): QuestionDialogue {
-  const q = (typeof brut === 'object' && brut !== null ? brut : {}) as Objet;
-  const options = Array.isArray(q['options']) ? (q['options'] as unknown[]) : [];
-  return {
-    question: chaine(q['question']),
-    entete: chaine(q['header']),
-    multiple: q['multiSelect'] === true,
-    options: options.map((o) => {
-      const opt = (typeof o === 'object' && o !== null ? o : {}) as Objet;
-      return { libelle: chaine(opt['label']), description: chaine(opt['description']) };
-    }),
-  };
-}
-
-/** Les appels AskUserQuestion du fil principal portés par cette ligne. */
-export function questionsDe(l: Ligne): Extract<Dialogue, { genre: 'questions' }>[] {
-  if (l.type !== 'assistant' || l.isSidechain === true) return [];
-  return blocs(l.message?.content)
-    .filter((b) => b['type'] === 'tool_use' && b['name'] === 'AskUserQuestion')
-    .map((b) => {
-      const entree = (b['input'] ?? {}) as Objet;
-      const qs = Array.isArray(entree['questions']) ? (entree['questions'] as unknown[]) : [];
-      return { genre: 'questions' as const, id: chaine(b['id']), questions: qs.map(question) };
-    })
-    .filter((d) => d.id !== '' && d.questions.length > 0);
-}
-
-/** Les identifiants d'appels d'outil dont cette ligne porte le résultat. */
-export function resultatsDe(l: Ligne): string[] {
-  if (l.type !== 'user' || l.isSidechain === true) return [];
-  return blocs(l.message?.content)
-    .filter((b) => b['type'] === 'tool_result')
-    .map((b) => chaine(b['tool_use_id']));
+export interface OptionAffichee {
+  readonly libelle: string;
+  readonly description: string;
+  readonly case: 'cochee' | 'vide' | null; // null : option sans case (choix unique)
 }
 
 export interface MenuAffiche {
   readonly titre: string;
-  readonly options: string[];
+  readonly options: OptionAffichee[];
   readonly curseur: number;
 }
 
@@ -82,15 +46,38 @@ function titreDe(lignes: readonly string[]): string {
     .slice(0, 400);
 }
 
-function menuNumerote(corps: readonly string[]): MenuAffiche | null {
-  const lignes = corps.map((l, i) => ({ i, m: l.match(NUMEROTEE) })).filter((x) => x.m !== null);
-  const options = lignes.filter((x, k) => Number(x.m?.[2]) === k + 1);
-  if (options.length < 2) return null;
-  const curseur = options.findIndex((x) => Boolean(x.m?.[1]));
+const CASE = /^\[(.)\]\s*/;
+
+function option(texte: string, description: string[]): OptionAffichee {
+  const c = texte.match(CASE);
   return {
-    titre: titreDe(corps.slice(0, options[0]?.i ?? 0)),
-    options: options.map((x) => (x.m?.[3] ?? '').replace(/^\[.\]\s*/, '')),
-    curseur: Math.max(curseur, 0),
+    libelle: texte.replace(CASE, ''),
+    description: description.join(' '),
+    case: c ? (c[1] === ' ' ? 'vide' : 'cochee') : null,
+  };
+}
+
+// Options numérotées ; les lignes plus indentées qui suivent une option sont sa description (« Submit », la ligne de
+// validation des cases, n'en est pas une).
+function menuNumerote(corps: readonly string[]): MenuAffiche | null {
+  const options: { texte: string; description: string[]; curseur: boolean; ligne: number }[] = [];
+  for (const [i, l] of corps.entries()) {
+    const m = l.match(NUMEROTEE);
+    if (m && Number(m[2]) === options.length + 1) {
+      options.push({ texte: m[3] ?? '', description: [], curseur: Boolean(m[1]), ligne: i });
+      continue;
+    }
+    const derniere = options.at(-1);
+    if (derniere && l.trim() && l.trim() !== 'Submit') derniere.description.push(l.trim());
+  }
+  if (options.length < 2) return null;
+  return {
+    titre: titreDe(corps.slice(0, options[0]?.ligne ?? 0)),
+    options: options.map((o) => option(o.texte, o.description)),
+    curseur: Math.max(
+      options.findIndex((o) => o.curseur),
+      0,
+    ),
   };
 }
 
@@ -103,7 +90,7 @@ function menuSimple(corps: readonly string[]): MenuAffiche | null {
   while (fin < corps.length - 1 && (corps[fin + 1] ?? '').trim()) fin++;
   // Le bloc du curseur colle souvent au texte d'intro : on ne garde que les lignes indentées comme des options.
   while (debut < ici && !/^\s{2,}\S/.test(corps[debut] ?? '')) debut++;
-  const options = corps.slice(debut, fin + 1).map((l) => l.replace(/^\s*❯?\s*/, '').trim());
+  const options = corps.slice(debut, fin + 1).map((l) => option(l.replace(/^\s*❯?\s*/, '').trim(), []));
   if (options.length < 2) return null;
   return { titre: titreDe(corps.slice(0, debut)), options, curseur: ici - debut };
 }
@@ -120,49 +107,56 @@ export function menuAffiche(ecran: string): MenuAffiche | null {
   return menuNumerote(corps) ?? menuSimple(corps);
 }
 
-export function dialogueChoix(menu: MenuAffiche): Extract<Dialogue, { genre: 'choix' }> {
-  const empreinte = Bun.hash(`${menu.titre}\n${menu.options.join('\n')}`).toString(36);
-  return { genre: 'choix', id: `menu-${empreinte}`, titre: menu.titre, options: menu.options };
+// La ligne de réponse libre d'AskUserQuestion : « Type something », ou le texte déjà tapé, juste avant « Chat about
+// this ».
+function indexSaisie(options: readonly OptionAffichee[]): number | null {
+  const i = options.findIndex((o) => /^Type something\.?$/i.test(o.libelle));
+  if (i >= 0) return i;
+  return options.length >= 3 && /^Chat about this$/i.test(options.at(-1)?.libelle ?? '') ? options.length - 2 : null;
+}
+
+export function dialogueDe(menu: MenuAffiche): Dialogue {
+  const empreinte = Bun.hash(`${menu.titre}\n${menu.options.map((o) => o.libelle).join('\n')}`).toString(36);
+  return {
+    id: `menu-${empreinte}`,
+    titre: menu.titre,
+    options: menu.options.map((o) => ({ libelle: o.libelle, description: o.description })),
+    multiple: menu.options.some((o) => o.case !== null),
+    saisie: indexSaisie(menu.options),
+    coches: menu.options.flatMap((o, i) => (o.case === 'cochee' ? [i] : [])),
+  };
 }
 
 const chiffre = (n: number): Touche => ({ touche: String(n) });
 
-function touchesQuestion(q: QuestionDialogue, r: { choix: number[]; autre?: string } | undefined): Touche[] {
-  const n = q.options.length;
-  const autre = r?.autre?.trim();
-  if (!q.multiple) {
-    if (autre) return [chiffre(n + 1), { texte: autre }, { touche: 'Enter' }];
-    return [chiffre((r?.choix[0] ?? 0) + 1)];
-  }
-  // Choix multiple : un chiffre coche sans déplacer le curseur (resté sur la 1re option) ; la saisie libre se tape
-  // curseur posé sur sa ligne. Tab mène à l'onglet suivant, ou à la relecture.
-  const t: Touche[] = (r?.choix ?? []).map((c) => chiffre(c + 1));
-  if (autre) t.push(chiffre(n + 1), ...Array.from({ length: n }, () => ({ touche: 'Down' })), { texte: autre });
-  t.push({ touche: 'Tab' });
-  return t;
+function deplacer(depuis: number, vers: number): Touche[] {
+  const fleche = { touche: vers > depuis ? 'Down' : 'Up' };
+  return Array.from({ length: Math.abs(vers - depuis) }, () => fleche);
 }
 
-/** Les touches qui répondent à un AskUserQuestion affiché, puis valident l'écran de relecture s'il y en a un. */
-export function touchesQuestions(questions: readonly QuestionDialogue[], r: ReponseDialogue): Touche[] | string {
-  if (r.genre !== 'questions') return 'réponse d’un autre genre que le dialogue affiché';
-  if (r.reponses.length !== questions.length) return `il faut ${questions.length} réponse(s)`;
-  const touches: Touche[] = [];
-  for (const [i, q] of questions.entries()) {
-    const rep = r.reponses[i];
-    const horsBornes = rep?.choix.some((c) => c >= q.options.length);
-    if (horsBornes) return `choix hors des options de la question ${i + 1}`;
-    if (!rep?.autre?.trim() && (rep?.choix.length ?? 0) === 0) return `question ${i + 1} sans réponse`;
-    touches.push(...touchesQuestion(q, rep));
-  }
-  // Une seule question à choix unique part dès le choix ; sinon, l'écran de relecture attend « Submit answers ».
-  if (questions.length > 1 || questions.some((q) => q.multiple)) touches.push(chiffre(1));
-  return touches;
+// Cases : un chiffre coche ou décoche sans déplacer le curseur ; la réponse libre se tape curseur posé sur sa ligne ;
+// Tab mène à la question suivante, ou à l'écran de relecture.
+function touchesCases(menu: MenuAffiche, d: Dialogue, r: ReponseDialogue): Touche[] | string {
+  const voulues = new Set(r.cases ?? d.coches);
+  const texte = r.texte?.trim();
+  if (texte && d.saisie !== null) voulues.add(d.saisie);
+  if ([...voulues].some((c) => c >= d.options.length || c > 8)) return 'case hors du dialogue affiché';
+  const touches: Touche[] = d.options.flatMap((_, i) =>
+    voulues.has(i) !== d.coches.includes(i) ? [chiffre(i + 1)] : [],
+  );
+  if (texte && d.saisie !== null) touches.push(...deplacer(menu.curseur, d.saisie), { texte });
+  return [...touches, { touche: 'Tab' }];
 }
 
-/** Les touches qui amènent le curseur d'un menu sur l'option voulue, puis la valident. */
-export function touchesChoix(menu: MenuAffiche, index: number): Touche[] | string {
-  if (index >= menu.options.length) return 'option hors du menu affiché';
-  const ecart = index - menu.curseur;
-  const fleche = { touche: ecart > 0 ? 'Down' : 'Up' };
-  return [...Array.from({ length: Math.abs(ecart) }, () => fleche), { touche: 'Enter' }];
+/** Les touches qui répondent au dialogue affiché, comme au clavier. */
+export function touchesReponse(menu: MenuAffiche, r: ReponseDialogue): Touche[] | string {
+  const d = dialogueDe(menu);
+  if (d.multiple) return touchesCases(menu, d, r);
+  const texte = r.texte?.trim();
+  if (texte) {
+    if (d.saisie === null) return 'ce dialogue n’accepte pas de réponse libre';
+    return [...deplacer(menu.curseur, d.saisie), { texte }, { touche: 'Enter' }];
+  }
+  if (r.index === undefined || r.index >= d.options.length) return 'option hors du dialogue affiché';
+  return [...deplacer(menu.curseur, r.index), { touche: 'Enter' }];
 }
