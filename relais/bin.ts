@@ -53,6 +53,8 @@ function fichierStatique(req: Request): Response {
 
 Bun.serve({
   port: config.portWeb,
+  // Au-delà des 10 s par défaut : le long-poll attend jusqu'à 30 s, une commande de poste jusqu'à 60 s.
+  idleTimeout: 75,
   routes: {
     ...routes,
     '/api/flux': (req, serveur) => {
