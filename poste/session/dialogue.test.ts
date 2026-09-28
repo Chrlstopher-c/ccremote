@@ -92,6 +92,19 @@ describe('touches d’AskUserQuestion (mesurées sur le TUI 2.1.280)', () => {
     expect(touchesQuestions([couleur], r)).toEqual([{ touche: '3' }, { texte: 'Bordeaux' }, { touche: 'Enter' }]);
   });
 
+  test('question multiple seule avec réponse libre : curseur descendu sur la saisie, Tab, relecture', () => {
+    const r = { genre: 'questions' as const, id: 'x', reponses: [{ choix: [0], autre: 'Kiwi' }] };
+    expect(touchesQuestions([fruits], r)).toEqual([
+      { touche: '1' },
+      { touche: '3' },
+      { touche: 'Down' },
+      { touche: 'Down' },
+      { texte: 'Kiwi' },
+      { touche: 'Tab' },
+      { touche: '1' },
+    ]);
+  });
+
   test('deux questions dont une multiple : cases, Tab, puis validation de la relecture', () => {
     const r = { genre: 'questions' as const, id: 'x', reponses: [{ choix: [0] }, { choix: [0, 1] }] };
     expect(touchesQuestions([couleur, fruits], r)).toEqual([

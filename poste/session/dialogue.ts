@@ -127,18 +127,18 @@ export function dialogueChoix(menu: MenuAffiche): Extract<Dialogue, { genre: 'ch
 
 const chiffre = (n: number): Touche => ({ touche: String(n) });
 
-function touchesQuestion(q: QuestionDialogue, r: { choix: number[]; autre?: string } | undefined, seule: boolean) {
+function touchesQuestion(q: QuestionDialogue, r: { choix: number[]; autre?: string } | undefined): Touche[] {
   const n = q.options.length;
   const autre = r?.autre?.trim();
   if (!q.multiple) {
     if (autre) return [chiffre(n + 1), { texte: autre }, { touche: 'Enter' }];
     return [chiffre((r?.choix[0] ?? 0) + 1)];
   }
+  // Choix multiple : un chiffre coche sans déplacer le curseur (resté sur la 1re option) ; la saisie libre se tape
+  // curseur posé sur sa ligne. Tab mène à l'onglet suivant, ou à la relecture.
   const t: Touche[] = (r?.choix ?? []).map((c) => chiffre(c + 1));
-  if (autre) t.push(chiffre(n + 1), { texte: autre });
-  // Question multiple seule : la ligne « Submit » suit « Type something » ; sinon Tab passe à l'onglet suivant.
-  if (seule) t.push(chiffre(n + 1), { touche: 'Down' }, { touche: 'Enter' });
-  else t.push({ touche: 'Tab' });
+  if (autre) t.push(chiffre(n + 1), ...Array.from({ length: n }, () => ({ touche: 'Down' })), { texte: autre });
+  t.push({ touche: 'Tab' });
   return t;
 }
 
@@ -152,9 +152,10 @@ export function touchesQuestions(questions: readonly QuestionDialogue[], r: Repo
     const horsBornes = rep?.choix.some((c) => c >= q.options.length);
     if (horsBornes) return `choix hors des options de la question ${i + 1}`;
     if (!rep?.autre?.trim() && (rep?.choix.length ?? 0) === 0) return `question ${i + 1} sans réponse`;
-    touches.push(...touchesQuestion(q, rep, questions.length === 1));
+    touches.push(...touchesQuestion(q, rep));
   }
-  if (questions.length > 1) touches.push(chiffre(1)); // « Submit answers » de l'écran de relecture
+  // Une seule question à choix unique part dès le choix ; sinon, l'écran de relecture attend « Submit answers ».
+  if (questions.length > 1 || questions.some((q) => q.multiple)) touches.push(chiffre(1));
   return touches;
 }
 
