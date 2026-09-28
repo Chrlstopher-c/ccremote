@@ -12,7 +12,7 @@ export interface ParametresLien {
   readonly secret: string;
   readonly journal: Logger;
   readonly bonjour: () => MessagePoste;
-  readonly surCommande: (c: CommandeRelais) => Promise<MessagePoste>;
+  readonly surCommande: (c: CommandeRelais) => Promise<MessagePoste | null>;
 }
 
 export class LienRelais {
@@ -36,7 +36,7 @@ export class LienRelais {
   // Le flux en direct n'a de valeur que maintenant : perdu si le lien est coupé. Le reste est rejoué à la reconnexion.
   envoyer(m: MessagePoste): void {
     if (this.ws?.readyState === WebSocket.OPEN) return this.ws.send(JSON.stringify(m));
-    if (m.kind === 'flux' || m.kind === 'etat_machine') return;
+    if (m.kind === 'flux' || m.kind === 'etat_machine' || m.kind === 'terminal_sortie') return;
     this.tampon.push(m);
     if (this.tampon.length > TAILLE_TAMPON) this.tampon.shift();
   }
@@ -70,7 +70,7 @@ export class LienRelais {
       return;
     }
     const reponse = await this.p.surCommande(commande);
-    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reponse));
+    if (reponse && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(reponse));
   }
 
   private ferme(code: number, raison: string): void {

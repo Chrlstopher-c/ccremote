@@ -1,6 +1,7 @@
 // Responsabilité : les messages échangés entre un poste (machine de travail) et le relais du Pi.
 // Sens unique du pouvoir : le relais commande, le poste rend compte. Un poste ne commande jamais rien.
 import { z } from 'zod';
+import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
 import { DemandeSession, Evenement, Projet, ReponseDialogue, ResumeSession } from './session.ts';
 
@@ -10,6 +11,7 @@ export const EtatMachine = z.object({
   disque: z.object({ utilise: z.number(), total: z.number() }),
   charge: z.number(),
   demarreeDepuis: z.number(),
+  utilisateur: z.string().optional(), // le compte Unix du poste, à viser en SSH (sur le Pi : pi, pas trinity)
 });
 export type EtatMachine = z.infer<typeof EtatMachine>;
 
@@ -36,6 +38,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     erreur: z.string().optional(),
     donnees: z.unknown().optional(),
   }),
+  ...messagesAppareil,
 ]);
 export type MessagePoste = z.infer<typeof MessagePoste>;
 
@@ -62,6 +65,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('compte_code'), id: z.string(), nom: z.string(), code: z.string().min(1).max(2000) }),
   z.object({ kind: z.literal('compte_retirer'), id: z.string(), nom: z.string() }),
   z.object({ kind: z.literal('comptes_relever'), id: z.string() }),
+  ...commandesAppareil,
 ]);
 export type CommandeRelais = z.infer<typeof CommandeRelais>;
 

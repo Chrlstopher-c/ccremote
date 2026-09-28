@@ -1,6 +1,6 @@
 // Responsabilité : mesurer l'état de la machine (CPU, mémoire, disque, charge) pour le tableau de bord.
 import { statfsSync } from 'node:fs';
-import { cpus, freemem, loadavg, totalmem, uptime } from 'node:os';
+import { cpus, freemem, loadavg, totalmem, uptime, userInfo } from 'node:os';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
 
 interface Echantillon {
@@ -37,6 +37,7 @@ export class SondeMachine {
       disque: { utilise: (fs.blocks - fs.bfree) * fs.bsize, total: fs.blocks * fs.bsize },
       charge: loadavg()[0] ?? 0,
       demarreeDepuis: Math.round(uptime()),
+      utilisateur: userInfo().username,
     };
   }
 }

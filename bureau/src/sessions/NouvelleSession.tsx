@@ -108,30 +108,24 @@ export function NouvelleSession({
   ouvert,
   surFermer,
   surOuverte,
+  machine,
 }: {
   readonly ouvert: boolean;
   readonly surFermer: () => void;
   readonly surOuverte: (id: string) => void;
+  readonly machine?: string;
 }): ReactNode {
-  const n = useNouvelleSession(ouvert, surOuverte);
+  const n = useNouvelleSession(ouvert, surOuverte, machine);
   return (
     <Dialogue ouvert={ouvert} surFermer={surFermer} titre="Nouvelle session" largeur={560}>
       <form onSubmit={(e) => void n.soumettre(e)} className="space-y-3">
         <Emplacement n={n} />
         <Consignes n={n} />
-        {n.erreur && (
-          <p className="text-[12px] text-danger">{n.erreur}</p>
-        )}
+        {n.erreur && <p className="text-[12px] text-danger">{n.erreur}</p>}
         <div className="flex justify-end gap-2 pt-1">
-          <Bouton onClick={surFermer}>
-            Annuler
-          </Bouton>
-          <Bouton
-            type="submit"
-            ton="accent"
-            disabled={n.envoi || !n.projet || !n.f.message.trim()}
-            icone={<Rocket size={13} />}
-          >
+          <Bouton onClick={surFermer}>Annuler</Bouton>
+          <Bouton type="submit" ton="accent" disabled={n.envoi || !n.projet || !n.f.message.trim()}
+            icone={<Rocket size={13} />}>
             {n.envoi ? 'Ouverture…' : 'Lancer la session'}
           </Bouton>
         </div>

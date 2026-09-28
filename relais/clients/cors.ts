@@ -11,7 +11,7 @@ export function entetesCors(origine: string): Record<string, string> {
   return {
     'access-control-allow-origin': origine,
     'access-control-allow-headers': 'authorization, content-type',
-    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-methods': 'GET, POST, PUT, OPTIONS',
     'access-control-max-age': '600',
     vary: 'origin',
   };

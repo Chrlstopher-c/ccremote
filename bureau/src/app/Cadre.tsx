@@ -9,6 +9,7 @@ import { useEtat } from '../shared/etat/contexte.tsx';
 import { ouvrirTerminal } from '../shared/natif.ts';
 import { Touche } from '../shared/ui/elements.tsx';
 import { VueMachine } from '../parc/VueMachine.tsx';
+import { AppareilsOuverts } from '../appareils/AppareilsOuverts.tsx';
 import { BarreLaterale } from './BarreLaterale.tsx';
 import { ColonneListe } from './ColonneListe.tsx';
 import { SOURCE_DEFAUT, sessionsDe, type Source } from './navigation.ts';
@@ -51,7 +52,7 @@ function useSelection() {
 export function Cadre({ surDeconnexion }: { readonly surDeconnexion: () => void }): ReactNode {
   const sel = useSelection();
   const [palette, setPalette] = useState(false);
-  const [nouvelle, setNouvelle] = useState(false);
+  const [nouvelle, setNouvelle] = useState<boolean | string>(false); // une machine : ouverte depuis un appareil
   const machines = useEtat((e) => e.machines);
   const session = sel.toutes.find((s) => s.id === sel.choisie) ?? null;
   const src = sel.source;
@@ -60,12 +61,13 @@ export function Cadre({ surDeconnexion }: { readonly surDeconnexion: () => void 
     sel.choisirSource({ genre: 'sessions', filtre: 'toutes' });
     sel.setChoisie(id);
   };
-  useRaccourcisCadre(sel, session, setPalette, setNouvelle);
-
+  useRaccourcisCadre(sel, session, machines.find((m) => m.id === session?.machine)?.etat?.utilisateur,
+    setPalette, setNouvelle);
   return (
     <div className="flex h-full">
       <BarreLaterale source={sel.source} surChoisir={sel.choisirSource} surDeconnexion={surDeconnexion} />
-      {src.genre === 'comptes' ? <VueComptes /> : (
+      <AppareilsOuverts source={src} surFil={allerSession} surNouvelle={setNouvelle} />
+      {src.genre === 'appareil' ? null : src.genre === 'comptes' ? <VueComptes /> : (
         <>
           <ColonneListe source={sel.source} sessions={sel.liste} choisie={sel.choisie} recherche={sel.recherche}
             surRecherche={sel.setRecherche} surChoisir={allerOuChoisir(sel, allerSession)}
@@ -76,8 +78,8 @@ export function Cadre({ surDeconnexion }: { readonly surDeconnexion: () => void 
       )}
       <PaletteCommandes ouverte={palette} fermer={() => setPalette(false)} allerSession={allerSession}
         allerSource={sel.choisirSource} nouvelle={() => setNouvelle(true)} />
-      <NouvelleSession ouvert={nouvelle} surFermer={() => setNouvelle(false)}
-        surOuverte={(id) => { setNouvelle(false); allerSession(id); }} />
+      <NouvelleSession ouvert={nouvelle !== false} machine={typeof nouvelle === 'string' ? nouvelle : undefined}
+        surFermer={() => setNouvelle(false)} surOuverte={(id) => { setNouvelle(false); allerSession(id); }} />
     </div>
   );
 }
@@ -85,15 +87,16 @@ export function Cadre({ surDeconnexion }: { readonly surDeconnexion: () => void 
 function useRaccourcisCadre(
   sel: Selection,
   session: ResumeSession | null,
+  utilisateur: string | undefined,
   setPalette: (v: boolean) => void,
   setNouvelle: (v: boolean) => void,
 ): void {
   const raccourcis = useMemo(() => ({
     palette: () => setPalette(true), nouvelle: () => setNouvelle(true),
     suivante: () => sel.decaler(1), precedente: () => sel.decaler(-1),
-    terminal: () => { if (session?.tmux) void ouvrirTerminal(session.machine, session.tmux); },
+    terminal: () => { if (session?.tmux) void ouvrirTerminal(session.machine, session.tmux, utilisateur); },
     ecrire: () => window.dispatchEvent(new Event('ccremote:ecrire')),
-  }), [sel, session, setPalette, setNouvelle]);
+  }), [sel, session, utilisateur, setPalette, setNouvelle]);
   useRaccourcis(raccourcis);
 }
 

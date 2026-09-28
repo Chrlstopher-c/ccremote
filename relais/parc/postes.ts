@@ -23,6 +23,11 @@ const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
+  /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
+  terminaux: {
+    duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
+    posteDeconnecte(machine: string): void;
+  } | null = null;
 
   constructor(
     private readonly registre: Registre,
@@ -57,6 +62,7 @@ export class Postes {
     if (this.connectes.get(ws.data.machine) !== ws) return;
     this.connectes.delete(ws.data.machine);
     this.journal.warn({ machine: ws.data.machine }, 'poste déconnecté');
+    this.terminaux?.posteDeconnecte(ws.data.machine);
     this.diffuserMachine(ws.data.machine);
   }
 
@@ -77,6 +83,11 @@ export class Postes {
     });
   }
 
+  /** Sans attendre de réponse : la frappe dans un terminal. Machine hors ligne → perdu, et c'est voulu. */
+  envoyer(machine: string, commande: SansId<CommandeRelais>): void {
+    this.connectes.get(machine)?.send(JSON.stringify({ ...commande, id: '' }));
+  }
+
   recu(ws: ServerWebSocket<DonneesPoste>, brut: string): void {
     const machine = ws.data.machine;
     let m: MessagePoste;
@@ -91,6 +102,7 @@ export class Postes {
 
   private traiter(machine: string, m: MessagePoste): void {
     if (m.kind === 'reponse') return this.enAttente.get(m.id)?.(m);
+    if (m.kind === 'terminal_sortie' || m.kind === 'terminal_fin') return this.terminaux?.duPoste(machine, m);
     if (m.kind === 'bonjour') return this.bonjour(machine, m);
     if (m.kind === 'etat_machine') {
       this.registre.majEtatMachine(machine, m.etat);

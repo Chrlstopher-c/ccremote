@@ -11,7 +11,7 @@ export type Formulaire = typeof VIERGE;
 const cle = (p: Projet): string => `${p.machine}:${p.chemin}`;
 
 // Machine choisie + projet joignable depuis elle (le VPS isolé ne voit que ses propres projets).
-function useEmplacement(ouvert: boolean) {
+function useEmplacement(ouvert: boolean, machineInitiale?: string) {
   const machines = useEtat((e) => e.machines);
   const enLigne = useMemo(() => machines.filter((m) => m.enLigne), [machines]);
   const [machine, setMachine] = useState('');
@@ -19,6 +19,10 @@ function useEmplacement(ouvert: boolean) {
   useEffect(() => {
     if (ouvert && !enLigne.some((m) => m.id === machine)) setMachine(enLigne[0]?.id ?? '');
   }, [ouvert, enLigne, machine]);
+  // Ouverte depuis un appareil : la session part sur lui, sauf s'il est hors ligne.
+  useEffect(() => {
+    if (ouvert && machineInitiale && enLigne.some((m) => m.id === machineInitiale)) setMachine(machineInitiale);
+  }, [ouvert, machineInitiale]); // eslint-disable-line react-hooks/exhaustive-deps -- à l'ouverture seulement
   const projets = useMemo(
     () => machines.filter((m) => machine !== ISOLEE || m.id === ISOLEE).map((m) => [m.id, m.projets] as const),
     [machines, machine],
@@ -40,9 +44,9 @@ function useEmplacement(ouvert: boolean) {
   return { enLigne, machine, choisirMachine, projets, projet, cleProjet, setCleProjet, cle, comptes };
 }
 
-export function useNouvelleSession(ouvert: boolean, surOuverte: (id: string) => void) {
+export function useNouvelleSession(ouvert: boolean, surOuverte: (id: string) => void, machineInitiale?: string) {
   const { client } = useMagasin();
-  const lieu = useEmplacement(ouvert);
+  const lieu = useEmplacement(ouvert, machineInitiale);
   const [f, setF] = useState<Formulaire>(VIERGE);
   const [erreur, setErreur] = useState<string | null>(null);
   const [envoi, setEnvoi] = useState(false);

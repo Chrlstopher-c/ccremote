@@ -1,5 +1,6 @@
-// Responsabilité : la barre latérale — sources (sessions, machines, alertes), état du lien, déconnexion.
-import { Bell, Circle, KeyRound, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
+// Responsabilité : la barre latérale — sources (sessions, machines, accès à distance, alertes), état du lien,
+// déconnexion.
+import { Bell, Circle, HardDrive, KeyRound, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEtat } from '../shared/etat/contexte.tsx';
 import { choisirTheme, LIBELLES_THEME, themeSuivant, useTheme } from '../shared/theme.ts';
@@ -53,6 +54,19 @@ function Machines({ courante, surChoisir }: PropsMachines): ReactNode {
         <Entree key={m.id} source={{ genre: 'machine', id: m.id }} courante={courante} surChoisir={surChoisir}
           icone={<Point ton={m.enLigne ? 'calme' : 'eteint'} />} libelle={m.id}
           compteur={sessions.filter((s) => s.machine === m.id && estOuverte(s)).length} />
+      ))}
+    </Section>
+  );
+}
+
+// Accès à distance : fichiers, terminaux et sessions de chaque appareil, depuis n'importe quel réseau.
+function Appareils({ courante, surChoisir }: PropsMachines): ReactNode {
+  const machines = useEtat((e) => e.machines);
+  return (
+    <Section titre="Accès à distance">
+      {machines.map((m) => (
+        <Entree key={m.id} source={{ genre: 'appareil', id: m.id }} courante={courante} surChoisir={surChoisir}
+          icone={<HardDrive size={13} className={m.enLigne ? '' : 'opacity-40'} />} libelle={m.id} />
       ))}
     </Section>
   );
@@ -112,6 +126,7 @@ export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
             icone={<KeyRound size={14} />} libelle="Comptes" compteur={comptes} />
         </Section>
         <Machines courante={source} surChoisir={surChoisir} />
+        <Appareils courante={source} surChoisir={surChoisir} />
       </div>
       <Pied surDeconnexion={surDeconnexion} />
     </nav>

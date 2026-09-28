@@ -6,10 +6,11 @@ import { journal } from './journal.ts';
 
 export const estBureau = (): boolean => isTauri();
 
-export async function ouvrirTerminal(machine: string, tmux: string): Promise<string | null> {
+/** \`utilisateur\` : le compte Unix du poste distant (sur le Pi, \`pi\` et non le compte SSH par défaut). */
+export async function ouvrirTerminal(machine: string, tmux: string, utilisateur?: string): Promise<string | null> {
   if (!estBureau()) return 'disponible dans l’app de bureau seulement';
   try {
-    await invoke('ouvrir_terminal', { machine, tmux });
+    await invoke('ouvrir_terminal', { machine, tmux, utilisateur: utilisateur ?? null });
     return null;
   } catch (erreur) {
     journal.warn({ machine, tmux, erreur: String(erreur) }, 'terminal non ouvert');

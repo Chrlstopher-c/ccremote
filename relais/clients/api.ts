@@ -7,6 +7,7 @@ import { reveiller } from '../parc/reveil.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ApiSessions } from './api-sessions.ts';
 import type { ApiComptes } from './api-comptes.ts';
+import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
@@ -17,6 +18,7 @@ export interface DependancesApi {
   readonly diffusion: Diffusion;
   readonly sessions: ApiSessions;
   readonly comptes: ApiComptes;
+  readonly fichiers: ApiFichiers;
   readonly wol: ReadonlyMap<string, string>;
   readonly diffusionWol: string;
 }
@@ -60,6 +62,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/relever': { POST: protege((req) => d.comptes.relever(req as never)) },
     '/api/machines/:id/comptes/:nom/code': { POST: protege((req) => d.comptes.code(req as never)) },
     '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
+    ...routesFichiers(d.fichiers, protege),
   };
 }
 

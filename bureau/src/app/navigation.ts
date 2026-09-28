@@ -6,6 +6,7 @@ import { estOuverte } from '../sessions/statut.ts';
 export type Source =
   | { readonly genre: 'sessions'; readonly filtre: 'ouvertes' | 'toutes' }
   | { readonly genre: 'machine'; readonly id: string }
+  | { readonly genre: 'appareil'; readonly id: string }
   | { readonly genre: 'alertes' }
   | { readonly genre: 'comptes' };
 
@@ -15,6 +16,7 @@ export function memeSource(a: Source, b: Source): boolean {
   if (a.genre !== b.genre) return false;
   if (a.genre === 'sessions' && b.genre === 'sessions') return a.filtre === b.filtre;
   if (a.genre === 'machine' && b.genre === 'machine') return a.id === b.id;
+  if (a.genre === 'appareil' && b.genre === 'appareil') return a.id === b.id;
   return true;
 }
 
@@ -34,7 +36,9 @@ export function sessionsDe(source: Source, sessions: readonly ResumeSession[], r
 export function titreSource(source: Source, machines: readonly VueMachine[]): string {
   if (source.genre === 'alertes') return 'Alertes';
   if (source.genre === 'comptes') return 'Comptes';
-  if (source.genre === 'machine') return machines.find((m) => m.id === source.id)?.id ?? source.id;
+  if (source.genre === 'machine' || source.genre === 'appareil') {
+    return machines.find((m) => m.id === source.id)?.id ?? source.id;
+  }
   return source.filtre === 'ouvertes' ? 'Sessions ouvertes' : 'Toutes les sessions';
 }
 

@@ -38,6 +38,10 @@ function useCommandes(p: PropsPalette): Commande[] {
       id: `m-${m.id}`, libelle: m.id, detail: m.enLigne ? 'machine · en ligne' : 'machine · hors ligne',
       agir: () => p.allerSource({ genre: 'machine', id: m.id }),
     })),
+    ...machines.map((m) => ({
+      id: `a-${m.id}`, libelle: `${m.id} — fichiers et terminal`, detail: 'accès à distance',
+      agir: () => p.allerSource({ genre: 'appareil', id: m.id }),
+    })),
     ...sessions.map((s) => ({
       id: `s-${s.id}`, libelle: s.titre, detail: `${s.machine} · ${s.projet.nom}`, agir: () => p.allerSession(s.id),
     })),

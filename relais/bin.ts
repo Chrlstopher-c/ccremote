@@ -5,6 +5,9 @@ import { creerJournal } from '../commun/journal.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { construireRoutes } from './clients/api.ts';
+import { ApiFichiers } from './appareils/api-fichiers.ts';
+import { ouvrirTerminal } from './appareils/route-terminal.ts';
+import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
 import { avecCors } from './clients/cors.ts';
@@ -24,6 +27,10 @@ const acces = new Acces(registre, config.empreinteMotDePasse);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const comptes = new ApiComptes(postes, journal);
+const fichiers = new ApiFichiers(postes, journal);
+const terminaux = new TerminauxRelais(postes, journal);
+postes.terminaux = terminaux;
+type DonneesClient = { readonly type: 'flux' } | DonneesTerminal;
 const routes = avecCors(
   construireRoutes({
     acces,
@@ -32,6 +39,7 @@ const routes = avecCors(
     diffusion,
     sessions,
     comptes,
+    fichiers,
     wol: config.wol,
     diffusionWol: config.diffusionWol,
   }),
@@ -61,16 +69,19 @@ Bun.serve({
       if (!acces.autorise(req)) return erreur('non connecté', 401);
       const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
       const entetes: Record<string, string> = parProtocole ? { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } : {};
-      return serveur.upgrade(req, { data: {}, headers: entetes }) ? undefined : erreur('WebSocket attendu', 426);
+      const data: DonneesClient = { type: 'flux' };
+      return serveur.upgrade(req, { data, headers: entetes }) ? undefined : erreur('WebSocket attendu', 426);
     },
+    '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
     '/api/*': () => erreur('route inconnue', 404),
   },
   fetch: fichierStatique,
   websocket: {
-    data: {} as Record<string, never>,
-    open: (ws) => diffusion.ajouter(ws),
-    close: (ws) => diffusion.retirer(ws),
-    message: () => undefined, // les clients écoutent ; ils agissent par l'API HTTP
+    data: {} as DonneesClient,
+    open: (ws) => (estTerminal(ws) ? void terminaux.ouvert(ws) : diffusion.ajouter(ws)),
+    close: (ws) => (estTerminal(ws) ? terminaux.ferme(ws) : diffusion.retirer(ws)),
+    // Le flux : les clients écoutent et agissent par l'API HTTP. Un terminal : la frappe et les redimensionnements.
+    message: (ws, m) => (estTerminal(ws) ? terminaux.recu(ws, m) : undefined),
     idleTimeout: 120,
     sendPings: true,
   },
@@ -94,7 +105,7 @@ Bun.serve({
     message: (ws, m) => postes.recu(ws, String(m)),
     idleTimeout: 120,
     sendPings: true,
-    maxPayloadLength: 8 * 1024 * 1024,
+    maxPayloadLength: 16 * 1024 * 1024, // un morceau de fichier : 4 Mo bruts, ~5,4 Mo en base64
   },
 });
 

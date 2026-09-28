@@ -17,8 +17,8 @@ fn machine_locale() -> Option<String> {
 }
 
 #[tauri::command]
-pub fn ouvrir_terminal(machine: String, tmux: String) -> Result<(), String> {
-    if !valide(&machine) || !valide(&tmux) {
+pub fn ouvrir_terminal(machine: String, tmux: String, utilisateur: Option<String>) -> Result<(), String> {
+    if !valide(&machine) || !valide(&tmux) || !utilisateur.as_deref().map_or(true, valide) {
         return Err(format!("nom refusé : {machine} / {tmux}"));
     }
     let titre = format!("{tmux} · {machine}");
@@ -31,8 +31,19 @@ pub fn ouvrir_terminal(machine: String, tmux: String) -> Result<(), String> {
     } else {
         // Connexion SSH dédiée (pas la maîtresse partagée) : fermer la fenêtre libère vraiment le client tmux.
         // La commande distante passe par le shell de la machine : `=nom` entre apostrophes, sinon zsh l'expanse.
-        let distante = format!("{} '{cible}'", attache.join(" "));
-        commande.args(["ssh", "-t", "-o", "ControlPath=none", &machine, &distante]);
+        // `☠` Le Pi et le VPS n'ont pas la description de terminal `xterm-kitty` : tmux y refusait de s'attacher
+        // (« missing or unsuitable terminal ») et la fenêtre se refermait aussitôt (Chris, 28/09).
+        let distante = format!(
+            "infocmp xterm-kitty >/dev/null 2>&1 || export TERM=xterm-256color; {} '{cible}'",
+            attache.join(" ")
+        );
+        // Le poste peut tourner sous un autre compte que celui de l'alias SSH (le Pi : \`pi\`, l'alias : \`trinity\`) ;
+        // son serveur tmux est dans SON dossier : c'est ce compte-là qu'il faut viser.
+        commande.args(["ssh", "-t", "-o", "ControlPath=none"]);
+        if let Some(u) = &utilisateur {
+            commande.args(["-l", u]);
+        }
+        commande.args([&machine, &distante]);
     }
     commande.spawn().map(|_| ()).map_err(|e| {
         log::error!("kitty introuvable ou refusé : {e}");
