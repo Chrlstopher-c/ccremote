@@ -1,6 +1,9 @@
-# ARCHITECTURE — ccremote v2
+# ARCHITECTURE — Quart (dépôt `ccremote`, v2)
 
-ccremote pilote les **sessions Claude Code** du parc (tour, portable, Pi, VPS) depuis l'app de bureau, le web ou
+**Quart** est le nom du produit (app de bureau, onglet de Sémaphore sur l'iPhone). Le dépôt, les services
+(`ccremote-relais`, `ccremote-poste`), les identifiants techniques et les dossiers de config gardent le nom `ccremote`.
+
+Quart pilote les **sessions Claude Code** du parc (tour, portable, Pi, VPS) depuis l'app de bureau, le web ou
 l'iPhone (Sémaphore). Une session est un **vrai Claude Code en TUI**, dans un serveur tmux dédié, avec toute la config de
 Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la suit ou lui parle à distance.
 
@@ -47,7 +50,11 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 | `session/transcript.ts`, `sous-agents.ts` | Lecture incrémentale (octets) des transcripts, principal et sous-agents |
 | `session/lanceur.ts`, `crochet.ts`, `mcp-rythme.ts`, `serveur-local.ts` | La ligne `claude` d'une session pilotée, ses hooks (Stop, SessionStart, UserPromptSubmit, PreToolUse) et ses outils (`etape_terminee`, `objectif_atteint`, `poser_question`), reliés au poste par un socket Unix 0600 |
 | `session/garde-sous-agents.ts` | Sous-agents : Sonnet imposé, pas de fork, 3 par étape au plus |
-| `session/consignes.ts`, `confiance.ts` | Le texte ajouté au prompt système ; l'approbation du dossier (sinon le CLI bloque sur « trust ») |
+| `session/consignes.ts`, `confiance.ts` | Le texte ajouté au prompt système ; l'approbation du dossier (sinon le CLI bloque sur « trust ») et l'accueil marqué fait d'un dossier de config neuf |
+| `session/processus.ts`, `adoption.ts` | Les Claude vivants déclarés dans `<config>/sessions/<pid>.json` : identifiant exact des sessions tmux, sessions de terminal suivies en lecture seule |
+| `session/dialogue.ts`, `suivi-dialogue.ts` | Les dialogues du TUI (AskUserQuestion, permission, plan) relevés à l'écran du pane, et la réponse de Quart tapée au clavier après revérification. Le transcript n'écrit un AskUserQuestion qu'une fois répondu : l'écran est la seule source |
+| `session/claude-tmux.zsh` | Lanceur à sourcer dans `~/.zshrc` : tout `claude` interactif tapé au clavier démarre dans `tmux -L claude` |
+| `comptes/` | Les comptes Claude Code de la machine : relevé (identité par `claude auth status`, usage par l'API OAuth, jeton jamais renouvelé ici), connexion OAuth en deux temps (URL puis code, dans un tmux `quart-connexion-*` invisible des sessions), retrait, persistance dans `poste.json` |
 | `parc/` | Lien sortant vers le relais, état de la machine, extinction |
 | `projets/` | Découverte des projets dans les racines de la machine |
 
@@ -68,7 +75,22 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 - **Adoptée** : lancée hors ccremote (bureau de la tour, Atrium, terminal). Suivie en lecture, pilotable par tmux
   (message, interruption, compaction, fermeture), sans autonomie.
 
+## Comptes Claude Code
+
+Un compte = un dossier de config (`CLAUDE_CONFIG_DIR`) sur une machine ; `null` = la config habituelle (`~/.claude`).
+L'usage appartient au compte (email), pas à la machine : l'app regroupe les installations par email et garde le relevé
+lisible le plus récent. Connexion : le poste lance `claude auth login` sans navigateur, rend l'URL (ouverte dans le
+navigateur de Chris par l'app), puis tape le code collé par Chris. Le jeton ne quitte jamais la machine.
+
+## Dialogues du TUI
+
+Quand Claude Code attend un choix (question, permission, validation de plan), le poste relève le menu à l'écran du
+pane toutes les 2 s et le publie sur la fiche de session (`dialogue`) ; un nouveau dialogue devient une question du fil
+(alerte). La réponse (index, cases, texte libre) est traduite en touches, mesurées sur le TUI, et tapée seulement si le
+même dialogue est encore affiché. Sessions de terminal hors tmux : non répondables.
+
 ## Thème de l'app
 
 Charte Echo Agency (skill `echo-agency-design`) : **clair** (canvas sable, accent `brand-600`) et **night** (`#1E1830`,
-accent `brand-400`) selon la préférence du système ; barre latérale night dans les deux.
+accent `brand-400`). Suit le système par défaut ; bascule système / clair / sombre dans le pied de la barre latérale et
+la palette (Ctrl+K), mémorisée sur le poste (`data-theme` sur `<html>`).

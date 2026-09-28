@@ -4,6 +4,10 @@
 
 - [x] **Sémaphore / Vigie sur l’API v2** : refaite (sessions, fil, parc, alertes, réglages), charte Echo
       Agency clair/sombre selon l'iPhone ; build de l'IPA sur le portable.
+- [ ] Chris : ajouter un vrai compte depuis l'écran Comptes (le code OAuth demande sa connexion) et ouvrir une
+      session avec ce compte ; vérifier qu'aucun écran d'accueil du CLI ne bloque sur un dossier de config neuf.
+- [ ] Chris : poser le nouvel IPA (dialogues répondables dans Vigie).
+- [ ] Brancher `claude-tmux.zsh` sur la tour (son lanceur actuel vit dans `/mnt/projects/relais/sessions/`).
 - [ ] Valider l'app de bureau connectée sur le portable (connexion avec le mot de passe, « Ouvrir le terminal » depuis
       l'app, notification système sur un objectif atteint).
 
@@ -14,7 +18,8 @@
 - [ ] Terminal intégré à l'app (xterm.js + PTY `Bun.Terminal` sur le poste) pour le web et l'iPhone.
 - [x] Sessions Claude lancées hors tmux : listées en lecture seule (déclaration `sessions/<pid>.json`).
 - [ ] Session de terminal : proposer « Reprendre dans tmux » une fois le terminal fermé.
-- [ ] Comptes : choix du compte à l'ouverture dans l'app (le VPS en a deux : `compte-a`, `compte-b`).
+- [x] Comptes : choix du compte à l'ouverture dans l'app ; écran Comptes (usage, ajout OAuth, retrait).
+- [ ] Comptes : `compte-b` du VPS est déconnecté — le reconnecter ou le retirer depuis l'écran Comptes.
 - [x] Rétention du fil : purger les événements des sessions fermées depuis plus de 30 jours (démarrage + toutes les 24 h).
 - [ ] Découper le bundle web (un seul fichier de 500 ko+) : Markdown chargé à la demande.
 

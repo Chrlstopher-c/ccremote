@@ -1,4 +1,4 @@
-# ccremote
+# Quart (ccremote)
 
 Toutes les sessions **Claude Code** d'un parc de machines, depuis un seul endroit : une app de bureau (Arch Linux),
 le web, ou l'iPhone ([Sémaphore](https://github.com/Chrlstopher-c/semaphore)).
@@ -10,6 +10,10 @@ le web, ou l'iPhone ([Sémaphore](https://github.com/Chrlstopher-c/semaphore)).
   d'étape et au-delà d'un seuil de contexte, et plafonne ses sous-agents.
 - **Tout le parc** : ouvrir une session sur n'importe quelle machine, y compris sur le projet d'une autre (par SSH),
   voir l'état de chaque machine, la réveiller ou l'éteindre.
+- **Répondre à Claude d'où qu'on soit** : ses questions, demandes de permission et validations de plan s'affichent
+  dans l'app et sur l'iPhone, et s'y répondent comme au clavier.
+- **Les comptes Claude Code** : usage en cours (fenêtre de 5 h, semaine) de chaque compte, machines où il est connecté ;
+  en ajouter un sur la machine de son choix (connexion OAuth dans le navigateur), le retirer.
 
 Architecture et définitions : [`ARCHITECTURE.md`](ARCHITECTURE.md). État courant : [`STATE.md`](STATE.md).
 
@@ -39,6 +43,8 @@ bun test commun poste relais && (cd bureau && bun test src)
 ```
 
 Un poste se lance avec `bun run poste/bin.ts` et `~/.config/ccremote/poste.json` (voir `poste/config.ts`).
+Pour que tout `claude` tapé au clavier soit pilotable depuis Quart, sourcer `poste/session/claude-tmux.zsh` dans
+`~/.zshrc`, avant tout autre enrobage de `claude` (`QUART_SANS_TMUX=1 claude` pour un lancement nu).
 
 ## Déployer
 
@@ -46,7 +52,7 @@ Un poste se lance avec `bun run poste/bin.ts` et `~/.config/ccremote/poste.json`
 ./deploiement/deployer.sh tout          # postes (tour, portable, vps, pi) puis relais
 ./deploiement/deployer.sh poste tour    # une seule machine
 ./bureau/construire.sh                  # build release de l'app (sur la tour)
-./bureau/installer.sh                   # installe l'app sur le portable
+./bureau/installer.sh                   # installe Quart (binaire `quart`, entrée du lanceur d'apps)
 ```
 
 Les valeurs réelles (adresses, MAC, secrets) vivent dans `~/.config/ccremote/deploiement.env`, jamais dans le dépôt.

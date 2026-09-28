@@ -1,6 +1,6 @@
 # STATE — ccremote
 
-*Dernière mise à jour : 2026-09-28 (nuit), branche `dev`*
+*Dernière mise à jour : 2026-09-28 (après-midi), branche `dev`*
 
 ## Résumé
 
@@ -9,6 +9,23 @@
 tourner un poste (`ccremote-poste`) qui gère les **vrais Claude Code en TUI** dans `tmux -L claude` — le même serveur que
 relais/Atrium. L'app de bureau (Tauri) est installée sur le portable ; le même frontend est servi en web sur le domaine
 public. `master` reste la version publique précédente ; `dev` porte le v2.
+
+## 28/09 après-midi — Quart, dialogues, comptes
+
+- **Renommé Quart** côté produit (app de bureau `quart`, entrée de lanceur, titre ; onglet « Quart » de Sémaphore).
+  Dépôt, services et identifiants techniques restent `ccremote` (la connexion de l'app survit à la mise à jour).
+- **Thème** : bascule système / clair / sombre (pied de la barre latérale, palette Ctrl+K).
+- **Dialogues du TUI répondables** depuis l'app et l'iPhone (AskUserQuestion : choix unique, cases, réponse libre,
+  relecture ; permissions ; plans). Relevés à l'écran du pane — le transcript n'écrit la question qu'une fois répondue.
+  Validé de bout en bout sur une vraie session (portable, Haiku).
+- **Comptes Claude Code** : chaque poste relève identité et usage (5 h, semaine, par modèle) toutes les 5 min ; écran
+  « Comptes » (regroupés par email) ; ajout d'un compte sur une machine au choix par OAuth (URL ouverte dans le
+  navigateur, code collé), retrait ; choix du compte à l'ouverture d'une session. Relevé vérifié sur les 4 machines ;
+  ajout testé jusqu'au code (le vrai code demande la connexion de Chris).
+- **Lanceur zsh** (`poste/session/claude-tmux.zsh`, branché sur le portable) : tout `claude` tapé démarre dans tmux.
+- **Correctifs trouvés en route** : Cloudflare remplaçait les réponses 502 du relais par sa page (message perdu) →
+  refus de poste en 409 ; Bun coupait toute requête HTTP à 10 s (long-poll compris) → `idleTimeout` 75 s ; une fiche de
+  session d'un ancien contrat faisait tomber `/api/etat` → lecture tolérante.
 
 ## Pourquoi cette refonte (mesuré le 28/09)
 
