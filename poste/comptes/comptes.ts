@@ -51,11 +51,11 @@ export class Comptes {
     return this.releveEnCours;
   }
 
-  async connecter(nom: string): Promise<Reponse> {
+  async connecter(nom: string, email?: string): Promise<Reponse> {
     if (!NOM_COMPTE.test(nom)) return { ok: false, erreur: 'nom de compte invalide (minuscules, chiffres, tirets)' };
     if (nom in this.d.config.comptes)
       return { ok: false, erreur: `le compte ${nom} existe déjà sur ${this.d.config.machine}` };
-    const r = await demarrerConnexion(nom, join(DOSSIER_COMPTES, nom));
+    const r = await demarrerConnexion(nom, join(DOSSIER_COMPTES, nom), email);
     if ('erreur' in r) return { ok: false, erreur: r.erreur };
     this.connexions.set(nom, { url: r.url, depuis: new Date().toISOString() });
     this.publier();

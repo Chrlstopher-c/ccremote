@@ -56,7 +56,7 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
   if (c.kind === 'eteindre') return eteindreMachine(journal);
-  if (c.kind === 'compte_connecter') return comptes.connecter(c.nom);
+  if (c.kind === 'compte_connecter') return comptes.connecter(c.nom, c.email);
   if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);
   if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
   if (c.kind === 'comptes_relever') return comptes.relever().then(() => ({ ok: true, donnees: comptes.lister() }));

@@ -31,3 +31,9 @@ export function duree(secondes: number): string {
 export function heure(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
+
+/** Le temps restant jusqu'à une échéance (« dans 2 h 10 min »), ou « maintenant » si elle est passée. */
+export function dans(iso: string, maintenant = Date.now()): string {
+  const s = Math.round((Date.parse(iso) - maintenant) / 1000);
+  return s <= 0 ? 'maintenant' : `dans ${duree(s)}`;
+}

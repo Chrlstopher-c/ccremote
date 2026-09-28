@@ -1,11 +1,12 @@
 // Responsabilité : la barre latérale — sources (sessions, machines, alertes), état du lien, déconnexion.
-import { Bell, Circle, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
+import { Bell, Circle, KeyRound, Layers, LogOut, MessagesSquare, Monitor, Moon, Sun } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEtat } from '../shared/etat/contexte.tsx';
 import { choisirTheme, LIBELLES_THEME, themeSuivant, useTheme } from '../shared/theme.ts';
 import { Point } from '../shared/ui/elements.tsx';
 import { memeSource, nonLues, type Source } from './navigation.ts';
 import { estOuverte } from '../sessions/statut.ts';
+import { regrouper } from '../comptes/regroupement.ts';
 
 interface PropsEntree {
   readonly source: Source;
@@ -95,6 +96,7 @@ export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
   const sessions = useEtat((e) => e.sessions);
   const alertes = useEtat((e) => nonLues(e.notifications));
   const ouvertes = sessions.filter((s) => estOuverte(s)).length;
+  const comptes = useEtat((e) => regrouper(e.machines).length);
   return (
     <nav className="flex h-full w-[210px] shrink-0 flex-col border-r border-filet bg-cote">
       <div className="px-4 pt-3.5 pb-3 text-[14px] font-extrabold tracking-[-0.03em]">Quart</div>
@@ -106,6 +108,8 @@ export function BarreLaterale({ source, surChoisir, surDeconnexion }: {
             icone={<Layers size={14} />} libelle="Toutes" compteur={sessions.length} />
           <Entree source={{ genre: 'alertes' }} courante={source} surChoisir={surChoisir}
             icone={<Bell size={14} />} libelle="Alertes" compteur={alertes} />
+          <Entree source={{ genre: 'comptes' }} courante={source} surChoisir={surChoisir}
+            icone={<KeyRound size={14} />} libelle="Comptes" compteur={comptes} />
         </Section>
         <Machines courante={source} surChoisir={surChoisir} />
       </div>

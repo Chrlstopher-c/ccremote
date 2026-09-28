@@ -1,4 +1,4 @@
-// Responsabilité : ce que seule l'app de bureau sait faire — ouvrir un terminal attaché, notifier le système.
+// Responsabilité : ce que seule l'app de bureau sait faire — ouvrir un terminal attaché, un lien, notifier.
 // Dans un navigateur (repli web servi par le relais), ces fonctions se dégradent sans erreur.
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
@@ -13,6 +13,21 @@ export async function ouvrirTerminal(machine: string, tmux: string): Promise<str
     return null;
   } catch (erreur) {
     journal.warn({ machine, tmux, erreur: String(erreur) }, 'terminal non ouvert');
+    return String(erreur);
+  }
+}
+
+/** La page de connexion d'un compte Claude, dans le navigateur de l'utilisateur. */
+export async function ouvrirLien(url: string): Promise<string | null> {
+  if (!estBureau()) {
+    window.open(url, '_blank', 'noopener');
+    return null;
+  }
+  try {
+    await invoke('ouvrir_lien', { url });
+    return null;
+  } catch (erreur) {
+    journal.warn({ erreur: String(erreur) }, 'lien non ouvert');
     return String(erreur);
   }
 }

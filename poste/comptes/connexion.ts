@@ -27,11 +27,13 @@ async function attendre<T>(delaiMs: number, essai: () => Promise<T | null>): Pro
 export async function demarrerConnexion(
   compte: string,
   configDir: string,
+  email?: string,
 ): Promise<{ url: string } | { erreur: string }> {
   mkdirSync(configDir, { recursive: true, mode: 0o700 });
   await tmux.tuer(nomTmux(compte)); // une connexion précédente abandonnée
   const commande = ['env', '-u', 'DISPLAY', '-u', 'WAYLAND_DISPLAY', 'BROWSER=true', `CLAUDE_CONFIG_DIR=${configDir}`];
-  const r = await tmux.creer(nomTmux(compte), homedir(), [...commande, binaireClaude(), 'auth', 'login'], {});
+  const login = [binaireClaude(), 'auth', 'login', ...(email ? ['--email', email] : [])];
+  const r = await tmux.creer(nomTmux(compte), homedir(), [...commande, ...login], {});
   if (r.code !== 0) return { erreur: `tmux refuse la connexion : ${r.erreur}` };
   const lireUrl = async (): Promise<string | null> =>
     (await tmux.capturer(nomTmux(compte)))?.match(URL_OAUTH)?.[0] ?? null;

@@ -27,6 +27,10 @@ function useCommandes(p: PropsPalette): Commande[] {
   return useMemo(() => [
     { id: 'nouvelle', libelle: 'Nouvelle session', detail: 'Ctrl+N', agir: p.nouvelle },
     { id: 'alertes', libelle: 'Alertes', detail: 'aller à', agir: () => p.allerSource({ genre: 'alertes' }) },
+    {
+      id: 'comptes', libelle: 'Comptes Claude Code', detail: 'aller à',
+      agir: () => p.allerSource({ genre: 'comptes' }),
+    },
     ...(['clair', 'sombre', 'systeme'] as const).map((t) => ({
       id: `theme-${t}`, libelle: LIBELLES_THEME[t], detail: 'apparence', agir: () => choisirTheme(t),
     })),

@@ -10,7 +10,10 @@ import { erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
 type RequeteCompte = Request & { params: { id: string; nom?: string } };
 
-const CorpsConnexion = z.object({ nom: z.string().regex(NOM_COMPTE, 'minuscules, chiffres et tirets seulement') });
+const CorpsConnexion = z.object({
+  nom: z.string().regex(NOM_COMPTE, 'minuscules, chiffres et tirets seulement'),
+  email: z.string().email().optional(),
+});
 const CorpsCode = z.object({ code: z.string().trim().min(1).max(2000) });
 
 export class ApiComptes {
@@ -22,7 +25,8 @@ export class ApiComptes {
   async connecter(req: RequeteCompte): Promise<Response> {
     const c = await lireCorps(req, CorpsConnexion);
     if (c instanceof Response) return c;
-    return this.commander(req.params.id, { kind: 'compte_connecter', nom: c.nom });
+    const email = c.email ? { email: c.email } : {};
+    return this.commander(req.params.id, { kind: 'compte_connecter', nom: c.nom, ...email });
   }
 
   async code(req: RequeteCompte): Promise<Response> {

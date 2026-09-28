@@ -56,6 +56,22 @@ export class ClientRelais {
     return this.appeler('POST', `/api/sessions/${sessionId}/${action}`, {});
   }
 
+  connecterCompte(machine: string, nom: string, email?: string): Promise<{ url: string }> {
+    return this.appeler('POST', `/api/machines/${machine}/comptes`, email ? { nom, email } : { nom });
+  }
+
+  validerCompte(machine: string, nom: string, code: string): Promise<unknown> {
+    return this.appeler('POST', `/api/machines/${machine}/comptes/${nom}/code`, { code });
+  }
+
+  retirerCompte(machine: string, nom: string): Promise<unknown> {
+    return this.appeler('POST', `/api/machines/${machine}/comptes/${nom}/retirer`, {});
+  }
+
+  releverComptes(machine: string): Promise<unknown> {
+    return this.appeler('POST', `/api/machines/${machine}/comptes/relever`, {});
+  }
+
   repondre(sessionId: string, reponse: ReponseDialogue): Promise<ResumeSession> {
     return this.appeler('POST', `/api/sessions/${sessionId}/repondre`, reponse);
   }

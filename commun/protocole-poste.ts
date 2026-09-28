@@ -53,7 +53,12 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
   // Comptes Claude Code : connexion OAuth en deux temps (URL, puis code collé par Chris), retrait, relevé immédiat.
-  z.object({ kind: z.literal('compte_connecter'), id: z.string(), nom: z.string().regex(NOM_COMPTE) }),
+  z.object({
+    kind: z.literal('compte_connecter'),
+    id: z.string(),
+    nom: z.string().regex(NOM_COMPTE),
+    email: z.string().email().optional(), // pré-remplit la page de connexion : ajouter un compte déjà connu ailleurs
+  }),
   z.object({ kind: z.literal('compte_code'), id: z.string(), nom: z.string(), code: z.string().min(1).max(2000) }),
   z.object({ kind: z.literal('compte_retirer'), id: z.string(), nom: z.string() }),
   z.object({ kind: z.literal('comptes_relever'), id: z.string() }),

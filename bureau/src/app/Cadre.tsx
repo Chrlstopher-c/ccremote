@@ -4,6 +4,7 @@ import { MessagesSquare } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { NouvelleSession } from '../sessions/NouvelleSession.tsx';
 import { VueSession } from '../sessions/VueSession.tsx';
+import type { ResumeSession } from '../../../commun/session.ts';
 import { useEtat } from '../shared/etat/contexte.tsx';
 import { ouvrirTerminal } from '../shared/natif.ts';
 import { Touche } from '../shared/ui/elements.tsx';
@@ -11,6 +12,7 @@ import { VueMachine } from '../parc/VueMachine.tsx';
 import { BarreLaterale } from './BarreLaterale.tsx';
 import { ColonneListe } from './ColonneListe.tsx';
 import { SOURCE_DEFAUT, sessionsDe, type Source } from './navigation.ts';
+import { VueComptes } from '../comptes/VueComptes.tsx';
 import { PaletteCommandes } from './PaletteCommandes.tsx';
 import { useRaccourcis } from './useRaccourcis.ts';
 
@@ -58,27 +60,41 @@ export function Cadre({ surDeconnexion }: { readonly surDeconnexion: () => void 
     sel.choisirSource({ genre: 'sessions', filtre: 'toutes' });
     sel.setChoisie(id);
   };
-  const raccourcis = useMemo(() => ({
-    palette: () => setPalette(true), nouvelle: () => setNouvelle(true),
-    suivante: () => sel.decaler(1), precedente: () => sel.decaler(-1),
-    terminal: () => { if (session?.tmux) void ouvrirTerminal(session.machine, session.tmux); },
-    ecrire: () => window.dispatchEvent(new Event('ccremote:ecrire')),
-  }), [sel, session]);
-  useRaccourcis(raccourcis);
+  useRaccourcisCadre(sel, session, setPalette, setNouvelle);
 
   return (
     <div className="flex h-full">
       <BarreLaterale source={sel.source} surChoisir={sel.choisirSource} surDeconnexion={surDeconnexion} />
-      <ColonneListe source={sel.source} sessions={sel.liste} choisie={sel.choisie} recherche={sel.recherche}
-        surRecherche={sel.setRecherche} surChoisir={allerOuChoisir(sel, allerSession)}
-        surNouvelle={() => setNouvelle(true)} />
-      {session ? <VueSession key={session.id} session={session} /> : machine ? <VueMachine m={machine} /> : <Vide />}
+      {src.genre === 'comptes' ? <VueComptes /> : (
+        <>
+          <ColonneListe source={sel.source} sessions={sel.liste} choisie={sel.choisie} recherche={sel.recherche}
+            surRecherche={sel.setRecherche} surChoisir={allerOuChoisir(sel, allerSession)}
+            surNouvelle={() => setNouvelle(true)} />
+          {session ? <VueSession key={session.id} session={session} />
+            : machine ? <VueMachine m={machine} /> : <Vide />}
+        </>
+      )}
       <PaletteCommandes ouverte={palette} fermer={() => setPalette(false)} allerSession={allerSession}
         allerSource={sel.choisirSource} nouvelle={() => setNouvelle(true)} />
       <NouvelleSession ouvert={nouvelle} surFermer={() => setNouvelle(false)}
         surOuverte={(id) => { setNouvelle(false); allerSession(id); }} />
     </div>
   );
+}
+
+function useRaccourcisCadre(
+  sel: Selection,
+  session: ResumeSession | null,
+  setPalette: (v: boolean) => void,
+  setNouvelle: (v: boolean) => void,
+): void {
+  const raccourcis = useMemo(() => ({
+    palette: () => setPalette(true), nouvelle: () => setNouvelle(true),
+    suivante: () => sel.decaler(1), precedente: () => sel.decaler(-1),
+    terminal: () => { if (session?.tmux) void ouvrirTerminal(session.machine, session.tmux); },
+    ecrire: () => window.dispatchEvent(new Event('ccremote:ecrire')),
+  }), [sel, session, setPalette, setNouvelle]);
+  useRaccourcis(raccourcis);
 }
 
 // Depuis les alertes, choisir mène à la session concernée ; ailleurs, la sélection reste dans la liste courante.

@@ -5,7 +5,7 @@ import { ErreurApi } from '../shared/api/client.ts';
 import { useEtat, useMagasin } from '../shared/etat/contexte.tsx';
 
 const ISOLEE = 'vps'; // règle du parc : le VPS ne travaille que sur ses propres projets
-const VIERGE = { titre: '', objectif: '', message: '', modele: '', autonomie: true };
+const VIERGE = { titre: '', objectif: '', message: '', modele: '', compte: '', autonomie: true };
 export type Formulaire = typeof VIERGE;
 
 const cle = (p: Projet): string => `${p.machine}:${p.chemin}`;
@@ -32,7 +32,12 @@ function useEmplacement(ouvert: boolean) {
     setMachine(id);
     setCleProjet('');
   };
-  return { enLigne, machine, choisirMachine, projets, projet, cleProjet, setCleProjet, cle };
+  // Les comptes connectés de la machine choisie, avec leur usage de la fenêtre de 5 h pour choisir en connaissance.
+  const comptes = useMemo(
+    () => (machines.find((m) => m.id === machine)?.etatComptes ?? []).filter((c) => c.connecte),
+    [machines, machine],
+  );
+  return { enLigne, machine, choisirMachine, projets, projet, cleProjet, setCleProjet, cle, comptes };
 }
 
 export function useNouvelleSession(ouvert: boolean, surOuverte: (id: string) => void) {
@@ -56,6 +61,7 @@ export function useNouvelleSession(ouvert: boolean, surOuverte: (id: string) => 
         objectif: f.objectif.trim() || null,
         autonomie: f.autonomie,
         ...(f.modele ? { modele: f.modele } : {}),
+        ...(f.compte && lieu.comptes.some((c) => c.id === f.compte) ? { compte: f.compte } : {}),
       });
       setF(VIERGE);
       surOuverte(s.id);

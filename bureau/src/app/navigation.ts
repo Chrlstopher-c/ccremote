@@ -6,7 +6,8 @@ import { estOuverte } from '../sessions/statut.ts';
 export type Source =
   | { readonly genre: 'sessions'; readonly filtre: 'ouvertes' | 'toutes' }
   | { readonly genre: 'machine'; readonly id: string }
-  | { readonly genre: 'alertes' };
+  | { readonly genre: 'alertes' }
+  | { readonly genre: 'comptes' };
 
 export const SOURCE_DEFAUT: Source = { genre: 'sessions', filtre: 'ouvertes' };
 
@@ -32,6 +33,7 @@ export function sessionsDe(source: Source, sessions: readonly ResumeSession[], r
 
 export function titreSource(source: Source, machines: readonly VueMachine[]): string {
   if (source.genre === 'alertes') return 'Alertes';
+  if (source.genre === 'comptes') return 'Comptes';
   if (source.genre === 'machine') return machines.find((m) => m.id === source.id)?.id ?? source.id;
   return source.filtre === 'ouvertes' ? 'Sessions ouvertes' : 'Toutes les sessions';
 }

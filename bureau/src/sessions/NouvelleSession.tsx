@@ -2,6 +2,7 @@
 // quel objectif.
 import { Rocket } from 'lucide-react';
 import type { ReactNode } from 'react';
+import type { EtatCompte } from '../../../commun/comptes.ts';
 import { Bouton } from '../shared/ui/Bouton.tsx';
 import { Dialogue } from '../shared/ui/Dialogue.tsx';
 import { Bascule, Champ, Choix, Libelle, Zone } from '../shared/ui/elements.tsx';
@@ -15,8 +16,24 @@ const MODELES = [
 ] as const;
 type Etat = ReturnType<typeof useNouvelleSession>;
 
+function libelleCompte(c: EtatCompte): string {
+  const usage = c.session ? ` · ${Math.round(c.session.pourcent)} %` : '';
+  return `${c.id}${c.email ? ` · ${c.email}` : ''}${usage}`;
+}
+
 function Options({ valeurs }: { readonly valeurs: readonly (readonly [string, string])[] }): ReactNode {
   return valeurs.map(([v, l]) => <option key={v} value={v}>{l}</option>);
+}
+
+function ChoixCompte({ n }: { readonly n: Etat }): ReactNode {
+  return (
+    <label className="block">
+      <Libelle detail="usage de la fenêtre de 5 h">Compte Claude Code</Libelle>
+      <Choix value={n.f.compte} onChange={(e) => n.setF({ ...n.f, compte: e.target.value })}>
+        <Options valeurs={n.comptes.map((c) => [c.id, libelleCompte(c)] as const)} />
+      </Choix>
+    </label>
+  );
 }
 
 function Emplacement({ n }: { readonly n: Etat }): ReactNode {
@@ -37,6 +54,7 @@ function Emplacement({ n }: { readonly n: Etat }): ReactNode {
           </Choix>
         </label>
       </div>
+      {n.comptes.length > 1 && <ChoixCompte n={n} />}
       <label className="block">
         <Libelle detail={distant}>Projet</Libelle>
         <Choix value={n.cleProjet} onChange={(e) => n.setCleProjet(e.target.value)} required>
