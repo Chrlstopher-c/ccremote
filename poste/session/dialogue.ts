@@ -38,10 +38,11 @@ function corpsDuDialogue(lignes: readonly string[], pied: number): string[] {
   return corps;
 }
 
+// La barre d'onglets d'AskUserQuestion (« ←  ☐ Couleur  ✔ Submit  → ») n'est pas du titre.
 function titreDe(lignes: readonly string[]): string {
   return lignes
     .map((l) => l.trim())
-    .filter(Boolean)
+    .filter((l) => l && !/^←.*→$/.test(l))
     .join(' ')
     .slice(0, 400);
 }
@@ -61,7 +62,9 @@ function option(texte: string, description: string[]): OptionAffichee {
 // validation des cases, n'en est pas une).
 function menuNumerote(corps: readonly string[]): MenuAffiche | null {
   const options: { texte: string; description: string[]; curseur: boolean; ligne: number }[] = [];
+  let curseurSurValider = -1;
   for (const [i, l] of corps.entries()) {
+    if (/^\s*❯\s*Submit\s*$/.test(l)) curseurSurValider = options.length; // ligne virtuelle après la saisie
     const m = l.match(NUMEROTEE);
     if (m && Number(m[2]) === options.length + 1) {
       options.push({ texte: m[3] ?? '', description: [], curseur: Boolean(m[1]), ligne: i });
@@ -74,10 +77,7 @@ function menuNumerote(corps: readonly string[]): MenuAffiche | null {
   return {
     titre: titreDe(corps.slice(0, options[0]?.ligne ?? 0)),
     options: options.map((o) => option(o.texte, o.description)),
-    curseur: Math.max(
-      options.findIndex((o) => o.curseur),
-      0,
-    ),
+    curseur: curseurSurValider >= 0 ? curseurSurValider : Math.max(options.findIndex((o) => o.curseur), 0),
   };
 }
 
@@ -135,7 +135,7 @@ function deplacer(depuis: number, vers: number): Touche[] {
 }
 
 // Cases : un chiffre coche ou décoche sans déplacer le curseur ; la réponse libre se tape curseur posé sur sa ligne ;
-// Tab mène à la question suivante, ou à l'écran de relecture.
+// la ligne « Submit », juste sous la saisie, mène à la question suivante ou à l'écran de relecture.
 function touchesCases(menu: MenuAffiche, d: Dialogue, r: ReponseDialogue): Touche[] | string {
   const voulues = new Set(r.cases ?? d.coches);
   const texte = r.texte?.trim();
@@ -144,8 +144,9 @@ function touchesCases(menu: MenuAffiche, d: Dialogue, r: ReponseDialogue): Touch
   const touches: Touche[] = d.options.flatMap((_, i) =>
     voulues.has(i) !== d.coches.includes(i) ? [chiffre(i + 1)] : [],
   );
-  if (texte && d.saisie !== null) touches.push(...deplacer(menu.curseur, d.saisie), { texte });
-  return [...touches, { touche: 'Tab' }];
+  if (d.saisie === null) return [...touches, { touche: 'Tab' }];
+  if (texte) touches.push(...deplacer(menu.curseur, d.saisie), { texte });
+  return [...touches, ...deplacer(texte ? d.saisie : menu.curseur, d.saisie + 1), { touche: 'Enter' }];
 }
 
 /** Les touches qui répondent au dialogue affiché, comme au clavier. */

@@ -118,7 +118,7 @@ describe('touches (mesurées sur le TUI 2.1.280)', () => {
     ]);
   });
 
-  test('cases : seules les cases à changer, saisie curseur posé, puis Tab', () => {
+  test('cases : seules les cases à changer, saisie curseur posé, puis « Submit »', () => {
     expect(touchesReponse(menu(ECRAN_CASES), { id: '', cases: [1], texte: 'Kiwi' })).toEqual([
       { touche: '1' },
       { touche: '2' },
@@ -126,8 +126,24 @@ describe('touches (mesurées sur le TUI 2.1.280)', () => {
       { touche: 'Down' },
       { touche: 'Down' },
       { texte: 'Kiwi' },
-      { touche: 'Tab' },
+      { touche: 'Down' },
+      { touche: 'Enter' },
     ]);
+  });
+
+  test('cases sans saisie : curseur descendu jusqu’à « Submit »', () => {
+    expect(touchesReponse(menu(ECRAN_CASES), { id: '', cases: [0] })).toEqual([
+      { touche: 'Down' },
+      { touche: 'Down' },
+      { touche: 'Down' },
+      { touche: 'Enter' },
+    ]);
+  });
+
+  test('curseur posé sur « Submit » : relevé comme ligne virtuelle, titre sans barre d’onglets', () => {
+    const m = menu(ECRAN_CASES.replace('❯ 1.', '  1.').replace('     Submit', '❯    Submit'));
+    expect(m.curseur).toBe(3);
+    expect(m.titre).toBe('Quels fruits ?');
   });
 
   test('refuse une option hors du dialogue', () => {
