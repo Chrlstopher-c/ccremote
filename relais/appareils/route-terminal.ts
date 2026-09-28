@@ -38,7 +38,8 @@ export function ouvrirTerminal(
   if (!r.success) return erreur('terminal : paramètres invalides');
   if (!postes.enLigne(r.data.machine)) return erreur(`${r.data.machine} est hors ligne`, REFUS_POSTE);
   const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
-  const entetes: Record<string, string> = parProtocole ? { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } : {};
   const data = donneesTerminal(r.data.machine, r.data.cible, r.data.colonnes, r.data.lignes);
-  return serveur.upgrade(req, { data, headers: entetes }) ? undefined : erreur('WebSocket attendu', 426);
+  // Bun refuse un objet d'en-têtes vide : le client natif (jeton en Authorization) n'en reçoit aucun.
+  const options = parProtocole ? { data, headers: { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } } : { data };
+  return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
 }
