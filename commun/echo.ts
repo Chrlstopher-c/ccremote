@@ -20,6 +20,7 @@ export type MessageEcho =
   | { readonly type: 'usage'; readonly usage: UsageEcho }
   | { readonly type: 'mcp'; readonly serveurs: readonly McpEcho[] }
   | { readonly type: 'contexte'; readonly etat: ContexteEcho }
+  | { readonly type: 'reveil'; readonly attente: ReveilEcho | null }
   | { readonly type: 'voix_commande'; readonly action: CommandeVoix }
   | { readonly type: 'reglages'; readonly reglages: ReglagesEcho }
   | { readonly type: 'cadres'; readonly cadres: readonly CadreEcho[] };
@@ -87,7 +88,17 @@ export interface EtatEcho {
   readonly usage: UsageEcho | null;
   readonly mcp: readonly McpEcho[];
   readonly contexte: ContexteEcho | null;
+  readonly reveil: ReveilEcho | null;
 }
+
+// Un terminal n'atteint plus les sens, leur machine est éteinte : Echo attend que Chris décide de la réveiller.
+export interface ReveilEcho {
+  readonly machine: string;
+  readonly depuis: string;
+  readonly statut: 'attente' | 'en_cours';
+}
+
+export type DecisionReveil = 'reveiller' | 'ignorer';
 
 export interface EntreeHistoriqueEcho {
   readonly ts: string;

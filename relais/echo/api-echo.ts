@@ -8,6 +8,7 @@ type Gestionnaire = (req: Request & { params: Record<string, string> }) => Respo
 const CorpsParler = z.object({ texte: z.string().min(1).max(20_000), appareil: z.string().max(60).optional() });
 const CorpsReglage = z.object({ micro: z.boolean().optional(), voix: z.boolean().optional() });
 const CorpsVoix = z.object({ action: z.enum(['enroler', 'oublier', 'annuler']) });
+const CorpsReveil = z.object({ action: z.enum(['reveiller', 'ignorer']) });
 const CorpsRetrait = z.object({ id: z.string().min(1).max(60) });
 const INJOIGNABLE = 'Echo injoignable';
 const fait = (ok: boolean): Response => (ok ? json({ ok: true }) : erreur(INJOIGNABLE, 502));
@@ -45,6 +46,7 @@ function routesAction(protege: Protege, avec: Avec) {
     '/api/echo/parler': poster(CorpsParler, (lien, c) => lien.parler(c.texte, `quart:${c.appareil ?? 'app'}`)),
     '/api/echo/reglage': poster(CorpsReglage, (lien, c) => lien.regler(c)),
     '/api/echo/voix': poster(CorpsVoix, (lien, c) => lien.commanderVoix(c.action)),
+    '/api/echo/reveil': poster(CorpsReveil, (lien, c) => lien.deciderReveil(c.action)),
     '/api/echo/retirer': poster(CorpsRetrait, (lien, c) => lien.retirerCadre(c.id)),
     '/api/echo/interrompre': { POST: protege(avec((lien) => fait(lien.interrompre()))) },
     '/api/echo/redemarrer': { POST: protege(avec((lien) => fait(lien.redemarrer()))) },

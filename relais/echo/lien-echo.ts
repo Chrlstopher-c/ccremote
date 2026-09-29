@@ -4,12 +4,14 @@ import type {
   CadreEcho,
   CommandeVoix,
   ContexteEcho,
+  DecisionReveil,
   EntreeHistoriqueEcho,
   EtatEcho,
   EtatVoixEcho,
   McpEcho,
   MessageEcho,
   ReglagesEcho,
+  ReveilEcho,
   UsageEcho,
 } from '../../commun/echo.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
@@ -25,6 +27,7 @@ export class LienEcho {
   private usage: UsageEcho | null = null;
   private mcp: readonly McpEcho[] = [];
   private contexte: ContexteEcho | null = null;
+  private reveil: ReveilEcho | null = null;
 
   constructor(
     private readonly url: string,
@@ -44,6 +47,7 @@ export class LienEcho {
       usage: this.usage,
       mcp: this.mcp,
       contexte: this.contexte,
+      reveil: this.reveil,
     };
   }
 
@@ -87,6 +91,10 @@ export class LienEcho {
     return this.envoyer({ type: 'redemarrer' });
   }
 
+  deciderReveil(action: DecisionReveil): boolean {
+    return this.envoyer({ type: 'reveil', action });
+  }
+
   retirerCadre(id: string): boolean {
     return this.envoyer({ type: 'retirer_cadre', id });
   }
@@ -116,6 +124,7 @@ export class LienEcho {
       else if (echo.type === 'usage') this.usage = echo.usage;
       else if (echo.type === 'mcp') this.mcp = echo.serveurs;
       else if (echo.type === 'contexte') this.contexte = echo.etat;
+      else if (echo.type === 'reveil') this.reveil = echo.attente;
       this.diffusion.diffuser({ type: 'echo', echo });
     } catch (err) {
       this.journal.warn({ err }, 'message d’Echo illisible');
