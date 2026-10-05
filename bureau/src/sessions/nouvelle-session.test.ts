@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { projetLibre } from './useNouvelleSession.ts';
+import { projetLibre } from './emplacement.ts';
 
 describe('projetLibre', () => {
   test('~ par défaut, nommé « maison » ; sinon le dernier dossier', () => {

@@ -3,21 +3,14 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import type { Projet } from '../../../commun/session.ts';
 import { ErreurApi } from '../shared/api/client.ts';
 import { useEtat, useMagasin } from '../shared/etat/contexte.tsx';
+import { AUCUN_PROJET, MAISON, projetLibre } from './emplacement.ts';
+
+export { AUCUN_PROJET } from './emplacement.ts';
 
 const VIERGE = { titre: '', objectif: '', message: '', modele: '', compte: '', autonomie: true };
 export type Formulaire = typeof VIERGE;
 
 const cle = (p: Projet): string => `${p.machine}:${p.chemin}`;
-
-export const AUCUN_PROJET = '';
-const MAISON = '~';
-
-/** Un emplacement libre (pas un projet découvert) : son nom est son dernier dossier, « maison » pour ~. */
-export function projetLibre(machine: string, emplacement: string): Projet {
-  const chemin = emplacement.trim() || MAISON;
-  const nom = chemin === MAISON ? 'maison' : (chemin.replace(/\/+$/, '').split('/').pop() ?? chemin) || chemin;
-  return { machine, chemin, nom };
-}
 
 // La machine choisie : la première en ligne, ou celle d'où le formulaire a été ouvert.
 function useMachineChoisie(ouvert: boolean, machineInitiale?: string) {
