@@ -28,6 +28,16 @@ function useCollant(taille: number) {
   return ref;
 }
 
+function Elements({ elements }: { readonly elements: ReturnType<typeof structurer> }): ReactNode {
+  if (elements.length === 0)
+    return <p className="py-12 text-center text-[12px] text-discret">Fil vide pour l’instant.</p>;
+  return elements.map((el) => {
+    if (el.genre === 'outil') return <CarteOutil key={el.seq} el={el} />;
+    if (el.genre === 'sous_agent') return <CarteSousAgent key={el.seq} el={el} />;
+    return <ElementSimple key={el.seq} evt={el.evt} ts={el.ts} />;
+  });
+}
+
 export function Fil({
   sessionId,
   dossier,
@@ -51,19 +61,7 @@ export function Fil({
       <ContexteDossier.Provider value={dossier}>
         <ContexteMachine.Provider value={machine}>
           <div className="mx-auto max-w-[860px]">
-            {elements.length === 0 && (
-              <p
-                className={`py-12 text-center
-            text-[12px] text-discret`}
-              >
-                Fil vide pour l’instant.
-              </p>
-            )}
-            {elements.map((el) => {
-              if (el.genre === 'outil') return <CarteOutil key={el.seq} el={el} />;
-              if (el.genre === 'sous_agent') return <CarteSousAgent key={el.seq} el={el} />;
-              return <ElementSimple key={el.seq} evt={el.evt} ts={el.ts} />;
-            })}
+            <Elements elements={elements} />
           </div>
         </ContexteMachine.Provider>
       </ContexteDossier.Provider>
