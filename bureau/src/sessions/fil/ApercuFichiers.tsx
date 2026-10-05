@@ -50,10 +50,11 @@ function Image({ api, chemin }: { readonly api: ApiAppareil; readonly chemin: st
     );
   return (
     <>
-      <button
-        type="button"
-        title={`${chemin} — clic : agrandir · clic droit : plus`}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setGrand(true)}
+        onKeyDown={(e) => e.key === 'Enter' && setGrand(true)}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenu({ x: e.clientX, y: e.clientY });
@@ -61,7 +62,7 @@ function Image({ api, chemin }: { readonly api: ApiAppareil; readonly chemin: st
         className="cursor-zoom-in"
       >
         <img src={etat.url} alt={etat.nom} className="max-h-80 max-w-full rounded-[6px] border border-filet" />
-      </button>
+      </div>
       {grand && <Visionneuse image={etat} fermer={() => setGrand(false)} />}
       {menu && (
         <MenuImage image={etat} x={menu.x} y={menu.y} agrandir={() => setGrand(true)} fermer={() => setMenu(null)} />
