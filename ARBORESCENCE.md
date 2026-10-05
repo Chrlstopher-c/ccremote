@@ -3,6 +3,7 @@
 Un fichier par ligne, avec sa responsabilité (tirée de son en-tête). Icônes et verrous de dépendances omis.
 
 ```
+.github/workflows/ci.yml                            CI : types (racine et app), tests
 .env.example                                         variables du relais et du poste (sans valeurs)
 .gitignore                                           fichiers non suivis
 .prettierrc                                          format du code (120 colonnes)
@@ -114,7 +115,11 @@ poste/session/session-tmux.ts                        UNE session Claude Code dan
 poste/session/sous-agents.ts                         suivre les sous-agents d'une session — chacun a son transcript dans `…
 poste/session/suite-du-tour.test.ts                  tests de suite-du-tour.ts
 poste/session/suite-du-tour.ts                       décider ce qui suit la fin d'un tour — attendre Chris, compacter, rel…
+poste/session/nuit.test.ts                               politique de réveil du mode nuit, lecture de l'état, fin réussie
+poste/session/nuit.ts                                    mode nuit vu du poste : état écrit par la config Claude, politique de réveil, bascule
 poste/session/suivi-dialogue.ts                      le dialogue en attente d'UNE session, relevé à l'écran de son pane, e…
+poste/session/suivi-nuit.test.ts                         suivi nuit : publication, réveil, abandon, session au travail
+poste/session/suivi-nuit.ts                              le suivi du mode nuit d'UNE session : publier, réveiller, prévenir de la fin
 poste/session/tmux.conf                              config du serveur tmux dédié aux Claude
 poste/session/tmux.ts                                parler au serveur tmux dédié aux Claude (`tmux -L claude`), le même q…
 poste/session/traduction.test.ts                     tests de traduction.ts

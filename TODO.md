@@ -1,5 +1,5 @@
 # TODO — Quart (dépôt ccremote)
-*Dernière mise à jour : 2026-09-28*
+*Dernière mise à jour : 2026-10-06*
 
 ## En cours
 
@@ -8,7 +8,9 @@
 - [ ] Chris : ajouter un vrai compte depuis l'écran Comptes (le code OAuth demande sa connexion) et ouvrir une
       session avec ce compte ; vérifier qu'aucun écran d'accueil du CLI ne bloque sur un dossier de config neuf.
 - [ ] Chris : poser le nouvel IPA (dialogues répondables dans Vigie).
-- [ ] Brancher `claude-tmux.zsh` sur la tour (son lanceur actuel vit dans `/mnt/projects/relais/sessions/`).
+- [x] `claude-tmux.zsh` branché sur la tour (06/10, `~/.zshrc` ; l'ancien lanceur de Relais est commenté, même serveur tmux).
+- [ ] Mode nuit : essai en vrai par Chris (une nuit), puis corrections ; installer la config nuit sur le Pi et le VPS (`~/.claude/night/install.sh`).
+- [ ] Mode nuit : reconstruire et réinstaller l'app de bureau Tauri (la bascule/le badge sont déjà dans le web servi par le relais).
 - [x] App de bureau Quart installée et connectée sur le portable (lanceur d'apps, thème, écran Comptes).
 - [ ] Chris : valider « Ouvrir le terminal » (kitty, corrigé le 28/09 soir) depuis Quart et la notification système sur un objectif atteint.
 

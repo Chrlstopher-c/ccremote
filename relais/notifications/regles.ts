@@ -17,6 +17,8 @@ export function notificationPour(titreSession: string, evt: Evenement): Brouillo
     case 'erreur':
       return { niveau: 'alerte', titre: `${titreSession} — erreur`, texte: court(evt.message) };
     case 'relance':
+      if (evt.raison.startsWith('mode nuit : ') && evt.raison.includes('sans effet'))
+        return { niveau: 'alerte', titre: `${titreSession} — nuit interrompue`, texte: evt.raison };
       return evt.raison.startsWith('autonomie en pause')
         ? { niveau: 'alerte', titre: `${titreSession} — autonomie en pause`, texte: evt.raison }
         : null;

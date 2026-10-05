@@ -44,6 +44,7 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 |---|---|
 | `session/session-tmux.ts` | UNE session : fil, commandes (via tmux), rythme si elle est pilotée |
 | `session/gestionnaire.ts` | Les sessions du poste : découverte dans tmux, adoption, ouverture, persistance |
+| `session/nuit.ts`, `suivi-nuit.ts` | Mode nuit : lecture de l'état écrit par la config Claude (`~/.claude/night/sessions/<id>.json`), politique pure de réveil (6 min d'arrêt sans Chris, 4 essais), bascule `night on|off`, suivi d'UNE session (publication, réveil, fin réussie) |
 | `session/suite-du-tour.ts` | Pur : que faire à la fin d'un tour (attendre, compacter, relancer, patienter, s'arrêter) |
 | `session/politique-compaction.ts` | Pur : quand compacter (seuils étape / dur) et avec quelle consigne |
 | `session/traduction.ts` | Pur : ligne de transcript → événements du fil |
@@ -76,6 +77,15 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
   patience si un sous-agent tourne), compaction pilotée, reprise automatique après compaction.
 - **Adoptée** : lancée hors ccremote (bureau de la tour, Atrium, terminal). Suivie en lecture, pilotable par tmux
   (message, interruption, compaction, fermeture), sans autonomie.
+
+## Mode nuit
+
+Complémentarité voulue entre la config Claude Code de Chris et Quart : la config porte le **comportement** (protocole, plan, relance par
+le hook Stop, refus de finir sans preuve) et marche seule, sans Quart ; Quart porte ce qu'une session ne peut pas faire d'elle-même —
+la **veille** (réveil par tmux quand la session s'arrête malgré tout : limite des 9 blocages, erreur, plantage du CLI), la **vitrine**
+(état dans l'app/l'iPhone, notifications de fin ou d'abandon) et la **télécommande** (bascule depuis l'app). Le contrat entre les deux est
+un fichier : `~/.claude/night/sessions/<claudeSessionId>.json` (lu par le poste) et la trace `.done` d'une fin réussie. Voir
+`~/.claude/night/README.md`.
 
 ## Comptes Claude Code
 

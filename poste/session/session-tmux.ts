@@ -10,7 +10,8 @@ import { CONSIGNE_COMPACTION, deciderCompaction } from './politique-compaction.t
 import { deciderSuite, type Suite } from './suite-du-tour.ts';
 import * as tmux from './tmux.ts';
 import { SuiviSousAgents } from './sous-agents.ts';
-import { basculerNuitClaude, deciderVeille, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
+import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
+import { SuiviNuit } from './suivi-nuit.ts';
 import { SuiviDialogue } from './suivi-dialogue.ts';
 import { LecteurTranscript } from './transcript.ts';
 import { contexteDe, type Ligne, traduire, travailEnCours } from './traduction.ts';
@@ -26,8 +27,6 @@ export interface EnvironnementSession {
   readonly sortie: SortieSession;
 }
 
-const PERIODE_NUIT_MS = 10_000;
-
 const RELANCE_APRES_COMPACTION =
   'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), ' +
   'sans refaire le travail livré.';
@@ -41,14 +40,14 @@ export class SessionTmux {
   private tour = { outils: 0, etapeTerminee: false, debut: Date.now() };
   private drapeaux = { objectifAtteint: false, questionPosee: false, compactionDemandee: false };
   private relancesSansProgres = 0;
-  private readonly veille = {
-    attenteDepuis: null as number | null,
-    dernierReveil: null as number | null,
-    sansEffet: 0,
-    reveils: 0,
-    abandon: false,
-    lecture: 0,
-  };
+  private readonly suiviNuit = new SuiviNuit({
+    resume: () => this.etat,
+    messagesChrisEnVol: () => this.enVol.length,
+    publierNuit: (nuit) => this.maj({ nuit }),
+    emettre: (evt) => this.emettre(evt),
+    coller: (texte) => this.coller(texte),
+    journal: () => this.env.journal,
+  });
   private readonly enVol: string[] = []; // textes envoyés par Chris pendant un tour, pas encore soumis par Claude
   private readonly internes = new Set<string>(); // textes collés par le poste lui-même (relance, compaction)
 
@@ -128,43 +127,9 @@ export class SessionTmux {
 
   // --- mode nuit : le poste est le filet du hook Stop de la config Claude Code (voir nuit.ts) ---
 
-  /** Appelé toutes les 2 s : publie l'état du mode nuit et réveille la session si elle s'est arrêtée, Chris muet. */
-  async veillerNuit(maintenant: number = Date.now()): Promise<void> {
-    const v = this.veille;
-    if (this.etat.statut === 'attente') v.attenteDepuis ??= maintenant;
-    else {
-      v.attenteDepuis = null;
-      if (this.etat.statut === 'travail') {
-        v.sansEffet = 0;
-        v.abandon = false;
-      }
-    }
-    if (maintenant - v.lecture < PERIODE_NUIT_MS) return;
-    v.lecture = maintenant;
-    const nuit = lireNuit(this.etat.claudeSessionId, maintenant, v.reveils);
-    if (JSON.stringify(nuit) !== JSON.stringify(this.etat.nuit ?? null)) this.maj({ nuit });
-    if (v.abandon) return;
-    const suite = deciderVeille({
-      nuit,
-      statut: this.etat.statut,
-      peutEcrire: this.etat.tmux !== null && this.etat.terminal !== true,
-      attenteDepuisMs: v.attenteDepuis,
-      dernierReveilMs: v.dernierReveil,
-      reveilsSansEffet: v.sansEffet,
-      messagesChrisEnVol: this.enVol.length,
-      maintenantMs: maintenant,
-    });
-    if (suite.action === 'abandonner') {
-      v.abandon = true;
-      this.emettre({ type: 'relance', raison: suite.raison });
-    } else if (suite.action === 'reveiller') {
-      v.dernierReveil = maintenant;
-      v.sansEffet += 1;
-      v.reveils += 1;
-      this.emettre({ type: 'relance', raison: suite.raison });
-      const erreur = await this.coller(suite.texte);
-      if (erreur) this.env.journal.warn({ session: this.etat.id, erreur }, 'réveil de nuit refusé');
-    }
+  /** Appelé toutes les 2 s par le gestionnaire (voir suivi-nuit.ts). */
+  veillerNuit(maintenant: number = Date.now()): Promise<void> {
+    return this.suiviNuit.tick(maintenant);
   }
 
   /** Depuis Quart : active ou coupe le mode nuit de la config Claude, puis prévient la session. */
@@ -178,9 +143,7 @@ export class SessionTmux {
       objectif ?? this.etat.objectif ?? this.etat.titre,
     );
     if (erreur) return erreur;
-    this.veille.reveils = 0;
-    this.veille.sansEffet = 0;
-    this.veille.abandon = false;
+    this.suiviNuit.reinitialiser();
     this.maj({ nuit: lireNuit(this.etat.claudeSessionId, Date.now(), 0) });
     return this.envoyer(active ? TEXTE_ACTIVATION : TEXTE_RETOUR);
   }

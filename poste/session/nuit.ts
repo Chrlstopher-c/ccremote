@@ -2,7 +2,7 @@
 // (~/.claude/night/sessions/<id>.json) et décider quand réveiller une session à l'arrêt dont Chris ne répond plus.
 // Le poste est le filet : le hook Stop de Claude relance tant qu'il le peut (9 blocages sans action au plus), le poste
 // reprend la main quand la session s'est arrêtée quand même.
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Nuit, StatutSession } from '../../commun/session.ts';
@@ -45,6 +45,20 @@ export function lireNuit(claudeSessionId: string | null, maintenantMs: number, r
     };
   } catch {
     return null;
+  }
+}
+
+/** Vrai (une seule fois) si `night done` vient de terminer le mode nuit de cette session avec succès. */
+export function finReussie(claudeSessionId: string | null, maintenantMs: number): boolean {
+  if (!claudeSessionId) return false;
+  const chemin = join(dossierNuit(), 'sessions', `${claudeSessionId}.done`);
+  if (!existsSync(chemin)) return false;
+  try {
+    const at = Number((JSON.parse(readFileSync(chemin, 'utf8')) as Record<string, unknown>)['at']);
+    unlinkSync(chemin);
+    return Number.isFinite(at) && maintenantMs - at * 1000 < 10 * 60_000;
+  } catch {
+    return false;
   }
 }
 

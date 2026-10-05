@@ -2,7 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DELAI_REVEIL_MS, deciderVeille, lireNuit, REVEILS_SANS_EFFET_MAX, type EtatVeille } from './nuit.ts';
+import {
+  DELAI_REVEIL_MS,
+  deciderVeille,
+  finReussie,
+  lireNuit,
+  REVEILS_SANS_EFFET_MAX,
+  type EtatVeille,
+} from './nuit.ts';
 
 const nuit = { depuisH: 1, casesOuvertes: 2, relances: 0, reveils: 0 };
 const base: EtatVeille = {
@@ -53,5 +60,20 @@ describe('lireNuit', () => {
     expect(lireNuit('vieux', maintenant, 0)).toBeNull();
     expect(lireNuit('absent', maintenant, 0)).toBeNull();
     expect(lireNuit(null, maintenant, 0)).toBeNull();
+  });
+});
+
+describe('finReussie', () => {
+  test('lit la trace de `night done` une seule fois, ignore l’ancienne', () => {
+    const dossier = mkdtempSync(join(tmpdir(), 'nuit-'));
+    mkdirSync(join(dossier, 'sessions'));
+    process.env['QUART_NUIT_DIR'] = dossier;
+    const maintenant = Date.now();
+    writeFileSync(join(dossier, 'sessions', 'ok.done'), JSON.stringify({ at: maintenant / 1000 - 5 }));
+    writeFileSync(join(dossier, 'sessions', 'vieux.done'), JSON.stringify({ at: maintenant / 1000 - 7200 }));
+    expect(finReussie('ok', maintenant)).toBe(true);
+    expect(finReussie('ok', maintenant)).toBe(false);
+    expect(finReussie('vieux', maintenant)).toBe(false);
+    expect(finReussie(null, maintenant)).toBe(false);
   });
 });

@@ -10,6 +10,28 @@ tourner un poste (`ccremote-poste`) qui gère les **vrais Claude Code en TUI** d
 relais/Atrium. L'app de bureau (Tauri) est installée sur le portable ; le même frontend est servi en web sur le domaine
 public. `master` reste la version publique précédente ; `dev` porte le v2.
 
+## 06/10 — Mode nuit (config Claude Code ⇄ Quart)
+
+Chris dort pendant que les sessions travaillent : « je vais dormir / je te laisse gérer en autonomie » → la session travaille
+seule jusqu'à tout finir et tout tester, sans question ni to-do rendue ; au réveil, il ne fait que tester. Deux moitiés :
+
+- **Config Claude Code** (`~/.claude/night/`, hooks UserPromptSubmit / Stop / SessionStart + commande `night`, voir son README) :
+  détecte la phrase, injecte le protocole, plan à cases + `VERIFY`, relance tant qu'il reste du travail, rappelle les consignes
+  permanentes à chaque message et les rappels au démarrage.
+- **Quart** (cette base) : le **filet** — Claude Code coupe un hook Stop après 9 blocages sans action (mesuré : 14 passent si chaque
+  tour agit), donc `poste/session/suivi-nuit.ts` réveille par tmux une session à l'arrêt dont Chris ne répond plus depuis 6 min
+  (4 réveils sans effet max, puis alerte) ; la **vitrine** — l'état (`nuit` : heures, cases ouvertes, relances, réveils) est lu dans
+  `~/.claude/night/sessions/<id>.json`, publié dans la fiche de session, affiché dans l'app (lune + bascule « nuit ») ; la fin réussie
+  (`night done`, VERIFY vert) devient une notification « objectif atteint », un abandon une alerte « nuit interrompue ».
+- **Bascule depuis l'app/l'iPhone** : `POST /api/sessions/:id/nuit {active, objectif?}` → commande `nuit` au poste → `night on|off`
+  puis message collé dans le tmux. Valable pour les sessions adoptées (terminal) comme pilotées.
+- **Sessions du terminal de la tour** : `claude-tmux.zsh` (Quart) remplace le lanceur de Relais dans `~/.zshrc` ; toute session ouverte
+  au clavier vit dans `tmux -L claude` → adoptée par le poste, visible et pilotable dans Quart (vérifié : la session de travail du
+  06/10 y figure avec son transcript).
+- **CI** ajoutée (`.github/workflows/ci.yml` : types racine + app, tests) — le dépôt n'en avait pas. 78 tests.
+- Déployé le 06/10 : postes tour et portable, relais (Pi). Vérifié de bout en bout : fichier d'état → poste → relais de production →
+  `/api/etat` (champ `nuit`).
+
 ## 28/09 soir — Accès à distance (fichiers, terminaux) et terminal kitty réparé
 
 - **iPhone** (dépôt semaphore, onglet Vigie « Accès ») : même accès natif — fichiers, QuickLook, édition, dépôt de
