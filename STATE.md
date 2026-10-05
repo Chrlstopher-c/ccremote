@@ -28,7 +28,8 @@ seule jusqu'à tout finir et tout tester, sans question ni to-do rendue ; au ré
 - **Sessions du terminal de la tour** : `claude-tmux.zsh` (Quart) remplace le lanceur de Relais dans `~/.zshrc` ; toute session ouverte
   au clavier vit dans `tmux -L claude` → adoptée par le poste, visible et pilotable dans Quart (vérifié : la session de travail du
   06/10 y figure avec son transcript).
-- **CI** ajoutée (`.github/workflows/ci.yml` : types racine + app, tests) — le dépôt n'en avait pas. 78 tests.
+- **CI** ajoutée (`.github/workflows/ci.yml` : types racine + app, tests racine + app) — le dépôt n'en avait pas. 90 tests.
+- **Fil de session** : les fichiers présentés par un appel d'outil (image lue, `SendUserFile`, envoi avec `files`) s'affichent dans le fil — image en aperçu, autre fichier en carte à télécharger — lus sur la machine de la session par l'API fichiers du relais. Plus « aveugle » face à ce que Claude présente.
 - Déployé le 06/10 : postes tour et portable, relais (Pi). Vérifié de bout en bout : fichier d'état → poste → relais de production →
   `/api/etat` (champ `nuit`).
 
