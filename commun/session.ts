@@ -42,6 +42,15 @@ export const ReponseDialogue = z.object({
 });
 export type ReponseDialogue = z.infer<typeof ReponseDialogue>;
 
+// Mode nuit (config Claude Code : ~/.claude/night) : Chris dort, la session travaille seule jusqu'à tout finir.
+export const Nuit = z.object({
+  depuisH: z.number(), // heures écoulées depuis l'activation
+  casesOuvertes: z.number().nullable(), // cases `- [ ]` restantes du plan (null : pas encore compté)
+  relances: z.number(), // relances du hook Stop (côté Claude)
+  reveils: z.number(), // réveils par le poste (session à l'arrêt, Chris muet)
+});
+export type Nuit = z.infer<typeof Nuit>;
+
 export const ResumeSession = z.object({
   id: z.string(),
   machine: z.string(),
@@ -62,6 +71,7 @@ export const ResumeSession = z.object({
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
   terminal: z.boolean().optional(), // vivante dans un terminal ordinaire, hors tmux : suivie en lecture seule
   dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
+  nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
   creeLe: z.string(),
   majLe: z.string(),
 });

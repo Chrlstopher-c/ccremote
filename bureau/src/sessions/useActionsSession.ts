@@ -40,6 +40,7 @@ export function useActionsSession(session: ResumeSession) {
     agir: (a: ActionSession) => executer(() => client.agir(session.id, a)),
     repondre: (r: ReponseDialogue) => executer(() => client.repondre(session.id, r)),
     autonomie: (active: boolean) => executer(() => client.autonomie(session.id, active)),
+    nuit: (active: boolean) => executer(() => client.nuit(session.id, active)),
     terminal: () => executer(() => kitty(session, utilisateur)),
   };
 }

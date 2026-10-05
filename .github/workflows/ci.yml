@@ -1,0 +1,23 @@
+name: CI
+on:
+  push:
+    branches: [dev, master]
+  pull_request:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: Dépendances (racine)
+        run: bun install --frozen-lockfile
+      - name: Types (racine)
+        run: bun run typecheck
+      - name: Tests
+        run: bun test commun poste relais
+      - name: Dépendances (app)
+        run: bun install --frozen-lockfile
+        working-directory: bureau
+      - name: Types (app)
+        run: bunx tsc --noEmit
+        working-directory: bureau

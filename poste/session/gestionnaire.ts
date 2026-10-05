@@ -88,6 +88,7 @@ export class GestionnaireSessions {
     else if (c.kind === 'fermer') erreur = await s.fermer();
     else if (c.kind === 'reprendre') erreur = await s.reprendre();
     else if (c.kind === 'autonomie') s.basculerAutonomie(c.active);
+    else if (c.kind === 'nuit') erreur = await s.basculerNuit(c.active, c.objectif);
     else if (c.kind === 'repondre') erreur = await s.repondre(c.reponse);
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
   }
@@ -144,6 +145,7 @@ export class GestionnaireSessions {
       this.adopter(transcriptDuPane(pane, panes, parPid.get(pane.pid)), pane);
     this.suivreTerminaux(procs.filter((p) => !p.enTmux));
     await Promise.all([...this.sessions.values()].map((s) => s.releverEcran()));
+    await Promise.all([...this.sessions.values()].map((s) => s.veillerNuit()));
   }
 
   // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.

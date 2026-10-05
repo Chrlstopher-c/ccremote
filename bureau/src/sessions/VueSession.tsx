@@ -1,5 +1,5 @@
 // Responsabilité : une session choisie — barre d'outils (actions), ligne d'état (contexte), fil, compositeur.
-import { Minimize2, Play, Power, Square, SquareTerminal } from 'lucide-react';
+import { Minimize2, Moon, Play, Power, Square, SquareTerminal } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ResumeSession } from '../../../commun/session.ts';
 import { tokens } from '../shared/format.ts';
@@ -49,6 +49,29 @@ function BarreOutils({ s, a }: { readonly s: ResumeSession; readonly a: Actions 
   );
 }
 
+function libelleNuit(n: NonNullable<ResumeSession['nuit']>): string {
+  const cases =
+    n.casesOuvertes === null ? '' : ` · ${pluriel(n.casesOuvertes, 'case')} ouverte${n.casesOuvertes > 1 ? 's' : ''}`;
+  return `nuit ${n.depuisH} h${cases}${n.reveils > 0 ? ` · ${pluriel(n.reveils, 'réveil')}` : ''}`;
+}
+
+function Bascules({ s, a }: { readonly s: ResumeSession; readonly a: Actions }): ReactNode {
+  return (
+    <>
+      {s.tmux !== null && !s.terminal && (
+        <label className="flex items-center gap-1.5">
+          nuit <Bascule active={s.nuit != null} onChange={(v) => void a.nuit(v)} libelle="Mode nuit" />
+        </label>
+      )}
+      {s.pilotee && (
+        <label className="flex items-center gap-1.5">
+          autonomie <Bascule active={s.autonomie} onChange={(v) => void a.autonomie(v)} libelle="Autonomie" />
+        </label>
+      )}
+    </>
+  );
+}
+
 // La jauge vire au rouge au seuil de compaction dure (35 % d'une fenêtre de 1 M) : au-delà, chaque tour coûte cher.
 function LigneEtat({ s, a }: { readonly s: ResumeSession; readonly a: Actions }): ReactNode {
   const st = STATUTS[s.statut];
@@ -64,12 +87,14 @@ function LigneEtat({ s, a }: { readonly s: ResumeSession; readonly a: Actions })
         {`${tokens(s.contexte.tokens)} / ${tokens(s.contexte.max)}`}
       </span>
       <span>{`${pluriel(s.etapes, 'étape')} · ${pluriel(s.compactions, 'compaction')}`}</span>
-      <span className="flex-1" />
-      {s.pilotee && (
-        <label className="flex items-center gap-1.5">
-          autonomie <Bascule active={s.autonomie} onChange={(v) => void a.autonomie(v)} libelle="Autonomie" />
-        </label>
+      {s.nuit && (
+        <span className="flex items-center gap-1.5 text-encre-2">
+          <Moon size={12} />
+          {libelleNuit(s.nuit)}
+        </span>
       )}
+      <span className="flex-1" />
+      <Bascules s={s} a={a} />
     </div>
   );
 }
@@ -82,8 +107,11 @@ export function VueSession({ session }: { readonly session: ResumeSession }): Re
       <BarreOutils s={session} a={actions} />
       <LigneEtat s={session} a={actions} />
       {actions.erreur && (
-        <button type="button" onClick={actions.effacerErreur}
-          className="cursor-default border-b border-filet px-4 py-1.5 text-left text-[12px] text-danger">
+        <button
+          type="button"
+          onClick={actions.effacerErreur}
+          className="cursor-default border-b border-filet px-4 py-1.5 text-left text-[12px] text-danger"
+        >
           {actions.erreur}
         </button>
       )}
@@ -91,8 +119,11 @@ export function VueSession({ session }: { readonly session: ResumeSession }): Re
       {session.dialogue && (
         <CarteDialogue dialogue={session.dialogue} repondable={lectureSeule === null} repondre={actions.repondre} />
       )}
-      {lectureSeule ? <LectureSeule s={session} raison={lectureSeule} />
-        : <Composeur session={session} envoyer={actions.envoyer} occupe={actions.occupe} />}
+      {lectureSeule ? (
+        <LectureSeule s={session} raison={lectureSeule} />
+      ) : (
+        <Composeur session={session} envoyer={actions.envoyer} occupe={actions.occupe} />
+      )}
     </section>
   );
 }

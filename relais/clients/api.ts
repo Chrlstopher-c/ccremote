@@ -52,6 +52,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/evenements': { GET: protege((req) => d.sessions.evenements(req as never)) },
     '/api/sessions/:id/messages': { POST: protege((req) => d.sessions.envoyer(req as never)) },
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
+    '/api/sessions/:id/nuit': { POST: protege((req) => d.sessions.nuit(req as never)) },
     '/api/sessions/:id/repondre': { POST: protege((req) => d.sessions.repondre(req as never)) },
     '/api/sessions/:id/:action': { POST: protege((req) => d.sessions.action(req as never)) },
     '/api/notifications': {

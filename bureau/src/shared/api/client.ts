@@ -77,6 +77,10 @@ export class ClientRelais {
     return this.appeler('POST', `/api/sessions/${sessionId}/repondre`, reponse);
   }
 
+  nuit(sessionId: string, active: boolean): Promise<ResumeSession> {
+    return this.appeler('POST', `/api/sessions/${sessionId}/nuit`, { active });
+  }
+
   autonomie(sessionId: string, active: boolean): Promise<ResumeSession> {
     return this.appeler('POST', `/api/sessions/${sessionId}/autonomie`, { active });
   }

@@ -21,6 +21,7 @@ const CorpsOuverture = z.object({
 });
 const CorpsMessage = z.object({ texte: z.string().min(1) });
 const CorpsAutonomie = z.object({ active: z.boolean() });
+const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).optional() });
 const ACTIONS = new Set(['interrompre', 'compacter', 'fermer', 'reprendre'] as const);
 type Action = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
 
@@ -84,6 +85,12 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: 'autonomie', active: c.active });
   }
 
+  async nuit(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsNuit);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'nuit', active: c.active, objectif: c.objectif });
+  }
+
   async repondre(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, ReponseDialogue);
     if (c instanceof Response) return c;
@@ -101,6 +108,7 @@ export class ApiSessions {
     c:
       | { kind: 'envoyer'; texte: string }
       | { kind: 'autonomie'; active: boolean }
+      | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
       | { kind: 'repondre'; reponse: ReponseDialogue }
       | { kind: Action },
   ): Promise<Response> {
