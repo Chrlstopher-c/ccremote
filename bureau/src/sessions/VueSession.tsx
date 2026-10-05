@@ -115,7 +115,7 @@ export function VueSession({ session }: { readonly session: ResumeSession }): Re
           {actions.erreur}
         </button>
       )}
-      <Fil sessionId={session.id} dossier={session.cwd} />
+      <Fil sessionId={session.id} dossier={session.cwd} machine={session.machine} />
       {session.dialogue && (
         <CarteDialogue dialogue={session.dialogue} repondable={lectureSeule === null} repondre={actions.repondre} />
       )}

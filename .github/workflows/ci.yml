@@ -15,6 +15,8 @@ jobs:
         run: bun run typecheck
       - name: Tests
         run: bun test commun poste relais
+      - name: Tests (app)
+        run: bun test bureau/src
       - name: Dépendances (app)
         run: bun install --frozen-lockfile
         working-directory: bureau

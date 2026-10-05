@@ -2,6 +2,8 @@
 import { Bot, ChevronRight, FileText, Globe, Pencil, Search, SquareTerminal, Wrench } from 'lucide-react';
 import { createContext, type ReactNode, useContext, useState } from 'react';
 import { Point } from '../../shared/ui/elements.tsx';
+import { ApercuFichiers } from './ApercuFichiers.tsx';
+import { cheminsPresentes } from './fichiers-presentes.ts';
 import type { ElementOutil, ElementSousAgent } from './structure.ts';
 
 const ICONES: Record<string, ReactNode> = {
@@ -65,6 +67,7 @@ export function CarteOutil({ el }: { readonly el: ElementOutil }): ReactNode {
         <span className="truncate font-mono text-[11.5px] text-discret">{raccourcir(outil.resume, dossier)}</span>
         {resultat === null && <span className="ml-auto pr-1"><Point ton="actif" /></span>}
       </Rangee>
+      {resultat && !resultat.erreur && <ApercuFichiers chemins={cheminsPresentes(outil.nom, outil.detail, dossier)} />}
       {ouvert && <Bloc titre="entrée" texte={outil.detail} />}
       {ouvert && resultat && (
         <Bloc titre={resultat.erreur ? 'erreur' : 'résultat'} texte={resultat.extrait} erreur={resultat.erreur} />
