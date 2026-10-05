@@ -43,3 +43,37 @@ export async function notifierSysteme(titre: string, texte: string): Promise<voi
     journal.warn({ erreur: String(erreur) }, 'notification système impossible');
   }
 }
+
+/** Enregistre un fichier vu dans le fil : Téléchargements/Quart sur le bureau, téléchargement du navigateur en web. */
+export async function enregistrerFichier(nom: string, blob: Blob): Promise<{ chemin: string } | { erreur: string }> {
+  if (!estBureau()) {
+    const url = URL.createObjectURL(blob);
+    Object.assign(document.createElement('a'), { href: url, download: nom }).click();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    return { chemin: nom };
+  }
+  try {
+    const octets = Array.from(new Uint8Array(await blob.arrayBuffer()));
+    return { chemin: await invoke<string>('enregistrer_fichier', { nom, octets }) };
+  } catch (erreur) {
+    journal.warn({ nom, erreur: String(erreur) }, 'fichier non enregistré');
+    return { erreur: String(erreur) };
+  }
+}
+
+/** Ouvre un fichier vu dans le fil dans le navigateur (bureau : copie dans Téléchargements/Quart d'abord). */
+export async function ouvrirDansNavigateur(nom: string, blob: Blob): Promise<string | null> {
+  if (!estBureau()) {
+    window.open(URL.createObjectURL(blob), '_blank', 'noopener');
+    return null;
+  }
+  const r = await enregistrerFichier(nom, blob);
+  if ('erreur' in r) return r.erreur;
+  try {
+    await invoke('ouvrir_dans_navigateur', { chemin: r.chemin });
+    return null;
+  } catch (erreur) {
+    journal.warn({ nom, erreur: String(erreur) }, 'ouverture dans le navigateur impossible');
+    return String(erreur);
+  }
+}

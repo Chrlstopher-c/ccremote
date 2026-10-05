@@ -5,6 +5,7 @@ import { createContext, type ReactNode, useContext, useEffect, useMemo, useState
 import { ApiAppareil } from '../../appareils/api-appareil.ts';
 import { apercuDe } from '../../appareils/fichiers/genre.ts';
 import { useMagasin } from '../../shared/etat/contexte.tsx';
+import { type ImageChargee, MenuImage, Visionneuse } from './Visionneuse.tsx';
 
 /** La machine de la session affichée : d'où lire les fichiers. */
 export const ContexteMachine = createContext('');
@@ -13,7 +14,7 @@ function nomDe(chemin: string): string {
   return chemin.slice(chemin.lastIndexOf('/') + 1);
 }
 
-type EtatImage = { readonly url: string } | { readonly erreur: string } | null;
+type EtatImage = ImageChargee | { readonly erreur: string } | null;
 
 function useImage(api: ApiAppareil, chemin: string): EtatImage {
   const [etat, setEtat] = useState<EtatImage>(null);
@@ -22,8 +23,8 @@ function useImage(api: ApiAppareil, chemin: string): EtatImage {
     let actif = true;
     api
       .lire(chemin)
-      .then((b) => {
-        if (actif) setEtat({ url: (url = URL.createObjectURL(b)) });
+      .then((blob) => {
+        if (actif) setEtat({ url: (url = URL.createObjectURL(blob)), blob, nom: nomDe(chemin) });
       })
       .catch((e: unknown) => actif && setEtat({ erreur: e instanceof Error ? e.message : String(e) }));
     return () => {
@@ -34,8 +35,11 @@ function useImage(api: ApiAppareil, chemin: string): EtatImage {
   return etat;
 }
 
+// Clic : en grand. Clic droit : agrandir, télécharger, ouvrir dans le navigateur.
 function Image({ api, chemin }: { readonly api: ApiAppareil; readonly chemin: string }): ReactNode {
   const etat = useImage(api, chemin);
+  const [grand, setGrand] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   if (etat === null) return <div className="h-24 w-48 animate-pulse rounded-[6px] bg-champ" />;
   if ('erreur' in etat)
     return (
@@ -45,9 +49,24 @@ function Image({ api, chemin }: { readonly api: ApiAppareil; readonly chemin: st
       </div>
     );
   return (
-    <a href={etat.url} target="_blank" rel="noreferrer" title={chemin}>
-      <img src={etat.url} alt={nomDe(chemin)} className="max-h-80 max-w-full rounded-[6px] border border-filet" />
-    </a>
+    <>
+      <button
+        type="button"
+        title={`${chemin} — clic : agrandir · clic droit : plus`}
+        onClick={() => setGrand(true)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+        className="cursor-zoom-in"
+      >
+        <img src={etat.url} alt={etat.nom} className="max-h-80 max-w-full rounded-[6px] border border-filet" />
+      </button>
+      {grand && <Visionneuse image={etat} fermer={() => setGrand(false)} />}
+      {menu && (
+        <MenuImage image={etat} x={menu.x} y={menu.y} agrandir={() => setGrand(true)} fermer={() => setMenu(null)} />
+      )}
+    </>
   );
 }
 

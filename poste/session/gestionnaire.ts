@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
-import type { ConfigPoste } from '../config.ts';
+import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { SessionTmux, type SortieSession } from './session-tmux.ts';
@@ -193,7 +193,7 @@ export class GestionnaireSessions {
 
   // Projet d'une autre machine : la session travaille via ssh depuis un espace local dédié.
   private repertoire(d: DemandeSession): string {
-    if (d.projet.machine === this.config.machine) return d.projet.chemin;
+    if (d.projet.machine === this.config.machine) return developper(d.projet.chemin.trim() || '~');
     const espace = join(this.config.donnees, 'espaces', d.sessionId);
     mkdirSync(espace, { recursive: true });
     return espace;

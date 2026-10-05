@@ -1,12 +1,12 @@
-// Responsabilité : ouvrir une session — où elle tourne, sur quel projet (de n'importe quelle machine joignable), avec
-// quel objectif.
+// Responsabilité : ouvrir une session — où elle tourne, sur quel projet de cette machine (ou un emplacement libre),
+// avec quel objectif.
 import { Rocket } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { EtatCompte } from '../../../commun/comptes.ts';
 import { Bouton } from '../shared/ui/Bouton.tsx';
 import { Dialogue } from '../shared/ui/Dialogue.tsx';
 import { Bascule, Champ, Choix, Libelle, Zone } from '../shared/ui/elements.tsx';
-import { useNouvelleSession } from './useNouvelleSession.ts';
+import { AUCUN_PROJET, useNouvelleSession } from './useNouvelleSession.ts';
 
 const MODELES = [
   ['', 'Par défaut (réglages de Claude Code)'],
@@ -22,7 +22,11 @@ function libelleCompte(c: EtatCompte): string {
 }
 
 function Options({ valeurs }: { readonly valeurs: readonly (readonly [string, string])[] }): ReactNode {
-  return valeurs.map(([v, l]) => <option key={v} value={v}>{l}</option>);
+  return valeurs.map(([v, l]) => (
+    <option key={v} value={v}>
+      {l}
+    </option>
+  ));
 }
 
 function ChoixCompte({ n }: { readonly n: Etat }): ReactNode {
@@ -37,7 +41,6 @@ function ChoixCompte({ n }: { readonly n: Etat }): ReactNode {
 }
 
 function Emplacement({ n }: { readonly n: Etat }): ReactNode {
-  const distant = n.projet && n.projet.machine !== n.machine ? `via ssh ${n.projet.machine}` : undefined;
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
@@ -56,15 +59,18 @@ function Emplacement({ n }: { readonly n: Etat }): ReactNode {
       </div>
       {n.comptes.length > 1 && <ChoixCompte n={n} />}
       <label className="block">
-        <Libelle detail={distant}>Projet</Libelle>
-        <Choix value={n.cleProjet} onChange={(e) => n.setCleProjet(e.target.value)} required>
-          {n.projets.map(([id, liste]) => (
-            <optgroup key={id} label={id}>
-              <Options valeurs={liste.map((p) => [n.cle(p), p.nom] as const)} />
-            </optgroup>
-          ))}
+        <Libelle detail={`projets de ${n.machine || '…'}`}>Projet</Libelle>
+        <Choix value={n.cleProjet} onChange={(e) => n.setCleProjet(e.target.value)}>
+          <option value={AUCUN_PROJET}>Aucun projet — un emplacement</option>
+          <Options valeurs={n.projets.map((p) => [n.cle(p), p.nom] as const)} />
         </Choix>
       </label>
+      {n.cleProjet === AUCUN_PROJET && (
+        <label className="block">
+          <Libelle detail="~ = ton dossier personnel sur la machine">Emplacement</Libelle>
+          <Champ value={n.emplacement} onChange={(e) => n.setEmplacement(e.target.value)} placeholder="~" />
+        </label>
+      )}
     </>
   );
 }
@@ -124,8 +130,12 @@ export function NouvelleSession({
         {n.erreur && <p className="text-[12px] text-danger">{n.erreur}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Bouton onClick={surFermer}>Annuler</Bouton>
-          <Bouton type="submit" ton="accent" disabled={n.envoi || !n.projet || !n.f.message.trim()}
-            icone={<Rocket size={13} />}>
+          <Bouton
+            type="submit"
+            ton="accent"
+            disabled={n.envoi || !n.projet || !n.f.message.trim()}
+            icone={<Rocket size={13} />}
+          >
             {n.envoi ? 'Ouverture…' : 'Lancer la session'}
           </Bouton>
         </div>
