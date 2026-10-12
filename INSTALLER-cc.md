@@ -77,3 +77,40 @@ de la branche et redémarrer `ccremote-poste`.
 
 - Le lanceur `cc` n'est pas exécuté par `ci.yml` (le runner n'a pas tmux). À ajouter si Chris le veut.
 - Les sessions déjà ouvertes avant le changement gardent leur ancien nom tmux.
+
+## Veilleur (reprise des sessions Desktop interrompues)
+
+Le veilleur (`poste/session/veilleur`) surveille `~/.claude/sessions/*.json` (entrypoint `claude-desktop`). Si Desktop
+se ferme pendant qu'une session travaille (dernière entrée = demande sans réponse ou outil sans résultat), il la
+reprend après 45 s via `cc --lanceur veilleur … -- --resume <id>`, une seule fois. Détection de Desktop : processus
+`comm = claude-desktop` sans `--type=` dans ses arguments (processus principal Electron ; `ps -eo comm=,args=`).
+
+Installation (rien n'est lancé tant que Chris ne l'a pas demandé) :
+
+```sh
+mkdir -p ~/.config/systemd/user
+ln -sf ~/.local/share/ccremote/code/poste/session/cc-veilleur.service ~/.config/systemd/user/cc-veilleur.service
+systemctl --user daemon-reload
+systemctl --user enable --now cc-veilleur.service
+```
+
+Vérification :
+
+```sh
+systemctl --user status cc-veilleur.service          # active (running)
+journalctl --user -u cc-veilleur.service -n 20       # « veilleur démarré », puis « reprise … » si besoin
+cd ~/.local/share/ccremote/code && bash poste/session/veilleur.test.sh    # tests isolés (serveur tmux cc-test)
+```
+
+Retour arrière :
+
+```sh
+systemctl --user disable --now cc-veilleur.service
+rm ~/.config/systemd/user/cc-veilleur.service && systemctl --user daemon-reload
+rm -f ~/.local/state/cc/veilleur.json                # état des reprises (optionnel)
+```
+
+Notes :
+- `ExecStart` pointe vers `~/.local/share/ccremote/code/` : `systemd-analyze verify` signale l'absence du fichier tant
+  que la branche n'est pas déployée (attendu).
+- `VEILLEUR_CC` vaut `~/.local/bin/cc` par défaut ; `cc` doit donc être installé (§1) avant le veilleur.

@@ -100,7 +100,7 @@ analyser() {
     esac
   done
   ARGS=("$@")
-  case "$LANCEUR" in kitty | quart | echo) ;; *) erreur "lanceur inconnu : $LANCEUR"; exit 2 ;; esac
+  case "$LANCEUR" in kitty | quart | echo | veilleur) ;; *) erreur "lanceur inconnu : $LANCEUR"; exit 2 ;; esac
   case "$ID" in *[!A-Za-z0-9-]*) erreur "id invalide : $ID"; exit 2 ;; esac
 }
 

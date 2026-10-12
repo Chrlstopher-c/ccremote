@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# Responsabilité : veilleur des sessions Claude Code lancées par Claude Desktop. Quand Desktop se ferme pendant qu'une
+# session travaille, la reprend dans tmux via `cc --lanceur veilleur`. Détection de Desktop : un processus dont le nom
+# (comm) est claude-desktop et dont les arguments ne contiennent pas --type= (le processus principal Electron ; ses
+# fils portent --type=). Dépendances : bash, jq, ps, tmux, cc, notify-send (facultatif).
+set -u
+
+GRACE=45
+FENETRE=1800
+PERIODE=10
+MESSAGE="L'application Claude Desktop s'est fermée pendant ta tâche. "
+MESSAGE+="Reprends exactement où tu t'es arrêté, sans redemander."
+RACINE=""
+UNE_FOIS=0
+VEILLEUR_CC="${VEILLEUR_CC:-$HOME/.local/bin/cc}"
+CC_SOCKET="${CC_SOCKET:-claude}"
+NOTIFIER="${VEILLEUR_NOTIFIER:-notify-send}"
+
+journal() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
+
+resoudre_chemins() {
+  if [ -n "$RACINE" ]; then
+    CLAUDE_HOME="$RACINE/.claude"
+    ETAT="$RACINE/etat/cc"
+  else
+    CLAUDE_HOME="$HOME/.claude"
+    ETAT="${XDG_STATE_HOME:-$HOME/.local/state}/cc"
+  fi
+  CC_REGISTRE="$ETAT/sessions"
+  ETAT_FICHIER="$ETAT/veilleur.json"
+}
+
+maintenant() {
+  if [ -n "${VEILLEUR_HORLOGE:-}" ]; then sh -c "$VEILLEUR_HORLOGE"; else date +%s; fi
+}
+
+# Vrai si Desktop tourne (VEILLEUR_DESKTOP_CMD, pour les tests, remplace la détection par ps).
+desktop_tourne() {
+  if [ -n "${VEILLEUR_DESKTOP_CMD:-}" ]; then sh -c "$VEILLEUR_DESKTOP_CMD"; return; fi
+  ps -eo comm=,args= | awk '$1 == "claude-desktop" && $0 !~ /--type=/ { trouve = 1 } END { exit !trouve }'
+}
+
+# Vrai si le pid existe avec le même procStart (champ 22 de /proc/<pid>/stat, après la parenthèse du nom).
+processus_vivant() { # pid procStart
+  local stat actuel
+  stat=$(cat "/proc/$1/stat" 2> /dev/null) || return 1
+  actuel=$(printf '%s' "${stat##*) }" | awk '{ print $20 }')
+  [ -n "$2" ] && [ "$actuel" = "$2" ]
+}
+
+# Sessions Desktop du registre natif : pid|id|procStart|activité(ms)|cwd|nom
+sessions_desktop() {
+  local f
+  for f in "$CLAUDE_HOME"/sessions/*.json; do
+    [ -f "$f" ] || continue
+    jq -r 'select(.entrypoint == "claude-desktop")
+      | "\(.pid)|\(.sessionId)|\(.procStart // "")|\(.updatedAt // .startedAt // 0)|\(.cwd // "")|\(.name // "")"' \
+      "$f" 2> /dev/null || journal "fiche native illisible : $f"
+  done
+}
+
+transcription_de() { # cwd id : Claude encode le dossier en remplaçant tout caractère non alphanumérique par « - »
+  local dossier
+  dossier=$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g')
+  printf '%s/projects/%s/%s.jsonl' "$CLAUDE_HOME" "$dossier" "$2"
+}
+
+# Vrai si la dernière entrée utile (utilisateur ou assistant) est une demande sans réponse ou un outil sans résultat.
+en_travail() { # fichier
+  local derniere
+  derniere=$(tail -n 400 "$1" | jq -cR 'fromjson? | select(.type == "user" or .type == "assistant")' 2> /dev/null \
+    | tail -n 1)
+  [ -n "$derniere" ] || return 1
+  printf '%s' "$derniere" | jq -e 'if .type == "user" then true
+    else ((.message.content // []) | type == "array" and any(.[]?; .type == "tool_use")) end' > /dev/null 2>&1
+}
+
+lire_etat() {
+  if [ -f "$ETAT_FICHIER" ] && jq -c . "$ETAT_FICHIER" 2> /dev/null; then return; fi
+  printf '{"morts":{},"reprises":{}}'
+}
+
+# Mise à jour atomique de l'état : etat_maj <filtre jq> [options jq]
+etat_maj() {
+  local filtre=$1 tmp="$ETAT_FICHIER.$$.tmp"
+  shift
+  mkdir -p "$ETAT" || return 1
+  lire_etat | jq -c "$@" "$filtre" > "$tmp" && mv -f "$tmp" "$ETAT_FICHIER"
+}
+
+deja_repris() { # id
+  lire_etat | jq -e --arg id "$1" '.reprises[$id]' > /dev/null 2>&1
+}
+
+debut_de_mort() { # id : horodatage de la première observation de la mort, vide si aucune
+  lire_etat | jq -r --arg id "$1" '.morts[$id] // empty'
+}
+
+# Vrai si la session tourne déjà dans tmux (fiche cc vivante, ou pane dont la commande porte l'id).
+deja_vivante() { # id
+  local fiche nom_tmux
+  fiche="$CC_REGISTRE/$1.json"
+  if [ -f "$fiche" ]; then
+    nom_tmux=$(jq -r '.tmux // empty' "$fiche" 2> /dev/null)
+    if [ -n "$nom_tmux" ] && tmux -L "$CC_SOCKET" has-session -t "=$nom_tmux" 2> /dev/null; then return 0; fi
+  fi
+  tmux -L "$CC_SOCKET" list-panes -a -F '#{pane_start_command}' 2> /dev/null | grep -qF -- "$1"
+}
+
+notifier() {
+  command -v "$NOTIFIER" > /dev/null 2>&1 || return 0
+  "$NOTIFIER" "Claude" "$1" > /dev/null 2>&1 || journal "notification non envoyée"
+}
+
+lancer_reprise() { # now id nom cwd
+  local id=$2 nom=$3 cwd=$4
+  if desktop_tourne; then journal "$id : Desktop est revenu, pas de reprise"; return 0; fi
+  if [ ! -d "$cwd" ]; then journal "$id : dossier $cwd absent, pas de reprise"; return 0; fi
+  etat_maj '.reprises[$id] = {le: $le}' --arg id "$id" --arg le "$(date -u +%FT%TZ)" || journal "état non écrit"
+  journal "reprise $id ($nom) dans $cwd"
+  notifier "Reprise de « $nom » : Claude Desktop s'est fermé pendant une tâche"
+  (cd "$cwd" && "$VEILLEUR_CC" --detache --lanceur veilleur --id "$id" --nom "$nom" -- --resume "$id" "$MESSAGE") \
+    || journal "erreur : cc a échoué pour $id"
+}
+
+traiter() { # now pid id procStart activité cwd nom
+  local now=$1 pid=$2 id=$3 depart=$4 activite=$5 cwd=$6 nom=$7 debut
+  if processus_vivant "$pid" "$depart"; then
+    etat_maj 'del(.morts[$id])' --arg id "$id" || journal "état non écrit"
+    return 0
+  fi
+  deja_repris "$id" && return 0
+  deja_vivante "$id" && return 0
+  if [ $((now - activite / 1000)) -gt "$FENETRE" ]; then return 0; fi
+  if ! en_travail "$(transcription_de "$cwd" "$id")" 2> /dev/null; then return 0; fi
+  debut=$(debut_de_mort "$id")
+  if [ -z "$debut" ]; then
+    etat_maj '.morts[$id] = $t' --arg id "$id" --argjson t "$now" || journal "état non écrit"
+    journal "$id : session morte pendant une tâche, délai de grâce de ${GRACE} s"
+    return 0
+  fi
+  if [ $((now - debut)) -lt "$GRACE" ]; then return 0; fi
+  lancer_reprise "$now" "$id" "$nom" "$cwd"
+}
+
+passe() {
+  local now pid id depart activite cwd nom
+  now=$(maintenant) || { journal "horloge indisponible"; return 1; }
+  if desktop_tourne; then
+    etat_maj '.morts = {}' || journal "état non écrit"
+    return 0
+  fi
+  while IFS='|' read -r pid id depart activite cwd nom; do
+    [ -n "$nom" ] || nom=${cwd##*/}
+    traiter "$now" "$pid" "$id" "$depart" "$activite" "$cwd" "$nom"
+  done < <(sessions_desktop)
+}
+
+main() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --une-fois) UNE_FOIS=1; shift ;;
+      --racine)
+        [ $# -ge 2 ] || { journal "--racine attend un dossier"; return 2; }
+        RACINE=$2
+        shift 2
+        ;;
+      *) journal "argument inconnu : $1"; return 2 ;;
+    esac
+  done
+  resoudre_chemins
+  journal "veilleur démarré (grâce ${GRACE} s, fenêtre ${FENETRE} s)"
+  while true; do
+    passe || journal "passe en échec"
+    [ "$UNE_FOIS" = 1 ] && return 0
+    sleep "$PERIODE"
+  done
+}
+
+main "$@"
