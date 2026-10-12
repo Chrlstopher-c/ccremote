@@ -12,7 +12,7 @@ MESSAGE="L'application Claude Desktop s'est fermée pendant ta tâche. "
 MESSAGE+="Reprends exactement où tu t'es arrêté, sans redemander."
 RACINE=""
 UNE_FOIS=0
-VEILLEUR_CC="${VEILLEUR_CC:-$HOME/.local/bin/cc}"
+VEILLEUR_CC="${VEILLEUR_CC:-$HOME/.local/bin/ccs}"
 CC_SOCKET="${CC_SOCKET:-claude}"
 NOTIFIER="${VEILLEUR_NOTIFIER:-notify-send}"
 

@@ -9,7 +9,7 @@ ci-dessous pointe vers l'ancien code), et `ccremote-poste` redémarré pour char
 ## 1. Lien symbolique du lanceur
 
 ```sh
-ln -sf ~/.local/share/ccremote/code/poste/session/cc ~/.local/bin/cc
+ln -sf ~/.local/share/ccremote/code/poste/session/cc ~/.local/bin/ccs
 ```
 
 `cc` résout son propre chemin (`readlink -f`) : il retrouve `tmux.conf` à côté de lui.
@@ -28,7 +28,7 @@ Les remplacer par :
 
 ```
 # Quart : `claude` passe par le lanceur unique `cc` (registre des sessions dans ~/.local/state/cc/sessions)
-claude() { "$HOME/.local/bin/cc" "$@"; }
+claude() { "$HOME/.local/bin/ccs" "$@"; }
 ```
 
 `claude-tmux.zsh` reste dans le dépôt, non supprimé, pour le retour arrière.
@@ -46,7 +46,7 @@ ls ~/.local/state/cc/sessions/      # une fiche <id>.json
 Critère 3 : le `claude` du shell est bien `cc`, et un `claude` lancé dans kitty produit une session visible :
 
 ```sh
-zsh -ic 'functions claude'          # doit afficher : "$HOME/.local/bin/cc" "$@"
+zsh -ic 'functions claude'          # doit afficher : "$HOME/.local/bin/ccs" "$@"
 ```
 
 Critère 5 : après une session lancée par `cc` ou par Quart, aucune adoption à faux identifiant :
@@ -65,7 +65,7 @@ bun test poste/session
 ## 4. Retour arrière
 
 ```sh
-rm ~/.local/bin/cc
+rm ~/.local/bin/ccs
 ```
 
 Dans `~/.zshrc`, supprimer la fonction `claude() { ... }` et rétablir les lignes 51 à 53 ci-dessus.

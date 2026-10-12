@@ -6,7 +6,7 @@ After=default.target
 Type=simple
 ExecStart=%h/.local/share/ccremote/code/poste/session/veilleur
 Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
-Environment=VEILLEUR_CC=%h/.local/bin/cc
+Environment=VEILLEUR_CC=%h/.local/bin/ccs
 Restart=always
 RestartSec=5
 
