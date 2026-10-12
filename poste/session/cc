@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+# Responsabilité : lanceur unique des sessions Claude Code. Chaque session reçoit un id, un nom, une session tmux
+# dans le serveur `tmux -L claude`, et une fiche dans $XDG_STATE_HOME/cc/sessions/<id>.json que lisent Quart et Echo.
+# Dépendances : bash, tmux, uuidgen, claude (git facultatif, pour la racine du nom).
+set -u
+
+SOCKET="${CC_SOCKET:-claude}"
+SELF="$(readlink -f "$0")"
+CONF="$(dirname "$SELF")/tmux.conf"
+ETAT="${XDG_STATE_HOME:-$HOME/.local/state}/cc"
+REGISTRE="$ETAT/sessions"
+VARIABLES=(PATH LANG LC_ALL COLORTERM DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR DBUS_SESSION_BUS_ADDRESS
+  SSH_AUTH_SOCK CLAUDE_CONFIG_DIR)
+SOUS_COMMANDES='mcp|config|doctor|update|upgrade|install|plugin|plugins|setup-token|migrate-installer|agents'
+SOUS_COMMANDES+='|auth|login|logout'
+
+LANCEUR=kitty
+ID=
+NOM=
+DETACHE=0
+CREE=
+ARGS=()
+BIN=
+ID_ARGS=()
+ENVS=()
+CONF_ARGS=()
+
+erreur() { printf 'cc : %s\n' "$*" >&2; }
+
+journal() {
+  mkdir -p "$ETAT" 2> /dev/null && printf '%s %s\n' "$(date -u +%FT%TZ)" "$*" >> "$ETAT/journal.log"
+  return 0
+}
+
+# Chaîne JSON : échappe les guillemets, barres obliques inverses et caractères de contrôle courants.
+json() {
+  local s=${1//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\t'/\\t}
+  s=${s//$'\n'/\\n}
+  printf '"%s"' "$s"
+}
+
+# Valeur d'un champ d'une fiche du registre (une ligne, forme écrite par ecrire_registre).
+champ() { sed -n 's/.*"'"$1"'":\("\([^"]*\)"\|null\).*/\2/p' "$2"; }
+
+nom_de_dossier() {
+  local racine
+  if [ "$PWD" = "$HOME" ]; then
+    racine=racine
+  else
+    racine=$(git -C "$PWD" rev-parse --show-toplevel 2> /dev/null) || racine=$PWD
+  fi
+  racine=${racine%/}
+  racine=${racine##*/}
+  racine=${racine//[^A-Za-z0-9_-]/_}
+  printf '%s' "${racine:-racine}"
+}
+
+session_vivante() { tmux -L "$SOCKET" has-session -t "=$1" 2> /dev/null; }
+
+# Nom libre : -2, -3… ajoutés tant qu'une session tmux vivante porte déjà claude-<nom>.
+nom_libre() {
+  local base=$1 candidat=$1 n=2
+  while session_vivante "$(nom_tmux "$candidat")"; do
+    candidat="$base-$n"
+    n=$((n + 1))
+  done
+  printf '%s' "$candidat"
+}
+
+nom_tmux() { printf 'claude-%s' "${1//[^A-Za-z0-9_-]/_}"; }
+
+trouver_claude() {
+  local c
+  for c in "${CC_CLAUDE:-}" "$HOME/.bun/bin/claude" "$HOME/.local/bin/claude" "$(command -v claude 2> /dev/null)"; do
+    if [ -n "$c" ] && [ -x "$c" ]; then
+      printf '%s' "$c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+analyser() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --lanceur | --id | --nom)
+        [ $# -ge 2 ] || { erreur "$1 attend une valeur"; exit 2; }
+        case "$1" in
+          --lanceur) LANCEUR=$2 ;;
+          --id) ID=$2 ;;
+          --nom) NOM=$2 ;;
+        esac
+        shift 2
+        ;;
+      --detache) DETACHE=1; shift ;;
+      --) shift; break ;;
+      *) break ;;
+    esac
+  done
+  ARGS=("$@")
+  case "$LANCEUR" in kitty | quart | echo) ;; *) erreur "lanceur inconnu : $LANCEUR"; exit 2 ;; esac
+  case "$ID" in *[!A-Za-z0-9-]*) erreur "id invalide : $ID"; exit 2 ;; esac
+}
+
+# Claude seul, sans session à suivre : sous-commandes, impressions, aide, reprise « la plus récente ».
+hors_tmux() {
+  local a
+  [[ "${1:-}" =~ ^($SOUS_COMMANDES)$ ]] && return 0
+  for a in "$@"; do
+    case "$a" in -p | --print | --version | -v | --help | -h | -c | --continue) return 0 ;; esac
+  done
+  return 1
+}
+
+# Id passé à --resume (ou -r) dans les arguments transmis : c'est une reprise, pas une nouvelle conversation.
+valeur_reprise() {
+  local a prec=
+  for a in "$@"; do
+    if [ "$prec" = --resume ] || [ "$prec" = -r ]; then
+      printf '%s' "$a"
+      return 0
+    fi
+    prec=$a
+  done
+  return 1
+}
+
+# Fiche écrite d'un bloc puis renommée : un lecteur ne voit jamais une fiche à moitié écrite.
+ecrire_registre() { # id nom cwd tmux lanceur creeLe
+  local fichier="$REGISTRE/$1.json" tmp="$REGISTRE/.$1.$$.tmp" tmuxjson=null
+  [ -n "$4" ] && tmuxjson=$(json "$4")
+  mkdir -p "$REGISTRE" || return 1
+  printf '{"id":%s,"nom":%s,"cwd":%s,"tmux":%s,"lanceur":%s,"creeLe":%s}\n' \
+    "$(json "$1")" "$(json "$2")" "$(json "$3")" "$tmuxjson" "$(json "$5")" "$(json "$6")" > "$tmp" \
+    && mv -f "$tmp" "$fichier"
+}
+
+# Vrai si cc tourne déjà dans une session du serveur claude : pas d'imbrication, on remplace le processus.
+dans_claude_tmux() {
+  [ -n "${TMUX:-}" ] && [ "${TMUX%%,*}" = "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$SOCKET" ]
+}
+
+preparer_identite() {
+  local reprise=""
+  reprise=$(valeur_reprise "${ARGS[@]}") || reprise=""
+  if [ -n "$reprise" ]; then
+    ID=$reprise
+  else
+    ID=${ID:-$(uuidgen | tr 'A-F' 'a-f')}
+    ID_ARGS=(--session-id "$ID")
+  fi
+  local fichier="$REGISTRE/$ID.json"
+  if [ -f "$fichier" ]; then
+    NOM=${NOM:-$(champ nom "$fichier")}
+    CREE=$(champ creeLe "$fichier")
+  fi
+  NOM=${NOM:-$(nom_de_dossier)}
+  CREE=${CREE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+  [ -n "$reprise" ] || ID_ARGS+=(--name "$NOM")
+}
+
+lancer_ici() {
+  local courante
+  courante=$(tmux -L "$SOCKET" display-message -p '#S' 2> /dev/null)
+  ecrire_registre "$ID" "$NOM" "$PWD" "$courante" "$LANCEUR" "$CREE" || { erreur "registre impossible"; return 1; }
+  journal "ici $ID $NOM ($LANCEUR)"
+  exec "$BIN" "${ID_ARGS[@]}" "${ARGS[@]}"
+}
+
+preparer_tmux() {
+  local v
+  CONF_ARGS=()
+  [ -f "$CONF" ] && CONF_ARGS=(-f "$CONF")
+  ENVS=()
+  for v in "${VARIABLES[@]}"; do
+    [ -n "${!v:-}" ] && ENVS+=(-e "$v=${!v}")
+  done
+  return 0
+}
+
+# Hors d'une session claude : une session dédiée dans le serveur claude, rattachée si un terminal est là.
+lancer_tmux() {
+  local tmuxnom
+  NOM=$(nom_libre "$NOM")
+  tmuxnom=$(nom_tmux "$NOM")
+  ecrire_registre "$ID" "$NOM" "$PWD" "$tmuxnom" "$LANCEUR" "$CREE" || { erreur "registre impossible"; return 1; }
+  preparer_tmux
+  if ! tmux -L "$SOCKET" "${CONF_ARGS[@]}" -u new-session -d -s "$tmuxnom" -c "$PWD" "${ENVS[@]}" -- \
+    env -u CLAUDE_CODE_CHILD_SESSION "$BIN" "${ID_ARGS[@]}" "${ARGS[@]}"; then
+    erreur "tmux refuse la session $tmuxnom"
+    return 1
+  fi
+  journal "tmux $ID $tmuxnom ($LANCEUR)"
+  if [ "$DETACHE" = 1 ] || [ ! -t 1 ]; then
+    printf '%s\n' "$tmuxnom"
+    return 0
+  fi
+  exec env -u TMUX tmux -L "$SOCKET" attach-session -t "=$tmuxnom"
+}
+
+demarrer() {
+  preparer_identite
+  if dans_claude_tmux; then lancer_ici; else lancer_tmux; fi
+}
+
+correspond() { # ref fiche : id exact, préfixe d'id (4 caractères au moins) ou nom exact
+  local id
+  id=$(champ id "$2")
+  [ "$id" = "$1" ] || [ "$(champ nom "$2")" = "$1" ] || { [ "${#1}" -ge 4 ] && [[ "$id" == "$1"* ]]; }
+}
+
+trouver_entree() { # la fiche la plus récente qui correspond
+  local f
+  while IFS= read -r f; do
+    if correspond "$1" "$f"; then
+      printf '%s' "$f"
+      return 0
+    fi
+  done < <(ls -1t "$REGISTRE"/*.json 2> /dev/null)
+  return 1
+}
+
+reprendre() {
+  local ref=${1:-} fichier id nom lanceur nom_tmux
+  [ -n "$ref" ] || { erreur 'usage : cc reprendre <id|nom>'; return 2; }
+  fichier=$(trouver_entree "$ref") || { erreur "session « $ref » introuvable"; return 1; }
+  id=$(champ id "$fichier")
+  nom=$(champ nom "$fichier")
+  lanceur=$(champ lanceur "$fichier")
+  nom_tmux=$(champ tmux "$fichier")
+  if [ -n "$nom_tmux" ] && session_vivante "$nom_tmux"; then
+    if [ -t 1 ]; then exec env -u TMUX tmux -L "$SOCKET" attach-session -t "=$nom_tmux"; fi
+    printf 'vivante : tmux -L %s attach-session -t =%s\n' "$SOCKET" "$nom_tmux"
+    return 0
+  fi
+  # La reprise se fait dans le dossier d'origine, pas dans celui de l'appelant.
+  local cwd
+  cwd=$(champ cwd "$fichier")
+  if [ -d "$cwd" ]; then cd "$cwd" || return 1; fi
+  exec "$SELF" --lanceur "$lanceur" --id "$id" --nom "$nom" -- --resume "$id"
+}
+
+liste() {
+  local f nom_tmux etat
+  while IFS= read -r f; do
+    nom_tmux=$(champ tmux "$f")
+    etat=fermé
+    if [ -n "$nom_tmux" ] && session_vivante "$nom_tmux"; then etat=vivant; fi
+    printf '%-8s %-7s %-28s %-7s %s\n' "$(champ id "$f" | cut -c1-8)" "$etat" "$(champ nom "$f")" \
+      "$(champ lanceur "$f")" "$(champ cwd "$f")"
+  done < <(ls -1t "$REGISTRE"/*.json 2> /dev/null)
+}
+
+analyser_sous_commande() {
+  case "${1:-}" in
+    reprendre) shift; reprendre "$@" ;;
+    liste) liste ;;
+    *) return 1 ;;
+  esac
+}
+
+main() {
+  unset CLAUDE_CODE_CHILD_SESSION
+  if [ "${1:-}" = reprendre ] || [ "${1:-}" = liste ]; then
+    analyser_sous_commande "$@"
+    return
+  fi
+  analyser "$@"
+  BIN=$(trouver_claude) || { erreur 'claude introuvable'; return 127; }
+  if hors_tmux "${ARGS[@]}"; then exec "$BIN" "${ARGS[@]}"; fi
+  demarrer
+}
+
+main "$@"
