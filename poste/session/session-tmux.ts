@@ -40,6 +40,7 @@ export class SessionTmux {
   private tour = { outils: 0, etapeTerminee: false, debut: Date.now() };
   private drapeaux = { objectifAtteint: false, questionPosee: false, compactionDemandee: false };
   private relancesSansProgres = 0;
+  private nomFixe: string | null = null; // nom donné par cc ou Claude : prime sur le titre du pane (session adoptée)
   private readonly suiviNuit = new SuiviNuit({
     resume: () => this.etat,
     messagesChrisEnVol: () => this.enVol.length,
@@ -74,12 +75,17 @@ export class SessionTmux {
 
   // --- découverte : l'état réel vient de tmux et du transcript ---
 
+  /** Nom connu de la session adoptée (registre cc, nom natif) : il remplace le titre du pane à chaque passage. */
+  nommer(nom: string | null): void {
+    this.nomFixe = nom;
+  }
+
   rattacher(pane: tmux.PaneTmux | null): void {
     if (!pane) {
       if (this.etat.tmux !== null) this.maj({ tmux: null, attachee: false, statut: 'fermee' });
       return;
     }
-    const titre = this.p.consignes === null ? pane.titre : this.etat.titre;
+    const titre = this.p.consignes === null ? (this.nomFixe ?? pane.titre) : this.etat.titre;
     if (pane.nom !== this.etat.tmux || pane.attachee !== this.etat.attachee || titre !== this.etat.titre) {
       this.maj({
         tmux: pane.nom,
@@ -250,7 +256,7 @@ export class SessionTmux {
     const nom = await tmux.nomLibre(this.etat.projet.nom);
     const commande =
       this.p.consignes === null
-        ? commandeReprise(this.etat.claudeSessionId)
+        ? commandeReprise(this.etat.claudeSessionId, this.etat.lanceur ?? 'quart')
         : commandeClaude({
             sessionId: this.etat.claudeSessionId,
             titre: this.etat.titre,
