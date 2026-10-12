@@ -142,6 +142,15 @@ dans_claude_tmux() {
   [ -n "${TMUX:-}" ] && [ "${TMUX%%,*}" = "${TMUX_TMPDIR:-/tmp}/tmux-$(id -u)/$SOCKET" ]
 }
 
+# Consigne de Chris : toute session part en permission bypass, sauf mode de permission explicite dans les arguments.
+ajouter_bypass() {
+  local a
+  for a in "${ARGS[@]}"; do
+    case "$a" in --dangerously-skip-permissions | --permission-mode | --permission-mode=*) return 0 ;; esac
+  done
+  ARGS+=(--dangerously-skip-permissions)
+}
+
 preparer_identite() {
   local reprise=""
   reprise=$(valeur_reprise "${ARGS[@]}") || reprise=""
@@ -158,6 +167,7 @@ preparer_identite() {
   fi
   NOM=${NOM:-$(nom_de_dossier)}
   CREE=${CREE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
+  ajouter_bypass
   [ -n "$reprise" ] || ID_ARGS+=(--name "$NOM")
 }
 
