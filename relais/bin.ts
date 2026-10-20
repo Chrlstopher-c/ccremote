@@ -4,6 +4,7 @@ import { join, normalize } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
+import { PlafondEchecs } from './acces/plafond.ts';
 import { construireRoutes } from './clients/api.ts';
 import { ApiFichiers } from './appareils/api-fichiers.ts';
 import { ouvrirTerminal } from './appareils/route-terminal.ts';
@@ -24,7 +25,8 @@ const journal = creerJournal('relais');
 const config = chargerConfig();
 const registre = new Registre(ouvrirBase(config.base), journal);
 const diffusion = new Diffusion();
-const acces = new Acces(registre, config.empreinteMotDePasse);
+const plafond = new PlafondEchecs(config.fichierEchecs, journal.child({ domaine: 'acces' }));
+const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
 const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const comptes = new ApiComptes(postes, journal);
@@ -65,34 +67,37 @@ function fichierStatique(req: Request): Response {
   return existsSync(index) ? new Response(Bun.file(index)) : new Response('interface non construite', { status: 503 });
 }
 
-Bun.serve({
-  port: config.portWeb,
-  // Au-delà des 10 s par défaut : le long-poll attend jusqu'à 30 s, une commande de poste jusqu'à 60 s.
-  idleTimeout: 75,
-  routes: {
-    ...routes,
-    '/api/flux': (req, serveur) => {
-      if (!acces.autorise(req)) return erreur('non connecté', 401);
-      const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
-      const data: DonneesClient = { type: 'flux' };
-      // Jamais `headers: {}` : upgrade() de Bun plante dessus (500 pour un client authentifié par en-tête).
-      const options = parProtocole ? { data, headers: { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } } : { data };
-      return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
+for (const hostname of config.hotesWeb) {
+  Bun.serve({
+    hostname,
+    port: config.portWeb,
+    // Au-delà des 10 s par défaut : le long-poll attend jusqu'à 30 s, une commande de poste jusqu'à 60 s.
+    idleTimeout: 75,
+    routes: {
+      ...routes,
+      '/api/flux': (req, serveur) => {
+        if (!acces.autorise(req)) return erreur('non connecté', 401);
+        const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
+        const data: DonneesClient = { type: 'flux' };
+        // Jamais `headers: {}` : upgrade() de Bun plante dessus (500 pour un client authentifié par en-tête).
+        const options = parProtocole ? { data, headers: { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } } : { data };
+        return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
+      },
+      '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
+      '/api/*': () => erreur('route inconnue', 404),
     },
-    '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
-    '/api/*': () => erreur('route inconnue', 404),
-  },
-  fetch: fichierStatique,
-  websocket: {
-    data: {} as DonneesClient,
-    open: (ws) => (estTerminal(ws) ? void terminaux.ouvert(ws) : diffusion.ajouter(ws)),
-    close: (ws) => (estTerminal(ws) ? terminaux.ferme(ws) : diffusion.retirer(ws)),
-    // Le flux : les clients écoutent et agissent par l'API HTTP. Un terminal : la frappe et les redimensionnements.
-    message: (ws, m) => (estTerminal(ws) ? terminaux.recu(ws, m) : undefined),
-    idleTimeout: 120,
-    sendPings: true,
-  },
-});
+    fetch: fichierStatique,
+    websocket: {
+      data: {} as DonneesClient,
+      open: (ws) => (estTerminal(ws) ? void terminaux.ouvert(ws) : diffusion.ajouter(ws)),
+      close: (ws) => (estTerminal(ws) ? terminaux.ferme(ws) : diffusion.retirer(ws)),
+      // Le flux : les clients écoutent et agissent par l'API HTTP. Un terminal : la frappe et les redimensionnements.
+      message: (ws, m) => (estTerminal(ws) ? terminaux.recu(ws, m) : undefined),
+      idleTimeout: 120,
+      sendPings: true,
+    },
+  });
+}
 
 Bun.serve({
   port: config.portPostes,
@@ -119,6 +124,11 @@ Bun.serve({
 lancerRetention(registre, journal);
 
 journal.info(
-  { web: config.portWeb, postes: config.portPostes, machinesAutorisees: [...config.secretsPostes.keys()] },
+  {
+    web: config.portWeb,
+    hotesWeb: config.hotesWeb,
+    postes: config.portPostes,
+    machinesAutorisees: [...config.secretsPostes.keys()],
+  },
   'relais démarré',
 );

@@ -27,10 +27,18 @@ export interface DependancesApi {
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
+interface Serveur {
+  requestIP(req: Request): { readonly address: string } | null;
+}
 const CorpsConnexion = z.object({ motDePasse: z.string().min(1).max(512), appareil: z.string().max(120).optional() });
 
-export function ipDe(req: Request): string {
-  return req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+const BOUCLE_LOCALE = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+
+// Les en-têtes d'IP ne valent que posés par le tunnel local ; venus d'ailleurs, n'importe qui peut les écrire.
+export function ipDe(req: Request, pair: string | undefined): string {
+  if (!pair) return 'inconnue';
+  if (!BOUCLE_LOCALE.has(pair)) return pair;
+  return req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? pair;
 }
 
 export function construireRoutes(d: DependancesApi) {
@@ -39,7 +47,7 @@ export function construireRoutes(d: DependancesApi) {
     (req) =>
       d.acces.autorise(req) ? g(req) : erreur('non connecté', 401);
   return {
-    '/api/connexion': { POST: (req: Request) => connexion(d, req) },
+    '/api/connexion': { POST: (req: Request, serveur: Serveur) => connexion(d, req, serveur) },
     '/api/deconnexion': {
       POST: protege((req) => {
         d.acces.deconnecter(req);
@@ -71,13 +79,14 @@ export function construireRoutes(d: DependancesApi) {
   };
 }
 
-async function connexion(d: DependancesApi, req: Request): Promise<Response> {
+async function connexion(d: DependancesApi, req: Request, serveur: Serveur): Promise<Response> {
   const c = await lireCorps(req, CorpsConnexion);
   if (c instanceof Response) return c;
-  const r = await d.acces.connecter(c.motDePasse, ipDe(req), c.appareil ?? req.headers.get('user-agent') ?? 'inconnu');
+  const ip = ipDe(req, serveur.requestIP(req)?.address);
+  const r = await d.acces.connecter(c.motDePasse, ip, c.appareil ?? req.headers.get('user-agent') ?? 'inconnu');
   if (!r.ok)
     return erreur(
-      r.raison === 'trop_de_tentatives' ? 'trop de tentatives, réessaie dans 15 minutes' : 'mot de passe refusé',
+      r.raison === 'trop_de_tentatives' ? 'trop de tentatives, réessaie plus tard' : 'mot de passe refusé',
       r.raison === 'trop_de_tentatives' ? 429 : 401,
     );
   return json({ jeton: r.jeton }, 200, { 'set-cookie': cookieDeSession(r.jeton) });

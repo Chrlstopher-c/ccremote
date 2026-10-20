@@ -1,6 +1,6 @@
 // Responsabilité : la configuration du relais, lue exclusivement dans l'environnement (aucune valeur réelle dans le
 // dépôt).
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export interface ConfigRelais {
   readonly empreinteMotDePasse: string;
@@ -10,6 +10,8 @@ export interface ConfigRelais {
   readonly diffusionWol: string;
   readonly base: string;
   readonly portWeb: number;
+  readonly hotesWeb: readonly string[];
+  readonly fichierEchecs: string;
   readonly portPostes: number;
   readonly web: string;
   readonly origines: ReadonlySet<string>;
@@ -37,6 +39,7 @@ function requis(nom: string): string {
 
 export function chargerConfig(): ConfigRelais {
   const racine = join(import.meta.dir, '..');
+  const base = process.env['CCREMOTE_BASE'] ?? join(racine, '.donnees/relais.db');
   return {
     empreinteMotDePasse: requis('CCREMOTE_EMPREINTE_MOT_DE_PASSE'),
     secretsPostes: paires(requis('CCREMOTE_SECRETS_POSTES')),
@@ -48,8 +51,14 @@ export function chargerConfig(): ConfigRelais {
     ),
     wol: paires(process.env['CCREMOTE_WOL']),
     diffusionWol: process.env['CCREMOTE_DIFFUSION_WOL'] ?? '255.255.255.255',
-    base: process.env['CCREMOTE_BASE'] ?? join(racine, '.donnees/relais.db'),
+    base,
     portWeb: Number(process.env['CCREMOTE_PORT_WEB'] ?? 8766),
+    // Boucle locale seulement : le tunnel Cloudflare est le seul chemin d'accès aux clients.
+    hotesWeb: (process.env['CCREMOTE_HOTES_WEB'] ?? '127.0.0.1,::1')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    fichierEchecs: process.env['CCREMOTE_ECHECS'] ?? join(dirname(base), 'echecs-connexion.json'),
     portPostes: Number(process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
     web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
     echo: configEcho(),

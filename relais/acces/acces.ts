@@ -1,6 +1,7 @@
 // Responsabilité : qui a le droit de parler au relais — mot de passe, jetons révocables, limite de tentatives.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Registre } from '../registre/registre.ts';
+import type { PlafondEchecs } from './plafond.ts';
 
 const DUREE_JETON_MS = 90 * 24 * 3600 * 1000;
 const FENETRE_ECHECS_MS = 15 * 60 * 1000;
@@ -17,12 +18,14 @@ export class Acces {
   constructor(
     private readonly registre: Registre,
     private readonly empreinteMotDePasse: string,
+    private readonly plafond: PlafondEchecs,
   ) {}
 
   async connecter(motDePasse: string, ip: string, appareil: string): Promise<ResultatConnexion> {
-    if (this.bloque(ip)) return { ok: false, raison: 'trop_de_tentatives' };
+    if (this.plafond.atteint() || this.bloque(ip)) return { ok: false, raison: 'trop_de_tentatives' };
     if (!(await Bun.password.verify(motDePasse, this.empreinteMotDePasse))) {
       this.noterEchec(ip);
+      this.plafond.noter();
       return { ok: false, raison: 'refuse' };
     }
     this.echecs.delete(ip);

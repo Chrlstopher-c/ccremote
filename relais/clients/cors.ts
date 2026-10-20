@@ -1,6 +1,7 @@
 // Responsabilité : autoriser l'app de bureau (origine Tauri) et le serveur de dev à appeler l'API du relais.
 type RequeteRoute = Request & { params: Record<string, string> };
-type Methodes = Record<string, (req: RequeteRoute) => Response | Promise<Response>>;
+// Le second argument (le serveur Bun) est transmis tel quel : la connexion en tire l'adresse du pair.
+type Methodes = Record<string, (req: RequeteRoute, serveur: never) => Response | Promise<Response>>;
 
 export function origineAutorisee(req: Request, origines: ReadonlySet<string>): string | null {
   const origine = req.headers.get('origin');
@@ -23,8 +24,8 @@ export function avecCors<R extends Record<string, Methodes>>(routes: R, origines
   for (const [chemin, methodes] of Object.entries(routes)) {
     const enveloppees: Methodes = {};
     for (const [verbe, g] of Object.entries(methodes)) {
-      enveloppees[verbe] = async (req: RequeteRoute) => {
-        const r = await g(req);
+      enveloppees[verbe] = async (req: RequeteRoute, serveur: never) => {
+        const r = await g(req, serveur);
         const origine = origineAutorisee(req, origines);
         if (origine) for (const [k, v] of Object.entries(entetesCors(origine))) r.headers.set(k, v);
         return r;
