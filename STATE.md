@@ -10,6 +10,9 @@ tourner un poste (`ccremote-poste`) qui gère les **vrais Claude Code en TUI** d
 relais/Atrium. L'app de bureau (Tauri) est installée sur le portable ; le même frontend est servi en web sur le domaine
 public. `master` reste la version publique précédente ; `dev` porte le v2.
 
+Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
+l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
+
 ## 05/11 — Écran « Accès » : brancher claude.ai et Claude Code, gérer les accès
 
 - Nouvel écran **Accès** (barre latérale, palette) : appareils connectés (app, web, iPhone), connecteurs Claude.ai et
@@ -20,6 +23,16 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
   sans état (`relais/connecteurs/mcp-http.ts`, mêmes outils que `mcp/`), `/.well-known/*` → 404 (pas d'OAuth).
 - Risque assumé : le jeton claude.ai voyage dans l'URL (journaux du tunnel) — révocable depuis l'écran.
 - `centralisation-sessions` (4 commits du 12/10, lanceur `ccs`, veilleur) n'est PAS dans `dev` : à fusionner à part.
+- **Décisions** : claude.ai n'accepte qu'un MCP distant → servi par le relais lui-même (aucun nouveau service) ; jeton
+  dans l'URL plutôt qu'OAuth (simple, révocable) ; un connecteur pilote le parc mais n'administre pas les accès ;
+  travail repris depuis `origin/dev` (MCP cherry-picked) pour ne pas déployer `centralisation-sessions` sans validation.
+- **Déployé et vérifié en prod le 05/11** (CI verte) : relais à jour par `git reset` sur `origin/dev` + `bureau/dist`
+  copié, base sauvegardée avant migration (`/mnt/hdd/ccremote/relais-avant-acces-20261105.db`). Vérifié : 401/403/404
+  attendus, `initialize` + `quart_parc` par `/mcp` (4 machines). Non vérifié : l'écran connecté en prod (mot de passe
+  de Chris) et l'ajout réel du connecteur sur claude.ai.
+- **Reprendre par** : (1) Chris ouvre Accès, crée un connecteur claude.ai et le teste ; (2) reconstruire/réinstaller
+  l'app Tauri (l'écran n'est que dans le web) ; (3) décider de la fusion de `centralisation-sessions` dans `dev` ;
+  (4) sur le portable, `git pull` de `~/ccremote` (en retard sur `dev`).
 
 ## 05/11 — MCP Quart : ouvrir une session depuis Claude, sur n'importe quelle machine
 

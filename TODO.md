@@ -1,5 +1,5 @@
 # TODO — Quart (dépôt ccremote)
-*Dernière mise à jour : 2026-10-06*
+*Dernière mise à jour : 2026-11-05*
 
 ## En cours
 
@@ -14,6 +14,12 @@
 - [x] App de bureau Quart installée et connectée sur le portable (lanceur d'apps, thème, écran Comptes).
 - [ ] Chris : valider « Ouvrir le terminal » (kitty, corrigé le 28/09 soir) depuis Quart et la notification système sur un objectif atteint.
 
+- [ ] Chris : écran Accès en prod — créer un connecteur claude.ai, l'ajouter (Paramètres → Connecteurs), vérifier
+      `quart_parc` depuis une conversation ; idem avec la commande Claude Code sur une machine.
+- [ ] Reconstruire et réinstaller l'app de bureau Tauri : écran Accès (+ bascule nuit) seulement dans le web pour l'instant.
+- [ ] Décider avec Chris de la fusion de `centralisation-sessions` (12/10 : lanceur `ccs`, veilleur, registre cc) dans `dev`,
+      puis supprimer les branches locales `mcp-quart` / `acces` (déjà dans `dev`).
+- [ ] Portable : `git pull` de `~/ccremote` (en retard sur `dev` depuis le 05/11).
 - [ ] Chris : reconnecter le compte Claude du portable (« Login expired » à l'ouverture d'une session via le MCP).
 - [ ] MCP Quart : l'installer sur le Pi et le VPS si des sessions y en ont besoin (`QUART_JETON_CIBLE=… mcp/installer.sh <hôte>`).
 
@@ -34,6 +40,12 @@
 - [ ] Découper le bundle web (un seul fichier de 500 ko+) : Markdown chargé à la demande.
 
 ## Plus tard
+
+- [ ] Écran Accès dans Sémaphore (iPhone) : lister / révoquer les accès depuis le téléphone.
+- [ ] Connecteur claude.ai par OAuth au lieu du jeton dans l'URL, si le jeton en clair dans les journaux du tunnel
+      devient un problème.
+- [ ] Une fois les connecteurs HTTP éprouvés : retirer l'installation stdio (`~/.local/share/quart-mcp`) de la tour et
+      du portable au profit de `claude mcp add --transport http`.
 
 - [ ] Supprimer les anciennes installations désactivées (`ccremote-harness`, `ccremote-web`, `ccremote-pc`) une fois le v2
       éprouvé quelques jours.
