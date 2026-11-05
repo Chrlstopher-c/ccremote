@@ -14,6 +14,7 @@ import { BarreLaterale } from './BarreLaterale.tsx';
 import { ColonneListe } from './ColonneListe.tsx';
 import { SOURCE_DEFAUT, sessionsDe, type Source } from './navigation.ts';
 import { VueComptes } from '../comptes/VueComptes.tsx';
+import { VueAcces } from '../acces/VueAcces.tsx';
 import { BandeauReveil } from '../echo/BandeauReveil.tsx';
 import { VueEcho } from '../echo/VueEcho.tsx';
 import { PaletteCommandes } from './PaletteCommandes.tsx';
@@ -72,7 +73,7 @@ export function Cadre({ surDeconnexion }: { readonly surDeconnexion: () => void 
         <BarreLaterale source={sel.source} surChoisir={sel.choisirSource} surDeconnexion={surDeconnexion} />
         <AppareilsOuverts source={src} surFil={allerSession} surNouvelle={setNouvelle} />
         {src.genre === 'appareil' ? null : src.genre === 'echo' ? <VueEcho />
-          : src.genre === 'comptes' ? <VueComptes /> : (
+          : src.genre === 'comptes' ? <VueComptes /> : src.genre === 'acces' ? <VueAcces /> : (
           <>
             <ColonneListe source={sel.source} sessions={sel.liste} choisie={sel.choisie} recherche={sel.recherche}
               surRecherche={sel.setRecherche} surChoisir={allerOuChoisir(sel, allerSession)}

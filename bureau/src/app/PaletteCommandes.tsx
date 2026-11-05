@@ -31,6 +31,10 @@ function useCommandes(p: PropsPalette): Commande[] {
       id: 'comptes', libelle: 'Comptes Claude Code', detail: 'aller à',
       agir: () => p.allerSource({ genre: 'comptes' }),
     },
+    {
+      id: 'acces', libelle: 'Accès — brancher Claude.ai / Claude Code', detail: 'aller à',
+      agir: () => p.allerSource({ genre: 'acces' }),
+    },
     ...(['clair', 'sombre', 'systeme'] as const).map((t) => ({
       id: `theme-${t}`, libelle: LIBELLES_THEME[t], detail: 'apparence', agir: () => choisirTheme(t),
     })),

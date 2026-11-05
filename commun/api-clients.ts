@@ -61,3 +61,28 @@ export interface DemandeOuverture {
 }
 
 export type ActionSession = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
+
+// Un accès au relais : un appareil connecté par mot de passe (app, web, iPhone) ou un connecteur Claude (MCP).
+export const GENRES_ACCES = ['appareil', 'claude-code', 'claude-ai'] as const;
+export type GenreAcces = (typeof GENRES_ACCES)[number];
+
+export interface VueAcces {
+  readonly id: string; // début de l'empreinte du jeton : désigne l'accès sans rien révéler
+  readonly nom: string;
+  readonly genre: GenreAcces;
+  readonly creeLe: string;
+  readonly expireLe: string;
+  readonly vuLe: string | null;
+  readonly courant: boolean; // l'accès de l'appareil qui demande la liste
+}
+
+export interface DemandeAcces {
+  readonly nom: string;
+  readonly genre: Exclude<GenreAcces, 'appareil'>;
+  readonly jours: number;
+}
+
+export interface NouvelAcces {
+  readonly id: string;
+  readonly jeton: string; // montré une seule fois
+}

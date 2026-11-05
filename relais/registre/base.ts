@@ -18,6 +18,9 @@ const MIGRATIONS: readonly string[] = [
    CREATE TABLE jetons (
      empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, appareil TEXT NOT NULL);`,
   `ALTER TABLE machines ADD COLUMN etat_comptes TEXT NOT NULL DEFAULT '[]';`,
+  `ALTER TABLE jetons ADD COLUMN genre TEXT NOT NULL DEFAULT 'appareil';
+   ALTER TABLE jetons ADD COLUMN vu_le TEXT;
+   UPDATE jetons SET genre = 'claude-code' WHERE appareil LIKE 'mcp-%';`,
 ];
 
 export function ouvrirBase(chemin: string): Database {

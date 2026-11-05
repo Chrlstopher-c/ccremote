@@ -9,7 +9,8 @@ export type Source =
   | { readonly genre: 'machine'; readonly id: string }
   | { readonly genre: 'appareil'; readonly id: string }
   | { readonly genre: 'alertes' }
-  | { readonly genre: 'comptes' };
+  | { readonly genre: 'comptes' }
+  | { readonly genre: 'acces' };
 
 export const SOURCE_DEFAUT: Source = { genre: 'sessions', filtre: 'ouvertes' };
 
@@ -38,6 +39,7 @@ export function titreSource(source: Source, machines: readonly VueMachine[]): st
   if (source.genre === 'echo') return 'Echo';
   if (source.genre === 'alertes') return 'Alertes';
   if (source.genre === 'comptes') return 'Comptes';
+  if (source.genre === 'acces') return 'Accès';
   if (source.genre === 'machine' || source.genre === 'appareil') {
     return machines.find((m) => m.id === source.id)?.id ?? source.id;
   }

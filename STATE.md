@@ -1,6 +1,6 @@
 # STATE — ccremote
 
-*Dernière mise à jour : 2026-11-05, branche `mcp-quart` (depuis `centralisation-sessions`)*
+*Dernière mise à jour : 2026-11-05, branche `dev` (MCP + écran Accès)*
 
 ## Résumé
 
@@ -9,6 +9,17 @@
 tourner un poste (`ccremote-poste`) qui gère les **vrais Claude Code en TUI** dans `tmux -L claude` — le même serveur que
 relais/Atrium. L'app de bureau (Tauri) est installée sur le portable ; le même frontend est servi en web sur le domaine
 public. `master` reste la version publique précédente ; `dev` porte le v2.
+
+## 05/11 — Écran « Accès » : brancher claude.ai et Claude Code, gérer les accès
+
+- Nouvel écran **Accès** (barre latérale, palette) : appareils connectés (app, web, iPhone), connecteurs Claude.ai et
+  Claude Code ; créer un accès (nom, durée 30 j / 90 j / 1 an) → marche à suivre avec le jeton montré une seule fois
+  (claude.ai : Paramètres → Connecteurs → connecteur personnalisé, URL `/mcp/<jeton>` ; Claude Code : `claude mcp add
+  --transport http … /mcp --header "Authorization: Bearer …"`) ; révoquer (confirmation, « cet appareil » signalé).
+- Relais : jetons typés (`genre`, `vu_le`, migration 3), `/api/acces` réservé aux jetons `appareil`, MCP servi en HTTP
+  sans état (`relais/connecteurs/mcp-http.ts`, mêmes outils que `mcp/`), `/.well-known/*` → 404 (pas d'OAuth).
+- Risque assumé : le jeton claude.ai voyage dans l'URL (journaux du tunnel) — révocable depuis l'écran.
+- `centralisation-sessions` (4 commits du 12/10, lanceur `ccs`, veilleur) n'est PAS dans `dev` : à fusionner à part.
 
 ## 05/11 — MCP Quart : ouvrir une session depuis Claude, sur n'importe quelle machine
 

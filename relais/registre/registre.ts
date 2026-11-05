@@ -1,7 +1,7 @@
 // Responsabilité : lire et écrire l'état du relais — machines, sessions, fil d'événements, notifications, jetons.
 import type { Logger } from 'pino';
 import type { Database } from 'bun:sqlite';
-import type { EvenementDate, Notification, VueMachine } from '../../commun/api-clients.ts';
+import type { EvenementDate, GenreAcces, Notification, VueMachine } from '../../commun/api-clients.ts';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
 import { EtatCompte } from '../../commun/comptes.ts';
 import { Evenement, ResumeSession } from '../../commun/session.ts';
@@ -185,21 +185,50 @@ export class Registre {
     this.db.query('UPDATE notifications SET lue = 1 WHERE seq <= $s').run({ s: jusqua });
   }
 
-  creerJeton(empreinte: string, appareil: string, expireLe: string): void {
+  creerJeton(empreinte: string, appareil: string, expireLe: string, genre: GenreAcces = 'appareil'): void {
     this.db
-      .query('INSERT INTO jetons (empreinte, cree_le, expire_le, appareil) VALUES ($e, $c, $x, $a)')
-      .run({ e: empreinte, c: new Date().toISOString(), x: expireLe, a: appareil });
+      .query('INSERT INTO jetons (empreinte, cree_le, expire_le, appareil, genre) VALUES ($e, $c, $x, $a, $g)')
+      .run({ e: empreinte, c: new Date().toISOString(), x: expireLe, a: appareil, g: genre });
   }
 
-  jetonValide(empreinte: string): boolean {
-    const l = this.db.query('SELECT expire_le FROM jetons WHERE empreinte = $e').get({ e: empreinte }) as {
+  /** Le genre d'un jeton encore valide, null s'il est inconnu ou expiré. */
+  genreJeton(empreinte: string): GenreAcces | null {
+    const l = this.db.query('SELECT expire_le, genre FROM jetons WHERE empreinte = $e').get({ e: empreinte }) as {
       expire_le: string;
+      genre: GenreAcces;
     } | null;
-    return l !== null && l.expire_le > new Date().toISOString();
+    return l !== null && l.expire_le > new Date().toISOString() ? l.genre : null;
+  }
+
+  noterUsageJeton(empreinte: string, quand: string): void {
+    this.db.query('UPDATE jetons SET vu_le = $q WHERE empreinte = $e').run({ q: quand, e: empreinte });
+  }
+
+  jetons(): LigneJeton[] {
+    return this.db
+      .query('SELECT empreinte, appareil, genre, cree_le, expire_le, vu_le FROM jetons ORDER BY cree_le DESC')
+      .all() as LigneJeton[];
   }
 
   revoquerJeton(empreinte: string): void {
     this.db.query('DELETE FROM jetons WHERE empreinte = $e').run({ e: empreinte });
   }
+
+  /** Révoque par préfixe d'empreinte (l'id montré aux clients) ; rend le nombre de jetons retirés. */
+  revoquerJetonParId(id: string): number {
+    return this.db.query('DELETE FROM jetons WHERE substr(empreinte, 1, length($i)) = $i').run({ i: id }).changes;
+  }
+
+  purgerJetonsExpires(): void {
+    this.db.query('DELETE FROM jetons WHERE expire_le <= $m').run({ m: new Date().toISOString() });
+  }
 }
 
+export interface LigneJeton {
+  readonly empreinte: string;
+  readonly appareil: string;
+  readonly genre: GenreAcces;
+  readonly cree_le: string;
+  readonly expire_le: string;
+  readonly vu_le: string | null;
+}

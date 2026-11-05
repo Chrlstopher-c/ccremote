@@ -1,11 +1,14 @@
 // Responsabilité : qui a le droit de parler au relais — mot de passe, jetons révocables, limite de tentatives.
 import { createHash, randomBytes } from 'node:crypto';
+import type { DemandeAcces, GenreAcces, NouvelAcces, VueAcces } from '../../commun/api-clients.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { PlafondEchecs } from './plafond.ts';
 
 const DUREE_JETON_MS = 90 * 24 * 3600 * 1000;
 const FENETRE_ECHECS_MS = 15 * 60 * 1000;
 const MAX_ECHECS = 5;
+const USAGE_NOTE_MS = 5 * 60 * 1000; // « vu le » : une écriture au plus toutes les 5 min par jeton
+export const LONGUEUR_ID = 12;
 export const NOM_COOKIE = 'ccremote';
 
 export type ResultatConnexion =
@@ -14,6 +17,7 @@ export type ResultatConnexion =
 
 export class Acces {
   private readonly echecs = new Map<string, { nombre: number; depuis: number }>();
+  private readonly usages = new Map<string, number>();
 
   constructor(
     private readonly registre: Registre,
@@ -39,8 +43,52 @@ export class Acces {
   }
 
   autorise(req: Request): boolean {
+    return this.genre(req) !== null;
+  }
+
+  /** Le genre de l'accès qui porte la requête (null : refusé). Note l'usage au passage. */
+  genre(req: Request): GenreAcces | null {
     const jeton = extraireJeton(req);
-    return jeton !== null && this.registre.jetonValide(empreinte(jeton));
+    return jeton === null ? null : this.genreDuJeton(jeton);
+  }
+
+  genreDuJeton(jeton: string): GenreAcces | null {
+    const e = empreinte(jeton);
+    const genre = this.registre.genreJeton(e);
+    if (genre && Date.now() - (this.usages.get(e) ?? 0) > USAGE_NOTE_MS) {
+      this.usages.set(e, Date.now());
+      this.registre.noterUsageJeton(e, new Date().toISOString());
+    }
+    return genre;
+  }
+
+  emettre(d: DemandeAcces): NouvelAcces {
+    const jeton = randomBytes(32).toString('base64url');
+    const e = empreinte(jeton);
+    const expire = new Date(Date.now() + d.jours * 24 * 3600 * 1000).toISOString();
+    this.registre.creerJeton(e, d.nom.slice(0, 120), expire, d.genre);
+    return { id: e.slice(0, LONGUEUR_ID), jeton };
+  }
+
+  lister(req: Request): VueAcces[] {
+    const jeton = extraireJeton(req);
+    const courant = jeton ? empreinte(jeton) : '';
+    this.registre.purgerJetonsExpires();
+    return this.registre.jetons().map((l) => ({
+      id: l.empreinte.slice(0, LONGUEUR_ID),
+      nom: l.appareil,
+      genre: l.genre,
+      creeLe: l.cree_le,
+      expireLe: l.expire_le,
+      vuLe: l.vu_le,
+      courant: l.empreinte === courant,
+    }));
+  }
+
+  revoquer(id: string): boolean {
+    if (!new RegExp(`^[0-9a-f]{${LONGUEUR_ID}}$`).test(id)) return false;
+    for (const e of this.usages.keys()) if (e.startsWith(id)) this.usages.delete(e);
+    return this.registre.revoquerJetonParId(id) > 0;
   }
 
   deconnecter(req: Request): void {

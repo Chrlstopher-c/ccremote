@@ -3,9 +3,12 @@ import type { CommandeVoix, DecisionReveil, EntreeHistoriqueEcho, EtatEcho, Regl
 import type {
   ActionSession,
   DemandeOuverture,
+  DemandeAcces,
   EtatRelais,
   EvenementDate,
   Notification,
+  NouvelAcces,
+  VueAcces,
 } from '../../../../commun/api-clients.ts';
 import type { Projet, ReponseDialogue, ResumeSession } from '../../../../commun/session.ts';
 import { journal } from '../journal.ts';
@@ -155,6 +158,18 @@ export class ClientRelais {
 
   echoInterrompre(): Promise<{ ok: boolean }> {
     return this.appeler('POST', '/api/echo/interrompre', {});
+  }
+
+  acces(): Promise<VueAcces[]> {
+    return this.appeler('GET', '/api/acces');
+  }
+
+  creerAcces(d: DemandeAcces): Promise<NouvelAcces> {
+    return this.appeler('POST', '/api/acces', d);
+  }
+
+  revoquerAcces(id: string): Promise<unknown> {
+    return this.appeler('POST', `/api/acces/${id}/revoquer`, {});
   }
 
   private async appeler<T>(methode: 'GET' | 'POST', chemin: string, corps?: unknown): Promise<T> {

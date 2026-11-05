@@ -6,6 +6,8 @@ import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
 import { construireRoutes } from './clients/api.ts';
+import { routesAcces } from './acces/api-acces.ts';
+import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
 import { ApiFichiers } from './appareils/api-fichiers.ts';
 import { ouvrirTerminal } from './appareils/route-terminal.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
@@ -53,6 +55,12 @@ const routes = avecCors(
   }),
   config.origines,
 );
+const routesGestionAcces = avecCors(routesAcces(acces, journal.child({ domaine: 'acces' })), config.origines);
+const connecteurs = routesMcp(
+  acces,
+  adresseBoucle(config.hotesWeb[0] ?? '127.0.0.1', config.portWeb),
+  journal.child({ domaine: 'mcp' }),
+);
 
 function fichierStatique(req: Request): Response {
   const chemin = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^(\.\.[/\\])+/, '');
@@ -75,6 +83,8 @@ for (const hostname of config.hotesWeb) {
     idleTimeout: 75,
     routes: {
       ...routes,
+      ...routesGestionAcces,
+      ...connecteurs,
       '/api/flux': (req, serveur) => {
         if (!acces.autorise(req)) return erreur('non connecté', 401);
         const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);

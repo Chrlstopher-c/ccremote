@@ -34,7 +34,7 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 |---|---|---|
 | `commun/` | Les contrats partagés : vocabulaire d'une session et de son fil (`session.ts`), accès à un appareil — fichiers et terminaux (`appareil.ts`), protocole poste ↔ relais (`protocole-poste.ts`), API des clients (`api-clients.ts`), journal pino | Aucune logique, aucune I/O |
 | `poste/` | Tout ce qui tourne sur une machine de travail : sessions tmux, lecture des transcripts, crochets et MCP de rythme, politique de compaction/relance, lien sortant vers le relais, état de la machine, découverte des projets | Aucune connaissance des autres machines ni du registre |
-| `relais/` | Tout ce qui tourne sur le Pi : registre SQLite, accès (mot de passe, jetons), API HTTP + flux WebSocket des clients, serveur des postes, notifications, réveil Wake-on-LAN, règle d'isolation du parc | Aucune décision sur le déroulé d'une session (c'est le poste) |
+| `relais/` | Tout ce qui tourne sur le Pi : registre SQLite, accès (mot de passe, jetons par genre — appareil, claude-code, claude-ai — gérés depuis l'écran Accès), connecteurs Claude (`connecteurs/` : le MCP servi en HTTP sur `/mcp`), API HTTP + flux WebSocket des clients, serveur des postes, notifications, réveil Wake-on-LAN, règle d'isolation du parc | Aucune décision sur le déroulé d'une session (c'est le poste) |
 | `bureau/` | L'app de bureau (Tauri 2 + React) — le même frontend est servi en web par le relais ; `src-tauri/` = coquille native (terminal kitty, notifications) | Aucune règle métier : elle affiche et commande |
 | `mcp/` | Le MCP « quart » : un client de l'API du relais (jeton porteur) qui expose aux sessions Claude les outils `quart_*` — voir le parc, ouvrir une session sur n'importe quelle machine, lire son fil, lui parler, la piloter ; plus l'émission du jeton (sur le Pi) et l'installeur | Aucun accès direct à un poste ni au registre : tout passe par l'API HTTP publique du relais |
 | `deploiement/` | Le script de déploiement (relais + postes) | Aucune valeur réelle : adresses, MAC et secrets viennent de `~/.config/ccremote/deploiement.env` |
@@ -68,6 +68,10 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
   (ou l'inverse) est une faute.
 - `poste/` et `relais/` ne se parlent que par `commun/protocole-poste.ts`, validé par zod à la réception.
 - `mcp/` n'importe que des types de `commun/` et parle au relais par HTTP, comme l'app : jamais d'import de `relais/`.
+  Le relais, lui, importe l'interface publique de `mcp/` (`outils.ts`, `client-relais.ts`) pour servir les mêmes outils
+  en HTTP (`relais/connecteurs/mcp-http.ts`) ; ces outils le rappellent par la boucle locale avec le jeton du connecteur.
+- Un connecteur Claude (jeton `claude-code` / `claude-ai`) a tout le pilotage du parc mais ne gère pas les accès :
+  `/api/acces` est réservé aux jetons `appareil` (connexion par mot de passe).
 - Un poste ne rend compte que de SES sessions : le relais refuse un compte rendu d'une session d'une autre machine.
 - Les noms `service` / `manager` / `helper` ne sont pas utilisés : le nommage suit le métier (poste, relais, session,
   fil, rythme).
