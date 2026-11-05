@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test commun poste relais",
+    "test": "bun test commun poste relais mcp",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "relais": "bun run relais/bin.ts",
     "poste": "bun run poste/bin.ts"

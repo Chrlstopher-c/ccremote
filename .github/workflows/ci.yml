@@ -14,7 +14,7 @@ jobs:
       - name: Types (racine)
         run: bun run typecheck
       - name: Tests
-        run: bun test commun poste relais
+        run: bun test commun poste relais mcp
       - name: Dépendances (app)
         run: bun install --frozen-lockfile
         working-directory: bureau

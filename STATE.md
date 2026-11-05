@@ -1,6 +1,6 @@
 # STATE — ccremote
 
-*Dernière mise à jour : 2026-09-28 (soir), branche `dev`*
+*Dernière mise à jour : 2026-11-05, branche `mcp-quart` (depuis `centralisation-sessions`)*
 
 ## Résumé
 
@@ -9,6 +9,18 @@
 tourner un poste (`ccremote-poste`) qui gère les **vrais Claude Code en TUI** dans `tmux -L claude` — le même serveur que
 relais/Atrium. L'app de bureau (Tauri) est installée sur le portable ; le même frontend est servi en web sur le domaine
 public. `master` reste la version publique précédente ; `dev` porte le v2.
+
+## 05/11 — MCP Quart : ouvrir une session depuis Claude, sur n'importe quelle machine
+
+- `mcp/` : serveur MCP stdio « quart », client de l'API publique du relais (jeton porteur). Outils : `quart_parc`,
+  `quart_projets`, `quart_ouvrir`, `quart_fil` (attente longue jusqu'à 30 s), `quart_envoyer`, `quart_repondre`,
+  `quart_piloter`, `quart_reveiller`. Aucune modif du relais ni des postes : rien à redéployer.
+- Jetons sans mot de passe : `mcp/emettre-jeton.ts` lancé SUR le Pi contre la base du relais (appareils `mcp-tour`,
+  `mcp-portable`, 1 an, révocables par `DELETE FROM jetons WHERE appareil = …`). Côté machine : `~/.config/quart/mcp.env` (600).
+- Installé (copie autonome `~/.local/share/quart-mcp`, enregistré niveau utilisateur) sur la **tour** et le **portable**.
+- Vérifié en réel depuis la tour : parc des 4 machines, projets, session ouverte sur la tour (réponse lue, message envoyé,
+  fermeture) ; session ouverte sur le portable → le poste rend « Login expired » : **compte Claude du portable à
+  reconnecter** (écran Comptes de Quart), le MCP n'y est pour rien.
 
 ## 06/10 — Mode nuit (config Claude Code ⇄ Quart)
 

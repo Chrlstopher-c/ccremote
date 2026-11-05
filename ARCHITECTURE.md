@@ -36,6 +36,7 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 | `poste/` | Tout ce qui tourne sur une machine de travail : sessions tmux, lecture des transcripts, crochets et MCP de rythme, politique de compaction/relance, lien sortant vers le relais, état de la machine, découverte des projets | Aucune connaissance des autres machines ni du registre |
 | `relais/` | Tout ce qui tourne sur le Pi : registre SQLite, accès (mot de passe, jetons), API HTTP + flux WebSocket des clients, serveur des postes, notifications, réveil Wake-on-LAN, règle d'isolation du parc | Aucune décision sur le déroulé d'une session (c'est le poste) |
 | `bureau/` | L'app de bureau (Tauri 2 + React) — le même frontend est servi en web par le relais ; `src-tauri/` = coquille native (terminal kitty, notifications) | Aucune règle métier : elle affiche et commande |
+| `mcp/` | Le MCP « quart » : un client de l'API du relais (jeton porteur) qui expose aux sessions Claude les outils `quart_*` — voir le parc, ouvrir une session sur n'importe quelle machine, lire son fil, lui parler, la piloter ; plus l'émission du jeton (sur le Pi) et l'installeur | Aucun accès direct à un poste ni au registre : tout passe par l'API HTTP publique du relais |
 | `deploiement/` | Le script de déploiement (relais + postes) | Aucune valeur réelle : adresses, MAC et secrets viennent de `~/.config/ccremote/deploiement.env` |
 
 ### `poste/` en détail
@@ -66,6 +67,7 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 - `bureau/` et `relais/` ne partagent que `commun/` (types seulement côté app). Un import de `relais/` depuis `bureau/`
   (ou l'inverse) est une faute.
 - `poste/` et `relais/` ne se parlent que par `commun/protocole-poste.ts`, validé par zod à la réception.
+- `mcp/` n'importe que des types de `commun/` et parle au relais par HTTP, comme l'app : jamais d'import de `relais/`.
 - Un poste ne rend compte que de SES sessions : le relais refuse un compte rendu d'une session d'une autre machine.
 - Les noms `service` / `manager` / `helper` ne sont pas utilisés : le nommage suit le métier (poste, relais, session,
   fil, rythme).

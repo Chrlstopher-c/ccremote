@@ -57,6 +57,20 @@ Pour que tout `claude` tapé au clavier soit pilotable depuis Quart, sourcer `po
 
 Les valeurs réelles (adresses, MAC, secrets) vivent dans `~/.config/ccremote/deploiement.env`, jamais dans le dépôt.
 
+## MCP Quart (ouvrir des sessions depuis Claude)
+
+Le dossier `mcp/` donne à n'importe quelle session Claude Code les outils `quart_parc`, `quart_projets`,
+`quart_ouvrir`, `quart_fil`, `quart_envoyer`, `quart_repondre`, `quart_piloter`, `quart_reveiller`. Une session
+ouverte ainsi tourne dans `tmux -L claude` sur la machine visée et se suit partout dans Quart.
+
+```bash
+# 1. jeton (sur le Pi, sans mot de passe) → ~/.config/quart/mcp.env : QUART_URL=… et QUART_JETON=…
+ssh pi '… bun run - mcp-<appareil>' < mcp/emettre-jeton.ts   # commande complète en tête du fichier
+# 2. installation + enregistrement Claude Code (niveau utilisateur)
+./mcp/installer.sh                    # cette machine
+QUART_JETON_CIBLE=… ./mcp/installer.sh portable   # une autre machine, avec son propre jeton
+```
+
 ## Licence
 
 AGPL-3.0-or-later.

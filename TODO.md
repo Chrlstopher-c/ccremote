@@ -14,6 +14,9 @@
 - [x] App de bureau Quart installée et connectée sur le portable (lanceur d'apps, thème, écran Comptes).
 - [ ] Chris : valider « Ouvrir le terminal » (kitty, corrigé le 28/09 soir) depuis Quart et la notification système sur un objectif atteint.
 
+- [ ] Chris : reconnecter le compte Claude du portable (« Login expired » à l'ouverture d'une session via le MCP).
+- [ ] MCP Quart : l'installer sur le Pi et le VPS si des sessions y en ont besoin (`QUART_JETON_CIBLE=… mcp/installer.sh <hôte>`).
+
 ## Ensuite
 
 - [ ] Relever la consommation réelle d'une vraie session autonome longue (contexte avant/après chaque compaction,
