@@ -4,7 +4,8 @@ import Phaser from 'phaser';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { CLE_JETON, creerSourceMonde, demarrerMonde, lireConfig, MagasinMonde, stockageNavigateur } from './donnees';
+import { CLE_JETON, creerSourceMonde, demarrerMonde, MagasinMonde } from './donnees';
+import { configRelais, envRelais } from './ui/config-relais';
 import { Connexion } from './ui/connexion/Connexion';
 import { SceneMonde } from './monde/scene-monde';
 import { ouvrir } from './ui/bus';
@@ -16,7 +17,7 @@ import './ui/theme.css';
  * servie par le relais sous /hq/). */
 function demanderConnexion(): boolean {
   if (import.meta.env['VITE_SOURCE'] !== 'relais') return false;
-  const base = import.meta.env['VITE_RELAIS_URL'] || location.origin;
+  const base = envRelais().VITE_RELAIS_URL ?? location.origin;
   if (localStorage.getItem(CLE_JETON)) return false;
   const ui = document.getElementById('ui');
   if (ui) createRoot(ui).render(createElement(Connexion, { base }));
@@ -26,11 +27,7 @@ function demanderConnexion(): boolean {
 async function demarrer(): Promise<void> {
   if (demanderConnexion()) return;
   const magasin = new MagasinMonde();
-  const env = {
-    VITE_SOURCE: import.meta.env['VITE_SOURCE'],
-    VITE_RELAIS_URL: import.meta.env['VITE_RELAIS_URL'] || location.origin,
-  };
-  const source = creerSourceMonde(lireConfig(env, stockageNavigateur()));
+  const source = creerSourceMonde(configRelais());
   demarrerMonde(source, magasin).catch((err) => console.error('données du monde indisponibles', err));
   const ui = document.getElementById('ui');
   if (ui) createRoot(ui).render(createElement(FournisseurMonde, { magasin, source }, createElement(Racine)));

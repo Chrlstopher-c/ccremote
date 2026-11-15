@@ -1,0 +1,199 @@
+/* Responsabilité : la mise en forme de l'accueil (embaucher un agent) — registre papier et bois, deux colonnes
+   (où / quoi), une seule colonne qui défile sur téléphone. */
+.embauche {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px;
+  padding: 16px 20px 18px;
+}
+
+.embauche-col {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.embauche-rubrique {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.embauche-rubrique.grande { flex: 1; }
+.embauche-rubrique h3 {
+  margin: 0;
+  font-size: 15px;
+  color: var(--bois);
+}
+.embauche-aide {
+  margin: -4px 0 0;
+  font-size: 12px;
+  color: var(--encre-2);
+}
+
+.embauche-champ {
+  width: 100%;
+  font: 14px/1.45 var(--lisible);
+  color: var(--encre);
+  background: #fffaf0;
+  border: none;
+  outline: none;
+  padding: 8px 10px;
+  box-shadow: 0 0 0 2px var(--bois-clair), inset 2px 2px 0 var(--papier-2);
+}
+.embauche-champ:focus { box-shadow: 0 0 0 2px var(--clawd), inset 2px 2px 0 var(--papier-2); }
+.embauche-champ::placeholder { color: #a08a6c; }
+.embauche-message {
+  flex: 1;
+  min-height: 130px;
+  resize: none;
+}
+
+.embauche-machines {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.embauche-machine {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  cursor: pointer;
+  color: var(--encre);
+  background: var(--papier-2);
+  box-shadow: 0 0 0 2px var(--bois-clair);
+}
+.embauche-machine:hover:not(:disabled) { background: #fff3d6; }
+.embauche-machine.choisie {
+  background: #fff3d6;
+  box-shadow: 0 0 0 3px var(--clawd), 3px 3px 0 3px var(--bois-fonce);
+}
+.embauche-machine:disabled { opacity: 0.55; cursor: not-allowed; }
+.embauche-led {
+  width: 9px;
+  height: 9px;
+  background: #a89a80;
+  box-shadow: 0 0 0 2px var(--bois-fonce);
+}
+.embauche-led.en-ligne { background: var(--vert); }
+.embauche-machine-nom { font-family: var(--pixel); font-weight: 600; font-size: 14px; }
+.embauche-machine-desc {
+  grid-column: 2;
+  font-size: 11.5px;
+  color: var(--encre-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.embauche-projets {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.embauche-liste {
+  flex: 1;
+  min-height: 120px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow: auto;
+  background: #fffaf0;
+  box-shadow: 0 0 0 2px var(--bois-clair);
+  scrollbar-width: thin;
+  scrollbar-color: var(--bois-clair) transparent;
+}
+.embauche-liste button {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--encre);
+  text-align: left;
+  cursor: pointer;
+}
+.embauche-liste button:hover { background: var(--papier-2); }
+.embauche-liste button.choisi { background: var(--clawd); color: #fff; }
+.embauche-liste button.choisi .embauche-projet-chemin { color: #ffe2d4; }
+.embauche-projet-nom { font-weight: 700; font-size: 14px; }
+.embauche-projet-chemin {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--encre-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.embauche-vide {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--encre-2);
+  font-style: italic;
+}
+
+.embauche-modeles {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-left: 2px;
+}
+
+.embauche-pied {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+.embauche-erreur {
+  flex: 1;
+  color: #b0283c;
+  font-size: 13px;
+  font-weight: 600;
+}
+.embauche-manque {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--encre-2);
+}
+.embauche-bouton {
+  font-size: 16px;
+  padding: 9px 18px;
+}
+
+@media (max-width: 760px) {
+  .embauche {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+    padding: 12px 14px 16px;
+    gap: 16px;
+  }
+  .embauche-liste { max-height: 220px; }
+  .embauche-pied { flex-wrap: wrap; }
+  .embauche-bouton { width: 100%; }
+}
+
+.embauche-autonomie {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--encre-2);
+}

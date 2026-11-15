@@ -1,6 +1,9 @@
 // Responsabilité : la salle de réunion côté HQ — lister, ouvrir, envoyer une demande de Chris. Miroir typé de
 // commun/reunion.ts (hq n'importe rien d'autre que lui-même). Deux sources : le relais réel (HTTP, jeton porteur)
 // et une démo qui simule deux sessions. Les erreurs remontent en ErreurRelais, comme le reste du dossier.
+import type { ResumeSession } from './contrat';
+import { SCENARIO_SESSIONS } from './demo-scenario';
+import { sessionALInstant } from './demo-simulation';
 import { journaliser } from './journal';
 import { ErreurRelais, type Recuperer } from './transport-http';
 
@@ -93,51 +96,97 @@ export class ClientReunions implements ApiReunions {
   }
 }
 
-interface AgentDemo {
-  readonly id: string;
-  readonly nom: string;
-}
+export type FournisseurSessions = () => readonly ResumeSession[];
 
-const AGENTS_DEMO: readonly AgentDemo[] = [
-  { id: 'demo-atlas', nom: 'Atlas' },
-  { id: 'demo-boreal', nom: 'Boréal' },
-];
-
+const DELAI_PREMIERE_MS = 1_000;
+const DELAI_ENTRE_MS = 1_000;
 const SUJET_MAX = 60;
 const EXTRAIT_MAX = 40;
 
-export function creerReunionsDemo(maintenant: () => Date = () => new Date()): ApiReunions {
-  return new ReunionsDemo(maintenant);
+// Sans fournisseur : les sessions du scénario de démo, figées à l'heure de création.
+export function creerReunionsDemo(
+  maintenant: () => Date = () => new Date(),
+  sessions: FournisseurSessions = sessionsDuScenario(maintenant),
+): ApiReunions {
+  return new ReunionsDemo(maintenant, sessions);
 }
 
-// Démo : chaque agent répond une fois, de façon déterministe ; aucun appel au relais.
+function sessionsDuScenario(maintenant: () => Date): FournisseurSessions {
+  const t0 = maintenant().getTime();
+  return () => SCENARIO_SESSIONS.map((def) => sessionALInstant(def, t0, maintenant().getTime()));
+}
+
+interface ReponseEnAttente {
+  readonly reunionId: string;
+  readonly a: number;
+  readonly auteur: string;
+  readonly texte: string;
+}
+
+// Démo : chaque session choisie répond une fois, après un délai lu sur l'horloge injectée ; aucun appel au relais.
 class ReunionsDemo implements ApiReunions {
   private readonly reunions = new Map<string, Reunion>();
+  private attente: ReponseEnAttente[] = [];
   private compteur = 0;
 
-  constructor(private readonly maintenant: () => Date) {}
+  constructor(
+    private readonly maintenant: () => Date,
+    private readonly sessions: FournisseurSessions,
+  ) {}
 
   async lister(): Promise<readonly Reunion[]> {
+    this.livrer();
     return [...this.reunions.values()];
   }
 
   async ouvrir(id: string): Promise<Reunion> {
+    this.livrer();
     return this.trouver(id);
   }
 
   async envoyer(demande: DemandeReunion): Promise<ReponseReunion> {
+    this.livrer();
     const existante = demande.reunionId === undefined ? null : this.trouver(demande.reunionId);
-    const cibles = demande.destinataires === 'auto' ? AGENTS_DEMO.map((a) => a.id) : [...demande.destinataires];
+    const connues = this.sessions();
+    const cibles = demande.destinataires === 'auto' ? cibleAuto(demande.texte, connues) : [...demande.destinataires];
+    const envois = cibles.map((id) => envoiDemo(id, connues));
+    const reelles = envois.filter((e) => e.ok).map((e) => e.sessionId);
     const depart = existante ?? this.nouvelle(demande.texte);
-    let reunion = this.ajouter(depart, { auteur: AUTEUR_CHRIS, texte: demande.texte, destinataires: cibles });
-    reunion = { ...reunion, participants: [...new Set([...reunion.participants, ...cibles])] };
-    for (const agent of AGENTS_DEMO.filter((a) => cibles.includes(a.id))) {
-      const texte = `${agent.nom} : bien reçu, « ${extrait(demande.texte)} ».`;
-      reunion = this.ajouter(reunion, { auteur: agent.id, texte, destinataires: [] });
-    }
+    const message = { auteur: AUTEUR_CHRIS, texte: demande.texte, destinataires: reelles };
+    let reunion = this.ajouter(depart, message, this.maintenant());
+    reunion = { ...reunion, participants: [...new Set([...reunion.participants, ...reelles])] };
     this.reunions.set(reunion.id, reunion);
-    const envois = cibles.map((sessionId) => envoiDemo(sessionId));
+    this.programmer(reunion.id, demande.texte, reelles, connues);
     return { reunion, envois };
+  }
+
+  private programmer(
+    reunionId: string,
+    texte: string,
+    ids: readonly string[],
+    connues: readonly ResumeSession[],
+  ): void {
+    const depart = this.maintenant().getTime();
+    ids.forEach((id, rang) => {
+      const session = connues.find((s) => s.id === id);
+      if (!session) return;
+      const reponse = `${session.projet.nom} : bien reçu, « ${extrait(texte)} ».`;
+      const a = depart + DELAI_PREMIERE_MS + rang * DELAI_ENTRE_MS;
+      this.attente.push({ reunionId, a, auteur: id, texte: reponse });
+    });
+  }
+
+  private livrer(): void {
+    const now = this.maintenant().getTime();
+    const prets = this.attente.filter((r) => r.a <= now).sort((x, y) => x.a - y.a);
+    if (prets.length === 0) return;
+    this.attente = this.attente.filter((r) => r.a > now);
+    for (const r of prets) {
+      const reunion = this.reunions.get(r.reunionId);
+      if (!reunion) continue;
+      const message = { auteur: r.auteur, texte: r.texte, destinataires: [] };
+      this.reunions.set(r.reunionId, this.ajouter(reunion, message, new Date(r.a)));
+    }
   }
 
   private trouver(id: string): Reunion {
@@ -160,19 +209,29 @@ class ReunionsDemo implements ApiReunions {
   private ajouter(
     reunion: Reunion,
     message: { readonly auteur: string; readonly texte: string; readonly destinataires: readonly string[] },
+    ts: Date,
   ): Reunion {
     this.compteur += 1;
-    const complet: MessageReunion = {
-      id: `demo-message-${this.compteur}`,
-      ts: this.maintenant().toISOString(),
-      ...message,
-    };
+    const complet: MessageReunion = { id: `demo-message-${this.compteur}`, ts: ts.toISOString(), ...message };
     return { ...reunion, messages: [...reunion.messages, complet] };
   }
 }
 
-function envoiDemo(sessionId: string): EnvoiReunion {
-  return AGENTS_DEMO.some((a) => a.id === sessionId)
+// Auto : sessions actives (ni archivées, ni fermées) citées par projet ou titre ; à défaut, toutes les actives.
+function cibleAuto(texte: string, sessions: readonly ResumeSession[]): string[] {
+  const actives = sessions.filter((s) => !s.archivee && s.statut !== 'fermee');
+  const bas = texte.toLowerCase();
+  const citees = actives.filter((s) => cite(bas, s.projet.nom) || cite(bas, s.titre));
+  return (citees.length > 0 ? citees : actives).map((s) => s.id);
+}
+
+function cite(texteBas: string, mot: string): boolean {
+  const cherche = mot.trim().toLowerCase();
+  return cherche.length > 0 && texteBas.includes(cherche);
+}
+
+function envoiDemo(sessionId: string, connues: readonly ResumeSession[]): EnvoiReunion {
+  return connues.some((s) => s.id === sessionId)
     ? { sessionId, ok: true }
     : { sessionId, ok: false, erreur: 'session inconnue' };
 }

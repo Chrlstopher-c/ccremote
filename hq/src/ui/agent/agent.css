@@ -4,7 +4,7 @@
   flex: 1;
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr 270px;
+  grid-template-columns: minmax(0, 1fr) 270px;
 }
 
 .ecran-principal {
@@ -259,7 +259,8 @@
 .frise-cible { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 760px) {
-  .ecran-agent { grid-template-columns: 1fr; }
+  .ecran-agent { grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .bulle-chris { max-width: 92%; }
   .touches { display: none; }
   .fil-colonne { padding: 0 12px; }
   .composeur { padding: 8px 10px 12px; }

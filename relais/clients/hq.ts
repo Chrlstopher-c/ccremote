@@ -1,12 +1,13 @@
-// Responsabilité : les routes de l'Agent HQ (interface Vite + Phaser) servies sous /hq/, protégées comme l'API.
+// Responsabilité : les routes de l'Agent HQ (interface Vite + Phaser) servies sous /hq/. Publiques comme l'ancienne
+// interface : l'app ne contient aucun secret et doit pouvoir afficher son écran de connexion ; l'API reste protégée.
 import { erreur } from './http.ts';
 import { indexSpa, servirStatique } from './statique.ts';
 
 export const PREFIXE_HQ = '/hq';
 type Gestionnaire = (req: Request) => Response;
 
-export function routesHq(racine: string, autorise: (req: Request) => boolean): Record<string, Gestionnaire> {
-  const gestionnaire: Gestionnaire = (req) => (autorise(req) ? fichierHq(racine, req) : erreur('non connecté', 401));
+export function routesHq(racine: string): Record<string, Gestionnaire> {
+  const gestionnaire: Gestionnaire = (req) => fichierHq(racine, req);
   return { [PREFIXE_HQ]: gestionnaire, [`${PREFIXE_HQ}/*`]: gestionnaire };
 }
 

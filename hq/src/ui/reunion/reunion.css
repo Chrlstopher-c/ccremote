@@ -1,0 +1,259 @@
+/* Responsabilité : la mise en forme de la salle de réunion — papier et bois, la table au centre (plateau de bois où
+   se posent les messages), participants et historique en colonnes ; onglets sur téléphone. */
+.salle {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 250px 1fr 230px;
+  gap: 18px;
+  padding: 14px 18px 16px;
+}
+
+.salle-onglets { display: none; }
+
+.salle-titre-col {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--bois);
+}
+
+.salle-participants,
+.salle-passees {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.salle-auto {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  background: var(--papier-2);
+  box-shadow: 0 0 0 2px var(--bois-clair);
+}
+.salle-auto.actif { background: #fff3d6; box-shadow: 0 0 0 3px var(--clawd); }
+.salle-auto span { display: flex; flex-direction: column; }
+.salle-auto strong { font-family: var(--pixel); font-size: 14px; }
+.salle-auto small { font-size: 11.5px; color: var(--encre-2); }
+
+.salle input[type='checkbox'] {
+  accent-color: var(--clawd);
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  flex: none;
+}
+
+.salle-sessions,
+.salle-liste-passees {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  overflow: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bois-clair) transparent;
+}
+
+.salle-session {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 7px 8px;
+  cursor: pointer;
+  background: #fffaf0;
+  box-shadow: 0 0 0 2px var(--papier-2);
+}
+.salle-session:hover { box-shadow: 0 0 0 2px var(--bois-clair); }
+.salle-session.cochee { box-shadow: 0 0 0 2px var(--clawd); background: #fff3e8; }
+.salle-session.inactif { opacity: 0.55; cursor: default; }
+.salle-session-textes { min-width: 0; display: flex; flex-direction: column; }
+.salle-session-titre {
+  font-weight: 700;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.salle-session-lieu { font-size: 11px; color: var(--encre-2); }
+
+.salle-pastille {
+  display: inline-block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  background: #a89a80;
+  box-shadow: 0 0 0 2px var(--bois-fonce);
+}
+.salle-pastille.bloque { background: var(--rouge); animation: clignote 0.8s steps(1) infinite; }
+.salle-pastille.travail { background: var(--clawd); }
+.salle-pastille.fini { background: var(--vert); }
+.salle-pastille.erreur { background: var(--rouge); }
+.salle-pastille.inactive { background: var(--bleu); }
+
+/* La table : un plateau de bois, les messages posés dessus comme des feuilles. */
+.salle-centre {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.salle-table {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 22px, rgba(59, 38, 24, 0.12) 22px 24px),
+    var(--bois-clair);
+  box-shadow: inset 0 0 0 3px var(--bois), inset 0 0 0 6px var(--bois-fonce), 0 4px 0 var(--bois-fonce);
+  padding: 6px;
+}
+.salle-fil {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-color: var(--bois) transparent;
+}
+.salle-fil-vide {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff3d6;
+  text-shadow: 2px 2px 0 var(--bois-fonce);
+}
+.salle-fil-vide p { margin: 0; max-width: 360px; font-size: 13.5px; line-height: 1.5; }
+.salle-fil-vide .titre-pixel { font-size: 20px; margin-bottom: 6px; }
+
+.salle-msg {
+  max-width: 82%;
+  padding: 9px 12px 6px;
+  color: var(--encre);
+  box-shadow: 0 0 0 2px var(--bois-fonce), 3px 4px 0 2px rgba(0, 0, 0, 0.25);
+}
+.salle-msg time { display: block; font-size: 10.5px; color: var(--encre-2); text-align: right; margin-top: 4px; }
+.salle-msg.chris { align-self: flex-end; background: #ffe2d4; }
+.salle-msg.agent { align-self: flex-start; background: var(--papier); }
+.salle-msg-tete { font-size: 12px; margin-bottom: 4px; color: var(--encre-2); }
+.salle-msg-tete strong { font-family: var(--pixel); color: #b85e42; font-size: 13px; }
+.salle-msg-texte { white-space: pre-wrap; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+
+.salle-auteur { display: flex; align-items: baseline; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+.salle-auteur strong { font-family: var(--pixel); font-size: 13px; color: var(--bois); }
+.salle-auteur .salle-pastille { margin-top: 0; align-self: center; }
+.salle-auteur-lieu { font-size: 11px; color: var(--encre-2); }
+
+.salle-md { font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; }
+.salle-md p { margin: 0 0 6px; }
+.salle-md p:last-child { margin-bottom: 0; }
+.salle-md code { font-family: var(--mono); font-size: 12.5px; background: var(--papier-2); padding: 0 3px; }
+.salle-md pre { background: var(--papier-2); padding: 8px; overflow: auto; }
+.salle-md ul, .salle-md ol { margin: 4px 0; padding-left: 20px; }
+
+.salle-attente {
+  align-self: flex-start;
+  font-family: var(--pixel);
+  font-size: 13px;
+  color: #fff3d6;
+  text-shadow: 2px 2px 0 var(--bois-fonce);
+  animation: clignote 1.6s steps(2) infinite;
+}
+
+.salle-erreurs {
+  color: #b0283c;
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.salle-envoi-boite {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  background: #fffaf0;
+  padding: 8px;
+  box-shadow: 0 0 0 2px var(--bois-clair);
+}
+.salle-envoi-boite:focus-within { box-shadow: 0 0 0 2px var(--clawd); }
+.salle-envoi-boite textarea {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--encre);
+  font: 14px/1.5 var(--lisible);
+  max-height: 160px;
+}
+.salle-envoi-boite textarea::placeholder { color: #a08a6c; }
+.salle-envoi-boite .bouton-pixel { white-space: nowrap; }
+.salle-garde-fous {
+  margin: 6px 2px 0;
+  font-size: 11.5px;
+  color: var(--encre-2);
+}
+.salle-garde-fous::before { content: '⚑ '; color: var(--bois); }
+
+.salle-nouvelle { margin: 0 2px 10px; }
+.salle-liste-passees button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  cursor: pointer;
+  padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--encre);
+  background: #fffaf0;
+  box-shadow: 0 0 0 2px var(--papier-2);
+}
+.salle-liste-passees button:hover { box-shadow: 0 0 0 2px var(--bois-clair); }
+.salle-liste-passees button.courante { box-shadow: 0 0 0 2px var(--clawd); background: #fff3e8; }
+.salle-passee-sujet {
+  font-weight: 700;
+  font-size: 13px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.salle-passee-meta { font-size: 11px; color: var(--encre-2); }
+
+.salle-vide-petit { font-size: 12.5px; font-style: italic; color: var(--encre-2); padding: 6px 4px; }
+
+@media (max-width: 1050px) and (min-width: 761px) {
+  .salle { grid-template-columns: 220px 1fr; }
+  .salle-passees { display: none; }
+}
+
+@media (max-width: 760px) {
+  .salle {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    padding: 10px 12px 12px;
+    gap: 10px;
+  }
+  .salle-onglets { display: flex; gap: 10px; padding: 2px; }
+  .salle-onglets .bouton-pixel { flex: 1; font-size: 13px; padding: 6px 4px; }
+  .salle-participants,
+  .salle-centre,
+  .salle-passees { display: none; }
+  .salle[data-onglet='participants'] .salle-participants,
+  .salle[data-onglet='reunions'] .salle-passees { display: flex; }
+  .salle[data-onglet='fil'] .salle-centre { display: flex; }
+  .salle-msg { max-width: 92%; }
+  .salle-envoi-boite .bouton-pixel { padding: 6px 8px; font-size: 12px; }
+}

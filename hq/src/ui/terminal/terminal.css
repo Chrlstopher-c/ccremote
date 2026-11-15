@@ -1,0 +1,100 @@
+/* Responsabilité : la mise en forme du panneau terminal — écran cathodique vert (léger balayage), bandeau de fin,
+   rangée de touches pour téléphone. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+.crt-corps {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.cadre-crt .panneau-tete {
+  border-bottom: 2px solid #2c4430;
+}
+
+.cadre-crt .panneau-titres h2 {
+  color: var(--crt-texte);
+  text-shadow: 0 0 6px rgba(140, 240, 154, 0.45);
+}
+
+.crt-ecran {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  padding: 12px 6px 10px 14px;
+  background: radial-gradient(ellipse at center, #1f3322 0%, var(--crt) 70%, #132015 100%);
+  cursor: text;
+}
+
+.crt-xterm {
+  width: 100%;
+  height: 100%;
+}
+
+.crt-xterm .xterm {
+  height: 100%;
+}
+
+.crt-xterm .xterm-viewport {
+  background: transparent !important;
+  scrollbar-width: thin;
+  scrollbar-color: #3f6a46 transparent;
+}
+
+.crt-xterm .xterm-screen {
+  text-shadow: 0 0 4px rgba(140, 240, 154, 0.35);
+}
+
+/* Lignes de balayage : un motif fixe, très discret, qui ne gêne pas la lecture. */
+.crt-balayage {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px 3px);
+}
+
+.crt-fin {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  font-family: var(--pixel);
+  font-size: 15px;
+  color: var(--crt-texte);
+  background: #22382a;
+  border-top: 2px solid #2c4430;
+}
+
+.crt-fin.erreur {
+  color: #ffb0a0;
+  background: #3a2222;
+}
+
+.crt-touches {
+  display: none;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: #ddd2ae;
+  border-top: 3px solid #6e6650;
+}
+
+.crt-touches .bouton-pixel {
+  flex: 0 0 auto;
+  min-width: 40px;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+@media (max-width: 760px) {
+  .crt-touches {
+    display: flex;
+  }
+  .crt-ecran {
+    padding: 8px 4px 6px 8px;
+  }
+}

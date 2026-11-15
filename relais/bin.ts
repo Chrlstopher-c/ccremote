@@ -91,7 +91,7 @@ for (const hostname of config.hotesWeb) {
       ...routes,
       ...routesGestionAcces,
       ...connecteurs,
-      ...routesHq(config.hq, (req) => acces.autorise(req)),
+      ...routesHq(config.hq),
       '/api/flux': (req, serveur) => {
         if (!acces.autorise(req)) return erreur('non connecté', 401);
         const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);

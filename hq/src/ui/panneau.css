@@ -73,9 +73,31 @@
     padding: 0;
   }
   .panneau {
-    width: 100%;
+    width: 100vw;
+    max-width: 100vw;
     height: 100%;
     box-shadow: none;
+    overflow: hidden;
+  }
+  .panneau-tete {
+    flex-wrap: wrap;
+    padding: 10px 10px 8px 12px;
+  }
+  .panneau-titres {
+    flex-basis: calc(100% - 52px);
+  }
+  .panneau-titres h2 {
+    font-size: 16px;
+  }
+  .panneau-actions {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .panneau-corps {
+    min-width: 0;
+    width: 100%;
   }
   .panneau-actions .bouton-pixel {
     font-size: 12px;

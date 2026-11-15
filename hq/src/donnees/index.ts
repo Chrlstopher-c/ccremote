@@ -10,8 +10,10 @@ export {
   type ApiReunions,
   type DemandeReunion,
   type EnvoiReunion,
+  type FournisseurSessions,
   type ReponseReunion,
 } from './reunion';
+export { journaliser } from './journal';
 export { creerActions, type ActionsMonde, type ResultatAction } from './actions';
 export {
   CLE_JETON,

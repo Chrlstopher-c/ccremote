@@ -7,7 +7,8 @@ import { construireCarte, TUILE, type Carte } from './carte/plan';
 import { dessinerCarte, poserObjets, poserPlaques } from './carte/rendu-carte';
 import { Agent } from './persos/agent';
 import { Marcheur } from './persos/marcheur';
-import { ouvrir, type Panneau } from '../ui/bus';
+import { poserAmbiance } from './ambiance';
+import { ecouterPanneau, ouvrir, type Panneau } from '../ui/bus';
 import type { MagasinMonde, ResumeSession } from '../donnees';
 import { cleSessions, etatDansLeMonde, sessionsDuMonde } from './lien-donnees';
 import { chargerImages, chargerIndex, creerAnimations, type Ressources } from './sprites';
@@ -50,6 +51,7 @@ export class SceneMonde extends Phaser.Scene {
     dessinerCarte(this, this.carte, this.r.tuiles);
     const poses = poserObjets(this, this.carte, this.r.objets);
     poserPlaques(this, this.carte);
+    poserAmbiance(this, this.carte);
     sessions.forEach((s, i) => {
       const poste = this.carte.postes[i];
       if (poste) this.agents.set(s.id, new Agent(this, poste, this.carte, this.r.persos));
@@ -65,8 +67,14 @@ export class SceneMonde extends Phaser.Scene {
   private installerControles(): void {
     const kb = this.input.keyboard;
     if (kb) {
-      // addKeys renvoie un objet indexé par les noms demandés
-      this.touches = kb.addKeys('Z,Q,S,D,W,A,UP,DOWN,LEFT,RIGHT') as Record<string, Phaser.Input.Keyboard.Key>;
+      // addKeys renvoie un objet indexé par les noms demandés ; sans capture : les touches restent aux champs de saisie
+      this.touches = kb.addKeys('Z,Q,S,D,W,A,UP,DOWN,LEFT,RIGHT', false) as Record<string, Phaser.Input.Keyboard.Key>;
+      // Un panneau ouvert reprend le clavier : Chris tape dans le fil, le terminal ou l'éditeur, pas dans le jeu.
+      const fin = ecouterPanneau((p) => {
+        kb.enabled = p === null;
+        if (p) kb.resetKeys();
+      });
+      this.events.once('shutdown', fin);
     }
     this.input.on('pointerup', (p: Phaser.Input.Pointer, cibles: unknown[]) => {
       if (cibles.length || p.getDistance() > 6) return;

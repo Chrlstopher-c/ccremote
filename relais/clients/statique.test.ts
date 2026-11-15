@@ -40,8 +40,7 @@ describe('service statique', () => {
 });
 
 describe('routes /hq/', () => {
-  const ouvert = routesHq(racine, () => true);
-  const refuse = routesHq(racine, () => false);
+  const ouvert = routesHq(racine);
   const appeler = (
     table: ReturnType<typeof routesHq>,
     chemin: string,
@@ -58,10 +57,10 @@ describe('routes /hq/', () => {
     expect(await r.text()).toContain('<title>HQ</title>');
   });
 
-  test('refus sans authentification : 401 sur toute la sous-arborescence', async () => {
-    const handler = refuse['/hq/*'];
+  test('servie sans authentification (écran de connexion) : /hq répond, un fichier absent donne 404', async () => {
+    expect((await appeler(ouvert, '/hq')).status).toBe(200);
+    const handler = ouvert['/hq/*'];
     if (!handler) throw new Error('route /hq/* absente');
-    expect((await handler(new Request('http://relais.test/hq/une/route'))).status).toBe(401);
-    expect((await appeler(refuse, '/hq')).status).toBe(401);
+    expect((await handler(new Request('http://relais.test/hq/absent.js'))).status).toBe(404);
   });
 });

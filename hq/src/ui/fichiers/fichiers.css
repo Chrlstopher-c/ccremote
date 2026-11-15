@@ -1,0 +1,380 @@
+/* Responsabilité : la mise en forme de la bibliothèque (panneau fichiers) — papier et bois, arborescence à gauche,
+   feuille d'édition à droite, onglets sur téléphone. */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+.biblio {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+}
+
+.biblio-arbre {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 3px solid var(--papier-2);
+  background: #f0deb4;
+}
+
+.biblio-barre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 10px;
+  border-bottom: 2px dashed #d8bf8a;
+}
+
+.biblio-barre .bouton-pixel {
+  font-size: 13px;
+  padding: 5px 9px;
+}
+
+.biblio-chemin {
+  flex-basis: 100%;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--encre-2);
+  direction: rtl;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.biblio-defile {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 6px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bois-clair) transparent;
+}
+
+.biblio-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.biblio-ligne {
+  display: flex;
+  align-items: center;
+}
+
+.biblio-ligne.edition {
+  padding: 4px 2px;
+}
+
+.biblio-ligne.cachee .biblio-texte {
+  opacity: 0.6;
+}
+
+.biblio-nom {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--encre);
+  font: 500 14px var(--lisible);
+  text-align: left;
+  cursor: pointer;
+}
+
+.biblio-ligne:not(.edition):hover {
+  background: rgba(154, 106, 62, 0.12);
+}
+
+.biblio-ligne.choisie {
+  background: var(--papier);
+  box-shadow: inset 3px 0 0 var(--clawd), inset 0 0 0 2px var(--bois-clair);
+}
+
+.biblio-ligne.choisie .biblio-nom {
+  font-weight: 700;
+}
+
+.biblio-texte {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.biblio-taille {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--encre-2);
+}
+
+/* Icônes pixel dessinées en CSS : chemise cartonnée et feuille cornée. */
+.biblio-icone {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 13px;
+  position: relative;
+}
+
+.biblio-icone.dossier {
+  background: #d9a441;
+  box-shadow: inset 0 -3px 0 #b07a24, 0 0 0 1px #6b4428;
+  margin-top: 3px;
+}
+
+.biblio-icone.dossier::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -4px;
+  width: 7px;
+  height: 3px;
+  background: #d9a441;
+  box-shadow: 0 0 0 1px #6b4428;
+}
+
+.biblio-icone.fichier {
+  width: 12px;
+  height: 15px;
+  background: #fffaf0;
+  box-shadow: 0 0 0 1px #6b4428, inset 0 -2px 0 #e8d8b8;
+}
+
+.biblio-icone.fichier::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -1px;
+  border-style: solid;
+  border-width: 0 5px 5px 0;
+  border-color: #f0deb4 #f0deb4 #c8a878 #c8a878;
+}
+
+.biblio-outils {
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+}
+
+.biblio-ligne:hover .biblio-outils,
+.biblio-ligne.choisie .biblio-outils,
+.biblio-outils:focus-within {
+  opacity: 1;
+}
+
+.biblio-outil {
+  border: none;
+  background: transparent;
+  color: var(--encre-2);
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.biblio-outil:hover {
+  background: var(--papier);
+  color: var(--encre);
+}
+
+.biblio-outil.danger:hover {
+  color: #c0303a;
+}
+
+.biblio-saisie,
+.biblio-confirme {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.biblio-saisie input {
+  flex: 1;
+  min-width: 120px;
+  padding: 6px 8px;
+  border: none;
+  background: #fffaf0;
+  color: var(--encre);
+  font: 14px var(--lisible);
+  box-shadow: 0 0 0 2px var(--bois);
+  outline: none;
+}
+
+.biblio-saisie input:focus {
+  box-shadow: 0 0 0 2px var(--clawd);
+}
+
+.biblio-saisie .bouton-pixel,
+.biblio-confirme .bouton-pixel {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.biblio-confirme {
+  padding: 10px 12px;
+  background: #f8d8c8;
+  color: #6b1a1a;
+  font-size: 13px;
+  box-shadow: inset 0 0 0 2px #d08070;
+}
+
+.biblio-confirme span {
+  flex: 1 1 100%;
+}
+
+.biblio-erreur {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 0;
+  padding: 8px 10px;
+  background: #f8d0c8;
+  color: #8a1a1a;
+  font-size: 13px;
+  box-shadow: inset 0 0 0 2px #d07060;
+}
+
+.biblio-erreur span {
+  flex: 1;
+}
+
+.biblio-vide {
+  padding: 24px 12px;
+  color: var(--encre-2);
+  font-family: var(--pixel);
+  text-align: center;
+}
+
+.biblio-droite {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.biblio-editeur {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.biblio-entete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--papier-2);
+}
+
+.biblio-fichier {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.biblio-fichier .titre-pixel {
+  font-size: 17px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.biblio-etat {
+  font-size: 12px;
+  color: var(--encre-2);
+  white-space: nowrap;
+}
+
+.biblio-etat.modifie {
+  color: var(--clawd);
+  font-weight: 700;
+}
+
+.biblio-feuille {
+  flex: 1;
+  min-height: 0;
+  margin: 10px 12px 12px;
+  box-shadow: 0 0 0 2px var(--papier-2), 3px 4px 0 2px rgba(107, 68, 40, 0.18);
+}
+
+.biblio-feuille[hidden] {
+  display: none;
+}
+
+.biblio-message {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px;
+  color: var(--encre-2);
+  text-align: center;
+}
+
+.biblio-message .titre-pixel {
+  font-size: 18px;
+  color: var(--encre);
+}
+
+.biblio-message.erreur {
+  color: #8a1a1a;
+}
+
+.biblio-onglets {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .biblio {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+  .biblio-onglets {
+    display: flex;
+    gap: 4px;
+    padding: 8px 10px 0;
+    border-bottom: 3px solid var(--papier-2);
+  }
+  .biblio-onglets button {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border: none;
+    background: var(--papier-2);
+    color: var(--encre-2);
+    font: 600 14px var(--pixel);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .biblio-onglets button.actif {
+    background: var(--bois-clair);
+    color: #fff8e4;
+  }
+  .biblio.onglet-arbre .biblio-droite,
+  .biblio.onglet-editeur .biblio-arbre {
+    display: none;
+  }
+  .biblio-arbre {
+    border-right: none;
+  }
+  .biblio-outils {
+    opacity: 1;
+  }
+  .biblio-feuille {
+    margin: 6px;
+  }
+}
