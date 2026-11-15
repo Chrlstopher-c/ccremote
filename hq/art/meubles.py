@@ -227,7 +227,24 @@ def buisson() -> Objet:
     return Objet([Boite(4, 3, 0, 10, 6, 2, (60, 110, 54))], [boules], marge_haut=12, marge_cote=6)
 
 
+def montant() -> Objet:
+    """Montant de porte : poteau de bois dans l'épaisseur de la cloison, de chaque côté d'une ouverture."""
+    return Objet([Boite(0, 0, 0, 4, 4, 22, BOIS), Boite(0, 0, 22, 4, 4, 2, BOIS_CLAIR)])
+
+
+def tapis() -> Objet:
+    """Tapis de couloir (au sol, sans épaisseur) : bordure dorée, motif en losanges."""
+    def motif(d: ImageDraw.ImageDraw, _a: Rect, t: Rect) -> None:
+        d.rectangle(t, fill=(150, 52, 48))
+        d.rectangle([t[0] + 1, t[1] + 1, t[2] - 1, t[3] - 1], outline=(214, 170, 90))
+        for x in range(t[0] + 6, t[2] - 4, 8):
+            cy = (t[1] + t[3]) // 2
+            d.polygon([(x, cy - 3), (x + 3, cy), (x, cy + 3), (x - 3, cy)], fill=(196, 96, 70))
+    return Objet([Boite(0, 0, 0, 96, 14, 0, (150, 52, 48), motif, dessus=(150, 52, 48))])
+
+
 RECETTES = {
+    'montant': montant, 'tapis': tapis,
     'bureau': bureau, 'etagere': etagere, 'serveur': baie_serveur, 'crt': terminal, 'cafe': machine_cafe,
     'distributeur': distributeur, 'canape': canape, 'table': table_ronde, 'plante': plante, 'tableau': tableau_blanc,
     'lampadaire': lampadaire, 'banc': banc, 'cendrier': cendrier, 'arbre': arbre, 'buisson': buisson,

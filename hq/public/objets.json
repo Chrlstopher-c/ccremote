@@ -1,4 +1,14 @@
 {
+ "montant": {
+  "w": 10,
+  "h": 60,
+  "emprise": 8
+ },
+ "tapis": {
+  "w": 194,
+  "h": 32,
+  "emprise": 28
+ },
  "bureau": {
   "w": 98,
   "h": 96,

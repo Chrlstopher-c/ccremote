@@ -19,6 +19,7 @@ export interface Objet {
   y: number; // bas (pieds de l'objet), en pixels du monde
   bloque: boolean;
   miroir?: boolean;
+  auSol?: boolean; // posé à plat (tapis) : toujours dessous des personnages
 }
 
 export type Lieu = 'cafe' | 'reunion' | 'bibliotheque' | 'terminal' | 'fumoir' | 'entree';
@@ -73,9 +74,14 @@ function piece(c: Case[][], r: Rect, sol: string): void {
   poser(c, { x: r.x + 1, y: r.y + 1, w: r.w - 2, h: r.h - 2 }, 'sol', sol);
 }
 
-/** Ouverture dans un mur horizontal, marquée d'un seuil. */
+const montants: Objet[] = [];
+
+/** Ouverture dans un mur horizontal, marquée d'un seuil et encadrée de deux montants de bois. */
 function porte(c: Case[][], x: number, y: number, largeur = 2): void {
   poser(c, { x, y, w: largeur, h: 1 }, 'sol', 'seuil');
+  for (const bord of [x * TUILE + 2, (x + largeur) * TUILE - 2]) {
+    montants.push({ nom: 'montant', x: bord, y: y * TUILE + 26, bloque: false });
+  }
 }
 
 interface Gabarit {
@@ -206,10 +212,23 @@ function dehors(c: Case[][], g: Gabarit, entreeX: number, objets: Objet[]): Cart
   return fumoir;
 }
 
+/** Couloir : tapis de passage tout du long, plantes aux deux bouts. */
+function decorCouloir(g: Gabarit): Objet[] {
+  const y = (g.couloirY + 2) * TUILE - 4;
+  const o: Objet[] = [];
+  for (let x = g.bx + 2; x + 6 < g.bx + g.batW - 1; x += 6) {
+    o.push({ nom: 'tapis', x: (x + 3) * TUILE, y, bloque: false, auSol: true });
+  }
+  o.push({ nom: 'plante', x: (g.bx + 1) * TUILE + 16, y: (g.couloirY + 1) * TUILE, bloque: true });
+  o.push({ nom: 'plante', x: (g.bx + g.batW - 1) * TUILE - 16, y: (g.couloirY + 1) * TUILE, bloque: true });
+  return o;
+}
+
 /** Le monde complet pour une liste de projets (un bureau chacun, au moins cinq emplacements). */
 export function construireCarte(projets: readonly string[]): Carte {
   const n = Math.max(MIN_BUREAUX, projets.length);
   const g = gabarit(n);
+  montants.length = 0;
   const c = grilleVide(g.w, g.h);
   const objets: Objet[] = [];
   piece(c, { x: g.bx, y: g.nordY, w: g.batW, h: g.basY - g.nordY + 1 }, 'parquet-1');
@@ -228,6 +247,7 @@ export function construireCarte(projets: readonly string[]): Carte {
   faceNord(c, g);
   facade(c, g, entreeX);
   const fumoir = dehors(c, g, entreeX, objets);
+  objets.push(...montants, ...decorCouloir(g));
   return {
     largeur: g.w,
     hauteur: g.h,
