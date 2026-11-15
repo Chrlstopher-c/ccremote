@@ -14,6 +14,8 @@ export interface ConfigRelais {
   readonly fichierEchecs: string;
   readonly portPostes: number;
   readonly web: string;
+  readonly hq: string;
+  readonly inactiviteMs: number;
   readonly origines: ReadonlySet<string>;
   readonly echo: { readonly url: string; readonly jeton: string } | null;
 }
@@ -29,6 +31,12 @@ function paires(v: string | undefined): Map<string, string> {
     if (i > 0) m.set(p.slice(0, i), p.slice(i + 1));
   }
   return m;
+}
+
+// Minutes entières positives ; une valeur absente ou fausse prend le défaut.
+function minutes(v: string | undefined, defaut: number): number {
+  const n = Number(v);
+  return v && Number.isInteger(n) && n > 0 ? n : defaut;
 }
 
 function requis(nom: string): string {
@@ -61,6 +69,8 @@ export function chargerConfig(): ConfigRelais {
     fichierEchecs: process.env['CCREMOTE_ECHECS'] ?? join(dirname(base), 'echecs-connexion.json'),
     portPostes: Number(process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
     web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
+    hq: process.env['CCREMOTE_HQ'] ?? join(racine, 'hq/dist'),
+    inactiviteMs: minutes(process.env['CCREMOTE_INACTIVITE_MIN'], 30) * 60_000,
     echo: configEcho(),
     origines: new Set(
       (process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420')

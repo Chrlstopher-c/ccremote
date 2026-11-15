@@ -1,6 +1,6 @@
 # STATE — ccremote
 
-*Dernière mise à jour : 2026-11-05, branche `dev` (MCP + écran Accès)*
+*Dernière mise à jour : 2026-11-15, branche `agent-hq` (non commitée)*
 
 ## Résumé
 
@@ -12,6 +12,26 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
+
+## 15/11 — Moteur SDK du poste, cycle de vie, Agent HQ (`hq/`)
+
+**Livré (rien commité, à relire puis committer)** :
+- **Poste, moteur `sdk`** (défaut des sessions ouvertes depuis l'app) : à parité avec tmux pour le fil, les commandes,
+  les dialogues (AskUserQuestion, ExitPlanMode) et la fin de tour (relance, compaction, mode nuit, même politique pure).
+  Fichiers `poste/session/*-sdk.ts`, `bilan-tour.ts`, `rythme.ts`. Voir ARCHITECTURE « Moteurs du poste ».
+- **Cycle de vie** : inactivité à 30 min (`CCREMOTE_INACTIVITE_MIN`, recalcul chaque minute, changements seulement) ;
+  archivage `POST /api/sessions/:id/archiver|desarchiver`, archiver ferme d'abord la session vivante ; archivées masquées
+  sauf `?archivees=1`. Le client HQ appelle la même route, testée des deux côtés.
+- **Relais** : sert Agent HQ sous `/hq/` (`CCREMOTE_HQ`), derrière la même authentification que l'API.
+- **Agent HQ** (`hq/`) : monde Phaser (carte, un Clawd par session, Chris jouable), client de données (démo ou relais),
+  actions de session ; pipeline d'assets local dans `hq/art/`. Apparence en cours de design.
+
+**Vérifié** : `bun test` à la racine vert (249 tests, dont `hq/src/donnees`) ; `bun run typecheck` vert ; `hq` : 57 tests
+`src/donnees` verts et typecheck vert. **Non vérifié** : sessions SDK sur un vrai poste (ouverture, question, relance,
+compaction) et l'écran Agent HQ connecté à un relais réel.
+
+**Reste** : commit après relecture ; CI sans `hq/` (`.github/workflows/ci.yml` ne lance ni son typecheck ni ses tests) ;
+décision de fin de `bureau/` au profit de `hq/`.
 
 ## 05/11 — Écran « Accès » : brancher claude.ai et Claude Code, gérer les accès
 

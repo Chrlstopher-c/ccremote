@@ -19,7 +19,7 @@ export function sessionsAPurger(
 
 export function purgerFil(registre: Registre, journal: Logger, maintenant = new Date()): void {
   try {
-    const ids = sessionsAPurger(registre.sessions(), maintenant);
+    const ids = sessionsAPurger(registre.sessions(true), maintenant);
     const supprimes = ids.length > 0 ? registre.purgerEvenements(ids) : 0;
     journal.info({ sessions: ids.length, evenements: supprimes, jours: RETENTION_JOURS }, 'rétention du fil');
   } catch (e) {

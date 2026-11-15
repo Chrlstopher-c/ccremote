@@ -3,23 +3,20 @@
 import type { Logger } from 'pino';
 import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
 import { approuverDossier } from './confiance.ts';
-import { GardeSousAgents, type DecisionCrochet } from './garde-sous-agents.ts';
+import { GardeSousAgents } from './garde-sous-agents.ts';
 import { commandeClaude, commandeReprise, VAR_SESSION, VAR_SOCKET } from './lanceur.ts';
 import type { SessionPersistee } from './persistance.ts';
-import { CONSIGNE_COMPACTION, deciderCompaction } from './politique-compaction.ts';
+import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { deciderSuite, type Suite } from './suite-du-tour.ts';
+import { effetRythme } from './rythme.ts';
 import * as tmux from './tmux.ts';
 import { SuiviSousAgents } from './sous-agents.ts';
+import type { ReponseCrochet, SessionPoste, SortieSession } from './session-poste.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
 import { SuiviNuit } from './suivi-nuit.ts';
 import { SuiviDialogue } from './suivi-dialogue.ts';
 import { LecteurTranscript } from './transcript.ts';
 import { contexteDe, type Ligne, traduire, travailEnCours } from './traduction.ts';
-
-export interface SortieSession {
-  evenement(sessionId: string, evt: Evenement): void;
-  resume(r: ResumeSession): void;
-}
 
 export interface EnvironnementSession {
   readonly socket: string;
@@ -31,7 +28,7 @@ const RELANCE_APRES_COMPACTION =
   'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), ' +
   'sans refaire le travail livré.';
 
-export class SessionTmux {
+export class SessionTmux implements SessionPoste {
   private etat: ResumeSession;
   private lecteur: LecteurTranscript | null;
   private sousAgents: SuiviSousAgents | null;
@@ -47,6 +44,7 @@ export class SessionTmux {
     emettre: (evt) => this.emettre(evt),
     coller: (texte) => this.coller(texte),
     journal: () => this.env.journal,
+    peutEcrire: () => this.etat.tmux !== null && this.etat.terminal !== true,
   });
   private readonly enVol: string[] = []; // textes envoyés par Chris pendant un tour, pas encore soumis par Claude
   private readonly internes = new Set<string>(); // textes collés par le poste lui-même (relance, compaction)
@@ -70,6 +68,10 @@ export class SessionTmux {
 
   get transcriptConnu(): boolean {
     return this.lecteur !== null;
+  }
+
+  get vivante(): boolean {
+    return this.etat.tmux !== null;
   }
 
   // --- découverte : l'état réel vient de tmux et du transcript ---
@@ -305,7 +307,7 @@ export class SessionTmux {
 
   // --- crochets du CLI (sessions pilotées seulement) ---
 
-  crochet(type: string, entree: Record<string, unknown>): DecisionCrochet | { decision?: 'block'; reason?: string } {
+  crochet(type: string, entree: Record<string, unknown>): ReponseCrochet {
     if (type === 'PreToolUse') return this.garde.decider(String(entree['tool_name'] ?? ''), entree['tool_input']);
     if (type === 'SessionStart') this.surDemarrage(entree);
     if (type === 'UserPromptSubmit') this.surPrompt(String(entree['prompt'] ?? ''));
@@ -406,32 +408,19 @@ export class SessionTmux {
   // --- outils de rythme (MCP) ---
 
   rythme(outil: string, args: Record<string, unknown>): string {
-    const champ = (k: string): string => String(args[k] ?? '');
+    const effet = effetRythme(outil, args, this.etat.contexte);
+    if (!effet) return `outil inconnu : ${outil}`;
     if (outil === 'etape_terminee') {
       this.tour.etapeTerminee = true;
       this.garde.nouvelleEtape();
       this.maj({ etapes: this.etat.etapes + 1 });
-      this.emettre({ type: 'etape', resume: champ('resume'), suite: champ('suite') });
-      const k = Math.round(this.etat.contexte.tokens / 1000);
-      if (!deciderCompaction(this.etat.contexte.tokens, this.etat.contexte.max, true).agir) {
-        return `Étape enregistrée. Contexte léger (${k}k) : pas de compaction, enchaîne directement sur la suite.`;
-      }
-      return (
-        `Étape enregistrée. Contexte lourd (${k}k) : termine ton tour par une phrase de bilan ; le harness compacte ` +
-        'puis te relance sur la suite.'
-      );
-    }
-    if (outil === 'objectif_atteint') {
+    } else if (outil === 'objectif_atteint') {
       this.drapeaux.objectifAtteint = true;
-      this.emettre({ type: 'objectif_atteint', bilan: champ('bilan') });
-      return 'Chris est notifié. Termine ton tour.';
-    }
-    if (outil === 'poser_question') {
+    } else {
       this.drapeaux.questionPosee = true;
-      this.emettre({ type: 'question', question: champ('question') });
-      return 'Question transmise à Chris. Termine ton tour : sa réponse arrivera comme prochain message.';
     }
-    return `outil inconnu : ${outil}`;
+    this.emettre(effet.evenement);
+    return effet.reponse;
   }
 
   private dernierMessage = '';

@@ -3,7 +3,8 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-const MIGRATIONS: readonly string[] = [
+// Numérotées : une migration déjà appliquée (user_version) n'est jamais réécrite. Exportées pour les tests.
+export const MIGRATIONS: readonly string[] = [
   `CREATE TABLE machines (
      id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', racines TEXT NOT NULL DEFAULT '[]',
      projets TEXT NOT NULL DEFAULT '[]', comptes TEXT NOT NULL DEFAULT '[]', version TEXT NOT NULL DEFAULT '',
@@ -21,6 +22,7 @@ const MIGRATIONS: readonly string[] = [
   `ALTER TABLE jetons ADD COLUMN genre TEXT NOT NULL DEFAULT 'appareil';
    ALTER TABLE jetons ADD COLUMN vu_le TEXT;
    UPDATE jetons SET genre = 'claude-code' WHERE appareil LIKE 'mcp-%';`,
+  `ALTER TABLE sessions ADD COLUMN archivee INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function ouvrirBase(chemin: string): Database {

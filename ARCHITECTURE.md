@@ -35,7 +35,8 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 | `commun/` | Les contrats partagés : vocabulaire d'une session et de son fil (`session.ts`), accès à un appareil — fichiers et terminaux (`appareil.ts`), protocole poste ↔ relais (`protocole-poste.ts`), API des clients (`api-clients.ts`), journal pino | Aucune logique, aucune I/O |
 | `poste/` | Tout ce qui tourne sur une machine de travail : sessions tmux, lecture des transcripts, crochets et MCP de rythme, politique de compaction/relance, lien sortant vers le relais, état de la machine, découverte des projets | Aucune connaissance des autres machines ni du registre |
 | `relais/` | Tout ce qui tourne sur le Pi : registre SQLite, accès (mot de passe, jetons par genre — appareil, claude-code, claude-ai — gérés depuis l'écran Accès), connecteurs Claude (`connecteurs/` : le MCP servi en HTTP sur `/mcp`), API HTTP + flux WebSocket des clients, serveur des postes, notifications, réveil Wake-on-LAN, règle d'isolation du parc | Aucune décision sur le déroulé d'une session (c'est le poste) |
-| `bureau/` | L'app de bureau (Tauri 2 + React) — le même frontend est servi en web par le relais ; `src-tauri/` = coquille native (terminal kitty, notifications) | Aucune règle métier : elle affiche et commande |
+| `bureau/` | **Appelé à disparaître** au profit de `hq/`. L'app de bureau (Tauri 2 + React) — le même frontend est servi en web par le relais ; `src-tauri/` = coquille native (terminal kitty, notifications) | Aucune règle métier : elle affiche et commande |
+| `hq/` | Agent HQ : l'app web façon jeu (Phaser 3 + Vite), servie par le relais sous `/hq/` — modèle et transport (`src/donnees/`), jeu (`src/monde/`), pipeline d'assets Python hors runtime (`art/`) | Aucune règle de session : elle lit le relais et lui commande des actions |
 | `mcp/` | Le MCP « quart » : un client de l'API du relais (jeton porteur) qui expose aux sessions Claude les outils `quart_*` — voir le parc, ouvrir une session sur n'importe quelle machine, lire son fil, lui parler, la piloter ; plus l'émission du jeton (sur le Pi) et l'installeur | Aucun accès direct à un poste ni au registre : tout passe par l'API HTTP publique du relais |
 | `deploiement/` | Le script de déploiement (relais + postes) | Aucune valeur réelle : adresses, MAC et secrets viennent de `~/.config/ccremote/deploiement.env` |
 
@@ -62,6 +63,54 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 | `terminal/` | Les terminaux à distance : un PTY par terminal (shell, ou client attaché à `tmux -L claude`), sortie regroupée vers le relais |
 | `projets/` | Découverte des projets dans les racines de la machine |
 
+## Moteurs du poste
+
+Une session a un **moteur** (`commun/session.ts`, champ `moteur`) : `sdk` pour les sessions ouvertes depuis l'app (absent
+= `sdk` à la lecture), `tmux` pour les sessions tapées au clavier et les anciennes sessions.
+
+| Fichier | Rôle |
+|---|---|
+| `poste/session/session-poste.ts` | Contrat commun aux deux moteurs : le gestionnaire ne parle qu'à cette forme |
+| `poste/session/session-sdk.ts` | UNE session SDK : une requête `query()` par session, nourrie par les messages de Chris, fil, dialogues, fin de tour |
+| `poste/session/file-messages-sdk.ts` | File asynchrone des messages de Chris ; le premier ne part qu'une fois les connecteurs MCP prêts |
+| `poste/session/traduction-sdk.ts` | Pur : message du SDK → événements du fil et signaux de fin de tour, jamais d'exception |
+| `poste/session/options-sdk.ts` | Pur : options du SDK (dossier, reprise, consignes, modèle, environnement épuré, permissions, serveur de rythme) |
+| `poste/session/questions-sdk.ts` | Pur : AskUserQuestion et ExitPlanMode deviennent des dialogues ; la réponse redevient la décision attendue |
+| `poste/session/rythme.ts` | Pur : les trois outils de rythme (étape, objectif, question) ; chaque moteur applique ses propres drapeaux |
+| `poste/session/bilan-tour.ts` | Bilan d'un tour (outils, étape, compaction, messages en vol, interruption), puis suite à en tirer |
+
+Le SDK n'a pas de hook `Stop` : à la fin de chaque tour, `bilan-tour.ts` applique la même politique pure que les sessions
+tmux (`suite-du-tour.ts` : relance autonome, compaction, mode nuit). Le fil, les commandes (envoyer, interrompre, compacter,
+fermer, reprendre, répondre, autonomie, nuit) et les réponses aux dialogues sont les mêmes pour les deux moteurs.
+
+## Cycle de vie d'une session
+
+- **Statuts** (`commun/session.ts`) : `demarrage`, `travail`, `compaction`, `attente`, `question`, `terminee`, `erreur`, `fermee`.
+- **Inactivité** (`relais/sessions/`) : inactive = tour fini (`attente` ou `terminee`) et silence depuis le seuil
+  (30 min, `CCREMOTE_INACTIVITE_MIN`). Aucun événement ne l'annonce : le relais la recalcule chaque minute et ne diffuse
+  que les changements.
+- **Archivage** (`relais/clients/api-sessions.ts`) : `POST /api/sessions/:id/archiver` ferme d'abord une session vivante
+  (si le poste refuse, rien n'est écrit) puis la range ; `desarchiver` ne touche jamais au poste. Une session rangée est
+  absente des listes sauf `?archivees=1`. Le client HQ appelle la même route (`hq/src/donnees/transport-http.ts`).
+- **Rétention** : le fil d'une session fermée depuis 30 jours est purgé (`relais/registre/retention.ts`).
+
+## Agent HQ (`hq/`)
+
+Un monde en jeu où chaque session est un Clawd : il travaille à son bureau, se lève quand il attend Chris, sort devant
+l'entrée quand elle est inactive. Servie par le relais (`CCREMOTE_HQ`) derrière la même authentification que l'API ; sans
+relais, la source démo la fait vivre seule.
+
+- `hq/src/donnees/` — modèle et transport. `contrat.ts` est le miroir typé des contrats de `commun/` (hq n'importe rien
+  d'autre que lui-même) ; `source-monde.ts` est l'interface lue par le magasin `monde-etat.ts` ; `transport*` = relais réel
+  (HTTP + WebSocket, jeton jamais dans l'URL) ; `demo*` = source de démonstration sur horloge injectée ; `etat-agent.ts` dit
+  ce que le monde montre d'une session (pur) ; `actions.ts` = les actions de Chris.
+- `hq/src/monde/` — le jeu Phaser : `carte/` (plan pur, chemin A* pur, rendu), `persos/` (Clawd par session, Chris),
+  `scene-monde.ts`.
+- `hq/art/` — pipeline Python hors runtime qui produit `hq/public/` : `tuiles.py` (tuiles procédurales), `objets.py` (objets
+  générés en local, découpés et mis à l'échelle), `personnages.py` (planches de Clawd et de Chris), `exporter.py` (planches
+  de la mascotte). `art/gen/` contient les scripts de génération locale.
+- L'apparence du monde est en cours de design ; la structure ci-dessus est stable.
+
 ## Frontières
 
 - `bureau/` et `relais/` ne partagent que `commun/` (types seulement côté app). Un import de `relais/` depuis `bureau/`
@@ -76,11 +125,14 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
 - Les noms `service` / `manager` / `helper` ne sont pas utilisés : le nommage suit le métier (poste, relais, session,
   fil, rythme).
 
+- `hq/` ne dépend d'aucun autre dossier : il parle au relais par HTTP et WebSocket, avec son contrat miroir.
+
 ## Sessions pilotées et adoptées
 
-- **Pilotée** : ouverte par ccremote. Lancée avec `--session-id`, les consignes (`--append-system-prompt`), les crochets
+- **Pilotée** (moteur `tmux`) : ouverte par ccremote. Lancée avec `--session-id`, les consignes (`--append-system-prompt`), les crochets
   et le MCP de rythme. Autonomie (relance par le hook `Stop` jusqu'à `objectif_atteint`, pause après 3 tours à vide,
   patience si un sous-agent tourne), compaction pilotée, reprise automatique après compaction.
+- **Pilotée** (moteur `sdk`, défaut des sessions ouvertes depuis l'app) : même contrat, moteur décrit plus bas.
 - **Adoptée** : lancée hors ccremote (bureau de la tour, Atrium, terminal). Suivie en lecture, pilotable par tmux
   (message, interruption, compaction, fermeture), sans autonomie.
 

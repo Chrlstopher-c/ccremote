@@ -55,6 +55,8 @@ function ligneEvenement(e: EvenementDate): string | null {
   switch (v.type) {
     case 'message':
       return `[${heure}] CHRIS/MCP > ${couper(v.texte)}`;
+    case 'flux':
+      return null;
     case 'texte':
       return v.agent ? null : `[${heure}] CLAUDE > ${couper(v.texte, 1200)}`;
     case 'outil':

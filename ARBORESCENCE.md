@@ -3,8 +3,8 @@
 Un fichier par ligne, avec sa responsabilité (tirée de son en-tête). Icônes et verrous de dépendances omis.
 
 ```
-.github/workflows/ci.yml                            CI : types (racine et app), tests
 .env.example                                         variables du relais et du poste (sans valeurs)
+.github/workflows/ci.yml                            CI : types (racine et app), tests
 .gitignore                                           fichiers non suivis
 .prettierrc                                          format du code (120 colonnes)
 ARBORESCENCE.md                                      cet index
@@ -82,12 +82,79 @@ bureau/src/shared/ui/elements.tsx                    petites primitives d'outil 
 bureau/tsconfig.json                                 TypeScript de l'app
 bureau/vite.config.ts                                Vite + React + Tailwind
 commun/api-clients.ts                                le contrat de l'API des clients (app de bureau, iPhone, web) — ce que…
+commun/appareil.ts                                   le vocabulaire de l'accès à un appareil du parc — fichiers et terminaux
 commun/comptes.ts                                    le vocabulaire des comptes Claude Code d'une machine — identité, usag…
+commun/echo.ts                                       ce que Quart relaie d'Echo — copie des seuls champs affichés
 commun/journal.ts                                    le logger unique (pino), lisible en terminal, JSON quand la sortie es…
 commun/protocole-poste.ts                            les messages échangés entre un poste (machine de travail) et le relai…
 commun/session.ts                                    le vocabulaire d'une session Claude Code persistante, partagé par le…
 deploiement/deployer.sh                              Déploie ccremote v2 depuis le portable : le relais sur le Pi, un post…
-package.json                                         paquet racine : relais, poste, commun
+essais/sdk/.gitignore                                fichiers non suivis de l'essai SDK
+essais/sdk/RAPPORT.md                                essai : le Claude Agent SDK reproduit-il la config de Claude Code ?
+essais/sdk/bun.lock                                  verrou de l'essai SDK
+essais/sdk/claudemd.ts                               essai : prise en compte du CLAUDE.md par le SDK
+essais/sdk/init.ts                                   essai : requête sans fin, lecture du message d'init
+essais/sdk/lib.ts                                    options de base et outils communs aux essais SDK
+essais/sdk/multitour.ts                              essai : plusieurs tours dans une même requête
+essais/sdk/package.json                              paquet de l'essai SDK
+essais/sdk/pilote.ts                                 essai : variables d'environnement épurées, requête simple
+essais/sdk/resume.ts                                 essai : reprise d'une session SDK (identifiant, mode de permission)
+essais/sdk/session-reelle.ts                         essai réel unique de SessionSdk : un message, un tour, fermeture
+essais/sdk/status.ts                                 essai : compteurs d'événements pendant une requête
+essais/sdk/tsconfig.json                             configuration TypeScript de l'essai SDK
+hq/.env.example                                      source du monde (démo ou relais) et adresse du relais, sans valeurs réelles
+hq/art/exporter.py                                   planches de la mascotte → `public/sprites/` pour le monde
+hq/art/gen/objets.tsv                                liste des objets du décor (nom, description) pour la génération
+hq/art/gen/run_monde.sh                              génère le bâtiment d'Agent HQ vu en plongée (sans personnage)
+hq/art/gen/run_objets.sh                             lance la génération des objets isolés (graine en argument)
+hq/art/gen/t2i.py                                    génération texte → image locale d'un objet du décor
+hq/art/gen/wf*.json                                  workflows de génération (wfm = monde, wfo = objets)
+hq/art/objets.py                                     objets générés en local, découpés et ramenés à la tuile 32 px
+hq/art/personnages.py                                planches de Clawd et du perso de Chris (direction, marche, frappe)
+hq/art/tuiles.py                                     jeu de tuiles procédural (parquet, herbe, murs, pavés…) → `public/tuiles.png`
+hq/bun.lock                                          verrou de l'app Agent HQ
+hq/index.html                                        page d'entrée d'Agent HQ (police pixel)
+hq/package.json                                      paquet d'Agent HQ (Phaser, Vite, TypeScript)
+hq/public/objets.json                                taille et emprise au sol des objets (collisions)
+hq/public/objets/*.png                               objets du décor (une image par objet)
+hq/public/sprites/persos/*                           planches et `persos.json` de Clawd et du perso de Chris
+hq/public/tuiles.json                                nom → index des tuiles
+hq/public/tuiles.png                                 une rangée de tuiles du monde
+hq/src/donnees/actions.test.ts                       tests des actions : chaque action passe par la bonne route
+hq/src/donnees/actions.ts                            actions de Chris sur une session (envoyer, répondre, interrompre, compacter, éteindre, reprendre, archiver)
+hq/src/donnees/config.test.ts                        tests du choix de la source (repli sur la démo)
+hq/src/donnees/config.ts                             source du monde selon VITE_SOURCE et jeton stocké dans le navigateur
+hq/src/donnees/contrat.ts                            miroir typé des contrats de commun/ lus par Agent HQ
+hq/src/donnees/demarrage-monde.test.ts               tests du branchement source → magasin
+hq/src/donnees/demarrage-monde.ts                    branche une source sur le magasin, resynchronise après coupure
+hq/src/donnees/demo-scenario.ts                      scénario de la démo : deux machines, quatre projets, cinq sessions en boucle
+hq/src/donnees/demo-simulation.ts                    état des sessions de la démo à un instant (pur)
+hq/src/donnees/demo.test.ts                          tests de la démo : évolution déterministe sur horloge injectée
+hq/src/donnees/demo.ts                               source de démonstration : mêmes contrats que le relais, sans réseau
+hq/src/donnees/etat-agent.test.ts                    tests de la lecture de l'état d'un agent
+hq/src/donnees/etat-agent.ts                         ce que le monde montre d'une session : bloquée, en travail, finie, inactive (pur)
+hq/src/donnees/index.ts                              surface publique du dossier donnees
+hq/src/donnees/journal.ts                            journal d'Agent HQ — seul point de sortie console du dossier
+hq/src/donnees/monde-etat.test.ts                    tests du magasin : abonnements, fil borné, dédoublonnage
+hq/src/donnees/monde-etat.ts                         magasin observable de l'état du monde (machines, sessions, fils, notifications)
+hq/src/donnees/monde-selecteurs.ts                   vues dérivées (sessions actives, projets) — pures
+hq/src/donnees/source-monde.ts                       contrat de la source de données du monde (relais ou démo)
+hq/src/donnees/transport-flux.ts                     flux temps réel du relais (WebSocket, sous-protocole, reconnexion)
+hq/src/donnees/transport-http.ts                     client HTTP du relais — appels authentifiés, erreurs typées
+hq/src/donnees/transport.test.ts                     tests du transport avec faux fetch et faux WebSocket
+hq/src/donnees/transport.ts                          source « relais » : assemble le client HTTP et le flux temps réel
+hq/src/donnees/vite-env.d.ts                         typage de import.meta.env pour la configuration de la source
+hq/src/main.ts                                       démarre le monde dans la page, une fois la police chargée
+hq/src/monde/carte/chemin.ts                         cases marchables et plus court chemin (A*, pur)
+hq/src/monde/carte/plan.ts                           construit la carte depuis les projets (campus, bâtiment, murs, meubles) — pur
+hq/src/monde/carte/rendu-carte.ts                    dessine la carte dans Phaser (sol, murs, meubles triés par profondeur)
+hq/src/monde/persos/agent.ts                         un agent (session) incarné par un Clawd selon son état
+hq/src/monde/persos/marcheur.ts                      personnage qui marche sur un chemin (Clawd ou Chris)
+hq/src/monde/scene-monde.ts                          scène principale : carte, un Clawd par session, Chris jouable, caméra
+hq/src/monde/sessions-demo.ts                        sessions fictives pour monter le monde hors relais
+hq/src/monde/sprites.ts                              charge les ressources exportées par art/ et crée les animations Phaser
+hq/tsconfig.json                                     configuration TypeScript d'Agent HQ
+hq/vite.config.ts                                    base `/hq/` au build ; proxy de dev vers le relais (côté serveur seulement)
 mcp/bin.ts                                           point d'entrée du MCP Quart (stdio) — lit l'adresse du relais et le jeton, branche les outils
 mcp/client-relais.ts                                 parler à l'API du relais Quart avec un jeton porteur — le seul point de contact réseau du MCP
 mcp/emettre-jeton.ts                                 émettre un jeton d'accès au relais pour le MCP, sans mot de passe — à lancer SUR le Pi
@@ -95,6 +162,7 @@ mcp/format.ts                                        rendre l'état du parc et l
 mcp/installer.sh                                     installe le MCP Quart sur une machine et l'enregistre dans Claude Code (niveau utilisateur)
 mcp/mcp.test.ts                                      tests du MCP (résolution de projet, format, config, client HTTP)
 mcp/outils.ts                                        les outils MCP « quart_* » — ouvrir et piloter des sessions Claude Code sur n'importe quelle machine
+package.json                                         paquet racine : relais, poste, commun
 poste/bin.ts                                         point d'entrée du poste — assemble config, sessions tmux, socket loca…
 poste/comptes/comptes.ts                             les comptes Claude Code du poste — relevé périodique (identité, usage…
 poste/comptes/connexion.ts                           connecter un compte Claude Code sur cette machine par OAuth, en deux…
@@ -102,11 +170,14 @@ poste/comptes/releve.ts                              relever un compte Claude Co
 poste/comptes/usage.test.ts                          tests de usage.ts
 poste/comptes/usage.ts                               lire la réponse de l'API d'usage OAuth (`/api/oauth/usage`) en fenêtr…
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
+poste/fichiers/explorateur.test.ts                   tests de explorateur.ts
+poste/fichiers/explorateur.ts                        fichiers de la machine vus depuis Quart — lister, lire/écrire par morceaux, renommer, supprimer
 poste/parc/alimentation.ts                           éteindre la machine du poste à la demande de Chris.
 poste/parc/etat-machine.ts                           mesurer l'état de la machine (CPU, mémoire, disque, charge) pour le t…
 poste/parc/lien-relais.ts                            le lien sortant du poste vers le relais — connexion authentifiée, rec…
 poste/projets/decouverte.ts                          lister les projets présents sur la machine (sous-dossiers des racines…
 poste/session/adoption.ts                            la fiche d'une session adoptée — lancée hors ccremote, dans tmux ou d…
+poste/session/bilan-tour.ts                          bilan d'UN tour d'une session SDK, puis la suite à en tirer (suite-du-tour.ts)
 poste/session/claude-tmux.zsh                        lancer chaque `claude` interactif dans `tmux -L claude` (le serveur d…
 poste/session/confiance.ts                           approuver un dossier dans la config Claude avant d'y lancer une sessi…
 poste/session/consignes.test.ts                      tests de consignes.ts
@@ -114,53 +185,82 @@ poste/session/consignes.ts                           le texte ajouté au prompt 
 poste/session/crochet.ts                             script lancé par les hooks de Claude Code — relaie l'événement au pos…
 poste/session/dialogue.test.ts                       tests de dialogue.ts
 poste/session/dialogue.ts                            les dialogues du TUI qui bloquent une session (AskUserQuestion, permi…
+poste/session/file-messages-sdk.ts                   file asynchrone des messages de Chris pour la requête SDK
 poste/session/garde-sous-agents.test.ts              tests de garde-sous-agents.ts
 poste/session/garde-sous-agents.ts                   borner les sous-agents d'une session — Sonnet imposé, pas de fork, au…
+poste/session/gestionnaire.test.ts                   tests de gestionnaire.ts
 poste/session/gestionnaire.ts                        les sessions Claude du poste — découverte dans tmux, ouverture, comma…
 poste/session/lanceur.test.ts                        tests de lanceur.ts
 poste/session/lanceur.ts                             la ligne de commande `claude` d'une session pilotée par ccremote (lan…
 poste/session/mcp-rythme.ts                          serveur MCP stdio des trois outils de rythme d'une session pilotée (é…
+poste/session/nuit.test.ts                               politique de réveil du mode nuit, lecture de l'état, fin réussie
+poste/session/nuit.ts                                    mode nuit vu du poste : état écrit par la config Claude, politique de réveil, bascule
+poste/session/options-sdk.test.ts                    tests de options-sdk.ts
+poste/session/options-sdk.ts                         options du Claude Agent SDK d'une session (pur)
 poste/session/persistance.ts                         garder sur disque ce que tmux ne sait pas — objectif, autonomie, cons…
 poste/session/politique-compaction.test.ts           tests de politique-compaction.ts
 poste/session/politique-compaction.ts                décider QUAND compacter une session. Règle pure, sans I/O.
 poste/session/processus.ts                           les processus Claude Code vivants de la machine, tels que Claude les…
+poste/session/questions-sdk.ts                       AskUserQuestion et ExitPlanMode du SDK rendus en dialogues du poste (pur)
+poste/session/rythme.test.ts                         tests de rythme.ts
+poste/session/rythme.ts                              les trois outils de rythme vus du poste — événement au fil et texte rendu (pur)
 poste/session/serveur-local.ts                       le socket Unix local par lequel les crochets et le MCP de rythme des…
+poste/session/session-poste.ts                       contrat commun aux deux moteurs (tmux, sdk) vu du gestionnaire
+poste/session/session-sdk.test.ts                    tests de session-sdk.ts
+poste/session/session-sdk.ts                         UNE session Claude Code pilotée par le Claude Agent SDK
 poste/session/session-tmux.ts                        UNE session Claude Code dans tmux — son fil (lu dans le transcript),…
 poste/session/sous-agents.ts                         suivre les sous-agents d'une session — chacun a son transcript dans `…
 poste/session/suite-du-tour.test.ts                  tests de suite-du-tour.ts
 poste/session/suite-du-tour.ts                       décider ce qui suit la fin d'un tour — attendre Chris, compacter, rel…
-poste/session/nuit.test.ts                               politique de réveil du mode nuit, lecture de l'état, fin réussie
-poste/session/nuit.ts                                    mode nuit vu du poste : état écrit par la config Claude, politique de réveil, bascule
 poste/session/suivi-dialogue.ts                      le dialogue en attente d'UNE session, relevé à l'écran de son pane, e…
 poste/session/suivi-nuit.test.ts                         suivi nuit : publication, réveil, abandon, session au travail
 poste/session/suivi-nuit.ts                              le suivi du mode nuit d'UNE session : publier, réveiller, prévenir de la fin
 poste/session/tmux.conf                              config du serveur tmux dédié aux Claude
 poste/session/tmux.ts                                parler au serveur tmux dédié aux Claude (`tmux -L claude`), le même q…
+poste/session/traduction-sdk.test.ts                 tests de traduction-sdk.ts
+poste/session/traduction-sdk.ts                      message du SDK → événements du fil et fin de tour (pur)
 poste/session/traduction.test.ts                     tests de traduction.ts
 poste/session/traduction.ts                          traduire une ligne du transcript JSONL de Claude Code en événements d…
 poste/session/transcript.ts                          lire un transcript JSONL de Claude Code au fil de l'eau, et retrouver…
+poste/terminal/terminaux.test.ts                     tests de terminaux.ts
+poste/terminal/terminaux.ts                          terminaux à distance : un PTY par terminal, sortie vers le relais
+relais/acces/acces.test.ts                           tests de acces.ts (échecs par IP et global, plafond persistant)
 relais/acces/acces.ts                                qui a le droit de parler au relais — mot de passe, jetons révocables,…
 relais/acces/api-acces.ts                            routes de gestion des accès (lister, créer, révoquer), réservées aux appareils
+relais/acces/plafond.ts                              plafond global d'échecs de connexion, conservé sur disque
+relais/appareils/api-fichiers.ts                     fichiers d'un appareil par l'API des clients — transmis au poste
+relais/appareils/route-terminal.ts                   ouverture d'un terminal à distance — authentifier, valider, WebSocket
+relais/appareils/terminaux.ts                        terminaux à distance côté relais — WebSocket client relié à un PTY de poste
 relais/bin.ts                                        point d'entrée du relais — deux serveurs : clients (web, iPhone) et p…
 relais/clients/api-comptes.ts                        les routes des comptes Claude Code d'une machine — connexion OAuth en…
 relais/clients/api-sessions.ts                       les routes des sessions — ouvrir, lire le fil, parler, piloter (inter…
 relais/clients/api.ts                                la table des routes de l'API des clients (web, iPhone), toutes protég…
 relais/clients/cors.ts                               autoriser l'app de bureau (origine Tauri) et le serveur de dev à appe…
 relais/clients/diffusion.ts                          pousser en direct ce qui change vers les clients (web en WebSocket, i…
+relais/clients/hq.ts                                 routes d'Agent HQ servies sous /hq/, protégées comme l'API
 relais/clients/http.ts                               les petites briques HTTP communes aux routes (réponses JSON, lecture…
+relais/clients/statique.test.ts                      tests de statique.ts
+relais/clients/statique.ts                           servir un dossier statique (bureau, Agent HQ) — jamais un chemin hors du dossier
 relais/config.ts                                     la configuration du relais, lue exclusivement dans l'environnement (a…
 relais/connecteurs/mcp-http.test.ts                  tests de mcp-http.ts et des routes d'accès
 relais/connecteurs/mcp-http.ts                       le MCP « quart » servi en HTTP pour claude.ai (/mcp/<jeton>) et Claude Code (/mcp + Bearer)
+relais/echo/api-echo.ts                              routes Echo des clients — parler, interrompre, relire, savoir si Echo répond
+relais/echo/lien-echo.ts                             lien du relais vers Echo, relayé dans le flux des clients
 relais/notifications/regles.ts                       quels événements méritent une notification, et laquelle. Pur.
 relais/parc/postes.ts                                les postes connectés au relais — authentification, comptes rendus reç…
 relais/parc/reveil.test.ts                           tests de reveil.ts
 relais/parc/reveil.ts                                réveiller une machine éteinte par Wake-on-LAN (paquet magique en diff…
+relais/registre/archivage.test.ts                    tests de l'archivage : archiver ferme d'abord, désarchiver sans poste
 relais/registre/base.ts                              la base SQLite du relais et ses migrations (numérotées, jamais réécri…
 relais/registre/registre.ts                          lire et écrire l'état du relais — machines, sessions, fil d'événement…
 relais/registre/retention.test.ts                    tests de retention.ts
 relais/registre/retention.ts                         rétention du fil — purger les événements des sessions fermées depuis…
 relais/sessions/composition-parc.test.ts             tests de composition-parc.ts
 relais/sessions/composition-parc.ts                  ce qu'une session a le droit de joindre depuis sa machine. Pur.
+relais/sessions/inactivite.test.ts                   tests de inactivite.ts
+relais/sessions/inactivite.ts                        règle d'inactivité d'une session (pure) — tour fini et silence depuis le seuil
+relais/sessions/recalcul-inactivite.test.ts          tests de recalcul-inactivite.ts
+relais/sessions/recalcul-inactivite.ts               recalcul périodique de l'inactivité (1 min), diffusion des seuls changements
 restart.sh                                           arrête puis relance le mode dev
 start.sh                                             Mode dev : relais local (variables de .env) + interface de l'app (Vit…
 stop.sh                                              Arrête le relais local et l'interface de dev lancés par start.sh.

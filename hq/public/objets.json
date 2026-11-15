@@ -1,0 +1,82 @@
+{
+ "bureau": {
+  "w": 96,
+  "h": 94,
+  "emprise": 22
+ },
+ "chaise": {
+  "w": 30,
+  "h": 49,
+  "emprise": 10
+ },
+ "etagere": {
+  "w": 46,
+  "h": 131,
+  "emprise": 14
+ },
+ "serveur": {
+  "w": 36,
+  "h": 92,
+  "emprise": 14
+ },
+ "crt": {
+  "w": 60,
+  "h": 74,
+  "emprise": 18
+ },
+ "cafe": {
+  "w": 60,
+  "h": 74,
+  "emprise": 20
+ },
+ "plante": {
+  "w": 28,
+  "h": 49,
+  "emprise": 10
+ },
+ "table": {
+  "w": 124,
+  "h": 101,
+  "emprise": 44
+ },
+ "canape": {
+  "w": 92,
+  "h": 62,
+  "emprise": 22
+ },
+ "tableau": {
+  "w": 60,
+  "h": 101,
+  "emprise": 8
+ },
+ "arbre": {
+  "w": 92,
+  "h": 133,
+  "emprise": 18
+ },
+ "buisson": {
+  "w": 40,
+  "h": 40,
+  "emprise": 14
+ },
+ "lampadaire": {
+  "w": 28,
+  "h": 146,
+  "emprise": 8
+ },
+ "banc": {
+  "w": 68,
+  "h": 72,
+  "emprise": 14
+ },
+ "cendrier": {
+  "w": 18,
+  "h": 38,
+  "emprise": 6
+ },
+ "distributeur": {
+  "w": 48,
+  "h": 83,
+  "emprise": 16
+ }
+}

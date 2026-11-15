@@ -4,11 +4,13 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
-import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
+import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
 import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
-import { SessionTmux, type SortieSession } from './session-tmux.ts';
+import { SessionTmux } from './session-tmux.ts';
+import { SessionSdk, trouverClaude } from './session-sdk.ts';
+import type { SessionPoste, SortieSession } from './session-poste.ts';
 import * as tmux from './tmux.ts';
 import { type Adoptee, ficheAdoptee, transcriptDuPane, transcriptDuProcessus } from './adoption.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
@@ -25,8 +27,13 @@ const HISTORIQUE_ADOPTION = 150;
 const PERIODE_DECOUVERTE_MS = 2_000;
 const PERIODE_LECTURE_MS = 700;
 
+// Le moteur d'une session ouverte depuis l'app : le SDK, sauf demande explicite de tmux (sessions anciennes).
+export function moteurDe(d: DemandeSession): Moteur {
+  return d.moteur ?? 'sdk';
+}
+
 export class GestionnaireSessions {
-  private readonly sessions = new Map<string, SessionTmux>();
+  private readonly sessions = new Map<string, SessionPoste>();
   private readonly persistance: PersistanceSessions;
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
 
@@ -50,8 +57,13 @@ export class GestionnaireSessions {
     return [...this.sessions.values()].map((s) => s.resume);
   }
 
-  session(id: string): SessionTmux | undefined {
+  session(id: string): SessionPoste | undefined {
     return this.sessions.get(id);
+  }
+
+  // Un compte ne se retire pas sous une session vivante : pane tmux ou requête SDK ouverte.
+  enUsage(compte: string): boolean {
+    return [...this.sessions.values()].some((s) => s.resume.compte === compte && s.vivante);
   }
 
   async ouvrir(d: DemandeSession): Promise<Reponse> {
@@ -101,7 +113,7 @@ export class GestionnaireSessions {
     }
   }
 
-  private creer(p: SessionPersistee): SessionTmux {
+  private creer(p: SessionPersistee): SessionPoste {
     const sortie: SortieSession = {
       evenement: (id, evt) => this.sortie.evenement(id, evt),
       resume: (r) => {
@@ -109,6 +121,9 @@ export class GestionnaireSessions {
         this.planifierSauvegarde();
       },
     };
+    if (p.resume.moteur === 'sdk') {
+      return new SessionSdk(p, { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket });
+    }
     return new SessionTmux(p, { socket: this.socket, journal: this.journal, sortie });
   }
 
@@ -184,7 +199,7 @@ export class GestionnaireSessions {
 
   // Le transcript d'une session tout juste lancée n'existe qu'après son premier échange : on le cherche à chaque
   // passage.
-  private associer(s: SessionTmux, a: Adoptee): void {
+  private associer(s: SessionPoste, a: Adoptee): void {
     const pris = [...this.sessions.values()].some(
       (autre) => autre !== s && autre.resume.claudeSessionId === a.transcript?.id,
     );
@@ -216,6 +231,7 @@ export class GestionnaireSessions {
       etapes: 0,
       compactions: 0,
       claudeSessionId: d.sessionId,
+      moteur: moteurDe(d),
       tmux: null,
       attachee: false,
       pilotee: true,

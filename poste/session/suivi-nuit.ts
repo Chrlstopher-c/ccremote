@@ -14,6 +14,7 @@ export interface HoteNuit {
   emettre(evt: Evenement): void;
   coller(texte: string): Promise<string | null>;
   journal(): Logger;
+  peutEcrire(): boolean; // la session peut recevoir un message maintenant (tmux vivant, requête ouverte)
 }
 
 export class SuiviNuit {
@@ -45,7 +46,7 @@ export class SuiviNuit {
     const suite = deciderVeille({
       nuit,
       statut: etat.statut,
-      peutEcrire: etat.tmux !== null && etat.terminal !== true,
+      peutEcrire: this.hote.peutEcrire(),
       attenteDepuisMs: this.attenteDepuis,
       dernierReveilMs: this.dernierReveil,
       reveilsSansEffet: this.sansEffet,

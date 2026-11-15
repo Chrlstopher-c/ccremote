@@ -1,6 +1,4 @@
 // Responsabilité : point d'entrée du relais — deux serveurs : clients (web, iPhone) et postes (machines de travail).
-import { existsSync } from 'node:fs';
-import { join, normalize } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
@@ -13,6 +11,8 @@ import { ouvrirTerminal } from './appareils/route-terminal.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
+import { routesHq } from './clients/hq.ts';
+import { indexSpa, servirStatique } from './clients/statique.ts';
 import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
 import { LienEcho } from './echo/lien-echo.ts';
@@ -22,10 +22,11 @@ import { type DonneesPoste, Postes } from './parc/postes.ts';
 import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
+import { lancerRecalculInactivite } from './sessions/recalcul-inactivite.ts';
 
 const journal = creerJournal('relais');
 const config = chargerConfig();
-const registre = new Registre(ouvrirBase(config.base), journal);
+const registre = new Registre(ouvrirBase(config.base), journal, config.inactiviteMs);
 const diffusion = new Diffusion();
 const plafond = new PlafondEchecs(config.fichierEchecs, journal.child({ domaine: 'acces' }));
 const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
@@ -62,17 +63,9 @@ const connecteurs = routesMcp(
   journal.child({ domaine: 'mcp' }),
 );
 
-function fichierStatique(req: Request): Response {
-  const chemin = normalize(decodeURIComponent(new URL(req.url).pathname)).replace(/^(\.\.[/\\])+/, '');
-  const cible = join(config.web, chemin);
-  if (cible.startsWith(config.web) && existsSync(cible) && !cible.endsWith('/')) {
-    const immuable = chemin.startsWith('/assets/');
-    return new Response(Bun.file(cible), {
-      headers: immuable ? { 'cache-control': 'public, max-age=31536000, immutable' } : {},
-    });
-  }
-  const index = join(config.web, 'index.html');
-  return existsSync(index) ? new Response(Bun.file(index)) : new Response('interface non construite', { status: 503 });
+// L'interface de bureau, servie à la racine : fichier exact, sinon index.html (repli SPA).
+function fichierBureau(req: Request): Response {
+  return servirStatique(config.web, new URL(req.url).pathname) ?? indexSpa(config.web);
 }
 
 for (const hostname of config.hotesWeb) {
@@ -85,6 +78,7 @@ for (const hostname of config.hotesWeb) {
       ...routes,
       ...routesGestionAcces,
       ...connecteurs,
+      ...routesHq(config.hq, (req) => acces.autorise(req)),
       '/api/flux': (req, serveur) => {
         if (!acces.autorise(req)) return erreur('non connecté', 401);
         const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
@@ -96,7 +90,7 @@ for (const hostname of config.hotesWeb) {
       '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
       '/api/*': () => erreur('route inconnue', 404),
     },
-    fetch: fichierStatique,
+    fetch: fichierBureau,
     websocket: {
       data: {} as DonneesClient,
       open: (ws) => (estTerminal(ws) ? void terminaux.ouvert(ws) : diffusion.ajouter(ws)),
@@ -132,6 +126,7 @@ Bun.serve({
 });
 
 lancerRetention(registre, journal);
+lancerRecalculInactivite(registre, diffusion, journal.child({ domaine: 'sessions' }));
 
 journal.info(
   {

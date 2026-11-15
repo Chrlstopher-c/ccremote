@@ -46,7 +46,7 @@ const comptes = new Comptes({
   config,
   journal,
   publier: (etats) => envoyer({ kind: 'comptes', comptes: etats }),
-  enUsage: (compte) => sessions.lister().some((s) => s.compte === compte && s.tmux !== null),
+  enUsage: (compte) => sessions.enUsage(compte),
 });
 
 function bonjour(): MessagePoste {

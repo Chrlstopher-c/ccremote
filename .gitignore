@@ -11,3 +11,4 @@ node_modules/
 *.tsbuildinfo
 web/dist/
 .donnees/
+essais/sdk/logs/

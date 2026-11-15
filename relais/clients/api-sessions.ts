@@ -22,15 +22,15 @@ const CorpsOuverture = z.object({
 const CorpsMessage = z.object({ texte: z.string().min(1) });
 const CorpsAutonomie = z.object({ active: z.boolean() });
 const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).optional() });
-const ACTIONS = new Set(['interrompre', 'compacter', 'fermer', 'reprendre'] as const);
 type Action = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
+const ACTIONS: ReadonlySet<string> = new Set<string>(['interrompre', 'compacter', 'fermer', 'reprendre']);
 
 type RequeteSession = Request & { params: { id: string; action?: string } };
 
 export class ApiSessions {
   constructor(
     private readonly registre: Registre,
-    private readonly postes: Postes,
+    private readonly postes: Pick<Postes, 'commander'>,
     private readonly diffusion: Diffusion,
     private readonly isolees: ReadonlySet<string>,
     private readonly journal: Logger,
@@ -98,9 +98,25 @@ export class ApiSessions {
   }
 
   async action(req: RequeteSession): Promise<Response> {
-    const action = req.params.action as Action; // vérifié juste en dessous contre la liste fermée
-    if (!ACTIONS.has(action)) return erreur('action inconnue', 404);
+    const action = req.params.action ?? '';
+    if (action === 'archiver' || action === 'desarchiver') return this.archiver(req.params.id, action === 'archiver');
+    if (!estAction(action)) return erreur('action inconnue', 404);
     return this.commander(req.params.id, { kind: action });
+  }
+
+  // Ranger est manuel : une session vivante est fermée d'abord (le fil reste lisible), et l'archivage n'est pas écrit
+  // si la fermeture échoue. Le poste n'est jamais appelé pour désarchiver.
+  private async archiver(sessionId: string, archivee: boolean): Promise<Response> {
+    const session = this.registre.session(sessionId);
+    if (!session) return erreur('session inconnue', 404);
+    if (archivee && session.statut !== 'fermee') {
+      const r = await this.postes.commander(session.machine, { kind: 'fermer', sessionId });
+      if (!r.ok) return erreur(r.erreur ?? 'fermeture refusée, archivage annulé', REFUS_POSTE);
+    }
+    this.registre.definirArchivee(sessionId, archivee);
+    const vue = this.registre.session(sessionId);
+    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    return json({ ok: true, archivee });
   }
 
   private async commander(
@@ -118,6 +134,10 @@ export class ApiSessions {
     if (!r.ok) this.journal.warn({ sessionId, commande: c.kind, erreur: r.erreur }, 'commande refusée');
     return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', REFUS_POSTE);
   }
+}
+
+function estAction(valeur: string): valeur is Action {
+  return ACTIONS.has(valeur);
 }
 
 function titreDepuis(message: string): string {

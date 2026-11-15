@@ -3,6 +3,7 @@
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import type { McpStdioServerConfig } from '@anthropic-ai/claude-agent-sdk';
 
 export const VAR_SESSION = 'CCREMOTE_SESSION';
 export const VAR_SOCKET = 'CCREMOTE_SOCKET';
@@ -45,6 +46,16 @@ function crochets(): string {
 
 function rythme(): string {
   return JSON.stringify({ mcpServers: { ccremote: { type: 'stdio', command: process.execPath, args: [MCP_RYTHME] } } });
+}
+
+// Le même serveur de rythme que tmux, lancé par le SDK : la session et le socket passent par l'environnement.
+export function serveurRythme(session: string, socket: string): McpStdioServerConfig {
+  return {
+    type: 'stdio',
+    command: process.execPath,
+    args: [MCP_RYTHME],
+    env: { [VAR_SESSION]: session, [VAR_SOCKET]: socket },
+  };
 }
 
 // Reprise d'une session adoptée : sa config d'origine, sans crochets ; seulement de quoi démarrer sans question.

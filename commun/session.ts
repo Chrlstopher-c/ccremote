@@ -14,6 +14,11 @@ export const StatutSession = z.enum([
 ]);
 export type StatutSession = z.infer<typeof StatutSession>;
 
+// Comment la session tourne sur le poste : `sdk` = Claude Agent SDK piloté par le poste (défaut des sessions ouvertes
+// depuis l'app), `tmux` = vrai TUI dans `tmux -L claude` (sessions tapées au clavier, anciennes sessions).
+export const Moteur = z.enum(['sdk', 'tmux']);
+export type Moteur = z.infer<typeof Moteur>;
+
 export const Projet = z.object({
   machine: z.string(),
   chemin: z.string(),
@@ -66,12 +71,17 @@ export const ResumeSession = z.object({
   etapes: z.number(),
   compactions: z.number(),
   claudeSessionId: z.string().nullable(),
+  moteur: Moteur.optional(), // absent = tmux (postes antérieurs)
   tmux: z.string().nullable(), // nom de la session tmux (serveur `tmux -L claude`), null si fermée
   attachee: z.boolean(), // un terminal est attaché (kitty, web)
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
   terminal: z.boolean().optional(), // vivante dans un terminal ordinaire, hors tmux : suivie en lecture seule
   dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
   nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
+  // Calculé par le relais, jamais par le poste : ISO de la dernière activité quand le tour est fini (attente ou
+  // terminée) depuis le seuil d'inactivité ; null sinon (travail, compaction, question, démarrage, erreur, fermée).
+  inactiveDepuis: z.string().nullable().optional(),
+  archivee: z.boolean().optional(), // rangée par Chris : absente des listes par défaut, jamais fermée automatiquement
   creeLe: z.string(),
   majLe: z.string(),
 });
@@ -83,6 +93,8 @@ const deAgent = { agent: z.string().optional() };
 export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message'), texte: z.string() }),
   z.object({ type: z.literal('texte'), texte: z.string(), ...deAgent }),
+  // Texte en cours d'écriture (SDK, includePartialMessages) : remplacé par l'événement `texte` final, jamais persisté.
+  z.object({ type: z.literal('flux'), bloc: z.string(), delta: z.string(), ...deAgent }),
   z.object({ type: z.literal('reflexion'), texte: z.string(), ...deAgent }),
   z.object({
     type: z.literal('outil'),
@@ -125,6 +137,7 @@ export const DemandeSession = z.object({
   autonomie: z.boolean(),
   modele: z.string().optional(),
   compte: z.string().optional(),
+  moteur: Moteur.optional(), // absent = sdk
   // Composé par le relais pour la machine cible : ce que la session a le droit de joindre.
   parc: z.array(z.object({ id: z.string(), description: z.string(), racines: z.array(z.string()) })),
 });

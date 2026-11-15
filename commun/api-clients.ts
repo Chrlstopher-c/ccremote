@@ -60,7 +60,8 @@ export interface DemandeOuverture {
   readonly compte?: string;
 }
 
-export type ActionSession = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
+// `archiver` / `desarchiver` : rangement manuel (jamais automatique). Archiver ferme d'abord une session vivante.
+export type ActionSession = 'interrompre' | 'compacter' | 'fermer' | 'reprendre' | 'archiver' | 'desarchiver';
 
 // Un accès au relais : un appareil connecté par mot de passe (app, web, iPhone) ou un connecteur Claude (MCP).
 export const GENRES_ACCES = ['appareil', 'claude-code', 'claude-ai'] as const;

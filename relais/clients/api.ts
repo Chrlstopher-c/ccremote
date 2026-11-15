@@ -54,7 +54,7 @@ export function construireRoutes(d: DependancesApi) {
         return json({ ok: true }, 200, { 'set-cookie': 'ccremote=; Path=/; Max-Age=0' });
       }),
     },
-    '/api/etat': { GET: protege(() => json(etat(d))) },
+    '/api/etat': { GET: protege((req) => json(etat(d, req))) },
     '/api/attente': { GET: protege((req) => attente(d, req)) },
     '/api/sessions': { POST: protege((req) => d.sessions.ouvrir(req)) },
     '/api/sessions/:id/evenements': { GET: protege((req) => d.sessions.evenements(req as never)) },
@@ -92,12 +92,17 @@ async function connexion(d: DependancesApi, req: Request, serveur: Serveur): Pro
   return json({ jeton: r.jeton }, 200, { 'set-cookie': cookieDeSession(r.jeton) });
 }
 
-function etat(d: DependancesApi) {
+// `?archivees=1` : les sessions rangées reviennent dans la liste (absentes par défaut).
+function avecArchivees(req: Request): boolean {
+  return new URL(req.url).searchParams.get('archivees') === '1';
+}
+
+function etat(d: DependancesApi, req: Request) {
   const notifications = d.registre.notifications(0, 50);
   return {
     version: d.diffusion.version,
     machines: d.postes.vues(),
-    sessions: d.registre.sessions(),
+    sessions: d.registre.sessions(avecArchivees(req)),
     notifications,
     reveilPossible: [...d.wol.keys()],
   };
@@ -113,7 +118,7 @@ async function attente(d: DependancesApi, req: Request): Promise<Response> {
   return json({
     version: d.diffusion.version,
     notifications: d.registre.notifications(apres),
-    sessions: d.registre.sessions(),
+    sessions: d.registre.sessions(avecArchivees(req)),
     machines: d.postes.vues(),
   });
 }

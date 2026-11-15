@@ -1,8 +1,11 @@
 # TODO — Quart (dépôt ccremote)
-*Dernière mise à jour : 2026-11-05*
+*Dernière mise à jour : 2026-11-15*
 
 ## En cours
 
+- [ ] Agent HQ + moteur SDK (branche `agent-hq`) : relire, committer, CI verte avant push.
+- [ ] Valider en réel les sessions SDK sur un poste : ouverture, question, relance, compaction, mode nuit.
+- [ ] CI : ajouter le typecheck et les tests de `hq/` (`hq/src/donnees`) à `.github/workflows/ci.yml`.
 - [x] **Sémaphore / Vigie sur l’API v2** : refaite (sessions, fil, parc, alertes, réglages), charte Echo
       Agency clair/sombre selon l'iPhone ; build de l'IPA sur le portable.
 - [ ] Chris : ajouter un vrai compte depuis l'écran Comptes (le code OAuth demande sa connexion) et ouvrir une
@@ -40,6 +43,9 @@
 - [ ] Découper le bundle web (un seul fichier de 500 ko+) : Markdown chargé à la demande.
 
 ## Plus tard
+
+- [ ] Décider la fin de `bureau/` au profit de `hq/` (reporter d'abord ce que l'app de bureau fait encore).
+- [ ] `hq/art/` : sortir les `hq-monde-*.png` du suivi (ou les ignorer) ; retirer le chemin local de `art/gen/`.
 
 - [ ] Écran Accès dans Sémaphore (iPhone) : lister / révoquer les accès depuis le téléphone.
 - [ ] Connecteur claude.ai par OAuth au lieu du jeton dans l'URL, si le jeton en clair dans les journaux du tunnel

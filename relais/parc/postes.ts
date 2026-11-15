@@ -120,7 +120,7 @@ export class Postes {
     if (m.kind === 'flux') return; // plus émis depuis le passage au TUI : le fil vient du transcript
     if (m.kind === 'session') {
       this.registre.enregistrerSession(m.session);
-      return this.diffusion.diffuser({ type: 'session', session: m.session });
+      return this.diffuserSession(m.session.id);
     }
     this.evenement(sessionId, m.ts, m.evt);
   }
@@ -139,7 +139,7 @@ export class Postes {
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
       this.registre.enregistrerSession(s);
-      this.diffusion.diffuser({ type: 'session', session: s });
+      this.diffuserSession(s.id);
     }
     this.diffuserMachine(machine);
   }
@@ -159,6 +159,12 @@ export class Postes {
   private appartient(sessionId: string, machine: string): boolean {
     const s = this.registre.session(sessionId);
     return s === null || s.machine === machine;
+  }
+
+  // La vue relue dans le registre : elle porte l'inactivité et le drapeau d'archivage, absents de la fiche du poste.
+  private diffuserSession(sessionId: string): void {
+    const session = this.registre.session(sessionId);
+    if (session) this.diffusion.diffuser({ type: 'session', session });
   }
 
   private diffuserMachine(machine: string): void {

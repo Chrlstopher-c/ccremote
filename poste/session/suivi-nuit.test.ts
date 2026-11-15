@@ -33,6 +33,7 @@ function banc(statut: ResumeSession['statut'] = 'attente') {
       return null;
     },
     journal: () => ({ warn: () => undefined }) as never,
+    peutEcrire: () => etat.tmux !== null,
   });
   return { suivi, etat, evts, collages, publies, t0, dossier };
 }
