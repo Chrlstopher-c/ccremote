@@ -40,7 +40,8 @@ function creerVue(parent: HTMLElement, texte: string, nom: string, changement: (
   const ecoute = EditorView.updateListener.of((u) => {
     if (u.docChanged) changement();
   });
-  const etat = EditorState.create({ doc: texte, extensions: [basicSetup, langageDe(nom), THEME_PAPIER, ecoute] });
+  const extensions = [basicSetup, langageDe(nom), THEME_PAPIER, ecoute, EditorView.lineWrapping];
+  const etat = EditorState.create({ doc: texte, extensions });
   return new EditorView({ state: etat, parent });
 }
 
