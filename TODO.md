@@ -6,7 +6,6 @@
 - [x] Agent HQ v1 + moteur SDK : commités sur `nuit/2026-11-15`, testés de bout en bout en local (16/11, nuit).
 - [ ] Chris : relire Agent HQ v1 ; puis fusion dans `dev`, push, CI verte, déploiement (`deploiement/deployer.sh tout`).
 - [ ] Agent HQ : Authentik devant `/hq/` (comme le hub) en plus du mot de passe du relais.
-- [ ] Agent HQ : régénérer la vidéo de marche de dos de Chris (le 1er essai a donné une vue de face).
 - [ ] Agent HQ : maturité des pièces (taille, luxe selon l'âge du dépôt, commits, sessions) + manifeste de projet.
 - [ ] Agent HQ : routage « Auto » de la réunion par un Haiku exécuté sur un poste (point d'extension `RouteurAuto`).
 - [ ] Agent HQ : navigateurs virtuels (bureaux du hub) dans l'app ; idle compaction affichée en bulle d'info.

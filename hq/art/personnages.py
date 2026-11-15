@@ -261,8 +261,8 @@ def chris_pas(vue: str, pas: int) -> Image.Image:
 
 
 def chris_planches() -> dict[str, list[tuple[Image.Image, int]]]:
-    # bas, droite, gauche : marches tirées des vidéos (marche_video.py) ; la vidéo de dos a échoué, d'où cette vue.
-    vues = {'haut': 'dos'}
+    # Les quatre marches viennent des vidéos (marche_video.py) ; ici seulement la pose café.
+    vues: dict[str, str] = {}
     planches: dict[str, list[tuple[Image.Image, int]]] = {}
     for sens, vue in vues.items():
         planches[f'chris-repos-{sens}'] = [(chris(vue), 1000)]

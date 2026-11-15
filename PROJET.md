@@ -3,7 +3,7 @@
 **Pourquoi** : remplacer Claude Desktop et l'appli mobile Claude par une app à soi, façon jeu (Les Sims / Smallville),
 pour piloter toutes les sessions Claude Code du parc d'un coup d'œil.
 **Pour qui** : Chris, sur la tour, le portable et le téléphone.
-**Référence** : intérieurs de Stardew Valley vus murs baissés (Les Sims), Smallville (Generative Agents) pour le monde
+**Référence** : intérieurs de Stardew Valley (murs à face visible), Smallville (Generative Agents) pour le monde
 vivant ; Claude Desktop pour la qualité du fil de conversation.
 **Voie** : moteur = relais + postes de Quart, sessions par l'Agent SDK (abonnement, pas de clé API) ; app web
 `hq/` (Phaser + React) servie par le relais ; assets dessinés par procédure dans une projection unique (`hq/art/`).
@@ -14,6 +14,7 @@ Cadrage d'origine : `~/Agent HQ — notes de cadrage.md`. Règles de rendu : `hq
 - 15/11 : back-end délégué à Haiku, design fait par Claude (Opus).
 - 16/11 : une seule projection et une seule taille de pixel pour tout le décor ; exception : le perso de Chris en
   résolution native pour rester reconnaissable.
+- 16/11 : style « murs baissés » des Sims écarté par Chris : retour aux murs à face façon Stardew.
 - 16/11 : `/hq/` public (écran de connexion), API protégée.
 
 ## Plan (épiques)

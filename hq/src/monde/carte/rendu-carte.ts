@@ -28,15 +28,16 @@ function masqueMur(carte: Carte, x: number, y: number): number {
     (estMur(carte, x - 1, y) ? 8 : 0);
 }
 
-/** Mur extérieur (touche le dehors ou la façade) : épais et plein ; cloison intérieure : fine, tranche visible. */
+/** Mur extérieur, ou mur qui montre sa face : épais et plein (le haut du mur) ; mur vertical intérieur : fin. */
 function nomMur(carte: Carte, x: number, y: number): string {
+  if (carte.cases[y + 1]?.[x]?.nature === 'face') return 'mur-dessus';
   for (let dy = -1; dy <= 1; dy++) {
     for (let dx = -1; dx <= 1; dx++) {
       const c = carte.cases[y + dy]?.[x + dx];
       if (c?.nature === 'dehors' || c?.tuile.startsWith('facade')) return 'mur-dessus';
     }
   }
-  return `cloison-${masqueMur(carte, x, y)}`;
+  return `mur-${masqueMur(carte, x, y)}`;
 }
 
 export function dessinerCarte(scene: Phaser.Scene, carte: Carte, tuiles: Record<string, number>): void {

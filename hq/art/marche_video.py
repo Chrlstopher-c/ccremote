@@ -94,7 +94,7 @@ def planche(boucle: list[Image.Image], nom: str) -> dict:
 
 def main() -> None:
     video, nom = Path(sys.argv[1]), sys.argv[2]
-    options = dict(zip(sys.argv[3::2], sys.argv[4::2]))
+    options = dict(zip([a for a in sys.argv[3:] if a != '--propre'][0::2], [a for a in sys.argv[3:] if a != '--propre'][1::2]))
     miroir = options.get('--miroir')
     repos = options.get('--repos')  # pose immobile = première image de la boucle (même échelle que la marche)
     detourees = [detourer(im) for im in images(video)]
@@ -103,7 +103,8 @@ def main() -> None:
     boites = [im.getbbox() or (0, 0, 1, 1) for im in boucle]
     commune = (min(b[0] for b in boites), min(b[1] for b in boites), max(b[2] for b in boites),
                max(b[3] for b in boites))
-    reduites = [reduire(im, commune) for im in boucle]
+    # --propre : chaque image recadrée sur elle-même (le perso s'éloigne dans certaines vidéos et rapetisse)
+    reduites = [reduire(im, b if '--propre' in sys.argv else commune) for im, b in zip(boucle, boites)]
     index_chemin = SORTIE / 'persos.json'
     index = json.loads(index_chemin.read_text())
     index[nom] = planche(reduites, nom)

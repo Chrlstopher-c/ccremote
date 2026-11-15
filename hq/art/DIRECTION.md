@@ -1,6 +1,6 @@
 # Direction artistique du monde d'Agent HQ
 
-Référence : intérieurs de Stardew Valley / Eastward, vus murs baissés façon Les Sims.
+Référence : intérieurs de Stardew Valley / Eastward (le style « murs baissés » des Sims a été écarté par Chris le 16/11).
 
 ## Règles (non négociables)
 
@@ -11,12 +11,12 @@ Référence : intérieurs de Stardew Valley / Eastward, vus murs baissés façon
    aucun asset à 1 px fin à côté d'un asset à gros pixels).
 3. **Lumière unique en haut à gauche** : dessus le plus clair, face avant moyenne, arête basse sombre, liseré clair à
    gauche. Pas de contour sombre sur les arêtes intérieures ; contour extérieur seulement pour détacher du sol.
-4. **Murs** : seul le mur du fond montre sa face (bande de 2 cases, fenêtres) ; cloisons intérieures baissées (murs fins
-   + tranche) ; la façade sud se voit depuis la rue.
-5. **Placement** : un meuble haut s'adosse à un mur dont la face est visible (fond) ou au mur du bas ; jamais contre une
-   cloison baissée côté nord (il déborderait sur la pièce voisine). Profondeur = bas de l'emprise (tri en Y).
+4. **Murs** : tout mur horizontal montre sa face (bande de 2 cases ; fenêtres sur le mur extérieur du nord), les portes
+   percent ces faces, les murs verticaux sont fins ; la façade sud se voit depuis la rue.
+5. **Placement** : un meuble haut s'adosse à la face du mur du fond de sa pièce. Profondeur = bas de l'emprise (tri en
+   Y) ; un tapis est toujours sous les personnages.
 6. **Exception** : le perso de Chris est à la résolution native (pas ×2) pour rester reconnaissable (visage, lunettes,
-   logo) ; ses marches viennent de vidéos MiniMax H3 sur fond vert (`marche_video.py`).
+   logo) ; ses marches (4 directions) viennent de vidéos MiniMax H3 sur fond vert (`marche_video.py`).
 7. **Personnages** : face avant (Stardew), 2 cases de haut pour un humain, ombre portée elliptique au sol, Clawd en
    blocs (même moteur de boîtes que les meubles).
 

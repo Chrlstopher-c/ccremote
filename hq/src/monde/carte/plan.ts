@@ -1,6 +1,6 @@
-// Responsabilité : construire la carte du monde à partir des projets. Le bâtiment d'Agent HQ est vu murs baissés,
-// façon Les Sims : seul le mur du fond montre sa face (avec fenêtres), les cloisons intérieures sont des murs fins
-// percés de portes, la façade en briques se voit depuis la rue. Organisation : une rangée de bureaux (un par projet)
+// Responsabilité : construire la carte du monde à partir des projets. Le bâtiment d'Agent HQ est vu comme un intérieur
+// de Stardew Valley : chaque mur horizontal montre sa face (deux rangs, fenêtres sur le mur extérieur), les portes
+// percent ces faces, les murs verticaux sont fins ; la façade en briques se voit depuis la rue. Organisation : une rangée de bureaux (un par projet)
 // au nord, un couloir, puis bibliothèque, salle de réunion, hall d'entrée avec coin café, salle serveurs.
 // Dehors : parvis, fumoir, rue. Pur : aucune notion de Phaser, testable.
 
@@ -100,18 +100,29 @@ function gabarit(n: number): Gabarit {
   const bx = 6;
   const nordY = 3;
   const couloirY = nordY + 8; // bureaux : 2 rangs de face + 5 rangs utiles, cloison sud
-  const sudY = couloirY + 4; // couloir de 3 rangs + cloison
-  const basY = sudY + 7;
+  const sudY = couloirY + 6; // couloir : 2 rangs de face (mur des bureaux) + 3 rangs utiles + cloison
+  const basY = sudY + 8; // pièces du sud : 2 rangs de face + 5 rangs utiles
   return { w: batW + 2 * bx, h: basY + 12, bx, batW, nordY, couloirY, sudY, basY };
 }
 
-/** Le mur du fond montre sa face sur deux rangs, avec une fenêtre de temps en temps. */
-function faceNord(c: Case[][], g: Gabarit): void {
-  for (let x = g.bx + 1; x < g.bx + g.batW - 1; x++) {
-    if (c[g.nordY + 1]?.[x]?.nature !== 'sol') continue;
-    const fenetre = (x - g.bx) % PAS_BUREAU === 2;
-    poser(c, { x, y: g.nordY + 1, w: 1, h: 1 }, 'face', fenetre ? 'fenetre-haut' : 'mur-face-haut');
-    poser(c, { x, y: g.nordY + 2, w: 1, h: 1 }, 'face', fenetre ? 'fenetre-bas' : 'mur-face');
+/** Tout mur horizontal dont les deux cases du dessous sont du sol montre sa face (deux rangs) : c'est ce qui donne la
+ * profondeur, comme dans Stardew. Fenêtres sur le mur extérieur du nord ; mur gris dans la salle serveurs. */
+function faces(c: Case[][], g: Gabarit): void {
+  for (let y = c.length - 3; y >= 0; y--) {
+    const ligne = c[y];
+    if (!ligne) continue;
+    for (let x = 0; x < ligne.length; x++) {
+      const bas1 = c[y + 1]?.[x];
+      const bas2 = c[y + 2]?.[x];
+      if (ligne[x]?.nature !== 'mur' || bas1?.nature !== 'sol' || bas2?.nature !== 'sol') continue;
+      if (ligne[x - 1]?.nature !== 'mur' && ligne[x + 1]?.nature !== 'mur') continue; // montant de porte
+      const gris = bas1.tuile.startsWith('carrelage-sombre');
+      const fenetre = y === g.nordY && (x - g.bx) % PAS_BUREAU === 2;
+      bas1.nature = 'face';
+      bas2.nature = 'face';
+      bas1.tuile = fenetre ? 'fenetre-haut' : gris ? 'mur-face-gris-haut' : 'mur-face-haut';
+      bas2.tuile = fenetre ? 'fenetre-bas' : gris ? 'mur-face-gris' : 'mur-face';
+    }
   }
 }
 
@@ -170,25 +181,25 @@ function piecesSud(c: Case[][], g: Gabarit): PiecesSud {
   return { biblio, reunion, hall, serveurs };
 }
 
-/** Meubles des pièces du sud. Les grands meubles s'adossent au mur du bas : posés contre la cloison du haut, ils
- * déborderaient visuellement sur le couloir (les cloisons sont baissées). */
-function meublerSud(p: PiecesSud, objets: Objet[], basY: number): void {
-  const fond = basY * TUILE - 2; // pied des meubles adossés au mur extérieur sud
+/** Meubles des pièces du sud, adossés à la face du mur du fond (premier rang de sol sous la face). */
+function meublerSud(p: PiecesSud, objets: Objet[]): void {
+  const fond = (r: Rect): number => (r.y + 3) * TUILE; // pied d'un meuble collé à la face
   for (let k = 0; k < 3; k++) {
-    objets.push({ nom: 'etagere', x: (p.biblio.x + 1.4 + k * 1.6) * TUILE, y: fond, bloque: true });
+    objets.push({ nom: 'etagere', x: (p.biblio.x + 1.4 + k * 1.6) * TUILE, y: fond(p.biblio) + 14, bloque: true });
   }
-  objets.push({ nom: 'canape', x: (p.biblio.x + p.biblio.w / 2) * TUILE, y: (p.biblio.y + 3) * TUILE, bloque: true });
-  objets.push({ nom: 'table', x: (p.reunion.x + p.reunion.w / 2) * TUILE, y: (p.reunion.y + 5) * TUILE + 8,
+  objets.push({ nom: 'canape', x: (p.biblio.x + p.biblio.w / 2) * TUILE, y: (p.biblio.y + 7) * TUILE, bloque: true });
+  objets.push({ nom: 'table', x: (p.reunion.x + p.reunion.w / 2) * TUILE, y: (p.reunion.y + 6) * TUILE + 8,
     bloque: true });
-  objets.push({ nom: 'plante', x: (p.reunion.x + 1.5) * TUILE, y: fond, bloque: true });
-  objets.push({ nom: 'plante', x: (p.reunion.x + p.reunion.w - 1.5) * TUILE, y: fond, bloque: true });
-  objets.push({ nom: 'cafe', x: (p.hall.x + 1.8) * TUILE, y: fond, bloque: true });
-  objets.push({ nom: 'distributeur', x: (p.hall.x + 3.4) * TUILE, y: fond, bloque: true });
-  objets.push({ nom: 'canape', x: (p.hall.x + p.hall.w - 2.6) * TUILE, y: (p.hall.y + 3) * TUILE, bloque: true });
+  objets.push({ nom: 'plante', x: (p.reunion.x + 1.5) * TUILE, y: fond(p.reunion) + 10, bloque: true });
+  objets.push({ nom: 'plante', x: (p.reunion.x + p.reunion.w - 1.5) * TUILE, y: fond(p.reunion) + 10, bloque: true });
+  objets.push({ nom: 'cafe', x: (p.hall.x + 1.8) * TUILE, y: fond(p.hall) + 18, bloque: true });
+  objets.push({ nom: 'distributeur', x: (p.hall.x + 3.4) * TUILE, y: fond(p.hall) + 18, bloque: true });
+  objets.push({ nom: 'canape', x: (p.hall.x + p.hall.w - 2.6) * TUILE, y: (p.hall.y + 7) * TUILE, bloque: true });
   for (let k = 0; k < 3; k++) {
-    objets.push({ nom: 'serveur', x: (p.serveurs.x + 1.3 + k * 1.3) * TUILE, y: fond, bloque: true });
+    objets.push({ nom: 'serveur', x: (p.serveurs.x + 1.3 + k * 1.3) * TUILE, y: fond(p.serveurs) + 18,
+      bloque: true });
   }
-  objets.push({ nom: 'crt', x: (p.serveurs.x + p.serveurs.w - 2) * TUILE, y: (p.serveurs.y + 4) * TUILE,
+  objets.push({ nom: 'crt', x: (p.serveurs.x + p.serveurs.w - 2) * TUILE, y: (p.serveurs.y + 6) * TUILE,
     bloque: true });
 }
 
@@ -214,13 +225,13 @@ function dehors(c: Case[][], g: Gabarit, entreeX: number, objets: Objet[]): Cart
 
 /** Couloir : tapis de passage tout du long, plantes aux deux bouts. */
 function decorCouloir(g: Gabarit): Objet[] {
-  const y = (g.couloirY + 2) * TUILE - 4;
+  const y = (g.couloirY + 4) * TUILE - 4;
   const o: Objet[] = [];
   for (let x = g.bx + 2; x + 6 < g.bx + g.batW - 1; x += 6) {
     o.push({ nom: 'tapis', x: (x + 3) * TUILE, y, bloque: false, auSol: true });
   }
-  o.push({ nom: 'plante', x: (g.bx + 1) * TUILE + 16, y: (g.couloirY + 1) * TUILE, bloque: true });
-  o.push({ nom: 'plante', x: (g.bx + g.batW - 1) * TUILE - 16, y: (g.couloirY + 1) * TUILE, bloque: true });
+  o.push({ nom: 'plante', x: (g.bx + 1) * TUILE + 16, y: (g.couloirY + 3) * TUILE, bloque: true });
+  o.push({ nom: 'plante', x: (g.bx + g.batW - 1) * TUILE - 16, y: (g.couloirY + 3) * TUILE, bloque: true });
   return o;
 }
 
@@ -241,10 +252,10 @@ export function construireCarte(projets: readonly string[]): Carte {
     if (projet) postes.push(meublerBureau(r, projet, objets));
   }
   const sud = piecesSud(c, g);
-  meublerSud(sud, objets, g.basY);
+  meublerSud(sud, objets);
   const entreeX = sud.hall.x + Math.floor(sud.hall.w / 2) - 1;
   poser(c, { x: entreeX, y: g.basY, w: 2, h: 1 }, 'sol', 'seuil');
-  faceNord(c, g);
+  faces(c, g);
   facade(c, g, entreeX);
   const fumoir = dehors(c, g, entreeX, objets);
   objets.push(...montants, ...decorCouloir(g));
@@ -255,9 +266,9 @@ export function construireCarte(projets: readonly string[]): Carte {
     objets,
     postes,
     lieux: {
-      cafe: { x: (sud.hall.x + 1.8) * TUILE, y: (g.basY - 1) * TUILE + 4 },
+      cafe: { x: (sud.hall.x + 1.8) * TUILE, y: (sud.hall.y + 4) * TUILE },
       reunion: { x: (sud.reunion.x + sud.reunion.w / 2) * TUILE, y: (sud.reunion.y + 6) * TUILE + 10 },
-      bibliotheque: { x: (sud.biblio.x + 3) * TUILE, y: (g.basY - 1) * TUILE + 4 },
+      bibliotheque: { x: (sud.biblio.x + 3) * TUILE, y: (sud.biblio.y + 4) * TUILE },
       terminal: { x: (sud.serveurs.x + sud.serveurs.w - 2) * TUILE, y: (sud.serveurs.y + 4) * TUILE + 26 },
       fumoir,
       entree: { x: (entreeX + 1) * TUILE, y: (g.basY + 4) * TUILE },

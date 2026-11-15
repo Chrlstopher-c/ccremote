@@ -21,7 +21,8 @@ l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 - Monde jeu (Phaser) en projection unique façon Stardew : bâtiment généré depuis les sessions (un bureau par session,
   couloir, bibliothèque, réunion, hall café, salle serveurs, façade, rue), meubles dessinés par `art/oblique.py`,
   Clawd en 3/4 (assis de dos au travail, tourné vers la pièce quand il t'attend, dehors au fumoir quand il est inactif),
-  marche de Chris tirée de vidéos MiniMax H3 (profil et face ; dos = planche de Mathéo), nuit selon l'heure réelle.
+  marche de Chris tirée de vidéos MiniMax H3 (4 directions), nuit selon l'heure réelle. Murs façon Stardew (faces
+  visibles) : le style « murs baissés » des Sims a été écarté par Chris pendant la nuit.
 - Écran d'agent : fil complet (bulles, Markdown, outils regroupés dépliables, sous-agents, réflexions, repères, flux en
   direct), question en attente avec ses choix, envoi, interrompre / compacter / terminal / éteindre / rallumer /
   archiver, colonne des fichiers touchés + frise. Testé sur une VRAIE session SDK ouverte depuis l'app.
@@ -37,7 +38,6 @@ l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
   depuis la machine qui l'a.
 - Une session SDK vit dans le processus du poste : au redémarrage du poste, celles qui tournaient sont reprises toutes
   seules (vérifié en réel) ; celles éteintes par Chris restent éteintes.
-- Vidéo de marche de dos ratée (le modèle a dessiné une vue de face) : à régénérer.
 - Authentik pas encore devant `/hq/` (mot de passe du relais seulement).
 - Banc d’essai local et isolé : `hq/scripts/essai-local.sh` (relais 8790 + poste « essai », tmux à part ; `arreter`).
 
