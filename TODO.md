@@ -3,9 +3,15 @@
 
 ## En cours
 
-- [ ] Agent HQ + moteur SDK (branche `agent-hq`) : relire, committer, CI verte avant push.
-- [ ] Valider en réel les sessions SDK sur un poste : ouverture, question, relance, compaction, mode nuit.
-- [ ] CI : ajouter le typecheck et les tests de `hq/` (`hq/src/donnees`) à `.github/workflows/ci.yml`.
+- [x] Agent HQ v1 + moteur SDK : commités sur `nuit/2026-11-15`, testés de bout en bout en local (16/11, nuit).
+- [ ] Chris : relire Agent HQ v1 ; puis fusion dans `dev`, push, CI verte, déploiement (`deploiement/deployer.sh tout`).
+- [ ] Agent HQ : Authentik devant `/hq/` (comme le hub) en plus du mot de passe du relais.
+- [ ] Agent HQ : régénérer la vidéo de marche de dos de Chris (le 1er essai a donné une vue de face).
+- [ ] Agent HQ : maturité des pièces (taille, luxe selon l'âge du dépôt, commits, sessions) + manifeste de projet.
+- [ ] Agent HQ : routage « Auto » de la réunion par un Haiku exécuté sur un poste (point d'extension `RouteurAuto`).
+- [ ] Agent HQ : navigateurs virtuels (bureaux du hub) dans l'app ; idle compaction affichée en bulle d'info.
+- [ ] Supprimer `bureau/` une fois Agent HQ adopté.
+- [x] CI : `hq/` dans `.github/workflows/ci.yml` (typecheck, tests, build).
 - [x] **Sémaphore / Vigie sur l’API v2** : refaite (sessions, fil, parc, alertes, réglages), charte Echo
       Agency clair/sombre selon l'iPhone ; build de l'IPA sur le portable.
 - [ ] Chris : ajouter un vrai compte depuis l'écran Comptes (le code OAuth demande sa connexion) et ouvrir une

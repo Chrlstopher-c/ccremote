@@ -1,6 +1,6 @@
 # STATE — ccremote
 
-*Dernière mise à jour : 2026-11-15, branche `agent-hq` (non commitée)*
+*Dernière mise à jour : 2026-11-16 (nuit), branche `nuit/2026-11-15` (commitée, non poussée, non déployée)*
 
 ## Résumé
 
@@ -12,6 +12,34 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
+
+## 16/11 (nuit) — Agent HQ v1 : l'app jeu qui remplace Claude Desktop
+
+**Ce qui marche (vérifié de bout en bout sur un relais + un poste d'essai locaux, isolés de la prod)** :
+- `hq/` servi par le relais sous `/hq/` (build de production `VITE_SOURCE=relais`, adresse = origine de la page) ;
+  écran de connexion (mot de passe du relais, jeton dans le navigateur).
+- Monde jeu (Phaser) en projection unique façon Stardew : bâtiment généré depuis les sessions (un bureau par session,
+  couloir, bibliothèque, réunion, hall café, salle serveurs, façade, rue), meubles dessinés par `art/oblique.py`,
+  Clawd en 3/4 (assis de dos au travail, tourné vers la pièce quand il t'attend, dehors au fumoir quand il est inactif),
+  marche de Chris tirée de vidéos MiniMax H3 (profil et face ; dos = planche de Mathéo), nuit selon l'heure réelle.
+- Écran d'agent : fil complet (bulles, Markdown, outils regroupés dépliables, sous-agents, réflexions, repères, flux en
+  direct), question en attente avec ses choix, envoi, interrompre / compacter / terminal / éteindre / rallumer /
+  archiver, colonne des fichiers touchés + frise. Testé sur une VRAIE session SDK ouverte depuis l'app.
+- Embauche d'un agent (machine, projet, mission, modèle, autonomie), terminal réel (xterm, zsh de Chris), fichiers réels
+  (arborescence + CodeMirror, enregistrement vérifié sur disque), salle de réunion (relais : diffusion, historique,
+  limite par réunion ; réponse réelle d'un agent reçue), HUD (rouge = t'attendent, ambre = ont fini, notifications
+  navigateur), vue téléphone (panneaux plein écran, touches de terminal).
+- Moteur SDK du poste à parité avec tmux (rythme, autonomie, nuit, comptes) ; messages de Chris dans le fil SDK.
+
+**Pas fait / limites** :
+- PAS déployé (mode nuit : prod interdite). `deploiement/deployer.sh tout` (essai : `--essai`) sauvegarde la base,
+  construit `bureau` et `hq`, pousse sur le Pi. `~/.config/ccremote/deploiement.env` absent de la tour : le lancer
+  depuis la machine qui l'a.
+- Une session SDK vit dans le processus du poste : redémarrer le poste la coupe (reprise automatique au démarrage :
+  voir l'entrée suivante si livrée, sinon bouton Rallumer).
+- Vidéo de marche de dos ratée (le modèle a dessiné une vue de face) : à régénérer.
+- Authentik pas encore devant `/hq/` (mot de passe du relais seulement).
+- Essai local : `/tmp/claude-1000/hq-essai/lancer.sh` (relais 8790 + poste « essai », socket tmux `hq-essai`).
 
 ## 15/11 — Moteur SDK du poste, cycle de vie, Agent HQ (`hq/`)
 
