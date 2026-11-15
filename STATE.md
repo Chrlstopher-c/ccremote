@@ -39,7 +39,7 @@ l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
   voir l'entrée suivante si livrée, sinon bouton Rallumer).
 - Vidéo de marche de dos ratée (le modèle a dessiné une vue de face) : à régénérer.
 - Authentik pas encore devant `/hq/` (mot de passe du relais seulement).
-- Essai local : `/tmp/claude-1000/hq-essai/lancer.sh` (relais 8790 + poste « essai », socket tmux `hq-essai`).
+- Banc d’essai local et isolé : `hq/scripts/essai-local.sh` (relais 8790 + poste « essai », tmux à part ; `arreter`).
 
 ## 15/11 — Moteur SDK du poste, cycle de vie, Agent HQ (`hq/`)
 
