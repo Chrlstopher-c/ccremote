@@ -35,8 +35,8 @@ l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 - PAS déployé (mode nuit : prod interdite). `deploiement/deployer.sh tout` (essai : `--essai`) sauvegarde la base,
   construit `bureau` et `hq`, pousse sur le Pi. `~/.config/ccremote/deploiement.env` absent de la tour : le lancer
   depuis la machine qui l'a.
-- Une session SDK vit dans le processus du poste : redémarrer le poste la coupe (reprise automatique au démarrage :
-  voir l'entrée suivante si livrée, sinon bouton Rallumer).
+- Une session SDK vit dans le processus du poste : au redémarrage du poste, celles qui tournaient sont reprises toutes
+  seules (vérifié en réel) ; celles éteintes par Chris restent éteintes.
 - Vidéo de marche de dos ratée (le modèle a dessiné une vue de face) : à régénérer.
 - Authentik pas encore devant `/hq/` (mot de passe du relais seulement).
 - Banc d’essai local et isolé : `hq/scripts/essai-local.sh` (relais 8790 + poste « essai », tmux à part ; `arreter`).
