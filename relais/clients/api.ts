@@ -11,6 +11,7 @@ import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
 import type { LienEcho } from '../echo/lien-echo.ts';
 import { routesEcho } from '../echo/api-echo.ts';
+import { type DependancesReunions, routesReunions } from '../reunion/api-reunions.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 export interface DependancesApi {
@@ -22,6 +23,7 @@ export interface DependancesApi {
   readonly comptes: ApiComptes;
   readonly fichiers: ApiFichiers;
   readonly echo: LienEcho | null;
+  readonly reunions: DependancesReunions;
   readonly wol: ReadonlyMap<string, string>;
   readonly diffusionWol: string;
 }
@@ -41,11 +43,12 @@ export function ipDe(req: Request, pair: string | undefined): string {
   return req.headers.get('cf-connecting-ip') ?? req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? pair;
 }
 
+function protegerAvec(acces: Acces): (g: Gestionnaire) => Gestionnaire {
+  return (g) => (req) => (acces.autorise(req) ? g(req) : erreur('non connecté', 401));
+}
+
 export function construireRoutes(d: DependancesApi) {
-  const protege =
-    (g: Gestionnaire): Gestionnaire =>
-    (req) =>
-      d.acces.autorise(req) ? g(req) : erreur('non connecté', 401);
+  const protege = protegerAvec(d.acces);
   return {
     '/api/connexion': { POST: (req: Request, serveur: Serveur) => connexion(d, req, serveur) },
     '/api/deconnexion': {
@@ -76,6 +79,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
     ...routesFichiers(d.fichiers, protege),
     ...routesEcho(d.echo, protege),
+    ...routesReunions(d.reunions, protege),
   };
 }
 

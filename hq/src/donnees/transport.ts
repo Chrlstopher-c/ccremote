@@ -2,6 +2,8 @@
 import { ClientRelais, type Recuperer } from './transport-http';
 import { type FabriqueSocket, FluxRelais, type Programmateur } from './transport-flux';
 import type { SourceMonde } from './source-monde';
+import { creerFichiersRelais } from './fichiers';
+import { ouvrirTerminalRelais } from './terminal';
 
 export interface OptionsRelais {
   readonly base: string;
@@ -13,16 +15,15 @@ export interface OptionsRelais {
 
 export function creerSourceRelais(options: OptionsRelais): SourceMonde {
   const base = options.base.replace(/\/+$/, '');
-  const http = new ClientRelais(base, options.jeton, options.recuperer ?? versFetch);
-  const flux = new FluxRelais(
-    urlFlux(base),
-    options.jeton,
-    options.fabrique ?? versWebSocket,
-    options.programmer ?? versDelai,
-  );
+  const recuperer = options.recuperer ?? versFetch;
+  const fabrique = options.fabrique ?? versWebSocket;
+  const http = new ClientRelais(base, options.jeton, recuperer);
+  const flux = new FluxRelais(urlFlux(base), options.jeton, fabrique, options.programmer ?? versDelai);
   return {
     nom: 'relais',
     api: http,
+    fichiers: creerFichiersRelais({ base, jeton: options.jeton, recuperer }),
+    ouvrirTerminal: ouvrirTerminalRelais({ base, jeton: options.jeton, fabrique }),
     etatInitial: () => http.etat(),
     evenements: (sessionId) => http.evenements(sessionId),
     demarrer: (ecouteur) => flux.demarrer(ecouteur),

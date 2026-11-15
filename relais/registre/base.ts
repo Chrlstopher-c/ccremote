@@ -23,6 +23,13 @@ export const MIGRATIONS: readonly string[] = [
    ALTER TABLE jetons ADD COLUMN vu_le TEXT;
    UPDATE jetons SET genre = 'claude-code' WHERE appareil LIKE 'mcp-%';`,
   `ALTER TABLE sessions ADD COLUMN archivee INTEGER NOT NULL DEFAULT 0;`,
+  `CREATE TABLE reunions (
+     id TEXT PRIMARY KEY, sujet TEXT NOT NULL, cree_le TEXT NOT NULL, participants TEXT NOT NULL DEFAULT '[]');
+   CREATE TABLE reunion_messages (
+     seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE,
+     reunion_id TEXT NOT NULL REFERENCES reunions(id) ON DELETE CASCADE,
+     auteur TEXT NOT NULL, texte TEXT NOT NULL, ts TEXT NOT NULL, destinataires TEXT NOT NULL DEFAULT '[]');
+   CREATE INDEX reunion_messages_reunion ON reunion_messages(reunion_id, seq);`,
 ];
 
 export function ouvrirBase(chemin: string): Database {

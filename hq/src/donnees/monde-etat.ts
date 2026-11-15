@@ -1,6 +1,6 @@
 // Responsabilité : le magasin observable de l'état du monde (machines, sessions, fil par session, notifications).
 // Pur TypeScript, sans rendu ni horloge : un abonné n'est prévenu que si la valeur qu'il regarde change.
-import type { EtatRelais, EvenementDate, MessageClient, Notification, ResumeSession, VueMachine } from './contrat';
+import type { EtatRelais, EvenementDate, MessageClient, Notification, Reunion, ResumeSession, VueMachine } from './contrat';
 import { journaliser } from './journal';
 import type { EtatLien } from './source-monde';
 
@@ -11,6 +11,7 @@ export interface EtatMonde {
   readonly sessions: readonly ResumeSession[];
   readonly notifications: readonly Notification[];
   readonly fil: Readonly<Record<string, readonly EvenementDate[]>>;
+  readonly reunions: Readonly<Record<string, Reunion>>;
 }
 
 export interface TaillesMagasin {
@@ -30,6 +31,7 @@ const ETAT_INITIAL: EtatMonde = {
   sessions: [],
   notifications: [],
   fil: {},
+  reunions: {},
 };
 
 export class MagasinMonde {
@@ -90,6 +92,9 @@ export class MagasinMonde {
         this.ajouterNotification(message.notification);
         return;
       case 'echo':
+        return;
+      case 'reunion':
+        this.mettre({ reunions: { ...this.etat.reunions, [message.reunion.id]: message.reunion } });
         return;
     }
   }

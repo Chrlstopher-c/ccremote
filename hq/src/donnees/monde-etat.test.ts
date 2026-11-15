@@ -1,9 +1,17 @@
 // Responsabilité : tests du magasin de l'état du monde — abonnements par sélecteur, fil borné, dédoublonnage.
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
-import type { EvenementDate, EtatRelais, MessageClient, Notification, ResumeSession, VueMachine } from './contrat';
+import type {
+  EvenementDate,
+  EtatRelais,
+  MessageClient,
+  Notification,
+  Reunion,
+  ResumeSession,
+  VueMachine,
+} from './contrat';
 import { MagasinMonde } from './monde-etat';
-import { projetsDuMonde, sessionsActives } from './monde-selecteurs';
+import { projetsDuMonde, reunionsTriees, sessionsActives } from './monde-selecteurs';
 
 const MAINTENANT = '2026-11-15T10:00:00.000Z';
 
@@ -175,5 +183,41 @@ describe('MagasinMonde : notifications et lien', () => {
     magasin.definirLien('coupe');
     magasin.definirLien('ouvert');
     expect(etats).toEqual(['coupe', 'ouvert']);
+  });
+});
+
+function reunion(id: string, creeLe: string, tsMessage: string | null = null): Reunion {
+  const messages = tsMessage === null ? [] : [{ id: `${id}-m`, auteur: 'chris', texte: 'x', ts: tsMessage, destinataires: [] }];
+  return { id, sujet: id, creeLe, participants: [], messages };
+}
+
+describe('MagasinMonde : salle de réunion', () => {
+  test('un message reunion range la réunion par id et remplace la version précédente', () => {
+    const magasin = new MagasinMonde();
+    magasin.appliquer({ type: 'reunion', reunion: reunion('r1', MAINTENANT) });
+    magasin.appliquer({ type: 'reunion', reunion: reunion('r2', MAINTENANT) });
+    magasin.appliquer({ type: 'reunion', reunion: { ...reunion('r1', MAINTENANT), sujet: 'mise à jour' } });
+    expect(Object.keys(magasin.lire().reunions).sort()).toEqual(['r1', 'r2']);
+    expect(magasin.lire().reunions['r1']?.sujet).toBe('mise à jour');
+  });
+
+  test('un abonné au sélecteur des réunions est prévenu à chaque réunion nouvelle ou changée', () => {
+    const magasin = new MagasinMonde();
+    let appels = 0;
+    magasin.abonner((e) => e.reunions, () => (appels += 1));
+    magasin.appliquer({ type: 'reunion', reunion: reunion('r1', MAINTENANT) });
+    magasin.appliquer({ type: 'echo', echo: {} });
+    expect(appels).toBe(1);
+  });
+
+  test('reunionsTriees met la réunion la plus récente en tête, selon son dernier message', () => {
+    const magasin = new MagasinMonde();
+    magasin.appliquer({ type: 'reunion', reunion: reunion('ancienne', '2026-11-10T08:00:00.000Z') });
+    magasin.appliquer({
+      type: 'reunion',
+      reunion: reunion('active', '2026-11-01T08:00:00.000Z', '2026-11-15T09:00:00.000Z'),
+    });
+    magasin.appliquer({ type: 'reunion', reunion: reunion('recente', '2026-11-12T08:00:00.000Z') });
+    expect(reunionsTriees(magasin.lire()).map((r) => r.id)).toEqual(['active', 'recente', 'ancienne']);
   });
 });

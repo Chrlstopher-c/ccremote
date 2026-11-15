@@ -1,0 +1,143 @@
+/* Responsabilité : la charte de l'interface d'Agent HQ, cohérente avec le monde pixel art — cadres de jeu (bois et
+   papier façon Stardew, écran d'ordinateur, écran cathodique), bordures en escalier sans flou, police pixel pour les
+   titres, police lisible pour le texte long et le code. */
+:root {
+  --bois-fonce: #3b2618;
+  --bois: #6b4428;
+  --bois-clair: #9a6a3e;
+  --papier: #f4e6c4;
+  --papier-2: #ead7ac;
+  --encre: #3b2a1a;
+  --encre-2: #6e5640;
+  --ecran: #16121f;
+  --ecran-2: #201a2e;
+  --ecran-3: #2c2440;
+  --texte: #ece8f4;
+  --texte-2: #b8b0cc;
+  --texte-3: #847b9c;
+  --cadre: #2b2735;
+  --clawd: #d97757;
+  --clawd-clair: #f0a080;
+  --rouge: #ff4d6a;
+  --ambre: #f0a030;
+  --vert: #6fd69a;
+  --bleu: #78c8f8;
+  --crt: #1a2a1c;
+  --crt-texte: #8cf09a;
+  --pixel: 'Pixelify Sans', monospace;
+  --lisible: 'Manrope', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  font-family: var(--lisible);
+  color: var(--texte);
+  z-index: 10;
+}
+
+#ui * {
+  box-sizing: border-box;
+}
+
+.interactif {
+  pointer-events: auto;
+}
+
+/* Bordure pixel : anneaux sans flou (pas d'arrondi lisse). */
+.cadre-bois {
+  background: var(--papier);
+  color: var(--encre);
+  box-shadow:
+    0 0 0 3px var(--bois-clair),
+    0 0 0 6px var(--bois),
+    0 0 0 9px var(--bois-fonce),
+    6px 9px 0 9px rgba(0, 0, 0, 0.35);
+}
+
+.cadre-ecran {
+  background: var(--ecran);
+  color: var(--texte);
+  box-shadow:
+    0 0 0 4px #3d3850,
+    0 0 0 12px var(--cadre),
+    0 0 0 15px #15121c,
+    8px 12px 0 15px rgba(0, 0, 0, 0.35);
+}
+
+.cadre-crt {
+  background: var(--crt);
+  color: var(--crt-texte);
+  box-shadow:
+    0 0 0 4px #c8bc96,
+    0 0 0 14px #ddd2ae,
+    0 0 0 17px #6e6650,
+    8px 12px 0 17px rgba(0, 0, 0, 0.35);
+}
+
+.titre-pixel {
+  font-family: var(--pixel);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bouton-pixel {
+  font-family: var(--pixel);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 6px 12px;
+  border: none;
+  cursor: pointer;
+  color: var(--encre);
+  background: var(--papier);
+  box-shadow: 0 0 0 2px var(--bois-fonce), inset -2px -3px 0 var(--papier-2), inset 2px 2px 0 #fff8e4;
+}
+
+.bouton-pixel:hover {
+  background: #fff3d6;
+}
+
+.bouton-pixel:active {
+  transform: translateY(1px);
+  box-shadow: 0 0 0 2px var(--bois-fonce), inset 2px 3px 0 var(--papier-2);
+}
+
+.bouton-pixel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.bouton-pixel.primaire {
+  background: var(--clawd);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--bois-fonce), inset -2px -3px 0 #b85e42, inset 2px 2px 0 var(--clawd-clair);
+}
+
+.bouton-pixel.danger {
+  background: #e05a6a;
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--bois-fonce), inset -2px -3px 0 #b03a4a, inset 2px 2px 0 #ff8a98;
+}
+
+.bouton-pixel.discret {
+  background: var(--ecran-3);
+  color: var(--texte-2);
+  box-shadow: 0 0 0 2px #0e0b16, inset -2px -2px 0 #1a1528, inset 2px 2px 0 #3a3152;
+}
+
+.defile {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ecran-3) transparent;
+}
+
+@keyframes clignote {
+  50% { opacity: 0.25; }
+}
+
+@keyframes apparait {
+  from { transform: translateY(14px) scale(0.98); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

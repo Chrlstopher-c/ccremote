@@ -44,6 +44,18 @@ def bloc(d: ImageDraw.ImageDraw, x0: float, y0: float, x1: float, y1: float, dy:
     d.line([(a[0], b[1]), b], fill=OMBRE)
 
 
+DESSUS = (236, 152, 120)
+
+
+def dessus(d: ImageDraw.ImageDraw, x0: float, x1: float, dy: float) -> None:
+    """Dessus du corps vu en trois-quarts (même projection que les meubles) : bande claire au-dessus de la face."""
+    a = (round((OX + x0) * U), round((OY - 1.5 + dy) * U))
+    b = (round((OX + x1) * U) - 1, round((OY + dy) * U) - 1)
+    d.rectangle([a, b], fill=DESSUS)
+    d.line([(a[0], a[1]), (b[0], a[1])], fill=(246, 178, 150))
+    d.line([(a[0], b[1]), (b[0], b[1])], fill=ORANGE)
+
+
 def contour(img: Image.Image) -> Image.Image:
     """Liseré sombre d'un pixel autour de la silhouette, pour détacher le perso du décor."""
     a = np.array(img)
@@ -76,6 +88,7 @@ def clawd(sens: str, pas: int = -1, bras: tuple[str, str] = ('repos', 'repos'), 
             x0, x1 = (-1.5, 0) if cote < 0 else (8, 9.5)
         bloc(d, x0, y0, x1, y1, dy)
     bloc(d, 0, 0, 8, 6, dy)
+    dessus(d, 0, 8, dy)
     if sens == 'face':
         haut = {'ouverts': 1, 'bas': 1.5, 'cligne': 1.75}[yeux]
         for x in (1, 6):
@@ -97,6 +110,7 @@ def clawd_profil(vers: int, pas: int) -> Image.Image:
         bloc(d, col + avance, 6, col + 1.5 + avance, 7.5 if levee else 8, 0.25 * (pas == 0))
     dy = 0.25 * (pas == 0)
     bloc(d, 1, 0, 7, 6, dy)
+    dessus(d, 1, 7, dy)
     arriere = (1, 2) if vers > 0 else (6, 7)
     bloc(d, arriere[0], 0, arriere[1], 6, dy, OMBRE)
     oeil = 5.5 if vers > 0 else 1.5
@@ -246,7 +260,8 @@ def chris_pas(vue: str, pas: int) -> Image.Image:
 
 
 def chris_planches() -> dict[str, list[tuple[Image.Image, int]]]:
-    vues = {'bas': 'front', 'haut': 'dos', 'droite': 'profil-r', 'gauche': 'profil-l'}
+    # bas, droite, gauche : marches tirées des vidéos (marche_video.py) ; la vidéo de dos a échoué, d'où cette vue.
+    vues = {'haut': 'dos'}
     planches: dict[str, list[tuple[Image.Image, int]]] = {}
     for sens, vue in vues.items():
         planches[f'chris-repos-{sens}'] = [(chris(vue), 1000)]
@@ -281,9 +296,13 @@ def main() -> None:
         index[nom] = ecrire(nom, imgs, (CADRE[0] // 2, CADRE[1] - 4))
     for nom, imgs in chris_planches().items():
         index[nom] = ecrire(nom, imgs, (CHRIS_CADRE[0] // 2, CHRIS_CADRE[1] - 2))
-    index['chaise-dossier'] = ecrire('chaise-dossier', [(chaise_dossier(), 1000)], (CHAISE[0] // 2, CHAISE[1] - 1))
-    index['chaise-assise'] = ecrire('chaise-assise', [(chaise_assise(), 1000)], (CHAISE[0] // 2, CHAISE[1] - 1))
-    (SORTIE / 'persos.json').write_text(json.dumps(index, indent=1))
+    chemin = SORTIE / 'persos.json'
+    # garder les planches produites ailleurs (marche_video.py : marche de Chris tirée des vidéos)
+    anciennes = json.loads(chemin.read_text()) if chemin.exists() else {}
+    for nom, planche in anciennes.items():
+        if nom not in index and (SORTIE / f'{nom}.png').exists():
+            index[nom] = planche
+    chemin.write_text(json.dumps(index, indent=1))
     print(', '.join(f"{k}:{v['n']}" for k, v in index.items()))
 
 

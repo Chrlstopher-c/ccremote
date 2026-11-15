@@ -1,82 +1,87 @@
 {
  "bureau": {
-  "w": 96,
-  "h": 94,
-  "emprise": 22
- },
- "chaise": {
-  "w": 30,
-  "h": 49,
-  "emprise": 10
+  "w": 98,
+  "h": 96,
+  "emprise": 28
  },
  "etagere": {
-  "w": 46,
-  "h": 131,
+  "w": 50,
+  "h": 102,
   "emprise": 14
  },
  "serveur": {
-  "w": 36,
-  "h": 92,
-  "emprise": 14
- },
- "crt": {
-  "w": 60,
-  "h": 74,
-  "emprise": 18
- },
- "cafe": {
-  "w": 60,
-  "h": 74,
+  "w": 34,
+  "h": 96,
   "emprise": 20
  },
- "plante": {
-  "w": 28,
-  "h": 49,
-  "emprise": 10
+ "crt": {
+  "w": 50,
+  "h": 72,
+  "emprise": 26
  },
- "table": {
-  "w": 124,
-  "h": 101,
-  "emprise": 44
+ "cafe": {
+  "w": 54,
+  "h": 82,
+  "emprise": 24
+ },
+ "distributeur": {
+  "w": 42,
+  "h": 100,
+  "emprise": 20
  },
  "canape": {
-  "w": 92,
-  "h": 62,
-  "emprise": 22
+  "w": 90,
+  "h": 70,
+  "emprise": 32
+ },
+ "table": {
+  "w": 116,
+  "h": 94,
+  "emprise": 32
+ },
+ "plante": {
+  "w": 40,
+  "h": 68,
+  "emprise": 20
  },
  "tableau": {
-  "w": 60,
-  "h": 101,
-  "emprise": 8
- },
- "arbre": {
-  "w": 92,
-  "h": 133,
-  "emprise": 18
- },
- "buisson": {
-  "w": 40,
-  "h": 40,
-  "emprise": 14
+  "w": 58,
+  "h": 60,
+  "emprise": 10
  },
  "lampadaire": {
-  "w": 28,
-  "h": 146,
-  "emprise": 8
+  "w": 24,
+  "h": 118,
+  "emprise": 20
  },
  "banc": {
-  "w": 68,
-  "h": 72,
-  "emprise": 14
+  "w": 66,
+  "h": 54,
+  "emprise": 18
  },
  "cendrier": {
   "w": 18,
-  "h": 38,
-  "emprise": 6
+  "h": 46,
+  "emprise": 14
  },
- "distributeur": {
-  "w": 48,
-  "h": 83,
-  "emprise": 16
+ "arbre": {
+  "w": 68,
+  "h": 112,
+  "emprise": 22
+ },
+ "buisson": {
+  "w": 50,
+  "h": 40,
+  "emprise": 18
+ },
+ "chaise-assise": {
+  "w": 36,
+  "h": 76,
+  "emprise": 28
+ },
+ "chaise-dossier": {
+  "w": 36,
+  "h": 76,
+  "emprise": 28
  }
 }

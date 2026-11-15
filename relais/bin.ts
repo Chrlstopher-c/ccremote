@@ -23,10 +23,13 @@ import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
 import { lancerRecalculInactivite } from './sessions/recalcul-inactivite.ts';
+import { RegistreReunions } from './reunion/registre-reunions.ts';
+import { SalleDeReunion } from './reunion/salle.ts';
 
 const journal = creerJournal('relais');
 const config = chargerConfig();
-const registre = new Registre(ouvrirBase(config.base), journal, config.inactiviteMs);
+const base = ouvrirBase(config.base);
+const registre = new Registre(base, journal, config.inactiviteMs);
 const diffusion = new Diffusion();
 const plafond = new PlafondEchecs(config.fichierEchecs, journal.child({ domaine: 'acces' }));
 const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
@@ -36,6 +39,15 @@ const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
 const terminaux = new TerminauxRelais(postes, journal);
 postes.terminaux = terminaux;
+const salleReunions = new SalleDeReunion({
+  reunions: new RegistreReunions(base),
+  registre,
+  postes,
+  diffusion,
+  journal: journal.child({ domaine: 'reunion' }),
+  limite: config.reunionLimite,
+});
+postes.reunions = salleReunions;
 const echo = config.echo
   ? new LienEcho(config.echo.url, config.echo.jeton, diffusion, journal.child({ domaine: 'echo' }))
   : null;
@@ -51,6 +63,7 @@ const routes = avecCors(
     comptes,
     fichiers,
     echo,
+    reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
     wol: config.wol,
     diffusionWol: config.diffusionWol,
   }),

@@ -20,8 +20,8 @@ const BULLES: Record<EtatMonde, { texte: string; fond: number; encre: string }> 
 
 // Décalages (px) entre le pied de la chaise et les pieds de Clawd assis : de dos il est posé sur l'assise, de face
 // un peu plus bas (ses pattes pendent devant l'assise).
-const ASSIS_DOS = -11;
-const ASSIS_FACE = -9;
+const ASSIS_DOS = -34;
+const ASSIS_FACE = -28;
 const ABORD = 16; // où il se lève / arrive, juste devant la chaise
 
 export class Agent {
@@ -39,8 +39,9 @@ export class Agent {
     planches: Record<string, PlanchePerso>,
   ) {
     const { x, y } = poste.siege;
-    this.assise = scene.add.image(x, y, 'chaise-assise', 0).setOrigin(0.5, 47 / 48);
-    this.dossier = scene.add.image(x, y, 'chaise-dossier', 0).setOrigin(0.5, 47 / 48);
+    // toile commune des deux pièces (art/meubles.py) : le sol avant de la chaise est à 72 px sur 76
+    this.assise = scene.add.image(x, y, 'objet-chaise-assise').setOrigin(0.5, 72 / 76);
+    this.dossier = scene.add.image(x, y, 'objet-chaise-dossier').setOrigin(0.5, 72 / 76);
     this.corps = new Marcheur(scene, 'clawd', planches, { x, y: y + ABORD }, 70);
     this.bulle = scene.add.container(0, 0);
     this.clignote = scene.tweens.add({ targets: this.bulle, alpha: 0.2, duration: 360, yoyo: true, repeat: -1,
@@ -49,10 +50,11 @@ export class Agent {
     this.chaise('libre');
   }
 
-  /** Ordre de dessin chaise / Clawd : de dos le dossier passe devant lui, de face c'est l'assise. */
+  /** Ordre de dessin chaise / Clawd : de dos le dossier passe devant lui ; tourné vers la pièce, toute la chaise est
+   * derrière lui (il est assis sur le bord, pattes pendantes devant l'assise). */
   private chaise(ordre: 'dos' | 'face' | 'libre'): void {
     const y = this.poste.siege.y;
-    this.assise.setDepth(ordre === 'face' ? y + 1 : y - 1);
+    this.assise.setDepth(y - 1);
     this.dossier.setDepth(ordre === 'dos' ? y + 1 : ordre === 'face' ? y - 1 : y - 0.5);
   }
 

@@ -1,6 +1,6 @@
 // Responsabilité : les vues dérivées de l'état du monde (sessions actives, projets avec leur nombre de sessions).
 // Pures : elles lisent un EtatMonde et ne gardent rien.
-import type { Projet, ResumeSession } from './contrat';
+import type { Projet, Reunion, ResumeSession } from './contrat';
 import type { EtatMonde } from './monde-etat';
 
 export interface ProjetVue {
@@ -10,6 +10,12 @@ export interface ProjetVue {
 
 export function sessionsActives(etat: EtatMonde): ResumeSession[] {
   return etat.sessions.filter((s) => !s.archivee);
+}
+
+// Réunions de la plus récente à la plus ancienne : la date de dernier message, à défaut la date de création.
+export function reunionsTriees(etat: EtatMonde): Reunion[] {
+  const activite = (r: Reunion): number => Date.parse(r.messages.at(-1)?.ts ?? r.creeLe) || 0;
+  return Object.values(etat.reunions).sort((a, b) => activite(b) - activite(a));
 }
 
 export function sessionParId(etat: EtatMonde, id: string): ResumeSession | undefined {

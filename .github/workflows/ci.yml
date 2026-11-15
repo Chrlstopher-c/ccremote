@@ -23,3 +23,20 @@ jobs:
       - name: Types (app)
         run: bunx tsc --noEmit
         working-directory: bureau
+  hq:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: Dépendances (Agent HQ)
+        run: bun install --frozen-lockfile
+        working-directory: hq
+      - name: Types (Agent HQ)
+        run: bun run typecheck
+        working-directory: hq
+      - name: Tests (Agent HQ)
+        run: bun test src
+        working-directory: hq
+      - name: Build (Agent HQ)
+        run: bun run build
+        working-directory: hq

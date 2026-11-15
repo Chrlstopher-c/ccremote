@@ -2,7 +2,8 @@
 // une session lancée du bureau, d'Atrium ou de ccremote est la même, attachable de partout.
 import { join } from 'node:path';
 
-export const SOCKET = 'claude';
+// Surchargeable pour un poste d'essai qui ne doit pas voir les vraies sessions du serveur tmux.
+export const SOCKET = process.env['CCREMOTE_TMUX_SOCKET'] ?? 'claude';
 export const PREFIXE = 'claude-';
 const CONFIG = join(import.meta.dir, 'tmux.conf');
 const FORMAT = ['session_name', 'session_created', 'session_attached', 'pane_current_path', 'pane_title', 'pane_pid']

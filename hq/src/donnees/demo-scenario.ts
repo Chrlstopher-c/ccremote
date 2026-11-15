@@ -38,17 +38,30 @@ function projet(machine: string, nom: string): Projet {
   return { machine, chemin: `/demo/${nom}`, nom };
 }
 
+// Détail = entrée JSON de l'outil, comme le poste la transmet (voir poste/session/traduction.ts).
 const LECTURE: Evenement = {
   type: 'outil',
   id: 'o-lecture',
   nom: 'Read',
-  resume: 'lit le magasin',
-  detail: 'monde-etat.ts',
+  resume: 'src/donnees/monde-etat.ts',
+  detail: '{"file_path": "src/donnees/monde-etat.ts"}',
 };
-const GREP: Evenement = { type: 'outil', id: 'o-grep', nom: 'Grep', resume: 'cherche les résumés', detail: 'resume' };
-const TEST: Evenement = { type: 'outil', id: 'o-test', nom: 'Bash', resume: 'npm test', detail: 'stocks' };
+const GREP: Evenement = {
+  type: 'outil',
+  id: 'o-grep',
+  nom: 'Grep',
+  resume: 'resume',
+  detail: '{"pattern": "resume"}',
+};
+const TEST: Evenement = {
+  type: 'outil',
+  id: 'o-test',
+  nom: 'Bash',
+  resume: 'bun test src/donnees',
+  detail: '{"command": "bun test src/donnees"}',
+};
 
-const QUESTION_FORMAT: Dialogue = {
+export const QUESTION_FORMAT: Dialogue = {
   id: 'q-format',
   titre: 'Format des résumés ?',
   options: [

@@ -1,22 +1,43 @@
 #!/usr/bin/env bash
 # Déploie ccremote v2 depuis le portable : le relais sur le Pi, un poste par machine.
-#   ./deploiement/deployer.sh relais            relais (Pi) + interface web servie par lui
+#   ./deploiement/deployer.sh relais            relais (Pi) + interface web et Agent HQ servis par lui
 #   ./deploiement/deployer.sh poste <machine>   poste d'une machine (pi, tour, portable, vps)
 #   ./deploiement/deployer.sh tout              postes d'abord, relais ensuite
+#   --essai (n'importe où)                      affiche le plan, n'exécute rien
 # Les valeurs réelles (adresses, MAC, secrets) viennent de ~/.config/ccremote/deploiement.env, jamais du dépôt.
 # Idempotent : relançable pour mettre à jour. Le code vient de la branche dev sur GitHub.
 set -euo pipefail
 
 ICI=$(cd "$(dirname "$0")/.." && pwd)
 ENV_LOCAL=${CCREMOTE_DEPLOIEMENT:-$HOME/.config/ccremote/deploiement.env}
-# shellcheck source=/dev/null
-source "$ENV_LOCAL"
+ESSAI=0
+ARGS=()
+for arg in "$@"; do
+  if [ "$arg" = --essai ]; then ESSAI=1; else ARGS+=("$arg"); fi
+done
+set -- "${ARGS[@]+"${ARGS[@]}"}"
+if [ -f "$ENV_LOCAL" ]; then
+  # shellcheck source=/dev/null
+  source "$ENV_LOCAL"
+elif [ "$ESSAI" = 1 ]; then
+  echo "essai : $ENV_LOCAL absent, valeurs factices (example.com)" >&2
+  PI_SSH=pi@example.com PI_LAN=192.0.2.10 LIEN_PUBLIC=https://example.com/poste DIFFUSION_WOL=192.0.2.255
+  SECRET_PI=essai SECRET_TOUR=essai SECRET_PORTABLE=essai SECRET_VPS=essai
+  MACHINES_ISOLEES=vps WOL=
+else
+  echo "environnement absent : $ENV_LOCAL" >&2
+  exit 1
+fi
 DEPOT=https://github.com/Chrlstopher-c/ccremote.git
 BRANCHE=dev
 log() { printf '\033[1;35m▸ %s\033[0m\n' "$*"; }
 
 # --- exécution distante, sous le bon utilisateur ---------------------------------------------------------------
 executer() { # machine, script (stdin)
+  if [ "$ESSAI" = 1 ]; then
+    echo "  [essai] $1 : script distant de $(wc -l | tr -d ' ') lignes, non exécuté" >&2
+    return 0
+  fi
   case $1 in
     pi) ssh "$PI_SSH" 'sudo -u pi -H bash -s' ;;
     portable) bash -s ;;
@@ -24,6 +45,10 @@ executer() { # machine, script (stdin)
   esac
 }
 executer_root() { # machine, script (stdin) — pour les unités système
+  if [ "$ESSAI" = 1 ]; then
+    echo "  [essai] $1 (root) : script distant de $(wc -l | tr -d ' ') lignes, non exécuté" >&2
+    return 0
+  fi
   case $1 in
     pi) ssh "$PI_SSH" 'sudo bash -s' ;;
     *) ssh "$1" 'sudo bash -s' ;;
@@ -141,9 +166,27 @@ EOF
 }
 
 # --- relais -----------------------------------------------------------------------------------------------------
-deployer_relais() {
-  log "relais : interface web (build léger, ici)"
+construire_locaux() { # interface web (bureau) et Agent HQ (hq), sur ce poste
+  log "relais : interface web et Agent HQ (build léger, ici)"
+  if [ "$ESSAI" = 1 ]; then
+    echo "  [essai] bureau : bun install --frozen-lockfile && bun run build" >&2
+    echo "  [essai] hq : bun install --frozen-lockfile && bun run build (→ hq/dist, base /hq/)" >&2
+    return 0
+  fi
   (cd "$ICI/bureau" && bun install --frozen-lockfile >/dev/null && bun run build >/dev/null)
+  (cd "$ICI/hq" && bun install --frozen-lockfile >/dev/null && bun run build >/dev/null)
+}
+
+envoyer_dossier() { # dossier construit (ici), dossier de destination (sur le Pi, sous pi)
+  if [ "$ESSAI" = 1 ]; then
+    echo "  [essai] $1 → Pi:$2" >&2
+    return 0
+  fi
+  tar -C "$1" -cf - . | ssh "$PI_SSH" "sudo -u pi tar -C $2 -xf -"
+}
+
+deployer_relais() {
+  construire_locaux
   log "relais : code sur le Pi"
   executer pi <<EOF
 set -e
@@ -151,11 +194,12 @@ export PATH=\$HOME/.bun/bin:\$PATH
 cd /mnt/projects
 if [ -d ccremote-relais/.git ]; then git -C ccremote-relais fetch -q origin $BRANCHE && git -C ccremote-relais reset -q --hard origin/$BRANCHE
 else git clone -q -b $BRANCHE $DEPOT ccremote-relais; fi
-cd ccremote-relais && bun install --production --frozen-lockfile >/dev/null && mkdir -p bureau/dist
+cd ccremote-relais && bun install --production --frozen-lockfile >/dev/null && mkdir -p bureau/dist hq/dist
 echo "code : \$(git log -1 --format='%h %s' | cut -c1-70)"
 EOF
-  tar -C "$ICI/bureau/dist" -cf - . | ssh "$PI_SSH" 'sudo -u pi tar -C /mnt/projects/ccremote-relais/bureau/dist -xf -'
-  log "relais : environnement (mot de passe inchangé : celui de l'ancienne interface)"
+  envoyer_dossier "$ICI/bureau/dist" /mnt/projects/ccremote-relais/bureau/dist
+  envoyer_dossier "$ICI/hq/dist" /mnt/projects/ccremote-relais/hq/dist
+  log "relais : environnement, sauvegarde de la base avant migration"
   executer_root pi <<EOF
 set -e
 mkdir -p /mnt/hdd/ccremote && chown pi:pi /mnt/hdd/ccremote && chmod 700 /mnt/hdd/ccremote
@@ -164,7 +208,7 @@ if [ ! -f /mnt/hdd/ccremote/relais.env ]; then
   EMPREINTE=\$(sudo -u pi MDP="\$MDP" /home/pi/.bun/bin/bun -e 'console.log(await Bun.password.hash(process.env.MDP))')
   printf "CCREMOTE_EMPREINTE_MOT_DE_PASSE='%s'\n" "\$EMPREINTE" > /mnt/hdd/ccremote/relais.env
 fi
-sed -i '/^CCREMOTE_\(SECRETS_POSTES\|MACHINES_ISOLEES\|WOL\|DIFFUSION_WOL\|BASE\|WEB\)=/d' /mnt/hdd/ccremote/relais.env
+sed -i '/^CCREMOTE_\(SECRETS_POSTES\|MACHINES_ISOLEES\|WOL\|DIFFUSION_WOL\|BASE\|WEB\|HQ\)=/d' /mnt/hdd/ccremote/relais.env
 cat >> /mnt/hdd/ccremote/relais.env <<ENV
 CCREMOTE_SECRETS_POSTES=pi=$SECRET_PI,tour=$SECRET_TOUR,portable=$SECRET_PORTABLE,vps=$SECRET_VPS
 CCREMOTE_MACHINES_ISOLEES=$MACHINES_ISOLEES
@@ -172,8 +216,17 @@ CCREMOTE_WOL=$WOL
 CCREMOTE_DIFFUSION_WOL=$DIFFUSION_WOL
 CCREMOTE_BASE=/mnt/hdd/ccremote/relais.db
 CCREMOTE_WEB=/mnt/projects/ccremote-relais/bureau/dist
+CCREMOTE_HQ=/mnt/projects/ccremote-relais/hq/dist
 ENV
 chown pi:pi /mnt/hdd/ccremote/relais.env && chmod 600 /mnt/hdd/ccremote/relais.env
+BASE=\$(sed -n 's/^CCREMOTE_BASE=//p' /mnt/hdd/ccremote/relais.env)
+if [ -f "\$BASE" ]; then
+  command -v sqlite3 >/dev/null || { echo "sqlite3 manquant sur le Pi : arrêt avant migration"; exit 1; }
+  SAUVEGARDE="\$(dirname "\$BASE")/relais-avant-deploiement-\$(date +%Y%m%d-%H%M%S).db"
+  sqlite3 "\$BASE" ".backup '\$SAUVEGARDE'"
+  chown pi:pi "\$SAUVEGARDE" && chmod 600 "\$SAUVEGARDE"
+  echo "base sauvegardée : \$SAUVEGARDE"
+fi
 cat > /etc/systemd/system/ccremote-relais.service <<'UNITE'
 [Unit]
 Description=ccremote — relais (API, flux, lien des postes ; aucun LLM)
@@ -200,5 +253,6 @@ case ${1:-} in
   relais) deployer_relais ;;
   poste) deployer_poste "${2:?machine attendue}" ;;
   tout) for m in tour portable vps pi; do deployer_poste "$m"; done; deployer_relais ;;
-  *) sed -n '2,7p' "$0"; exit 1 ;;
+  *) sed -n '2,8p' "$0"; exit 1 ;;
 esac
+if [ "$ESSAI" = 1 ]; then echo "essai terminé : aucune commande exécutée" >&2; fi

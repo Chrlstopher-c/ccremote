@@ -7,6 +7,7 @@ import { construireCarte, TUILE, type Carte } from './carte/plan';
 import { dessinerCarte, poserObjets, poserPlaques } from './carte/rendu-carte';
 import { Agent } from './persos/agent';
 import { Marcheur } from './persos/marcheur';
+import { ouvrir, type Panneau } from '../ui/bus';
 import type { MagasinMonde, ResumeSession } from '../donnees';
 import { cleSessions, etatDansLeMonde, sessionsDuMonde } from './lien-donnees';
 import { chargerImages, chargerIndex, creerAnimations, type Ressources } from './sprites';
@@ -47,7 +48,7 @@ export class SceneMonde extends Phaser.Scene {
     this.carte = construireCarte(sessions.map((s) => s.projet.nom));
     this.grille = grilleDe(this.carte, this.r.objets);
     dessinerCarte(this, this.carte, this.r.tuiles);
-    poserObjets(this, this.carte, this.r.objets);
+    const poses = poserObjets(this, this.carte, this.r.objets);
     poserPlaques(this, this.carte);
     sessions.forEach((s, i) => {
       const poste = this.carte.postes[i];
@@ -56,6 +57,7 @@ export class SceneMonde extends Phaser.Scene {
     const retour = this.registry.get('position-chris') as { x: number; y: number } | undefined;
     this.chris = new Marcheur(this, 'chris', this.r.persos, retour ?? this.carte.depart, 110);
     this.installerControles();
+    this.rendreInteractifs(poses, magasin);
     this.installerCamera();
     this.suivreSessions(magasin);
   }
@@ -70,8 +72,9 @@ export class SceneMonde extends Phaser.Scene {
       if (cibles.length || p.getDistance() > 6) return;
       this.chris.allerA(this.grille, { x: p.worldX, y: p.worldY });
     });
-    for (const a of this.agents.values()) {
+    for (const [id, a] of this.agents) {
       a.corps.sprite.on('pointerup', () => {
+        ouvrir({ type: 'agent', sessionId: id });
         const d = a.corps.position;
         this.chris.allerA(this.grille, { x: d.x, y: d.y + 30 }, () => {
           this.chris.sens = 'haut';
@@ -84,7 +87,8 @@ export class SceneMonde extends Phaser.Scene {
   private installerCamera(): void {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, this.carte.largeur * TUILE, this.carte.hauteur * TUILE);
-    const zoom = Number(new URLSearchParams(location.search).get('zoom')) || 2;
+    // téléphone : on recule un peu la caméra pour voir une pièce entière
+    const zoom = Number(new URLSearchParams(location.search).get('zoom')) || (window.innerWidth < 760 ? 1.25 : 2);
     cam.setZoom(zoom).startFollow(this.chris.sprite, true, 0.12, 0.12);
     const vue = new URLSearchParams(location.search).get('vue')?.split(',').map(Number);
     if (vue?.length === 2) cam.stopFollow().centerOn(vue[0] ?? 0, vue[1] ?? 0); // capture de contrôle
@@ -92,6 +96,34 @@ export class SceneMonde extends Phaser.Scene {
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       cam.setZoom(Phaser.Math.Clamp(cam.zoom * (dy > 0 ? 0.9 : 1.1), 0.7, 4));
     });
+  }
+
+  /** Les meubles utiles s'ouvrent au clic : terminal (vieux poste), fichiers (étagères), réunion (table). Chris marche
+   * jusqu'au meuble pendant que le panneau s'ouvre. */
+  private rendreInteractifs(poses: { nom: string; image: Phaser.GameObjects.Image }[], magasin: MagasinMonde): void {
+    const contexte = (): { machine: string; cwd: string } => {
+      const e = magasin.lire();
+      const s = sessionsDuMonde(e).at(-1);
+      return { machine: s?.machine ?? e.machines[0]?.id ?? '', cwd: s?.cwd ?? e.machines[0]?.racines[0] ?? '/' };
+    };
+    const panneaux: Record<string, () => Panneau> = {
+      crt: () => ({ type: 'terminal', ...contexte(), titre: 'Salle serveurs' }),
+      serveur: () => ({ type: 'terminal', ...contexte(), titre: 'Salle serveurs' }),
+      etagere: () => {
+        const c = contexte();
+        return { type: 'fichiers', machine: c.machine, chemin: c.cwd };
+      },
+      table: () => ({ type: 'reunion' }),
+    };
+    for (const { nom, image } of poses) {
+      const panneau = panneaux[nom];
+      if (!panneau) continue;
+      image.setInteractive({ useHandCursor: true, pixelPerfect: true });
+      image.on('pointerup', () => {
+        ouvrir(panneau());
+        this.chris.allerA(this.grille, { x: image.x, y: image.y + 24 });
+      });
+    }
   }
 
   /** Le bâtiment suit les sessions : une session de plus ou de moins reconstruit la carte (Chris reste où il est),

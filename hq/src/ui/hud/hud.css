@@ -1,0 +1,60 @@
+/* Responsabilité : la barre du haut d'Agent HQ (pixel, lisible sur le monde, compacte sur téléphone). */
+.hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+}
+.hud-gauche, .hud-centre, .hud-droite {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hud-gauche {
+  background: var(--papier);
+  color: var(--encre);
+  padding: 6px 12px;
+  box-shadow: 0 0 0 2px var(--bois), 0 0 0 4px var(--bois-fonce), 3px 5px 0 4px rgba(0, 0, 0, 0.3);
+}
+.hud-logo { font-size: 17px; }
+.hud-lien { font-size: 12px; color: var(--encre-2); }
+.hud-lien.ouvert { color: #2f8a52; }
+.hud-lien.coupe { color: #c0303e; }
+.hud-centre { margin: 0 auto; }
+.hud-compteur {
+  font-family: var(--pixel);
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  padding: 6px 12px;
+  color: #fff;
+}
+.hud-compteur.rouge {
+  background: var(--rouge);
+  box-shadow: 0 0 0 2px #5a1020;
+  animation: clignote 0.9s steps(1) infinite;
+}
+.hud-compteur.ambre {
+  background: var(--ambre);
+  color: #2a1a00;
+  box-shadow: 0 0 0 2px #5a3a00;
+}
+.hud-machine {
+  font-family: var(--pixel);
+  font-size: 12px;
+  padding: 4px 8px;
+  background: rgba(22, 18, 31, 0.8);
+  color: var(--texte-3);
+}
+.hud-machine.on { color: var(--vert); }
+
+@media (max-width: 760px) {
+  .hud { top: 8px; left: 8px; right: 8px; flex-wrap: wrap; }
+  .hud-machine, .hud-lien { display: none; }
+  .hud-logo { font-size: 14px; }
+  .hud-centre { order: 3; width: 100%; justify-content: center; }
+}

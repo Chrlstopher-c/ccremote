@@ -1,6 +1,7 @@
 // Responsabilité : le contrat de l'API des clients (app de bureau, iPhone, web) — ce que le relais rend et pousse.
 import type { EtatCompte } from './comptes.ts';
 import type { MessageEcho } from './echo.ts';
+import type { Reunion } from './reunion.ts';
 import type { EtatMachine } from './protocole-poste.ts';
 import type { Evenement, Projet, ResumeSession } from './session.ts';
 
@@ -47,7 +48,8 @@ export type MessageClient =
   | { readonly type: 'session'; readonly session: ResumeSession }
   | { readonly type: 'machine'; readonly machine: VueMachine }
   | { readonly type: 'notification'; readonly notification: Notification }
-  | { readonly type: 'echo'; readonly echo: MessageEcho }; // WebSocket seulement : n'avance pas le long-poll
+  | { readonly type: 'echo'; readonly echo: MessageEcho } // WebSocket seulement : n'avance pas le long-poll
+  | { readonly type: 'reunion'; readonly reunion: Reunion }; // WebSocket seulement : la salle de réunion (HQ)
 
 export interface DemandeOuverture {
   readonly machine: string;

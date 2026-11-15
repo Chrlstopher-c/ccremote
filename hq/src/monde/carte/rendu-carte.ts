@@ -49,12 +49,19 @@ export function dessinerCarte(scene: Phaser.Scene, carte: Carte, tuiles: Record<
   }
 }
 
-export function poserObjets(scene: Phaser.Scene, carte: Carte, objets: Record<string, InfoObjet>): void {
+export function poserObjets(
+  scene: Phaser.Scene,
+  carte: Carte,
+  objets: Record<string, InfoObjet>,
+): { nom: string; image: Phaser.GameObjects.Image }[] {
+  const poses: { nom: string; image: Phaser.GameObjects.Image }[] = [];
   for (const o of carte.objets) {
     if (!objets[o.nom]) continue;
     const img = scene.add.image(o.x, o.y, `objet-${o.nom}`).setOrigin(0.5, 1).setDepth(o.y);
     if (o.miroir) img.setFlipX(true);
+    poses.push({ nom: o.nom, image: img });
   }
+  return poses;
 }
 
 export function poserPlaques(scene: Phaser.Scene, carte: Carte): void {

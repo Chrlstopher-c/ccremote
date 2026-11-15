@@ -1,0 +1,84 @@
+/* Responsabilité : mise en page des panneaux (centrés, grands, plein écran sur téléphone). */
+.panneau-voile {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 6, 18, 0.45);
+  padding: 32px;
+}
+
+.panneau {
+  width: min(980px, 100%);
+  height: min(760px, 100%);
+  display: flex;
+  flex-direction: column;
+  animation: apparait 160ms steps(4);
+}
+
+.panneau.large {
+  width: min(1280px, 100%);
+}
+
+.panneau-tete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 10px 18px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.06);
+}
+
+.cadre-bois .panneau-tete {
+  border-bottom-color: var(--papier-2);
+}
+
+.panneau-titres {
+  min-width: 0;
+  flex: 1;
+}
+
+.panneau-titres h2 {
+  margin: 0;
+  font-size: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panneau-sous {
+  font-size: 12px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
+.panneau-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.panneau-fermer {
+  padding: 6px 10px;
+}
+
+.panneau-corps {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+@media (max-width: 760px) {
+  .panneau-voile {
+    padding: 0;
+  }
+  .panneau {
+    width: 100%;
+    height: 100%;
+    box-shadow: none;
+  }
+  .panneau-actions .bouton-pixel {
+    font-size: 12px;
+    padding: 5px 8px;
+  }
+}

@@ -137,12 +137,50 @@ export interface EtatRelais {
   readonly reveilPossible: readonly string[];
 }
 
+// Salle de réunion : miroir de commun/reunion.ts. Une réunion entre sessions principales ; `auteur` = 'chris' ou sessionId.
+export interface MessageReunion {
+  readonly id: string;
+  readonly auteur: string;
+  readonly texte: string;
+  readonly ts: string;
+  readonly destinataires: readonly string[];
+}
+
+export interface Reunion {
+  readonly id: string;
+  readonly sujet: string;
+  readonly creeLe: string;
+  readonly participants: readonly string[];
+  readonly messages: readonly MessageReunion[];
+}
+
 export type MessageClient =
   | { readonly type: 'evenement'; readonly evenement: EvenementDate }
   | { readonly type: 'session'; readonly session: ResumeSession }
   | { readonly type: 'machine'; readonly machine: VueMachine }
   | { readonly type: 'notification'; readonly notification: Notification }
-  | { readonly type: 'echo'; readonly echo: unknown };
+  | { readonly type: 'echo'; readonly echo: unknown }
+  | { readonly type: 'reunion'; readonly reunion: Reunion };
 
 // Actions de session : les quatre du relais, plus archiver/desarchiver (ajoutées au contrat en parallèle).
 export type ActionSession = 'interrompre' | 'compacter' | 'fermer' | 'reprendre' | 'archiver' | 'desarchiver';
+
+// Terminaux et fichiers d'un poste : miroir de commun/appareil.ts (CibleTerminal, ListeDossier, EntreeFichier).
+export type CibleTerminal =
+  | { readonly type: 'shell'; readonly dossier?: string }
+  | { readonly type: 'tmux'; readonly tmux: string };
+
+export interface EntreeFichier {
+  readonly nom: string;
+  readonly type: 'dossier' | 'fichier' | 'lien' | 'autre';
+  readonly taille: number;
+  readonly modifie: string;
+  readonly cache: boolean;
+}
+
+export interface ListeDossier {
+  readonly chemin: string;
+  readonly parent: string | null;
+  readonly accueil: string;
+  readonly entrees: readonly EntreeFichier[];
+}

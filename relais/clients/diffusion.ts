@@ -25,7 +25,8 @@ export class Diffusion {
   diffuser(m: MessageClient): void {
     const texte = JSON.stringify(m);
     for (const ws of this.clients) ws.send(texte);
-    if (m.type === 'machine' || m.type === 'echo') return; // l'iPhone ne se réveille pas pour chaque fragment d'Echo
+    // L'iPhone ne se réveille ni pour chaque fragment d'Echo ni pour la salle de réunion (HQ, WebSocket seulement).
+    if (m.type === 'machine' || m.type === 'echo' || m.type === 'reunion') return;
     this.versionCourante += 1;
     const reveils = this.attentes;
     this.attentes = new Set();

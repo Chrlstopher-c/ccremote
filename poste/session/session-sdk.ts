@@ -150,12 +150,16 @@ export class SessionSdk implements SessionPoste {
     return this.suiviNuit.tick(maintenant);
   }
 
+  // Les messages de Chris entrent dans le fil tout de suite : le SDK ne les renvoie pas (contrairement au transcript
+  // relu par les sessions tmux).
   async lancer(message: string): Promise<string | null> {
+    this.emettre({ type: 'message', texte: message });
     return this.demarrer(false, message);
   }
 
   async envoyer(texte: string): Promise<string | null> {
     if (!this.fil) return this.reprendre(texte);
+    this.emettre({ type: 'message', texte });
     this.bilan.messageDeChris();
     this.pousser(texte);
     if (this.etat.statut !== 'compaction') this.maj({ statut: 'travail' });
@@ -165,6 +169,7 @@ export class SessionSdk implements SessionPoste {
   async reprendre(message?: string): Promise<string | null> {
     if (this.fil) return message ? this.envoyer(message) : null;
     if (!this.etat.claudeSessionId) return 'conversation inconnue : impossible de la reprendre';
+    if (message) this.emettre({ type: 'message', texte: message });
     return this.demarrer(true, message);
   }
 

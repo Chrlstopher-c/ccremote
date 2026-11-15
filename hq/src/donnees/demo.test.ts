@@ -106,8 +106,8 @@ describe('demo : flux émis par la source', () => {
     expect(seqs).toEqual([...seqs].sort((x, y) => x - y));
   });
 
-  test('les actions sont acceptées sans effet réseau', async () => {
-    const source = creerSourceDemo({ horloge: () => T0 });
+  test('les actions sont acceptées sans réseau', async () => {
+    const source = creerSourceDemo({ horloge: () => T0, planifierUnique: () => () => undefined });
     await expect(source.api.envoyerMessage('demo-1', 'salut')).resolves.toBeUndefined();
     await expect(source.api.agir('demo-1', 'archiver')).resolves.toBeUndefined();
   });

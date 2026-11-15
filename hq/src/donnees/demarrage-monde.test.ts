@@ -3,7 +3,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { EtatRelais, EvenementDate, MessageClient } from './contrat';
 import { demarrerMonde } from './demarrage-monde';
+import { creerFichiersDemo } from './fichiers-demo';
 import { MagasinMonde } from './monde-etat';
+import { fabriqueTerminalDemo } from './terminal-demo';
 import type { ApiMonde, EcouteurSource, EtatLien, SourceMonde } from './source-monde';
 
 function etat(version: number, sessionIds: string[]): EtatRelais {
@@ -22,6 +24,8 @@ function sourceFactice(): { source: SourceMonde; ecouteur: () => EcouteurSource 
   const source: SourceMonde = {
     nom: 'demo',
     api,
+    fichiers: creerFichiersDemo(),
+    ouvrirTerminal: fabriqueTerminalDemo,
     etatInitial: async () => {
       compteur += 1;
       return etat(compteur, ['s1']);

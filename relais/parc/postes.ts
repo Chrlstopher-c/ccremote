@@ -4,6 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Logger } from 'pino';
 import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/protocole-poste.ts';
+import type { Evenement } from '../../commun/session.ts';
 import type { Diffusion, VueMachine } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import type { Registre } from '../registre/registre.ts';
@@ -28,6 +29,8 @@ export class Postes {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
     posteDeconnecte(machine: string): void;
   } | null = null;
+  /** La salle de réunion (HQ) : voit chaque événement d'une session pour recopier les réponses demandées. */
+  reunions: { observer(sessionId: string, evt: Evenement): void } | null = null;
 
   constructor(
     private readonly registre: Registre,
@@ -147,6 +150,7 @@ export class Postes {
   private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {
     const e = this.registre.ajouterEvenement(sessionId, ts, evt);
     this.diffusion.diffuser({ type: 'evenement', evenement: e });
+    this.reunions?.observer(sessionId, evt);
     const titre = this.registre.session(sessionId)?.titre ?? 'Session';
     const brouillon = notificationPour(titre, evt);
     if (!brouillon) return;

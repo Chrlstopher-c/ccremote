@@ -1,0 +1,27 @@
+/* Responsabilité : l'écran de connexion, centré sur fond de nuit. */
+.connexion {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 50% 40%, #2a2140, #120e1a 70%);
+  padding: 24px;
+}
+.connexion-carte {
+  width: min(380px, 100%);
+  padding: 26px 26px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.connexion-carte h1 { margin: 0; font-size: 30px; color: var(--clawd); }
+.connexion-carte p { margin: 0; font-size: 14px; color: var(--encre-2); }
+.connexion-carte input {
+  font: 15px var(--lisible);
+  padding: 10px 12px;
+  border: none;
+  background: #fffaf0;
+  box-shadow: 0 0 0 2px var(--bois-fonce), inset 2px 2px 0 var(--papier-2);
+  color: var(--encre);
+}
+.connexion-erreur { color: #b0303e; font-size: 13px; }

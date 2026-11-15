@@ -119,6 +119,8 @@ export class Magasin {
       if (this.etat.fils.has(m.evenement.sessionId)) this.fusionnerFil(m.evenement.sessionId, [m.evenement], false);
     } else if (m.type === 'echo') {
       for (const f of this.surEcho) f(m.echo);
+    } else if (m.type === 'reunion') {
+      return;
     } else {
       this.changer({ notifications: [m.notification, ...this.etat.notifications].slice(0, 200) });
       for (const f of this.surNotification) f(m.notification);

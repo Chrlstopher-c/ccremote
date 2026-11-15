@@ -18,6 +18,7 @@ export interface ConfigRelais {
   readonly inactiviteMs: number;
   readonly origines: ReadonlySet<string>;
   readonly echo: { readonly url: string; readonly jeton: string } | null;
+  readonly reunionLimite: number; // demandes de Chris relayées par réunion (CCREMOTE_REUNION_LIMITE)
 }
 
 // « a=x,b=y » → Map ; « a,b » → Set
@@ -35,6 +36,10 @@ function paires(v: string | undefined): Map<string, string> {
 
 // Minutes entières positives ; une valeur absente ou fausse prend le défaut.
 function minutes(v: string | undefined, defaut: number): number {
+  return entierPositif(v, defaut);
+}
+
+function entierPositif(v: string | undefined, defaut: number): number {
   const n = Number(v);
   return v && Number.isInteger(n) && n > 0 ? n : defaut;
 }
@@ -51,34 +56,32 @@ export function chargerConfig(): ConfigRelais {
   return {
     empreinteMotDePasse: requis('CCREMOTE_EMPREINTE_MOT_DE_PASSE'),
     secretsPostes: paires(requis('CCREMOTE_SECRETS_POSTES')),
-    isolees: new Set(
-      (process.env['CCREMOTE_MACHINES_ISOLEES'] ?? '')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
-    ),
+    isolees: new Set(liste(process.env['CCREMOTE_MACHINES_ISOLEES'])),
     wol: paires(process.env['CCREMOTE_WOL']),
     diffusionWol: process.env['CCREMOTE_DIFFUSION_WOL'] ?? '255.255.255.255',
     base,
     portWeb: Number(process.env['CCREMOTE_PORT_WEB'] ?? 8766),
     // Boucle locale seulement : le tunnel Cloudflare est le seul chemin d'accès aux clients.
-    hotesWeb: (process.env['CCREMOTE_HOTES_WEB'] ?? '127.0.0.1,::1')
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+    hotesWeb: liste(process.env['CCREMOTE_HOTES_WEB'] ?? '127.0.0.1,::1'),
     fichierEchecs: process.env['CCREMOTE_ECHECS'] ?? join(dirname(base), 'echecs-connexion.json'),
     portPostes: Number(process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
     web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
     hq: process.env['CCREMOTE_HQ'] ?? join(racine, 'hq/dist'),
     inactiviteMs: minutes(process.env['CCREMOTE_INACTIVITE_MIN'], 30) * 60_000,
     echo: configEcho(),
+    reunionLimite: entierPositif(process.env['CCREMOTE_REUNION_LIMITE'], 20),
     origines: new Set(
-      (process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420')
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean),
+      liste(process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420'),
     ),
   };
+}
+
+// « a, b » → liste sans espaces ni vides
+function liste(v: string | undefined): string[] {
+  return (v ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 // Echo (cerveau sur le Pi) : facultatif ; sans ces deux variables, Quart n'a pas de vue Echo.

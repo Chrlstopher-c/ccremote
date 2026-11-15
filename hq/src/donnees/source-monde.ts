@@ -1,6 +1,8 @@
 // Responsabilité : le contrat de la source de données du monde — ce que le magasin lit et ce que les actions envoient.
 // Implémenté par le transport (relais réel) et par la démo : le reste de l'app ne sait pas laquelle tourne.
 import type { ActionSession, EtatRelais, EvenementDate, MessageClient, ReponseDialogue } from './contrat';
+import type { ServiceFichiers } from './fichiers';
+import type { FabriqueTerminal } from './terminal';
 
 export type EtatLien = 'connexion' | 'ouvert' | 'coupe';
 export type NomSource = 'demo' | 'relais';
@@ -19,6 +21,10 @@ export interface ApiMonde {
 export interface SourceMonde {
   readonly nom: NomSource;
   readonly api: ApiMonde;
+  /** Fichiers des postes (liste, lecture, écriture, renommage, suppression). */
+  readonly fichiers: ServiceFichiers;
+  /** Ouvre un terminal à distance sur un poste (shell ou session tmux). */
+  readonly ouvrirTerminal: FabriqueTerminal;
   etatInitial(): Promise<EtatRelais>;
   evenements(sessionId: string): Promise<EvenementDate[]>;
   demarrer(ecouteur: EcouteurSource): void;

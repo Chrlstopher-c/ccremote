@@ -80,6 +80,18 @@ function analyser(texte: string, statut: number): unknown {
   }
 }
 
+// Erreur d'une réponse non OK (fichiers, terminaux) : le message du relais s'il existe, sinon le statut seul.
+export async function erreurDeReponse(reponse: Response): Promise<ErreurRelais> {
+  const texte = await reponse.text().catch(() => '');
+  let donnees: unknown = null;
+  try {
+    donnees = JSON.parse(texte);
+  } catch {
+    donnees = null; // corps non JSON : on garde le statut seul
+  }
+  return new ErreurRelais(reponse.status, messageDErreur(donnees, reponse.status));
+}
+
 function messageDErreur(donnees: unknown, statut: number): string {
   if (typeof donnees === 'object' && donnees !== null && 'erreur' in donnees) {
     const { erreur } = donnees;
