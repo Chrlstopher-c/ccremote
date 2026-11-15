@@ -91,7 +91,7 @@ export class Agent {
     const p: PointMonde = { x: fumoir.x + (Math.random() - 0.5) * 50, y: fumoir.y + Math.random() * 20 };
     const posee = (): void => {
       this.corps.sens = 'bas';
-      this.corps.poser();
+      this.corps.poser('clawd-clope'); // la pause clope validée par Chris, devant l'entrée
     };
     if (!this.corps.allerA(grille, p, posee)) posee();
   }

@@ -29,6 +29,7 @@ import {
   type Question,
   valeurReponse,
 } from './questions-sdk.ts';
+import { RAISON_REDEMARRAGE } from './reprise.ts';
 import { effetRythme } from './rythme.ts';
 import type { ReponseCrochet, SessionPoste, SortieSession } from './session-poste.ts';
 import type { Suite } from './suite-du-tour.ts';
@@ -101,13 +102,16 @@ export class SessionSdk implements SessionPoste {
   private readonly delaiMcp: number;
   private readonly periodeMcp: number;
   private readonly suiviNuit: SuiviNuit;
+  private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
 
   constructor(
     private readonly p: SessionPersistee,
     private readonly env: EnvironnementSdk,
   ) {
     // Au démarrage du poste aucune requête ne vit : une session persistée est reprenable, pas active.
-    this.etat = { ...p.resume, statut: 'fermee', dialogue: null, tmux: null, attachee: false, moteur: 'sdk' };
+    this.aReprendre = p.aReprendre;
+    const statut = p.aReprendre ? p.resume.statut : 'fermee';
+    this.etat = { ...p.resume, statut, dialogue: null, tmux: null, attachee: false, moteur: 'sdk' };
     this.fabrique = env.requete ?? requeteParDefaut;
     this.traduction = env.traduction ?? TRADUCTION_PAR_DEFAUT;
     this.delaiMcp = env.delaiMcpMs ?? DELAI_MCP_MS;
@@ -128,7 +132,7 @@ export class SessionSdk implements SessionPoste {
   }
 
   get persistee(): SessionPersistee {
-    return { ...this.p, resume: this.etat, transcript: null, position: 0 };
+    return { ...this.p, resume: this.etat, transcript: null, position: 0, aReprendre: this.aReprendre };
   }
 
   get transcriptConnu(): boolean {
@@ -173,6 +177,16 @@ export class SessionSdk implements SessionPoste {
     return this.demarrer(true, message);
   }
 
+  reprendreApresRedemarrage(texte: string | null): string | null {
+    if (texte) this.emettre({ type: 'relance', raison: RAISON_REDEMARRAGE });
+    const erreur = this.etat.claudeSessionId ? this.demarrer(true, texte ?? undefined) : 'conversation inconnue';
+    if (!erreur) return null;
+    this.aReprendre = false;
+    this.emettre({ type: 'erreur', message: erreur });
+    this.maj({ statut: 'fermee' });
+    return erreur;
+  }
+
   async interrompre(): Promise<string | null> {
     const requete = this.requete;
     if (!requete) return 'session fermée';
@@ -199,6 +213,7 @@ export class SessionSdk implements SessionPoste {
 
   async fermer(): Promise<string | null> {
     const requete = this.requete;
+    this.aReprendre = false;
     this.libererRequete(TEXTE_FERMETURE);
     this.maj({ statut: 'fermee', dialogue: null });
     if (!requete) return null;
@@ -335,6 +350,7 @@ export class SessionSdk implements SessionPoste {
     this.bilan = new BilanTour();
     try {
       const requete = this.fabrique({ prompt: messagesAvecConnecteurs(fil, pret), options: this.optionsDe(reprise) });
+      this.aReprendre = true;
       this.requete = requete;
       this.fil = fil;
       void this.attendreConnecteurs(requete).then(() => liberer());
@@ -387,6 +403,7 @@ export class SessionSdk implements SessionPoste {
 
   private arreterSansErreur(requete: RequeteSdk): void {
     if (this.requete !== requete) return;
+    this.aReprendre = false;
     this.libererRequete('Session terminée');
     this.maj({ statut: 'fermee' });
   }

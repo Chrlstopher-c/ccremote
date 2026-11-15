@@ -7,6 +7,7 @@ Sortie : `public/sprites/persos/<nom>.png` (planche horizontale) + `persos.json`
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -271,6 +272,36 @@ def chris_planches() -> dict[str, list[tuple[Image.Image, int]]]:
     return planches
 
 
+def clope() -> tuple[list[tuple[Image.Image, int]], tuple[int, int]]:
+    """La pause clope validée par Chris (atelier de la mascotte), à l'unité 4 du monde, avec liseré."""
+    sys.path.insert(0, str(MASCOTTE))
+    import clawd_px  # noqa: PLC0415 — module de l'atelier, chargé à la demande
+    from clawd_clope import build  # noqa: PLC0415
+    clawd_px.U = U
+    images = [(contour(clawd_px.draw(f)), f.ms) for f in build()]
+    return images, ((8 + 4) * U, (5 + 8) * U)
+
+
+def ecrire_grille(nom: str, images: list[tuple[Image.Image, int]], ancre: tuple[int, int], par_rang: int = 12) -> dict:
+    """Comme `ecrire`, mais en grille (les longues animations dépassent la largeur maximale d'une texture)."""
+    uniques: list[bytes] = []
+    imgs: list[Image.Image] = []
+    seq = []
+    for im, ms in images:
+        cle = im.tobytes()
+        if cle not in uniques:
+            uniques.append(cle)
+            imgs.append(im)
+        seq.append([uniques.index(cle), ms])
+    w, h = imgs[0].size
+    rangs = (len(imgs) + par_rang - 1) // par_rang
+    grille = Image.new('RGBA', (w * min(par_rang, len(imgs)), h * rangs), (0, 0, 0, 0))
+    for i, im in enumerate(imgs):
+        grille.alpha_composite(im, ((i % par_rang) * w, (i // par_rang) * h))
+    grille.save(SORTIE / f'{nom}.png')
+    return {'w': w, 'h': h, 'n': len(imgs), 'seq': seq, 'ancre': list(ancre)}
+
+
 def ecrire(nom: str, images: list[tuple[Image.Image, int]], ancre: tuple[int, int]) -> dict:
     uniques: list[bytes] = []
     planche_imgs: list[Image.Image] = []
@@ -294,6 +325,8 @@ def main() -> None:
     index = {}
     for nom, imgs in clawd_planches().items():
         index[nom] = ecrire(nom, imgs, (CADRE[0] // 2, CADRE[1] - 4))
+    images_clope, ancre_clope = clope()
+    index['clawd-clope'] = ecrire_grille('clawd-clope', images_clope, ancre_clope)
     for nom, imgs in chris_planches().items():
         index[nom] = ecrire(nom, imgs, (CHRIS_CADRE[0] // 2, CHRIS_CADRE[1] - 2))
     chemin = SORTIE / 'persos.json'

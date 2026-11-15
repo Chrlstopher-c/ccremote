@@ -1,50 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { Options, PermissionResult, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import pino from 'pino';
-import type { Evenement, ResumeSession } from '../../commun/session.ts';
-import { FileAsynchrone } from './file-messages-sdk.ts';
-import type { SessionPersistee } from './persistance.ts';
-import type { SortieSession } from './session-poste.ts';
-import {
-  type EnvironnementSdk,
-  type FabriqueRequete,
-  type RequeteSdk,
-  SessionSdk,
-  type TraductionSdk,
-} from './session-sdk.ts';
-import { nouvelEtatTraduction, type SortieTraduction } from './traduction-sdk.ts';
+import { attendre, journal, nouvelleSession, persistee, RequeteFausse, traduction } from './faux-sdk.ts';
+import { type EnvironnementSdk, SessionSdk } from './session-sdk.ts';
 import { DELAI_REVEIL_MS, TEXTE_REVEIL } from './nuit.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 
-// Faux messages du SDK : seule la forme lue par le faux traducteur compte, le vrai SDK n'est jamais appelé.
-type Faux = {
-  readonly type: string;
-  readonly texte?: string;
-  readonly erreur?: string | null;
-  readonly contexte?: number;
-};
-const faux = (f: Faux): SDKMessage => f as unknown as SDKMessage; // forme factice, voir ci-dessus
-const lireFaux = (m: SDKMessage): Faux => m as unknown as Faux; // inverse de faux
-
-function traduireFaux(msg: SDKMessage): SortieTraduction {
-  const f = lireFaux(msg);
-  if (f.type === 'result') {
-    const contexte = f.contexte ?? 1200;
-    return {
-      evenements: [{ type: 'tour_fini', dureeMs: 5, contexte }],
-      finDeTour: { dureeMs: 5, contexte, erreur: f.erreur ?? null },
-    };
-  }
-  if (f.type === 'texte') return { evenements: [{ type: 'texte', texte: f.texte ?? '' }] };
-  if (f.type === 'compaction') return { evenements: [], compaction: true };
-  return { evenements: [] };
-}
-
-const traduction: TraductionSdk = { nouvelEtat: nouvelEtatTraduction, traduire: traduireFaux };
-const journal = pino({ level: 'silent' });
 const QUESTIONS = {
   questions: [
     {
@@ -58,125 +21,6 @@ const QUESTIONS = {
     },
   ],
 };
-
-type Scenario = (texte: string, requete: RequeteFausse) => Promise<Faux[]>;
-
-class RequeteFausse implements RequeteSdk {
-  readonly sortie = new FileAsynchrone<SDKMessage>();
-  interrompue = false;
-  fermee = false;
-  mcpAppels = 0;
-  private echec: unknown = null;
-
-  constructor(
-    prompt: AsyncIterable<SDKUserMessage>,
-    readonly options: Options,
-    private readonly scenario: Scenario,
-    private readonly mcp: string[][],
-  ) {
-    void this.jouer(prompt);
-  }
-
-  async *[Symbol.asyncIterator](): AsyncGenerator<SDKMessage> {
-    for await (const m of this.sortie) yield m;
-    if (this.echec) throw this.echec;
-  }
-
-  async interrupt(): Promise<unknown> {
-    this.interrompue = true;
-    return undefined;
-  }
-
-  close(): void {
-    this.fermee = true;
-    this.sortie.clore();
-  }
-
-  async mcpServerStatus(): Promise<{ readonly status: string }[]> {
-    this.mcpAppels += 1;
-    return (this.mcp.shift() ?? ['connected']).map((status) => ({ status }));
-  }
-
-  private async jouer(prompt: AsyncIterable<SDKUserMessage>): Promise<void> {
-    for await (const u of prompt) {
-      const texte = typeof u.message.content === 'string' ? u.message.content : '';
-      try {
-        for (const m of await this.scenario(texte, this)) this.sortie.push(faux(m));
-      } catch (erreur) {
-        this.echec = erreur;
-        this.sortie.clore();
-      }
-    }
-  }
-}
-
-interface Reglages {
-  readonly objectif?: string;
-  readonly env?: Record<string, string | undefined>;
-  readonly mcp?: string[][];
-  readonly configDir?: string | null;
-}
-
-function persistee(configDir: string | null, objectif: string | null = null): SessionPersistee {
-  const resume: ResumeSession = {
-    id: 'quart-1',
-    machine: 'tour',
-    projet: { machine: 'tour', chemin: '/projets/app', nom: 'app' },
-    cwd: '/projets/app',
-    titre: 'Test',
-    objectif,
-    modele: 'claude-haiku-5-5',
-    compte: 'principal',
-    autonomie: false,
-    statut: 'fermee',
-    contexte: { tokens: 0, max: 1_000_000 },
-    etapes: 0,
-    compactions: 0,
-    claudeSessionId: 'claude-abc',
-    moteur: 'sdk',
-    tmux: null,
-    attachee: false,
-    pilotee: true,
-    creeLe: '2026-11-15T00:00:00.000Z',
-    majLe: '2026-11-15T00:00:00.000Z',
-  };
-  return { resume, consignes: 'Consignes ccremote', configDir, transcript: null, position: 0 };
-}
-
-function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
-  const requetes: RequeteFausse[] = [];
-  const evenements: Evenement[] = [];
-  const fabrique: FabriqueRequete = (p) => {
-    const requete = new RequeteFausse(p.prompt, p.options, scenario, reglages.mcp ?? []);
-    requetes.push(requete);
-    return requete;
-  };
-  const sortie: SortieSession = {
-    evenement: (_id, evt) => void evenements.push(evt),
-    resume: () => undefined,
-  };
-  const env: EnvironnementSdk = {
-    journal,
-    sortie,
-    executable: null,
-    requete: fabrique,
-    traduction,
-    env: reglages.env ?? { HOME: '/home/test' },
-    socket: '/run/poste.sock',
-    delaiMcpMs: 200,
-    periodeMcpMs: 1,
-  };
-  const persistance = persistee(reglages.configDir ?? null, reglages.objectif ?? null);
-  return { session: new SessionSdk(persistance, env), requetes, evenements };
-}
-
-async function attendre(condition: () => boolean, delai = 2000): Promise<void> {
-  const fin = Date.now() + delai;
-  while (!condition()) {
-    if (Date.now() > fin) throw new Error('délai dépassé');
-    await new Promise((r) => setTimeout(r, 2));
-  }
-}
 
 function demanderPermission(
   requete: RequeteFausse,
@@ -504,3 +348,4 @@ describe('SessionSdk — rythme, fin de tour et mode nuit', () => {
     expect(session.vivante).toBe(false);
   });
 });
+

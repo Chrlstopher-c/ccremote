@@ -10,6 +10,9 @@ export const SessionPersistee = z.object({
   configDir: z.string().nullable(),
   transcript: z.string().nullable(),
   position: z.number(),
+  // Vrai tant que la session tourne (ou a planté en tour) : à reprendre au démarrage du poste. Faux après une
+  // fermeture par Chris ou une fin naturelle. Absent des fichiers d'avant : faux, donc rien ne se rouvre seul.
+  aReprendre: z.boolean().default(false),
 });
 export type SessionPersistee = z.infer<typeof SessionPersistee>;
 

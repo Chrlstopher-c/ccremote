@@ -96,20 +96,27 @@ fermer, reprendre, répondre, autonomie, nuit) et les réponses aux dialogues so
 
 ## Agent HQ (`hq/`)
 
-Un monde en jeu où chaque session est un Clawd : il travaille à son bureau, se lève quand il attend Chris, sort devant
-l'entrée quand elle est inactive. Servie par le relais (`CCREMOTE_HQ`) derrière la même authentification que l'API ; sans
-relais, la source démo la fait vivre seule.
+Agent HQ est l'app web façon jeu (Phaser 3 + Vite, interface React par-dessus) qui remplace Claude Desktop et l'appli
+mobile Claude, et l'ancienne interface `bureau/`, appelée à disparaître. Chaque session est un Clawd : il travaille à son
+bureau, se lève quand il attend Chris, sort devant l'entrée quand elle est inactive. Servie par le relais (`CCREMOTE_HQ`)
+sous `/hq/` : la page est publique, l'API reste protégée. Sans relais, la source démo la fait vivre seule.
 
-- `hq/src/donnees/` — modèle et transport. `contrat.ts` est le miroir typé des contrats de `commun/` (hq n'importe rien
-  d'autre que lui-même) ; `source-monde.ts` est l'interface lue par le magasin `monde-etat.ts` ; `transport*` = relais réel
-  (HTTP + WebSocket, jeton jamais dans l'URL) ; `demo*` = source de démonstration sur horloge injectée ; `etat-agent.ts` dit
-  ce que le monde montre d'une session (pur) ; `actions.ts` = les actions de Chris.
-- `hq/src/monde/` — le jeu Phaser : `carte/` (plan pur, chemin A* pur, rendu), `persos/` (Clawd par session, Chris),
-  `scene-monde.ts`.
-- `hq/art/` — pipeline Python hors runtime qui produit `hq/public/` : `tuiles.py` (tuiles procédurales), `objets.py` (objets
-  générés en local, découpés et mis à l'échelle), `personnages.py` (planches de Clawd et de Chris), `exporter.py` (planches
-  de la mascotte). `art/gen/` contient les scripts de génération locale.
-- L'apparence du monde est en cours de design ; la structure ci-dessus est stable.
+Carte des domaines de `hq/src/` :
+
+- `donnees/` — modèle et transport, sans affichage. `index.ts` est la surface publique ; `contrat.ts` est le miroir typé
+  des contrats de `commun/` ; `monde-etat.ts` le magasin observable ; `transport*` le relais réel (HTTP + WebSocket, jeton
+  jamais dans l'URL) ; `demo*` la source de démonstration sur horloge injectée ; `etat-agent.ts` dit ce que le monde montre
+  d'une session ; `actions.ts`, `ouverture.ts`, `reunion.ts`, `fichiers.ts`, `terminal.ts` portent les actions de Chris.
+- `monde/` — le jeu Phaser : `carte/` (plan pur, chemin A* pur, rendu), `persos/` (Clawd par session, Chris),
+  `scene-monde.ts`, `lien-donnees.ts` (quelles sessions ont un bureau, dans quel état), `ambiance.ts` (jour et nuit).
+- `ui/` — l'interface par-dessus le jeu : `bus.ts` (panneau ouvert), `contexte.tsx`, `config-relais.ts`, `Racine.tsx`,
+  `Panneau.tsx`, puis `hud/`, `agent/` (écran d'agent), `terminal/`, `fichiers/` (bibliothèque), `reunion/` (salle),
+  `nouvelle/` (embauche), `connexion/`.
+- `art/` — pipeline Python hors runtime qui produit `public/` : `oblique.py` (moteur de boîtes, une seule projection du
+  jeu), `meubles.py`, `tuiles.py`, `personnages.py` (Clawd et Chris), `marche_video.py` (marche de Chris tirée de vidéos
+  MiniMax H3), `objets.py` (ancienne voie par génération), `DIRECTION.md` (règles de rendu), `gen/` (scripts de génération).
+
+L'apparence du monde est en cours de design ; la structure ci-dessus est stable.
 
 ## Frontières
 
@@ -124,8 +131,9 @@ relais, la source démo la fait vivre seule.
 - Un poste ne rend compte que de SES sessions : le relais refuse un compte rendu d'une session d'une autre machine.
 - Les noms `service` / `manager` / `helper` ne sont pas utilisés : le nommage suit le métier (poste, relais, session,
   fil, rythme).
-
 - `hq/` ne dépend d'aucun autre dossier : il parle au relais par HTTP et WebSocket, avec son contrat miroir.
+- Dans `hq/` : `monde/` et `ui/` ne parlent aux données que par `donnees/index.ts`, et `ui/` et `monde/` ne communiquent
+  que par `ui/bus.ts`.
 
 ## Sessions pilotées et adoptées
 

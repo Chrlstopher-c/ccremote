@@ -1,5 +1,5 @@
 // Responsabilité : la liste des réunions passées de la salle — reprendre une réunion, ou en commencer une nouvelle.
-import type { Reunion } from '../../donnees/reunion';
+import type { Reunion } from '../../donnees';
 
 function date(ts: string): string {
   const d = new Date(ts);

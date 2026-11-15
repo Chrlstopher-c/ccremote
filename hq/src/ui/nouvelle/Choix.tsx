@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import type { Projet, VueMachine } from '../../donnees';
-import { MODELES } from '../../donnees/ouverture';
+import { MODELES } from '../../donnees';
 
 export function ChoixMachine(p: { machines: readonly VueMachine[]; choisie: string; choisir: (id: string) => void }) {
   if (p.machines.length === 0) return <div className="embauche-vide">Aucune machine connue du relais.</div>;

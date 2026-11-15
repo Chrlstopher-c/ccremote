@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 
 import { lireConfig, type Projet, type VueMachine } from '../../donnees';
 import { configRelais } from '../config-relais';
-import { journaliser } from '../../donnees/journal';
-import { creerOuverture, MODELE_PAR_DEFAUT, type ServiceOuverture } from '../../donnees/ouverture';
+import { journaliser } from '../../donnees';
+import { creerOuverture, MODELE_PAR_DEFAUT, type ServiceOuverture } from '../../donnees';
 import { fermer, ouvrir } from '../bus';
 import { useMonde, useMondeBrut } from '../contexte';
 

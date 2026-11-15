@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 import { etatAgent, type ResumeSession } from '../../donnees';
-import { AUTEUR_CHRIS, type MessageReunion, type Reunion } from '../../donnees/reunion';
+import { AUTEUR_CHRIS, type MessageReunion, type Reunion } from '../../donnees';
 import { useMonde } from '../contexte';
 
 type Annuaire = ReadonlyMap<string, ResumeSession>;

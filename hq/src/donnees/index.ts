@@ -46,3 +46,10 @@ export {
   type Ressource,
   type Touche,
 } from './bibliotheque';
+export {
+  creerOuverture,
+  MODELE_PAR_DEFAUT,
+  MODELES,
+  type ModeleAgent,
+  type ServiceOuverture,
+} from './ouverture';

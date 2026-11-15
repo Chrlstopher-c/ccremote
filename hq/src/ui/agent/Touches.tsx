@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import type { EvenementDate } from '../../donnees';
-import { fileEvenements, indexerBibliotheque, type Ressource } from '../../donnees/bibliotheque';
+import { fileEvenements, indexerBibliotheque, type Ressource } from '../../donnees';
 import { ouvrir } from '../bus';
 
 const ICONE: Record<string, string> = {

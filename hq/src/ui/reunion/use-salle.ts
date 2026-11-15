@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { configRelais } from '../config-relais';
-import { journaliser } from '../../donnees/journal';
+import { journaliser } from '../../donnees';
 import {
   ClientReunions,
   creerReunionsDemo,
   type ApiReunions,
   type EnvoiReunion,
   type Reunion,
-} from '../../donnees/reunion';
+} from '../../donnees';
 import { useMondeBrut } from '../contexte';
 
 const RAFRAICHIR_MS = 3_000;

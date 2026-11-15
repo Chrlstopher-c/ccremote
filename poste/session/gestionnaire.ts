@@ -8,6 +8,7 @@ import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session
 import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
+import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
@@ -47,7 +48,9 @@ export class GestionnaireSessions {
   }
 
   demarrer(): void {
-    for (const p of this.persistance.charger()) this.sessions.set(p.resume.id, this.creer(p));
+    const persistees = this.persistance.charger();
+    for (const p of persistees) this.sessions.set(p.resume.id, this.creer(p));
+    void relancerApresRedemarrage(this.reprisesPrevues(persistees), this.journal);
     void this.decouvrir();
     setInterval(() => void this.decouvrir(), PERIODE_DECOUVERTE_MS);
     setInterval(() => this.lireTout(), PERIODE_LECTURE_MS);
@@ -80,6 +83,7 @@ export class GestionnaireSessions {
       configDir,
       transcript: cheminTranscript(cwd, d.sessionId, configDir),
       position: 0,
+      aReprendre: false,
     });
     this.sessions.set(d.sessionId, session);
     const erreur = await session.lancer(d.message, d.modele ?? null);
@@ -111,6 +115,15 @@ export class GestionnaireSessions {
     } catch (erreur) {
       this.journal.error({ err: erreur }, 'écriture des sessions impossible');
     }
+  }
+
+  // Les sessions SDK qui tournaient à l'arrêt du poste, avec le texte de leur reprise.
+  private reprisesPrevues(persistees: readonly SessionPersistee[]): ReprisePrevue[] {
+    return persistees.flatMap((p) => {
+      const prevue = reprisePrevue(p);
+      const session = this.sessions.get(p.resume.id);
+      return prevue && session instanceof SessionSdk ? [{ session, texte: prevue.texte }] : [];
+    });
   }
 
   private creer(p: SessionPersistee): SessionPoste {
@@ -190,6 +203,7 @@ export class GestionnaireSessions {
       configDir: null,
       transcript: null,
       position: 0,
+      aReprendre: false,
     });
     this.sessions.set(a.id, session);
     if (a.transcript) session.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
