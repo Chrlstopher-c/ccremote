@@ -83,7 +83,8 @@ export class SceneMonde extends Phaser.Scene {
   private demarrerPiece(projet: string, sessions: ResumeSession[]): void {
     this.carte = construirePiece(projet, sessions.length);
     this.grille = grilleDe(this.carte, {});
-    const meubles = dessinerPiece(this, projet, categorieDe(projet).accent);
+    const categorie = categorieDe(projet);
+    const meubles = dessinerPiece(this, projet, categorie.id, categorie.accent);
     sessions.forEach((s, i) => {
       const poste = this.carte?.postes[i];
       if (poste && this.carte) this.agents.set(s.id, new Agent(this, poste, this.carte, this.r.persos));
