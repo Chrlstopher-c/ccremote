@@ -2,11 +2,11 @@
 // couloir central ; au nord, une pièce par projet où ses agents travaillent ensemble ; au sud, les pièces communes
 // (bibliothèque, réunion, hall d'entrée avec café, salle serveurs) ; dehors, pelouse et allée. Les murs sont des cases
 // (le rendu dessine leur dessus et leur face, voir peinture/murs.ts). Pur : aucune notion de Phaser, testable.
-import { meublerCommunes, meublerProjet, type Communes, type Hauteurs } from './meubler';
+import { meublerCommunes, meublerProjet, type Communes, type Emprises } from './meubler';
 
 export const TUILE = 32;
 
-export type Nature = 'dehors' | 'sol' | 'mur';
+export type Nature = 'dehors' | 'sol' | 'mur' | 'face'; // face : pied d'un mur du fond, on n'y marche pas
 export type Sol =
   | 'herbe' | 'allee' | 'paves' | 'dalles' | 'seuil' | 'parquet-a' | 'parquet-b' | 'carrelage'
   | 'moquette-verte' | 'moquette-bleue' | 'beton';
@@ -62,10 +62,12 @@ export interface Carte {
 
 const MARGE = 5; // pelouse autour du bâtiment
 const NORD = 3; // rang du mur extérieur nord
-const HAUT_BUREAU = 6; // rangs d'une pièce de projet (5 utiles + le mur du couloir)
-const HAUT_COULOIR = 4; // 3 rangs utiles + le mur des pièces communes
-const HAUT_COMMUNE = 7; // 6 rangs utiles + le mur extérieur sud
-const DEHORS_SUD = 8;
+// Hauteurs en rangs, mur du haut compris : chaque mur du fond montre sa face sur les deux rangs sous lui (RANGS_FACE).
+const HAUT_BUREAU = 7; // mur + 2 rangs de face + 4 rangs utiles
+const HAUT_COULOIR = 6; // mur + 2 rangs de face + 3 rangs utiles
+const HAUT_COMMUNE = 8; // mur + 2 rangs de face + 5 rangs utiles
+const DEHORS_SUD = 10; // façade (2 rangs) + parvis et allée
+export const RANGS_FACE = 2;
 const PAR_AGENT = 3; // cases de large par bureau
 const COMMUNES_MIN = [7, 9, 8, 6] as const; // bibliothèque, réunion, hall, serveurs
 
@@ -152,7 +154,7 @@ function bureaux(base: Base, projets: readonly number[], noms: readonly string[]
     const r = { x, y: NORD, w: w + 2, h: HAUT_BUREAU + 1 };
     piece(cases, r, i % 2 ? 'parquet-b' : 'parquet-a');
     percer(base, x + 1, g.couloirN, 2);
-    base.plaques.push({ texte: noms[i] ?? 'libre', x: (x + 3 + (w - 2) / 2) * TUILE, y: g.couloirN * TUILE + 21 });
+    base.plaques.push({ texte: noms[i] ?? 'libre', x: (x + 3 + (w - 2) / 2) * TUILE, y: g.couloirN * TUILE + 40 });
     for (let f = x + 3; f + 1 < x + w; f += 5) base.fenetres.push({ x: f, y: NORD }, { x: f + 1, y: NORD });
     x += w + 1;
     return r;
@@ -178,18 +180,20 @@ function communes(base: Base, l: readonly number[]): Communes {
 
 function dehors(base: Base, entreeX: number): { x: number; y: number } {
   const { g, cases, objets } = base;
-  poser(cases, { x: g.bx - 1, y: g.basY + 1, w: g.batW + 2, h: 2 }, 'dehors', 'paves');
-  poser(cases, { x: entreeX - 1, y: g.basY + 3, w: 4, h: DEHORS_SUD - 2 }, 'dehors', 'allee');
+  const parvis = g.basY + RANGS_FACE + 1;
+  poser(cases, { x: g.bx - 1, y: parvis, w: g.batW + 2, h: 2 }, 'dehors', 'paves');
+  poser(cases, { x: entreeX - 1, y: parvis + 2, w: 4, h: DEHORS_SUD - RANGS_FACE - 2 }, 'dehors', 'allee');
+  poser(cases, { x: entreeX, y: g.basY + 1, w: 2, h: RANGS_FACE }, 'dehors', 'paves');
   for (let x = g.bx + 2; x < g.bx + g.batW - 2; x += 4) {
     if (Math.abs(x - entreeX) > 2) base.fenetres.push({ x, y: g.basY });
   }
   for (const dx of [-2, 4]) {
-    objets.push({ nom: 'lampadaire', x: centreCase(entreeX + dx), y: (g.basY + 5) * TUILE, bloque: true });
+    objets.push({ nom: 'lampadaire', x: centreCase(entreeX + dx), y: (parvis + 3) * TUILE, bloque: true });
   }
   const arbres: [number, number][] = [[1, 4], [2, 10], [1, 16], [g.w - 2, 4], [g.w - 3, 11], [g.w - 2, 17]];
   for (let x = g.bx + 4; x < g.bx + g.batW; x += 9) arbres.push([x, 1]);
   for (const [x, y] of arbres) objets.push({ nom: 'arbre', x: centreCase(x), y: (y + 1) * TUILE, bloque: true });
-  const fumoir = { x: (entreeX + 7) * TUILE, y: (g.basY + 6) * TUILE };
+  const fumoir = { x: (entreeX + 7) * TUILE, y: (parvis + 4) * TUILE };
   objets.push({ nom: 'banc', x: fumoir.x + 40, y: fumoir.y - 2, bloque: true });
   objets.push({ nom: 'cendrier', x: fumoir.x - 4, y: fumoir.y - 4, bloque: true });
   return fumoir;
@@ -203,8 +207,22 @@ function postesDesSessions(projets: readonly string[], parProjet: readonly Poste
   });
 }
 
+/** Les deux rangs sous chaque mur qui a un bras horizontal deviennent sa face (un mur vertical peut la traverser). */
+function marquerFaces(cases: Case[][]): void {
+  const mur = (x: number, y: number): boolean => cases[y]?.[x]?.nature === 'mur';
+  for (let y = cases.length - 1; y >= 0; y--) {
+    for (let x = 0; x < (cases[y]?.length ?? 0); x++) {
+      if (!mur(x, y) || !(mur(x - 1, y) || mur(x + 1, y))) continue;
+      for (let k = 1; k <= RANGS_FACE; k++) {
+        const c = cases[y + k]?.[x];
+        if (c && (c.nature === 'sol' || c.nature === 'dehors') && c.sol !== 'seuil') c.nature = 'face';
+      }
+    }
+  }
+}
+
 /** Le monde complet : `projets` = le projet de chaque session, dans l'ordre (postes[i] = poste de la session i). */
-export function construireCarte(projets: readonly string[], hauteurs: Hauteurs = {}): Carte {
+export function construireCarte(projets: readonly string[], emprises: Emprises = {}): Carte {
   const { noms } = regrouper(projets);
   const agents = noms.map((n) => projets.filter((p) => p === n).length);
   const l = largeurs(agents);
@@ -213,13 +231,14 @@ export function construireCarte(projets: readonly string[], hauteurs: Hauteurs =
   const base: Base = { g, cases, objets: [], plaques: [], portes: [], fenetres: [] };
   piece(cases, { x: g.bx, y: NORD, w: g.batW, h: g.basY - NORD + 1 }, 'dalles');
   const pieces = bureaux(base, l.projets, noms);
-  const parProjet = pieces.map((r, i) => meublerProjet(r, agents[i] ?? 0, base.objets, hauteurs));
+  const parProjet = pieces.map((r, i) => meublerProjet(r, agents[i] ?? 0, base.objets, emprises));
   const c = communes(base, l.communes);
-  const lieux = meublerCommunes(c, base.objets, hauteurs);
+  const lieux = meublerCommunes(c, base.objets, emprises);
   const entreeX = c.hall.x + Math.floor(c.hall.w / 2) - 1;
   percer(base, entreeX, g.basY, 2);
   const fumoir = dehors(base, entreeX);
-  const entree = { x: (entreeX + 1) * TUILE, y: (g.basY + 4) * TUILE };
+  marquerFaces(cases);
+  const entree = { x: (entreeX + 1) * TUILE, y: (g.basY + RANGS_FACE + 3) * TUILE };
   return {
     largeur: g.w, hauteur: g.h, cases, objets: base.objets, postes: postesDesSessions(projets, parProjet),
     plaques: base.plaques, portes: base.portes, fenetres: base.fenetres, lieux: { ...lieux, fumoir, entree },

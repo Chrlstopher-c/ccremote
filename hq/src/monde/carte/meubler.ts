@@ -1,8 +1,8 @@
 // Responsabilité : meubler les pièces du plan — bureaux des agents dans la pièce d'un projet, meubles des pièces
 // communes. Règles (art/DIRECTION.md) : toute l'emprise d'un meuble est sur du sol ; un meuble adossé au mur du fond
-// ne dépasse JAMAIS le dessus du mur (son sommet s'arrête sur la face, comme dans The Escapists) : il est donc posé
-// d'après la hauteur réelle de son image. Pur, testable.
-import { TUILE, type Lieu, type Objet, type Poste, type Rect } from './plan';
+// pose son emprise sur le premier rang de sol, devant la face du mur (qui est plus haute que lui : il ne dépasse
+// jamais le dessus du mur). Pur, testable.
+import { RANGS_FACE, TUILE, type Lieu, type Objet, type Poste, type Rect } from './plan';
 
 export interface Communes {
   biblio: Rect;
@@ -11,28 +11,30 @@ export interface Communes {
   serveurs: Rect;
 }
 
-/** Hauteur dessinée de chaque meuble, en pixels du monde (public/objets.json). */
-export type Hauteurs = Readonly<Record<string, number>>;
+/** Profondeur au sol de chaque meuble, en pixels du monde (`emprise` de public/objets.json). */
+export type Emprises = Readonly<Record<string, number>>;
 
 const PAR_AGENT = 3;
-const BAS_COIFFE = 14; // bas du dessus d'un mur sous le haut de sa case (7 px d'art × 2)
-const HAUTEUR_DEFAUT = 64;
+const EMPRISE_DEFAUT = 20;
 
 const cx = (cases: number): number => cases * TUILE;
 
-/** Pied d'un meuble adossé au mur du fond de `r` : son sommet touche le bas du dessus du mur, sans le chevaucher. */
-export function adosse(r: Rect, nom: string, h: Hauteurs): number {
-  return r.y * TUILE + BAS_COIFFE + (h[nom] ?? HAUTEUR_DEFAUT);
+/** Haut du premier rang de sol d'une pièce : sous son mur du fond et les rangs de sa face. */
+export const premierRang = (r: Rect): number => (r.y + 1 + RANGS_FACE) * TUILE;
+
+/** Pied d'un meuble adossé au mur du fond de `r` : son emprise commence au premier rang de sol. */
+export function adosse(r: Rect, nom: string, e: Emprises): number {
+  return premierRang(r) + (e[nom] ?? EMPRISE_DEFAUT);
 }
 
-function contreLeMur(objets: Objet[], r: Rect, nom: string, x: number, h: Hauteurs): number {
+function contreLeMur(objets: Objet[], r: Rect, nom: string, x: number, h: Emprises): number {
   const y = adosse(r, nom, h);
   objets.push({ nom, x, y, bloque: true });
   return y;
 }
 
 /** Bureaux côte à côte contre le mur du fond, une plante dans le coin ; un poste par agent. */
-export function meublerProjet(r: Rect, agents: number, objets: Objet[], h: Hauteurs): Poste[] {
+export function meublerProjet(r: Rect, agents: number, objets: Objet[], h: Emprises): Poste[] {
   contreLeMur(objets, r, 'plante', cx(r.x + 1.5), h);
   if (r.w - 2 >= PAR_AGENT * agents + 5) contreLeMur(objets, r, 'plante', cx(r.x + r.w - 1.5), h);
   return Array.from({ length: agents }, (_, k) => {
@@ -42,30 +44,30 @@ export function meublerProjet(r: Rect, agents: number, objets: Objet[], h: Haute
   });
 }
 
-function bibliotheque(r: Rect, objets: Objet[], h: Hauteurs): void {
+function bibliotheque(r: Rect, objets: Objet[], h: Emprises): void {
   for (let x = r.x + 1.8; x < r.x + r.w - 5; x += 1.6) contreLeMur(objets, r, 'etagere', cx(x), h);
-  objets.push({ nom: 'tapis', x: cx(r.x + r.w / 2), y: cx(r.y + 5), bloque: false, auSol: true });
-  objets.push({ nom: 'canape', x: cx(r.x + r.w / 2), y: cx(r.y + 6) - 2, bloque: true });
+  objets.push({ nom: 'tapis', x: cx(r.x + r.w / 2), y: premierRang(r) + 3 * TUILE, bloque: false, auSol: true });
+  objets.push({ nom: 'canape', x: cx(r.x + r.w / 2), y: premierRang(r) + 4 * TUILE + 30, bloque: true });
 }
 
-function salleReunion(r: Rect, objets: Objet[], h: Hauteurs): { x: number; y: number } {
-  const table = { x: cx(r.x + r.w / 2), y: cx(r.y + 4) + 24 };
+function salleReunion(r: Rect, objets: Objet[], h: Emprises): { x: number; y: number } {
+  const table = { x: cx(r.x + r.w / 2), y: premierRang(r) + 2 * TUILE + 30 };
   objets.push({ nom: 'table', ...table, bloque: true });
   contreLeMur(objets, r, 'plante', cx(r.x + 1.5), h);
-  objets.push({ nom: 'plante', x: cx(r.x + 1.5), y: cx(r.y + 6) + 4, bloque: true });
+  objets.push({ nom: 'plante', x: cx(r.x + 1.5), y: premierRang(r) + 4 * TUILE + 28, bloque: true });
   return { x: table.x, y: table.y + 30 };
 }
 
-function hall(r: Rect, objets: Objet[], h: Hauteurs): void {
+function hall(r: Rect, objets: Objet[], h: Emprises): void {
   contreLeMur(objets, r, 'cafe', cx(r.x + 1.8), h);
   contreLeMur(objets, r, 'distributeur', cx(r.x + 3.1), h);
   contreLeMur(objets, r, 'plante', cx(r.x + r.w - 1.5), h);
-  objets.push({ nom: 'canape', x: cx(r.x + r.w - 3), y: cx(r.y + 5), bloque: true });
+  objets.push({ nom: 'canape', x: cx(r.x + r.w - 3), y: premierRang(r) + 3 * TUILE, bloque: true });
 }
 
-function serveurs(r: Rect, objets: Objet[], h: Hauteurs): { x: number; y: number } {
+function serveurs(r: Rect, objets: Objet[], h: Emprises): { x: number; y: number } {
   for (let x = r.x + 1.5; x < r.x + r.w - 4.6; x += 1.2) contreLeMur(objets, r, 'serveur', cx(x), h);
-  const crt = { x: cx(r.x + 2), y: cx(r.y + 5) + 16 };
+  const crt = { x: cx(r.x + 2), y: premierRang(r) + 3 * TUILE + 10 };
   objets.push({ nom: 'crt', ...crt, bloque: true });
   return { x: crt.x + 8, y: crt.y + 26 };
 }
@@ -74,7 +76,7 @@ function serveurs(r: Rect, objets: Objet[], h: Hauteurs): { x: number; y: number
 export function meublerCommunes(
   c: Communes,
   objets: Objet[],
-  h: Hauteurs,
+  h: Emprises,
 ): Record<Exclude<Lieu, 'fumoir' | 'entree'>, { x: number; y: number }> {
   bibliotheque(c.biblio, objets, h);
   const reunion = salleReunion(c.reunion, objets, h);

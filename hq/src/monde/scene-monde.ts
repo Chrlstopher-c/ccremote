@@ -57,8 +57,8 @@ export class SceneMonde extends Phaser.Scene {
     const magasin = this.registry.get('magasin') as MagasinMonde; // posé par main.ts avant le premier rendu
     const sessions = sessionsDuMonde(magasin.lire());
     this.cle = cleSessions(sessions);
-    const hauteurs = Object.fromEntries(Object.entries(this.r.objets).map(([nom, o]) => [nom, o.h]));
-    this.carte = construireCarte(sessions.map((s) => s.projet.nom), hauteurs);
+    const emprises = Object.fromEntries(Object.entries(this.r.objets).map(([nom, o]) => [nom, o.emprise]));
+    this.carte = construireCarte(sessions.map((s) => s.projet.nom), emprises);
     this.grille = grilleDe(this.carte, this.r.objets);
     dessinerCarte(this, this.carte);
     const poses = poserObjets(this, this.carte, this.r.objets);
