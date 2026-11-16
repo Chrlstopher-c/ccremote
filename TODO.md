@@ -31,6 +31,8 @@
 - [ ] Chris : reconnecter le compte Claude du portable (« Login expired » à l'ouverture d'une session via le MCP).
 - [ ] MCP Quart : l'installer sur le Pi et le VPS si des sessions y en ont besoin (`QUART_JETON_CIBLE=… mcp/installer.sh <hôte>`).
 
+- [ ] Déploiement : la sauvegarde de la base avant migration est un `cp` de la base vivante (copie incohérente constatée le 16/11) → `sqlite3 .backup`.
+
 ## Ensuite
 
 - [ ] Relever la consommation réelle d'une vraie session autonome longue (contexte avant/après chaque compaction,
