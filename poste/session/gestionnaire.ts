@@ -178,7 +178,7 @@ export class GestionnaireSessions {
 
   private async decouvrir(): Promise<void> {
     const panes = await tmux.lister();
-    const procs = processusClaude([null, ...Object.values(this.config.comptes)]);
+    const procs = processusClaude([null, ...Object.values(this.config.comptes)], this.journal);
     const parPid = new Map(procs.map((p) => [p.pid, p]));
     const entrees = lireRegistreCc(dossierRegistreCc(), this.journal);
     const vus = new Set<string>();

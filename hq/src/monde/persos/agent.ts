@@ -4,7 +4,7 @@
 import type Phaser from 'phaser';
 
 import type { Grille, PointMonde } from '../carte/chemin';
-import { POLICE } from '../carte/rendu-carte';
+import { POLICE } from '../station/rendu-station';
 import type { Carte, Poste } from '../carte/plan';
 import type { PlanchePerso } from '../sprites';
 import { Marcheur } from './marcheur';

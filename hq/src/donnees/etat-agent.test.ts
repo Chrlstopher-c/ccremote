@@ -2,7 +2,7 @@
 /// <reference types="bun" />
 import { describe, expect, test } from 'bun:test';
 import type { ResumeSession } from './contrat';
-import { dureeLisible, etatAgent, SEUIL_INACTIVITE_MS, type SessionAgent } from './etat-agent';
+import { dureeLisible, etatAgent, SEUIL_EXTINCTION_MS, SEUIL_INACTIVITE_MS, type SessionAgent } from './etat-agent';
 
 const T0 = Date.parse('2026-11-15T10:00:00.000Z');
 const il = (decalageMs: number): string => new Date(T0 + decalageMs).toISOString();
@@ -26,6 +26,28 @@ describe('etatAgent', () => {
   test('erreur et session fermée ont leur propre état', () => {
     expect(etatAgent(session({ statut: 'erreur' }), T0)).toBe('erreur');
     expect(etatAgent(session({ statut: 'fermee' }), T0)).toBe('eteinte');
+  });
+
+  test('une machine hors ligne rend ses sessions éteintes, quel que soit leur statut', () => {
+    for (const statut of ['travail', 'question', 'erreur', 'attente', 'terminee'] as const) {
+      expect(etatAgent({ ...session({ statut, majLe: il(-MINUTE) }), machineEnLigne: false }, T0)).toBe('eteinte');
+    }
+  });
+
+  test('une machine en ligne, ou dont l’état est inconnu, ne change rien', () => {
+    expect(etatAgent({ ...session({ statut: 'travail' }), machineEnLigne: true }, T0)).toBe('travail');
+    expect(etatAgent(session({ statut: 'travail' }), T0)).toBe('travail');
+  });
+
+  test('une attente sans activité depuis plus de 24 h est éteinte, même déclarée inactive', () => {
+    const ancienne = session({ statut: 'attente', majLe: il(-SEUIL_EXTINCTION_MS - MINUTE), inactiveDepuis: il(0) });
+    expect(etatAgent(ancienne, T0)).toBe('eteinte');
+  });
+
+  test('la frontière des 24 h : une attente de moins de 24 h reste inactive, au-delà elle s’éteint', () => {
+    const avant = session({ statut: 'attente', majLe: il(0) });
+    expect(etatAgent(avant, T0 + SEUIL_EXTINCTION_MS - MINUTE)).toBe('inactive');
+    expect(etatAgent(avant, T0 + SEUIL_EXTINCTION_MS + MINUTE)).toBe('eteinte');
   });
 
   test('démarrage, travail et compaction donnent travail, quelle que soit l ancienneté', () => {

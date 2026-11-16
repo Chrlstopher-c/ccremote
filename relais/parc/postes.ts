@@ -144,7 +144,20 @@ export class Postes {
       this.registre.enregistrerSession(s);
       this.diffuserSession(s.id);
     }
+    this.fermerNonAnnoncees(machine, new Set(m.sessions.map((s) => s.id)));
     this.diffuserMachine(machine);
+  }
+
+  // Une session que le poste n'annonce plus n'a plus de processus qu'il suit : elle est fermée, pas laissée « en
+  // attente » pour toujours.
+  private fermerNonAnnoncees(machine: string, annoncees: ReadonlySet<string>): void {
+    const maintenant = new Date().toISOString();
+    for (const s of this.registre.sessions(true)) {
+      if (s.machine !== machine || s.statut === 'fermee' || annoncees.has(s.id)) continue;
+      this.journal.info({ machine, sessionId: s.id, statut: s.statut }, 'session absente de l’annonce : fermée');
+      this.registre.enregistrerSession({ ...s, statut: 'fermee', majLe: maintenant });
+      this.diffuserSession(s.id);
+    }
   }
 
   private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {

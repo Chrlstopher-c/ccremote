@@ -3,8 +3,9 @@
 import Phaser from 'phaser';
 
 import { grilleDe, type Grille } from './carte/chemin';
-import { construireCarte, TUILE, type Carte } from './carte/plan';
-import { dessinerCarte, poserObjets, poserPlaques } from './carte/rendu-carte';
+import { TUILE, type Carte } from './carte/plan';
+import { construireStation } from './station/plan-station';
+import { chargerKit, dessinerStation, poserObjetsStation } from './station/rendu-station';
 import { Agent } from './persos/agent';
 import { Marcheur } from './persos/marcheur';
 import { poserAmbiance } from './ambiance';
@@ -31,6 +32,7 @@ export class SceneMonde extends Phaser.Scene {
     etapeChargement('description du monde…');
     this.load.on('loaderror', (f: Phaser.Loader.File) => erreurChargement(`fichier introuvable : ${f.url}`));
     chargerIndex(this);
+    chargerKit(this);
   }
 
   create(): void {
@@ -57,12 +59,11 @@ export class SceneMonde extends Phaser.Scene {
     const magasin = this.registry.get('magasin') as MagasinMonde; // posé par main.ts avant le premier rendu
     const sessions = sessionsDuMonde(magasin.lire());
     this.cle = cleSessions(sessions);
-    const emprises = Object.fromEntries(Object.entries(this.r.objets).map(([nom, o]) => [nom, o.emprise]));
-    this.carte = construireCarte(sessions.map((s) => s.projet.nom), emprises);
+    const station = construireStation(sessions.map((s) => s.projet.nom));
+    this.carte = station.carte;
     this.grille = grilleDe(this.carte, this.r.objets);
-    dessinerCarte(this, this.carte);
-    const poses = poserObjets(this, this.carte, this.r.objets);
-    poserPlaques(this, this.carte);
+    dessinerStation(this, station);
+    const poses = poserObjetsStation(this, this.carte.objets);
     poserAmbiance(this, this.carte);
     sessions.forEach((s, i) => {
       const poste = this.carte.postes[i];
@@ -127,13 +128,12 @@ export class SceneMonde extends Phaser.Scene {
       return { machine: s?.machine ?? e.machines[0]?.id ?? '', cwd: s?.cwd ?? e.machines[0]?.racines[0] ?? '/' };
     };
     const panneaux: Record<string, () => Panneau> = {
-      crt: () => ({ type: 'terminal', ...contexte(), titre: 'Salle serveurs' }),
-      serveur: () => ({ type: 'terminal', ...contexte(), titre: 'Salle serveurs' }),
-      etagere: () => {
+      baie: () => ({ type: 'terminal', ...contexte(), titre: 'Salle des machines' }),
+      biblio: () => {
         const c = contexte();
         return { type: 'fichiers', machine: c.machine, chemin: c.cwd };
       },
-      table: () => ({ type: 'reunion' }),
+      'table-cafe': () => ({ type: 'reunion' }),
     };
     for (const { nom, image } of poses) {
       const panneau = panneaux[nom];

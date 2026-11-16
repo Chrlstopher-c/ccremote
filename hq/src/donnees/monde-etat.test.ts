@@ -10,8 +10,9 @@ import type {
   ResumeSession,
   VueMachine,
 } from './contrat';
+import { etatAgent } from './etat-agent';
 import { MagasinMonde } from './monde-etat';
-import { projetsDuMonde, reunionsTriees, sessionsActives, SESSIONS_MAX } from './monde-selecteurs';
+import { projetsDuMonde, reunionsTriees, sessionParId, sessionsActives, SESSIONS_MAX } from './monde-selecteurs';
 
 const MAINTENANT = '2026-11-15T10:00:00.000Z';
 
@@ -157,6 +158,20 @@ describe('sessionsActives : ce que le monde montre', () => {
     const actives = sessionsActives(monde(nombreuses), t);
     expect(actives).toHaveLength(SESSIONS_MAX);
     expect(actives.map((s) => s.id)).not.toContain(`s${SESSIONS_MAX + 9}`);
+  });
+
+  test('une session dont la machine est hors ligne est éteinte, même non fermée, le reste de la machine suit', () => {
+    const magasin = new MagasinMonde();
+    magasin.initialiser({
+      ...etatInitial([session('hors-ligne', { machine: 'poste-b' }), session('en-ligne')]),
+      machines: [machine('poste-a'), { ...machine('poste-b'), enLigne: false }],
+    });
+    const etat = magasin.lire();
+    const etats = Object.fromEntries(sessionsActives(etat, t).map((s) => [s.id, etatAgent(s, t)]));
+    expect(etats).toEqual({ 'hors-ligne': 'eteinte', 'en-ligne': 'travail' });
+    const horsLigne = sessionParId(etat, 'hors-ligne');
+    expect(horsLigne?.machineEnLigne).toBe(false);
+    expect(horsLigne && etatAgent(horsLigne, t)).toBe('eteinte');
   });
 });
 

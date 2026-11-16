@@ -3,6 +3,7 @@
 import type Phaser from 'phaser';
 
 import { chemin, type Grille, type PointMonde } from '../carte/chemin';
+import { TUILE } from '../carte/plan';
 import type { PlanchePerso } from '../sprites';
 
 export type Sens = 'bas' | 'haut' | 'gauche' | 'droite';
@@ -138,7 +139,7 @@ export class Marcheur {
     const nx = this.sprite.x + (vx / n) * pas;
     const ny = this.sprite.y + (vy / n) * pas;
     const libre = (x: number, y: number): boolean =>
-      grille.libre[Math.floor((y - 2) / 32)]?.[Math.floor(x / 32)] === true;
+      grille.libre[Math.floor((y - 2) / TUILE)]?.[Math.floor(x / TUILE)] === true;
     if (libre(nx, this.sprite.y)) this.sprite.x = nx;
     if (libre(this.sprite.x, ny)) this.sprite.y = ny;
     this.sens = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? 'droite' : 'gauche') : vy > 0 ? 'bas' : 'haut';
