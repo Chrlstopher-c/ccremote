@@ -8,8 +8,18 @@ export interface ProjetVue {
   readonly sessions: number;
 }
 
-export function sessionsActives(etat: EtatMonde): ResumeSession[] {
-  return etat.sessions.filter((s) => !s.archivee);
+/** Une session fermée reste visible un jour (« a fini »), puis seul l'historique la garde. */
+export const FERMEE_VISIBLE_MS = 24 * 3600 * 1000;
+/** Plafond du monde : la prod garde des milliers de sessions fermées, le monde n'en montre que les plus récentes. */
+export const SESSIONS_MAX = 40;
+
+// Sessions du monde : non archivées, vivantes ou fermées depuis moins d'un jour, les plus récentes d'abord retenues.
+export function sessionsActives(etat: EtatMonde, maintenant = Date.now()): ResumeSession[] {
+  const visibles = etat.sessions.filter((s) => !s.archivee
+    && (s.statut !== 'fermee' || maintenant - (Date.parse(s.majLe) || 0) < FERMEE_VISIBLE_MS));
+  if (visibles.length <= SESSIONS_MAX) return visibles;
+  const recentes = new Set([...visibles].sort((a, b) => b.majLe.localeCompare(a.majLe)).slice(0, SESSIONS_MAX));
+  return visibles.filter((s) => recentes.has(s));
 }
 
 // Réunions de la plus récente à la plus ancienne : la date de dernier message, à défaut la date de création.

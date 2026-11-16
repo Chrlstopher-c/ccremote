@@ -142,5 +142,6 @@
   to { transform: none; opacity: 1; }
 }
 
-/* Pixelify Sans dessine mal la ligature « fi » (« fini » lu « Ani ») : ligatures coupées partout. */
-html { font-variant-ligatures: none; }
+/* Pixelify Sans dessine mal la ligature « fi » (« fini » lu « Ani ») : ligatures coupées partout — sur chaque élément,
+   car boutons et champs n'héritent pas des réglages de police. */
+*, *::before, *::after { font-variant-ligatures: none; }

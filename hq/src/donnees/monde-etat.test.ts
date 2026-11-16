@@ -11,7 +11,7 @@ import type {
   VueMachine,
 } from './contrat';
 import { MagasinMonde } from './monde-etat';
-import { projetsDuMonde, reunionsTriees, sessionsActives } from './monde-selecteurs';
+import { projetsDuMonde, reunionsTriees, sessionsActives, SESSIONS_MAX } from './monde-selecteurs';
 
 const MAINTENANT = '2026-11-15T10:00:00.000Z';
 
@@ -131,6 +131,32 @@ describe('MagasinMonde : sessions et machines', () => {
     expect(projetsDuMonde(magasin.lire())).toEqual([
       { projet: { machine: 'poste-a', chemin: '/demo/agent-hq', nom: 'agent-hq' }, sessions: 1 },
     ]);
+  });
+});
+
+describe('sessionsActives : ce que le monde montre', () => {
+  const t = Date.parse(MAINTENANT);
+  const il_y_a = (h: number): string => new Date(t - h * 3600 * 1000).toISOString();
+  const monde = (sessions: ResumeSession[]): ReturnType<MagasinMonde['lire']> => {
+    const magasin = new MagasinMonde();
+    magasin.initialiser(etatInitial(sessions));
+    return magasin.lire();
+  };
+
+  test('une session fermée reste un jour, puis disparaît du monde', () => {
+    const etat = monde([
+      session('vivante'),
+      session('fermee-hier', { statut: 'fermee', majLe: il_y_a(2) }),
+      session('fermee-vieille', { statut: 'fermee', majLe: il_y_a(30) }),
+    ]);
+    expect(sessionsActives(etat, t).map((s) => s.id)).toEqual(['vivante', 'fermee-hier']);
+  });
+
+  test('au-delà du plafond, seules les plus récentes restent', () => {
+    const nombreuses = Array.from({ length: SESSIONS_MAX + 10 }, (_, i) => session(`s${i}`, { majLe: il_y_a(i / 10) }));
+    const actives = sessionsActives(monde(nombreuses), t);
+    expect(actives).toHaveLength(SESSIONS_MAX);
+    expect(actives.map((s) => s.id)).not.toContain(`s${SESSIONS_MAX + 9}`);
   });
 });
 

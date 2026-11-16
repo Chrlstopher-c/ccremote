@@ -4,6 +4,7 @@ import type { ConfigMonde } from './config';
 import { creerSourceDemo } from './demo';
 import { journaliser } from './journal';
 import type { MagasinMonde } from './monde-etat';
+import { sessionsActives } from './monde-selecteurs';
 import type { EtatLien, SourceMonde } from './source-monde';
 import { creerSourceRelais } from './transport';
 
@@ -37,8 +38,15 @@ async function synchroniser(source: SourceMonde, magasin: MagasinMonde): Promise
     journaliser('error', 'état du monde indisponible', { source: source.nom, erreur: String(erreur) });
     throw erreur;
   }
-  await Promise.all(magasin.lire().sessions.map((s) => chargerFil(source, magasin, s.id)));
+  const ids = sessionsActives(magasin.lire()).map((s) => s.id);
+  // Quatre fils à la fois : un navigateur de téléphone sature au-delà de quelques dizaines de requêtes simultanées.
+  const travailleur = async (): Promise<void> => {
+    for (let id = ids.shift(); id; id = ids.shift()) await chargerFil(source, magasin, id);
+  };
+  await Promise.all(Array.from({ length: FILS_EN_PARALLELE }, travailleur));
 }
+
+const FILS_EN_PARALLELE = 4;
 
 async function chargerFil(source: SourceMonde, magasin: MagasinMonde, sessionId: string): Promise<void> {
   try {

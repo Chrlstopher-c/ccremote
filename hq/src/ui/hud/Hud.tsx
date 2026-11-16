@@ -3,7 +3,7 @@
 // notifications navigateur quand un agent se bloque et que l'onglet est caché.
 import { useEffect, useMemo, useRef } from 'react';
 
-import { etatAgent, type ResumeSession } from '../../donnees';
+import { etatAgent, sessionsActives, type ResumeSession } from '../../donnees';
 import { ouvrir } from '../bus';
 import { useMonde } from '../contexte';
 import './hud.css';
@@ -17,29 +17,30 @@ function prevenir(bloquees: readonly ResumeSession[]): void {
   for (const s of bloquees) new Notification(`${s.projet.nom} t'attend`, { body: s.titre, tag: s.id });
 }
 
-function Compteur(p: { classe: string; titre: string; sessions: readonly ResumeSession[] }) {
+function Compteur(p: { classe: string; titres: readonly [string, string]; sessions: readonly ResumeSession[] }) {
   if (!p.sessions.length) return null;
   const premiere = p.sessions[0];
+  const titre = p.sessions.length > 1 ? p.titres[1] : p.titres[0];
   return (
-    <button className={`hud-compteur ${p.classe}`} title={p.titre}
+    <button className={`hud-compteur ${p.classe}`} title={titre}
       onClick={() => premiere && ouvrir({ type: 'agent', sessionId: premiere.id })}>
-      <b>{p.sessions.length}</b> {p.titre}
+      <b>{p.sessions.length}</b> {titre}
     </button>
   );
 }
 
 export function Hud() {
-  const sessions = useMonde((e) => e.sessions);
+  const etat = useMonde((e) => e);
   const machines = useMonde((e) => e.machines);
   const lien = useMonde((e) => e.lien);
   const { bloquees, finies } = useMemo(() => {
     const t = Date.now();
-    const actives = sessions.filter((s) => !s.archivee);
+    const actives = sessionsActives(etat, t);
     return {
       bloquees: actives.filter((s) => etatAgent(s, t) === 'bloque'),
       finies: actives.filter((s) => etatAgent(s, t) === 'fini'),
     };
-  }, [sessions]);
+  }, [etat]);
   const deja = useRef(new Set<string>());
   useEffect(() => {
     const nouvelles = bloquees.filter((s) => !deja.current.has(s.id));
@@ -53,8 +54,8 @@ export function Hud() {
         <span className={`hud-lien ${lien}`}>● {LIEN[lien] ?? lien}</span>
       </div>
       <div className="hud-centre interactif">
-        <Compteur classe="rouge" titre="t'attendent" sessions={bloquees} />
-        <Compteur classe="ambre" titre="ont fini" sessions={finies} />
+        <Compteur classe="rouge" titres={["t'attend", "t'attendent"]} sessions={bloquees} />
+        <Compteur classe="ambre" titres={["a fini", "ont fini"]} sessions={finies} />
       </div>
       <div className="hud-droite interactif">
         {machines.map((m) => (
