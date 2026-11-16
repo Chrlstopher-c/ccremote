@@ -13,6 +13,7 @@ const MUR_AVANT: Zone = { x0: 0.18, y0: 0.462, x1: 0.71, y1: 0.625 };
 
 export function chargerPiece(scene: Phaser.Scene): void {
   scene.load.image('st-piece', 'station/piece.png');
+  for (const b of ['question', 'fini', 'erreur']) scene.load.image(`st-bulle-${b}`, `station/bulles/${b}.png`);
 }
 
 /** Un morceau du fond redessiné par-dessus à la profondeur de son pied (mur avant, dossier de chaise). */

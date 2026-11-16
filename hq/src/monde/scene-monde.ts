@@ -16,7 +16,7 @@ import { erreurChargement, etapeChargement, finChargement } from '../ui/chargeme
 import { categorieDe } from './station/categories';
 import { chargerEnsemble, dessinerEnsemble, ENSEMBLE } from './station/rendu-ensemble';
 import { construirePiece, ECHELLE_FOND, FOND } from './station/piece';
-import { chargerPiece, dessinerPiece, POLICE } from './station/rendu-piece';
+import { chargerPiece, dessinerPiece } from './station/rendu-piece';
 import { activerGlisserZoomer } from './station/camera';
 
 const VUE = 'vue'; // clé du registre : 'station' ou le nom du projet dont on visite la pièce
@@ -95,10 +95,14 @@ export class SceneMonde extends Phaser.Scene {
     this.boutonRetour();
   }
 
+  /** « ← Station » : un vrai bouton de l'interface (hors du dessin, que le zoom de la caméra déformerait). */
   private boutonRetour(): void {
-    const b = this.add.text(12, 64, '← Station', { fontFamily: POLICE, fontSize: '14px', color: '#eef2ff',
-      backgroundColor: '#141a2c', padding: { x: 10, y: 6 }, resolution: 3 });
-    b.setScrollFactor(0).setDepth(200000).setInteractive({ useHandCursor: true }).on('pointerup', () => this.aller('station'));
+    const b = document.createElement('button');
+    b.className = 'bouton-pixel retour-station';
+    b.textContent = '← Station';
+    b.addEventListener('click', () => this.aller('station'));
+    document.getElementById('ui')?.append(b);
+    this.events.once('shutdown', () => b.remove());
     this.input.keyboard?.on('keydown-ESC', () => this.aller('station'));
   }
 

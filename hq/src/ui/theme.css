@@ -155,3 +155,6 @@
 #chargement .etape { font-size: 14px; color: var(--texte-3); }
 #chargement .erreurs { max-width: 90vw; font: 12px var(--mono); color: #ff8a8a; text-align: center; }
 #chargement.discret { inset: auto 8px 8px 8px; z-index: 20; background: rgba(20, 16, 31, 0.85); padding: 8px; }
+
+/* Bouton « ← Station » de la vue pièce (posé par la scène du monde). */
+.retour-station { position: fixed; left: 12px; bottom: 16px; z-index: 30; pointer-events: auto; }

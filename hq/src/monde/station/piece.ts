@@ -73,7 +73,7 @@ export function construirePiece(projet: string, agents: number): Carte {
   const postes: Poste[] = Array.from({ length: agents }, (_, k) => {
     const p = PLACES[k] ?? { x: 0.3 + 0.05 * (k - PLACES.length), y: 0.7 };
     const siege = relatif(p.x, p.y);
-    return { projet, siege, debout: { x: siege.x + 30, y: relatif(0, 0.45).y } };
+    return { projet, siege, debout: { x: siege.x, y: relatif(0, 0.452).y } };
   });
   const coursive = relatif(0.31, 0.69);
   const cafe = relatif(0.88, 0.58);
