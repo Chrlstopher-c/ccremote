@@ -145,3 +145,13 @@
 /* Pixelify Sans dessine mal la ligature « fi » (« fini » lu « Ani ») : ligatures coupées partout — sur chaque élément,
    car boutons et champs n'héritent pas des réglages de police. */
 *, *::before, *::after { font-variant-ligatures: none; }
+
+/* Écran de chargement du monde (ui/chargement.ts) : au centre tant que le monde n'est pas posé. */
+#chargement {
+  position: fixed; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 10px; color: var(--texte); font-family: var(--lisible); pointer-events: none;
+}
+#chargement .titre-pixel { font-size: 22px; color: var(--ambre); }
+#chargement .etape { font-size: 14px; color: var(--texte-3); }
+#chargement .erreurs { max-width: 90vw; font: 12px var(--mono); color: #ff8a8a; text-align: center; }
+#chargement.discret { inset: auto 8px 8px 8px; z-index: 20; background: rgba(20, 16, 31, 0.85); padding: 8px; }

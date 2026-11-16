@@ -11,6 +11,7 @@ import { SceneMonde } from './monde/scene-monde';
 import { ouvrir } from './ui/bus';
 import { FournisseurMonde } from './ui/contexte';
 import { Racine } from './ui/Racine';
+import { erreurChargement, etapeChargement, surveillerErreurs } from './ui/chargement';
 import './ui/theme.css';
 
 /** Mode relais sans jeton : écran de connexion au lieu de la démo. Base par défaut = l'origine de la page (l'app est
@@ -26,12 +27,15 @@ function demanderConnexion(): boolean {
 
 async function demarrer(): Promise<void> {
   if (demanderConnexion()) return;
+  surveillerErreurs();
+  etapeChargement('données…');
   const magasin = new MagasinMonde();
   const source = creerSourceMonde(configRelais());
   demarrerMonde(source, magasin).catch((err) => console.error('données du monde indisponibles', err));
   const ui = document.getElementById('ui');
   if (ui) createRoot(ui).render(createElement(FournisseurMonde, { magasin, source }, createElement(Racine)));
   Object.assign(window, { __hq: { ouvrir, magasin } }); // crochet des essais de bout en bout
+  etapeChargement('police…');
   try {
     await document.fonts.load('22px "Pixelify Sans"');
   } catch (err) {
@@ -41,6 +45,7 @@ async function demarrer(): Promise<void> {
   while (!window.innerWidth || !window.innerHeight) {
     await new Promise((fin) => window.addEventListener('resize', fin, { once: true }));
   }
+  etapeChargement('moteur du jeu…');
   const jeu = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'jeu',
@@ -50,6 +55,7 @@ async function demarrer(): Promise<void> {
     scene: [SceneMonde],
   });
   jeu.registry.set('magasin', magasin);
+  jeu.events.once('ready', () => etapeChargement(`moteur prêt (${jeu.renderer.type === Phaser.WEBGL ? 'WebGL' : 'Canvas'})`));
 }
 
-void demarrer();
+demarrer().catch((err: unknown) => erreurChargement(`démarrage : ${String(err)}`));

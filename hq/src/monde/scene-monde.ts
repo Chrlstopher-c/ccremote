@@ -12,6 +12,7 @@ import { ecouterPanneau, ouvrir, type Panneau } from '../ui/bus';
 import type { MagasinMonde, ResumeSession } from '../donnees';
 import { cleSessions, etatDansLeMonde, sessionsDuMonde } from './lien-donnees';
 import { chargerImages, chargerIndex, creerAnimations, type Ressources } from './sprites';
+import { erreurChargement, etapeChargement, finChargement } from '../ui/chargement';
 
 export class SceneMonde extends Phaser.Scene {
   private r!: Ressources;
@@ -27,6 +28,8 @@ export class SceneMonde extends Phaser.Scene {
   }
 
   preload(): void {
+    etapeChargement('description du monde…');
+    this.load.on('loaderror', (f: Phaser.Loader.File) => erreurChargement(`fichier introuvable : ${f.url}`));
     chargerIndex(this);
   }
 
@@ -37,7 +40,16 @@ export class SceneMonde extends Phaser.Scene {
       tuiles: this.cache.json.get('tuiles'),
     };
     chargerImages(this, this.r);
-    this.load.once('complete', () => this.demarrer());
+    this.load.on('progress', (p: number) => etapeChargement(`images ${Math.round(p * 100)} %`));
+    this.load.once('complete', () => {
+      etapeChargement('construction du monde…');
+      try {
+        this.demarrer();
+        finChargement();
+      } catch (err) {
+        erreurChargement(`monde : ${String(err)}`);
+      }
+    });
     this.load.start();
   }
 
