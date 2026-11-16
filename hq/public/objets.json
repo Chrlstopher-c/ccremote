@@ -1,7 +1,7 @@
 {
  "montant": {
   "w": 10,
-  "h": 60,
+  "h": 38,
   "emprise": 8
  },
  "tapis": {
@@ -11,87 +11,87 @@
  },
  "bureau": {
   "w": 98,
-  "h": 96,
+  "h": 66,
   "emprise": 28
  },
  "etagere": {
   "w": 50,
-  "h": 102,
+  "h": 64,
   "emprise": 14
  },
  "serveur": {
   "w": 34,
-  "h": 96,
+  "h": 64,
   "emprise": 20
  },
  "crt": {
   "w": 50,
-  "h": 72,
+  "h": 50,
   "emprise": 26
  },
  "cafe": {
   "w": 54,
-  "h": 82,
+  "h": 56,
   "emprise": 24
  },
  "distributeur": {
   "w": 42,
-  "h": 100,
+  "h": 66,
   "emprise": 20
  },
  "canape": {
   "w": 90,
-  "h": 70,
+  "h": 54,
   "emprise": 32
  },
  "table": {
   "w": 116,
-  "h": 94,
+  "h": 80,
   "emprise": 32
  },
  "plante": {
   "w": 40,
-  "h": 68,
+  "h": 54,
   "emprise": 20
  },
  "tableau": {
   "w": 58,
-  "h": 60,
+  "h": 36,
   "emprise": 10
  },
  "lampadaire": {
   "w": 24,
-  "h": 118,
+  "h": 72,
   "emprise": 20
  },
  "banc": {
   "w": 66,
-  "h": 54,
+  "h": 38,
   "emprise": 18
  },
  "cendrier": {
   "w": 18,
-  "h": 46,
+  "h": 34,
   "emprise": 14
  },
  "arbre": {
   "w": 68,
-  "h": 112,
+  "h": 82,
   "emprise": 22
  },
  "buisson": {
   "w": 50,
-  "h": 40,
+  "h": 34,
   "emprise": 18
  },
  "chaise-assise": {
   "w": 36,
-  "h": 76,
+  "h": 58,
   "emprise": 28
  },
  "chaise-dossier": {
   "w": 36,
-  "h": 76,
+  "h": 58,
   "emprise": 28
  }
 }

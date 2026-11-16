@@ -1,16 +1,19 @@
-// Responsabilité : construire la carte du monde à partir des projets. Le bâtiment d'Agent HQ est vu comme un intérieur
-// de Stardew Valley : chaque mur horizontal montre sa face (deux rangs, fenêtres sur le mur extérieur), les portes
-// percent ces faces, les murs verticaux sont fins ; la façade en briques se voit depuis la rue. Organisation : une rangée de bureaux (un par projet)
-// au nord, un couloir, puis bibliothèque, salle de réunion, hall d'entrée avec coin café, salle serveurs.
-// Dehors : parvis, fumoir, rue. Pur : aucune notion de Phaser, testable.
+// Responsabilité : construire la carte du monde à partir des sessions (leur projet). Plan façon The Escapists 2 : un
+// couloir central ; au nord, une pièce par projet où ses agents travaillent ensemble ; au sud, les pièces communes
+// (bibliothèque, réunion, hall d'entrée avec café, salle serveurs) ; dehors, pelouse et allée. Les murs sont des cases
+// (le rendu dessine leur dessus et leur face, voir peinture/murs.ts). Pur : aucune notion de Phaser, testable.
+import { meublerCommunes, meublerProjet, type Communes, type Hauteurs } from './meubler';
 
 export const TUILE = 32;
 
-export type Nature = 'dehors' | 'sol' | 'mur' | 'face';
+export type Nature = 'dehors' | 'sol' | 'mur';
+export type Sol =
+  | 'herbe' | 'allee' | 'paves' | 'dalles' | 'seuil' | 'parquet-a' | 'parquet-b' | 'carrelage'
+  | 'moquette-verte' | 'moquette-bleue' | 'beton';
 
 export interface Case {
   nature: Nature;
-  tuile: string; // nom dans public/tuiles.json (pour un mur : choisi au rendu selon ses voisins)
+  sol: Sol; // pour un mur : le sol de sa pièce (le rendu peint autour de lui le sol des cases voisines)
 }
 
 export interface Objet {
@@ -20,6 +23,7 @@ export interface Objet {
   bloque: boolean;
   miroir?: boolean;
   auSol?: boolean; // posé à plat (tapis) : toujours dessous des personnages
+  auMur?: boolean; // accroché à la face d'un mur (tableau) : derrière tout ce qui est au sol
 }
 
 export type Lieu = 'cafe' | 'reunion' | 'bibliotheque' | 'terminal' | 'fumoir' | 'entree';
@@ -28,7 +32,19 @@ export interface Poste {
   projet: string;
   siege: { x: number; y: number }; // pied de sa chaise : il s'y assoit pour travailler (vu de dos)
   debout: { x: number; y: number }; // où il se tient quand il attend Chris
-  plaque: { x: number; y: number };
+}
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface Plaque {
+  texte: string;
+  x: number;
+  y: number;
 }
 
 export interface Carte {
@@ -36,52 +52,59 @@ export interface Carte {
   hauteur: number;
   cases: Case[][]; // [y][x]
   objets: Objet[];
-  postes: Poste[];
+  postes: Poste[]; // un par session, dans l'ordre reçu
+  plaques: Plaque[];
+  portes: Rect[]; // ouvertures (cases de sol dans une ligne de mur)
+  fenetres: { x: number; y: number }[]; // cases de mur percées d'une fenêtre (sur leur face)
   lieux: Record<Lieu, { x: number; y: number }>;
   depart: { x: number; y: number }; // où apparaît Chris
 }
 
-interface Rect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+const MARGE = 5; // pelouse autour du bâtiment
+const NORD = 3; // rang du mur extérieur nord
+const HAUT_BUREAU = 6; // rangs d'une pièce de projet (5 utiles + le mur du couloir)
+const HAUT_COULOIR = 4; // 3 rangs utiles + le mur des pièces communes
+const HAUT_COMMUNE = 7; // 6 rangs utiles + le mur extérieur sud
+const DEHORS_SUD = 8;
+const PAR_AGENT = 3; // cases de large par bureau
+const COMMUNES_MIN = [7, 9, 8, 6] as const; // bibliothèque, réunion, hall, serveurs
 
-const PAS_BUREAU = 7; // un bureau = 6 cases utiles + la cloison partagée
-const MIN_BUREAUX = 5;
+export const centreCase = (c: number): number => c * TUILE + TUILE / 2;
 
-const centre = (c: number): number => c * TUILE + TUILE / 2;
-
-function grilleVide(w: number, h: number): Case[][] {
-  return Array.from({ length: h }, (_, y) =>
-    Array.from({ length: w }, (_, x) => ({ nature: 'dehors' as const, tuile: `herbe-${(x * 7 + y * 13) % 3}` })),
-  );
-}
-
-function poser(c: Case[][], r: Rect, nature: Nature, tuile: string): void {
+export function poser(c: Case[][], r: Rect, nature: Nature, sol: Sol): void {
   for (let y = r.y; y < r.y + r.h; y++) {
     for (let x = r.x; x < r.x + r.w; x++) {
       const ligne = c[y];
-      if (ligne?.[x]) ligne[x] = { nature, tuile };
+      if (ligne?.[x]) ligne[x] = { nature, sol };
     }
   }
 }
 
 /** Une pièce : murs sur le pourtour (partagés avec les voisines), sol à l'intérieur. */
-function piece(c: Case[][], r: Rect, sol: string): void {
-  poser(c, r, 'mur', 'mur');
+function piece(c: Case[][], r: Rect, sol: Sol): void {
+  poser(c, r, 'mur', sol);
   poser(c, { x: r.x + 1, y: r.y + 1, w: r.w - 2, h: r.h - 2 }, 'sol', sol);
 }
 
-const montants: Objet[] = [];
+/** Largeurs utiles réparties pour remplir `total` cases (murs compris), le surplus distribué tour à tour. */
+export function repartir(minimums: readonly number[], total: number): number[] {
+  const l = [...minimums];
+  let reste = total - (1 + l.reduce((s, w) => s + w + 1, 0));
+  for (let i = 0; reste > 0 && l.length; i = (i + 1) % l.length, reste--) l[i] = (l[i] ?? 0) + 1;
+  return l;
+}
 
-/** Ouverture dans un mur horizontal, marquée d'un seuil et encadrée de deux montants de bois. */
-function porte(c: Case[][], x: number, y: number, largeur = 2): void {
-  poser(c, { x, y, w: largeur, h: 1 }, 'sol', 'seuil');
-  for (const bord of [x * TUILE + 2, (x + largeur) * TUILE - 2]) {
-    montants.push({ nom: 'montant', x: bord, y: y * TUILE + 26, bloque: false });
-  }
+/** Projets dans l'ordre de première apparition, avec le rang de chaque session dans sa pièce. */
+function regrouper(projets: readonly string[]): { noms: string[]; rang: number[] } {
+  const noms: string[] = [];
+  const compte = new Map<string, number>();
+  const rang = projets.map((p) => {
+    if (!compte.has(p)) noms.push(p);
+    const k = compte.get(p) ?? 0;
+    compte.set(p, k + 1);
+    return k;
+  });
+  return { noms, rang };
 }
 
 interface Gabarit {
@@ -89,190 +112,117 @@ interface Gabarit {
   h: number;
   bx: number;
   batW: number;
-  nordY: number; // mur extérieur nord
-  couloirY: number; // première rangée du couloir
-  sudY: number; // première rangée des pièces du sud
+  couloirN: number; // mur entre les bureaux et le couloir
+  sudN: number; // mur entre le couloir et les pièces communes
   basY: number; // mur extérieur sud
 }
 
-function gabarit(n: number): Gabarit {
-  const batW = n * PAS_BUREAU + 1;
-  const bx = 6;
-  const nordY = 3;
-  const couloirY = nordY + 8; // bureaux : 2 rangs de face + 5 rangs utiles, cloison sud
-  const sudY = couloirY + 6; // couloir : 2 rangs de face (mur des bureaux) + 3 rangs utiles + cloison
-  const basY = sudY + 8; // pièces du sud : 2 rangs de face + 5 rangs utiles
-  return { w: batW + 2 * bx, h: basY + 12, bx, batW, nordY, couloirY, sudY, basY };
+function gabarit(batW: number): Gabarit {
+  const couloirN = NORD + HAUT_BUREAU;
+  const sudN = couloirN + HAUT_COULOIR;
+  const basY = sudN + HAUT_COMMUNE;
+  return { w: batW + 2 * MARGE, h: basY + 1 + DEHORS_SUD, bx: MARGE, batW, couloirN, sudN, basY };
 }
 
-/** Tout mur horizontal dont les deux cases du dessous sont du sol montre sa face (deux rangs) : c'est ce qui donne la
- * profondeur, comme dans Stardew. Fenêtres sur le mur extérieur du nord ; mur gris dans la salle serveurs. */
-function faces(c: Case[][], g: Gabarit): void {
-  for (let y = c.length - 3; y >= 0; y--) {
-    const ligne = c[y];
-    if (!ligne) continue;
-    for (let x = 0; x < ligne.length; x++) {
-      const bas1 = c[y + 1]?.[x];
-      const bas2 = c[y + 2]?.[x];
-      if (ligne[x]?.nature !== 'mur' || bas1?.nature !== 'sol' || bas2?.nature !== 'sol') continue;
-      if (ligne[x - 1]?.nature !== 'mur' && ligne[x + 1]?.nature !== 'mur') continue; // montant de porte
-      const gris = bas1.tuile.startsWith('carrelage-sombre');
-      const fenetre = y === g.nordY && (x - g.bx) % PAS_BUREAU === 2;
-      bas1.nature = 'face';
-      bas2.nature = 'face';
-      bas1.tuile = fenetre ? 'fenetre-haut' : gris ? 'mur-face-gris-haut' : 'mur-face-haut';
-      bas2.tuile = fenetre ? 'fenetre-bas' : gris ? 'mur-face-gris' : 'mur-face';
-    }
-  }
+function largeurs(agents: readonly number[]): { projets: number[]; communes: number[]; batW: number } {
+  const minProjets = agents.length ? agents.map((n) => Math.max(6, PAR_AGENT * n + 3)) : [6];
+  const somme = (l: readonly number[]): number => 1 + l.reduce((s, w) => s + w + 1, 0);
+  const batW = Math.max(somme(minProjets), somme(COMMUNES_MIN), 34);
+  return { projets: repartir(minProjets, batW), communes: repartir(COMMUNES_MIN, batW), batW };
 }
 
-/** Façade sud vue de la rue : deux rangs de briques sous le mur extérieur, fenêtres éclairées, porte d'entrée. */
-function facade(c: Case[][], g: Gabarit, entreeX: number): void {
-  for (let x = g.bx; x < g.bx + g.batW; x++) {
-    if (x >= entreeX && x < entreeX + 2) {
-      poser(c, { x, y: g.basY + 1, w: 1, h: 2 }, 'sol', 'seuil');
-      continue;
-    }
-    const fenetre = (x - g.bx) % 4 === 2;
-    poser(c, { x, y: g.basY + 1, w: 1, h: 1 }, 'face', fenetre ? 'facade-haut-fenetre' : 'facade-haut');
-    poser(c, { x, y: g.basY + 2, w: 1, h: 1 }, 'face', fenetre ? 'facade-bas-fenetre' : 'facade-bas');
-  }
+interface Base {
+  g: Gabarit;
+  cases: Case[][];
+  objets: Objet[];
+  plaques: Plaque[];
+  portes: Rect[];
+  fenetres: Carte['fenetres'];
 }
 
-function meublerBureau(r: Rect, projet: string, objets: Objet[]): Poste {
-  const cx = (r.x + r.w / 2) * TUILE;
-  const fond = (r.y + 3) * TUILE; // premier rang de sol sous la face du mur du fond
-  objets.push({ nom: 'bureau', x: cx, y: fond + 62, bloque: true });
-  objets.push({ nom: 'plante', x: (r.x + 1) * TUILE + 16, y: fond + 26, bloque: true });
-  objets.push({ nom: 'tableau', x: (r.x + r.w - 1) * TUILE - 10, y: fond + 36, bloque: true });
-  return {
-    projet,
-    siege: { x: cx, y: fond + 98 },
-    debout: { x: cx + 44, y: fond + 118 },
-    plaque: { x: cx, y: (r.y + 1) * TUILE + 6 },
-  };
+function percer(base: Base, x: number, y: number, w: number): void {
+  poser(base.cases, { x, y, w, h: 1 }, 'sol', 'seuil');
+  base.portes.push({ x, y, w, h: 1 });
 }
 
-interface PiecesSud {
-  biblio: Rect;
-  reunion: Rect;
-  hall: Rect;
-  serveurs: Rect;
+function bureaux(base: Base, projets: readonly number[], noms: readonly string[]): Rect[] {
+  const { g, cases } = base;
+  let x = g.bx;
+  return projets.map((w, i) => {
+    const r = { x, y: NORD, w: w + 2, h: HAUT_BUREAU + 1 };
+    piece(cases, r, i % 2 ? 'parquet-b' : 'parquet-a');
+    percer(base, x + 1, g.couloirN, 2);
+    base.plaques.push({ texte: noms[i] ?? 'libre', x: (x + 3 + (w - 2) / 2) * TUILE, y: g.couloirN * TUILE + 21 });
+    for (let f = x + 3; f + 1 < x + w; f += 5) base.fenetres.push({ x: f, y: NORD }, { x: f + 1, y: NORD });
+    x += w + 1;
+    return r;
+  });
 }
 
-function piecesSud(c: Case[][], g: Gabarit): PiecesSud {
-  const interieur = g.batW - 1;
-  const lb = Math.round(interieur * 0.24);
-  const lr = Math.round(interieur * 0.3);
-  const lh = Math.round(interieur * 0.26);
-  const x0 = g.bx;
-  const h = g.basY - g.sudY + 2;
-  const y = g.sudY - 1;
-  const biblio = { x: x0, y, w: lb + 1, h };
-  const reunion = { x: x0 + lb, y, w: lr + 1, h };
-  const hall = { x: x0 + lb + lr, y, w: lh + 1, h };
-  const serveurs = { x: x0 + lb + lr + lh, y, w: g.batW - (lb + lr + lh), h };
-  piece(c, biblio, 'moquette-verte');
-  piece(c, reunion, 'moquette-bleue');
-  piece(c, hall, 'parquet-1');
-  piece(c, serveurs, 'carrelage-sombre');
-  for (const r of [biblio, reunion, serveurs]) porte(c, r.x + Math.floor(r.w / 2) - 1, y);
-  porte(c, hall.x + Math.floor(hall.w / 2) - 1, y, 3);
+function communes(base: Base, l: readonly number[]): Communes {
+  const y = base.g.sudN;
+  const h = HAUT_COMMUNE + 1;
+  const [lb = 7, lr = 9, lh = 8, ls = 6] = l;
+  const biblio = { x: base.g.bx, y, w: lb + 2, h };
+  const reunion = { x: biblio.x + lb + 1, y, w: lr + 2, h };
+  const hall = { x: reunion.x + lr + 1, y, w: lh + 2, h };
+  const serveurs = { x: hall.x + lh + 1, y, w: ls + 2, h };
+  piece(base.cases, biblio, 'moquette-verte');
+  piece(base.cases, reunion, 'moquette-bleue');
+  piece(base.cases, hall, 'carrelage');
+  piece(base.cases, serveurs, 'beton');
+  for (const r of [biblio, reunion, serveurs]) percer(base, r.x + r.w - 4, y, 2);
+  percer(base, hall.x + Math.floor(hall.w / 2) - 1, y, 3);
   return { biblio, reunion, hall, serveurs };
 }
 
-/** Meubles des pièces du sud, adossés à la face du mur du fond (premier rang de sol sous la face). */
-function meublerSud(p: PiecesSud, objets: Objet[]): void {
-  const fond = (r: Rect): number => (r.y + 3) * TUILE; // pied d'un meuble collé à la face
-  for (let k = 0; k < 3; k++) {
-    objets.push({ nom: 'etagere', x: (p.biblio.x + 1.4 + k * 1.6) * TUILE, y: fond(p.biblio) + 14, bloque: true });
+function dehors(base: Base, entreeX: number): { x: number; y: number } {
+  const { g, cases, objets } = base;
+  poser(cases, { x: g.bx - 1, y: g.basY + 1, w: g.batW + 2, h: 2 }, 'dehors', 'paves');
+  poser(cases, { x: entreeX - 1, y: g.basY + 3, w: 4, h: DEHORS_SUD - 2 }, 'dehors', 'allee');
+  for (let x = g.bx + 2; x < g.bx + g.batW - 2; x += 4) {
+    if (Math.abs(x - entreeX) > 2) base.fenetres.push({ x, y: g.basY });
   }
-  objets.push({ nom: 'canape', x: (p.biblio.x + p.biblio.w / 2) * TUILE, y: (p.biblio.y + 7) * TUILE, bloque: true });
-  objets.push({ nom: 'table', x: (p.reunion.x + p.reunion.w / 2) * TUILE, y: (p.reunion.y + 6) * TUILE + 8,
-    bloque: true });
-  objets.push({ nom: 'plante', x: (p.reunion.x + 1.5) * TUILE, y: fond(p.reunion) + 10, bloque: true });
-  objets.push({ nom: 'plante', x: (p.reunion.x + p.reunion.w - 1.5) * TUILE, y: fond(p.reunion) + 10, bloque: true });
-  objets.push({ nom: 'cafe', x: (p.hall.x + 1.8) * TUILE, y: fond(p.hall) + 18, bloque: true });
-  objets.push({ nom: 'distributeur', x: (p.hall.x + 3.4) * TUILE, y: fond(p.hall) + 18, bloque: true });
-  objets.push({ nom: 'canape', x: (p.hall.x + p.hall.w - 2.6) * TUILE, y: (p.hall.y + 7) * TUILE, bloque: true });
-  for (let k = 0; k < 3; k++) {
-    objets.push({ nom: 'serveur', x: (p.serveurs.x + 1.3 + k * 1.3) * TUILE, y: fond(p.serveurs) + 18,
-      bloque: true });
+  for (const dx of [-2, 4]) {
+    objets.push({ nom: 'lampadaire', x: centreCase(entreeX + dx), y: (g.basY + 5) * TUILE, bloque: true });
   }
-  objets.push({ nom: 'crt', x: (p.serveurs.x + p.serveurs.w - 2) * TUILE, y: (p.serveurs.y + 6) * TUILE,
-    bloque: true });
-}
-
-function dehors(c: Case[][], g: Gabarit, entreeX: number, objets: Objet[]): Carte['lieux']['fumoir'] {
-  const rue = g.h - 5;
-  poser(c, { x: 0, y: rue - 1, w: g.w, h: 1 }, 'dehors', 'trottoir');
-  poser(c, { x: 0, y: rue, w: g.w, h: 3 }, 'dehors', 'paves-0');
-  poser(c, { x: 0, y: rue + 3, w: g.w, h: 1 }, 'dehors', 'trottoir');
-  poser(c, { x: entreeX - 1, y: g.basY + 3, w: 4, h: rue - 1 - (g.basY + 3) }, 'dehors', 'terre-0');
-  for (let x = 3; x < g.w - 2; x += 8) {
-    if (Math.abs(x - entreeX) > 3) {
-      objets.push({ nom: 'lampadaire', x: centre(x), y: (rue - 1) * TUILE + 20, bloque: true });
-    }
-  }
-  const arbres = [[2, 4], [3, 11], [1, 17], [g.w - 3, 5], [g.w - 2, 12], [g.w - 3, 18], [9, 1], [g.w - 10, 1]];
-  for (const [x, y] of arbres) objets.push({ nom: 'arbre', x: centre(x ?? 0), y: (y ?? 0) * TUILE + 30, bloque: true });
-  const fumoir = { x: (entreeX + 5) * TUILE, y: (g.basY + 4) * TUILE + 20 };
-  objets.push({ nom: 'cendrier', x: fumoir.x + 26, y: fumoir.y - 2, bloque: true });
-  objets.push({ nom: 'banc', x: fumoir.x + 80, y: fumoir.y - 4, bloque: true });
-  objets.push({ nom: 'buisson', x: (entreeX - 4) * TUILE, y: (g.basY + 4) * TUILE, bloque: true });
+  const arbres: [number, number][] = [[1, 4], [2, 10], [1, 16], [g.w - 2, 4], [g.w - 3, 11], [g.w - 2, 17]];
+  for (let x = g.bx + 4; x < g.bx + g.batW; x += 9) arbres.push([x, 1]);
+  for (const [x, y] of arbres) objets.push({ nom: 'arbre', x: centreCase(x), y: (y + 1) * TUILE, bloque: true });
+  const fumoir = { x: (entreeX + 7) * TUILE, y: (g.basY + 6) * TUILE };
+  objets.push({ nom: 'banc', x: fumoir.x + 40, y: fumoir.y - 2, bloque: true });
+  objets.push({ nom: 'cendrier', x: fumoir.x - 4, y: fumoir.y - 4, bloque: true });
   return fumoir;
 }
 
-/** Couloir : tapis de passage tout du long, plantes aux deux bouts. */
-function decorCouloir(g: Gabarit): Objet[] {
-  const y = (g.couloirY + 4) * TUILE - 4;
-  const o: Objet[] = [];
-  for (let x = g.bx + 2; x + 6 < g.bx + g.batW - 1; x += 6) {
-    o.push({ nom: 'tapis', x: (x + 3) * TUILE, y, bloque: false, auSol: true });
-  }
-  o.push({ nom: 'plante', x: (g.bx + 1) * TUILE + 16, y: (g.couloirY + 3) * TUILE, bloque: true });
-  o.push({ nom: 'plante', x: (g.bx + g.batW - 1) * TUILE - 16, y: (g.couloirY + 3) * TUILE, bloque: true });
-  return o;
+function postesDesSessions(projets: readonly string[], parProjet: readonly Poste[][]): Poste[] {
+  const { noms, rang } = regrouper(projets);
+  return projets.map((p, i) => {
+    const poste = parProjet[noms.indexOf(p)]?.[rang[i] ?? 0];
+    return { projet: p, siege: poste?.siege ?? { x: 0, y: 0 }, debout: poste?.debout ?? { x: 0, y: 0 } };
+  });
 }
 
-/** Le monde complet pour une liste de projets (un bureau chacun, au moins cinq emplacements). */
-export function construireCarte(projets: readonly string[]): Carte {
-  const n = Math.max(MIN_BUREAUX, projets.length);
-  const g = gabarit(n);
-  montants.length = 0;
-  const c = grilleVide(g.w, g.h);
-  const objets: Objet[] = [];
-  piece(c, { x: g.bx, y: g.nordY, w: g.batW, h: g.basY - g.nordY + 1 }, 'parquet-1');
-  const postes: Poste[] = [];
-  for (let i = 0; i < n; i++) {
-    const r = { x: g.bx + i * PAS_BUREAU, y: g.nordY, w: PAS_BUREAU + 1, h: g.couloirY - g.nordY };
-    const projet = projets[i];
-    piece(c, r, projet ? (i % 2 ? 'parquet-2' : 'parquet-0') : 'parquet-sombre');
-    porte(c, r.x + 3, r.y + r.h - 1);
-    if (projet) postes.push(meublerBureau(r, projet, objets));
-  }
-  const sud = piecesSud(c, g);
-  meublerSud(sud, objets);
-  const entreeX = sud.hall.x + Math.floor(sud.hall.w / 2) - 1;
-  poser(c, { x: entreeX, y: g.basY, w: 2, h: 1 }, 'sol', 'seuil');
-  faces(c, g);
-  facade(c, g, entreeX);
-  const fumoir = dehors(c, g, entreeX, objets);
-  objets.push(...montants, ...decorCouloir(g));
+/** Le monde complet : `projets` = le projet de chaque session, dans l'ordre (postes[i] = poste de la session i). */
+export function construireCarte(projets: readonly string[], hauteurs: Hauteurs = {}): Carte {
+  const { noms } = regrouper(projets);
+  const agents = noms.map((n) => projets.filter((p) => p === n).length);
+  const l = largeurs(agents);
+  const g = gabarit(l.batW);
+  const cases = Array.from({ length: g.h }, () => Array.from({ length: g.w }, (): Case => ({ nature: 'dehors', sol: 'herbe' })));
+  const base: Base = { g, cases, objets: [], plaques: [], portes: [], fenetres: [] };
+  piece(cases, { x: g.bx, y: NORD, w: g.batW, h: g.basY - NORD + 1 }, 'dalles');
+  const pieces = bureaux(base, l.projets, noms);
+  const parProjet = pieces.map((r, i) => meublerProjet(r, agents[i] ?? 0, base.objets, hauteurs));
+  const c = communes(base, l.communes);
+  const lieux = meublerCommunes(c, base.objets, hauteurs);
+  const entreeX = c.hall.x + Math.floor(c.hall.w / 2) - 1;
+  percer(base, entreeX, g.basY, 2);
+  const fumoir = dehors(base, entreeX);
+  const entree = { x: (entreeX + 1) * TUILE, y: (g.basY + 4) * TUILE };
   return {
-    largeur: g.w,
-    hauteur: g.h,
-    cases: c,
-    objets,
-    postes,
-    lieux: {
-      cafe: { x: (sud.hall.x + 1.8) * TUILE, y: (sud.hall.y + 4) * TUILE },
-      reunion: { x: (sud.reunion.x + sud.reunion.w / 2) * TUILE, y: (sud.reunion.y + 6) * TUILE + 10 },
-      bibliotheque: { x: (sud.biblio.x + 3) * TUILE, y: (sud.biblio.y + 4) * TUILE },
-      terminal: { x: (sud.serveurs.x + sud.serveurs.w - 2) * TUILE, y: (sud.serveurs.y + 4) * TUILE + 26 },
-      fumoir,
-      entree: { x: (entreeX + 1) * TUILE, y: (g.basY + 4) * TUILE },
-    },
-    depart: { x: (entreeX + 1) * TUILE, y: (g.basY + 5) * TUILE },
+    largeur: g.w, hauteur: g.h, cases, objets: base.objets, postes: postesDesSessions(projets, parProjet),
+    plaques: base.plaques, portes: base.portes, fenetres: base.fenetres, lieux: { ...lieux, fumoir, entree },
+    depart: entree,
   };
 }

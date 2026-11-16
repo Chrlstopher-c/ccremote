@@ -17,6 +17,11 @@ Detail = Callable[[ImageDraw.ImageDraw, Rect, Rect], None]  # (dessin, face avan
 
 ECHELLE = 2       # 1 pixel d'art = 2 pixels du monde
 CASE = 16         # pixels d'art par case
+HAUTEUR = 0.55    # écrasement des hauteurs : vue plus de dessus (The Escapists 2)
+
+
+def _z(v: int) -> int:
+    return round(v * HAUTEUR)
 
 
 def eclaircir(c: Couleur, f: float) -> Couleur:
@@ -53,10 +58,10 @@ class Objet:
 
 def _faces(b: Boite, haut: int) -> tuple[Rect, Rect]:
     """Rectangles écran (dessus, face avant) d'une boîte ; `haut` = hauteur max de l'objet (origine verticale)."""
-    y_top0 = b.y - (b.z + b.h) + haut
-    y_top1 = b.y + b.d - (b.z + b.h) + haut - 1
+    y_top0 = b.y - _z(b.z + b.h) + haut
+    y_top1 = b.y + b.d - _z(b.z + b.h) + haut - 1
     y_av0 = y_top1 + 1
-    y_av1 = b.y + b.d - b.z + haut - 1
+    y_av1 = b.y + b.d - _z(b.z) + haut - 1
     return (b.x, y_top0, b.x + b.w - 1, y_top1), (b.x, y_av0, b.x + b.w - 1, y_av1)
 
 
@@ -68,7 +73,7 @@ def _peindre(d: ImageDraw.ImageDraw, b: Boite, haut: int) -> None:
     if b.d > 0 and dessus[3] >= dessus[1]:
         d.rectangle(dessus, fill=c_dessus)
         d.line([(dessus[0], dessus[1]), (dessus[2], dessus[1])], fill=eclaircir(c_dessus, 0.15))
-    if b.h > 0 and avant[3] >= avant[1]:
+    if _z(b.z + b.h) > _z(b.z) and avant[3] >= avant[1]:
         d.rectangle(avant, fill=b.couleur)
         d.line([(avant[0], avant[1]), (avant[2], avant[1])], fill=eclaircir(b.couleur, 0.12))
         d.line([(avant[0], avant[1]), (avant[0], avant[3])], fill=eclaircir(b.couleur, 0.08))
@@ -81,7 +86,7 @@ def _peindre(d: ImageDraw.ImageDraw, b: Boite, haut: int) -> None:
 def rendre(obj: Objet, rogner: bool = True) -> tuple[Image.Image, int]:
     """Image ×2 de l'objet (contour extérieur sombre) et son emprise au sol en pixels du monde (profondeur)."""
     largeur = max(b.x + b.w for b in obj.boites) + 2 + 2 * obj.marge_cote
-    haut = max(b.z + b.h for b in obj.boites) + 1 + obj.marge_haut
+    haut = _z(max(b.z + b.h for b in obj.boites)) + 1 + obj.marge_haut
     for b in obj.boites:
         b.x += obj.marge_cote
     prof = max(b.y + b.d for b in obj.boites)
@@ -92,7 +97,7 @@ def rendre(obj: Objet, rogner: bool = True) -> tuple[Image.Image, int]:
         _peindre(d, b, haut)
 
     def ecran(x: int, y: int, z: int) -> tuple[int, int]:
-        return x + obj.marge_cote, y - z + haut
+        return x + obj.marge_cote, y - _z(z) + haut
 
     for f in obj.extra:
         f(d, ecran)

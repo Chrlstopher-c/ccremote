@@ -37,7 +37,6 @@ export class SceneMonde extends Phaser.Scene {
     this.r = {
       persos: this.cache.json.get('persos'),
       objets: this.cache.json.get('objets'),
-      tuiles: this.cache.json.get('tuiles'),
     };
     chargerImages(this, this.r);
     this.load.on('progress', (p: number) => etapeChargement(`images ${Math.round(p * 100)} %`));
@@ -58,9 +57,10 @@ export class SceneMonde extends Phaser.Scene {
     const magasin = this.registry.get('magasin') as MagasinMonde; // posé par main.ts avant le premier rendu
     const sessions = sessionsDuMonde(magasin.lire());
     this.cle = cleSessions(sessions);
-    this.carte = construireCarte(sessions.map((s) => s.projet.nom));
+    const hauteurs = Object.fromEntries(Object.entries(this.r.objets).map(([nom, o]) => [nom, o.h]));
+    this.carte = construireCarte(sessions.map((s) => s.projet.nom), hauteurs);
     this.grille = grilleDe(this.carte, this.r.objets);
-    dessinerCarte(this, this.carte, this.r.tuiles);
+    dessinerCarte(this, this.carte);
     const poses = poserObjets(this, this.carte, this.r.objets);
     poserPlaques(this, this.carte);
     poserAmbiance(this, this.carte);

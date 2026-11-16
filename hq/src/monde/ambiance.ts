@@ -54,13 +54,11 @@ export function poserAmbiance(scene: Phaser.Scene, carte: Carte, maintenant = ne
   fenetres(scene, carte, cle, nuit);
 }
 
-/** Les fenêtres éclairées de la façade rayonnent sur le trottoir. */
+/** Les fenêtres éclairées de la façade (celles qui donnent dehors) rayonnent sur le parvis. */
 function fenetres(scene: Phaser.Scene, carte: Carte, cle: string, nuit: number): void {
-  carte.cases.forEach((ligne, y) =>
-    ligne.forEach((c, x) => {
-      if (c.tuile !== 'facade-bas-fenetre') return;
-      scene.add.image(x * 32 + 16, y * 32 + 20, cle).setDepth(90001).setBlendMode(Phaser.BlendModes.ADD)
-        .setTint(0xffd27a).setScale(1.1).setAlpha(0.45 * nuit);
-    }),
-  );
+  for (const f of carte.fenetres) {
+    if (carte.cases[f.y + 1]?.[f.x]?.nature !== 'dehors') continue;
+    scene.add.image(f.x * 32 + 16, f.y * 32 + 30, cle).setDepth(90001).setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xffd27a).setScale(1.1).setAlpha(0.45 * nuit);
+  }
 }

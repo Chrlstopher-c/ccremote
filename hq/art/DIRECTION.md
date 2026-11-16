@@ -1,30 +1,34 @@
 # Direction artistique du monde d'Agent HQ
 
-Référence : intérieurs de Stardew Valley / Eastward (le style « murs baissés » des Sims a été écarté par Chris le 16/11).
+Référence : **The Escapists 2** (intérieurs, murs, ombres, lumière), un peu moins vu de dessus. Écartés par Chris : le
+style « murs baissés » des Sims (16/11) et les murs hauts à deux rangs façon Stardew (16/11, raccords faux).
 
 ## Règles (non négociables)
 
-1. **Une seule projection pour tout** : vue de dessus trois-quarts (« 3/4 top-down »). Le sol est une grille carrée ; un
-   objet montre son **dessus** et sa **face avant**, jamais ses côtés. Écran : `Y = profondeur − hauteur` (1:1).
-   Mélanger des objets vus sous des angles différents (images générées, packs) = l'effet « assemblé » à bannir.
-2. **Une seule taille de pixel** : tout est dessiné sur une grille de 16 px par case puis agrandi ×2 (pas de « mixels » :
-   aucun asset à 1 px fin à côté d'un asset à gros pixels).
-3. **Lumière unique en haut à gauche** : dessus le plus clair, face avant moyenne, arête basse sombre, liseré clair à
-   gauche. Pas de contour sombre sur les arêtes intérieures ; contour extérieur seulement pour détacher du sol.
-4. **Murs** : tout mur horizontal montre sa face (bande de 2 cases ; fenêtres sur le mur extérieur du nord), les portes
-   percent ces faces, les murs verticaux sont fins ; la façade sud se voit depuis la rue.
-5. **Placement** : un meuble haut s'adosse à la face du mur du fond de sa pièce. Profondeur = bas de l'emprise (tri en
-   Y) ; un tapis est toujours sous les personnages.
-6. **Exception** : le perso de Chris est à la résolution native (pas ×2) pour rester reconnaissable (visage, lunettes,
-   logo) ; ses marches (4 directions) viennent de vidéos MiniMax H3 sur fond vert (`marche_video.py`).
-7. **Personnages** : face avant (Stardew), 2 cases de haut pour un humain, ombre portée elliptique au sol, Clawd en
-   blocs (même moteur de boîtes que les meubles).
+1. **Une seule projection** : vue de dessus avec un léger relief vers le bas. Un objet montre surtout son **dessus** et
+   une face avant écrasée : `Y écran = profondeur − hauteur × 0,55` (`HAUTEUR` dans `oblique.py`).
+2. **Une seule taille de pixel** : 16 px d'art par case, affichés ×2 (case de 32 px dans le monde).
+3. **Murs calculés, jamais posés en tuiles** : un mur occupe une case. Il se dessine depuis le plan
+   (`src/monde/carte/peinture/murs.ts`) :
+   - un **dessus** clair et fin qui suit le mur et se raccorde à ses voisins (angles, T, croix, bouts) ;
+   - sous tout mur horizontal (et au bout bas d'un mur vertical), une **face** courte en briques, la même partout ;
+   - le dessus et la face couvrent toute la case : on ne voit jamais d'herbe ou de sol « dans » un mur.
+4. **Ombres** : tout (murs, meubles, personnages) projette une ombre douce vers le bas à droite ; le pied des faces
+   est assombri. Elles donnent le relief, pas les volumes.
+5. **Lumière** : soleil par les fenêtres (taches obliques), voile du soir, halos des lampes et écrans.
+6. **Placement** : un meuble a toute son emprise sur du sol, jamais sur une case de mur ; un meuble haut s'adosse au
+   mur du fond (son dessin monte devant la face). Ce qui est accroché au mur (tableau) se dessine sur la face.
+7. **Personnages** : Clawd en blocs (même moteur de boîtes) ; le perso de Chris à résolution native (vidéos MiniMax H3,
+   `marche_video.py`) ; ombre portée ovale décalée vers le bas à droite.
 
-## Outil
+## Plan du bâtiment
 
-`art/oblique.py` : moteur de boîtes (matériaux bois, métal, tissu, écran, feuillage) → pixel art dans cette projection.
-`art/meubles.py` : recettes des meubles (bureau, écran, chaise, étagère, baie serveur, terminal, café, distributeur,
-canapé, table, plante, tableau blanc, extérieur). Sortie dans `public/objets/` avec l'emprise au sol exacte.
+Un couloir central. Au nord, **une pièce par projet** (ses agents y travaillent ensemble, largeur selon leur nombre).
+Au sud, les pièces communes : bibliothèque (fichiers), réunion, hall d'entrée avec café, salle serveurs (terminal).
+Dehors : pelouse, allée vers l'entrée, quelques arbres.
 
-Sources : Pixelblog 35 (Top Down Interiors) et 3-4 (projections) de Raymond Schlitter (slynyrd.com) ; guide de
-conception de pièces RPG (« commit to one tilt across the entire game »).
+## Outils
+
+`art/oblique.py` : moteur de boîtes → pixel art dans la projection. `art/meubles.py` : recettes des meubles (sortie
+`public/objets/`, emprise au sol exacte). Sols, murs, ombres et lumière : dessinés à l'exécution depuis le plan
+(`src/monde/carte/peinture/`), ce qui garantit des raccords justes quel que soit le nombre de pièces.
