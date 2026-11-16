@@ -19,7 +19,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-marche-bas": {
@@ -38,7 +38,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-marche-haut": {
@@ -57,7 +57,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-marche-droite": {
@@ -76,7 +76,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-marche-gauche": {
@@ -95,7 +95,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-repos-dos": {
@@ -110,7 +110,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-frappe": {
@@ -133,7 +133,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-content": {
@@ -152,7 +152,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-assis-frappe": {
@@ -187,7 +187,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-assis-dos": {
@@ -202,7 +202,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-assis-face": {
@@ -225,7 +225,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-assis-question": {
@@ -244,7 +244,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-question": {
@@ -263,7 +263,7 @@
   ],
   "ancre": [
    32,
-   54
+   56
   ]
  },
  "clawd-clope": {

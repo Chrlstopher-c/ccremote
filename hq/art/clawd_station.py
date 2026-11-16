@@ -1,7 +1,7 @@
-"""Responsabilité : les planches d'animation de Clawd au style de la station, tirées du Clawd de la planche ChatGPT
-validée par Chris (`kit/clawd/corps-fini.png`, vue de face, remis en pixel art par `pixeliser.py`). On dérive la vue
-de dos (yeux effacés), la marche (corps qui rebondit), la position assise (jambes cachées par la chaise) et la frappe
-(bras qui montent). Même format que l'ancien (`public/sprites/persos/persos.json`) : le moteur n'a rien à changer.
+"""Responsabilité : les planches d'animation de Clawd au style de la station, tirées de la planche rendue par le modèle
+local à partir de celle de Chris (`gen/station/clawd-32.png` : vue de face et vue de dos, pleine résolution, ramenées
+à la taille du jeu avec un lissage propre). On en dérive la marche (corps qui rebondit), la position assise (jambes
+cachées par la chaise) et la frappe (bras qui montent). Même format que `public/sprites/persos/persos.json`.
 """
 from __future__ import annotations
 
@@ -14,31 +14,29 @@ from scipy import ndimage
 
 ICI = Path(__file__).resolve().parent
 SORTIE = ICI.parent / 'public' / 'sprites' / 'persos'
-CADRE = (32, 30)  # pixels d'art par image (×2 dans le monde)
-PIED = 27  # rang d'art où posent les pieds dans le cadre
-JAMBES = 17  # premier rang des jambes dans le corps
+CADRE = (64, 60)  # pixels du monde par image
+PIED = 56  # rang où posent les pieds dans le cadre
+HAUTEUR = 40  # hauteur du corps dans le monde (≈ 0,6 fois Chris, comme dans les images de référence)
+JAMBES = 31  # premier rang des jambes dans le corps réduit
+SOURCE = ICI / 'gen' / 'station' / 'clawd-32.png'
+FACE = (177, 136, 307, 254)
+DOS = (955, 401, 1086, 520)
 
 
-def corps() -> np.ndarray:
-    a = np.array(Image.open(ICI / 'kit' / 'clawd' / 'corps-fini.png').convert('RGBA'))
-    etiquettes, n = ndimage.label(a[..., 3] > 0)
-    if n > 1:  # reste de la bulle au-dessus de la tête : on ne garde que le plus grand morceau (le corps)
+def vue(boite: tuple[int, int, int, int]) -> np.ndarray:
+    """Une vue de la planche, fond retiré (restes détachés écartés), réduite à la taille du jeu."""
+    im = Image.open(SOURCE).convert('RGBA').crop(boite)
+    a = np.array(im).astype(int)
+    fond = np.median(np.concatenate([a[0], a[-1]])[:, :3], axis=0)
+    plein = np.abs(a[..., :3] - fond).max(axis=2) > 40
+    etiquettes, n = ndimage.label(ndimage.binary_dilation(plein, iterations=3))
+    if n > 1:  # le robot (corps, bras, jambes rapprochés par la dilatation) est le plus grand morceau
         tailles = ndimage.sum(np.ones(etiquettes.shape), etiquettes, range(1, n + 1))
-        a[etiquettes != int(np.argmax(tailles)) + 1] = 0
-    return a
-
-
-def dos(a: np.ndarray) -> np.ndarray:
-    b = a.copy()
-    lum = b[..., :3].astype(int).sum(axis=2)
-    plein = b[..., 3] > 0
-    mediane = np.median(lum[plein])
-    zone = np.arange(b.shape[0])[:, None] < JAMBES - 3
-    yeux = plein & zone & (lum < mediane * 0.8) & (np.arange(b.shape[1])[None, :] > 4) & \
-        (np.arange(b.shape[1])[None, :] < b.shape[1] - 5)
-    for y, x in zip(*np.nonzero(yeux)):
-        b[y, x] = b[y, 6] if x > b.shape[1] // 2 else b[y, b.shape[1] - 7]
-    return b
+        plein &= etiquettes == int(np.argmax(tailles)) + 1
+    a[..., 3] = np.where(plein, 255, 0)
+    img = Image.fromarray(a.astype(np.uint8)).crop(Image.fromarray(plein.astype(np.uint8) * 255).getbbox())
+    w = round(img.width * HAUTEUR / img.height)
+    return np.array(img.resize((w, HAUTEUR), Image.Resampling.LANCZOS))
 
 
 def cadre(a: np.ndarray, dy: int = 0, sans_jambes: bool = False, bras: int = 0) -> Image.Image:
@@ -47,11 +45,11 @@ def cadre(a: np.ndarray, dy: int = 0, sans_jambes: bool = False, bras: int = 0) 
         b[JAMBES:] = 0
     if bras:
         h, w = b.shape[:2]
-        for x0, x1 in ((0, 4), (w - 4, w)):
+        for x0, x1 in ((0, 8), (w - 8, w)):
             zone = b[:, x0:x1].copy()
             b[:, x0:x1] = np.roll(zone, -bras, axis=0)
     img = Image.new('RGBA', CADRE, (0, 0, 0, 0))
-    pied = PIED + (4 if sans_jambes else 0)
+    pied = PIED + (8 if sans_jambes else 0)
     img.alpha_composite(Image.fromarray(b), ((CADRE[0] - b.shape[1]) // 2, pied - b.shape[0] + dy))
     return img
 
@@ -61,8 +59,7 @@ def planche(images: list[Image.Image], ms: list[int]) -> tuple[Image.Image, dict
     p = Image.new('RGBA', (w * len(images), h))
     for k, im in enumerate(images):
         p.alpha_composite(im, (k * w, 0))
-    p = p.resize((p.width * 2, p.height * 2), Image.Resampling.NEAREST)
-    meta = {'w': w * 2, 'h': h * 2, 'n': len(images), 'seq': [[k, t] for k, t in enumerate(ms)], 'ancre': [w, PIED * 2]}
+    meta = {'w': w, 'h': h, 'n': len(images), 'seq': [[k, t] for k, t in enumerate(ms)], 'ancre': [w // 2, PIED]}
     return p, meta
 
 
@@ -86,8 +83,8 @@ def animations(f: np.ndarray, d: np.ndarray) -> dict[str, tuple[list[Image.Image
 
 
 def main() -> None:
-    f = corps()
-    d = dos(f)
+    f = vue(FACE)
+    d = vue(DOS)
     index = json.loads((SORTIE / 'persos.json').read_text())
     for nom, (images, ms) in animations(f, d).items():
         img, meta = planche(images, ms)

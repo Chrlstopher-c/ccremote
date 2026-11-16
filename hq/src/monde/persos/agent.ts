@@ -4,7 +4,7 @@
 import type Phaser from 'phaser';
 
 import type { Grille, PointMonde } from '../carte/chemin';
-import { POLICE } from '../station/rendu-station';
+import { POLICE } from '../station/rendu-piece';
 import type { Carte, Poste } from '../carte/plan';
 import type { PlanchePerso } from '../sprites';
 import { Marcheur } from './marcheur';
@@ -20,7 +20,7 @@ const BULLES: Record<EtatMonde, { texte: string; fond: number; encre: string }> 
 
 // Décalages (px) entre le pied de la chaise et les pieds de Clawd assis : de dos il est posé sur l'assise, de face
 // un peu plus bas (ses pattes pendent devant l'assise).
-const ASSIS_DOS = -34;
+const ASSIS_DOS = -14;
 const ASSIS_FACE = -28;
 const ABORD = 16; // où il se lève / arrive, juste devant la chaise
 
@@ -40,8 +40,9 @@ export class Agent {
   ) {
     const { x, y } = poste.siege;
     // toile commune des deux pièces (art/meubles.py) : le sol avant de la chaise est à 72 px sur 76
-    this.assise = scene.add.image(x, y, 'objet-chaise-assise').setOrigin(0.5, 72 / 76);
-    this.dossier = scene.add.image(x, y, 'objet-chaise-dossier').setOrigin(0.5, 72 / 76);
+    // le poste de la station a déjà sa chaise : celles-ci ne servent plus qu'à l'ordre de dessin (invisibles)
+    this.assise = scene.add.image(x, y, 'objet-chaise-assise').setOrigin(0.5, 72 / 76).setVisible(false);
+    this.dossier = scene.add.image(x, y, 'objet-chaise-dossier').setOrigin(0.5, 72 / 76).setVisible(false);
     this.corps = new Marcheur(scene, 'clawd', planches, { x, y: y + ABORD }, 70);
     this.bulle = scene.add.container(0, 0);
     this.clignote = scene.tweens.add({ targets: this.bulle, alpha: 0.2, duration: 360, yoyo: true, repeat: -1,
@@ -91,7 +92,7 @@ export class Agent {
     const p: PointMonde = { x: fumoir.x + (Math.random() - 0.5) * 50, y: fumoir.y + Math.random() * 20 };
     const posee = (): void => {
       this.corps.sens = 'bas';
-      this.corps.poser('clawd-clope'); // la pause clope validée par Chris, devant l'entrée
+      this.corps.poser('clawd-repos'); // en pause au café de la pièce
     };
     if (!this.corps.allerA(grille, p, posee)) posee();
   }

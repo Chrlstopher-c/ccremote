@@ -1,5 +1,5 @@
 // Responsabilité : les types communs de la carte du monde (cases praticables, objets, postes des agents, lieux) et la
-// taille d'une case. Le plan lui-même est construit par station/plan-station.ts. Pur : aucune notion de Phaser.
+// taille d'une case. Les cartes sont construites par station/piece.ts (vue pièce). Pur : aucune notion de Phaser.
 
 export const TUILE = 40; // une case = une plaque de sol du kit de la station (20 px d'art ×2)
 
