@@ -2,6 +2,9 @@
 // clients.
 import { z } from 'zod';
 
+export const LanceurSession = z.enum(['kitty', 'quart', 'echo']); // qui a lancé la session (registre `cc`)
+export type LanceurSession = z.infer<typeof LanceurSession>;
+
 export const StatutSession = z.enum([
   'demarrage', // tmux + claude se lancent
   'travail', // un tour est en cours
@@ -76,6 +79,7 @@ export const ResumeSession = z.object({
   attachee: z.boolean(), // un terminal est attaché (kitty, web)
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
   terminal: z.boolean().optional(), // vivante dans un terminal ordinaire, hors tmux : suivie en lecture seule
+  lanceur: LanceurSession.optional(), // qui a lancé la session (registre `cc`) : kitty, quart ou echo
   dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
   nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
   // Calculé par le relais, jamais par le poste : ISO de la dernière activité quand le tour est fini (attente ou

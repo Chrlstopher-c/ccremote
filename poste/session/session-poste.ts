@@ -21,6 +21,8 @@ export interface SessionPoste {
 
   // Découverte : ce que la machine voit de la session.
   rattacher(pane: PaneTmux | null): void;
+  /** Nom donné par `cc` (tmux seulement ; une session SDK porte son titre). */
+  nommer?(nom: string | null): void;
   rattacherTerminal(vivant: boolean): void;
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void;
   lire(): void;
