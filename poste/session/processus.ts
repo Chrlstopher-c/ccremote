@@ -12,6 +12,7 @@ const Declaration = z.object({
   cwd: z.string(),
   kind: z.string().optional(),
   entrypoint: z.string().optional(),
+  name: z.string().optional(),
 });
 
 export interface ProcessusClaude {
@@ -20,6 +21,7 @@ export interface ProcessusClaude {
   readonly cwd: string;
   readonly enTmux: boolean;
   readonly configDir: string | null;
+  readonly nom: string | null; // nom donné par Claude (/rename, --name) dans son registre natif
 }
 
 function lire(chemin: string): string {
@@ -55,6 +57,7 @@ export function processusClaude(configDirs: readonly (string | null)[]): Process
         cwd: d.data.cwd,
         enTmux: enTmux(d.data.pid),
         configDir,
+        nom: d.data.name ?? null,
       });
     }
   }

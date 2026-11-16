@@ -1,13 +1,16 @@
-// Responsabilité : la ligne de commande `claude` d'une session pilotée par ccremote (lancement ou reprise).
+// Responsabilité : la ligne de commande d'une session pilotée par ccremote (lancement ou reprise), passée par le
+// lanceur unique `cc` : c'est lui qui donne l'id, le nom, la session tmux et la fiche du registre.
 // La session garde TOUTE la config de Chris (CLAUDE.md, skills, MCP) : on n'ajoute que consignes, crochets et rythme.
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { McpStdioServerConfig } from '@anthropic-ai/claude-agent-sdk';
+import type { LanceurSession } from '../../commun/session.ts';
 
 export const VAR_SESSION = 'CCREMOTE_SESSION';
 export const VAR_SOCKET = 'CCREMOTE_SOCKET';
 
+const CC = join(import.meta.dir, 'cc');
 const CROCHET = join(import.meta.dir, 'crochet.ts');
 const MCP_RYTHME = join(import.meta.dir, 'mcp-rythme.ts');
 
@@ -58,22 +61,26 @@ export function serveurRythme(session: string, socket: string): McpStdioServerCo
   };
 }
 
-// Reprise d'une session adoptée : sa config d'origine, sans crochets ; seulement de quoi démarrer sans question.
-export function commandeReprise(sessionId: string): string[] {
-  return [binaireClaude(), '--resume', sessionId, '--dangerously-skip-permissions',
-    '--settings', JSON.stringify({ skipDangerousModePermissionPrompt: true })];
+// Reprise d'une session adoptée ou fermée : sa config d'origine, sans crochets ; de quoi démarrer sans question.
+export function commandeReprise(sessionId: string, lanceur: LanceurSession = 'quart'): string[] {
+  return [
+    CC, '--lanceur', lanceur, '--id', sessionId, '--',
+    '--resume', sessionId,
+    '--dangerously-skip-permissions',
+    '--settings', JSON.stringify({ skipDangerousModePermissionPrompt: true }),
+  ];
 }
 
-// `☠` `--mcp-config` est variadique : placé juste avant le message, il l'avale comme un second fichier de config
-// (« MCP config file not found: …/<message> »). Il vient donc en tête, suivi d'options à valeur unique.
+// `cc` ajoute --session-id et --name à un lancement neuf ; une reprise passe --resume (il reprend le nom et la date).
+// `--mcp-config` est variadique : il ne doit pas précéder le message, que l'appelant ajoute en dernier.
 export function commandeClaude(l: Lancement): string[] {
   return [
-    binaireClaude(),
+    CC, '--lanceur', 'quart', '--id', l.sessionId, '--nom', l.titre, '--',
     '--mcp-config', rythme(),
     '--settings', crochets(),
     '--dangerously-skip-permissions',
     '--append-system-prompt', l.consignes,
     ...(l.modele ? ['--model', l.modele] : []),
-    ...(l.reprise ? ['--resume', l.sessionId] : ['--session-id', l.sessionId, '--name', l.titre]),
+    ...(l.reprise ? ['--resume', l.sessionId] : []),
   ];
 }

@@ -1,6 +1,7 @@
 // Responsabilité : la fiche d'une session adoptée — lancée hors ccremote, dans tmux ou dans un terminal ordinaire —
-// et le transcript qui lui correspond. Pur, sauf la lecture du disque par `retrouverTranscript`.
-import type { ResumeSession } from '../../commun/session.ts';
+// et le transcript qui lui correspond. Une session sans identifiant réel n'est pas adoptée : pas de faux id.
+import type { LanceurSession, ResumeSession } from '../../commun/session.ts';
+import type { EntreeCc } from './registre-cc.ts';
 import type { ProcessusClaude } from './processus.ts';
 import type { PaneTmux } from './tmux.ts';
 import { cheminTranscript, retrouverTranscript } from './transcript.ts';
@@ -14,29 +15,48 @@ export interface Origine {
 export interface Adoptee {
   readonly id: string;
   readonly transcript: { readonly id: string; readonly chemin: string } | null;
+  readonly nom: string | null; // registre cc, puis nom natif de Claude
+  readonly lanceur: LanceurSession | null;
 }
 
-/** Le transcript d'une session tmux : exact si Claude a déclaré son processus, sinon deviné (titre, dossier). */
-export function transcriptDuPane(
-  pane: PaneTmux,
-  panes: readonly PaneTmux[],
-  proc: ProcessusClaude | undefined,
-): Adoptee {
-  if (proc)
-    return {
-      id: proc.sessionId,
-      transcript: { id: proc.sessionId, chemin: cheminTranscript(proc.cwd, proc.sessionId, proc.configDir) },
-    };
-  const voisins = panes.filter((p) => p.dossier === pane.dossier).length;
-  const t = retrouverTranscript(pane.dossier, pane.titre, voisins, null);
-  return { id: t?.id ?? `tmux-${pane.nom}-${pane.creeLe}`, transcript: t };
-}
-
-export function transcriptDuProcessus(proc: ProcessusClaude): Adoptee {
+function depuisProcessus(proc: ProcessusClaude, entree: EntreeCc | undefined): Adoptee {
   return {
     id: proc.sessionId,
     transcript: { id: proc.sessionId, chemin: cheminTranscript(proc.cwd, proc.sessionId, proc.configDir) },
+    nom: entree?.nom ?? proc.nom,
+    lanceur: entree?.lanceur ?? null,
   };
+}
+
+/** L'identité d'une session tmux : Claude a déclaré son processus, ou la fiche cc la nomme, sinon le transcript
+ *  unique du dossier. Rien de sûr : null (la session n'est pas adoptée). */
+export function identitePane(
+  pane: PaneTmux,
+  panes: readonly PaneTmux[],
+  proc: ProcessusClaude | undefined,
+  entree: EntreeCc | undefined,
+): Adoptee | null {
+  if (proc) return depuisProcessus(proc, entree);
+  if (entree) {
+    return {
+      id: entree.id,
+      transcript: { id: entree.id, chemin: cheminTranscript(entree.cwd, entree.id, null) },
+      nom: entree.nom,
+      lanceur: entree.lanceur,
+    };
+  }
+  const voisins = panes.filter((p) => p.dossier === pane.dossier).length;
+  const t = retrouverTranscript(pane.dossier, pane.titre, voisins, null);
+  return t ? { id: t.id, transcript: t, nom: null, lanceur: null } : null;
+}
+
+export function identiteProcessus(proc: ProcessusClaude, entree: EntreeCc | undefined): Adoptee {
+  return depuisProcessus(proc, entree);
+}
+
+/** Titre affiché : nom donné par Claude ou par cc, sinon titre du pane, sinon le dossier. */
+export function titreDe(nom: string | null, titrePane: string | null, dossier: string): string {
+  return nom ?? titrePane ?? (dossier.split('/').at(-1) || 'Claude');
 }
 
 export function ficheAdoptee(
@@ -66,7 +86,35 @@ export function ficheAdoptee(
     attachee: tmux?.attachee ?? false,
     pilotee: false,
     terminal: tmux === null,
+    ...(a.lanceur ? { lanceur: a.lanceur } : {}),
     creeLe: maintenant,
+    majLe: maintenant,
+  };
+}
+
+/** Fiche d'une session cc fermée : id et dossier connus, reprenable par `cc --resume`. */
+export function ficheFermee(o: Origine, e: EntreeCc): ResumeSession {
+  const maintenant = new Date().toISOString();
+  return {
+    id: e.id,
+    machine: o.machine,
+    projet: { machine: o.machine, chemin: e.cwd, nom: e.cwd.split('/').at(-1) ?? e.cwd },
+    cwd: e.cwd,
+    titre: e.nom,
+    objectif: null,
+    modele: 'défaut',
+    compte: o.compte,
+    autonomie: false,
+    statut: 'fermee',
+    contexte: { tokens: 0, max: o.fenetre },
+    etapes: 0,
+    compactions: 0,
+    claudeSessionId: e.id,
+    tmux: null,
+    attachee: false,
+    pilotee: false,
+    lanceur: e.lanceur,
+    creeLe: e.creeLe,
     majLe: maintenant,
   };
 }

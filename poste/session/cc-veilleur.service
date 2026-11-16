@@ -1,0 +1,14 @@
+[Unit]
+Description=Veilleur : reprend les sessions Claude Code interrompues par la fermeture de Claude Desktop
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/ccremote/code/poste/session/veilleur
+Environment=PATH=%h/.local/bin:%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
+Environment=VEILLEUR_CC=%h/.local/bin/ccs
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
