@@ -4,12 +4,14 @@
 // (relance autonome, compaction, mode nuit), car le SDK n'a pas de hook Stop.
 import { randomUUID } from 'node:crypto';
 import {
+  getSessionMessages,
   query as requeteParDefaut,
   type Options,
   type PermissionResult,
   type SDKControlGetContextUsageResponse,
   type SDKMessage,
   type SDKUserMessage,
+  type SessionMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'pino';
 import type { ConnecteurSession, ContexteSession, DetailTacheSession, TacheSession } from '../../commun/panneau.ts';
@@ -90,6 +92,8 @@ export class SessionSdk implements SessionPoste {
   private readonly presentation: PresentationSession | null;
   private readonly registreTaches = new RegistreTaches();
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
+  // Rembobinage en attente : la prochaine reprise part de cette entrée du transcript (resumeSessionAt).
+  private pointReprise: string | null = null;
   // Chris a interrompu le tour en cours : le SDK coupe alors le flux par une erreur, qui n'est pas une panne.
   private interrompuParChris = false;
 
@@ -167,10 +171,11 @@ export class SessionSdk implements SessionPoste {
     if (!this.fil) return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : this.reprendre(texte);
     const jointes = pieces.length > 0 ? (this.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session') : null;
     if (typeof jointes === 'string') return jointes;
-    this.emettre({ type: 'message', texte });
+    const uuid = randomUUID();
+    this.emettre({ type: 'message', texte, uuid });
     jointes?.evenements.forEach((evt) => this.emettre(evt));
     this.bilan.messageDeChris();
-    this.pousser(texte + (jointes?.complement ?? ''), jointes?.blocs);
+    this.pousser(texte + (jointes?.complement ?? ''), jointes?.blocs, uuid);
     if (this.etat.statut !== 'compaction') this.maj({ statut: 'travail' });
     return null;
   }
@@ -178,8 +183,9 @@ export class SessionSdk implements SessionPoste {
   async reprendre(message?: string): Promise<string | null> {
     if (this.fil) return message ? this.envoyer(message) : null;
     if (!this.etat.claudeSessionId) return 'conversation inconnue : impossible de la reprendre';
-    if (message) this.emettre({ type: 'message', texte: message });
-    return this.demarrer(true, message);
+    const uuid = message ? randomUUID() : undefined;
+    if (message) this.emettre({ type: 'message', texte: message, uuid });
+    return this.demarrer(true, message, uuid);
   }
 
   reprendreApresRedemarrage(texte: string | null): string | null {
@@ -228,6 +234,28 @@ export class SessionSdk implements SessionPoste {
       this.env.journal.warn({ err: erreur, session: this.etat.id, tache }, 'arrêt de tâche refusé par le SDK');
       return `arrêt impossible : ${String(erreur)}`;
     }
+  }
+
+  // Rembobiner : la conversation repartira de l'entrée qui précède ce message ; le message et la suite sont retirés
+  // de la reprise. La session se ferme ici, la reprise part au prochain message de Chris.
+  async rembobiner(messageId: string): Promise<string | null> {
+    const id = this.etat.claudeSessionId;
+    if (!id) return 'conversation inconnue : rien à rembobiner';
+    let messages: SessionMessage[];
+    try {
+      messages = await getSessionMessages(id, { dir: this.etat.cwd });
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'lecture du transcript impossible');
+      return `lecture du transcript impossible : ${String(erreur)}`;
+    }
+    const rang = messages.findIndex((m) => m.uuid === messageId && m.type === 'user');
+    if (rang < 0) return 'message introuvable dans la conversation';
+    const precedent = rang > 0 ? messages[rang - 1]?.uuid : undefined;
+    if (!precedent) return 'premier message : rembobinage impossible';
+    const refus = await this.fermer();
+    if (refus) return refus;
+    this.pointReprise = precedent;
+    return null;
   }
 
   async fermer(): Promise<string | null> {
@@ -325,6 +353,7 @@ export class SessionSdk implements SessionPoste {
     return optionsSdk({
       identifiant: reprise ? (this.etat.claudeSessionId ?? this.etat.id) : this.etat.id,
       reprise,
+      reprisePoint: this.pointReprise,
       cwd: this.etat.cwd,
       consignes: this.p.consignes ?? '',
       modele: this.etat.modele === 'défaut' ? undefined : this.etat.modele,
@@ -340,7 +369,7 @@ export class SessionSdk implements SessionPoste {
     });
   }
 
-  private demarrer(reprise: boolean, message?: string): string | null {
+  private demarrer(reprise: boolean, message?: string, uuid?: SDKUserMessage['uuid']): string | null {
     const fil = new FileAsynchrone<SDKUserMessage>();
     let liberer: () => void = () => undefined;
     const pret = new Promise<void>((r) => {
@@ -351,11 +380,12 @@ export class SessionSdk implements SessionPoste {
       const requete = this.fabrique({ prompt: messagesAvecConnecteurs(fil, pret), options: this.optionsDe(reprise) });
       this.aReprendre = true;
       this.requete = requete;
+      this.pointReprise = null;
       this.fil = fil;
       void this.attendreConnecteurs(requete).then(() => liberer());
       void this.ecouter(requete, this.traduction.nouvelEtat());
       this.maj({ statut: message ? 'travail' : 'attente' });
-      if (message) this.pousser(message);
+      if (message) this.pousser(message, undefined, uuid);
       return null;
     } catch (erreur) {
       this.requete = null;
@@ -367,10 +397,10 @@ export class SessionSdk implements SessionPoste {
   }
 
   // Un message poussé au SDK (Chris, relance, compaction, réveil) ouvre un tour que le bilan compte.
-  private pousser(texte: string, blocs?: PiecesPreparees['blocs']): void {
+  private pousser(texte: string, blocs?: PiecesPreparees['blocs'], uuid?: SDKUserMessage['uuid']): void {
     this.interrompuParChris = false;
     if (!this.fil) return;
-    this.fil.push(messageUtilisateur(texte, blocs));
+    this.fil.push(messageUtilisateur(texte, blocs, uuid));
     this.bilan.envoye();
   }
 

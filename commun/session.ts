@@ -111,8 +111,11 @@ export type ResumeSession = z.infer<typeof ResumeSession>;
 const deAgent = { agent: z.string().optional() };
 
 export const Evenement = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('message'), texte: z.string() }),
-  z.object({ type: z.literal('texte'), texte: z.string(), ...deAgent }),
+  // `uuid` : identifiant de l'entrée du transcript (SDK), stable : sert à rembobiner, dupliquer et épingler.
+  z.object({ type: z.literal('message'), texte: z.string(), uuid: z.string().optional() }),
+  z.object({ type: z.literal('texte'), texte: z.string(), uuid: z.string().optional(), ...deAgent }),
+  // Chapitre épinglé sur un message de l'utilisateur (relais) ; `epingle` false le retire.
+  z.object({ type: z.literal('chapitre'), uuid: z.string(), epingle: z.boolean() }),
   // Texte ou réflexion en cours d'écriture (SDK, includePartialMessages) : remplacé par l'événement final (`texte`,
   // `reflexion`), jamais persisté. `genre` absent = texte.
   z.object({

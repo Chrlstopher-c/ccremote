@@ -72,6 +72,9 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   // Lecture d'un fichier présenté (sortie d'outil, image du fil) stocké par la session sur le poste.
   z.object({ kind: z.literal('fichier_session'), ...avecSession, fichier: z.string() }),
   z.object({ kind: z.literal('interrompre'), ...avecSession }),
+  // Rembobiner à un message de Chris (la suite est retirée de la reprise) ; dupliquer : nouvelle session jusqu'à ce message.
+  z.object({ kind: z.literal('rembobiner'), ...avecSession, messageId: z.string().min(1).max(200) }),
+  z.object({ kind: z.literal('dupliquer'), ...avecSession, messageId: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('compacter'), ...avecSession }),
   z.object({ kind: z.literal('fermer'), ...avecSession }),
   z.object({ kind: z.literal('reprendre'), ...avecSession }),

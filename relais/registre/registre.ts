@@ -205,6 +205,22 @@ export class Registre {
       .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
   }
 
+  // Rang (seq) d'un message de Chris par son uuid, dans le fil de la session ; null s'il n'y est pas.
+  rangMessage(sessionId: string, uuid: string): number | null {
+    const ligne = this.db
+      .query(
+        `SELECT seq FROM evenements WHERE session_id = $s AND json_extract(evt, '$.type') = 'message'
+      AND json_extract(evt, '$.uuid') = $u ORDER BY seq LIMIT 1`,
+      )
+      .get({ s: sessionId, u: uuid }) as { seq: number } | null;
+    return ligne?.seq ?? null;
+  }
+
+  // Retire du fil tous les événements à partir de ce rang (inclus) : le rembobinage.
+  tronquerDepuis(sessionId: string, seq: number): number {
+    return this.db.query('DELETE FROM evenements WHERE session_id = $s AND seq >= $q').run({ s: sessionId, q: seq }).changes;
+  }
+
   // Supprime le fil des sessions données ; renvoie le nombre d'événements supprimés.
   purgerEvenements(sessionIds: readonly string[]): number {
     const supprimer = this.db.query('DELETE FROM evenements WHERE session_id = $s');

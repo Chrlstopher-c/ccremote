@@ -37,6 +37,7 @@ export function envSdk(source: Record<string, string | undefined>, configDir: st
 export interface ParametresSdk {
   readonly identifiant: string; // conversation nouvelle (sessionId) ou reprise (resume)
   readonly reprise: boolean;
+  readonly reprisePoint?: string | null; // rembobinage : la reprise part de cette entrée (resumeSessionAt)
   readonly cwd: string;
   readonly consignes: string;
   readonly modele: string | undefined;
@@ -55,6 +56,7 @@ export function optionsSdk(p: ParametresSdk): Options {
     cwd: p.cwd,
     env: envSdk(p.source, p.configDir),
     ...(p.reprise ? { resume: p.identifiant } : { sessionId: p.identifiant }),
+    ...(p.reprise && p.reprisePoint ? { resumeSessionAt: p.reprisePoint } : {}),
     systemPrompt: { type: 'preset', preset: 'claude_code', ...(p.consignes ? { append: p.consignes } : {}) },
     includePartialMessages: true,
     permissionMode: p.mode,

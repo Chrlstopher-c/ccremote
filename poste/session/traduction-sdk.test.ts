@@ -51,7 +51,7 @@ describe('traduction SDK → événements', () => {
     );
     expect(sortie.evenements).toEqual([
       { type: 'reflexion', texte: 'je réfléchis' },
-      { type: 'texte', texte: 'Bonjour' },
+      { type: 'texte', texte: 'Bonjour', uuid: 'u1' },
       { type: 'outil', id: 'toolu_1', nom: 'Bash', resume: 'git status', detail: '{\n "command": "git status"\n}' },
     ]);
     expect(sortie.claudeSessionId).toBe('s1');

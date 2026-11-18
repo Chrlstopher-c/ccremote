@@ -52,9 +52,9 @@ export async function* messagesAvecConnecteurs(
 }
 
 // Pièces de Chris (images, PDF) : le texte d'abord, puis les blocs, dans le même message.
-export function messageUtilisateur(texte: string, blocs: readonly BlocPiece[] = []): SDKUserMessage {
+export function messageUtilisateur(texte: string, blocs: readonly BlocPiece[] = [], uuid?: SDKUserMessage['uuid']): SDKUserMessage {
   const contenu = blocs.length > 0 ? [{ type: 'text' as const, text: texte }, ...blocs] : texte;
-  return { type: 'user', message: { role: 'user', content: contenu }, parent_tool_use_id: null };
+  return { type: 'user', message: { role: 'user', content: contenu }, parent_tool_use_id: null, ...(uuid ? { uuid } : {}) };
 }
 
 export function pause(ms: number): Promise<void> {

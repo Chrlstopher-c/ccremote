@@ -28,6 +28,8 @@ const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).
 const CorpsMode = z.object({ mode: ModeSession });
 const CorpsModele = z.object({ modele: z.string().min(1).max(120) });
 const CorpsEffort = z.object({ effort: EffortSession.nullable() });
+const CorpsMessageId = z.object({ messageId: z.string().min(1).max(200) });
+const CorpsChapitre = z.object({ messageId: z.string().min(1).max(200), epingle: z.boolean() });
 const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
 const CorpsTitre = z.object({ titre: z.string().trim().min(1).max(120) });
 const CorpsEnvironnement = z.object({
@@ -95,6 +97,56 @@ export class ApiSessions {
     const c = await lireCorps(req, CorpsMessage);
     if (c instanceof Response) return c;
     return this.commander(req.params.id, { kind: 'envoyer', texte: c.texte, ...(c.pieces ? { pieces: c.pieces } : {}) });
+  }
+
+  // Rembobinage : le poste ferme la session et retient le point de reprise ; le fil du relais est retiré à partir du
+  // message (le message compris), puis la fiche repart vers l'interface.
+  async rembobiner(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsMessageId);
+    if (c instanceof Response) return c;
+    const session = this.registre.session(req.params.id);
+    if (!session) return erreur('session inconnue', 404);
+    const rang = this.registre.rangMessage(session.id, c.messageId);
+    if (rang === null) return erreur('message introuvable dans le fil', 404);
+    const r = await this.postes.commander(session.machine, { kind: 'rembobiner', sessionId: session.id, messageId: c.messageId });
+    if (!r.ok) {
+      this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'rembobinage refusé');
+      return erreur(r.erreur ?? 'rembobinage refusé', REFUS_POSTE);
+    }
+    this.registre.tronquerDepuis(session.id, rang);
+    const vue = this.registre.session(session.id);
+    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    return json(r.donnees ?? {});
+  }
+
+  // Duplication : le poste copie la conversation jusqu'au message et la rend reprenable ; sa fiche arrive ensuite.
+  async dupliquer(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsMessageId);
+    if (c instanceof Response) return c;
+    const session = this.registre.session(req.params.id);
+    if (!session) return erreur('session inconnue', 404);
+    if (this.registre.rangMessage(session.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
+    const r = await this.postes.commander(session.machine, { kind: 'dupliquer', sessionId: session.id, messageId: c.messageId });
+    if (!r.ok) {
+      this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'duplication refusée');
+      return erreur(r.erreur ?? 'duplication refusée', REFUS_POSTE);
+    }
+    return json(r.donnees ?? {}, 201);
+  }
+
+  // Chapitre : épingle un message de Chris dans le fil (événement persisté, retirable).
+  async chapitre(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsChapitre);
+    if (c instanceof Response) return c;
+    if (!this.registre.session(req.params.id)) return erreur('session inconnue', 404);
+    if (this.registre.rangMessage(req.params.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
+    const e = this.registre.ajouterEvenement(req.params.id, new Date().toISOString(), {
+      type: 'chapitre',
+      uuid: c.messageId,
+      epingle: c.epingle,
+    });
+    this.diffusion.diffuser({ type: 'evenement', evenement: e });
+    return json({ ok: true, epingle: c.epingle });
   }
 
   // Fichier présenté par la session (artefact, image, fichier) : lu sur le poste, servi tel quel. Le relais ne le garde pas.

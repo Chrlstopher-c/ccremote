@@ -2,6 +2,7 @@
 // persistance.
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'pino';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
@@ -149,6 +150,7 @@ export class GestionnaireSessions {
 
   async executer(c: CommandeSession): Promise<Reponse> {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
+    if (c.kind === 'dupliquer') return this.dupliquer(c.sessionId, c.messageId);
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
@@ -156,6 +158,8 @@ export class GestionnaireSessions {
     let erreur: string | null = null;
     if (c.kind === 'envoyer') erreur = await this.envoyerMessage(s, c.texte, c.pieces ?? []);
     else if (c.kind === 'interrompre') erreur = await s.interrompre();
+    else if (c.kind === 'rembobiner')
+      erreur = s instanceof SessionSdk ? await s.rembobiner(c.messageId) : 'non pris en charge hors SDK';
     else if (c.kind === 'compacter') erreur = await s.compacter();
     else if (c.kind === 'fermer') erreur = await s.fermer();
     else if (c.kind === 'reprendre') erreur = await s.reprendre();
@@ -167,6 +171,25 @@ export class GestionnaireSessions {
     else if (c.kind === 'mode' || c.kind === 'modele' || c.kind === 'effort' || c.kind === 'renommer')
       erreur = await s.reglerSession(c);
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
+  }
+
+  // Duplication : le SDK copie le transcript jusqu'au message (inclus) dans une nouvelle conversation, importée comme
+  // une session reprenable. Son identifiant part au relais.
+  private async dupliquer(id: string, messageId: string): Promise<Reponse> {
+    const s = this.sessions.get(id);
+    const conversation = s?.resume.claudeSessionId;
+    if (!s || !conversation) return { ok: false, erreur: 'session inconnue ou sans conversation à dupliquer' };
+    let nouvelle: string;
+    try {
+      nouvelle = (await forkSession(conversation, { dir: s.resume.cwd, upToMessageId: messageId })).sessionId;
+    } catch (erreur) {
+      this.journal.warn({ err: erreur, session: id }, 'duplication refusée par le SDK');
+      return { ok: false, erreur: `duplication impossible : ${String(erreur)}` };
+    }
+    const copie = this.trouverImportables().find((t) => t.id === nouvelle);
+    if (copie) this.importerUne(copie);
+    this.sauvegarder();
+    return { ok: true, donnees: { sessionId: nouvelle } };
   }
 
   // Suppression sur demande explicite de Chris : la session s'arrête (SDK), son transcript part, son identifiant est

@@ -81,7 +81,8 @@ function traduireAssistant(msg: Assistant, etat: EtatTraduction): Evenement[] {
     return [{ type: 'erreur', message: texteErreur || `erreur de l’API : ${msg.error}` }];
   }
   if (principal) mettreContexte(msg.message, etat);
-  return blocsDe(msg.message.content).flatMap((b) => traduireBlocAssistant(b, marque, etat));
+  const evenements = blocsDe(msg.message.content).flatMap((b) => traduireBlocAssistant(b, marque, etat));
+  return principal ? evenements.map((evt) => (evt.type === 'texte' ? { ...evt, uuid: msg.uuid } : evt)) : evenements;
 }
 
 // Contexte relu au prochain tour = input + cache lu + cache créé du dernier appel du fil principal (cf. traduction.ts).

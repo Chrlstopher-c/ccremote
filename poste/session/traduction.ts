@@ -20,6 +20,7 @@ export interface Ligne {
   readonly message?: { content?: unknown; usage?: Objet; stop_reason?: unknown; model?: unknown };
   readonly compactMetadata?: Objet;
   readonly customTitle?: unknown;
+  readonly uuid?: unknown;
   readonly attachment?: { type?: unknown; prompt?: unknown };
   readonly isApiErrorMessage?: unknown;
 }
@@ -30,7 +31,15 @@ export function estErreurApi(l: Ligne): boolean {
 }
 
 // `agent` fourni : la ligne vient du transcript d'un sous-agent (toutes ses lignes sont `isSidechain`).
+// L'identifiant de la ligne (uuid du transcript) rejoint les messages et textes du fil principal.
 export function traduire(l: Ligne, agent?: string): Evenement[] {
+  const evenements = traduireLigne(l, agent);
+  const uuid = texte(l.uuid);
+  if (!uuid || agent !== undefined) return evenements;
+  return evenements.map((evt) => (evt.type === 'message' || evt.type === 'texte' ? { ...evt, uuid } : evt));
+}
+
+function traduireLigne(l: Ligne, agent?: string): Evenement[] {
   if (l.isSidechain === true && agent === undefined) return [];
   const marque = agent === undefined ? {} : { agent };
   if (estErreurApi(l) && agent === undefined) {
