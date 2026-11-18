@@ -13,6 +13,18 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 18/11 — Moteur SDK pour Lanterne : flux, permissions, réglages (branche `lanterne/moteur`)
+
+- Deltas de texte et de réflexion relayés en direct (`flux`, genre `reflexion`, `agent` pour un sous-agent) ; jamais
+  persistés, le bloc final reste dans le fil. Le client web ignore ces deltas (magasin.ts).
+- Permissions hors mode bypass : `canUseTool` → dialogue Autoriser / Toujours / Refuser, file d'attente
+  (`avis-sdk.ts`, `file-avis-sdk.ts`), refus de la file à l'interruption. Bypass (défaut) : aucune demande.
+  `allowDangerouslySkipPermissions` posé pour que le bypass soit accessible en cours de session.
+- Réglages en cours de session : `mode`, `modele`, `effort`, `renommer` (routes relais `/mode` etc.) ; sans requête
+  vivante, le réglage attend le prochain démarrage. Limite : le titre n'est pas écrit dans le JSONL du SDK.
+- À vérifier en réel (non fait, abonnement) : que `AskUserQuestion` et `ExitPlanMode` passent toujours par `canUseTool`
+  en mode bypass.
+
 ## 16/11 (nuit) — Agent HQ v1 : l'app jeu qui remplace Claude Desktop
 
 **Ce qui marche (vérifié de bout en bout sur un relais + un poste d'essai locaux, isolés de la prod)** :
