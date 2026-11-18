@@ -13,6 +13,14 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 18/11 (agent Haiku) — Suppression, environnements, import CLI (branche `lanterne/moteur`, 0ec7d23, 111d001)
+
+- Suppression : `POST /api/sessions/:id/supprimer` → poste : ferme la session SDK, retire `<config>/projects/<dossier>/<id>.jsonl` et `<id>/` (sous-agents) seulement, retient l'id dans `supprimees.json` (sinon la découverte la ferait réapparaître). Refus si la session tourne dans un terminal. Relais : efface la fiche, le fil et les notifications après accord du poste.
+- Environnements : table `environnements` (migration 6), `GET/POST /api/environnements` ; la liste = enregistrés puis dossiers des sessions récentes.
+- Import : `GET /api/machines/:id/importables` (transcripts de `projects` inconnus, non en cours, 100 au plus) et `POST /api/machines/:id/importer` (ids → sessions fermées sur le moteur tmux, historique lu, reprenables).
+- Essai réel sur la tour : session jetable créée puis supprimée dans `lanterne-essai-reel` (seul son jsonl parti) ; environnement enregistré ; une session CLI importée.
+- Non fait : Remote Control (le SDK n'expose pas de contrôle par session) ; sessions enfants (liens dans `subagents/*.meta.json`, pas de session côté SDK).
+
 ## 18/11 (nuit) — Contexte, connecteurs et tâches de fond relayés (branche `lanterne/moteur`)
 
 - Lectures du panneau, sans effet, par le canal de commandes du poste (comme `fichiers_lister`) : `GET
