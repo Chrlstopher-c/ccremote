@@ -94,3 +94,15 @@ describe('optionsSdk', () => {
     expect(o.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code' });
   });
 });
+
+describe('rembobinage : point de reprise', () => {
+  test('une reprise part de l’entrée demandée (resumeSessionAt), pas une création', () => {
+    const options = optionsSdk(parametres({ reprise: true, reprisePoint: 'entree-9' }));
+    expect(options.resume).toBe('conv-1');
+    expect(options.resumeSessionAt).toBe('entree-9');
+  });
+
+  test('sans point de reprise, la reprise reste entière', () => {
+    expect(optionsSdk(parametres({ reprise: true })).resumeSessionAt).toBeUndefined();
+  });
+});

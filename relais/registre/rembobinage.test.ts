@@ -52,7 +52,7 @@ function fil(r: Registre): void {
   r.ajouterEvenement('a', MAJ, { type: 'texte', texte: 'suite', uuid: 'r2' });
 }
 
-function postesQui(reponse: { ok: boolean; donnees?: unknown }, envoyes: unknown[]): Postes {
+function postesQui(reponse: { ok: boolean; donnees?: unknown; erreur?: string }, envoyes: unknown[]): Postes {
   return {
     commander: (_machine: string, commande: unknown) => {
       envoyes.push(commande);
