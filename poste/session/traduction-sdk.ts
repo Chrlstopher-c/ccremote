@@ -30,6 +30,8 @@ export interface EtatTraduction {
   erreurDuTour: boolean;
   // Appels des outils de présentation : leurs résultats sont masqués comme leurs appels.
   readonly outilsPresentation: Set<string>;
+  // Dernière entrée assistant du fil principal pendant le tour : son uuid désigne la réponse (dupliquer, épingler).
+  dernierUuid: string | null;
 }
 
 export interface SortieTraduction {
@@ -42,7 +44,13 @@ export interface SortieTraduction {
 type Corps = Omit<SortieTraduction, 'claudeSessionId'>;
 
 export function nouvelEtatTraduction(): EtatTraduction {
-  return { messagesEnFlux: new Map(), contexte: null, erreurDuTour: false, outilsPresentation: new Set() };
+  return {
+    messagesEnFlux: new Map(),
+    contexte: null,
+    erreurDuTour: false,
+    outilsPresentation: new Set(),
+    dernierUuid: null,
+  };
 }
 
 // L'identifiant de session est lu sur tout message qui le porte (init compris).
@@ -81,6 +89,7 @@ function traduireAssistant(msg: Assistant, etat: EtatTraduction): Evenement[] {
     return [{ type: 'erreur', message: texteErreur || `erreur de l’API : ${msg.error}` }];
   }
   if (principal) mettreContexte(msg.message, etat);
+  if (principal && msg.uuid) etat.dernierUuid = msg.uuid;
   const evenements = blocsDe(msg.message.content).flatMap((b) => traduireBlocAssistant(b, marque, etat));
   return principal ? evenements.map((evt) => (evt.type === 'texte' ? { ...evt, uuid: msg.uuid } : evt)) : evenements;
 }
@@ -173,8 +182,10 @@ function traduireResultat(msg: Resultat, etat: EtatTraduction): Corps {
   const contexte = etat.contexte ?? 0;
   const evenements: Evenement[] = [];
   if (erreur !== null && !etat.erreurDuTour) evenements.push({ type: 'erreur', message: erreur });
-  evenements.push({ type: 'tour_fini', dureeMs, contexte, ...jetonsDuTour(msg) });
+  const uuid = etat.dernierUuid ? { uuid: etat.dernierUuid } : {};
+  evenements.push({ type: 'tour_fini', dureeMs, contexte, ...jetonsDuTour(msg), ...uuid });
   etat.erreurDuTour = false;
+  etat.dernierUuid = null;
   etat.messagesEnFlux.clear();
   return { evenements, finDeTour: { dureeMs, contexte, erreur } };
 }

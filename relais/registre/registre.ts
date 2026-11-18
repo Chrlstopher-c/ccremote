@@ -216,6 +216,17 @@ export class Registre {
     return ligne?.seq ?? null;
   }
 
+  // Rang (seq) d'une entrée que Chris peut dupliquer ou épingler : son message, ou une réponse (uuid de `tour_fini`).
+  rangEntree(sessionId: string, uuid: string): number | null {
+    const ligne = this.db
+      .query(
+        `SELECT seq FROM evenements WHERE session_id = $s AND json_extract(evt, '$.type') IN ('message', 'tour_fini')
+      AND json_extract(evt, '$.uuid') = $u ORDER BY seq LIMIT 1`,
+      )
+      .get({ s: sessionId, u: uuid }) as { seq: number } | null;
+    return ligne?.seq ?? null;
+  }
+
   // Retire du fil tous les événements à partir de ce rang (inclus) : le rembobinage.
   tronquerDepuis(sessionId: string, seq: number): number {
     return this.db.query('DELETE FROM evenements WHERE session_id = $s AND seq >= $q').run({ s: sessionId, q: seq }).changes;

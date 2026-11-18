@@ -179,8 +179,20 @@ describe('traduction SDK → événements', () => {
     const etat = nouvelEtatTraduction();
     traduireSdk(assistant([{ type: 'text', text: 'fin' }]), etat);
     const sortie = traduireSdk(resultatOk(), etat);
-    expect(sortie.evenements).toEqual([{ type: 'tour_fini', dureeMs: 4200, contexte: 1100, entree: 1100, sortie: 5 }]);
+    expect(sortie.evenements).toEqual([
+      { type: 'tour_fini', dureeMs: 4200, contexte: 1100, entree: 1100, sortie: 5, uuid: 'u1' },
+    ]);
     expect(sortie.finDeTour).toEqual({ dureeMs: 4200, contexte: 1100, erreur: null });
+  });
+
+  test('tour_fini porte la dernière entrée assistant du fil principal, pas celle d’un sous-agent', () => {
+    const etat = nouvelEtatTraduction();
+    traduireSdk(assistant([{ type: 'text', text: 'avant' }]), etat);
+    traduireSdk(assistant([{ type: 'text', text: 'fin' }], { uuid: 'u2' }), etat);
+    traduireSdk(assistant([{ type: 'text', text: 'agent' }], { uuid: 'u3', parent_tool_use_id: 'toolu_9' }), etat);
+    const premier = traduireSdk(resultatOk(), etat).evenements;
+    expect(premier.at(-1)).toMatchObject({ type: 'tour_fini', uuid: 'u2' });
+    expect(traduireSdk(resultatOk(), etat).evenements.at(-1)).not.toHaveProperty('uuid');
   });
 
   test('result en erreur : erreur et fin de tour portant le message', () => {

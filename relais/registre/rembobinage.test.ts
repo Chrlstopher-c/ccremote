@@ -71,6 +71,30 @@ describe('rembobinage, duplication et chapitres', () => {
     expect(r.rangMessage('a', 'absent')).toBeNull();
   });
 
+  test('rangEntree trouve un message de Chris ou une fin de réponse, jamais un texte', () => {
+    const r = new Registre(ouvrirBase(':memory:'));
+    r.enregistrerSession(session('a'));
+    fil(r);
+    r.ajouterEvenement('a', MAJ, { type: 'tour_fini', dureeMs: 1, contexte: 0, uuid: 'r2' });
+    expect(r.rangEntree('a', 'm1')).toBe(1);
+    expect(r.rangEntree('a', 'r2')).toBe(5);
+    expect(r.rangEntree('a', 'r1')).toBeNull();
+  });
+
+  test('dupliquer et épingler une réponse par l uuid de sa fin de tour', async () => {
+    const r = new Registre(ouvrirBase(':memory:'));
+    r.enregistrerSession(session('a'));
+    fil(r);
+    r.ajouterEvenement('a', MAJ, { type: 'tour_fini', dureeMs: 1, contexte: 0, uuid: 'r2' });
+    const envoyes: unknown[] = [];
+    const postes = postesQui({ ok: true, donnees: { sessionId: 'copie' } }, envoyes);
+    const api = new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
+    expect((await api.dupliquer(requete('a', 'dupliquer', { messageId: 'r2' }))).status).toBe(201);
+    expect(envoyes).toEqual([{ kind: 'dupliquer', sessionId: 'a', messageId: 'r2' }]);
+    expect((await api.chapitre(requete('a', 'chapitres', { messageId: 'r2', epingle: true }))).status).toBe(200);
+    expect(r.derniersEvenements('a', 1)[0]?.evt).toEqual({ type: 'chapitre', uuid: 'r2', epingle: true });
+  });
+
   test('tronquerDepuis retire le message et tout ce qui le suit', () => {
     const r = new Registre(ouvrirBase(':memory:'));
     r.enregistrerSession(session('a'));

@@ -114,7 +114,7 @@ export const Evenement = z.discriminatedUnion('type', [
   // `uuid` : identifiant de l'entrée du transcript (SDK), stable : sert à rembobiner, dupliquer et épingler.
   z.object({ type: z.literal('message'), texte: z.string(), uuid: z.string().optional() }),
   z.object({ type: z.literal('texte'), texte: z.string(), uuid: z.string().optional(), ...deAgent }),
-  // Chapitre épinglé sur un message de l'utilisateur (relais) ; `epingle` false le retire.
+  // Chapitre épinglé sur un message de l'utilisateur ou une réponse (uuid de `tour_fini`) ; `epingle` false le retire.
   z.object({ type: z.literal('chapitre'), uuid: z.string(), epingle: z.boolean() }),
   // Texte ou réflexion en cours d'écriture (SDK, includePartialMessages) : remplacé par l'événement final (`texte`,
   // `reflexion`), jamais persisté. `genre` absent = texte.
@@ -159,6 +159,7 @@ export const Evenement = z.discriminatedUnion('type', [
     contexte: z.number(),
     entree: z.number().optional(), // jetons lus pendant le tour (SDK) ; absent pour une session tmux
     sortie: z.number().optional(), // jetons générés pendant le tour
+    uuid: z.string().optional(), // dernière entrée assistant du tour (SDK) : désigne la réponse (dupliquer, épingler)
   }),
   // Présentation (outils `lanterne` et pièces de Chris) : `fichier` désigne un fichier stocké sur le poste, servi par
   // la route du relais ; `artefact` est une version d'une page HTML ; `widget` un SVG ou une page HTML rendus en place.

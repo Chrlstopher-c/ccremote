@@ -119,13 +119,14 @@ export class ApiSessions {
     return json(r.donnees ?? {});
   }
 
-  // Duplication : le poste copie la conversation jusqu'au message et la rend reprenable ; sa fiche arrive ensuite.
+  // Duplication : le poste copie la conversation jusqu'au message (ou à la fin de la réponse) et la rend reprenable ;
+  // sa fiche arrive ensuite.
   async dupliquer(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsMessageId);
     if (c instanceof Response) return c;
     const session = this.registre.session(req.params.id);
     if (!session) return erreur('session inconnue', 404);
-    if (this.registre.rangMessage(session.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
+    if (this.registre.rangEntree(session.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
     const r = await this.postes.commander(session.machine, { kind: 'dupliquer', sessionId: session.id, messageId: c.messageId });
     if (!r.ok) {
       this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'duplication refusée');
@@ -134,12 +135,12 @@ export class ApiSessions {
     return json(r.donnees ?? {}, 201);
   }
 
-  // Chapitre : épingle un message de Chris dans le fil (événement persisté, retirable).
+  // Chapitre : épingle un message de Chris ou une réponse dans le fil (événement persisté, retirable).
   async chapitre(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsChapitre);
     if (c instanceof Response) return c;
     if (!this.registre.session(req.params.id)) return erreur('session inconnue', 404);
-    if (this.registre.rangMessage(req.params.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
+    if (this.registre.rangEntree(req.params.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
     const e = this.registre.ajouterEvenement(req.params.id, new Date().toISOString(), {
       type: 'chapitre',
       uuid: c.messageId,
