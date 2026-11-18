@@ -167,10 +167,17 @@ function traduireResultat(msg: Resultat, etat: EtatTraduction): Corps {
   const contexte = etat.contexte ?? 0;
   const evenements: Evenement[] = [];
   if (erreur !== null && !etat.erreurDuTour) evenements.push({ type: 'erreur', message: erreur });
-  evenements.push({ type: 'tour_fini', dureeMs, contexte });
+  evenements.push({ type: 'tour_fini', dureeMs, contexte, ...jetonsDuTour(msg) });
   etat.erreurDuTour = false;
   etat.messagesEnFlux.clear();
   return { evenements, finDeTour: { dureeMs, contexte, erreur } };
+}
+
+// Jetons du tour, totalisés par le SDK : entrée = tout ce qui a été lu (cache compris), sortie = ce qui a été généré.
+function jetonsDuTour(msg: Resultat): { entree: number; sortie: number } {
+  const u = objet(objet(msg)['usage']);
+  const entree = nombreDe(u['input_tokens']) + nombreDe(u['cache_read_input_tokens']);
+  return { entree: entree + nombreDe(u['cache_creation_input_tokens']), sortie: nombreDe(u['output_tokens']) };
 }
 
 function erreurDuResultat(msg: Resultat): string | null {

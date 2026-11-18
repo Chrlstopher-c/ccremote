@@ -54,7 +54,7 @@ export function identiteProcessus(proc: ProcessusClaude, entree: EntreeCc | unde
   return depuisProcessus(proc, entree);
 }
 
-/** Titre affiché : nom donné par Claude ou par cc, sinon titre du pane, sinon le dossier. */
+/** Titre affiché : titre du transcript, sinon nom donné par Claude ou par cc, sinon titre du pane, sinon le dossier. */
 export function titreDe(nom: string | null, titrePane: string | null, dossier: string): string {
   return nom ?? titrePane ?? (dossier.split('/').at(-1) || 'Claude');
 }
@@ -93,14 +93,14 @@ export function ficheAdoptee(
 }
 
 /** Fiche d'une session cc fermée : id et dossier connus, reprenable par `cc --resume`. */
-export function ficheFermee(o: Origine, e: EntreeCc): ResumeSession {
+export function ficheFermee(o: Origine, e: EntreeCc, titre: string): ResumeSession {
   const maintenant = new Date().toISOString();
   return {
     id: e.id,
     machine: o.machine,
     projet: { machine: o.machine, chemin: e.cwd, nom: e.cwd.split('/').at(-1) ?? e.cwd },
     cwd: e.cwd,
-    titre: e.nom,
+    titre,
     objectif: null,
     modele: 'défaut',
     compte: o.compte,

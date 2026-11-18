@@ -67,11 +67,11 @@ describe('titreDe', () => {
 
 describe('ficheFermee', () => {
   test('session cc fermée : statut fermée, reprenable par son id, lanceur conservé', () => {
-    const f = ficheFermee({ machine: 'poste', compte: 'principal', fenetre: 200_000 }, entree);
+    const f = ficheFermee({ machine: 'poste', compte: 'principal', fenetre: 200_000 }, entree, 'Titre du transcript');
     expect(f.statut).toBe('fermee');
     expect(f.claudeSessionId).toBe(entree.id);
     expect(f.tmux).toBeNull();
-    expect(f.titre).toBe('Mon projet');
+    expect(f.titre).toBe('Titre du transcript');
     expect(f.lanceur).toBe('quart');
   });
 });

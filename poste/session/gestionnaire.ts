@@ -25,6 +25,7 @@ import {
 import { type ProcessusClaude, processusClaude } from './processus.ts';
 import { dossierRegistreCc, type EntreeCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
+import { titreDuTranscript } from './titre-transcript.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -263,7 +264,8 @@ export class GestionnaireSessions {
     ]);
     for (const e of entrees.slice(0, FERMEES_MAX)) {
       if (this.sessions.has(e.id) || vivants.has(e.id)) continue;
-      const resume = ficheFermee(this.origine(), e);
+      const titre = titreDuTranscript(cheminTranscript(e.cwd, e.id, null), e.cwd, this.journal) ?? e.nom;
+      const resume = ficheFermee(this.origine(), e, titre);
       this.sessions.set(e.id, this.creer({ resume, consignes: null, configDir: null, transcript: null, position: 0, aReprendre: false }));
     }
   }
@@ -272,7 +274,9 @@ export class GestionnaireSessions {
   private adopter(a: Adoptee, pane: tmux.PaneTmux | null, dossier = pane?.dossier ?? ''): void {
     const connue = this.sessions.get(a.id);
     if (connue) return connue.rattacher(pane);
-    const titre = titreDe(a.nom, pane?.titre ?? null, dossier);
+    const titre =
+      (a.transcript ? titreDuTranscript(a.transcript.chemin, dossier, this.journal) : null) ??
+      titreDe(a.nom, pane?.titre ?? null, dossier);
     const session = this.creer({
       resume: ficheAdoptee(this.origine(), a, dossier, titre, pane),
       consignes: null,

@@ -179,7 +179,7 @@ describe('traduction SDK → événements', () => {
     const etat = nouvelEtatTraduction();
     traduireSdk(assistant([{ type: 'text', text: 'fin' }]), etat);
     const sortie = traduireSdk(resultatOk(), etat);
-    expect(sortie.evenements).toEqual([{ type: 'tour_fini', dureeMs: 4200, contexte: 1100 }]);
+    expect(sortie.evenements).toEqual([{ type: 'tour_fini', dureeMs: 4200, contexte: 1100, entree: 1100, sortie: 5 }]);
     expect(sortie.finDeTour).toEqual({ dureeMs: 4200, contexte: 1100, erreur: null });
   });
 
@@ -204,7 +204,7 @@ describe('traduction SDK → événements', () => {
     );
     expect(sortie.evenements).toEqual([
       { type: 'erreur', message: 'trop de tours' },
-      { type: 'tour_fini', dureeMs: 900, contexte: 0 },
+      { type: 'tour_fini', dureeMs: 900, contexte: 0, entree: 1100, sortie: 5 },
     ]);
     expect(sortie.finDeTour).toEqual({ dureeMs: 900, contexte: 0, erreur: 'trop de tours' });
   });

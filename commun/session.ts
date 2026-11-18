@@ -148,7 +148,13 @@ export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('question'), question: z.string() }),
   z.object({ type: z.literal('compaction'), avant: z.number(), apres: z.number(), declencheur: z.string() }),
   z.object({ type: z.literal('relance'), raison: z.string() }),
-  z.object({ type: z.literal('tour_fini'), dureeMs: z.number(), contexte: z.number() }),
+  z.object({
+    type: z.literal('tour_fini'),
+    dureeMs: z.number(),
+    contexte: z.number(),
+    entree: z.number().optional(), // jetons lus pendant le tour (SDK) ; absent pour une session tmux
+    sortie: z.number().optional(), // jetons générés pendant le tour
+  }),
   z.object({ type: z.literal('erreur'), message: z.string() }),
 ]);
 export type Evenement = z.infer<typeof Evenement>;
