@@ -169,6 +169,7 @@ export class Postes {
       bloc: m.bloc,
       delta: m.delta,
       ...(m.genre ? { genre: m.genre } : {}),
+      ...(m.agent ? { agent: m.agent } : {}),
     });
   }
 

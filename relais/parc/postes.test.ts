@@ -128,6 +128,16 @@ describe('flux : deltas de texte relayés sans persistance', () => {
     expect(registre.derniersEvenements('s', 300)).toHaveLength(versionAvant);
   });
 
+  test('un delta de sous-agent porte son auteur, pour que le client ne le mêle pas au fil principal', () => {
+    const { postes, recus } = montage([session('s', 'tour', 'travail')]);
+    postes.recu(
+      fauxPoste('tour'),
+      JSON.stringify({ kind: 'flux', sessionId: 's', bloc: 'm:0', delta: 'x', agent: 'toolu_1' }),
+    );
+
+    expect(recus).toEqual([{ type: 'flux', sessionId: 's', bloc: 'm:0', delta: 'x', agent: 'toolu_1' }]);
+  });
+
   test('un delta d’une session d’une autre machine est ignoré', () => {
     const { postes, recus } = montage([session('s', 'portable', 'travail')]);
     postes.recu(fauxPoste('tour'), JSON.stringify({ kind: 'flux', sessionId: 's', bloc: 'm:0', delta: 'x' }));

@@ -30,7 +30,7 @@ const sessions = new GestionnaireSessions(
   {
     evenement: (sessionId, evt) =>
       evt.type === 'flux'
-        ? envoyer({ kind: 'flux', sessionId, bloc: evt.bloc, delta: evt.delta, genre: evt.genre })
+        ? envoyer({ kind: 'flux', sessionId, bloc: evt.bloc, delta: evt.delta, genre: evt.genre, agent: evt.agent })
         : envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
     resume: (session) => envoyer({ kind: 'session', session }),
   },

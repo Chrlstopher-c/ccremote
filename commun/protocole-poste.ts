@@ -45,6 +45,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     bloc: z.string(),
     delta: z.string(),
     genre: z.enum(['texte', 'reflexion']).optional(),
+    agent: z.string().optional(), // id de l'appel d'outil du sous-agent auteur (absent = fil principal)
   }),
   z.object({
     kind: z.literal('reponse'),
