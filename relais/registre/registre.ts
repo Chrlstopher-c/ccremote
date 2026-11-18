@@ -10,7 +10,7 @@ import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
 export type { EvenementDate, Notification };
 
-type LigneSession = { resume: string; archivee: number };
+type LigneSession = { resume: string; archivee: number; epinglee: number };
 type LigneMachine = {
   id: string;
   description: string;
@@ -91,20 +91,27 @@ export class Registre {
   }
 
   session(id: string): ResumeSession | null {
-    const l = this.db.query('SELECT resume, archivee FROM sessions WHERE id = $id').get({ id }) as LigneSession | null;
+    const l = this.db
+      .query('SELECT resume, archivee, epinglee FROM sessions WHERE id = $id')
+      .get({ id }) as LigneSession | null;
     return l ? this.vue(l) : null;
   }
 
   // Les archivées sont absentes par défaut ; `avecArchivees` les rend (filtre ?archivees=1, rétention du fil).
   sessions(avecArchivees = false): ResumeSession[] {
     const lignes = this.db
-      .query('SELECT resume, archivee FROM sessions ORDER BY maj_le DESC')
+      .query('SELECT resume, archivee, epinglee FROM sessions ORDER BY maj_le DESC')
       .all() as LigneSession[];
     return lignes.filter((l) => avecArchivees || l.archivee === 0).flatMap((l) => this.vue(l) ?? []);
   }
 
   definirArchivee(id: string, archivee: boolean): void {
     this.db.query('UPDATE sessions SET archivee = $a WHERE id = $id').run({ a: archivee ? 1 : 0, id });
+  }
+
+  // Épinglée : remontée en tête de la liste par le client ; colonne du relais, jamais écrasée par le poste.
+  definirEpinglee(id: string, epinglee: boolean): void {
+    this.db.query('UPDATE sessions SET epinglee = $e WHERE id = $id').run({ e: epinglee ? 1 : 0, id });
   }
 
   // La vue rendue aux clients : la fiche du poste, le drapeau d'archivage (colonne, jamais écrasé par le poste) et
@@ -115,6 +122,7 @@ export class Registre {
     return {
       ...fiche,
       archivee: l.archivee === 1,
+      epinglee: l.epinglee === 1,
       inactiveDepuis: inactiveDepuis(fiche.statut, fiche.majLe, new Date(), this.seuilInactiviteMs),
     };
   }

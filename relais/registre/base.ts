@@ -30,6 +30,7 @@ export const MIGRATIONS: readonly string[] = [
      reunion_id TEXT NOT NULL REFERENCES reunions(id) ON DELETE CASCADE,
      auteur TEXT NOT NULL, texte TEXT NOT NULL, ts TEXT NOT NULL, destinataires TEXT NOT NULL DEFAULT '[]');
    CREATE INDEX reunion_messages_reunion ON reunion_messages(reunion_id, seq);`,
+  `ALTER TABLE sessions ADD COLUMN epinglee INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function ouvrirBase(chemin: string): Database {

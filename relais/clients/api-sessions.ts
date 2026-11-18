@@ -149,6 +149,7 @@ export class ApiSessions {
   async action(req: RequeteSession): Promise<Response> {
     const action = req.params.action ?? '';
     if (action === 'archiver' || action === 'desarchiver') return this.archiver(req.params.id, action === 'archiver');
+    if (action === 'epingler' || action === 'desepingler') return this.epingler(req.params.id, action === 'epingler');
     if (!estAction(action)) return erreur('action inconnue', 404);
     return this.commander(req.params.id, { kind: action });
   }
@@ -166,6 +167,15 @@ export class ApiSessions {
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, archivee });
+  }
+
+  // Épingler ne touche pas au poste : c'est un drapeau du relais, comme l'archivage sans fermeture.
+  private epingler(sessionId: string, epinglee: boolean): Response {
+    if (!this.registre.session(sessionId)) return erreur('session inconnue', 404);
+    this.registre.definirEpinglee(sessionId, epinglee);
+    const vue = this.registre.session(sessionId);
+    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    return json({ ok: true, epinglee });
   }
 
   private async lire(sessionId: string, c: Lecture, absenteEst404 = false): Promise<Response> {

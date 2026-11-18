@@ -100,6 +100,7 @@ export const ResumeSession = z.object({
   // terminée) depuis le seuil d'inactivité ; null sinon (travail, compaction, question, démarrage, erreur, fermée).
   inactiveDepuis: z.string().nullable().optional(),
   archivee: z.boolean().optional(), // rangée par Chris : absente des listes par défaut, jamais fermée automatiquement
+  epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
   creeLe: z.string(),
   majLe: z.string(),
 });
