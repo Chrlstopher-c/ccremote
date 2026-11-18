@@ -163,6 +163,7 @@ export const DemandeSession = z.object({
   modele: z.string().optional(),
   compte: z.string().optional(),
   moteur: Moteur.optional(), // absent = sdk
+  mode: ModeSession.optional(), // absent = bypassPermissions
   // Composé par le relais pour la machine cible : ce que la session a le droit de joindre.
   parc: z.array(z.object({ id: z.string(), description: z.string(), racines: z.array(z.string()) })),
 });

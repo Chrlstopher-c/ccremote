@@ -116,6 +116,14 @@ export class GestionnaireSessions {
       aReprendre: false,
     });
     this.sessions.set(d.sessionId, session);
+    // Le mode voulu à l'ouverture s'applique avant le premier message (le SDK démarre en bypass par défaut).
+    if (d.mode && d.mode !== 'bypassPermissions' && (d.moteur ?? 'sdk') === 'sdk') {
+      const refus = await session.reglerSession({ kind: 'mode', mode: d.mode });
+      if (refus) {
+        this.sessions.delete(d.sessionId);
+        return { ok: false, erreur: refus };
+      }
+    }
     const erreur = await session.lancer(d.message, d.modele ?? null);
     if (erreur) {
       this.sessions.delete(d.sessionId);

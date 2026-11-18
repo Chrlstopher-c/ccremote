@@ -13,6 +13,7 @@ export interface ConfigRelais {
   readonly hotesWeb: readonly string[];
   readonly fichierEchecs: string;
   readonly portPostes: number;
+  readonly hotePostes: string | undefined; // absent : toutes les interfaces (comportement d'origine)
   readonly web: string;
   readonly hq: string;
   readonly inactiviteMs: number;
@@ -65,6 +66,7 @@ export function chargerConfig(): ConfigRelais {
     hotesWeb: liste(process.env['CCREMOTE_HOTES_WEB'] ?? '127.0.0.1,::1'),
     fichierEchecs: process.env['CCREMOTE_ECHECS'] ?? join(dirname(base), 'echecs-connexion.json'),
     portPostes: Number(process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
+    hotePostes: process.env['CCREMOTE_HOTE_POSTES'] || undefined,
     web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
     hq: process.env['CCREMOTE_HQ'] ?? join(racine, 'hq/dist'),
     inactiviteMs: minutes(process.env['CCREMOTE_INACTIVITE_MIN'], 30) * 60_000,

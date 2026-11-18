@@ -117,6 +117,7 @@ for (const hostname of config.hotesWeb) {
 }
 
 Bun.serve({
+  hostname: config.hotePostes,
   port: config.portPostes,
   fetch(req, serveur) {
     if (new URL(req.url).pathname !== CHEMIN_POSTE) return new Response('introuvable', { status: 404 });

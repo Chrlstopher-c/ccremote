@@ -18,6 +18,7 @@ const CorpsOuverture = z.object({
   autonomie: z.boolean().default(true),
   modele: z.string().optional(),
   compte: z.string().optional(),
+  mode: ModeSession.optional(),
 });
 const CorpsMessage = z.object({ texte: z.string().min(1) });
 const CorpsAutonomie = z.object({ active: z.boolean() });
@@ -57,6 +58,7 @@ export class ApiSessions {
       parc: parcPour(c.machine, this.registre.machines(), this.isolees),
       ...(c.modele ? { modele: c.modele } : {}),
       ...(c.compte ? { compte: c.compte } : {}),
+      ...(c.mode ? { mode: c.mode } : {}),
     };
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
     if (!r.ok) this.journal.warn({ machine: c.machine, erreur: r.erreur }, 'ouverture de session refusée');
