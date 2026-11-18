@@ -1,5 +1,10 @@
 // Responsabilité : le faux SDK des tests de session-sdk — une requête rejouée par un scénario, jamais le vrai modèle.
-import type { Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  Options,
+  SDKControlGetContextUsageResponse,
+  SDKMessage,
+  SDKUserMessage,
+} from '@anthropic-ai/claude-agent-sdk';
 import pino from 'pino';
 import type { Evenement, ResumeSession, StatutSession } from '../../commun/session.ts';
 import { FileAsynchrone } from './file-messages-sdk.ts';
@@ -38,6 +43,22 @@ function traduireFaux(msg: SDKMessage): SortieTraduction {
   return { evenements: [] };
 }
 
+export const CONTEXTE_FAUX = {
+  model: 'claude-haiku-5-5',
+  totalTokens: 30000,
+  rawMaxTokens: 1000000,
+  percentage: 3,
+  categories: [
+    { name: 'System prompt', tokens: 460, kind: 'used' },
+    { name: 'MCP tools (deferred)', tokens: 120000, kind: 'deferred' },
+    { name: 'Messages', tokens: 4000, kind: 'used' },
+    { name: 'Autocompact buffer', tokens: 33000, kind: 'buffer' },
+    { name: 'Free space', tokens: 937000, kind: 'free' },
+  ],
+  mcpTools: [{ name: 'mcp__claude_ai_Flix__my_library', serverName: 'claude_ai_Flix', tokens: 100, isLoaded: false }],
+  memoryFiles: [{ path: '/projets/app/CLAUDE.md', type: 'Project', tokens: 800 }],
+};
+
 export const traduction: TraductionSdk = { nouvelEtat: nouvelEtatTraduction, traduire: traduireFaux };
 export const journal = pino({ level: 'silent' });
 
@@ -48,6 +69,7 @@ export class RequeteFausse implements RequeteSdk {
   interrompue = false;
   fermee = false;
   mcpAppels = 0;
+  contexteAppels = 0;
   private echec: unknown = null;
 
   constructor(
@@ -88,9 +110,15 @@ export class RequeteFausse implements RequeteSdk {
     this.reglages.push(`effort:${settings.effortLevel ?? 'défaut'}`);
   }
 
-  async mcpServerStatus(): Promise<{ readonly status: string }[]> {
+  async mcpServerStatus(): Promise<{ readonly name: string; readonly status: string }[]> {
     this.mcpAppels += 1;
-    return (this.mcp.shift() ?? ['connected']).map((status) => ({ status }));
+    return (this.mcp.shift() ?? ['connected']).map((status, rang) => ({ name: `connecteur-${rang + 1}`, status }));
+  }
+
+  // Forme partielle : seuls les champs que contexte-sdk.ts lit existent.
+  async getContextUsage(): Promise<SDKControlGetContextUsageResponse> {
+    this.contexteAppels += 1;
+    return CONTEXTE_FAUX as unknown as SDKControlGetContextUsageResponse; // forme partielle, voir ci-dessus
   }
 
   private async jouer(prompt: AsyncIterable<SDKUserMessage>): Promise<void> {

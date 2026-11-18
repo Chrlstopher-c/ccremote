@@ -75,6 +75,11 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('modele'), ...avecSession, modele: z.string().min(1).max(120) }),
   z.object({ kind: z.literal('effort'), ...avecSession, effort: EffortSession.nullable() }),
   z.object({ kind: z.literal('renommer'), ...avecSession, titre: z.string().min(1).max(120) }),
+  // Lectures du panneau de session (SDK) : rien ne change dans la session.
+  z.object({ kind: z.literal('contexte'), ...avecSession }),
+  z.object({ kind: z.literal('connecteurs'), ...avecSession }),
+  z.object({ kind: z.literal('taches'), ...avecSession }),
+  z.object({ kind: z.literal('tache'), ...avecSession, tache: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
   // Comptes Claude Code : connexion OAuth en deux temps (URL, puis code collé par Chris), retrait, relevé immédiat.

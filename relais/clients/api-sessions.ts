@@ -30,6 +30,8 @@ type Action = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
 const ACTIONS: ReadonlySet<string> = new Set<string>(['interrompre', 'compacter', 'fermer', 'reprendre']);
 
 type RequeteSession = Request & { params: { id: string; action?: string } };
+type RequeteTache = Request & { params: { id: string; tache: string } };
+type Lecture = { kind: 'contexte' } | { kind: 'connecteurs' } | { kind: 'taches' } | { kind: 'tache'; tache: string };
 
 export class ApiSessions {
   constructor(
@@ -125,6 +127,23 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: 'repondre', reponse: c });
   }
 
+  // Panneau de session : lectures sur le poste, rien ne change. Le contexte vaut `null` hors requête ouverte.
+  contexte(req: RequeteSession): Promise<Response> {
+    return this.lire(req.params.id, { kind: 'contexte' });
+  }
+
+  connecteurs(req: RequeteSession): Promise<Response> {
+    return this.lire(req.params.id, { kind: 'connecteurs' });
+  }
+
+  taches(req: RequeteSession): Promise<Response> {
+    return this.lire(req.params.id, { kind: 'taches' });
+  }
+
+  tache(req: RequeteTache): Promise<Response> {
+    return this.lire(req.params.id, { kind: 'tache', tache: req.params.tache }, true);
+  }
+
   async action(req: RequeteSession): Promise<Response> {
     const action = req.params.action ?? '';
     if (action === 'archiver' || action === 'desarchiver') return this.archiver(req.params.id, action === 'archiver');
@@ -145,6 +164,18 @@ export class ApiSessions {
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, archivee });
+  }
+
+  private async lire(sessionId: string, c: Lecture, absenteEst404 = false): Promise<Response> {
+    const session = this.registre.session(sessionId);
+    if (!session) return erreur('session inconnue', 404);
+    const r = await this.postes.commander(session.machine, { ...c, sessionId });
+    if (!r.ok) {
+      this.journal.warn({ sessionId, lecture: c.kind, erreur: r.erreur }, 'lecture refusée');
+      return erreur(r.erreur ?? 'lecture refusée', REFUS_POSTE);
+    }
+    if (absenteEst404 && r.donnees === null) return erreur('tâche inconnue', 404);
+    return json(r.donnees ?? null);
   }
 
   private async commander(

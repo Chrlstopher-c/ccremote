@@ -13,6 +13,22 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 18/11 (nuit) — Contexte, connecteurs et tâches de fond relayés (branche `lanterne/moteur`)
+
+- Lectures du panneau, sans effet, par le canal de commandes du poste (comme `fichiers_lister`) : `GET
+  /api/sessions/:id/contexte` (`null` hors requête ouverte), `/connecteurs` (`mcpServerStatus`, nom + statut),
+  `/taches` (liste sans prompt) et `/taches/:tache` (détail, 404 si absente). Schémas dans `commun/panneau.ts`.
+- Contexte : `getContextUsage({detail:'summary'})`. Mesure réelle (SDK 0.3.325, 15 connecteurs dont des
+  outils MCP déférés) : `summary` 33-70 ms, `full` 413 ms (un comptage d'API par catégorie). Totaux identiques
+  (29 579 jetons) ; le détail par outil MCP est une estimation locale, environ 16 % sous le compte exact de `full`.
+  Choix : `summary` pour le panneau. `full` n'est pas branché.
+- Tâches de fond (`poste/session/taches-sdk.ts`) : `task_started` (prompt, type, sous-agent, arrière-plan, parent),
+  `task_progress` (activité, outils, jetons), `task_updated` (statut, arrière-plan), `task_notification` (fin),
+  `background_tasks_changed` (marque l'arrière-plan). Le modèle n'est pas dans `task_started` : il vient de l'appel
+  `Agent`/`Task` (`input.model`), relié par `tool_use_id`. Les tâches ambiantes sont écartées ; 50 terminées gardées.
+  Pas d'événement sur `/api/flux` : le panneau relit les routes.
+- Non fait : rien n'est déployé ; le moteur Lanterne (`crates/lanterne-moteur-quart`) suit sur sa branche `contexteSession`.
+
 ## 18/11 — Moteur SDK pour Lanterne : flux, permissions, réglages (branche `lanterne/moteur`)
 
 - Deltas de texte et de réflexion relayés en direct (`flux`, genre `reflexion`, `agent` pour un sous-agent) ; jamais

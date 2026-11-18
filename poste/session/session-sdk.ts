@@ -7,12 +7,15 @@ import {
   query as requeteParDefaut,
   type Options,
   type PermissionResult,
+  type SDKControlGetContextUsageResponse,
   type SDKMessage,
   type SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'pino';
+import type { ConnecteurSession, ContexteSession, DetailTacheSession, TacheSession } from '../../commun/panneau.ts';
 import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
 import { BilanTour } from './bilan-tour.ts';
+import { contexteDe } from './contexte-sdk.ts';
 import { AvisSdk } from './avis-sdk.ts';
 import { FileAsynchrone, messageUtilisateur, messagesAvecConnecteurs } from './file-messages-sdk.ts';
 import { binaireClaude, serveurRythme } from './lanceur.ts';
@@ -26,13 +29,15 @@ import { effetRythme } from './rythme.ts';
 import type { ReponseCrochet, Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import type { Suite } from './suite-du-tour.ts';
 import { SuiviNuit } from './suivi-nuit.ts';
+import { RegistreTaches } from './taches-sdk.ts';
 import { type EtatTraduction, nouvelEtatTraduction, type SortieTraduction, traduireSdk } from './traduction-sdk.ts';
 
 // Ce que la session attend du SDK : une requête (flux de messages, interruption, fermeture).
 export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   interrupt(): Promise<unknown>;
   close(): void;
-  mcpServerStatus(): Promise<readonly { readonly status: string }[]>;
+  mcpServerStatus(): Promise<readonly { readonly name: string; readonly status: string }[]>;
+  getContextUsage(opts: { readonly detail: 'summary' }): Promise<SDKControlGetContextUsageResponse>;
 }
 
 export type FabriqueRequete = (p: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => RequeteSdk;
@@ -80,6 +85,7 @@ export class SessionSdk implements SessionPoste {
   private readonly delaiMcp: number;
   private readonly periodeMcp: number;
   private readonly suiviNuit: SuiviNuit;
+  private readonly registreTaches = new RegistreTaches();
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
 
   constructor(
@@ -239,6 +245,27 @@ export class SessionSdk implements SessionPoste {
     return null;
   }
 
+  // Panneau de session : lectures seules. Le contexte n'existe que pendant une requête ouverte (null sinon).
+  async contexte(): Promise<ContexteSession | null> {
+    const requete = this.requete;
+    if (!requete) return null;
+    return contexteDe(await requete.getContextUsage({ detail: 'summary' }));
+  }
+
+  async connecteurs(): Promise<ConnecteurSession[]> {
+    const requete = this.requete;
+    if (!requete) return [];
+    return (await requete.mcpServerStatus()).map((etat) => ({ nom: etat.name, statut: etat.status }));
+  }
+
+  taches(): TacheSession[] {
+    return this.registreTaches.liste();
+  }
+
+  tache(id: string): DetailTacheSession | null {
+    return this.registreTaches.detail(id);
+  }
+
   // Crochets : propres aux sessions pilotées dans tmux, le SDK n'en envoie pas.
   crochet(): ReponseCrochet {
     return {};
@@ -361,6 +388,7 @@ export class SessionSdk implements SessionPoste {
   }
 
   private traiter(msg: SDKMessage, etatTraduction: EtatTraduction): void {
+    this.registreTaches.observer(msg);
     const sortie = this.traduction.traduire(msg, etatTraduction);
     for (const evt of sortie.evenements) {
       this.constater(evt);

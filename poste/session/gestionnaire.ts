@@ -32,6 +32,18 @@ export interface Reponse {
   readonly donnees?: unknown;
 }
 type CommandeSession = Extract<CommandeRelais, { sessionId: string }>;
+type LecturePanneau = Extract<CommandeSession, { kind: 'contexte' | 'connecteurs' | 'taches' | 'tache' }>;
+const estLecture = (c: CommandeSession): c is LecturePanneau =>
+  c.kind === 'contexte' || c.kind === 'connecteurs' || c.kind === 'taches' || c.kind === 'tache';
+
+// Le panneau ne lit que le SDK ; une session tmux n'a ni contexte ni tâche à relayer (listes vides, détail absent).
+async function lecturePanneau(s: SessionPoste, c: LecturePanneau): Promise<unknown> {
+  if (!(s instanceof SessionSdk)) return c.kind === 'connecteurs' || c.kind === 'taches' ? [] : null;
+  if (c.kind === 'contexte') return s.contexte();
+  if (c.kind === 'connecteurs') return s.connecteurs();
+  if (c.kind === 'taches') return s.taches();
+  return s.tache(c.tache);
+}
 
 const HISTORIQUE_ADOPTION = 150;
 const PERIODE_DECOUVERTE_MS = 2_000;
@@ -115,6 +127,7 @@ export class GestionnaireSessions {
   async executer(c: CommandeSession): Promise<Reponse> {
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
     let erreur: string | null = null;
     if (c.kind === 'envoyer') erreur = await s.envoyer(c.texte);
     else if (c.kind === 'interrompre') erreur = await s.interrompre();
