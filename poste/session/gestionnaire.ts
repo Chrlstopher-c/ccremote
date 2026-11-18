@@ -79,7 +79,7 @@ export class GestionnaireSessions {
   }
 
   demarrer(): void {
-    const persistees = this.persistance.charger();
+    const persistees = this.persistance.charger().map((p) => this.titreRafraichi(p));
     for (const p of persistees) this.sessions.set(p.resume.id, this.creer(p));
     void relancerApresRedemarrage(this.reprisesPrevues(persistees), this.journal);
     void this.decouvrir();
@@ -165,6 +165,14 @@ export class GestionnaireSessions {
   }
 
   // Les sessions SDK qui tournaient à l'arrêt du poste, avec le texte de leur reprise.
+  // Une session fermée gardée avant la lecture du titre dans le transcript : son titre est relu une fois au démarrage.
+  private titreRafraichi(p: SessionPersistee): SessionPersistee {
+    if (p.resume.statut !== 'fermee') return p;
+    const { cwd, id } = p.resume;
+    const titre = titreDuTranscript(cheminTranscript(cwd, id, null), cwd, this.journal) ?? p.resume.titre;
+    return { ...p, resume: { ...p.resume, titre } };
+  }
+
   private reprisesPrevues(persistees: readonly SessionPersistee[]): ReprisePrevue[] {
     return persistees.flatMap((p) => {
       const prevue = reprisePrevue(p);
