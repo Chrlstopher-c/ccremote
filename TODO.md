@@ -1,8 +1,12 @@
 # TODO — Quart (dépôt ccremote)
-*Dernière mise à jour : 2026-11-15*
+*Dernière mise à jour : 2026-11-18*
 
 ## En cours
 
+- [x] Outils de présentation (18/11) : serveur `lanterne` (envoyer_fichier, publier_artefact, afficher_widget), images du fil, pièces jointes, route des fichiers ; commit 3ae98f1 sur `lanterne/moteur`, essai réel OK (détails dans STATE.md).
+- [ ] Présentation : le bureau de Quart ne rend pas les blocs fichier/artefact/widget/image (seul Lanterne les rend).
+- [ ] Présentation : attribuer à leur sous-agent les fichiers présentés par un sous-agent (aujourd'hui dans le fil principal).
+- [ ] Présentation : refus d'un outil `lanterne` affiché comme `relance` ; Lanterne ne le montre pas encore.
 - [x] Agent HQ v1 + moteur SDK : commités sur `nuit/2026-11-15`, testés de bout en bout en local (16/11, nuit).
 - [ ] Chris : relire Agent HQ v1 ; puis fusion dans `dev`, push, CI verte, déploiement (`deploiement/deployer.sh tout`).
 - [ ] Agent HQ : Authentik devant `/hq/` (comme le hub) en plus du mot de passe du relais.

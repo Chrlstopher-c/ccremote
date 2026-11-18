@@ -283,3 +283,26 @@ Ce que cet essai a trouvé et qui est corrigé :
 - La tour est restée allumée en fin de session (28/09, 15 h 50) : une session du portable (« semaphore ») y pilotait le
   récepteur Iris. Pas allumée par moi.
 - Titre des sessions : la liste montre encore « CCremote Refactor in Portable » (titre posé par Claude Code, pas par Quart).
+
+## Outils de présentation (18/11/2026, branche `lanterne/moteur`, commit 3ae98f1)
+
+- Poste : serveur MCP en processus `lanterne` ajouté à chaque session SDK. Outils : `envoyer_fichier` (copie d'un
+  fichier du poste, mode afficher ou joindre, légende), `publier_artefact` (page HTML, versions par `id`),
+  `afficher_widget` (SVG ou HTML court). Chaque appel émet un événement `fichier` / `artefact` / `widget` ; les appels
+  `mcp__lanterne__*` n'ont pas de carte `outil` dans le fil (traduction-sdk.ts masque l'appel et son résultat).
+- Un refus (type, taille, chemin hors des dossiers autorisés) émet une `relance` « présentation refusée » et renvoie
+  l'erreur à l'agent.
+- Chemins confinés (`poste/presentation/chemins.ts`) : dossier de la session, racines de projet, dossier temporaire ;
+  realpath, donc un lien qui sort est refusé.
+- Stockage : `donnees/fichiers/<session>/<id>` + `<id>.json`. Identifiants stricts (16 hex, `-vN` pour un artefact).
+  Supprimé avec la session.
+- Images : les blocs image des résultats d'outils (Read d'une image compris) deviennent des événements `image`
+  (origine outil). Pièces jointes de Chris (`envoyer` avec `pieces`, 3 au plus, 3 Mo chacune) : images et PDF partent
+  au modèle en blocs, les autres fichiers sont déposés et leur chemin est donné dans le texte.
+- Relais : `GET /api/sessions/:id/fichiers/:fichier` (lecture sur le poste par la commande `fichier_session`). HTML et
+  SVG sous CSP `sandbox`, `nosniff`, téléchargement seulement avec `?telecharger=1`.
+- Essai réel (Haiku 5.5, effort faible, un tour, dossier jetable) : image relue → événement image ; fichier et
+  artefact présentés ; aucun appel lanterne dans le fil ; trois routes 200 avec les bons en-têtes.
+- Limites connues : les sous-agents émettent leurs fichiers dans le fil principal (l'appel n'est pas attribuable) ;
+  dans Claude Code les outils MCP sont différés (`ToolSearch`), l'agent doit les charger avant de s'en servir ; le
+  bureau de Quart ne rend pas les nouveaux genres (Lanterne les rend).
