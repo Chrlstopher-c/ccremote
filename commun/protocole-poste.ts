@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
+import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 import {
   DemandeSession,
   EffortSession,
@@ -62,7 +63,14 @@ const avecSession = { id: z.string(), sessionId: z.string() };
 
 export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('ouvrir'), id: z.string(), demande: DemandeSession }),
-  z.object({ kind: z.literal('envoyer'), ...avecSession, texte: z.string().min(1) }),
+  z.object({
+    kind: z.literal('envoyer'),
+    ...avecSession,
+    texte: z.string().min(1),
+    pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(), // images, PDF, fichiers joints par Chris
+  }),
+  // Lecture d'un fichier présenté (sortie d'outil, image du fil) stocké par la session sur le poste.
+  z.object({ kind: z.literal('fichier_session'), ...avecSession, fichier: z.string() }),
   z.object({ kind: z.literal('interrompre'), ...avecSession }),
   z.object({ kind: z.literal('compacter'), ...avecSession }),
   z.object({ kind: z.literal('fermer'), ...avecSession }),

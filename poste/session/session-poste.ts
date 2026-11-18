@@ -1,5 +1,6 @@
 // Responsabilité : le contrat qu'une session du poste offre au gestionnaire et au socket local, quel que soit son
 // moteur — `tmux` (TUI dans un serveur tmux) ou `sdk` (Claude Agent SDK). Le gestionnaire ne parle qu'à cette forme.
+import type { PieceJointe } from '../../commun/presentation.ts';
 import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
 import type { DecisionCrochet } from './garde-sous-agents.ts';
 import type { SessionPersistee } from './persistance.ts';
@@ -38,7 +39,7 @@ export interface SessionPoste {
 
   // Commandes de Chris, relayées par le gestionnaire.
   lancer(message: string, modele: string | null): Promise<string | null>;
-  envoyer(texte: string): Promise<string | null>;
+  envoyer(texte: string, pieces?: readonly PieceJointe[]): Promise<string | null>;
   interrompre(): Promise<string | null>;
   compacter(): Promise<string | null>;
   fermer(): Promise<string | null>;

@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
+import type { PieceJointe } from '../../commun/presentation.ts';
 import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
 import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
@@ -27,6 +28,8 @@ import { dossierRegistreCc, type EntreeCc, lireRegistreCc } from './registre-cc.
 import { cheminTranscript } from './transcript.ts';
 import { ficheImportee, type TranscriptImportable, transcriptsImportables } from './importation.ts';
 import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
+import { lireFichierSession } from '../presentation/lecture.ts';
+import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 
 export interface Reponse {
@@ -70,6 +73,7 @@ export class GestionnaireSessions {
   private readonly sessions = new Map<string, SessionPoste>();
   private readonly persistance: PersistanceSessions;
   private readonly supprimees: SessionsSupprimees;
+  private readonly stockage: Stockage;
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -80,6 +84,7 @@ export class GestionnaireSessions {
   ) {
     this.persistance = new PersistanceSessions(config.donnees);
     this.supprimees = new SessionsSupprimees(config.donnees);
+    this.stockage = new Stockage(config.donnees);
   }
 
   demarrer(): void {
@@ -144,11 +149,12 @@ export class GestionnaireSessions {
 
   async executer(c: CommandeSession): Promise<Reponse> {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
+    if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
     let erreur: string | null = null;
-    if (c.kind === 'envoyer') erreur = await s.envoyer(c.texte);
+    if (c.kind === 'envoyer') erreur = await this.envoyerMessage(s, c.texte, c.pieces ?? []);
     else if (c.kind === 'interrompre') erreur = await s.interrompre();
     else if (c.kind === 'compacter') erreur = await s.compacter();
     else if (c.kind === 'fermer') erreur = await s.fermer();
@@ -183,8 +189,30 @@ export class GestionnaireSessions {
       return { ok: false, erreur: `suppression impossible : ${String(erreur)}` };
     }
     this.sessions.delete(id);
+    this.supprimerFichiers(id);
     this.sauvegarder();
     return { ok: true };
+  }
+
+  // Les fichiers présentés par la session partent avec elle ; un échec est journalisé, la suppression tient.
+  private supprimerFichiers(id: string): void {
+    try {
+      this.stockage.supprimer(id);
+    } catch (erreur) {
+      this.journal.error({ err: erreur, session: id }, 'fichiers présentés non supprimés');
+    }
+  }
+
+  // Fichier présenté, lu pour la route du relais : la session peut être fermée, le fichier reste sur le poste.
+  private fichier(sessionId: string, fichier: string): Reponse {
+    const lu = lireFichierSession(this.stockage, sessionId, fichier, this.journal);
+    return lu ? { ok: true, donnees: lu } : { ok: false, erreur: 'fichier introuvable' };
+  }
+
+  // Les pièces jointes ne partent qu'avec une session SDK : le moteur tmux n'a pas de message structuré.
+  private envoyerMessage(s: SessionPoste, texte: string, pieces: readonly PieceJointe[]): Promise<string | null> {
+    if (pieces.length > 0 && !(s instanceof SessionSdk)) return Promise.resolve('pièces jointes : moteur SDK seulement');
+    return s.envoyer(texte, pieces);
   }
 
   // Sessions Claude Code du poste que Quart ne connaît pas encore (ni supprimées par Chris).
@@ -263,7 +291,8 @@ export class GestionnaireSessions {
       },
     };
     if (p.resume.moteur === 'sdk') {
-      return new SessionSdk(p, { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket });
+      const presentation = { stockage: this.stockage, racines: this.config.racines };
+      return new SessionSdk(p, { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket, presentation });
     }
     return new SessionTmux(p, { socket: this.socket, journal: this.journal, sortie });
   }

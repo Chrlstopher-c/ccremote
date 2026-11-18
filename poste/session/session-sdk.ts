@@ -14,10 +14,14 @@ import {
 import type { Logger } from 'pino';
 import type { ConnecteurSession, ContexteSession, DetailTacheSession, TacheSession } from '../../commun/panneau.ts';
 import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
+import type { PieceJointe } from '../../commun/presentation.ts';
+import type { PiecesPreparees } from '../presentation/pieces.ts';
+import { PresentationSession } from '../presentation/session-presentation.ts';
+import type { Stockage } from '../presentation/stockage.ts';
 import { BilanTour } from './bilan-tour.ts';
 import { contexteDe } from './contexte-sdk.ts';
 import { AvisSdk } from './avis-sdk.ts';
-import { FileAsynchrone, messageUtilisateur, messagesAvecConnecteurs } from './file-messages-sdk.ts';
+import { attendreConnecteurs, FileAsynchrone, messageUtilisateur, messagesAvecConnecteurs } from './file-messages-sdk.ts';
 import { binaireClaude, serveurRythme } from './lanceur.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
 import { optionsSdk } from './options-sdk.ts';
@@ -54,6 +58,7 @@ export interface EnvironnementSdk {
   readonly executable: string | null;
   readonly socket: string; // socket local du poste : les outils de rythme y relaient leurs appels
   readonly requete?: FabriqueRequete; // injectable : les tests rejouent des messages sans appeler le modèle
+  readonly presentation?: { readonly stockage: Stockage; readonly racines: readonly string[] }; // sans lui, pas d'outils `lanterne`
   readonly traduction?: TraductionSdk;
   readonly env?: Record<string, string | undefined>;
   readonly delaiMcpMs?: number;
@@ -71,10 +76,6 @@ export function trouverClaude(): string | null {
   return Bun.which(binaireClaude());
 }
 
-function pause(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
 export class SessionSdk implements SessionPoste {
   private etat: ResumeSession;
   private requete: RequeteSdk | null = null;
@@ -86,6 +87,7 @@ export class SessionSdk implements SessionPoste {
   private readonly delaiMcp: number;
   private readonly periodeMcp: number;
   private readonly suiviNuit: SuiviNuit;
+  private readonly presentation: PresentationSession | null;
   private readonly registreTaches = new RegistreTaches();
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
   // Chris a interrompu le tour en cours : le SDK coupe alors le flux par une erreur, qui n'est pas une panne.
@@ -104,6 +106,17 @@ export class SessionSdk implements SessionPoste {
     this.traduction = env.traduction ?? TRADUCTION_PAR_DEFAUT;
     this.delaiMcp = env.delaiMcpMs ?? DELAI_MCP_MS;
     this.periodeMcp = env.periodeMcpMs ?? PERIODE_MCP_MS;
+    const pres = env.presentation;
+    this.presentation = pres
+      ? new PresentationSession({
+          sessionId: p.resume.id,
+          cwd: p.resume.cwd,
+          racines: pres.racines,
+          stockage: pres.stockage,
+          emettre: (evt) => this.emettre(evt),
+          journal: env.journal,
+        })
+      : null;
     this.suiviNuit = new SuiviNuit({
       resume: () => this.etat,
       messagesChrisEnVol: () => this.bilan.enVol,
@@ -149,11 +162,15 @@ export class SessionSdk implements SessionPoste {
     return this.demarrer(false, message);
   }
 
-  async envoyer(texte: string): Promise<string | null> {
-    if (!this.fil) return this.reprendre(texte);
+  // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
+  async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
+    if (!this.fil) return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : this.reprendre(texte);
+    const jointes = pieces.length > 0 ? (this.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session') : null;
+    if (typeof jointes === 'string') return jointes;
     this.emettre({ type: 'message', texte });
+    jointes?.evenements.forEach((evt) => this.emettre(evt));
     this.bilan.messageDeChris();
-    this.pousser(texte);
+    this.pousser(texte + (jointes?.complement ?? ''), jointes?.blocs);
     if (this.etat.statut !== 'compaction') this.maj({ statut: 'travail' });
     return null;
   }
@@ -315,6 +332,7 @@ export class SessionSdk implements SessionPoste {
       configDir: this.p.configDir,
       source: this.env.env ?? process.env,
       rythme: serveurRythme(this.etat.id, this.env.socket),
+      outils: this.presentation?.serveur(),
       mode: this.etat.mode ?? 'bypassPermissions',
       effort: this.etat.effort ?? null,
       canUseTool: (nom, entree, opts) =>
@@ -349,26 +367,15 @@ export class SessionSdk implements SessionPoste {
   }
 
   // Un message poussé au SDK (Chris, relance, compaction, réveil) ouvre un tour que le bilan compte.
-  private pousser(texte: string): void {
+  private pousser(texte: string, blocs?: PiecesPreparees['blocs']): void {
     this.interrompuParChris = false;
     if (!this.fil) return;
-    this.fil.push(messageUtilisateur(texte));
+    this.fil.push(messageUtilisateur(texte, blocs));
     this.bilan.envoye();
   }
 
-  // Le premier message n'attend que les connecteurs MCP de la config : le SDK ne les a pas tous à l'init.
-  private async attendreConnecteurs(requete: RequeteSdk): Promise<void> {
-    const fin = Date.now() + this.delaiMcp;
-    try {
-      while (Date.now() < fin) {
-        const etats = await requete.mcpServerStatus();
-        if (!etats.some((e) => e.status === 'pending')) return;
-        await pause(this.periodeMcp);
-      }
-      this.env.journal.warn({ session: this.etat.id }, 'connecteurs MCP encore en attente : message envoyé quand même');
-    } catch (erreur) {
-      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'état des connecteurs MCP illisible');
-    }
+  private attendreConnecteurs(requete: RequeteSdk): Promise<void> {
+    return attendreConnecteurs(requete, { delaiMs: this.delaiMcp, periodeMs: this.periodeMcp, session: this.etat.id }, this.env.journal);
   }
 
   private async ecouter(requete: RequeteSdk, etatTraduction: EtatTraduction): Promise<void> {
@@ -421,6 +428,7 @@ export class SessionSdk implements SessionPoste {
       this.emettre(evt);
     }
     this.bilan.observer(evenements, sortie.compaction === true);
+    this.presentation?.depuisMessage(msg);
     if (sortie.claudeSessionId && sortie.claudeSessionId !== this.etat.claudeSessionId) {
       this.maj({ claudeSessionId: sortie.claudeSessionId });
     }

@@ -8,6 +8,8 @@ import { contexteDe, resumerEntree } from './traduction.ts';
 const TAILLE_DETAIL = 8_000;
 const TAILLE_RESULTAT = 3_000;
 const PREFIXE_OUTILS_HARNESS = 'mcp__ccremote__';
+// Outils de présentation : leur effet arrive par les événements fichier, artefact, widget ; l'appel n'a pas de carte.
+const PREFIXE_PRESENTATION = 'mcp__lanterne__';
 const OUTILS_SOUS_AGENT = new Set(['Agent', 'Task']);
 const FIL_PRINCIPAL = '';
 
@@ -26,6 +28,8 @@ export interface EtatTraduction {
   contexte: number | null;
   // Une erreur d'API a déjà été émise pour le tour en cours : le result qui suit ne la répète pas.
   erreurDuTour: boolean;
+  // Appels des outils de présentation : leurs résultats sont masqués comme leurs appels.
+  readonly outilsPresentation: Set<string>;
 }
 
 export interface SortieTraduction {
@@ -38,7 +42,7 @@ export interface SortieTraduction {
 type Corps = Omit<SortieTraduction, 'claudeSessionId'>;
 
 export function nouvelEtatTraduction(): EtatTraduction {
-  return { messagesEnFlux: new Map(), contexte: null, erreurDuTour: false };
+  return { messagesEnFlux: new Map(), contexte: null, erreurDuTour: false, outilsPresentation: new Set() };
 }
 
 // L'identifiant de session est lu sur tout message qui le porte (init compris).
@@ -53,7 +57,7 @@ function traduireCorps(msg: SDKMessage, etat: EtatTraduction): Corps {
     case 'assistant':
       return { evenements: traduireAssistant(msg, etat) };
     case 'user':
-      return { evenements: traduireUtilisateur(msg) };
+      return { evenements: traduireUtilisateur(msg, etat) };
     case 'stream_event':
       return { evenements: traduireFlux(msg, etat) };
     case 'result':
@@ -77,7 +81,7 @@ function traduireAssistant(msg: Assistant, etat: EtatTraduction): Evenement[] {
     return [{ type: 'erreur', message: texteErreur || `erreur de l’API : ${msg.error}` }];
   }
   if (principal) mettreContexte(msg.message, etat);
-  return blocsDe(msg.message.content).flatMap((b) => traduireBlocAssistant(b, marque));
+  return blocsDe(msg.message.content).flatMap((b) => traduireBlocAssistant(b, marque, etat));
 }
 
 // Contexte relu au prochain tour = input + cache lu + cache créé du dernier appel du fil principal (cf. traduction.ts).
@@ -88,7 +92,7 @@ function mettreContexte(message: unknown, etat: EtatTraduction): void {
   if (contexte !== null) etat.contexte = contexte;
 }
 
-function traduireBlocAssistant(bloc: Objet, marque: Marque): Evenement[] {
+function traduireBlocAssistant(bloc: Objet, marque: Marque, etat: EtatTraduction): Evenement[] {
   const type = bloc['type'];
   if (type === 'text' && texteDe(bloc['text']).trim()) {
     return [{ type: 'texte', texte: texteDe(bloc['text']), ...marque }];
@@ -96,15 +100,16 @@ function traduireBlocAssistant(bloc: Objet, marque: Marque): Evenement[] {
   if (type === 'thinking' && texteDe(bloc['thinking']).trim()) {
     return [{ type: 'reflexion', texte: texteDe(bloc['thinking']), ...marque }];
   }
-  return type === 'tool_use' ? traduireOutil(bloc, marque) : [];
+  return type === 'tool_use' ? traduireOutil(bloc, marque, etat) : [];
 }
 
 // Un appel de sous-agent (Task/Agent) donne aussi un `sous_agent` : le fil l'affiche comme une carte.
-function traduireOutil(bloc: Objet, marque: Marque): Evenement[] {
+function traduireOutil(bloc: Objet, marque: Marque, etat: EtatTraduction): Evenement[] {
   const nom = texteDe(bloc['name']);
   const id = texteDe(bloc['id']);
   const entree = objet(bloc['input']);
-  if (!nom || nom.startsWith(PREFIXE_OUTILS_HARNESS)) return [];
+  if (nom.startsWith(PREFIXE_PRESENTATION)) etat.outilsPresentation.add(id);
+  if (!nom || nom.startsWith(PREFIXE_OUTILS_HARNESS) || nom.startsWith(PREFIXE_PRESENTATION)) return [];
   const outil: Evenement = {
     type: 'outil',
     id,
@@ -124,10 +129,10 @@ function traduireOutil(bloc: Objet, marque: Marque): Evenement[] {
   return [outil, sousAgent];
 }
 
-function traduireUtilisateur(msg: Utilisateur): Evenement[] {
+function traduireUtilisateur(msg: Utilisateur, etat: EtatTraduction): Evenement[] {
   const marque = marqueDe(msg.parent_tool_use_id);
   return blocsDe(msg.message.content)
-    .filter((b) => b['type'] === 'tool_result')
+    .filter((b) => b['type'] === 'tool_result' && !etat.outilsPresentation.has(texteDe(b['tool_use_id'])))
     .map((b): Evenement => ({
       type: 'resultat_outil',
       outilId: texteDe(b['tool_use_id']),

@@ -1,0 +1,38 @@
+// Responsabilité : le contexte commun des outils de présentation (session, dossier, racines, stockage, émission) et leur
+// garde : une erreur devient un refus lisible par l'agent et par Chris dans le fil, jamais une exception qui tombe.
+import type { Logger } from 'pino';
+import type { Evenement } from '../../commun/session.ts';
+import type { Stockage } from './stockage.ts';
+
+export interface ContexteOutils {
+  readonly sessionId: string;
+  readonly cwd: string;
+  readonly racines: readonly string[];
+  readonly stockage: Stockage;
+  readonly emettre: (evt: Evenement) => void;
+  readonly journal: Logger;
+}
+
+export interface Resultat {
+  readonly texte: string;
+  readonly erreur: boolean;
+}
+
+export function ok(texte: string): Resultat {
+  return { texte, erreur: false };
+}
+
+// Un refus reste visible dans le fil (note de relance), pour que Chris sache pourquoi rien n'apparaît.
+export function echec(c: ContexteOutils, texte: string): Resultat {
+  c.emettre({ type: 'relance', raison: `présentation refusée : ${texte}` });
+  return { texte, erreur: true };
+}
+
+export function protege(c: ContexteOutils, operation: string, fn: () => Resultat): Resultat {
+  try {
+    return fn();
+  } catch (erreur) {
+    c.journal.error({ err: erreur, session: c.sessionId, operation }, 'présentation impossible');
+    return echec(c, `${operation} impossible`);
+  }
+}

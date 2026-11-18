@@ -1,6 +1,7 @@
 // Responsabilité : le vocabulaire d'une session Claude Code persistante, partagé par le poste, le relais et les
 // clients.
 import { z } from 'zod';
+import { ModeFichier } from './presentation.ts';
 
 export const LanceurSession = z.enum(['kitty', 'quart', 'echo']); // qui a lancé la session (registre `cc`)
 export type LanceurSession = z.infer<typeof LanceurSession>;
@@ -155,6 +156,36 @@ export const Evenement = z.discriminatedUnion('type', [
     contexte: z.number(),
     entree: z.number().optional(), // jetons lus pendant le tour (SDK) ; absent pour une session tmux
     sortie: z.number().optional(), // jetons générés pendant le tour
+  }),
+  // Présentation (outils `lanterne` et pièces de Chris) : `fichier` désigne un fichier stocké sur le poste, servi par
+  // la route du relais ; `artefact` est une version d'une page HTML ; `widget` un SVG ou une page HTML rendus en place.
+  z.object({
+    type: z.literal('fichier'),
+    fichier: z.string(),
+    nom: z.string(),
+    mime: z.string(),
+    taille: z.number(),
+    mode: ModeFichier,
+    legende: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal('artefact'),
+    artefact: z.string(),
+    version: z.number().int(),
+    fichier: z.string(),
+    titre: z.string(),
+    mime: z.string(),
+    taille: z.number(),
+  }),
+  z.object({ type: z.literal('widget'), fichier: z.string(), titre: z.string(), mime: z.string(), taille: z.number() }),
+  z.object({
+    type: z.literal('image'),
+    fichier: z.string(),
+    nom: z.string(),
+    mime: z.string(),
+    taille: z.number(),
+    origine: z.enum(['outil', 'utilisateur']),
+    ...deAgent,
   }),
   z.object({ type: z.literal('erreur'), message: z.string() }),
 ]);

@@ -1,6 +1,8 @@
 // Responsabilité : alimenter la requête d'une session SDK — une file asynchrone que Chris remplit, et le message
 // utilisateur qu'attend le SDK. Le premier message ne part qu'une fois les connecteurs MCP prêts.
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { Logger } from 'pino';
+import type { BlocPiece } from '../presentation/pieces.ts';
 
 export class FileAsynchrone<T> implements AsyncIterable<T> {
   private readonly valeurs: { readonly valeur: T }[] = [];
@@ -49,6 +51,31 @@ export async function* messagesAvecConnecteurs(
   }
 }
 
-export function messageUtilisateur(texte: string): SDKUserMessage {
-  return { type: 'user', message: { role: 'user', content: texte }, parent_tool_use_id: null };
+// Pièces de Chris (images, PDF) : le texte d'abord, puis les blocs, dans le même message.
+export function messageUtilisateur(texte: string, blocs: readonly BlocPiece[] = []): SDKUserMessage {
+  const contenu = blocs.length > 0 ? [{ type: 'text' as const, text: texte }, ...blocs] : texte;
+  return { type: 'user', message: { role: 'user', content: contenu }, parent_tool_use_id: null };
+}
+
+export function pause(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// Le premier message n'attend que les connecteurs MCP de la config : le SDK ne les a pas tous à l'init.
+export async function attendreConnecteurs(
+  requete: { mcpServerStatus(): Promise<readonly { readonly status: string }[]> },
+  reglage: { readonly delaiMs: number; readonly periodeMs: number; readonly session: string },
+  journal: Logger,
+): Promise<void> {
+  const fin = Date.now() + reglage.delaiMs;
+  try {
+    while (Date.now() < fin) {
+      const etats = await requete.mcpServerStatus();
+      if (!etats.some((e) => e.status === 'pending')) return;
+      await pause(reglage.periodeMs);
+    }
+    journal.warn({ session: reglage.session }, 'connecteurs MCP encore en attente : message envoyé quand même');
+  } catch (erreur) {
+    journal.warn({ err: erreur, session: reglage.session }, 'état des connecteurs MCP illisible');
+  }
 }

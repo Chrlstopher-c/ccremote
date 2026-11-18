@@ -1,7 +1,12 @@
 // Responsabilité : les options du Claude Agent SDK d'une session ccremote (dossier, reprise, consignes, modèle,
 // environnement épuré, permissions, serveur de rythme). Pur : le binaire, le compte, le serveur de rythme et canUseTool
 // viennent de l'appelant.
-import type { CanUseTool, McpStdioServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  CanUseTool,
+  McpSdkServerConfigWithInstance,
+  McpStdioServerConfig,
+  Options,
+} from '@anthropic-ai/claude-agent-sdk';
 import type { EffortSession, ModeSession } from '../../commun/session.ts';
 
 // Hérité d'une session Claude parente (messagerie, identité de session) : le CLI enfant le prendrait pour le sien.
@@ -42,6 +47,7 @@ export interface ParametresSdk {
   readonly source: Record<string, string | undefined>;
   readonly rythme: McpStdioServerConfig; // le même serveur d'outils de rythme que les sessions tmux
   readonly canUseTool: CanUseTool;
+  readonly outils?: McpSdkServerConfigWithInstance; // serveur `lanterne` : présentation de fichiers, artefacts, widgets
 }
 
 export function optionsSdk(p: ParametresSdk): Options {
@@ -56,7 +62,7 @@ export function optionsSdk(p: ParametresSdk): Options {
     allowDangerouslySkipPermissions: true,
     ...(p.effort ? { effort: p.effort } : {}),
     canUseTool: p.canUseTool,
-    mcpServers: { ccremote: p.rythme },
+    mcpServers: { ccremote: p.rythme, ...(p.outils ? { lanterne: p.outils } : {}) },
     ...(p.modele ? { model: p.modele } : {}),
     ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),
   };

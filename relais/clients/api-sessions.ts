@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { EffortSession, ModeSession, Projet, ReponseDialogue } from '../../commun/session.ts';
+import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../commun/presentation.ts';
+import { reponseFichier } from './fichiers-session.ts';
 import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
@@ -20,7 +22,7 @@ const CorpsOuverture = z.object({
   compte: z.string().optional(),
   mode: ModeSession.optional(),
 });
-const CorpsMessage = z.object({ texte: z.string().min(1) });
+const CorpsMessage = z.object({ texte: z.string().min(1), pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional() });
 const CorpsAutonomie = z.object({ active: z.boolean() });
 const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).optional() });
 const CorpsMode = z.object({ mode: ModeSession });
@@ -39,6 +41,7 @@ const ACTIONS: ReadonlySet<string> = new Set<string>(['interrompre', 'compacter'
 type RequeteSession = Request & { params: { id: string; action?: string } };
 type RequeteTache = Request & { params: { id: string; tache: string } };
 type RequeteMachine = Request & { params: { id: string } };
+type RequeteFichier = Request & { params: { id: string; fichier: string } };
 type Lecture = { kind: 'contexte' } | { kind: 'connecteurs' } | { kind: 'taches' } | { kind: 'tache'; tache: string };
 
 export class ApiSessions {
@@ -91,7 +94,23 @@ export class ApiSessions {
   async envoyer(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsMessage);
     if (c instanceof Response) return c;
-    return this.commander(req.params.id, { kind: 'envoyer', texte: c.texte });
+    return this.commander(req.params.id, { kind: 'envoyer', texte: c.texte, ...(c.pieces ? { pieces: c.pieces } : {}) });
+  }
+
+  // Fichier présenté par la session (artefact, image, fichier) : lu sur le poste, servi tel quel. Le relais ne le garde pas.
+  async fichier(req: RequeteFichier): Promise<Response> {
+    const session = this.registre.session(req.params.id);
+    if (!session) return erreur('session inconnue', 404);
+    if (!estIdFichier(req.params.fichier)) return erreur('fichier inconnu', 404);
+    const r = await this.postes.commander(session.machine, {
+      kind: 'fichier_session',
+      sessionId: req.params.id,
+      fichier: req.params.fichier,
+    });
+    if (!r.ok) return erreur(r.erreur ?? 'fichier introuvable', REFUS_POSTE);
+    const lu = FichierLu.safeParse(r.donnees);
+    if (!lu.success) return erreur('réponse du poste illisible', 500);
+    return reponseFichier(lu.data, new URL(req.url).searchParams.get('telecharger') === '1');
   }
 
   async autonomie(req: RequeteSession): Promise<Response> {
@@ -270,7 +289,7 @@ export class ApiSessions {
   private async commander(
     sessionId: string,
     c:
-      | { kind: 'envoyer'; texte: string }
+      | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[] }
       | { kind: 'autonomie'; active: boolean }
       | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
       | { kind: 'repondre'; reponse: ReponseDialogue }
