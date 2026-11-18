@@ -97,6 +97,8 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
+  if (c.kind === 'importables') return sessions.importables();
+  if (c.kind === 'importer') return sessions.importer(c.ids);
   if (c.kind === 'eteindre') return eteindreMachine(journal);
   if (c.kind === 'compte_connecter') return comptes.connecter(c.nom, c.email);
   if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);

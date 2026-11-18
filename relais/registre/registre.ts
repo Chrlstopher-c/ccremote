@@ -114,6 +114,31 @@ export class Registre {
     this.db.query('UPDATE sessions SET epinglee = $e WHERE id = $id').run({ e: epinglee ? 1 : 0, id });
   }
 
+  // Suppression demandée par Chris, après que le poste a retiré le transcript : fiche, fil et notifications.
+  supprimerSession(id: string): void {
+    this.db.transaction(() => {
+      this.db.query('DELETE FROM evenements WHERE session_id = $id').run({ id });
+      this.db.query('DELETE FROM notifications WHERE session_id = $id').run({ id });
+      this.db.query('DELETE FROM sessions WHERE id = $id').run({ id });
+    })();
+  }
+
+  enregistrerEnvironnement(machine: string, dossier: string, quand: string): void {
+    this.db
+      .query(
+        `INSERT INTO environnements (machine, dossier, enregistre_le) VALUES ($m, $d, $q)
+      ON CONFLICT(machine, dossier) DO UPDATE SET enregistre_le = $q`,
+      )
+      .run({ m: machine, d: dossier, q: quand });
+  }
+
+  environnementsEnregistres(): { machine: string; dossier: string }[] {
+    return this.db.query('SELECT machine, dossier FROM environnements ORDER BY enregistre_le DESC').all() as {
+      machine: string;
+      dossier: string;
+    }[];
+  }
+
   // La vue rendue aux clients : la fiche du poste, le drapeau d'archivage (colonne, jamais écrasé par le poste) et
   // l'inactivité calculée à la lecture, pour qu'elle ne reste jamais périmée.
   private vue(l: LigneSession): ResumeSession | null {

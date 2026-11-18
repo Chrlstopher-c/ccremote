@@ -82,6 +82,18 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tache'), ...avecSession, tache: z.string().min(1).max(200) }),
   // Arrêt d'une tâche de fond du SDK (commande ou sous-agent) ; `stopTask` du SDK.
   z.object({ kind: z.literal('arreter_tache'), ...avecSession, tache: z.string().min(1).max(200) }),
+  // Suppression d'une session sur demande explicite de Chris : transcript et sous-agents retirés du poste.
+  z.object({ kind: z.literal('supprimer'), ...avecSession }),
+  // Sessions Claude Code du poste non encore connues (liste), puis import des identifiants choisis.
+  z.object({ kind: z.literal('importables'), id: z.string() }),
+  z.object({
+    kind: z.literal('importer'),
+    id: z.string(),
+    ids: z
+      .array(z.string().regex(/^[A-Za-z0-9-]{1,100}$/))
+      .min(1)
+      .max(100),
+  }),
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
   // Comptes Claude Code : connexion OAuth en deux temps (URL, puis code collé par Chris), retrait, relevé immédiat.

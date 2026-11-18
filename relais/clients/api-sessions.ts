@@ -26,12 +26,19 @@ const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).
 const CorpsMode = z.object({ mode: ModeSession });
 const CorpsModele = z.object({ modele: z.string().min(1).max(120) });
 const CorpsEffort = z.object({ effort: EffortSession.nullable() });
+const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
 const CorpsTitre = z.object({ titre: z.string().trim().min(1).max(120) });
+const CorpsEnvironnement = z.object({
+  machine: z.string().min(1).max(120),
+  dossier: z.string().trim().min(1).max(1000),
+});
+const CorpsImport = z.object({ ids: z.array(z.string().regex(IDENTIFIANT)).min(1).max(100) });
 type Action = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
 const ACTIONS: ReadonlySet<string> = new Set<string>(['interrompre', 'compacter', 'fermer', 'reprendre']);
 
 type RequeteSession = Request & { params: { id: string; action?: string } };
 type RequeteTache = Request & { params: { id: string; tache: string } };
+type RequeteMachine = Request & { params: { id: string } };
 type Lecture = { kind: 'contexte' } | { kind: 'connecteurs' } | { kind: 'taches' } | { kind: 'tache'; tache: string };
 
 export class ApiSessions {
@@ -176,6 +183,69 @@ export class ApiSessions {
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, epinglee });
+  }
+
+  // Suppression sur demande explicite de Chris (la confirmation est côté interface) : le poste retire le transcript,
+  // la fiche ne part du relais qu'ensuite. Si le poste refuse ou est hors ligne, rien n'est effacé ici.
+  async supprimer(req: RequeteSession): Promise<Response> {
+    const session = this.registre.session(req.params.id);
+    if (!session) return erreur('session inconnue', 404);
+    const r = await this.postes.commander(session.machine, { kind: 'supprimer', sessionId: session.id });
+    if (!r.ok) {
+      this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'suppression refusée par le poste');
+      return erreur(r.erreur ?? 'suppression refusée', REFUS_POSTE);
+    }
+    this.registre.supprimerSession(session.id);
+    return json({ ok: true });
+  }
+
+  // Environnements : ceux que Chris a enregistrés, puis les dossiers des sessions récentes (sans doublon).
+  environnements(): Response {
+    const enregistres = this.registre.environnementsEnregistres().map((e) => ({ ...e, enregistre: true }));
+    const recents = this.registre
+      .sessions(true)
+      .map((s) => ({ machine: s.machine, dossier: s.cwd, enregistre: false }));
+    const vus = new Set<string>();
+    const liste = [...enregistres, ...recents].filter((e) => {
+      const cle = `${e.machine}\n${e.dossier}`;
+      if (vus.has(cle)) return false;
+      vus.add(cle);
+      return true;
+    });
+    return json(liste.slice(0, 50));
+  }
+
+  async enregistrerEnvironnement(req: Request): Promise<Response> {
+    const c = await lireCorps(req, CorpsEnvironnement);
+    if (c instanceof Response) return c;
+    if (!this.machineConnue(c.machine)) return erreur('machine inconnue', 404);
+    this.registre.enregistrerEnvironnement(c.machine, c.dossier, new Date().toISOString());
+    return json({ ok: true }, 201);
+  }
+
+  // Sessions Claude Code du poste non encore connues de Quart.
+  importables(req: RequeteMachine): Promise<Response> {
+    return this.commanderMachine(req.params.id, { kind: 'importables' });
+  }
+
+  async importer(req: RequeteMachine): Promise<Response> {
+    const c = await lireCorps(req, CorpsImport);
+    if (c instanceof Response) return c;
+    return this.commanderMachine(req.params.id, { kind: 'importer', ids: c.ids });
+  }
+
+  private machineConnue(id: string): boolean {
+    return this.registre.machines().some((m) => m.id === id);
+  }
+
+  private async commanderMachine(
+    machine: string,
+    c: { kind: 'importables' } | { kind: 'importer'; ids: string[] },
+  ): Promise<Response> {
+    if (!this.machineConnue(machine)) return erreur('machine inconnue', 404);
+    const r = await this.postes.commander(machine, c);
+    if (!r.ok) this.journal.warn({ machine, commande: c.kind, erreur: r.erreur }, 'commande de machine refusée');
+    return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', REFUS_POSTE);
   }
 
   // Arrêt d'une tâche de fond : l'identifiant vient du SDK ; il est vérifié avant d'aller au poste.

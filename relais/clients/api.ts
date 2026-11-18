@@ -70,6 +70,13 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
     '/api/sessions/:id/nuit': { POST: protege((req) => d.sessions.nuit(req as never)) },
     '/api/sessions/:id/repondre': { POST: protege((req) => d.sessions.repondre(req as never)) },
+    '/api/sessions/:id/supprimer': { POST: protege((req) => d.sessions.supprimer(req as never)) },
+    '/api/environnements': {
+      GET: protege(() => d.sessions.environnements()),
+      POST: protege((req) => d.sessions.enregistrerEnvironnement(req)),
+    },
+    '/api/machines/:id/importables': { GET: protege((req) => d.sessions.importables(req as never)) },
+    '/api/machines/:id/importer': { POST: protege((req) => d.sessions.importer(req as never)) },
     '/api/sessions/:id/mode': { POST: protege((req) => d.sessions.mode(req as never)) },
     '/api/sessions/:id/modele': { POST: protege((req) => d.sessions.modele(req as never)) },
     '/api/sessions/:id/effort': { POST: protege((req) => d.sessions.effort(req as never)) },

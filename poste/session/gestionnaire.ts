@@ -25,6 +25,8 @@ import {
 import { type ProcessusClaude, processusClaude } from './processus.ts';
 import { dossierRegistreCc, type EntreeCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
+import { ficheImportee, type TranscriptImportable, transcriptsImportables } from './importation.ts';
+import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 
 export interface Reponse {
@@ -67,6 +69,7 @@ export function moteurDe(d: DemandeSession): Moteur {
 export class GestionnaireSessions {
   private readonly sessions = new Map<string, SessionPoste>();
   private readonly persistance: PersistanceSessions;
+  private readonly supprimees: SessionsSupprimees;
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -76,6 +79,7 @@ export class GestionnaireSessions {
     private readonly journal: Logger,
   ) {
     this.persistance = new PersistanceSessions(config.donnees);
+    this.supprimees = new SessionsSupprimees(config.donnees);
   }
 
   demarrer(): void {
@@ -139,6 +143,7 @@ export class GestionnaireSessions {
   }
 
   async executer(c: CommandeSession): Promise<Reponse> {
+    if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
@@ -156,6 +161,67 @@ export class GestionnaireSessions {
     else if (c.kind === 'mode' || c.kind === 'modele' || c.kind === 'effort' || c.kind === 'renommer')
       erreur = await s.reglerSession(c);
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
+  }
+
+  // Suppression sur demande explicite de Chris : la session s'arrête (SDK), son transcript part, son identifiant est
+  // retenu pour qu'aucune découverte ne la fasse réapparaître. Une session ouverte dans un terminal reste intacte.
+  async supprimer(id: string): Promise<Reponse> {
+    const s = this.sessions.get(id);
+    if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    if (s instanceof SessionSdk && s.vivante) {
+      const erreur = await s.fermer();
+      if (erreur) return { ok: false, erreur };
+    }
+    if (s.vivante) return { ok: false, erreur: 'session ouverte dans un terminal : la fermer avant de la supprimer' };
+    try {
+      for (const chemin of transcriptsDeLaSession(id, this.configDirs())) supprimerTranscript(chemin, id, this.journal);
+      this.supprimees.ajouter(id);
+    } catch (erreur) {
+      this.journal.error({ err: erreur, session: id }, 'suppression impossible');
+      return { ok: false, erreur: `suppression impossible : ${String(erreur)}` };
+    }
+    this.sessions.delete(id);
+    this.sauvegarder();
+    return { ok: true };
+  }
+
+  // Sessions Claude Code du poste que Quart ne connaît pas encore (ni supprimées par Chris).
+  importables(): Reponse {
+    return { ok: true, donnees: this.trouverImportables() };
+  }
+
+  // Import des identifiants choisis : sessions fermées, reprenables ; l'historique vient du transcript.
+  importer(ids: readonly string[]): Reponse {
+    const trouves = this.trouverImportables();
+    const aImporter = trouves.filter((t) => ids.includes(t.id));
+    const absentes = ids.filter((id) => !aImporter.some((t) => t.id === id));
+    for (const t of aImporter) this.importerUne(t);
+    this.sauvegarder();
+    return { ok: true, donnees: { importees: aImporter.length, absentes } };
+  }
+
+  private trouverImportables(): TranscriptImportable[] {
+    const ecartee = (id: string): boolean => this.sessions.has(id) || this.supprimees.has(id);
+    return transcriptsImportables(this.configDirs(), ecartee, this.journal);
+  }
+
+  private importerUne(t: TranscriptImportable): void {
+    const session = this.creer({
+      resume: ficheImportee(this.origine(), t),
+      consignes: null,
+      configDir: t.configDir,
+      transcript: t.chemin,
+      position: 0,
+      aReprendre: false,
+    });
+    this.sessions.set(t.id, session);
+    session.definirTranscript(t.chemin, HISTORIQUE_ADOPTION, t.id);
+    this.sortie.resume(session.resume);
+  }
+
+  // Configurations de comptes connues, plus la configuration par défaut de Claude Code.
+  private configDirs(): (string | null)[] {
+    return [null, ...Object.values(this.config.comptes)];
   }
 
   sauvegarder(): void {
@@ -273,7 +339,7 @@ export class GestionnaireSessions {
       ...entrees.filter((e) => panes.some((p) => p.nom === e.tmux)).map((e) => e.id),
     ]);
     for (const e of entrees.slice(0, FERMEES_MAX)) {
-      if (this.sessions.has(e.id) || vivants.has(e.id)) continue;
+      if (this.sessions.has(e.id) || vivants.has(e.id) || this.supprimees.has(e.id)) continue;
       const titre = titreDuTranscript(cheminTranscript(e.cwd, e.id, null), e.cwd, this.journal) ?? e.nom;
       const resume = ficheFermee(this.origine(), e, titre);
       this.sessions.set(e.id, this.creer({ resume, consignes: null, configDir: null, transcript: null, position: 0, aReprendre: false }));
