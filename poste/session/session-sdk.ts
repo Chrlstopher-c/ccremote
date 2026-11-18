@@ -13,31 +13,23 @@ import {
 import type { Logger } from 'pino';
 import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
 import { BilanTour } from './bilan-tour.ts';
+import { AvisSdk } from './avis-sdk.ts';
 import { FileAsynchrone, messageUtilisateur, messagesAvecConnecteurs } from './file-messages-sdk.ts';
 import { binaireClaude, serveurRythme } from './lanceur.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
 import { optionsSdk } from './options-sdk.ts';
 import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
-import {
-  decisionPlan,
-  dialogueDeQuestion,
-  OUTIL_PLAN,
-  OUTILS_AVIS,
-  QUESTION_PLAN,
-  questionsDeAskUser,
-  type Question,
-  valeurReponse,
-} from './questions-sdk.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
+import { champsReglage, appliquerReglage, type RequeteReglable } from './reglages-sdk.ts';
 import { effetRythme } from './rythme.ts';
-import type { ReponseCrochet, SessionPoste, SortieSession } from './session-poste.ts';
+import type { ReponseCrochet, Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import type { Suite } from './suite-du-tour.ts';
 import { SuiviNuit } from './suivi-nuit.ts';
 import { type EtatTraduction, nouvelEtatTraduction, type SortieTraduction, traduireSdk } from './traduction-sdk.ts';
 
 // Ce que la session attend du SDK : une requête (flux de messages, interruption, fermeture).
-export interface RequeteSdk extends AsyncIterable<SDKMessage> {
+export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   interrupt(): Promise<unknown>;
   close(): void;
   mcpServerStatus(): Promise<readonly { readonly status: string }[]>;
@@ -62,16 +54,6 @@ export interface EnvironnementSdk {
   readonly periodeMcpMs?: number;
 }
 
-// Une question en cours : `restantes[0]` est affichée, les réponses déjà données attendent les autres.
-interface AvisEnAttente {
-  readonly outil: string;
-  readonly entree: Record<string, unknown>;
-  readonly restantes: Question[];
-  readonly reponses: Record<string, string>;
-  id: string;
-  readonly decide: (r: PermissionResult) => void;
-}
-
 const DELAI_MCP_MS = 15_000;
 const PERIODE_MCP_MS = 250;
 const TRADUCTION_PAR_DEFAUT: TraductionSdk = { nouvelEtat: nouvelEtatTraduction, traduire: traduireSdk };
@@ -87,15 +69,11 @@ function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function autoriserSansQuestion(entree: Record<string, unknown>): PermissionResult {
-  return { behavior: 'allow', updatedInput: entree };
-}
-
 export class SessionSdk implements SessionPoste {
   private etat: ResumeSession;
   private requete: RequeteSdk | null = null;
   private fil: FileAsynchrone<SDKUserMessage> | null = null;
-  private avis: AvisEnAttente | null = null;
+  private readonly avis: AvisSdk;
   private bilan = new BilanTour();
   private readonly fabrique: FabriqueRequete;
   private readonly traduction: TraductionSdk;
@@ -110,6 +88,7 @@ export class SessionSdk implements SessionPoste {
   ) {
     // Au démarrage du poste aucune requête ne vit : une session persistée est reprenable, pas active.
     this.aReprendre = p.aReprendre;
+    this.avis = new AvisSdk({ emettre: (evt) => this.emettre(evt), maj: (champs) => this.maj(champs) });
     const statut = p.aReprendre ? p.resume.statut : 'fermee';
     this.etat = { ...p.resume, statut, dialogue: null, tmux: null, attachee: false, moteur: 'sdk' };
     this.fabrique = env.requete ?? requeteParDefaut;
@@ -191,7 +170,7 @@ export class SessionSdk implements SessionPoste {
     const requete = this.requete;
     if (!requete) return 'session fermée';
     this.bilan.interrompre();
-    this.refuser(this.avis, TEXTE_INTERRUPTION, true);
+    this.avis.refuserTous(TEXTE_INTERRUPTION, true);
     try {
       await requete.interrupt();
       return null;
@@ -242,11 +221,22 @@ export class SessionSdk implements SessionPoste {
   }
 
   async repondre(r: ReponseDialogue): Promise<string | null> {
-    const a = this.avis;
-    if (!a) return 'aucune question en attente';
-    if (r.id !== a.id) return 'question périmée : une autre question est affichée';
-    if (a.outil === OUTIL_PLAN) return this.repondrePlan(a, r);
-    return this.repondreQuestion(a, r);
+    return this.avis.repondre(r);
+  }
+
+  // Réglages en cours de session : appliqués à la requête vivante s'il y en a une, sinon au prochain démarrage.
+  async reglerSession(r: Reglage): Promise<string | null> {
+    const requete = this.requete;
+    if (requete && r.kind !== 'renommer') {
+      try {
+        await appliquerReglage(requete, r);
+      } catch (erreur) {
+        this.env.journal.warn({ err: erreur, session: this.etat.id, reglage: r.kind }, 'réglage refusé par le SDK');
+        return `réglage impossible : ${String(erreur)}`;
+      }
+    }
+    this.maj(champsReglage(r));
+    return null;
   }
 
   // Crochets : propres aux sessions pilotées dans tmux, le SDK n'en envoie pas.
@@ -270,62 +260,6 @@ export class SessionSdk implements SessionPoste {
     return effet.reponse;
   }
 
-  private repondreQuestion(a: AvisEnAttente, r: ReponseDialogue): string | null {
-    const courante = a.restantes[0];
-    if (!courante) return 'aucune question en attente';
-    const valeur = valeurReponse(courante, r);
-    if ('erreur' in valeur) return valeur.erreur;
-    a.reponses[courante.texte] = valeur.valeur;
-    a.restantes.shift();
-    if (a.restantes.length > 0) {
-      this.publierQuestion(a);
-      return null;
-    }
-    this.terminerAvis(a, { behavior: 'allow', updatedInput: { ...a.entree, answers: a.reponses } });
-    return null;
-  }
-
-  private repondrePlan(a: AvisEnAttente, r: ReponseDialogue): string | null {
-    const decision = decisionPlan(a.entree, r);
-    if (!decision) return 'réponse hors du plan proposé';
-    this.terminerAvis(a, decision);
-    return null;
-  }
-
-  // Appelé par le SDK avant chaque outil : les questions deviennent des dialogues, le reste est autorisé.
-  private autoriser(nom: string, entree: Record<string, unknown>, signal: AbortSignal): Promise<PermissionResult> {
-    if (!OUTILS_AVIS.has(nom)) return Promise.resolve(autoriserSansQuestion(entree));
-    const restantes = nom === OUTIL_PLAN ? [QUESTION_PLAN] : questionsDeAskUser(entree);
-    if (!restantes) {
-      return Promise.resolve({ behavior: 'deny', message: 'Questions illisibles : réponse impossible' });
-    }
-    return new Promise<PermissionResult>((decide) => {
-      const a: AvisEnAttente = { outil: nom, entree, restantes, reponses: {}, id: '', decide };
-      this.avis = a;
-      signal.addEventListener('abort', () => this.refuser(a, 'Demande annulée', false), { once: true });
-      this.publierQuestion(a);
-    });
-  }
-
-  private publierQuestion(a: AvisEnAttente): void {
-    const courante = a.restantes[0];
-    if (!courante) return;
-    a.id = randomUUID();
-    this.emettre({ type: 'question', question: courante.texte });
-    this.maj({ statut: 'question', dialogue: dialogueDeQuestion(a.id, courante) });
-  }
-
-  private terminerAvis(a: AvisEnAttente, decision: PermissionResult): void {
-    this.avis = null;
-    a.decide(decision);
-    this.maj({ dialogue: null, statut: 'travail' });
-  }
-
-  private refuser(a: AvisEnAttente | null, message: string, interrompre: boolean): void {
-    if (!a || this.avis !== a) return;
-    this.terminerAvis(a, { behavior: 'deny', message, interrupt: interrompre });
-  }
-
   private optionsDe(reprise: boolean): Options {
     return optionsSdk({
       identifiant: reprise ? (this.etat.claudeSessionId ?? this.etat.id) : this.etat.id,
@@ -337,7 +271,10 @@ export class SessionSdk implements SessionPoste {
       configDir: this.p.configDir,
       source: this.env.env ?? process.env,
       rythme: serveurRythme(this.etat.id, this.env.socket),
-      canUseTool: (nom, entree, opts) => this.autoriser(nom, entree, opts.signal),
+      mode: this.etat.mode ?? 'bypassPermissions',
+      effort: this.etat.effort ?? null,
+      canUseTool: (nom, entree, opts) =>
+        this.avis.autoriser(nom, entree, opts.suggestions ?? [], opts.signal, (this.etat.mode ?? 'bypassPermissions') === 'bypassPermissions'),
     });
   }
 
@@ -417,8 +354,7 @@ export class SessionSdk implements SessionPoste {
   }
 
   private libererRequete(message: string): void {
-    const a = this.avis;
-    this.refuser(a, message, true);
+    this.avis.refuserTous(message, true);
     this.requete = null;
     this.fil?.clore();
     this.fil = null;

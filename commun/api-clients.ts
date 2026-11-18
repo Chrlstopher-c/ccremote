@@ -45,6 +45,8 @@ export interface EtatRelais {
 
 export type MessageClient =
   | { readonly type: 'evenement'; readonly evenement: EvenementDate }
+  // Delta de texte ou de réflexion en cours d'écriture : WebSocket seulement, jamais dans le fil ni le long-poll.
+  | { readonly type: 'flux'; readonly sessionId: string; readonly bloc: string; readonly delta: string; readonly genre?: 'texte' | 'reflexion' }
   | { readonly type: 'session'; readonly session: ResumeSession }
   | { readonly type: 'machine'; readonly machine: VueMachine }
   | { readonly type: 'notification'; readonly notification: Notification }

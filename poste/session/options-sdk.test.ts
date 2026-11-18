@@ -14,6 +14,8 @@ const parametres = (surcharge: Partial<ParametresSdk> = {}): ParametresSdk => ({
   cwd: '/projets/app',
   consignes: 'Consignes ccremote',
   modele: 'claude-haiku-5-5',
+  mode: 'bypassPermissions',
+  effort: null,
   executable: '/usr/bin/claude',
   configDir: null,
   source: {},
@@ -57,8 +59,22 @@ describe('optionsSdk', () => {
     expect(o.sessionId).toBeUndefined();
   });
 
-  test('permissions par canUseTool, messages partiels, consignes ajoutées au prompt de Claude Code', () => {
+  test('mode bypass par défaut : permissionMode transmis, bypass autorisé pour les changements en cours de session', () => {
     const o = optionsSdk(parametres());
+    expect(o.permissionMode).toBe('bypassPermissions');
+    expect(o.allowDangerouslySkipPermissions).toBe(true);
+  });
+
+  test('mode demandé et effort transmis ; sans effort, le défaut du modèle', () => {
+    expect(optionsSdk(parametres({ mode: 'default', effort: 'high' }))).toMatchObject({
+      permissionMode: 'default',
+      effort: 'high',
+    });
+    expect(optionsSdk(parametres({ effort: null })).effort).toBeUndefined();
+  });
+
+  test('permissions par canUseTool, messages partiels, consignes ajoutées au prompt de Claude Code', () => {
+    const o = optionsSdk(parametres({ mode: 'default' }));
     expect(o.permissionMode).toBe('default');
     expect(o.includePartialMessages).toBe(true);
     expect(o.systemPrompt).toEqual({ type: 'preset', preset: 'claude_code', append: 'Consignes ccremote' });

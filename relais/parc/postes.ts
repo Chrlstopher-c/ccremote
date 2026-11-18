@@ -106,6 +106,7 @@ export class Postes {
   private traiter(machine: string, m: MessagePoste): void {
     if (m.kind === 'reponse') return this.enAttente.get(m.id)?.(m);
     if (m.kind === 'terminal_sortie' || m.kind === 'terminal_fin') return this.terminaux?.duPoste(machine, m);
+    if (m.kind === 'flux') return this.flux(machine, m);
     if (m.kind === 'bonjour') return this.bonjour(machine, m);
     if (m.kind === 'etat_machine') {
       this.registre.majEtatMachine(machine, m.etat);
@@ -120,7 +121,6 @@ export class Postes {
       this.journal.warn({ machine, sessionId }, 'compte rendu refusé : session d’une autre machine');
       return;
     }
-    if (m.kind === 'flux') return; // plus émis depuis le passage au TUI : le fil vient du transcript
     if (m.kind === 'session') {
       this.registre.enregistrerSession(m.session);
       return this.diffuserSession(m.session.id);
@@ -158,6 +158,18 @@ export class Postes {
       this.registre.enregistrerSession({ ...s, statut: 'fermee', majLe: maintenant });
       this.diffuserSession(s.id);
     }
+  }
+
+  // Delta en cours d'écriture : diffusé aux clients connectés, jamais persisté (le bloc final suit dans le fil).
+  private flux(machine: string, m: Extract<MessagePoste, { kind: 'flux' }>): void {
+    if (!this.appartient(m.sessionId, machine)) return;
+    this.diffusion.diffuser({
+      type: 'flux',
+      sessionId: m.sessionId,
+      bloc: m.bloc,
+      delta: m.delta,
+      ...(m.genre ? { genre: m.genre } : {}),
+    });
   }
 
   private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {

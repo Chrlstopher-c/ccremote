@@ -260,3 +260,25 @@ describe('traduction SDK → événements', () => {
     expect(traduireSdk(assistant([{ type: 'inconnu' }, { type: 'tool_use' }]), etat).evenements).toEqual([]);
   });
 });
+
+describe('flux de réflexion', () => {
+  test('thinking_delta → flux de genre réflexion, text_delta reste un flux de texte', () => {
+    const etat = nouvelEtatTraduction();
+    const pense = sdk({
+      type: 'stream_event',
+      session_id: 's1',
+      parent_tool_use_id: null,
+      event: { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'je pèse' } },
+    });
+    const dit = sdk({
+      type: 'stream_event',
+      session_id: 's1',
+      parent_tool_use_id: null,
+      event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Bon' } },
+    });
+    expect(traduireSdk(pense, etat).evenements).toEqual([
+      { type: 'flux', bloc: '0:0', delta: 'je pèse', genre: 'reflexion' },
+    ]);
+    expect(traduireSdk(dit, etat).evenements).toEqual([{ type: 'flux', bloc: '1:1', delta: 'Bon' }]);
+  });
+});

@@ -150,10 +150,15 @@ function traduireFlux(msg: Flux, etat: EtatTraduction): Evenement[] {
     return [];
   }
   const delta = objet(evenement['delta']);
-  if (evenement['type'] !== 'content_block_delta' || delta['type'] !== 'text_delta') return [];
+  if (evenement['type'] !== 'content_block_delta') return [];
   const index = nombreDe(evenement['index']);
   const id = etat.messagesEnFlux.get(fil) || String(index);
-  return [{ type: 'flux', bloc: `${id}:${index}`, delta: texteDe(delta['text']), ...marque }];
+  const bloc = `${id}:${index}`;
+  if (delta['type'] === 'text_delta') return [{ type: 'flux', bloc, delta: texteDe(delta['text']), ...marque }];
+  if (delta['type'] === 'thinking_delta') {
+    return [{ type: 'flux', bloc, delta: texteDe(delta['thinking']), genre: 'reflexion', ...marque }];
+  }
+  return [];
 }
 
 function traduireResultat(msg: Resultat, etat: EtatTraduction): Corps {

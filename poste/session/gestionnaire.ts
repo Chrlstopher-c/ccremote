@@ -124,6 +124,8 @@ export class GestionnaireSessions {
     else if (c.kind === 'autonomie') s.basculerAutonomie(c.active);
     else if (c.kind === 'nuit') erreur = await s.basculerNuit(c.active, c.objectif);
     else if (c.kind === 'repondre') erreur = await s.repondre(c.reponse);
+    else if (c.kind === 'mode' || c.kind === 'modele' || c.kind === 'effort' || c.kind === 'renommer')
+      erreur = await s.reglerSession(c);
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
   }
 

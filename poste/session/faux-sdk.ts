@@ -74,6 +74,20 @@ export class RequeteFausse implements RequeteSdk {
     this.sortie.clore();
   }
 
+  readonly reglages: string[] = [];
+
+  async setPermissionMode(mode: string): Promise<void> {
+    this.reglages.push(`mode:${mode}`);
+  }
+
+  async setModel(model?: string): Promise<void> {
+    this.reglages.push(`modele:${model ?? 'défaut'}`);
+  }
+
+  async applyFlagSettings(settings: { readonly effortLevel?: string | null }): Promise<void> {
+    this.reglages.push(`effort:${settings.effortLevel ?? 'défaut'}`);
+  }
+
   async mcpServerStatus(): Promise<{ readonly status: string }[]> {
     this.mcpAppels += 1;
     return (this.mcp.shift() ?? ['connected']).map((status) => ({ status }));

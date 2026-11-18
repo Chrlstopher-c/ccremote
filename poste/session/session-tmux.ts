@@ -164,6 +164,11 @@ export class SessionTmux implements SessionPoste {
     this.publierDialogue();
   }
 
+  // Les réglages du SDK (mode, modèle, effort, titre) n'ont pas de sens pour un TUI : refus explicite.
+  async reglerSession(): Promise<string | null> {
+    return 'réglage non disponible sur une session tmux';
+  }
+
   async repondre(r: ReponseDialogue): Promise<string | null> {
     const refus = this.refusTerminal();
     if (refus) return refus;

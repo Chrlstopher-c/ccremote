@@ -114,3 +114,24 @@ describe('bonjour : sessions absentes de l’annonce du poste', () => {
     expect(['a', 'b', 'c'].map((id) => registre.session(id)?.statut)).toEqual(['fermee', 'fermee', 'fermee']);
   });
 });
+
+describe('flux : deltas de texte relayés sans persistance', () => {
+  test('un delta est diffusé tel quel, n’entre pas dans le fil et ne fait pas avancer le long-poll', () => {
+    const { postes, registre, recus } = montage([session('s', 'tour', 'travail')]);
+    const versionAvant = registre.derniersEvenements('s', 300).length;
+    postes.recu(
+      fauxPoste('tour'),
+      JSON.stringify({ kind: 'flux', sessionId: 's', bloc: 'm:0', delta: 'Sal', genre: 'reflexion' }),
+    );
+
+    expect(recus).toEqual([{ type: 'flux', sessionId: 's', bloc: 'm:0', delta: 'Sal', genre: 'reflexion' }]);
+    expect(registre.derniersEvenements('s', 300)).toHaveLength(versionAvant);
+  });
+
+  test('un delta d’une session d’une autre machine est ignoré', () => {
+    const { postes, recus } = montage([session('s', 'portable', 'travail')]);
+    postes.recu(fauxPoste('tour'), JSON.stringify({ kind: 'flux', sessionId: 's', bloc: 'm:0', delta: 'x' }));
+
+    expect(recus).toEqual([]);
+  });
+});

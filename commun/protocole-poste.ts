@@ -3,7 +3,15 @@
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
-import { DemandeSession, Evenement, Projet, ReponseDialogue, ResumeSession } from './session.ts';
+import {
+  DemandeSession,
+  EffortSession,
+  Evenement,
+  ModeSession,
+  Projet,
+  ReponseDialogue,
+  ResumeSession,
+} from './session.ts';
 
 export const EtatMachine = z.object({
   cpu: z.number(),
@@ -30,7 +38,14 @@ export const MessagePoste = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
   z.object({ kind: z.literal('session'), session: ResumeSession }),
   z.object({ kind: z.literal('evenement'), sessionId: z.string(), ts: z.string(), evt: Evenement }),
-  z.object({ kind: z.literal('flux'), sessionId: z.string(), texte: z.string() }),
+  // Delta de texte ou de réflexion : relayé en direct, jamais persisté dans le fil.
+  z.object({
+    kind: z.literal('flux'),
+    sessionId: z.string(),
+    bloc: z.string(),
+    delta: z.string(),
+    genre: z.enum(['texte', 'reflexion']).optional(),
+  }),
   z.object({
     kind: z.literal('reponse'),
     id: z.string(),
@@ -54,6 +69,11 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('autonomie'), ...avecSession, active: z.boolean() }),
   z.object({ kind: z.literal('nuit'), ...avecSession, active: z.boolean(), objectif: z.string().max(300).optional() }),
   z.object({ kind: z.literal('repondre'), ...avecSession, reponse: ReponseDialogue }),
+  // Réglages d'une session SDK en cours : mode de permission, modèle, effort (null = défaut), titre.
+  z.object({ kind: z.literal('mode'), ...avecSession, mode: ModeSession }),
+  z.object({ kind: z.literal('modele'), ...avecSession, modele: z.string().min(1).max(120) }),
+  z.object({ kind: z.literal('effort'), ...avecSession, effort: EffortSession.nullable() }),
+  z.object({ kind: z.literal('renommer'), ...avecSession, titre: z.string().min(1).max(120) }),
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
   // Comptes Claude Code : connexion OAuth en deux temps (URL, puis code collé par Chris), retrait, relevé immédiat.

@@ -22,6 +22,14 @@ export type StatutSession = z.infer<typeof StatutSession>;
 export const Moteur = z.enum(['sdk', 'tmux']);
 export type Moteur = z.infer<typeof Moteur>;
 
+// Mode de permission d'une session SDK. `bypassPermissions` = défaut de Lanterne : aucune demande d'outil.
+export const ModeSession = z.enum(['bypassPermissions', 'default', 'acceptEdits', 'plan']);
+export type ModeSession = z.infer<typeof ModeSession>;
+
+// Effort de raisonnement (SDK `effort`). Absent ou null = effort par défaut du modèle.
+export const EffortSession = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+export type EffortSession = z.infer<typeof EffortSession>;
+
 export const Projet = z.object({
   machine: z.string(),
   chemin: z.string(),
@@ -38,6 +46,10 @@ export const Dialogue = z.object({
   multiple: z.boolean(), // cases à cocher (AskUserQuestion multiSelect)
   saisie: z.number().int().nullable(), // l'option « Type something » : réponse libre
   coches: z.array(z.number().int()), // cases déjà cochées
+  // Demande de permission d'un outil (mode autre que bypass) : options Autoriser / Toujours / Refuser.
+  permission: z
+    .object({ outil: z.string(), entree: z.string(), suggestion: z.boolean() })
+    .optional(),
 });
 export type Dialogue = z.infer<typeof Dialogue>;
 
@@ -75,6 +87,8 @@ export const ResumeSession = z.object({
   compactions: z.number(),
   claudeSessionId: z.string().nullable(),
   moteur: Moteur.optional(), // absent = tmux (postes antérieurs)
+  mode: ModeSession.optional(), // absent = bypassPermissions (comportement antérieur : tout autorisé)
+  effort: EffortSession.nullable().optional(), // absent ou null = défaut du modèle
   tmux: z.string().nullable(), // nom de la session tmux (serveur `tmux -L claude`), null si fermée
   attachee: z.boolean(), // un terminal est attaché (kitty, web)
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
@@ -97,8 +111,15 @@ const deAgent = { agent: z.string().optional() };
 export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('message'), texte: z.string() }),
   z.object({ type: z.literal('texte'), texte: z.string(), ...deAgent }),
-  // Texte en cours d'écriture (SDK, includePartialMessages) : remplacé par l'événement `texte` final, jamais persisté.
-  z.object({ type: z.literal('flux'), bloc: z.string(), delta: z.string(), ...deAgent }),
+  // Texte ou réflexion en cours d'écriture (SDK, includePartialMessages) : remplacé par l'événement final (`texte`,
+  // `reflexion`), jamais persisté. `genre` absent = texte.
+  z.object({
+    type: z.literal('flux'),
+    bloc: z.string(),
+    delta: z.string(),
+    genre: z.enum(['texte', 'reflexion']).optional(),
+    ...deAgent,
+  }),
   z.object({ type: z.literal('reflexion'), texte: z.string(), ...deAgent }),
   z.object({
     type: z.literal('outil'),

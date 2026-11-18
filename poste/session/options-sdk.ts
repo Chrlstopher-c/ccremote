@@ -2,6 +2,7 @@
 // environnement épuré, permissions, serveur de rythme). Pur : le binaire, le compte, le serveur de rythme et canUseTool
 // viennent de l'appelant.
 import type { CanUseTool, McpStdioServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
+import type { EffortSession, ModeSession } from '../../commun/session.ts';
 
 // Hérité d'une session Claude parente (messagerie, identité de session) : le CLI enfant le prendrait pour le sien.
 // Liste mesurée dans essais/sdk/RAPPORT.md. ANTHROPIC_API_KEY : abonnement uniquement.
@@ -34,6 +35,8 @@ export interface ParametresSdk {
   readonly cwd: string;
   readonly consignes: string;
   readonly modele: string | undefined;
+  readonly mode: ModeSession;
+  readonly effort: EffortSession | null;
   readonly executable: string | null; // le claude installé ; null : binaire embarqué au SDK
   readonly configDir: string | null;
   readonly source: Record<string, string | undefined>;
@@ -48,7 +51,10 @@ export function optionsSdk(p: ParametresSdk): Options {
     ...(p.reprise ? { resume: p.identifiant } : { sessionId: p.identifiant }),
     systemPrompt: { type: 'preset', preset: 'claude_code', ...(p.consignes ? { append: p.consignes } : {}) },
     includePartialMessages: true,
-    permissionMode: 'default',
+    permissionMode: p.mode,
+    // Requis par le SDK pour passer en bypass (en cours de session comme au démarrage) : choix explicite de Lanterne.
+    allowDangerouslySkipPermissions: true,
+    ...(p.effort ? { effort: p.effort } : {}),
     canUseTool: p.canUseTool,
     mcpServers: { ccremote: p.rythme },
     ...(p.modele ? { model: p.modele } : {}),

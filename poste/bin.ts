@@ -28,7 +28,10 @@ const envoyer = (m: MessagePoste): void => lien?.envoyer(m);
 const sessions = new GestionnaireSessions(
   config,
   {
-    evenement: (sessionId, evt) => envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
+    evenement: (sessionId, evt) =>
+      evt.type === 'flux'
+        ? envoyer({ kind: 'flux', sessionId, bloc: evt.bloc, delta: evt.delta, genre: evt.genre })
+        : envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
     resume: (session) => envoyer({ kind: 'session', session }),
   },
   socket,

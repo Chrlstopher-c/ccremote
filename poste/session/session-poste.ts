@@ -1,9 +1,16 @@
 // Responsabilité : le contrat qu'une session du poste offre au gestionnaire et au socket local, quel que soit son
 // moteur — `tmux` (TUI dans un serveur tmux) ou `sdk` (Claude Agent SDK). Le gestionnaire ne parle qu'à cette forme.
-import type { Evenement, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
+import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
 import type { DecisionCrochet } from './garde-sous-agents.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { PaneTmux } from './tmux.ts';
+
+// Réglage changé en cours de session (commande `mode`, `modele`, `effort`, `renommer` du relais).
+export type Reglage =
+  | { readonly kind: 'mode'; readonly mode: ModeSession }
+  | { readonly kind: 'modele'; readonly modele: string }
+  | { readonly kind: 'effort'; readonly effort: EffortSession | null }
+  | { readonly kind: 'renommer'; readonly titre: string };
 
 export interface SortieSession {
   evenement(sessionId: string, evt: Evenement): void;
@@ -39,6 +46,7 @@ export interface SessionPoste {
   basculerAutonomie(active: boolean): void;
   basculerNuit(active: boolean, objectif?: string): Promise<string | null>;
   repondre(r: ReponseDialogue): Promise<string | null>;
+  reglerSession(r: Reglage): Promise<string | null>;
 
   // Socket local : crochets (tmux seulement) et outils de rythme (tmux et SDK).
   crochet(type: string, entree: Record<string, unknown>): ReponseCrochet;

@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { Projet, ReponseDialogue } from '../../commun/session.ts';
+import { EffortSession, ModeSession, Projet, ReponseDialogue } from '../../commun/session.ts';
 import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
@@ -22,6 +22,10 @@ const CorpsOuverture = z.object({
 const CorpsMessage = z.object({ texte: z.string().min(1) });
 const CorpsAutonomie = z.object({ active: z.boolean() });
 const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).optional() });
+const CorpsMode = z.object({ mode: ModeSession });
+const CorpsModele = z.object({ modele: z.string().min(1).max(120) });
+const CorpsEffort = z.object({ effort: EffortSession.nullable() });
+const CorpsTitre = z.object({ titre: z.string().trim().min(1).max(120) });
 type Action = 'interrompre' | 'compacter' | 'fermer' | 'reprendre';
 const ACTIONS: ReadonlySet<string> = new Set<string>(['interrompre', 'compacter', 'fermer', 'reprendre']);
 
@@ -91,6 +95,30 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: 'nuit', active: c.active, objectif: c.objectif });
   }
 
+  async mode(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsMode);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'mode', mode: c.mode });
+  }
+
+  async modele(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsModele);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'modele', modele: c.modele });
+  }
+
+  async effort(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsEffort);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'effort', effort: c.effort });
+  }
+
+  async renommer(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsTitre);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'renommer', titre: c.titre });
+  }
+
   async repondre(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, ReponseDialogue);
     if (c instanceof Response) return c;
@@ -126,6 +154,10 @@ export class ApiSessions {
       | { kind: 'autonomie'; active: boolean }
       | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
       | { kind: 'repondre'; reponse: ReponseDialogue }
+      | { kind: 'mode'; mode: ModeSession }
+      | { kind: 'modele'; modele: string }
+      | { kind: 'effort'; effort: EffortSession | null }
+      | { kind: 'renommer'; titre: string }
       | { kind: Action },
   ): Promise<Response> {
     const session = this.registre.session(sessionId);

@@ -65,6 +65,10 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
     '/api/sessions/:id/nuit': { POST: protege((req) => d.sessions.nuit(req as never)) },
     '/api/sessions/:id/repondre': { POST: protege((req) => d.sessions.repondre(req as never)) },
+    '/api/sessions/:id/mode': { POST: protege((req) => d.sessions.mode(req as never)) },
+    '/api/sessions/:id/modele': { POST: protege((req) => d.sessions.modele(req as never)) },
+    '/api/sessions/:id/effort': { POST: protege((req) => d.sessions.effort(req as never)) },
+    '/api/sessions/:id/renommer': { POST: protege((req) => d.sessions.renommer(req as never)) },
     '/api/sessions/:id/:action': { POST: protege((req) => d.sessions.action(req as never)) },
     '/api/notifications': {
       GET: protege((req) => json(d.registre.notifications(entier(new URL(req.url).searchParams.get('apres'), 0)))),
