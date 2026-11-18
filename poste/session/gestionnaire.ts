@@ -172,7 +172,9 @@ export class GestionnaireSessions {
       const erreur = await s.fermer();
       if (erreur) return { ok: false, erreur };
     }
-    if (s.vivante) return { ok: false, erreur: 'session ouverte dans un terminal : la fermer avant de la supprimer' };
+    if (s.vivante || s.resume.terminal) {
+      return { ok: false, erreur: 'session ouverte dans un terminal : la fermer avant de la supprimer' };
+    }
     try {
       for (const chemin of transcriptsDeLaSession(id, this.configDirs())) supprimerTranscript(chemin, id, this.journal);
       this.supprimees.ajouter(id);
@@ -200,9 +202,12 @@ export class GestionnaireSessions {
     return { ok: true, donnees: { importees: aImporter.length, absentes } };
   }
 
+  // Une session qui tourne en ce moment (processus Claude Code) n'est pas à importer : elle s'écrit encore.
   private trouverImportables(): TranscriptImportable[] {
-    const ecartee = (id: string): boolean => this.sessions.has(id) || this.supprimees.has(id);
-    return transcriptsImportables(this.configDirs(), ecartee, this.journal);
+    const configs = this.configDirs();
+    const vivantes = new Set(processusClaude(configs, this.journal).map((p) => p.sessionId));
+    const ecartee = (id: string): boolean => this.sessions.has(id) || this.supprimees.has(id) || vivantes.has(id);
+    return transcriptsImportables(configs, ecartee, this.journal);
   }
 
   private importerUne(t: TranscriptImportable): void {
