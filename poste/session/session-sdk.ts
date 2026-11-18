@@ -162,8 +162,9 @@ export class SessionSdk implements SessionPoste {
   // Les messages de Chris entrent dans le fil tout de suite : le SDK ne les renvoie pas (contrairement au transcript
   // relu par les sessions tmux).
   async lancer(message: string): Promise<string | null> {
-    this.emettre({ type: 'message', texte: message });
-    return this.demarrer(false, message);
+    const uuid = randomUUID();
+    this.emettre({ type: 'message', texte: message, uuid });
+    return this.demarrer(false, message, uuid);
   }
 
   // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
