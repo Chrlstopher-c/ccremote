@@ -11,7 +11,7 @@ import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
-import type { SessionPoste, SortieSession } from './session-poste.ts';
+import type { Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import * as tmux from './tmux.ts';
 import {
   type Adoptee,
@@ -116,12 +116,17 @@ export class GestionnaireSessions {
       aReprendre: false,
     });
     this.sessions.set(d.sessionId, session);
-    // Le mode voulu à l'ouverture s'applique avant le premier message (le SDK démarre en bypass par défaut).
-    if (d.mode && d.mode !== 'bypassPermissions' && (d.moteur ?? 'sdk') === 'sdk') {
-      const refus = await session.reglerSession({ kind: 'mode', mode: d.mode });
-      if (refus) {
-        this.sessions.delete(d.sessionId);
-        return { ok: false, erreur: refus };
+    // Mode et modèle voulus à l'ouverture s'appliquent avant le premier message (SDK seulement).
+    if ((d.moteur ?? 'sdk') === 'sdk') {
+      const reglages: Reglage[] = [];
+      if (d.mode && d.mode !== 'bypassPermissions') reglages.push({ kind: 'mode', mode: d.mode });
+      if (d.modele) reglages.push({ kind: 'modele', modele: d.modele });
+      for (const reglage of reglages) {
+        const refus = await session.reglerSession(reglage);
+        if (refus) {
+          this.sessions.delete(d.sessionId);
+          return { ok: false, erreur: refus };
+        }
       }
     }
     const erreur = await session.lancer(d.message, d.modele ?? null);

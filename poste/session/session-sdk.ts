@@ -87,6 +87,8 @@ export class SessionSdk implements SessionPoste {
   private readonly suiviNuit: SuiviNuit;
   private readonly registreTaches = new RegistreTaches();
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
+  // Chris a interrompu le tour en cours : le SDK coupe alors le flux par une erreur, qui n'est pas une panne.
+  private interrompuParChris = false;
 
   constructor(
     private readonly p: SessionPersistee,
@@ -176,6 +178,7 @@ export class SessionSdk implements SessionPoste {
     const requete = this.requete;
     if (!requete) return 'session fermée';
     this.bilan.interrompre();
+    this.interrompuParChris = true;
     this.avis.refuserTous(TEXTE_INTERRUPTION, true);
     try {
       await requete.interrupt();
@@ -333,6 +336,7 @@ export class SessionSdk implements SessionPoste {
 
   // Un message poussé au SDK (Chris, relance, compaction, réveil) ouvre un tour que le bilan compte.
   private pousser(texte: string): void {
+    this.interrompuParChris = false;
     if (!this.fil) return;
     this.fil.push(messageUtilisateur(texte));
     this.bilan.envoye();
@@ -374,6 +378,12 @@ export class SessionSdk implements SessionPoste {
 
   private echouer(requete: RequeteSdk, erreur: unknown): void {
     if (this.requete !== requete) return; // fermée volontairement : l'erreur qui suit n'est pas une panne
+    if (this.interrompuParChris) {
+      this.env.journal.info({ session: this.etat.id }, 'flux SDK coupé après interruption demandée par Chris');
+      this.libererRequete('Interrompue par Chris');
+      this.maj({ statut: 'attente' });
+      return;
+    }
     this.env.journal.error({ err: erreur, session: this.etat.id }, 'requête SDK en échec');
     this.emettre({ type: 'erreur', message: String(erreur) });
     this.libererRequete('Session en erreur');
@@ -390,11 +400,13 @@ export class SessionSdk implements SessionPoste {
   private traiter(msg: SDKMessage, etatTraduction: EtatTraduction): void {
     this.registreTaches.observer(msg);
     const sortie = this.traduction.traduire(msg, etatTraduction);
-    for (const evt of sortie.evenements) {
+    // Après une interruption de Chris, le SDK rend son résultat en erreur : ce n'est pas une panne du tour.
+    const evenements = sortie.evenements.filter((evt) => evt.type !== 'erreur' || !this.interrompuParChris);
+    for (const evt of evenements) {
       this.constater(evt);
       this.emettre(evt);
     }
-    this.bilan.observer(sortie.evenements, sortie.compaction === true);
+    this.bilan.observer(evenements, sortie.compaction === true);
     if (sortie.claudeSessionId && sortie.claudeSessionId !== this.etat.claudeSessionId) {
       this.maj({ claudeSessionId: sortie.claudeSessionId });
     }
@@ -416,7 +428,8 @@ export class SessionSdk implements SessionPoste {
       contexte: tokens,
       maxTokens: this.etat.contexte.max,
     });
-    const statut: StatutSession = suite.action === 'laisser' ? 'travail' : fin.erreur ? 'erreur' : 'attente';
+    const panne = fin.erreur && !this.interrompuParChris;
+    const statut: StatutSession = suite.action === 'laisser' ? 'travail' : panne ? 'erreur' : 'attente';
     this.maj({ statut, contexte: { ...this.etat.contexte, tokens } });
     this.appliquerSuite(suite);
     void this.suiviNuit.tick();
