@@ -21,6 +21,8 @@ export interface Ligne {
   readonly compactMetadata?: Objet;
   readonly customTitle?: unknown;
   readonly uuid?: unknown;
+  readonly parentUuid?: unknown; // entrée précédente de la conversation (branche active)
+  readonly logicalParentUuid?: unknown; // idem à travers une compaction
   readonly attachment?: { type?: unknown; prompt?: unknown };
   readonly isApiErrorMessage?: unknown;
 }

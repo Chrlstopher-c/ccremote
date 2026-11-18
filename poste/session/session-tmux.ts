@@ -2,6 +2,7 @@
 // et, si ccremote l'a lancée, son rythme : relance autonome, compaction pilotée, garde des sous-agents.
 import type { Logger } from 'pino';
 import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
+import { brancheActive } from './branche.ts';
 import { approuverDossier } from './confiance.ts';
 import { GardeSousAgents } from './garde-sous-agents.ts';
 import { commandeClaude, commandeReprise, VAR_SESSION, VAR_SOCKET } from './lanceur.ts';
@@ -118,7 +119,7 @@ export class SessionTmux implements SessionPoste {
     this.lecteur = new LecteurTranscript(chemin);
     this.sousAgents = new SuiviSousAgents(chemin);
     const evts: Evenement[] = [];
-    for (const l of this.lecteur.lire()) evts.push(...this.absorber(l));
+    for (const l of brancheActive(this.lecteur.lire())) evts.push(...this.absorber(l));
     for (const evt of evts.slice(-historique)) this.env.sortie.evenement(this.etat.id, evt);
     this.publier();
   }
