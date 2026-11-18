@@ -80,6 +80,8 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('connecteurs'), ...avecSession }),
   z.object({ kind: z.literal('taches'), ...avecSession }),
   z.object({ kind: z.literal('tache'), ...avecSession, tache: z.string().min(1).max(200) }),
+  // Arrêt d'une tâche de fond du SDK (commande ou sous-agent) ; `stopTask` du SDK.
+  z.object({ kind: z.literal('arreter_tache'), ...avecSession, tache: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('projets'), id: z.string() }),
   z.object({ kind: z.literal('eteindre'), id: z.string() }),
   // Comptes Claude Code : connexion OAuth en deux temps (URL, puis code collé par Chris), retrait, relevé immédiat.

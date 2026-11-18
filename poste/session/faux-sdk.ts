@@ -91,6 +91,10 @@ export class RequeteFausse implements RequeteSdk {
     return undefined;
   }
 
+  async stopTask(): Promise<void> {
+    return undefined;
+  }
+
   close(): void {
     this.fermee = true;
     this.sortie.clore();

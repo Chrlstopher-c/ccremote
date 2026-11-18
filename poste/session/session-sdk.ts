@@ -35,6 +35,7 @@ import { type EtatTraduction, nouvelEtatTraduction, type SortieTraduction, tradu
 // Ce que la session attend du SDK : une requête (flux de messages, interruption, fermeture).
 export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   interrupt(): Promise<unknown>;
+  stopTask(tache: string): Promise<void>;
   close(): void;
   mcpServerStatus(): Promise<readonly { readonly name: string; readonly status: string }[]>;
   getContextUsage(opts: { readonly detail: 'summary' }): Promise<SDKControlGetContextUsageResponse>;
@@ -197,6 +198,19 @@ export class SessionSdk implements SessionPoste {
     }
     this.lancerCompaction('demandée par Chris');
     return null;
+  }
+
+  // Arrête une tâche de fond (commande ou sous-agent) par son identifiant SDK ; son état revient par les messages du SDK.
+  async arreterTache(tache: string): Promise<string | null> {
+    const requete = this.requete;
+    if (!requete) return 'session fermée';
+    try {
+      await requete.stopTask(tache);
+      return null;
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id, tache }, 'arrêt de tâche refusé par le SDK');
+      return `arrêt impossible : ${String(erreur)}`;
+    }
   }
 
   async fermer(): Promise<string | null> {

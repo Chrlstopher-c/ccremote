@@ -178,6 +178,13 @@ export class ApiSessions {
     return json({ ok: true, epinglee });
   }
 
+  // Arrêt d'une tâche de fond : l'identifiant vient du SDK ; il est vérifié avant d'aller au poste.
+  arreterTache(req: RequeteTache): Promise<Response> {
+    const tache = req.params.tache;
+    if (!/^[A-Za-z0-9_-]{1,200}$/.test(tache)) return Promise.resolve(erreur('identifiant de tâche invalide', 400));
+    return this.commander(req.params.id, { kind: 'arreter_tache', tache });
+  }
+
   private async lire(sessionId: string, c: Lecture, absenteEst404 = false): Promise<Response> {
     const session = this.registre.session(sessionId);
     if (!session) return erreur('session inconnue', 404);
@@ -201,6 +208,7 @@ export class ApiSessions {
       | { kind: 'modele'; modele: string }
       | { kind: 'effort'; effort: EffortSession | null }
       | { kind: 'renommer'; titre: string }
+      | { kind: 'arreter_tache'; tache: string }
       | { kind: Action },
   ): Promise<Response> {
     const session = this.registre.session(sessionId);

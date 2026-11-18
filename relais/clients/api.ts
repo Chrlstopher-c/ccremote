@@ -65,6 +65,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/connecteurs': { GET: protege((req) => d.sessions.connecteurs(req as never)) },
     '/api/sessions/:id/taches': { GET: protege((req) => d.sessions.taches(req as never)) },
     '/api/sessions/:id/taches/:tache': { GET: protege((req) => d.sessions.tache(req as never)) },
+    '/api/sessions/:id/taches/:tache/arreter': { POST: protege((req) => d.sessions.arreterTache(req as never)) },
     '/api/sessions/:id/messages': { POST: protege((req) => d.sessions.envoyer(req as never)) },
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
     '/api/sessions/:id/nuit': { POST: protege((req) => d.sessions.nuit(req as never)) },
