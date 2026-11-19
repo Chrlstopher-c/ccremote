@@ -221,6 +221,32 @@ export class Registre {
       .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
   }
 
+  // Une page du fil antérieure au rang `avant` : les `limite` événements qui le précèdent, en ordre croissant.
+  evenementsAvant(sessionId: string, avant: number, limite: number): EvenementDate[] {
+    const lignes = this.db
+      .query(
+        `SELECT seq, session_id, ts, evt FROM evenements WHERE session_id = $s AND seq < $a
+      ORDER BY seq DESC LIMIT $l`,
+      )
+      .all({ s: sessionId, a: avant, l: limite }) as { seq: number; session_id: string; ts: string; evt: string }[];
+    return lignes
+      .reverse()
+      .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
+  }
+
+  // Messages épinglés comme chapitres : dernier état de chaque chapitre (un retrait l'annule).
+  chapitresEpingles(sessionId: string): string[] {
+    const lignes = this.db
+      .query(
+        `SELECT json_extract(evt, '$.uuid') AS uuid, json_extract(evt, '$.epingle') AS epingle FROM evenements
+      WHERE session_id = $s AND json_extract(evt, '$.type') = 'chapitre' ORDER BY seq`,
+      )
+      .all({ s: sessionId }) as { uuid: string; epingle: number }[];
+    const etat = new Map<string, boolean>();
+    for (const l of lignes) etat.set(l.uuid, l.epingle === 1);
+    return [...etat].filter(([, epingle]) => epingle).map(([uuid]) => uuid);
+  }
+
   // Rang (seq) d'un message de Chris par son uuid, dans le fil de la session ; null s'il n'y est pas.
   rangMessage(sessionId: string, uuid: string): number | null {
     const ligne = this.db
