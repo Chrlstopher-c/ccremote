@@ -21,6 +21,7 @@ import {
   ficheAdoptee,
   ficheFermee,
   identitePane,
+  adoptionAutorisee,
   identiteProcessus,
   titreDe,
 } from './adoption.ts';
@@ -397,7 +398,7 @@ export class GestionnaireSessions {
     ]);
     for (const e of entrees.slice(0, FERMEES_MAX)) {
       if (this.sessions.has(e.id) || vivants.has(e.id) || this.supprimees.has(e.id)) continue;
-      const titre = titreDuTranscript(cheminTranscript(e.cwd, e.id, null), e.cwd, this.journal) ?? e.nom;
+      const titre = titreDuTranscript(cheminTranscript(e.cwd, e.id, null), e.cwd, this.journal) ?? titreDe(e.nom, null, e.cwd);
       const resume = ficheFermee(this.origine(), e, titre);
       this.sessions.set(e.id, this.creer({ resume, consignes: null, configDir: null, transcript: null, position: 0, aReprendre: false }));
     }
@@ -405,6 +406,7 @@ export class GestionnaireSessions {
 
   // Une session lancée hors ccremote (bureau, Atrium, terminal) : suivie en lecture ; dans tmux, pilotable par tmux.
   private adopter(a: Adoptee, pane: tmux.PaneTmux | null, dossier = pane?.dossier ?? ''): void {
+    if (!adoptionAutorisee(a.id, this.supprimees)) return;
     const connue = this.sessions.get(a.id);
     if (connue) return connue.rattacher(pane);
     const titre =

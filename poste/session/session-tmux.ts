@@ -17,6 +17,7 @@ import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './
 import { SuiviNuit } from './suivi-nuit.ts';
 import { SuiviDialogue } from './suivi-dialogue.ts';
 import { LecteurTranscript } from './transcript.ts';
+import { titreDuMessage, titreProvisoire } from './titre-transcript.ts';
 import { contexteDe, type Ligne, traduire, travailEnCours } from './traduction.ts';
 
 export interface EnvironnementSession {
@@ -88,7 +89,7 @@ export class SessionTmux implements SessionPoste {
       if (this.etat.tmux !== null) this.maj({ tmux: null, attachee: false, statut: 'fermee' });
       return;
     }
-    const titre = this.p.consignes === null ? (this.nomFixe ?? pane.titre) : this.etat.titre;
+    const titre = this.p.consignes === null ? this.titreAdopte(pane) : this.etat.titre;
     if (pane.nom !== this.etat.tmux || pane.attachee !== this.etat.attachee || titre !== this.etat.titre) {
       this.maj({
         tmux: pane.nom,
@@ -97,6 +98,16 @@ export class SessionTmux implements SessionPoste {
         ...(this.etat.statut === 'fermee' ? { statut: 'attente' } : {}),
       });
     }
+  }
+
+  /** Titre d'une session adoptée : le premier nom réel l'emporte (nom cc, titre lu, titre du pane). Un nom par défaut
+   *  (tmux « dossier-N », « racine ») n'en est jamais un : le titre reste alors celui du transcript ou du dossier. */
+  private titreAdopte(pane: tmux.PaneTmux): string {
+    const cwd = this.etat.cwd;
+    const choisi = [this.nomFixe, this.etat.titre, pane.titre].find(
+      (titre): titre is string => titre !== null && !titreProvisoire(titre, cwd),
+    );
+    return choisi ?? this.etat.titre;
   }
 
   /** Session lancée dans un terminal ordinaire : ouverte tant que son processus vit, fermée ensuite. */
@@ -187,10 +198,18 @@ export class SessionTmux implements SessionPoste {
     this.maj({ dialogue: d });
   }
 
+  /** Titre provisoire remplacé par le premier titre réel du transcript : titre généré, puis premier message de Chris. */
+  private titreDeLigne(l: Ligne): ResumeSession {
+    const genere =
+      l.type === 'ai-title' && typeof l.aiTitle === 'string' && l.aiTitle.trim() !== '' ? l.aiTitle.trim() : null;
+    const titre = genere ?? (l.type === 'user' ? titreDuMessage(l) : null);
+    return titre === null ? this.etat : { ...this.etat, titre };
+  }
+
   private absorber(l: Ligne): Evenement[] {
     const contexte = contexteDe(l);
     if (contexte !== null) this.etat = { ...this.etat, contexte: { ...this.etat.contexte, tokens: contexte } };
-    if (l.type === 'custom-title' && typeof l.customTitle === 'string')
+    if (l.type === 'custom-title' && typeof l.customTitle === 'string' && !titreProvisoire(l.customTitle, this.etat.cwd))
       this.etat = { ...this.etat, titre: l.customTitle };
     const travail = travailEnCours(l);
     const vivante = this.etat.tmux !== null || this.etat.terminal === true;

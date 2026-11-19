@@ -94,6 +94,18 @@ describe('suppression d une session', () => {
     expect(appels).toEqual([]);
   });
 
+  test('la suppression se diffuse aux autres clients, pour qu aucun ne garde la ligne', async () => {
+    const r = new Registre(ouvrirBase(':memory:'));
+    r.enregistrerMachine({ id: 'tour', description: '', racines: [], projets: [], comptes: [], version: '', derniereVue: MAJ } as never);
+    const diffusion = new Diffusion();
+    const messages: unknown[] = [];
+    diffusion.diffuser = (m) => messages.push(m);
+    const a = new ApiSessions(r, fauxPostes({ ok: true }).postes, diffusion, new Set(), journal);
+    r.enregistrerSession(session('s1'));
+    await a.supprimer(requete('/api/sessions/s1/supprimer', undefined, { id: 's1' }));
+    expect(messages).toEqual([{ type: 'supprimee', id: 's1' }]);
+  });
+
   test('la suppression retire aussi les événements de la session', async () => {
     const { r, api: a } = api({ ok: true });
     r.enregistrerSession(session('s1'));

@@ -20,6 +20,7 @@ export interface Ligne {
   readonly message?: { content?: unknown; usage?: Objet; stop_reason?: unknown; model?: unknown };
   readonly compactMetadata?: Objet;
   readonly customTitle?: unknown;
+  readonly aiTitle?: unknown;
   readonly uuid?: unknown;
   readonly parentUuid?: unknown; // entrée précédente de la conversation (branche active)
   readonly logicalParentUuid?: unknown; // idem à travers une compaction

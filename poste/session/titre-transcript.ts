@@ -6,7 +6,6 @@ import { basename } from 'node:path';
 import type { Logger } from 'pino';
 
 const LONGUEUR_MAX = 60;
-const NOM_PAR_DEFAUT = /^racine(-\d+)?$/;
 
 type Objet = Record<string, unknown>;
 
@@ -16,6 +15,19 @@ interface Indices {
   premier: string | null;
 }
 
+/** Nom que Claude Code ou tmux donnent sans choix de Chris : « racine » ou le nom du dossier, suffixé d'un numéro. */
+export function estNomParDefaut(nom: string, cwd: string): boolean {
+  const dossier = basename(cwd).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^(racine|${dossier})(-\\d+)?$`).test(nom);
+}
+
+/** Titre provisoire : vide, ou nom par défaut ; le titre réel vient alors du transcript ou du premier message. */
+export function titreProvisoire(titre: string, cwd: string): boolean {
+  return titre.trim() === '' || estNomParDefaut(titre, cwd);
+}
+
+// Une ligne JSON déjà parsée : objet non nul, vérifié à l'exécution ; le cast ne sert qu'à lire ses champs par clé.
+const enObjet = (v: unknown): Objet | null => (typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Objet) : null);
 const texte = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
 function analyser(ligne: string, indices: Indices): void {
@@ -26,7 +38,7 @@ function analyser(ligne: string, indices: Indices): void {
     const t = texte((parser(ligne) ?? {})['aiTitle']);
     if (t) indices.genere = t;
   } else if (indices.premier === null && ligne.includes('"type":"user"')) {
-    indices.premier = premierMessage(parser(ligne));
+    indices.premier = titreDuMessage(parser(ligne));
   }
 }
 
@@ -38,13 +50,15 @@ function parser(ligne: string): Objet | null {
   }
 }
 
-function premierMessage(entree: Objet | null): string | null {
+/** Titre tiré d'une ligne « user » du transcript : son premier texte de Chris, null pour une méta ou une balise. */
+export function titreDuMessage(brut: unknown): string | null {
+  const entree = enObjet(brut);
   if (!entree || entree['type'] !== 'user' || entree['isMeta'] === true) return null;
   const contenu = (entree['message'] as Objet | undefined)?.['content'];
-  const brut = Array.isArray(contenu)
-    ? contenu.map((b) => texte((b as Objet)['type'] === 'text' ? (b as Objet)['text'] : null) ?? '').join(' ')
+  const texteBrut = Array.isArray(contenu)
+    ? contenu.map((b) => texte(enObjet(b)?.['type'] === 'text' ? enObjet(b)?.['text'] : null) ?? '').join(' ')
     : (texte(contenu) ?? '');
-  const ligne = brut.trim().split('\n')[0]?.trim() ?? '';
+  const ligne = texteBrut.trim().split('\n')[0]?.trim() ?? '';
   if (!ligne || ligne.startsWith('<')) return null; // balises de commande ou de collage : pas un titre
   return ligne.length > LONGUEUR_MAX ? `${ligne.slice(0, LONGUEUR_MAX)}…` : ligne;
 }
@@ -61,8 +75,7 @@ export function titreDuTranscript(chemin: string, cwd: string, journal: Logger):
   }
   const indices: Indices = { renomme: null, genere: null, premier: null };
   for (const ligne of contenu.split('\n')) if (ligne) analyser(ligne, indices);
-  const nomDossier = basename(cwd);
   const renomme = indices.renomme;
-  const vraiRenomme = renomme !== null && !NOM_PAR_DEFAUT.test(renomme) && renomme !== nomDossier ? renomme : null;
+  const vraiRenomme = renomme !== null && !estNomParDefaut(renomme, cwd) ? renomme : null;
   return vraiRenomme ?? indices.genere ?? indices.premier;
 }

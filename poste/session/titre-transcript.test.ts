@@ -43,6 +43,15 @@ describe('titreDuTranscript', () => {
     expect(titreDuTranscript(chemin, CWD, journal)).toBe('Confirmation simple');
   });
 
+  test('un renommage au nom du dossier suivi d un numéro (« projet-alpha-93 ») n est pas un titre', () => {
+    const chemin = transcript([
+      message('Relis le README'),
+      { type: 'custom-title', customTitle: 'projet-alpha-93' },
+      { type: 'ai-title', aiTitle: 'Relecture du README' },
+    ]);
+    expect(titreDuTranscript(chemin, CWD, journal)).toBe('Relecture du README');
+  });
+
   test('sans titre : premier message de Chris, sans méta ni balise, tronqué à 60 caractères', () => {
     const long = 'a'.repeat(70);
     const chemin = transcript([

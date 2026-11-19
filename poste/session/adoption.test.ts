@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { EntreeCc } from './registre-cc.ts';
-import { ficheFermee, identitePane, titreDe } from './adoption.ts';
+import { adoptionAutorisee, ficheFermee, identitePane, titreDe } from './adoption.ts';
+import { SessionsSupprimees } from './suppression.ts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { ProcessusClaude } from './processus.ts';
 import type { PaneTmux } from './tmux.ts';
 
@@ -73,5 +77,24 @@ describe('ficheFermee', () => {
     expect(f.tmux).toBeNull();
     expect(f.titre).toBe('Titre du transcript');
     expect(f.lanceur).toBe('quart');
+  });
+});
+
+describe('titre de repli et adoption après suppression', () => {
+  test('un nom de tmux suivi d un numéro (« alpha-93 ») n est jamais le titre : le dossier prend sa place', () => {
+    expect(titreDe('alpha-93', null, '/home/x/alpha')).toBe('alpha');
+    expect(titreDe('racine-2', null, '/home/x/alpha')).toBe('alpha');
+  });
+
+  test('un nom donné par Chris reste le titre de repli', () => {
+    expect(titreDe('Mon projet', null, '/home/x/alpha')).toBe('Mon projet');
+  });
+
+  test('une session supprimée par Chris n est pas réadoptée tant que son identifiant reste retenu', () => {
+    const dossier = mkdtempSync(join(tmpdir(), 'adoption-'));
+    const supprimees = new SessionsSupprimees(dossier);
+    supprimees.ajouter(proc.sessionId);
+    expect(adoptionAutorisee(proc.sessionId, supprimees)).toBe(false);
+    expect(adoptionAutorisee('autre-session', supprimees)).toBe(true);
   });
 });

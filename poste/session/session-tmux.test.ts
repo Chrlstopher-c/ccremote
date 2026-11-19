@@ -6,6 +6,7 @@ import pino from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { SortieSession } from './session-poste.ts';
+import * as tmux from './tmux.ts';
 import { SessionTmux } from './session-tmux.ts';
 
 const MAJ = '2026-11-15T10:00:00.000Z';
@@ -89,5 +90,33 @@ describe('session adoptée dans un terminal : cycle de vie', () => {
     session.rattacher(null);
 
     expect(session.resume.statut).toBe('attente');
+  });
+});
+
+describe('titre d une session adoptée dans tmux', () => {
+  const pane = (nom: string, titre: string): tmux.PaneTmux => ({
+    nom,
+    creeLe: 0,
+    attachee: false,
+    dossier: '/home/x/alpha',
+    titre,
+    pid: 4242,
+  });
+
+  test('un nom par défaut (« alpha-93 », nom cc) ne remplace pas le titre provisoire du dossier', () => {
+    const { session, emis } = montage(fiche({ cwd: '/home/x/alpha', titre: 'alpha', terminal: false, tmux: null }));
+    session.nommer('alpha-93', null);
+    session.rattacher(pane('claude-alpha-93', 'alpha'));
+
+    expect(session.resume.titre).toBe('alpha');
+    expect(emis.at(-1)?.titre ?? 'alpha').not.toBe('alpha-93');
+  });
+
+  test('un nom donné par Chris (registre cc) devient le titre', () => {
+    const { session } = montage(fiche({ cwd: '/home/x/alpha', titre: 'alpha', terminal: false, tmux: null }));
+    session.nommer('Migration de la base', null);
+    session.rattacher(pane('claude-alpha', 'alpha'));
+
+    expect(session.resume.titre).toBe('Migration de la base');
   });
 });

@@ -268,6 +268,7 @@ export class ApiSessions {
       return erreur(r.erreur ?? 'suppression refusée', REFUS_POSTE);
     }
     this.registre.supprimerSession(session.id);
+    this.diffusion.diffuser({ type: 'supprimee', id: session.id });
     return json({ ok: true });
   }
 

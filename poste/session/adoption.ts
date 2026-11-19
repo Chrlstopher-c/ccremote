@@ -5,6 +5,7 @@ import type { EntreeCc } from './registre-cc.ts';
 import type { ProcessusClaude } from './processus.ts';
 import type { PaneTmux } from './tmux.ts';
 import { cheminTranscript, retrouverTranscript } from './transcript.ts';
+import { estNomParDefaut } from './titre-transcript.ts';
 
 export interface Origine {
   readonly machine: string;
@@ -54,9 +55,16 @@ export function identiteProcessus(proc: ProcessusClaude, entree: EntreeCc | unde
   return depuisProcessus(proc, entree);
 }
 
-/** Titre affiché : titre du transcript, sinon nom donné par Claude ou par cc, sinon titre du pane, sinon le dossier. */
+/** Une session supprimée par Chris n'est jamais réadoptée, même si son processus ou son pane tourne encore. */
+export function adoptionAutorisee(id: string, supprimees: { has(identifiant: string): boolean }): boolean {
+  return !supprimees.has(id);
+}
+
+/** Titre de repli : le premier nom utile (ni vide, ni nom par défaut tmux ou dossier), sinon le dossier. */
 export function titreDe(nom: string | null, titrePane: string | null, dossier: string): string {
-  return nom ?? titrePane ?? (dossier.split('/').at(-1) || 'Claude');
+  const utile = (titre: string | null): titre is string =>
+    titre !== null && titre.trim() !== '' && !estNomParDefaut(titre, dossier);
+  return [nom, titrePane].find(utile) ?? (dossier.split('/').at(-1) || 'Claude');
 }
 
 export function ficheAdoptee(
