@@ -20,6 +20,18 @@ interface Ouvert {
   minuteur: ReturnType<typeof setTimeout> | null;
 }
 
+/** Sans langue UTF-8 dans l'environnement du poste, zsh compte les glyphes Nerd Font en octets : le prompt se chevauche. */
+export function environnementDuTerminal(base: NodeJS.ProcessEnv): Record<string, string> {
+  const env: Record<string, string> = { ...base, TERM: 'xterm-256color', COLORTERM: 'truecolor' };
+  const effective = ['LC_ALL', 'LC_CTYPE', 'LANG'].map((nom) => base[nom]).find((v) => v && v !== '');
+  if (!effective?.toLowerCase().includes('utf')) {
+    env['LANG'] = 'C.UTF-8';
+    for (const nom of ['LC_ALL', 'LC_CTYPE']) if (base[nom]) env[nom] = 'C.UTF-8';
+  }
+  delete env['TMUX'];
+  return env;
+}
+
 export function commandeDe(cible: CibleTerminal): string[] {
   if (cible.type === 'tmux') return ['tmux', '-L', 'claude', '-u', 'attach', '-t', `=${cible.tmux}`];
   const shell = process.env['SHELL'] || userInfo().shell || '/bin/bash';
@@ -40,7 +52,7 @@ export class Terminaux {
     const dossier = cible.type === 'shell' ? cheminAbsolu(cible.dossier) : homedir();
     const processus = Bun.spawn(commandeDe(cible), {
       cwd: dossier,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor', TMUX: undefined },
+      env: environnementDuTerminal(process.env),
       terminal: { cols: colonnes, rows: lignes, data: (_t, octets) => this.recu(terminal, octets) },
     });
     this.ouverts.set(terminal, { processus, tampon: [], minuteur: null });

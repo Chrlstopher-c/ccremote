@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pino from 'pino';
-import { commandeDe, Terminaux } from './terminaux.ts';
+import { commandeDe, environnementDuTerminal, Terminaux } from './terminaux.ts';
 
 const journal = pino({ level: 'silent' });
 
@@ -52,5 +52,16 @@ describe('terminaux à distance', () => {
     t.ouvrir(id, { type: 'shell' }, 80, 24);
     t.fermer(id);
     await attendre(() => fini);
+  });
+});
+
+describe('environnement du terminal à distance', () => {
+  test('sans langue UTF-8, le shell reçoit C.UTF-8 ; avec UTF-8 déjà posé, rien ne change', () => {
+    const sans = environnementDuTerminal({ PATH: '/usr/bin' });
+    expect(sans['LANG']).toBe('C.UTF-8');
+    expect(sans['TERM']).toBe('xterm-256color');
+    expect(sans['COLORTERM']).toBe('truecolor');
+    const avec = environnementDuTerminal({ LANG: 'fr_FR.UTF-8' });
+    expect(avec['LANG']).toBe('fr_FR.UTF-8');
   });
 });

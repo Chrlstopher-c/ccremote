@@ -10,7 +10,7 @@ import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
 import { ApiFichiers } from './appareils/api-fichiers.ts';
 import { ApiArtefacts } from './clients/api-artefacts.ts';
 import { ApiModifications } from './clients/api-modifications.ts';
-import { ouvrirTerminal } from './appareils/route-terminal.ts';
+import { ouvrirTerminal, ouvrirTerminalSession } from './appareils/route-terminal.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
@@ -131,6 +131,8 @@ for (const hostname of config.hotesWeb) {
         return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
       },
       '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
+      '/api/sessions/:id/terminal': (req, serveur) =>
+        ouvrirTerminalSession(req, serveur, acces, postes, registre, (req as Request & { params: Record<string, string> }).params['id'] ?? ''),
       '/api/*': () => erreur('route inconnue', 404),
     },
     fetch: fichierBureau,
