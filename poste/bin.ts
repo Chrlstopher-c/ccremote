@@ -1,7 +1,8 @@
 // Responsabilité : point d'entrée du poste — assemble config, sessions tmux, socket local, sonde et lien au relais.
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
-import type { CommandeRelais, MessagePoste } from '../commun/protocole-poste.ts';
+import { type CommandeRelais, type MessagePoste, TAILLE_LOT_HISTORIQUE } from '../commun/protocole-poste.ts';
 import { Comptes } from './comptes/comptes.ts';
 import { chargerConfig } from './config.ts';
 import { eteindreMachine } from './parc/alimentation.ts';
@@ -39,6 +40,12 @@ const sessions = new GestionnaireSessions(
       evt.type === 'flux'
         ? envoyer({ kind: 'flux', sessionId, bloc: evt.bloc, delta: evt.delta, genre: evt.genre, agent: evt.agent })
         : envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
+    historique: (sessionId, evenements) => {
+      const replay = randomUUID();
+      for (let i = 0; i < evenements.length; i += TAILLE_LOT_HISTORIQUE) {
+        envoyer({ kind: 'historique', sessionId, replay, evenements: evenements.slice(i, i + TAILLE_LOT_HISTORIQUE) });
+      }
+    },
     resume: (session) => envoyer({ kind: 'session', session }),
     decouvertes: (decouvertes) => envoyer({ kind: 'decouvertes', decouvertes }),
   },

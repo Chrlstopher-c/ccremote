@@ -184,6 +184,15 @@ export class Registre {
     return { seq: r.seq, sessionId, ts, evt };
   }
 
+  // Un lot d'historique, écrit d'un bloc : même ordre que le transcript, un seul passage.
+  ajouterHistorique(sessionId: string, lot: readonly { readonly ts: string; readonly evt: Evenement }[]): number {
+    const inserer = this.db.query('INSERT INTO evenements (session_id, ts, evt) VALUES ($s, $ts, $e)');
+    return this.db.transaction(() => {
+      for (const e of lot) inserer.run({ s: sessionId, ts: e.ts, e: JSON.stringify(e.evt) });
+      return lot.length;
+    })();
+  }
+
   evenements(sessionId: string, apres: number, limite = 500): EvenementDate[] {
     const lignes = this.db
       .query(

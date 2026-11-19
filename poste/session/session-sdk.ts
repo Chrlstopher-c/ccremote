@@ -39,6 +39,7 @@ import { optionsSdk } from './options-sdk.ts';
 import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
+import { lireHistorique, stockeurImages } from './historique.ts';
 import { champsReglage, appliquerReglage, type RequeteReglable } from './reglages-sdk.ts';
 import { effetRythme } from './rythme.ts';
 import type { ReponseCrochet, Reglage, SessionPoste, SortieSession } from './session-poste.ts';
@@ -117,6 +118,7 @@ export class SessionSdk implements SessionPoste {
   private readonly registreTaches = new RegistreTaches();
   private readonly reglagesVivants: ReglagesVivants;
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
+  private historiqueEmis = false; // l'historique du transcript n'est envoyé qu'à l'ouverture de la fiche
   // Rembobinage en attente : la prochaine reprise part de cette entrée du transcript (resumeSessionAt).
   private pointReprise: string | null = null;
   // Conversation recommencée après le rembobinage du premier message : son identifiant SDK (sans reprise).
@@ -195,11 +197,27 @@ export class SessionSdk implements SessionPoste {
     return this.requete !== null;
   }
 
-  // Pas de pane tmux, de terminal ni de transcript à relire : le fil vient du SDK, la veille est celle du poste.
+  // Session découverte ou adoptée : son historique entier part au relais, en un lot, une seule fois par fiche.
+  // Ensuite le fil vient du SDK ; une session SDK ne relit pas son transcript.
+  definirTranscript(chemin: string): void {
+    if (this.historiqueEmis) return;
+    this.rejouerHistorique(chemin);
+  }
+
+  // Relit tout le transcript vers le relais, en lots ; le fil du relais ne reçoit une relecture que sur un fil vide.
+  rejouerHistorique(chemin: string): number {
+    this.historiqueEmis = true;
+    const stockage = this.env.presentation?.stockage;
+    const images = stockage ? stockeurImages(stockage, this.etat.id, this.env.journal) : undefined;
+    const evenements = lireHistorique(chemin, this.env.journal, images);
+    this.env.sortie.historique?.(this.etat.id, evenements);
+    return evenements.length;
+  }
+  lire(): void {}
+
+  // Pas de pane tmux ni de terminal : le fil vient du SDK, la veille est celle du poste.
   rattacher(): void {}
   rattacherTerminal(): void {}
-  definirTranscript(): void {}
-  lire(): void {}
   async releverEcran(): Promise<void> {}
 
   veillerNuit(maintenant?: number): Promise<void> {

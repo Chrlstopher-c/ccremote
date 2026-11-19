@@ -18,6 +18,9 @@ import {
   ResumeSession,
 } from './session.ts';
 
+// Historique d'une session découverte ou adoptée : le transcript entier, envoyé en lots de cette taille.
+export const TAILLE_LOT_HISTORIQUE = 200;
+
 export const EtatMachine = z.object({
   cpu: z.number(),
   memoire: z.object({ utilisee: z.number(), totale: z.number() }),
@@ -46,6 +49,13 @@ export const MessagePoste = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
   z.object({ kind: z.literal('session'), session: ResumeSession }),
   z.object({ kind: z.literal('evenement'), sessionId: z.string(), ts: z.string(), evt: Evenement }),
+  // Un lot de l'historique (replay : identifiant de la relecture ; le relais ne reçoit une relecture que sur un fil vide).
+  z.object({
+    kind: z.literal('historique'),
+    sessionId: z.string(),
+    replay: z.string().min(1).max(64),
+    evenements: z.array(z.object({ ts: z.string(), evt: Evenement })).max(TAILLE_LOT_HISTORIQUE),
+  }),
   // Delta de texte ou de réflexion : relayé en direct, jamais persisté dans le fil.
   z.object({
     kind: z.literal('flux'),
@@ -88,6 +98,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   // Adoption d'une session découverte ou fermée du poste : sa fiche (fermée, reprenable par le SDK) est créée,
   // puis renvoyée.
   z.object({ kind: z.literal('adopter'), ...avecSession }),
+  z.object({ kind: z.literal('historique'), ...avecSession }), // relit le transcript : fil vide au relais
   z.object({ kind: z.literal('autonomie'), ...avecSession, active: z.boolean() }),
   z.object({ kind: z.literal('nuit'), ...avecSession, active: z.boolean(), objectif: z.string().max(300).optional() }),
   z.object({ kind: z.literal('remote_control'), ...avecSession, actif: z.boolean() }),

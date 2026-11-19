@@ -22,6 +22,7 @@ export interface Ligne {
   readonly customTitle?: unknown;
   readonly aiTitle?: unknown;
   readonly uuid?: unknown;
+  readonly timestamp?: unknown; // horodatage de la ligne (ISO), relu pour l'historique
   readonly parentUuid?: unknown; // entrée précédente de la conversation (branche active)
   readonly logicalParentUuid?: unknown; // idem à travers une compaction
   readonly attachment?: { type?: unknown; prompt?: unknown };

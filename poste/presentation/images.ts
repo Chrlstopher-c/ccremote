@@ -37,7 +37,12 @@ function imageDe(bloc: Objet): ImageSdk | null {
 /** Les images d'un message utilisateur du SDK : blocs image directs ou dans un résultat d'outil. */
 export function imagesDeMessage(msg: SDKMessage): ImageSdk[] {
   if (msg.type !== 'user') return [];
-  return blocsDe(msg.message.content)
+  return imagesDeContenu(msg.message.content);
+}
+
+/** Les images d'un contenu de message (SDK ou transcript) : blocs image directs ou dans un résultat d'outil. */
+export function imagesDeContenu(contenu: unknown): ImageSdk[] {
+  return blocsDe(contenu)
     .flatMap((bloc) => {
       if (bloc['type'] === 'tool_result') return blocsDe(bloc['content']).map(imageDe);
       return [imageDe(bloc)];

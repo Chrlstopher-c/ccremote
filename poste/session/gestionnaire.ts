@@ -141,6 +141,19 @@ export class GestionnaireSessions {
     return this.sessions.get(id);
   }
 
+  // Historique d'une session dont le fil est vide au relais (fiche migrée, ou adoptée avant la relecture) : son
+  // transcript repasse au relais. Une session en cours n'est pas relue : son fil vient du direct.
+  private rejouerHistorique(id: string): Reponse {
+    const s = this.sessions.get(id);
+    if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    if (!(s instanceof SessionSdk)) return { ok: false, erreur: 'historique relu seulement pour une session SDK' };
+    if (s.vivante) return { ok: false, erreur: 'session en cours : historique non relu' };
+    const conversation = s.resume.claudeSessionId;
+    if (!conversation) return { ok: true, donnees: { evenements: 0 } };
+    const chemin = cheminTranscript(s.resume.cwd, conversation, s.persistee.configDir);
+    return { ok: true, donnees: { evenements: s.rejouerHistorique(chemin) } };
+  }
+
   private reponseAdoption(id: string): Reponse {
     const s = this.sessions.get(id);
     return s ? { ok: true, donnees: s.resume } : { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
@@ -197,6 +210,7 @@ export class GestionnaireSessions {
   async executer(c: CommandeSession): Promise<Reponse> {
     await this.hydrater(c.sessionId);
     if (c.kind === 'adopter') return this.reponseAdoption(c.sessionId);
+    if (c.kind === 'historique') return this.rejouerHistorique(c.sessionId);
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
     if (c.kind === 'annexer') return annexer(this, c.sessionId);
@@ -378,6 +392,7 @@ export class GestionnaireSessions {
   creer(p: SessionPersistee): SessionPoste {
     const sortie: SortieSession = {
       evenement: (id, evt) => this.sortie.evenement(id, evt),
+      historique: (id, evts) => this.sortie.historique?.(id, evts),
       resume: (r) => {
         this.sortie.resume(r);
         this.planifierSauvegarde();

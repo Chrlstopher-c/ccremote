@@ -98,7 +98,10 @@ export class ApiSessions {
     const id = req.params.id;
     const session = await this.sessionDe(id);
     if (session instanceof Response) return session;
-    if (!url.searchParams.has('apres')) return json(this.registre.derniersEvenements(id, 300));
+    if (!url.searchParams.has('apres')) {
+      await this.relireSiVide(session);
+      return json(this.registre.derniersEvenements(id, 300));
+    }
     const apres = entier(url.searchParams.get('apres'), 0);
     const attendre = Math.min(entier(url.searchParams.get('attendre'), 0), 30);
     let evts = this.registre.evenements(id, apres);
@@ -392,6 +395,13 @@ export class ApiSessions {
   // Session adoptée sans fil au relais (son historique n'y remonte pas) : le poste vérifie le message.
   private filVide(id: string): boolean {
     return this.registre.derniersEvenements(id, 1).length === 0;
+  }
+
+  // Fil vide au relais alors que le poste connaît la session : son transcript repasse au relais (sans effet si rien).
+  private async relireSiVide(session: ResumeSession): Promise<void> {
+    if (!this.filVide(session.id)) return;
+    const r = await this.postes.commander(session.machine, { kind: 'historique', sessionId: session.id });
+    if (!r.ok) this.journal.debug({ sessionId: session.id, erreur: r.erreur }, 'historique non relu');
   }
 
   // Session de l'action : connue du relais, ou découverte puis adoptée par le poste (voir session-adoptee.ts).

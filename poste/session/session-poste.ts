@@ -4,6 +4,7 @@ import type { Decouverte } from '../../commun/decouverte.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
 import type { DecisionCrochet } from './garde-sous-agents.ts';
+import type { EvenementHorodate } from './historique.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { PaneTmux } from './tmux.ts';
 
@@ -17,6 +18,8 @@ export type Reglage =
 
 export interface SortieSession {
   evenement(sessionId: string, evt: Evenement): void;
+  /** Historique complet d'une session (transcript relu à l'ouverture) : un lot, sans notifications. */
+  historique?(sessionId: string, evenements: readonly EvenementHorodate[]): void;
   resume(r: ResumeSession): void;
   decouvertes?(liste: Decouverte[]): void; // sessions du poste pas encore ouvertes : liste complète à chaque changement
 }

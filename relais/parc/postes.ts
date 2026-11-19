@@ -28,6 +28,7 @@ export class Postes {
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
   // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
   private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
+  private readonly replays = new Map<string, string>(); // session → identifiant de la dernière relecture d'historique acceptée
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -163,6 +164,10 @@ export class Postes {
       this.registre.enregistrerSession(m.session);
       return this.diffuserSession(m.session.id);
     }
+    if (m.kind === 'historique') {
+      this.historique(sessionId, m.replay, m.evenements);
+      return;
+    }
     this.evenement(sessionId, m.ts, m.evt);
   }
 
@@ -211,6 +216,24 @@ export class Postes {
       ...(m.genre ? { genre: m.genre } : {}),
       ...(m.agent ? { agent: m.agent } : {}),
     });
+  }
+
+  // Historique d'une session découverte ou adoptée (transcript relu sur le poste) : une relecture ne s'écrit que sur un
+  // fil vide ; ses lots suivants (même replay) s'ajoutent. Ce sont des événements anciens : aucune notification.
+  private historique(
+    sessionId: string,
+    replay: string,
+    lot: readonly { readonly ts: string; readonly evt: Evenement }[],
+  ): void {
+    if (this.replays.get(sessionId) !== replay) {
+      if (this.registre.derniersEvenements(sessionId, 1).length > 0) {
+        this.journal.info({ sessionId, lot: lot.length }, 'historique ignoré : le fil de la session n’est pas vide');
+        return;
+      }
+      this.replays.set(sessionId, replay);
+    }
+    this.registre.ajouterHistorique(sessionId, lot);
+    this.diffuserSession(sessionId);
   }
 
   private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {
