@@ -34,8 +34,15 @@ export function environnementDuTerminal(base: NodeJS.ProcessEnv): Record<string,
 
 export function commandeDe(cible: CibleTerminal): string[] {
   if (cible.type === 'tmux') return ['tmux', '-L', 'claude', '-u', 'attach', '-t', `=${cible.tmux}`];
-  const shell = process.env['SHELL'] || userInfo().shell || '/bin/bash';
-  return [shell, '-l'];
+  return [shellDeLUtilisateur(), '-l'];
+}
+
+/** `$SHELL`, sinon le shell du compte. Sans `$SHELL` ni `$USER` (service systemd), Bun rend « unknown » : refusé. */
+export function shellDeLUtilisateur(): string {
+  const env = process.env['SHELL'];
+  if (env && env.startsWith('/')) return env;
+  const compte = userInfo().shell;
+  return compte && compte.startsWith('/') ? compte : '/bin/bash';
 }
 
 export class Terminaux {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import pino from 'pino';
-import { commandeDe, environnementDuTerminal, Terminaux } from './terminaux.ts';
+import { commandeDe, environnementDuTerminal, shellDeLUtilisateur, Terminaux } from './terminaux.ts';
 
 const journal = pino({ level: 'silent' });
 
@@ -63,5 +63,22 @@ describe('environnement du terminal à distance', () => {
     expect(sans['COLORTERM']).toBe('truecolor');
     const avec = environnementDuTerminal({ LANG: 'fr_FR.UTF-8' });
     expect(avec['LANG']).toBe('fr_FR.UTF-8');
+  });
+});
+
+describe('shell du terminal à distance', () => {
+  test('un $SHELL absolu prime ; sans lui, jamais « unknown » (Bun le rend sans $USER)', () => {
+    const avant = process.env['SHELL'];
+    try {
+      process.env['SHELL'] = '/usr/bin/zsh';
+      expect(shellDeLUtilisateur()).toBe('/usr/bin/zsh');
+      delete process.env['SHELL'];
+      expect(shellDeLUtilisateur().startsWith('/')).toBe(true);
+      process.env['SHELL'] = 'zsh';
+      expect(shellDeLUtilisateur().startsWith('/')).toBe(true);
+    } finally {
+      if (avant === undefined) delete process.env['SHELL'];
+      else process.env['SHELL'] = avant;
+    }
   });
 });
