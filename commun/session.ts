@@ -28,6 +28,11 @@ export type Moteur = z.infer<typeof Moteur>;
 export const ModeSession = z.enum(['bypassPermissions', 'default', 'acceptEdits', 'plan']);
 export type ModeSession = z.infer<typeof ModeSession>;
 
+// Bac à sable Bash d'une session SDK : `non` (défaut), `oui` (sandbox, Bash auto-approuvé), `strict` (sans
+// commande hors du bac).
+export const BacASable = z.enum(['non', 'oui', 'strict']);
+export type BacASable = z.infer<typeof BacASable>;
+
 // Effort de raisonnement (SDK `effort`). Absent ou null = effort par défaut du modèle.
 export const EffortSession = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export type EffortSession = z.infer<typeof EffortSession>;
@@ -109,6 +114,9 @@ export const ResumeSession = z.object({
   inactiveDepuis: z.string().nullable().optional(),
   archivee: z.boolean().optional(), // rangée par Chris : absente des listes par défaut, jamais fermée automatiquement
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
+  style_sortie: z.string().nullable().optional(), // style de sortie Claude (SDK) ; null ou absent = défaut
+  annexe_de: z.string().nullable().optional(), // conversation annexe : identifiant de la session parente
+  bac_a_sable: BacASable.optional(), // réglé à la création, réappliqué à la reprise ; absent = non
   creeLe: z.string(),
   majLe: z.string(),
 });
@@ -222,6 +230,9 @@ export const DemandeSession = z.object({
   compte: z.string().optional(),
   moteur: Moteur.optional(), // absent = sdk
   mode: ModeSession.optional(), // absent = bypassPermissions
+  style_sortie: z.string().min(1).max(80).nullable().optional(),
+  bac_a_sable: BacASable.optional(),
+  controle_distant: z.boolean().optional(), // Remote Control branché à la fin du premier tour
   // Composé par le relais pour la machine cible : ce que la session a le droit de joindre.
   parc: z.array(z.object({ id: z.string(), description: z.string(), racines: z.array(z.string()) })),
 });

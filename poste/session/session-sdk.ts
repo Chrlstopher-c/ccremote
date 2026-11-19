@@ -37,6 +37,9 @@ import { effetRythme } from './rythme.ts';
 import type { ReponseCrochet, Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import type { Suite } from './suite-du-tour.ts';
 import { SuiviNuit } from './suivi-nuit.ts';
+import { OUTILS_INTERDITS_ANNEXE } from './annexe.ts';
+import { ReglagesVivants } from './session-sdk-vivante.ts';
+import type { StylesSession } from '../../commun/configuration.ts';
 import { RegistreTaches } from './taches-sdk.ts';
 import { type EtatTraduction, nouvelEtatTraduction, type SortieTraduction, traduireSdk } from './traduction-sdk.ts';
 
@@ -47,6 +50,12 @@ export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   close(): void;
   mcpServerStatus(): Promise<readonly { readonly name: string; readonly status: string }[]>;
   getContextUsage(opts: { readonly detail: 'summary' }): Promise<SDKControlGetContextUsageResponse>;
+  toggleMcpServer(nom: string, actif: boolean): Promise<void>;
+  initializationResult(): Promise<{
+    readonly output_style: string;
+    readonly available_output_styles: readonly string[];
+  }>;
+  reloadOutputStyles(): Promise<unknown>;
 }
 
 export type FabriqueRequete = (p: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => RequeteSdk;
@@ -98,6 +107,7 @@ export class SessionSdk implements SessionPoste {
   private readonly suiviNuit: SuiviNuit;
   private readonly presentation: PresentationSession | null;
   private readonly registreTaches = new RegistreTaches();
+  private readonly reglagesVivants: ReglagesVivants;
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
   // Rembobinage en attente : la prochaine reprise part de cette entrée du transcript (resumeSessionAt).
   private pointReprise: string | null = null;
@@ -114,6 +124,7 @@ export class SessionSdk implements SessionPoste {
     const statut = p.aReprendre ? p.resume.statut : 'fermee';
     this.etat = { ...p.resume, statut, dialogue: null, tmux: null, attachee: false, moteur: 'sdk' };
     this.fabrique = env.requete ?? requeteParDefaut;
+    this.reglagesVivants = new ReglagesVivants(() => this.requete, env.journal, p.resume.id);
     this.traduction = env.traduction ?? TRADUCTION_PAR_DEFAUT;
     this.delaiMcp = env.delaiMcpMs ?? DELAI_MCP_MS;
     this.periodeMcp = env.periodeMcpMs ?? PERIODE_MCP_MS;
@@ -326,7 +337,23 @@ export class SessionSdk implements SessionPoste {
   async connecteurs(): Promise<ConnecteurSession[]> {
     const requete = this.requete;
     if (!requete) return [];
-    return (await requete.mcpServerStatus()).map((etat) => ({ nom: etat.name, statut: etat.status }));
+    return (await requete.mcpServerStatus()).map((etat) => ({
+      nom: etat.name,
+      statut: this.reglagesVivants.statut(etat.name, etat.status),
+    }));
+  }
+
+  // Connecteurs MCP, styles de sortie : réglés dans la requête vivante (voir session-sdk-vivante.ts).
+  basculerConnecteur(nom: string, actif: boolean): Promise<string | null> {
+    return this.reglagesVivants.connecteur(nom, actif);
+  }
+
+  stylesVivants(): Promise<StylesSession | null> {
+    return this.reglagesVivants.styles();
+  }
+
+  rechargerStyles(): Promise<void> {
+    return this.reglagesVivants.recharger();
   }
 
   taches(): TacheSession[] {
@@ -373,6 +400,9 @@ export class SessionSdk implements SessionPoste {
       outils: this.presentation?.serveur(),
       mode: this.etat.mode ?? 'bypassPermissions',
       effort: this.etat.effort ?? null,
+      style: this.etat.style_sortie ?? null,
+      bacASable: this.etat.bac_a_sable,
+      interdits: this.etat.annexe_de ? OUTILS_INTERDITS_ANNEXE : undefined,
       hooks: this.crochets(),
       canUseTool: (nom, entree, opts) =>
         this.avis.autoriser(nom, entree, opts.suggestions ?? [], opts.signal, (this.etat.mode ?? 'bypassPermissions') === 'bypassPermissions'),

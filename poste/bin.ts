@@ -14,12 +14,18 @@ import { GestionnaireSessions, type Reponse } from './session/gestionnaire.ts';
 import { servirLocal } from './session/serveur-local.ts';
 import { Terminaux } from './terminal/terminaux.ts';
 import { SANS_REPONSE } from '../commun/appareil.ts';
+import { estCommandeConfiguration, executerConfiguration } from './configuration/commande.ts';
+import { dossierClaudeDefaut } from './configuration/styles.ts';
+import { rechargerStylesVivants } from './session/styles-session.ts';
+import { creerListeurConnecteurs, DELAI_CONNECTEURS_MS } from './configuration/connecteurs.ts';
+import { lanceurClaude } from './configuration/exec.ts';
 
 const VERSION = '2.0.0';
 const PERIODE_ETAT_MS = 15_000;
 
 const journal = creerJournal('poste');
 const config = chargerConfig();
+const DELAI_CLAUDE_MS = 20_000;
 const sonde = new SondeMachine(config.racines[0] ?? '/');
 const socket = join(config.donnees, 'poste.sock');
 
@@ -90,6 +96,15 @@ async function executerAppareil(c: CommandeAppareil): Promise<Reponse> {
   }
 }
 
+// Configuration Claude de la machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins) : hors de toute session.
+const configuration = {
+  dossierConfig: dossierClaudeDefaut(),
+  lancer: lanceurClaude(DELAI_CLAUDE_MS, journal),
+  connecteurs: creerListeurConnecteurs({ lancer: lanceurClaude(DELAI_CONNECTEURS_MS, journal) }),
+  recharger: () => rechargerStylesVivants(sessions.sessions.values()),
+  journal,
+};
+
 async function executer(c: CommandeRelais): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
@@ -101,6 +116,7 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);
   if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
   if (c.kind === 'comptes_relever') return comptes.relever().then(() => ({ ok: true, donnees: comptes.lister() }));
+  if (estCommandeConfiguration(c)) return executerConfiguration(c, configuration);
   return sessions.executer(c);
 }
 

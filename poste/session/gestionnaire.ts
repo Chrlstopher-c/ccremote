@@ -2,7 +2,6 @@
 // persistance.
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
@@ -13,6 +12,10 @@ import { type CommandeSession, estLecture, lecturePanneau } from './lecture-pann
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
+import { annexer, dupliquer } from './copie.ts';
+import { ControlesDifferes, estAuRepos } from './controle-differe.ts';
+import { stylesDeSession } from './styles-session.ts';
+import { reglagesDeOuverture } from './reglages-sdk.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import * as tmux from './tmux.ts';
@@ -69,6 +72,7 @@ export class GestionnaireSessions {
   private readonly stockage: Stockage;
   private readonly modifications: ModificationsSessions;
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
+  private readonly controles = new ControlesDifferes();
 
   constructor(
     readonly config: ConfigPoste,
@@ -131,18 +135,11 @@ export class GestionnaireSessions {
       aReprendre: false,
     });
     this.sessions.set(d.sessionId, session);
-    // Mode et modèle voulus à l'ouverture s'appliquent avant le premier message (SDK seulement).
-    if ((d.moteur ?? 'sdk') === 'sdk') {
-      const reglages: Reglage[] = [];
-      if (d.mode && d.mode !== 'bypassPermissions') reglages.push({ kind: 'mode', mode: d.mode });
-      if (d.modele) reglages.push({ kind: 'modele', modele: d.modele });
-      for (const reglage of reglages) {
-        const refus = await session.reglerSession(reglage);
-        if (refus) {
-          this.sessions.delete(d.sessionId);
-          return { ok: false, erreur: refus };
-        }
-      }
+    if (d.controle_distant) this.controles.ajouter(d.sessionId);
+    const refusReglage = await reglagesDeOuverture(session, d);
+    if (refusReglage) {
+      this.sessions.delete(d.sessionId);
+      return { ok: false, erreur: refusReglage };
     }
     const erreur = await session.lancer(d.message, d.modele ?? null);
     if (erreur) {
@@ -161,7 +158,9 @@ export class GestionnaireSessions {
 
   async executer(c: CommandeSession): Promise<Reponse> {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
-    if (c.kind === 'dupliquer') return this.dupliquer(c.sessionId, c.messageId);
+    if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
+    if (c.kind === 'annexer') return annexer(this, c.sessionId);
+    if (c.kind === 'styles') return this.styles(c.sessionId);
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
     if (estFichiersSession(c)) return this.fichiersSession(c);
@@ -186,26 +185,16 @@ export class GestionnaireSessions {
       erreur = s instanceof SessionSdk ? await s.arreterTache(c.tache) : 'non pris en charge hors SDK';
     else if (c.kind === 'mode' || c.kind === 'modele' || c.kind === 'effort' || c.kind === 'renommer')
       erreur = await s.reglerSession(c);
+    else if (c.kind === 'style') erreur = await s.reglerSession({ kind: 'style', style: c.style });
+    else if (c.kind === 'connecteur')
+      erreur = s instanceof SessionSdk ? await s.basculerConnecteur(c.nom, c.actif) : 'non pris en charge hors SDK';
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
   }
 
-  // Duplication : le SDK copie le transcript jusqu'au message (inclus) dans une nouvelle conversation, importée comme
-  // une session reprenable. Son identifiant part au relais.
-  private async dupliquer(id: string, messageId: string): Promise<Reponse> {
+  private async styles(id: string): Promise<Reponse> {
     const s = this.sessions.get(id);
-    const conversation = s?.resume.claudeSessionId;
-    if (!s || !conversation) return { ok: false, erreur: 'session inconnue ou sans conversation à dupliquer' };
-    let nouvelle: string;
-    try {
-      nouvelle = (await forkSession(conversation, { dir: s.resume.cwd, upToMessageId: messageId })).sessionId;
-    } catch (erreur) {
-      this.journal.warn({ err: erreur, session: id }, 'duplication refusée par le SDK');
-      return { ok: false, erreur: `duplication impossible : ${String(erreur)}` };
-    }
-    const copie = this.trouverImportables().find((t) => t.id === nouvelle);
-    if (copie) this.importerUne(copie);
-    this.sauvegarder();
-    return { ok: true, donnees: { sessionId: nouvelle } };
+    if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    return { ok: true, donnees: await stylesDeSession(s, this.journal) };
   }
 
   // Suppression sur demande explicite de Chris : la session s'arrête (SDK), son transcript part, son identifiant est
@@ -271,17 +260,17 @@ export class GestionnaireSessions {
   }
 
   // Une session qui tourne en ce moment (processus Claude Code) n'est pas à importer : elle s'écrit encore.
-  private trouverImportables(): TranscriptImportable[] {
+  trouverImportables(): TranscriptImportable[] {
     const configs = this.configDirs();
     const vivantes = new Set(processusClaude(configs, this.journal).map((p) => p.sessionId));
     const ecartee = (id: string): boolean => this.sessions.has(id) || this.supprimees.has(id) || vivantes.has(id);
     return transcriptsImportables(configs, ecartee, this.journal);
   }
 
-  private importerUne(t: TranscriptImportable): void {
+  importerUne(t: TranscriptImportable, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
     const session = this.creer({
-      resume: ficheImportee(this.origine(), t),
-      consignes: null,
+      resume: { ...ficheImportee(this.origine(), t), ...surcharge },
+      consignes,
       configDir: t.configDir,
       transcript: t.chemin,
       position: 0,
@@ -378,6 +367,7 @@ export class GestionnaireSessions {
     this.suivreFermees(entrees, panes, procs);
     await Promise.all([...this.sessions.values()].map((s) => s.releverEcran()));
     await Promise.all([...this.sessions.values()].map((s) => s.veillerNuit()));
+    void this.controles.traiter(this);
   }
 
   // Un pane sans identifiant réel n'est pas une session adoptable : on le signale, on n'invente pas d'id.
@@ -487,6 +477,8 @@ export class GestionnaireSessions {
       compactions: 0,
       claudeSessionId: d.sessionId,
       moteur: moteurDe(d),
+      style_sortie: d.style_sortie ?? null,
+      bac_a_sable: d.bac_a_sable ?? 'non',
       tmux: null,
       attachee: false,
       pilotee: true,

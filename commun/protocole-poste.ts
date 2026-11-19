@@ -2,6 +2,7 @@
 // Sens unique du pouvoir : le relais commande, le poste rend compte. Un poste ne commande jamais rien.
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
+import { commandesConfiguration } from './configuration.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
@@ -83,6 +84,13 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('autonomie'), ...avecSession, active: z.boolean() }),
   z.object({ kind: z.literal('nuit'), ...avecSession, active: z.boolean(), objectif: z.string().max(300).optional() }),
   z.object({ kind: z.literal('remote_control'), ...avecSession, actif: z.boolean() }),
+  // Style de sortie (SDK) : appliqué à la requête vivante, gardé pour la reprise ; `styles` liste les disponibles.
+  z.object({ kind: z.literal('style'), ...avecSession, style: z.string().min(1).max(80).nullable() }),
+  z.object({ kind: z.literal('styles'), ...avecSession }),
+  // Connecteur MCP d'une session SDK vivante (activé ou désactivé pour la suite de la session).
+  z.object({ kind: z.literal('connecteur'), ...avecSession, nom: z.string().min(1).max(200), actif: z.boolean() }),
+  // Conversation annexe : copie complète de la session, en lecture seule, marquée comme annexe de celle-ci.
+  z.object({ kind: z.literal('annexer'), ...avecSession }),
   z.object({ kind: z.literal('repondre'), ...avecSession, reponse: ReponseDialogue }),
   // Réglages d'une session SDK en cours : mode de permission, modèle, effort (null = défaut), titre.
   z.object({ kind: z.literal('mode'), ...avecSession, mode: ModeSession }),
@@ -153,6 +161,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('compte_retirer'), id: z.string(), nom: z.string() }),
   z.object({ kind: z.literal('comptes_relever'), id: z.string() }),
   ...commandesAppareil,
+  ...commandesConfiguration,
 ]);
 export type CommandeRelais = z.infer<typeof CommandeRelais>;
 

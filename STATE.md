@@ -13,6 +13,19 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 19/11 — Vague W2 Lanterne (agent Haiku, worktree `quart-w2`, branche `lanterne/w2`)
+- Session : `style_sortie`, `bac_a_sable` (`non`/`oui`/`strict` → `sandbox`), `controle_distant` à l'ouverture ; `POST
+  /api/sessions/:id/style`, `GET …/styles`, `POST …/connecteurs/:nom` (`toggleMcpServer`), `POST|GET …/annexes`.
+  Annexe = fork complet importé en SDK, `bypassPermissions`, outils d'écriture retirés, consigne « Conversation annexe ».
+  Exclue des artefacts et des notifications ; supprimer la parente supprime ses annexes.
+- Remote Control à la création : le poste le rejoue au premier repos (une bascule refuse une session en tour).
+- Machine : `GET|PUT /api/machines/:id/instructions` (CLAUDE.md, empreinte sha256, 409 `conflit`), `…/competences`,
+  `…/competences/contenu` (403 hors liste), `…/connecteurs` (`claude mcp list`, 60 s, cache 30 s), `…/plugins`,
+  `POST …/plugins/:plugin`, `POST …/styles` (409 si le fichier existe). Code dans `poste/configuration/`.
+- Lecture réelle (read-only) : `claude mcp list` et `claude plugin list --json` analysés sur la tour ; aucun write.
+- Tests : `bun test commun poste relais mcp` vert (564), `tsc --noEmit` propre.
+- Dette relevée, non traitée : `poste/session/session-sdk.ts` 584 lignes (554 avant W2, limite 500) ; `gestionnaire.ts` 489.
+
 ## 19/11 — Machines SSH (agent Haiku) — relais et outils, testé en loopback
 - Nouveau : `relais/machines/` (config SSH, test, dossiers, installation du poste par SSH, confirmations), routes
   `/api/machines/config…`, `/api/machines/:id/dossiers`, `/api/confirmations…`, migration 9 (`machines_ssh`), outils

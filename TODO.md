@@ -3,6 +3,9 @@
 
 ## En cours
 
+- [ ] W2 Lanterne (19/11) : valider en vrai sur la tour après fusion — style, annexe, connecteur coupé, CLAUDE.md, plug-in, Remote Control à la création (branchement au premier repos).
+- [ ] W2 : dette de taille — découper `poste/session/session-sdk.ts` (584 lignes, > 500) : `optionsDe` et `crochets` d'abord.
+- [ ] W2 : réglages qui ne survivent pas à la fermeture (connecteur coupé dans une session arrêtée ; rechargement à la reprise).
 - [x] Outils de présentation (18/11) : serveur `lanterne` (envoyer_fichier, publier_artefact, afficher_widget), images du fil, pièces jointes, route des fichiers ; commit 3ae98f1 sur `lanterne/moteur`, essai réel OK (détails dans STATE.md).
 - [ ] Présentation : le bureau de Quart ne rend pas les blocs fichier/artefact/widget/image (seul Lanterne les rend).
 - [ ] Présentation : attribuer à leur sous-agent les fichiers présentés par un sous-agent (aujourd'hui dans le fil principal).

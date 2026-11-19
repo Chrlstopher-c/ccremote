@@ -6,8 +6,9 @@ import type {
   McpSdkServerConfigWithInstance,
   McpStdioServerConfig,
   Options,
+  SandboxSettings,
 } from '@anthropic-ai/claude-agent-sdk';
-import type { EffortSession, ModeSession } from '../../commun/session.ts';
+import type { BacASable, EffortSession, ModeSession } from '../../commun/session.ts';
 
 // Hérité d'une session Claude parente (messagerie, identité de session) : le CLI enfant le prendrait pour le sien.
 // Liste mesurée dans essais/sdk/RAPPORT.md. ANTHROPIC_API_KEY : abonnement uniquement.
@@ -50,6 +51,18 @@ export interface ParametresSdk {
   readonly canUseTool: CanUseTool;
   readonly outils?: McpSdkServerConfigWithInstance; // serveur `lanterne` : présentation de fichiers, artefacts, widgets
   readonly hooks?: Options['hooks']; // crochets des éditions (poste/modifications), sans effet sur les permissions
+  readonly style?: string | null; // style de sortie, réappliqué au démarrage comme à la reprise
+  readonly bacASable?: BacASable; // absent ou `non` : pas de sandbox
+  readonly interdits?: readonly string[]; // outils retirés de la session (conversation annexe)
+}
+
+// `oui` : Bash sandboxé et auto-approuvé dans le bac ; `strict` : et aucune commande hors du bac.
+function sandboxDe(mode: Exclude<BacASable, 'non'>): SandboxSettings {
+  return {
+    enabled: true,
+    autoAllowBashIfSandboxed: true,
+    ...(mode === 'strict' ? { allowUnsandboxedCommands: false } : {}),
+  };
 }
 
 export function optionsSdk(p: ParametresSdk): Options {
@@ -69,5 +82,8 @@ export function optionsSdk(p: ParametresSdk): Options {
     ...(p.modele ? { model: p.modele } : {}),
     ...(p.hooks ? { hooks: p.hooks } : {}),
     ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),
+    ...(p.style ? { settings: { outputStyle: p.style } } : {}),
+    ...(p.bacASable && p.bacASable !== 'non' ? { sandbox: sandboxDe(p.bacASable) } : {}),
+    ...(p.interdits?.length ? { disallowedTools: [...p.interdits] } : {}),
   };
 }

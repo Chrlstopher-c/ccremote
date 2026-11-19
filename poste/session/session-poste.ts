@@ -6,12 +6,13 @@ import type { DecisionCrochet } from './garde-sous-agents.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { PaneTmux } from './tmux.ts';
 
-// Réglage changé en cours de session (commande `mode`, `modele`, `effort`, `renommer` du relais).
+// Réglage changé en cours de session (commande `mode`, `modele`, `effort`, `renommer`, `style` du relais).
 export type Reglage =
   | { readonly kind: 'mode'; readonly mode: ModeSession }
   | { readonly kind: 'modele'; readonly modele: string }
   | { readonly kind: 'effort'; readonly effort: EffortSession | null }
-  | { readonly kind: 'renommer'; readonly titre: string };
+  | { readonly kind: 'renommer'; readonly titre: string }
+  | { readonly kind: 'style'; readonly style: string | null };
 
 export interface SortieSession {
   evenement(sessionId: string, evt: Evenement): void;

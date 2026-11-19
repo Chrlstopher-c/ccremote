@@ -122,6 +122,7 @@ bureau/vite.config.ts                                Vite + React + Tailwind
 commun/api-clients.ts                                le contrat de l'API des clients (app de bureau, iPhone, web) — ce que…
 commun/appareil.ts                                   le vocabulaire de l'accès à un appareil du parc — fichiers et terminaux
 commun/comptes.ts                                    le vocabulaire des comptes Claude Code d'une machine — identité, usag…
+commun/configuration.ts                             contrat de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
 commun/echo.ts                                       ce que Quart relaie d'Echo — copie des seuls champs affichés
 commun/journal.ts                                    le logger unique (pino), lisible en terminal, JSON quand la sortie es…
 commun/panneau.ts                                    vocabulaire du panneau de session — contexte, connecteurs, tâches de fond (lectures relayées)
@@ -287,6 +288,22 @@ poste/comptes/releve.ts                              relever un compte Claude Co
 poste/comptes/usage.test.ts                          tests de usage.ts
 poste/comptes/usage.ts                               lire la réponse de l'API d'usage OAuth (`/api/oauth/usage`) en fenêtr…
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
+poste/configuration/commande.test.ts                tests de l'aiguillage des commandes de configuration
+poste/configuration/commande.ts                     commandes de configuration reçues du relais, exécutées sur le poste (hors session)
+poste/configuration/competences.test.ts             tests des compétences et de leur refus hors liste
+poste/configuration/competences.ts                  compétences (skills) de la machine et de ses plug-ins ; contenu lu seulement si listé
+poste/configuration/connecteurs.test.ts             tests de l'analyse de `claude mcp list` (noms fictifs) et du cache
+poste/configuration/connecteurs.ts                  connecteurs MCP de la machine, lus dans `claude mcp list` (délai 60 s, cache 30 s)
+poste/configuration/exec.test.ts                    tests du lancement de la CLI avec un faux binaire
+poste/configuration/exec.ts                         lancement de la CLI Claude de la machine avec délai maximal, sans exception
+poste/configuration/frontmatter.test.ts             tests du frontmatter
+poste/configuration/frontmatter.ts                  lecture et écriture du frontmatter YAML simple des fichiers Markdown de Claude
+poste/configuration/instructions.test.ts            tests du CLAUDE.md : empreinte, conflit, écriture atomique
+poste/configuration/instructions.ts                 CLAUDE.md de la machine : lecture, écriture atomique, empreinte sha256, conflit
+poste/configuration/plugins.test.ts                 tests des plug-ins : analyse, manifeste, activation
+poste/configuration/plugins.ts                      plug-ins de la machine (`claude plugin list --json`), description du manifeste, activation
+poste/configuration/styles.test.ts                  tests des styles : listing, création, réservés
+poste/configuration/styles.ts                       styles de sortie : intégrés, fichiers output-styles, création d'un style
 poste/fichiers/explorateur.test.ts                   tests de explorateur.ts
 poste/fichiers/explorateur.ts                        fichiers de la machine vus depuis Quart — lister, lire/écrire par morceaux, renommer, supprimer
 poste/parc/alimentation.ts                           éteindre la machine du poste à la demande de Chris.
@@ -296,13 +313,18 @@ poste/presentation/machines-outils.test.ts          tests des outils machines co
 poste/presentation/machines-outils.ts               les outils machines du serveur lanterne : lister, tester, ajouter, modifier, supprimer (confirmation)
 poste/projets/decouverte.ts                          lister les projets présents sur la machine (sous-dossiers des racines…
 poste/session/adoption.ts                            la fiche d'une session adoptée — lancée hors ccremote, dans tmux ou d…
+poste/session/annexe.ts                             réglages d'une conversation annexe : titre, outils retirés, consigne
 poste/session/bilan-tour.ts                          bilan d'UN tour d'une session SDK, puis la suite à en tirer (suite-du-tour.ts)
 poste/session/claude-tmux.zsh                        lancer chaque `claude` interactif dans `tmux -L claude` (le serveur d…
 poste/session/confiance.ts                           approuver un dossier dans la config Claude avant d'y lancer une sessi…
+poste/session/configuration-sdk.test.ts             tests du style, du bac à sable, de l'annexe, des connecteurs et des styles en session SDK
 poste/session/consignes.test.ts                      tests de consignes.ts
 poste/session/consignes.ts                           le texte ajouté au prompt système Claude Code d'une session (append,…
 poste/session/contexte-sdk.test.ts                   tests de contexte-sdk.ts
 poste/session/contexte-sdk.ts                        réponse getContextUsage du SDK → forme du panneau Contexte (pur)
+poste/session/controle-differe.ts                   Remote Control demandé à la création, branché au premier repos de la session
+poste/session/copie.test.ts                         tests de la duplication, de l'annexe et du Remote Control différé
+poste/session/copie.ts                              duplication (fil jusqu'à un message) et conversation annexe, importées comme sessions reprenables
 poste/session/crochet.ts                             script lancé par les hooks de Claude Code — relaie l'événement au pos…
 poste/session/dialogue.test.ts                       tests de dialogue.ts
 poste/session/dialogue.ts                            les dialogues du TUI qui bloquent une session (AskUserQuestion, permi…
@@ -335,10 +357,12 @@ poste/session/serveur-local.ts                       le socket Unix local par le
 poste/session/session-poste.ts                       contrat commun aux deux moteurs (tmux, sdk) vu du gestionnaire
 poste/session/session-sdk-panneau.test.ts            tests des lectures du panneau sur une session SDK
 poste/session/session-sdk-reprise.test.ts            tests de la reprise d'une session SDK au démarrage du poste
+poste/session/session-sdk-vivante.ts                connecteurs MCP, styles et rechargement dans la requête SDK vivante
 poste/session/session-sdk.test.ts                    tests de session-sdk.ts
 poste/session/session-sdk.ts                         UNE session Claude Code pilotée par le Claude Agent SDK
 poste/session/session-tmux.ts                        UNE session Claude Code dans tmux — son fil (lu dans le transcript),…
 poste/session/sous-agents.ts                         suivre les sous-agents d'une session — chacun a son transcript dans `…
+poste/session/styles-session.ts                     styles de sortie d'une session (requête vivante ou disque) et rechargement machine
 poste/session/suppression.ts                          supprimer le transcript d'une session sur le poste (jsonl + sous-agents) et retenir les identifiants supprimés
 poste/session/suppression.test.ts                     tests de suppression.ts
 poste/session/suite-du-tour.test.ts                  tests de suite-du-tour.ts
@@ -366,6 +390,10 @@ relais/appareils/route-terminal.ts                   ouverture d'un terminal à 
 relais/appareils/terminaux.ts                        terminaux à distance côté relais — WebSocket client relié à un PTY de poste
 relais/bin.ts                                        point d'entrée du relais — deux serveurs : clients (web, iPhone) et p…
 relais/clients/api-comptes.ts                        les routes des comptes Claude Code d'une machine — connexion OAuth en…
+relais/clients/api-configuration.test.ts            tests des routes de configuration de machine
+relais/clients/api-configuration.ts                 routes de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
+relais/clients/api-session-config.test.ts           tests des routes de session (style, annexes) et de la création/suppression liées
+relais/clients/api-session-config.ts                routes du style, des connecteurs et des conversations annexes d'une session
 relais/clients/api-sessions.ts                       les routes des sessions — ouvrir, lire le fil, parler, piloter (inter…
 relais/clients/suppression-environnements.test.ts     tests des routes supprimer, environnements et import
 relais/clients/api.ts                                la table des routes de l'API des clients (web, iPhone), toutes protég…

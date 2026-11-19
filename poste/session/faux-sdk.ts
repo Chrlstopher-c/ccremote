@@ -110,8 +110,32 @@ export class RequeteFausse implements RequeteSdk {
     this.reglages.push(`modele:${model ?? 'défaut'}`);
   }
 
-  async applyFlagSettings(settings: { readonly effortLevel?: string | null }): Promise<void> {
-    this.reglages.push(`effort:${settings.effortLevel ?? 'défaut'}`);
+  async applyFlagSettings(settings: {
+    readonly effortLevel?: string | null;
+    readonly outputStyle?: string | null;
+  }): Promise<void> {
+    if (settings.outputStyle !== undefined) this.reglages.push(`style:${settings.outputStyle ?? 'défaut'}`);
+    else this.reglages.push(`effort:${settings.effortLevel ?? 'défaut'}`);
+  }
+
+  readonly connecteursBascules: string[] = [];
+  readonly styleInitial = { output_style: 'default', available_output_styles: ['default', 'Explanatory', 'Learning'] };
+  rechargements = 0;
+
+  async toggleMcpServer(nom: string, actif: boolean): Promise<void> {
+    this.connecteursBascules.push(`${nom}:${actif ? 'actif' : 'inactif'}`);
+  }
+
+  async initializationResult(): Promise<{
+    readonly output_style: string;
+    readonly available_output_styles: readonly string[];
+  }> {
+    return this.styleInitial;
+  }
+
+  async reloadOutputStyles(): Promise<unknown> {
+    this.rechargements += 1;
+    return undefined;
   }
 
   async mcpServerStatus(): Promise<{ readonly name: string; readonly status: string }[]> {
@@ -139,6 +163,7 @@ export class RequeteFausse implements RequeteSdk {
 }
 
 interface Reglages {
+  readonly resume?: Partial<ResumeSession>; // champs de la fiche posés avant le démarrage (style, annexe, sandbox…)
   readonly objectif?: string;
   readonly env?: Record<string, string | undefined>;
   readonly mcp?: string[][];
@@ -213,7 +238,8 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
     delaiMcpMs: 200,
     periodeMcpMs: 1,
   };
-  const persistance = persistee(reglages.configDir ?? null, reglages.objectif ?? null, reglages.reprise);
+  const base = persistee(reglages.configDir ?? null, reglages.objectif ?? null, reglages.reprise);
+  const persistance = reglages.resume ? { ...base, resume: { ...base.resume, ...reglages.resume } } : base;
   return { session: new SessionSdk(persistance, env), requetes, evenements };
 }
 

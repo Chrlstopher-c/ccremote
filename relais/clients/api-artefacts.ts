@@ -39,7 +39,7 @@ export class ApiArtefacts {
 
   /** Artefacts de toutes les sessions connues, rangées comprises. Un poste qui ne répond pas n'en apporte aucun. */
   async lister(): Promise<Response> {
-    const sessions = this.registre.sessions(true);
+    const sessions = this.registre.sessions(true).filter((s) => !s.annexe_de); // les annexes n'ont pas d'artefacts
     const reponses = await Promise.all(
       sessions.map((session) => this.postes.commander(session.machine, { kind: 'artefacts', sessionId: session.id })),
     );

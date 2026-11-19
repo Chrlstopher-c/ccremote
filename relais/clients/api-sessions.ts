@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { EffortSession, ModeSession, Projet, ReponseDialogue } from '../../commun/session.ts';
+import { BacASable, EffortSession, ModeSession, Projet, ReponseDialogue } from '../../commun/session.ts';
 import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../commun/presentation.ts';
 import { reponseFichier } from './fichiers-session.ts';
 import type { Postes } from '../parc/postes.ts';
@@ -21,6 +21,9 @@ const CorpsOuverture = z.object({
   modele: z.string().optional(),
   compte: z.string().optional(),
   mode: ModeSession.optional(),
+  style_sortie: z.string().min(1).max(80).nullable().optional(),
+  bac_a_sable: BacASable.optional(),
+  controle_distant: z.boolean().optional(),
 });
 const CorpsMessage = z.object({ texte: z.string().min(1), pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional() });
 const CorpsAutonomie = z.object({ active: z.boolean() });
@@ -72,6 +75,9 @@ export class ApiSessions {
       ...(c.modele ? { modele: c.modele } : {}),
       ...(c.compte ? { compte: c.compte } : {}),
       ...(c.mode ? { mode: c.mode } : {}),
+      style_sortie: c.style_sortie ?? null,
+      bac_a_sable: c.bac_a_sable ?? 'non',
+      controle_distant: c.controle_distant ?? false,
     };
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
     if (!r.ok) this.journal.warn({ machine: c.machine, erreur: r.erreur }, 'ouverture de session refusée');
@@ -277,7 +283,21 @@ export class ApiSessions {
     }
     this.registre.supprimerSession(session.id);
     this.diffusion.diffuser({ type: 'supprimee', id: session.id });
+    await this.supprimerAnnexes(session.id);
     return json({ ok: true });
+  }
+
+  // Les conversations annexes partent avec leur parente : chacune est retirée du poste, puis du registre.
+  private async supprimerAnnexes(parente: string): Promise<void> {
+    for (const annexe of this.registre.sessions(true).filter((s) => s.annexe_de === parente)) {
+      const r = await this.postes.commander(annexe.machine, { kind: 'supprimer', sessionId: annexe.id });
+      if (!r.ok) {
+        this.journal.warn({ sessionId: annexe.id, erreur: r.erreur }, 'annexe non supprimée par le poste');
+        continue;
+      }
+      this.registre.supprimerSession(annexe.id);
+      this.diffusion.diffuser({ type: 'supprimee', id: annexe.id });
+    }
   }
 
   // Environnements : ceux que Chris a enregistrés, puis les dossiers des sessions récentes (sans doublon).

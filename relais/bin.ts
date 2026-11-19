@@ -15,6 +15,8 @@ import { ApiFichiersSession } from './clients/api-fichiers-session.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
+import { ApiSessionConfig } from './clients/api-session-config.ts';
+import { ApiConfiguration } from './clients/api-configuration.ts';
 import { routesHq } from './clients/hq.ts';
 import { indexSpa, servirStatique } from './clients/statique.ts';
 import { avecCors } from './clients/cors.ts';
@@ -60,6 +62,8 @@ const machines = new ApiMachines({
   journal: journal.child({ domaine: 'machines' }),
 });
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
+const sessionConfig = new ApiSessionConfig(registre, postes);
+const configuration = new ApiConfiguration(postes);
 const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
 const artefacts = new ApiArtefacts(registre, postes, journal);
@@ -88,6 +92,8 @@ const routes = avecCors(
     postes,
     diffusion,
     sessions,
+    sessionConfig,
+    configuration,
     comptes,
     fichiers,
     artefacts,

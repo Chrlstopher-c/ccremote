@@ -9,6 +9,8 @@ import type { ApiArtefacts } from './api-artefacts.ts';
 import type { ApiModifications } from './api-modifications.ts';
 import type { ApiFichiersSession } from './api-fichiers-session.ts';
 import type { ApiSessions } from './api-sessions.ts';
+import type { ApiSessionConfig } from './api-session-config.ts';
+import type { ApiConfiguration } from './api-configuration.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
@@ -25,6 +27,8 @@ export interface DependancesApi {
   readonly postes: Postes;
   readonly diffusion: Diffusion;
   readonly sessions: ApiSessions;
+  readonly sessionConfig: ApiSessionConfig;
+  readonly configuration: ApiConfiguration;
   readonly comptes: ApiComptes;
   readonly fichiers: ApiFichiers;
   readonly artefacts: ApiArtefacts;
@@ -84,6 +88,13 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/repondre': { POST: protege((req) => d.sessions.repondre(req as never)) },
     '/api/sessions/:id/rembobiner': { POST: protege((req) => d.sessions.rembobiner(req as never)) },
     '/api/sessions/:id/dupliquer': { POST: protege((req) => d.sessions.dupliquer(req as never)) },
+    '/api/sessions/:id/style': { POST: protege((req) => d.sessionConfig.style(req as never)) },
+    '/api/sessions/:id/styles': { GET: protege((req) => d.sessionConfig.styles(req as never)) },
+    '/api/sessions/:id/connecteurs/:nom': { POST: protege((req) => d.sessionConfig.connecteur(req as never)) },
+    '/api/sessions/:id/annexes': {
+      GET: protege((req) => d.sessionConfig.annexes(req as never)),
+      POST: protege((req) => d.sessionConfig.annexer(req as never)),
+    },
     '/api/sessions/:id/chapitres': { POST: protege((req) => d.sessions.chapitre(req as never)) },
     '/api/sessions/:id/supprimer': { POST: protege((req) => d.sessions.supprimer(req as never)) },
     '/api/environnements': {
@@ -101,6 +112,16 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/config/:id/tester': { POST: protege((req) => d.machines.tester(req as never)) },
     '/api/machines/config/:id/installer': { POST: protege((req) => d.machines.installer(req as never)) },
     '/api/machines/:id/dossiers': { GET: protege((req) => d.machines.dossiers(req as never)) },
+    '/api/machines/:id/styles': { POST: protege((req) => d.configuration.creerStyle(req as never)) },
+    '/api/machines/:id/instructions': {
+      GET: protege((req) => d.configuration.instructions(req as never)),
+      PUT: protege((req) => d.configuration.ecrireInstructions(req as never)),
+    },
+    '/api/machines/:id/competences': { GET: protege((req) => d.configuration.competences(req as never)) },
+    '/api/machines/:id/competences/contenu': { GET: protege((req) => d.configuration.contenuCompetence(req as never)) },
+    '/api/machines/:id/connecteurs': { GET: protege((req) => d.configuration.connecteurs(req as never)) },
+    '/api/machines/:id/plugins': { GET: protege((req) => d.configuration.plugins(req as never)) },
+    '/api/machines/:id/plugins/:plugin': { POST: protege((req) => d.configuration.activerPlugin(req as never)) },
     '/api/confirmations': { POST: protege((req) => d.confirmations.demander(req)) },
     '/api/confirmations/:id': { GET: protege((req) => d.confirmations.lire(req as never)) },
     '/api/confirmations/:id/attendre': { GET: protege((req) => d.confirmations.attendre(req as never)) },

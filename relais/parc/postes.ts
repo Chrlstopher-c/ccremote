@@ -177,7 +177,9 @@ export class Postes {
     const e = this.registre.ajouterEvenement(sessionId, ts, evt);
     this.diffusion.diffuser({ type: 'evenement', evenement: e });
     this.reunions?.observer(sessionId, evt);
-    const titre = this.registre.session(sessionId)?.titre ?? 'Session';
+    const fiche = this.registre.session(sessionId);
+    if (fiche?.annexe_de) return; // une conversation annexe ne notifie pas Chris
+    const titre = fiche?.titre ?? 'Session';
     const brouillon = notificationPour(titre, evt);
     if (!brouillon) return;
     const notification = this.registre.ajouterNotification({ ...brouillon, sessionId, ts });
