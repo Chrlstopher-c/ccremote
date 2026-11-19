@@ -107,6 +107,11 @@ export class ApiSessions {
       return json(this.registre.derniersEvenements(id, 300));
     }
     const apres = entier(url.searchParams.get('apres'), 0);
+    if (url.searchParams.has('limite')) {
+      // Page suivante du fil paginé (descente) : au plus `limite` (1 à 1000), sans attente.
+      const limite = Math.min(Math.max(entier(url.searchParams.get('limite'), 300), 1), 1000);
+      return json(this.registre.evenements(id, apres, limite));
+    }
     const attendre = Math.min(entier(url.searchParams.get('attendre'), 0), 30);
     let evts = this.registre.evenements(id, apres);
     const echeance = Date.now() + attendre * 1000;

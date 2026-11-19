@@ -81,6 +81,17 @@ describe('fil paginé : evenementsAvant et chapitres', () => {
     expect(derniers[299]?.seq).toBe(1500);
   });
 
+  test('GET evenements?apres&limite rend la page suivante sans attendre ; limite bornée à 1000', async () => {
+    const r = registreAvec(1500);
+    const api = new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
+    const page = (await (await api.evenements(requete('a', '?apres=300&limite=300'))).json()) as EvenementDate[];
+    expect(page.map((e) => e.seq)).toEqual(Array.from({ length: 300 }, (_, i) => 301 + i));
+    const borne = (await (await api.evenements(requete('a', '?apres=0&limite=9999'))).json()) as EvenementDate[];
+    expect(borne).toHaveLength(1000);
+    const fin = (await (await api.evenements(requete('a', '?apres=1500&limite=300'))).json()) as EvenementDate[];
+    expect(fin).toEqual([]);
+  });
+
   test('recherche dans tout le fil : sans casse, messages seuls, les plus récents en ordre croissant, total exact', async () => {
     const r = registreAvec(5);
     r.ajouterEvenement('a', MAJ, { type: 'message', texte: 'Rapport Lanterne', uuid: 'm1' });
