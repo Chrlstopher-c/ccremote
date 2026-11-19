@@ -37,6 +37,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     comptes: z.array(z.string()),
     etatComptes: z.array(EtatCompte).optional(),
     sessions: z.array(ResumeSession),
+    empreinte: z.string().optional(), // empreinte du code installé (install par SSH) ; absente pour un poste d'avant
   }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),

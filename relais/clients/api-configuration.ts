@@ -1,8 +1,17 @@
 // Responsabilité : la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins). Le
 // poste de la machine lit et change ses fichiers ; le relais valide la requête, vérifie la machine et relaie.
+import type { Logger } from 'pino';
 import { z } from 'zod';
-import { IdPlugin, NomStyle } from '../../commun/configuration.ts';
+import {
+  ConnecteurMachine,
+  DefinitionConnecteur,
+  IdPlugin,
+  MASQUE_VALEUR,
+  NomConnecteur,
+  NomStyle,
+} from '../../commun/configuration.ts';
 import type { Postes } from '../parc/postes.ts';
+import { CacheConnecteurs } from './cache-connecteurs.ts';
 import { erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 const CorpsStyleMachine = z.object({
@@ -21,7 +30,14 @@ type Commande = Parameters<Pick<Postes, 'commander'>['commander']>[1];
 type Lecteur = Pick<Postes, 'commander' | 'vues'>;
 
 export class ApiConfiguration {
-  constructor(private readonly postes: Lecteur) {}
+  private readonly cache: CacheConnecteurs;
+
+  constructor(
+    private readonly postes: Lecteur,
+    journal: Logger,
+  ) {
+    this.cache = new CacheConnecteurs((machine) => this.relireConnecteurs(machine), journal);
+  }
 
   async creerStyle(req: Requete): Promise<Response> {
     const c = await lireCorps(req, CorpsStyleMachine);
@@ -55,8 +71,43 @@ export class ApiConfiguration {
     return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'lecture refusée', REFUS_POSTE);
   }
 
-  connecteurs(req: Requete): Promise<Response> {
-    return this.commander(req.params['id'], { kind: 'connecteurs_machine' });
+  // Liste servie depuis le cache de la machine, avec sa `fraicheur` ; une écriture l'a rendue périmée.
+  async connecteurs(req: Requete): Promise<Response> {
+    const id = req.params['id'];
+    if (!this.connue(id)) return erreur('machine inconnue', 404);
+    const r = await this.cache.lire(id ?? '');
+    return r.ok ? json(r.valeur) : erreur(r.erreur, REFUS_POSTE);
+  }
+
+  // Définition d'un connecteur de l'utilisateur ; valeurs de variables et d'en-têtes masquées sauf `?reveler=1`.
+  async connecteur(req: Requete): Promise<Response> {
+    const nom = NomConnecteur.safeParse(req.params['nom']);
+    if (!nom.success) return erreur('nom de connecteur invalide', 400);
+    const reveler = new URL(req.url).searchParams.get('reveler') === '1';
+    return this.commander(req.params['id'], { kind: 'connecteur_lire', nom: nom.data, reveler });
+  }
+
+  async ajouterConnecteur(req: Requete): Promise<Response> {
+    const c = await lireCorps(req, DefinitionConnecteur);
+    if (c instanceof Response) return c;
+    if ([...Object.values(c.variables), ...Object.values(c.entetes)].includes(MASQUE_VALEUR)) {
+      return erreur('valeur à saisir : la valeur est masquée', 400);
+    }
+    return this.ecrire(req.params['id'], { kind: 'connecteur_ajouter', definition: c }, 201);
+  }
+
+  async modifierConnecteur(req: Requete): Promise<Response> {
+    const nom = NomConnecteur.safeParse(req.params['nom']);
+    if (!nom.success) return erreur('nom de connecteur invalide', 400);
+    const c = await lireCorps(req, DefinitionConnecteur);
+    if (c instanceof Response) return c;
+    return this.ecrire(req.params['id'], { kind: 'connecteur_modifier', nom: nom.data, definition: c });
+  }
+
+  async retirerConnecteur(req: Requete): Promise<Response> {
+    const nom = NomConnecteur.safeParse(req.params['nom']);
+    if (!nom.success) return erreur('nom de connecteur invalide', 400);
+    return this.ecrire(req.params['id'], { kind: 'connecteur_retirer', nom: nom.data });
   }
 
   plugins(req: Requete): Promise<Response> {
@@ -79,5 +130,21 @@ export class ApiConfiguration {
     if (!this.connue(id)) return erreur('machine inconnue', 404);
     const r = await this.postes.commander(id ?? '', c);
     return r.ok ? json(r.donnees ?? {}, statut) : erreur(r.erreur ?? 'commande refusée', REFUS_POSTE);
+  }
+
+  // Écriture : le cache de la machine est périmé même si le poste a refusé (une restauration peut avoir eu lieu).
+  private async ecrire(id: string | undefined, c: Commande, statut = 200): Promise<Response> {
+    const reponse = await this.commander(id, c, statut);
+    this.cache.invalider(id ?? '');
+    return reponse;
+  }
+
+  private async relireConnecteurs(
+    machine: string,
+  ): Promise<{ ok: true; connecteurs: ConnecteurMachine[] } | { ok: false; erreur: string }> {
+    const r = await this.postes.commander(machine, { kind: 'connecteurs_machine' });
+    if (!r.ok) return { ok: false, erreur: r.erreur ?? 'connecteurs refusés' };
+    const lus = z.array(ConnecteurMachine).safeParse(r.donnees);
+    return lus.success ? { ok: true, connecteurs: lus.data } : { ok: false, erreur: 'réponse du poste illisible' };
   }
 }

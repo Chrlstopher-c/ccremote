@@ -67,8 +67,19 @@ describe('lectures du panneau de session', () => {
     expect(await presente.json()).toEqual({ id: 'x' });
   });
 
-  test('un poste qui refuse donne 409, une session inconnue 404', async () => {
-    expect((await api({ ok: false, erreur: 'hors ligne' }, []).connecteurs(requete('vivante'))).status).toBe(409);
+  test('un poste qui refuse : les connecteurs de la fiche ; une session inconnue 404', async () => {
+    const hors = await api({ ok: false, erreur: 'hors ligne' }, []).connecteurs(requete('vivante'));
+    expect(hors.status).toBe(200);
+    expect(await hors.json()).toEqual([]);
     expect((await api({ ok: true }, []).taches(requete('ailleurs'))).status).toBe(404);
+    expect((await api({ ok: true }, []).connecteurs(requete('ailleurs'))).status).toBe(404);
+  });
+
+  test('poste refusé : la fiche garde le dernier relevé reçu du poste', async () => {
+    const r = new Registre(ouvrirBase(':memory:'));
+    r.enregistrerSession({ ...session('vivante'), connecteurs: [{ nom: 'agenda', statut: 'connected' }] });
+    const postes = { commander: () => Promise.resolve({ ok: false as const, erreur: 'hors ligne' }) };
+    const api = new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
+    expect(await (await api.connecteurs(requete('vivante'))).json()).toEqual([{ nom: 'agenda', statut: 'connected' }]);
   });
 });

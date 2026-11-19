@@ -41,6 +41,10 @@ export function creerListeurConnecteurs(p: { readonly lancer: LanceurClaude; rea
       cache = { quand: t, valeur: connecteurs };
       return { ok: true, connecteurs };
     },
+    /** Après un changement de connecteur : la prochaine lecture relance `claude mcp list`. */
+    invalider(): void {
+      cache = null;
+    },
   };
 }
 

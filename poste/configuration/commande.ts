@@ -6,6 +6,14 @@ import { ecrireInstructions, lireInstructions } from './instructions.ts';
 import { creerStyle, type ResultatStyle } from './styles.ts';
 import { listerCompetences, lireCompetence } from './competences.ts';
 import { type ListeurConnecteurs } from './connecteurs.ts';
+import {
+  ajouterConnecteur,
+  definitionDe,
+  lireBrutConnecteur,
+  modifierConnecteur,
+  type ResultatEdition,
+  retirerConnecteur,
+} from './connecteurs-edition.ts';
 import type { LanceurClaude } from './exec.ts';
 import { activerPlugin, lirePlugins, pluginAffiche } from './plugins.ts';
 
@@ -19,6 +27,10 @@ export type CommandeConfiguration = Extract<
       | 'competences_lister'
       | 'competences_contenu'
       | 'connecteurs_machine'
+      | 'connecteur_lire'
+      | 'connecteur_ajouter'
+      | 'connecteur_modifier'
+      | 'connecteur_retirer'
       | 'plugins_lister'
       | 'plugin_activer';
   }
@@ -31,6 +43,10 @@ const GENRES: ReadonlySet<string> = new Set([
   'competences_lister',
   'competences_contenu',
   'connecteurs_machine',
+  'connecteur_lire',
+  'connecteur_ajouter',
+  'connecteur_modifier',
+  'connecteur_retirer',
   'plugins_lister',
   'plugin_activer',
 ]);
@@ -57,6 +73,7 @@ export async function executerConfiguration(
   c: CommandeConfiguration,
   d: DependancesConfiguration,
 ): Promise<ReponseConfiguration> {
+  if (estCommandeConnecteur(c)) return executerConnecteur(c, d);
   switch (c.kind) {
     case 'styles_creer':
       return versStyle(creerStyle(d.dossierConfig, c, d.journal), d);
@@ -96,4 +113,45 @@ async function contenuCompetence(chemin: string, d: DependancesConfiguration): P
   const plugins = await lirePlugins(d.lancer, d.journal);
   const r = lireCompetence(d.dossierConfig, plugins, chemin, d.journal);
   return r.ok ? { ok: true, donnees: { contenu: r.contenu } } : { ok: false, erreur: r.erreur };
+}
+
+type CommandeConnecteur = Extract<
+  CommandeConfiguration,
+  { kind: 'connecteur_lire' | 'connecteur_ajouter' | 'connecteur_modifier' | 'connecteur_retirer' }
+>;
+
+const KINDS_CONNECTEUR: ReadonlySet<string> = new Set([
+  'connecteur_lire',
+  'connecteur_ajouter',
+  'connecteur_modifier',
+  'connecteur_retirer',
+]);
+
+function estCommandeConnecteur(c: CommandeConfiguration): c is CommandeConnecteur {
+  return KINDS_CONNECTEUR.has(c.kind);
+}
+
+// Lecture : le masquage tient au poste (`reveler`). Écriture : la liste en cache est périmée, même en cas d'échec.
+async function executerConnecteur(c: CommandeConnecteur, d: DependancesConfiguration): Promise<ReponseConfiguration> {
+  if (c.kind === 'connecteur_lire') {
+    const brut = lireBrutConnecteur(c.nom, d.journal);
+    const def = brut ? definitionDe(c.nom, brut, c.reveler) : null;
+    return def ? { ok: true, donnees: def } : { ok: false, erreur: `connecteur introuvable : ${c.nom}` };
+  }
+  const r = await ecrireConnecteur(c, d);
+  d.connecteurs.invalider();
+  return r.ok ? { ok: true, donnees: { nom: c.kind === 'connecteur_retirer' ? c.nom : c.definition.nom } } : r;
+}
+
+function ecrireConnecteur(c: CommandeConnecteur, d: DependancesConfiguration): Promise<ResultatEdition> {
+  switch (c.kind) {
+    case 'connecteur_ajouter':
+      return ajouterConnecteur(d.lancer, c.definition);
+    case 'connecteur_modifier':
+      return modifierConnecteur(d.lancer, d.journal, c.nom, c.definition);
+    case 'connecteur_retirer':
+      return retirerConnecteur(d.lancer, c.nom);
+    default:
+      return Promise.resolve({ ok: false, erreur: 'commande inconnue' });
+  }
 }

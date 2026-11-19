@@ -111,6 +111,7 @@ export function construireRoutes(d: DependancesApi) {
     },
     '/api/machines/config/:id/tester': { POST: protege((req) => d.machines.tester(req as never)) },
     '/api/machines/config/:id/installer': { POST: protege((req) => d.machines.installer(req as never)) },
+    '/api/machines/config/:id/installation': { GET: protege((req) => d.machines.suivi(req as never)) },
     '/api/machines/:id/dossiers': { GET: protege((req) => d.machines.dossiers(req as never)) },
     '/api/machines/:id/styles': { POST: protege((req) => d.configuration.creerStyle(req as never)) },
     '/api/machines/:id/instructions': {
@@ -119,7 +120,15 @@ export function construireRoutes(d: DependancesApi) {
     },
     '/api/machines/:id/competences': { GET: protege((req) => d.configuration.competences(req as never)) },
     '/api/machines/:id/competences/contenu': { GET: protege((req) => d.configuration.contenuCompetence(req as never)) },
-    '/api/machines/:id/connecteurs': { GET: protege((req) => d.configuration.connecteurs(req as never)) },
+    '/api/machines/:id/connecteurs': {
+      GET: protege((req) => d.configuration.connecteurs(req as never)),
+      POST: protege((req) => d.configuration.ajouterConnecteur(req as never)),
+    },
+    '/api/machines/:id/connecteurs/:nom': {
+      GET: protege((req) => d.configuration.connecteur(req as never)),
+      PUT: protege((req) => d.configuration.modifierConnecteur(req as never)),
+      DELETE: protege((req) => d.configuration.retirerConnecteur(req as never)),
+    },
     '/api/machines/:id/plugins': { GET: protege((req) => d.configuration.plugins(req as never)) },
     '/api/machines/:id/plugins/:plugin': { POST: protege((req) => d.configuration.activerPlugin(req as never)) },
     '/api/confirmations': { POST: protege((req) => d.confirmations.demander(req)) },

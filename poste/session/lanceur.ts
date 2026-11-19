@@ -1,18 +1,23 @@
 // Responsabilité : la ligne de commande d'une session pilotée par ccremote (lancement ou reprise), passée par le
 // lanceur unique `cc` : c'est lui qui donne l'id, le nom, la session tmux et la fiche du registre.
 // La session garde TOUTE la config de Chris (CLAUDE.md, skills, MCP) : on n'ajoute que consignes, crochets et rythme.
+// Dans le binaire compilé (lanterne-moteur), le code n'est pas sur disque : crochet et rythme s'y lancent par
+// sous-commande du binaire, et `cc` / tmux.conf viennent de CCREMOTE_CC / CCREMOTE_TMUX_CONF (extraits au démarrage).
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { McpStdioServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type { EffortSession, LanceurSession, ModeSession } from '../../commun/session.ts';
+import { SOCKET } from './tmux.ts';
 
 export const VAR_SESSION = 'CCREMOTE_SESSION';
 export const VAR_SOCKET = 'CCREMOTE_SOCKET';
 
-const CC = join(import.meta.dir, 'cc');
+const EN_BINAIRE = import.meta.dir.startsWith('/$bunfs');
+const CC = process.env['CCREMOTE_CC'] || join(import.meta.dir, 'cc');
 const CROCHET = join(import.meta.dir, 'crochet.ts');
 const MCP_RYTHME = join(import.meta.dir, 'mcp-rythme.ts');
+const SOCKET_PAR_DEFAUT = 'claude';
 
 export interface Lancement {
   readonly sessionId: string;
@@ -33,10 +38,18 @@ export function binaireClaude(): string {
   return candidats.find((c): c is string => !!c && existsSync(c)) ?? 'claude';
 }
 
+// `cc` ouvre ses sessions sur le socket tmux qu'on lui désigne : celui du poste, passé par l'environnement de cc.
+// Sans cela, un poste d'essai sur un autre socket créerait ses sessions sur le serveur `claude` par défaut.
+function commandeCc(): string[] {
+  return SOCKET === SOCKET_PAR_DEFAUT ? [CC] : ['env', `CC_SOCKET=${SOCKET}`, CC];
+}
+
+function commandeCrochet(evenement: string): string {
+  return EN_BINAIRE ? `${process.execPath} crochet ${evenement}` : `${process.execPath} ${CROCHET} ${evenement}`;
+}
+
 function crochets(): string {
-  const commande = (evenement: string) => [
-    { type: 'command', command: `${process.execPath} ${CROCHET} ${evenement}`, timeout: 30 },
-  ];
+  const commande = (evenement: string) => [{ type: 'command', command: commandeCrochet(evenement), timeout: 30 }];
   return JSON.stringify({
     // Sans lui, un dossier de config neuf affiche l'avertissement du mode bypass (option par défaut : quitter).
     skipDangerousModePermissionPrompt: true,
@@ -49,16 +62,22 @@ function crochets(): string {
   });
 }
 
+// Le serveur de rythme : un script du poste, ou la sous-commande `rythme` du binaire compilé.
+function lanceurRythme(): { command: string; args: string[] } {
+  return EN_BINAIRE
+    ? { command: process.execPath, args: ['rythme'] }
+    : { command: process.execPath, args: [MCP_RYTHME] };
+}
+
 function rythme(): string {
-  return JSON.stringify({ mcpServers: { ccremote: { type: 'stdio', command: process.execPath, args: [MCP_RYTHME] } } });
+  return JSON.stringify({ mcpServers: { ccremote: { type: 'stdio', ...lanceurRythme() } } });
 }
 
 // Le même serveur de rythme que tmux, lancé par le SDK : la session et le socket passent par l'environnement.
 export function serveurRythme(session: string, socket: string): McpStdioServerConfig {
   return {
     type: 'stdio',
-    command: process.execPath,
-    args: [MCP_RYTHME],
+    ...lanceurRythme(),
     env: { [VAR_SESSION]: session, [VAR_SOCKET]: socket },
   };
 }
@@ -66,7 +85,7 @@ export function serveurRythme(session: string, socket: string): McpStdioServerCo
 // Reprise d'une session adoptée ou fermée : sa config d'origine, sans crochets ; de quoi démarrer sans question.
 export function commandeReprise(sessionId: string, lanceur: LanceurSession = 'quart'): string[] {
   return [
-    CC, '--lanceur', lanceur, '--id', sessionId, '--',
+    ...commandeCc(), '--lanceur', lanceur, '--id', sessionId, '--',
     '--resume', sessionId,
     '--dangerously-skip-permissions',
     '--settings', JSON.stringify({ skipDangerousModePermissionPrompt: true }),
@@ -77,7 +96,7 @@ export function commandeReprise(sessionId: string, lanceur: LanceurSession = 'qu
 // `--mcp-config` est variadique : il ne doit pas précéder le message, que l'appelant ajoute en dernier.
 export function commandeClaude(l: Lancement): string[] {
   return [
-    CC, '--lanceur', 'quart', '--id', l.sessionId, '--nom', l.titre, '--',
+    ...commandeCc(), '--lanceur', 'quart', '--id', l.sessionId, '--nom', l.titre, '--',
     '--mcp-config', rythme(),
     '--settings', crochets(),
     ...permission(l.mode),

@@ -35,4 +35,25 @@ describe('SessionSdk : lectures du panneau', () => {
     await session.fermer();
     expect(await session.contexte()).toBeNull();
   });
+
+  test('fiche : le relevé de l’initialisation reste au repos, après fermeture, et dans la persistance', async () => {
+    const { session } = nouvelleSession(async () => [{ type: 'result' }], { mcp: [['connected', 'failed']] });
+    await session.lancer('go');
+    await attendre(() => session.resume.connecteurs !== undefined);
+    await attendre(() => session.resume.statut === 'attente');
+    await session.fermer();
+    const releve = [
+      { nom: 'connecteur-1', statut: 'connected' },
+      { nom: 'connecteur-2', statut: 'failed' },
+    ];
+    expect(await session.connecteurs()).toEqual(releve);
+    expect(session.persistee.resume.connecteurs).toEqual(releve);
+  });
+
+  test('après redémarrage du poste : la fiche relue donne les connecteurs sans requête SDK', async () => {
+    const releve = [{ nom: 'claude.ai Agenda', statut: 'connected' }];
+    const { session, requetes } = nouvelleSession(async () => [], { resume: { connecteurs: releve } });
+    expect(await session.connecteurs()).toEqual(releve);
+    expect(requetes).toHaveLength(0);
+  });
 });

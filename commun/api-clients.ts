@@ -5,6 +5,22 @@ import type { Reunion } from './reunion.ts';
 import type { EtatMachine } from './protocole-poste.ts';
 import type { Evenement, Projet, ResumeSession } from './session.ts';
 
+/** Accès d'une machine au relais : local, connecte, connexion (tunnel ouvert, poste pas encore là), injoignable… */
+export type EtatAccesMachine = 'local' | 'connecte' | 'connexion' | 'injoignable' | 'non_installe';
+
+export interface AccesVue {
+  readonly etat: EtatAccesMachine;
+  readonly detail: string | null;
+  readonly depuis: string; // iso : moment du dernier changement d'état
+}
+
+/** Installation du poste par SSH : étape courante, état, message (fin de sortie assainie si échec). */
+export interface VueInstallation {
+  readonly etape: string;
+  readonly etat: 'en_cours' | 'fini' | 'echec';
+  readonly message: string | null;
+}
+
 export interface VueMachine {
   readonly id: string;
   readonly description: string;
@@ -16,6 +32,8 @@ export interface VueMachine {
   readonly etat: EtatMachine | null;
   readonly derniereVue: string;
   readonly enLigne: boolean;
+  readonly acces?: AccesVue; // absent sur un relais sans machines SSH (moteur d'avant la vague 6)
+  readonly installation?: VueInstallation | null; // dernière installation par SSH (absente hors relais intégré)
 }
 
 export interface EvenementDate {

@@ -4,6 +4,7 @@ import { homedir, userInfo } from 'node:os';
 import type { Logger } from 'pino';
 import type { CibleTerminal } from '../../commun/appareil.ts';
 import { cheminAbsolu, type Resultat } from '../fichiers/explorateur.ts';
+import { SOCKET } from '../session/tmux.ts';
 
 const MAX_TERMINAUX = 12;
 /** La sortie est regroupée sur ce laps : un `cat` d'un gros fichier ne doit pas émettre un message par octet. */
@@ -53,7 +54,7 @@ export function environnementDuTerminal(
 }
 
 export function commandeDe(cible: CibleTerminal): string[] {
-  if (cible.type === 'tmux') return ['tmux', '-L', 'claude', '-u', 'attach', '-t', `=${cible.tmux}`];
+  if (cible.type === 'tmux') return ['tmux', '-L', SOCKET, '-u', 'attach', '-t', `=${cible.tmux}`];
   return [shellDeLUtilisateur(), '-il'];
 }
 

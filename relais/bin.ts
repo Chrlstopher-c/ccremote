@@ -28,9 +28,13 @@ import { type DonneesPoste, Postes } from './parc/postes.ts';
 import { ApiMachines } from './machines/api-machines.ts';
 import { ApiConfirmations } from './machines/api-confirmations.ts';
 import { Confirmations } from './machines/confirmations.ts';
+import { AccesMachines } from './machines/acces-machines.ts';
+import { Installations } from './machines/installations.ts';
 import { RegistreMachines } from './machines/registre-machines.ts';
+import { nommageLanterne } from './machines/script-installation.ts';
 import { chargerSecretsPostes, dossierSecretsPostes } from './machines/secrets.ts';
 import { Ssh } from './machines/ssh.ts';
+import { Tunnels } from './machines/tunnels.ts';
 import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
@@ -49,8 +53,35 @@ const dossierSecrets = dossierSecretsPostes();
 const secretsPostes = new Map<string, string>([...config.secretsPostes, ...chargerSecretsPostes(dossierSecrets)]);
 const postes = new Postes(registre, diffusion, secretsPostes, journal);
 const confirmations = new ApiConfirmations(new Confirmations((m) => diffusion.diffuser(m)));
+// Relais intégré (appli) : les postes Lanterne sont joints par des tunnels SSH inverses lancés d'ici.
+const integre = config.integre;
+const registreMachines = new RegistreMachines(base);
+const tunnels = integre
+  ? new Tunnels({
+      cibles: () =>
+        registreMachines
+          .lister()
+          .filter((c) => secretsPostes.has(c.id))
+          .map((c) => ({ id: c.id, connexion: { hote: c.hote, port: c.port, utilisateur: c.utilisateur, cle: c.cle }, portDistant: c.portDistant })),
+      portPostes: config.portPostes,
+      surChangement: (id) => postes.rafraichirMachine(id),
+      journal: journal.child({ domaine: 'tunnels' }),
+    })
+  : null;
+const installations = new Installations({ surChangement: (id) => postes.rafraichirMachine(id) });
+const accesMachines = integre
+  ? new AccesMachines({
+      configurations: () => registreMachines.lister(),
+      installee: (id) => secretsPostes.has(id),
+      tunnel: (id) => tunnels?.etat(id) ?? { ouvert: false, detail: null },
+      enLigne: (id) => postes.enLigne(id),
+      connue: (id) => registre.machines().some((m) => m.id === id),
+      installation: (id) => installations.de(id),
+    })
+  : null;
+postes.acces = accesMachines;
 const machines = new ApiMachines({
-  registre: new RegistreMachines(base),
+  registre: registreMachines,
   postes,
   ssh: new Ssh(undefined, journal.child({ domaine: 'ssh' })),
   secrets: secretsPostes,
@@ -60,10 +91,29 @@ const machines = new ApiMachines({
   urlApi: config.urlApiPostes,
   racineCode: join(import.meta.dir, '..'),
   journal: journal.child({ domaine: 'machines' }),
+  integre:
+    integre && config.integre
+      ? {
+          nommage: nommageLanterne(integre.instance),
+          portDistantDefaut: integre.portDistantDefaut,
+          codePoste: integre.codePoste,
+        }
+      : undefined,
+  tunnels: tunnels ?? undefined,
+  installations,
 });
+postes.miseAJour = integre ? (id, empreinte) => machines.surConnexion(id, empreinte) : null;
+if (tunnels) {
+  tunnels.synchroniser();
+  // À l'arrêt du relais, les tunnels ssh partent avec lui (sans relance).
+  process.once('exit', () => tunnels.arreterTout());
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+    process.once(signal, () => process.exit(0));
+  }
+}
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const sessionConfig = new ApiSessionConfig(registre, postes);
-const configuration = new ApiConfiguration(postes);
+const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
 const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
 const artefacts = new ApiArtefacts(registre, postes, journal);

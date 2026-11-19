@@ -26,7 +26,13 @@ import { BilanTour } from './bilan-tour.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
 import { contexteDe } from './contexte-sdk.ts';
 import { AvisSdk } from './avis-sdk.ts';
-import { attendreConnecteurs, FileAsynchrone, messageUtilisateur, messagesAvecConnecteurs } from './file-messages-sdk.ts';
+import {
+  attendreConnecteurs,
+  type EtatMcp,
+  FileAsynchrone,
+  messageUtilisateur,
+  messagesAvecConnecteurs,
+} from './file-messages-sdk.ts';
 import { binaireClaude, serveurRythme } from './lanceur.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
 import { optionsSdk } from './options-sdk.ts';
@@ -385,18 +391,34 @@ export class SessionSdk implements SessionPoste {
     return contexteDe(await requete.getContextUsage({ detail: 'summary' }));
   }
 
+  // Au repos, le dernier relevé gardé dans la fiche (il survit au redémarrage du poste) ; vivante, un relevé neuf.
   async connecteurs(): Promise<ConnecteurSession[]> {
     const requete = this.requete;
-    if (!requete) return [];
-    return (await requete.mcpServerStatus()).map((etat) => ({
-      nom: etat.name,
-      statut: this.reglagesVivants.statut(etat.name, etat.status),
-    }));
+    if (!requete) return this.etat.connecteurs ?? [];
+    return this.releverConnecteurs(requete);
   }
 
   // Connecteurs MCP, styles de sortie : réglés dans la requête vivante (voir session-sdk-vivante.ts).
-  basculerConnecteur(nom: string, actif: boolean): Promise<string | null> {
-    return this.reglagesVivants.connecteur(nom, actif);
+  async basculerConnecteur(nom: string, actif: boolean): Promise<string | null> {
+    const requete = this.requete;
+    const erreur = await this.reglagesVivants.connecteur(nom, actif);
+    if (!erreur && requete) void this.releverConnecteurs(requete);
+    return erreur;
+  }
+
+  private async releverConnecteurs(requete: RequeteSdk): Promise<ConnecteurSession[]> {
+    try {
+      this.memoriserEtats(requete, await requete.mcpServerStatus());
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'connecteurs MCP non relevés');
+    }
+    return this.etat.connecteurs ?? [];
+  }
+
+  private memoriserEtats(requete: RequeteSdk, etats: readonly EtatMcp[]): void {
+    if (this.requete !== requete) return;
+    const liste = etats.map((etat) => ({ nom: etat.name, statut: this.reglagesVivants.statut(etat.name, etat.status) }));
+    if (JSON.stringify(liste) !== JSON.stringify(this.etat.connecteurs ?? [])) this.maj({ connecteurs: liste });
   }
 
   // `initializationResult` garde le style du lancement : un style changé en cours de session vient de la fiche.
@@ -511,7 +533,12 @@ export class SessionSdk implements SessionPoste {
   }
 
   private attendreConnecteurs(requete: RequeteSdk): Promise<void> {
-    return attendreConnecteurs(requete, { delaiMs: this.delaiMcp, periodeMs: this.periodeMcp, session: this.etat.id }, this.env.journal);
+    return attendreConnecteurs(
+      requete,
+      { delaiMs: this.delaiMcp, periodeMs: this.periodeMcp, session: this.etat.id },
+      this.env.journal,
+      (etats) => this.memoriserEtats(requete, etats),
+    );
   }
 
   private async ecouter(requete: RequeteSdk, etatTraduction: EtatTraduction): Promise<void> {

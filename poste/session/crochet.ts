@@ -1,11 +1,10 @@
-// Responsabilité : script lancé par les hooks de Claude Code — relaie l'événement au poste et rend sa décision.
-export {}; // module : permet l’await de premier niveau
+// Responsabilité : relais des événements des hooks de Claude Code vers le poste, qui rend sa décision.
+// Lancé par `bun crochet.ts <événement>` hors binaire, ou par `lanterne-moteur crochet <événement>` (binaire compilé).
 // Ne bloque JAMAIS Claude : poste absent ou lent → sortie vide, code 0, Claude continue comme sans ccremote.
-const [evenement] = process.argv.slice(2);
-const session = process.env['CCREMOTE_SESSION'];
-const socket = process.env['CCREMOTE_SOCKET'];
 
-async function relayer(): Promise<string> {
+export async function relayerCrochet(evenement: string | undefined): Promise<string> {
+  const session = process.env['CCREMOTE_SESSION'];
+  const socket = process.env['CCREMOTE_SOCKET'];
   if (!evenement || !session || !socket) return '';
   const corps = await Bun.stdin.text();
   const r = await fetch(`http://poste/crochet/${evenement}?session=${encodeURIComponent(session)}`, {
@@ -17,10 +16,14 @@ async function relayer(): Promise<string> {
   return r.ok ? r.text() : '';
 }
 
-try {
-  const sortie = await relayer();
-  if (sortie && sortie !== '{}') process.stdout.write(sortie);
-} catch (erreur) {
-  process.stderr.write(`ccremote : crochet ${evenement} non relayé (${String(erreur)})\n`);
+export async function executerCrochet(evenement: string | undefined): Promise<void> {
+  try {
+    const sortie = await relayerCrochet(evenement);
+    if (sortie && sortie !== '{}') process.stdout.write(sortie);
+  } catch (erreur) {
+    process.stderr.write(`ccremote : crochet ${evenement} non relayé (${String(erreur)})\n`);
+  }
+  process.exit(0);
 }
-process.exit(0);
+
+if (import.meta.main) await executerCrochet(process.argv[2]);

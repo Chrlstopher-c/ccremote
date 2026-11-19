@@ -69,6 +69,7 @@ function bonjour(): MessagePoste {
     comptes: Object.keys(config.comptes),
     etatComptes: comptes.lister(),
     sessions: sessions.lister(),
+    empreinte: process.env['CCREMOTE_EMPREINTE_CODE'] || undefined, // code installé par le relais (mise à jour)
   };
 }
 

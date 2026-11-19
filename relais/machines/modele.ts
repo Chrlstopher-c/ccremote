@@ -12,6 +12,8 @@ const CHEMIN = /^(~(\/[^\n\0]*)?|\/[^\n\0]*)$/;
 // absent (un `.default()` serait réappliqué par `.partial()`).
 const HOTE_CHAMP = z.string().regex(HOTE, 'hôte invalide');
 const PORT_CHAMP = z.number().int().min(1).max(65535);
+// Port d'écoute distant du tunnel inverse : sur la machine distante, jamais un port système.
+const PORT_DISTANT_CHAMP = z.number().int().min(1024).max(65535);
 const UTILISATEUR_CHAMP = z.string().regex(UTILISATEUR, 'utilisateur invalide');
 const CLE_CHAMP = z.string().regex(/^\/[^\n\0]+$/, 'clé : chemin absolu attendu');
 const DESCRIPTION_CHAMP = z.string().trim().max(200);
@@ -25,6 +27,7 @@ export const ConfigMachine = z.object({
   utilisateur: UTILISATEUR_CHAMP,
   cle: CLE_CHAMP,
   dossier: DOSSIER_CHAMP.default('~'),
+  portDistant: PORT_DISTANT_CHAMP.optional(), // absent : défaut de l'instance (voir le relais)
 });
 export type ConfigMachine = z.infer<typeof ConfigMachine>;
 
@@ -36,6 +39,7 @@ export const ModifMachine = z.object({
   utilisateur: UTILISATEUR_CHAMP.optional(),
   cle: CLE_CHAMP.optional(),
   dossier: DOSSIER_CHAMP.optional(),
+  portDistant: PORT_DISTANT_CHAMP.optional(),
 });
 export type ModifMachine = z.infer<typeof ModifMachine>;
 

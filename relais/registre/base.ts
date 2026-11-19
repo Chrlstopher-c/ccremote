@@ -37,8 +37,10 @@ export const MIGRATIONS: readonly string[] = [
      id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', hote TEXT NOT NULL, port INTEGER NOT NULL DEFAULT 22,
      utilisateur TEXT NOT NULL, cle TEXT NOT NULL, dossier TEXT NOT NULL DEFAULT '~',
      cree_le TEXT NOT NULL, maj_le TEXT NOT NULL);`,
-  // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
   `ALTER TABLE sessions ADD COLUMN non_lue INTEGER NOT NULL DEFAULT 0;`,
+  // Port d'écoute du tunnel inverse sur la machine distante (défaut de l'instance banc : voir le relais).
+  `ALTER TABLE machines_ssh ADD COLUMN port_distant INTEGER NOT NULL DEFAULT 47321;`,
+  // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 
 export function ouvrirBase(chemin: string): Database {

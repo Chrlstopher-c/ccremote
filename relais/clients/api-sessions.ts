@@ -229,8 +229,14 @@ export class ApiSessions {
     return this.lire(req.params.id, { kind: 'contexte' });
   }
 
-  connecteurs(req: RequeteSession): Promise<Response> {
-    return this.lire(req.params.id, { kind: 'connecteurs' });
+  // Le poste garde le relevé du SDK au repos ; hors ligne, la fiche garde le dernier relevé qu'elle a reçu.
+  async connecteurs(req: RequeteSession): Promise<Response> {
+    const session = this.registre.session(req.params.id);
+    if (!session) return erreur('session inconnue', 404);
+    const r = await this.postes.commander(session.machine, { kind: 'connecteurs', sessionId: session.id });
+    if (r.ok) return json(r.donnees ?? []);
+    this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'connecteurs lus sur la fiche');
+    return json(session.connecteurs ?? []);
   }
 
   taches(req: RequeteSession): Promise<Response> {

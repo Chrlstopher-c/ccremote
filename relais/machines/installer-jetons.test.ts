@@ -38,7 +38,7 @@ function rig(sortieSsh: Partial<ResultatSsh>) {
   const ssh = new Ssh(async () => ({ code: 0, sortie: 'ok', erreurs: '', delaiDepasse: false, ...sortieSsh }));
   const d: DependancesMachines = {
     registre: new RegistreMachines(ouvrirBase(':memory:')),
-    postes: { enLigne: () => false, commander: async () => ({ ok: false }) },
+    postes: { enLigne: () => false, rafraichirMachine: () => undefined, commander: async () => ({ ok: false }) },
     ssh,
     secrets: new Map<string, string>(),
     dossierSecrets: mkdtempSync(join(tmpdir(), 'sec-jetons-')),

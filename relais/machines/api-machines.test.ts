@@ -18,7 +18,7 @@ function rig(sortieSsh: Partial<ResultatSsh> = {}) {
   const ssh = new Ssh(async () => ({ code: 0, sortie: '/srv\n/root\nalpha\n', erreurs: '', delaiDepasse: false, ...sortieSsh }));
   const d: DependancesMachines = {
     registre,
-    postes: { enLigne: (id: string) => id === 'tour', commander: async () => ({ ok: true, donnees: { chemin: '/mnt', parent: '/', accueil: '/h', entrees: [] } }) },
+    postes: { enLigne: (id: string) => id === 'tour', rafraichirMachine: () => undefined, commander: async () => ({ ok: true, donnees: { chemin: '/mnt', parent: '/', accueil: '/h', entrees: [] } }) },
     ssh,
     secrets,
     dossierSecrets: mkdtempSync(join(tmpdir(), 'sec-test-')),

@@ -5,7 +5,8 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Logger } from 'pino';
 import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/protocole-poste.ts';
 import type { Evenement } from '../../commun/session.ts';
-import type { Diffusion, VueMachine } from '../clients/diffusion.ts';
+import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
+import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import type { Registre } from '../registre/registre.ts';
 
@@ -31,6 +32,14 @@ export class Postes {
   } | null = null;
   /** La salle de réunion (HQ) : voit chaque événement d'une session pour recopier les réponses demandées. */
   reunions: { observer(sessionId: string, evt: Evenement): void } | null = null;
+  /** L'accès de chaque machine (tunnel, installation) et les fiches des machines configurées sans poste. */
+  acces: {
+    de(machine: string): AccesVue;
+    sansPoste(): VueMachine[];
+    installation(machine: string): VueInstallation | null;
+  } | null = null;
+  /** Un poste s'est annoncé avec l'empreinte de son code : le relais peut le mettre à jour (une fois par connexion). */
+  miseAJour: ((machine: string, empreinte: string | undefined) => void) | null = null;
 
   constructor(
     private readonly registre: Registre,
@@ -52,7 +61,17 @@ export class Postes {
   }
 
   vues(): VueMachine[] {
-    return this.registre.machines().map((m) => ({ ...m, enLigne: this.enLigne(m.id) }));
+    const postes = this.registre.machines().map((m) => ({
+      ...m,
+      enLigne: this.enLigne(m.id),
+      ...(this.acces ? { acces: this.acces.de(m.id), installation: this.acces.installation(m.id) } : {}),
+    }));
+    return [...postes, ...(this.acces?.sansPoste() ?? [])];
+  }
+
+  /** Un changement d'accès (tunnel, installation) : les clients le reçoivent comme tout changement de machine. */
+  rafraichirMachine(machine: string): void {
+    this.diffuserMachine(machine);
   }
 
   ouvert(ws: ServerWebSocket<DonneesPoste>): void {
@@ -71,7 +90,7 @@ export class Postes {
 
   commander(machine: string, commande: SansId<CommandeRelais>): Promise<ReponsePoste> {
     const ws = this.connectes.get(machine);
-    if (!ws) return Promise.resolve({ ok: false, erreur: `${machine} est hors ligne` });
+    if (!ws) return Promise.resolve({ ok: false, erreur: this.messageHorsLigne(machine) });
     const id = randomUUID();
     return new Promise((resoudre) => {
       const minuteur = setTimeout(() => {
@@ -84,6 +103,12 @@ export class Postes {
       });
       ws.send(JSON.stringify({ ...commande, id }));
     });
+  }
+
+  private messageHorsLigne(machine: string): string {
+    const acces = this.acces?.de(machine);
+    if (acces?.etat !== 'injoignable') return `${machine} est hors ligne`;
+    return `machine injoignable${acces.detail ? ` (${acces.detail})` : ''}`;
   }
 
   /** Sans attendre de réponse : la frappe dans un terminal. Machine hors ligne → perdu, et c'est voulu. */
@@ -146,6 +171,7 @@ export class Postes {
     }
     this.fermerNonAnnoncees(machine, new Set(m.sessions.map((s) => s.id)));
     this.diffuserMachine(machine);
+    this.miseAJour?.(machine, m.empreinte);
   }
 
   // Une session que le poste n'annonce plus n'a plus de processus qu'il suit : elle est fermée, pas laissée « en

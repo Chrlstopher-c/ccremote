@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { Postes, ReponsePoste } from '../parc/postes.ts';
+import pino from 'pino';
 import { ApiConfiguration } from './api-configuration.ts';
+
+const silencieux = pino({ level: 'silent' });
 
 const EMPREINTE = 'a'.repeat(64);
 
@@ -15,7 +18,7 @@ function api(reponse: ReponsePoste, machines: string[] = ['tour']): { api: ApiCo
     },
     vues: () => machines.map((id) => ({ id })),
   } as unknown as Postes;
-  return { api: new ApiConfiguration(postes), recues };
+  return { api: new ApiConfiguration(postes, silencieux), recues };
 }
 
 function requete(
@@ -128,10 +131,15 @@ describe('compétences', () => {
 });
 
 describe('connecteurs et plug-ins', () => {
-  test('connecteurs relayés', async () => {
+  test('connecteurs relayés, avec la fraîcheur de la liste', async () => {
     const liste = [{ nom: 'exemple', cible: '/fictif', etat: 'connecte' }];
     const { api: a, recues } = api({ ok: true, donnees: liste });
-    expect(await (await a.connecteurs(requete('tour', { methode: 'GET' }))).json()).toEqual(liste);
+    const corps = (await (await a.connecteurs(requete('tour', { methode: 'GET' }))).json()) as {
+      connecteurs: unknown;
+      fraicheur: string;
+    };
+    expect(corps.connecteurs).toEqual(liste);
+    expect(Number.isNaN(Date.parse(corps.fraicheur))).toBe(false);
     expect(recues[0]?.commande).toEqual({ kind: 'connecteurs_machine' });
   });
 
@@ -144,5 +152,63 @@ describe('connecteurs et plug-ins', () => {
     const r = await a.activerPlugin(requete('tour', { corps: { actif: true }, params: { plugin: 'e@m' } }));
     expect(r.status).toBe(200);
     expect(recues[0]?.commande).toEqual({ kind: 'plugin_activer', plugin: 'e@m', actif: true });
+  });
+});
+
+describe('connecteurs de la machine : cache et écritures', () => {
+  test('seconde lecture : liste gardée servie, relecture de fond (une seule lecture au premier appel)', async () => {
+    const { api: a, recues } = api({ ok: true, donnees: [] });
+    await a.connecteurs(requete('tour', { methode: 'GET' }));
+    const corps = (await (await a.connecteurs(requete('tour', { methode: 'GET' }))).json()) as { fraicheur: string };
+    expect(Number.isNaN(Date.parse(corps.fraicheur))).toBe(false);
+    await new Promise((resoudre) => setTimeout(resoudre, 0));
+    expect(recues.filter((r) => r.commande['kind'] === 'connecteurs_machine')).toHaveLength(2);
+  });
+
+  test('ajout : 201 avec le nom, commande relayée telle quelle, liste périmée ensuite', async () => {
+    const { api: a, recues } = api({ ok: true, donnees: { nom: 'echo-test' } });
+    const corps = { nom: 'echo-test', type: 'stdio', commande: '/usr/bin/true' };
+    const r = await a.ajouterConnecteur(requete('tour', { corps }));
+    expect(r.status).toBe(201);
+    expect(await r.json()).toEqual({ nom: 'echo-test' });
+    expect(recues[0]?.commande).toMatchObject({ kind: 'connecteur_ajouter', definition: { nom: 'echo-test' } });
+  });
+
+  test('définition invalide : 400, rien envoyé au poste', async () => {
+    const { api: a, recues } = api({ ok: true });
+    const r = await a.ajouterConnecteur(requete('tour', { corps: { nom: 'x', type: 'http', url: 'file:///x' } }));
+    expect(r.status).toBe(400);
+    expect(recues).toHaveLength(0);
+  });
+
+  test('lecture : masquée par défaut, révélée seulement avec reveler=1', async () => {
+    const { api: a, recues } = api({ ok: true, donnees: { nom: 'web-test', type: 'http' } });
+    const url = 'http://relais.test/api/machines/tour/connecteurs/web-test?reveler=1';
+    await a.connecteur(requete('tour', { methode: 'GET', url, params: { nom: 'web-test' } }));
+    expect(recues[0]?.commande).toEqual({ kind: 'connecteur_lire', nom: 'web-test', reveler: true });
+    const sans = 'http://relais.test/api/machines/tour/connecteurs/web-test';
+    await a.connecteur(requete('tour', { methode: 'GET', url: sans, params: { nom: 'web-test' } }));
+    expect(recues[1]?.commande).toEqual({ kind: 'connecteur_lire', nom: 'web-test', reveler: false });
+  });
+
+  test('nom invalide dans l’URL : 400', async () => {
+    const { api: a, recues } = api({ ok: true });
+    const r = await a.retirerConnecteur(requete('tour', { methode: 'DELETE', params: { nom: '-x' } }));
+    expect(r.status).toBe(400);
+    expect(recues).toHaveLength(0);
+  });
+
+  test('valeur masquée à l’ajout : 400, rien envoyé au poste', async () => {
+    const { api: a, recues } = api({ ok: true });
+    const corps = { nom: 'x', type: 'http', url: 'https://exemple.invalide/mcp', entetes: { A: '••••••' } };
+    expect((await a.ajouterConnecteur(requete('tour', { corps }))).status).toBe(400);
+    expect(recues).toHaveLength(0);
+  });
+
+  test('retrait refusé par le poste : 409 avec le message', async () => {
+    const { api: a } = api({ ok: false, erreur: 'No MCP server named "x" in user scope' });
+    const r = await a.retirerConnecteur(requete('tour', { methode: 'DELETE', params: { nom: 'x' } }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ erreur: 'No MCP server named "x" in user scope' });
   });
 });

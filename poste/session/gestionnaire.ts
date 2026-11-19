@@ -369,7 +369,9 @@ export class GestionnaireSessions {
       if (a && !s.transcriptConnu) this.associer(s, a);
     }
     for (const pane of panes.filter((p) => !vus.has(p.nom))) this.adopterPane(pane, panes, parPid, entrees);
-    this.suivreTerminaux(procs.filter((p) => !p.enTmux), entrees);
+    // CCREMOTE_ADOPTER_TERMINAUX=non : ne lit pas les Claude lancés hors tmux (moteur intégré, isolement d'essai).
+    const terminaux = process.env['CCREMOTE_ADOPTER_TERMINAUX'] !== 'non';
+    this.suivreTerminaux(terminaux ? procs.filter((p) => !p.enTmux) : [], entrees);
     this.suivreFermees(entrees, panes, procs);
     await Promise.all([...this.sessions.values()].map((s) => s.releverEcran()));
     await Promise.all([...this.sessions.values()].map((s) => s.veillerNuit()));

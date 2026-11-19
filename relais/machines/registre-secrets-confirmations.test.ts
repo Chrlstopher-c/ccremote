@@ -20,7 +20,7 @@ const CONFIG = {
 describe('registre des machines', () => {
   test('insérer, lire, modifier partiellement, supprimer', () => {
     const r = new RegistreMachines(ouvrirBase(':memory:'));
-    r.inserer(CONFIG, '2026-11-19T00:00:00.000Z');
+    r.inserer(CONFIG, 47321, '2026-11-19T00:00:00.000Z');
     expect(r.lire('vps-test')?.hote).toBe('machine.exemple.test');
     expect(r.modifier('vps-test', { dossier: '~/dev' }, '2026-11-19T01:00:00.000Z')).toBe(true);
     const lue = r.lire('vps-test');

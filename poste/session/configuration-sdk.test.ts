@@ -91,9 +91,10 @@ describe('conversation annexe', () => {
 
 describe('connecteurs MCP', () => {
   test('désactivé dans la session : appel au SDK, statut `disabled` ensuite', async () => {
-    // Première liste : l'attente des connecteurs au démarrage ; la seconde : la lecture du panneau.
+    // Relevés dans l'ordre : l'attente au démarrage, le relevé après la bascule, la lecture du panneau.
     const { session, requetes } = nouvelleSession(async () => FIN, {
       mcp: [
+        ['connected', 'connected'],
         ['connected', 'connected'],
         ['connected', 'connected'],
       ],

@@ -61,16 +61,24 @@ export function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+export interface EtatMcp {
+  readonly name: string;
+  readonly status: string;
+}
+
 // Le premier message n'attend que les connecteurs MCP de la config : le SDK ne les a pas tous à l'init.
+// `surEtats` reçoit chaque relevé : la fiche garde ainsi les connecteurs sans appel de plus au SDK.
 export async function attendreConnecteurs(
-  requete: { mcpServerStatus(): Promise<readonly { readonly status: string }[]> },
+  requete: { mcpServerStatus(): Promise<readonly EtatMcp[]> },
   reglage: { readonly delaiMs: number; readonly periodeMs: number; readonly session: string },
   journal: Logger,
+  surEtats: (etats: readonly EtatMcp[]) => void = () => undefined,
 ): Promise<void> {
   const fin = Date.now() + reglage.delaiMs;
   try {
     while (Date.now() < fin) {
       const etats = await requete.mcpServerStatus();
+      surEtats(etats);
       if (!etats.some((e) => e.status === 'pending')) return;
       await pause(reglage.periodeMs);
     }

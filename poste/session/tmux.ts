@@ -5,7 +5,7 @@ import { join } from 'node:path';
 // Surchargeable pour un poste d'essai qui ne doit pas voir les vraies sessions du serveur tmux.
 export const SOCKET = process.env['CCREMOTE_TMUX_SOCKET'] ?? 'claude';
 export const PREFIXE = 'claude-';
-const CONFIG = join(import.meta.dir, 'tmux.conf');
+const CONFIG = process.env['CCREMOTE_TMUX_CONF'] || join(import.meta.dir, 'tmux.conf'); // binaire : fichier extrait
 const FORMAT = ['session_name', 'session_created', 'session_attached', 'pane_current_path', 'pane_title', 'pane_pid']
   .map((c) => `#{${c}}`)
   .join('\t');

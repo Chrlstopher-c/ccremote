@@ -126,6 +126,18 @@ function empreinte(jeton: string): string {
   return createHash('sha256').update(jeton).digest('hex');
 }
 
+// Jeton tiré par un tiers (l'appli Lanterne, à chaque lancement du moteur intégré) : enregistré tel quel, sans mot de
+// passe. Les jetons d'appareil de même nom sont révoqués : un seul accès vivant par moteur.
+export function enregistrerJetonFixe(registre: Registre, jeton: string, appareil: string): void {
+  for (const ligne of registre.jetons()) {
+    if (ligne.appareil === appareil && ligne.genre === 'appareil') {
+      registre.revoquerJetonParId(ligne.empreinte.slice(0, LONGUEUR_ID));
+    }
+  }
+  const expire = new Date(Date.now() + DUREE_JETON_MS).toISOString();
+  registre.creerJeton(empreinte(jeton), appareil.slice(0, 120), expire, 'appareil');
+}
+
 export const PROTOCOLE_FLUX = 'ccremote';
 
 export function extraireJeton(req: Request): string | null {

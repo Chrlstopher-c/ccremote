@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test commun poste relais mcp",
+    "test": "bun test commun poste relais mcp integre",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "relais": "bun run relais/bin.ts",
-    "poste": "bun run poste/bin.ts"
+    "poste": "bun run poste/bin.ts",
+    "integre:compiler": "bun build --compile --target=bun-linux-x64-baseline integre/bin.ts --outfile dist/integre/lanterne-moteur"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.325",

@@ -3,7 +3,8 @@
 import type { Database } from 'bun:sqlite';
 import type { ConfigMachine, ModifMachine } from './modele.ts';
 
-export interface MachineConfiguree extends ConfigMachine {
+export interface MachineConfiguree extends Omit<ConfigMachine, 'portDistant'> {
+  readonly portDistant: number; // port d'écoute du tunnel sur la machine distante (toujours renseigné en base)
   readonly cree_le: string;
   readonly maj_le: string;
 }
@@ -16,14 +17,16 @@ interface Ligne {
   utilisateur: string;
   cle: string;
   dossier: string;
+  port_distant: number;
   cree_le: string;
   maj_le: string;
 }
 
-const COLONNES = 'id, description, hote, port, utilisateur, cle, dossier, cree_le, maj_le';
+const COLONNES = 'id, description, hote, port, utilisateur, cle, dossier, port_distant, cree_le, maj_le';
 
 function versMachine(l: Ligne): MachineConfiguree {
-  return { ...l };
+  const { port_distant: portDistant, ...reste } = l;
+  return { ...reste, portDistant };
 }
 
 export class RegistreMachines {
@@ -38,11 +41,16 @@ export class RegistreMachines {
     return l ? versMachine(l) : null;
   }
 
-  inserer(c: ConfigMachine, quand: string): void {
+  /** Port distant déjà pris par une autre machine (deux tunnels ne peuvent pas écouter sur le même port). */
+  portPris(port: number, sauf: string): boolean {
+    return this.lister().some((m) => m.portDistant === port && m.id !== sauf);
+  }
+
+  inserer(c: ConfigMachine, portDistant: number, quand: string): void {
     this.db
       .query(
-        `INSERT INTO machines_ssh (id, description, hote, port, utilisateur, cle, dossier, cree_le, maj_le)
-         VALUES ($id, $description, $hote, $port, $utilisateur, $cle, $dossier, $quand, $quand)`,
+        `INSERT INTO machines_ssh (id, description, hote, port, utilisateur, cle, dossier, port_distant, cree_le, maj_le)
+         VALUES ($id, $description, $hote, $port, $utilisateur, $cle, $dossier, $portDistant, $quand, $quand)`,
       )
       .run({
         id: c.id,
@@ -52,6 +60,7 @@ export class RegistreMachines {
         utilisateur: c.utilisateur,
         cle: c.cle,
         dossier: c.dossier,
+        portDistant,
         quand,
       });
   }
@@ -64,7 +73,7 @@ export class RegistreMachines {
     this.db
       .query(
         `UPDATE machines_ssh SET description = $description, hote = $hote, port = $port, utilisateur = $utilisateur,
-           cle = $cle, dossier = $dossier, maj_le = $quand WHERE id = $id`,
+           cle = $cle, dossier = $dossier, port_distant = $portDistant, maj_le = $quand WHERE id = $id`,
       )
       .run({
         id,
@@ -74,6 +83,7 @@ export class RegistreMachines {
         utilisateur: f.utilisateur,
         cle: f.cle,
         dossier: f.dossier,
+        portDistant: f.portDistant,
         quand,
       });
     return true;

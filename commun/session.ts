@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { FichierModifie } from './modifications.ts';
 import { ModeFichier, NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
+import { ConnecteurSession } from './panneau.ts';
 
 export const LanceurSession = z.enum(['kitty', 'quart', 'echo']); // qui a lancé la session (registre `cc`)
 export type LanceurSession = z.infer<typeof LanceurSession>;
@@ -119,6 +120,8 @@ export const ResumeSession = z.object({
   annexe_de: z.string().nullable().optional(), // conversation annexe : identifiant de la session parente
   bac_a_sable: BacASable.optional(), // réglé à la création, réappliqué à la reprise ; absent = non
   nonLue: z.boolean().optional(), // fin de tour pas encore vue par Chris (drapeau du relais)
+  // Connecteurs MCP de la session relevés à l'initialisation du SDK et à chaque lecture vivante : gardés au repos.
+  connecteurs: z.array(ConnecteurSession).optional(),
   creeLe: z.string(),
   majLe: z.string(),
 });
