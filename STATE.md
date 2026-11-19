@@ -323,4 +323,5 @@ Ce que cet essai a trouvé et qui est corrigé :
 - Essai réel (session jetable, haiku, relais et poste de test sur socket tmux `rc-test`) : ON → URL
   `https://claude.ai/code/session_…` ; message pendant ON → réponse dans le .jsonl et dans le fil du relais ; OFF →
   `disconnected`, moteur sdk, message SDK → réponse dans le fil.
-- Limite : après ON, la fiche affiche `statut: fermee` alors que le TUI tourne (cause non trouvée, voir TODO).
+- Limite levée (19/11, branche lanterne/rc-statut) : après ON, `statut: fermee` venait de `rattacherTerminal` : le processus SDK
+  fermé (même identifiant, hors tmux) passait la session tmux en terminal, puis sa mort la fermait. Un pane tmux l'emporte désormais.

@@ -67,6 +67,4 @@
 - [ ] Supprimer les anciennes installations désactivées (`ccremote-harness`, `ccremote-web`, `ccremote-pc`) une fois le v2
       éprouvé quelques jours.
 - [ ] Fusionner `dev` dans `master` (dépôt public) après validation par Chris.
-- [ ] Remote Control : après ON, `statut` reste `fermee` dans la fiche alors que le pane tmux tourne et répond (essai
-      19/11, session d3b84433… jetable). Piste : publication tardive d'un état du SDK fermé, ou `rattacher` avant l'état du
-      TUI. À reproduire avec un journal du poste (le log n'a rien sur la session).
+- [ ] Remote Control : après ON, `statut` restait `fermee` alors que le pane tmux tournait (19/11). Cause : le processus SDK fermé, encore vivant hors tmux avec le même identifiant, passait la session tmux en « terminal », puis sa disparition la fermait. Corrigé par `SessionTmux.rattacherTerminal` (un pane tmux l'emporte) ; test dans `session-tmux.test.ts` (branche `lanterne/rc-statut`). Corrigé, tests verts ; essai réel pas encore refait.

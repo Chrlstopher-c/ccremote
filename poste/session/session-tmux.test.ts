@@ -93,6 +93,28 @@ describe('session adoptée dans un terminal : cycle de vie', () => {
   });
 });
 
+describe('session tmux : un processus hors tmux portant son identifiant ne la touche pas', () => {
+  // Après Remote Control, le processus SDK fermé peut vivre encore quelques instants, hors tmux, avec le même
+  // identifiant de session : sa disparition ne doit pas fermer le TUI qui tourne.
+  test('son départ ne la passe pas en fermée quand le pane tmux existe', () => {
+    const { session } = montage(fiche({ statut: 'attente', tmux: 'claude-p', terminal: false }));
+    session.rattacherTerminal(true);
+    session.rattacherTerminal(false);
+
+    expect(session.resume.tmux).toBe('claude-p');
+    expect(session.resume.statut).toBe('attente');
+    expect(session.resume.terminal).toBe(false);
+  });
+
+  test('une session tmux marquée terminal par erreur est remise en tmux sans fermeture', () => {
+    const { session } = montage(fiche({ statut: 'attente', tmux: 'claude-p', terminal: true }));
+    session.rattacherTerminal(false);
+
+    expect(session.resume.statut).toBe('attente');
+    expect(session.resume.terminal).toBe(false);
+  });
+});
+
 describe('titre d une session adoptée dans tmux', () => {
   const pane = (nom: string, titre: string): tmux.PaneTmux => ({
     nom,
