@@ -10,7 +10,7 @@ import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
 export type { EvenementDate, Notification };
 
-type LigneSession = { resume: string; archivee: number; epinglee: number };
+type LigneSession = { resume: string; archivee: number; epinglee: number; non_lue: number };
 type LigneMachine = {
   id: string;
   description: string;
@@ -92,7 +92,7 @@ export class Registre {
 
   session(id: string): ResumeSession | null {
     const l = this.db
-      .query('SELECT resume, archivee, epinglee FROM sessions WHERE id = $id')
+      .query('SELECT resume, archivee, epinglee, non_lue FROM sessions WHERE id = $id')
       .get({ id }) as LigneSession | null;
     return l ? this.vue(l) : null;
   }
@@ -100,7 +100,7 @@ export class Registre {
   // Les archivées sont absentes par défaut ; `avecArchivees` les rend (filtre ?archivees=1, rétention du fil).
   sessions(avecArchivees = false): ResumeSession[] {
     const lignes = this.db
-      .query('SELECT resume, archivee, epinglee FROM sessions ORDER BY maj_le DESC')
+      .query('SELECT resume, archivee, epinglee, non_lue FROM sessions ORDER BY maj_le DESC')
       .all() as LigneSession[];
     return lignes.filter((l) => avecArchivees || l.archivee === 0).flatMap((l) => this.vue(l) ?? []);
   }
@@ -112,6 +112,12 @@ export class Registre {
   // Épinglée : remontée en tête de la liste par le client ; colonne du relais, jamais écrasée par le poste.
   definirEpinglee(id: string, epinglee: boolean): void {
     this.db.query('UPDATE sessions SET epinglee = $e WHERE id = $id').run({ e: epinglee ? 1 : 0, id });
+  }
+
+  // Non lue : persistée pour survivre au redémarrage de l'appli (Lanterne la pose à la fin d'un tour hors vue, la retire
+  // à l'ouverture). Colonne du relais, jamais écrasée par une fiche du poste.
+  definirNonLue(id: string, nonLue: boolean): void {
+    this.db.query('UPDATE sessions SET non_lue = $n WHERE id = $id').run({ n: nonLue ? 1 : 0, id });
   }
 
   // Suppression demandée par Chris, après que le poste a retiré le transcript : fiche, fil et notifications.
@@ -148,6 +154,7 @@ export class Registre {
       ...fiche,
       archivee: l.archivee === 1,
       epinglee: l.epinglee === 1,
+      nonLue: l.non_lue === 1,
       inactiveDepuis: inactiveDepuis(fiche.statut, fiche.majLe, new Date(), this.seuilInactiviteMs),
     };
   }

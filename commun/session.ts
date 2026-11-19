@@ -109,6 +109,7 @@ export const ResumeSession = z.object({
   inactiveDepuis: z.string().nullable().optional(),
   archivee: z.boolean().optional(), // rangée par Chris : absente des listes par défaut, jamais fermée automatiquement
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
+  nonLue: z.boolean().optional(), // fin de tour pas encore vue par Chris (drapeau du relais)
   creeLe: z.string(),
   majLe: z.string(),
 });
@@ -163,6 +164,13 @@ export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('etape'), resume: z.string(), suite: z.string() }),
   z.object({ type: z.literal('objectif_atteint'), bilan: z.string() }),
   z.object({ type: z.literal('question'), question: z.string() }),
+  // Dialogue résolu par Chris (question, permission ou plan) : le fil le rejoue avec sa réponse, après rechargement.
+  z.object({
+    type: z.literal('dialogue_resolu'),
+    dialogue: Dialogue,
+    reponses: z.array(z.string()).optional(), // question : libellés choisis, ou saisie libre
+    decision: z.enum(['autoriser', 'toujours', 'refuser']).optional(), // permission ou plan
+  }),
   z.object({ type: z.literal('compaction'), avant: z.number(), apres: z.number(), declencheur: z.string() }),
   z.object({ type: z.literal('relance'), raison: z.string() }),
   z.object({

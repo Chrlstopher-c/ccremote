@@ -24,7 +24,7 @@ function rig(sortieSsh: Partial<ResultatSsh> = {}) {
     dossierSecrets: mkdtempSync(join(tmpdir(), 'sec-test-')),
     relaisPostes: null,
     racineCode: '/nonexistent',
-    acces: { emettre: () => ({ id: 'x', jeton: 'j' }) },
+    acces: { emettre: () => ({ id: 'x', jeton: 'j' }), idsDeAppareil: () => [], revoquer: () => false },
     urlApi: null,
     journal,
     maintenant: () => '2026-11-19T00:00:00.000Z',

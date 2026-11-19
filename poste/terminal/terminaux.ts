@@ -20,29 +20,46 @@ interface Ouvert {
   minuteur: ReturnType<typeof setTimeout> | null;
 }
 
-/** Sans langue UTF-8 dans l'environnement du poste, zsh compte les glyphes Nerd Font en octets : le prompt se chevauche. */
-export function environnementDuTerminal(base: NodeJS.ProcessEnv): Record<string, string> {
+/** Le compte qui fait tourner le poste : son shell de connexion et son dossier personnel viennent de passwd. */
+function compteDuPoste(): { nom: string; accueil: string; shell: string } {
+  const compte = userInfo();
+  const shell = compte.shell && compte.shell.startsWith('/') ? compte.shell : '/bin/bash';
+  return { nom: compte.username, accueil: compte.homedir, shell };
+}
+
+/**
+ * Sans langue UTF-8 dans l'environnement du poste, zsh compte les glyphes Nerd Font en octets : le prompt se chevauche.
+ * HOME, USER, LOGNAME et SHELL viennent du compte (passwd), jamais du lanceur : sous systemd ou un service, ils
+ * manquent ou valent autre chose, et le shell perd la configuration de l'utilisateur (powerlevel10k). ZDOTDIR du
+ * lanceur est retiré : zsh lit alors la configuration dans le dossier personnel.
+ */
+export function environnementDuTerminal(
+  base: NodeJS.ProcessEnv,
+  compte: { nom: string; accueil: string; shell: string } = compteDuPoste(),
+): Record<string, string> {
   const env: Record<string, string> = { ...base, TERM: 'xterm-256color', COLORTERM: 'truecolor' };
   const effective = ['LC_ALL', 'LC_CTYPE', 'LANG'].map((nom) => base[nom]).find((v) => v && v !== '');
   if (!effective?.toLowerCase().includes('utf')) {
     env['LANG'] = 'C.UTF-8';
     for (const nom of ['LC_ALL', 'LC_CTYPE']) if (base[nom]) env[nom] = 'C.UTF-8';
   }
+  env['HOME'] = compte.accueil;
+  env['USER'] = compte.nom;
+  env['LOGNAME'] = compte.nom;
+  env['SHELL'] = compte.shell;
+  delete env['ZDOTDIR'];
   delete env['TMUX'];
   return env;
 }
 
 export function commandeDe(cible: CibleTerminal): string[] {
   if (cible.type === 'tmux') return ['tmux', '-L', 'claude', '-u', 'attach', '-t', `=${cible.tmux}`];
-  return [shellDeLUtilisateur(), '-l'];
+  return [shellDeLUtilisateur(), '-il'];
 }
 
-/** `$SHELL`, sinon le shell du compte. Sans `$SHELL` ni `$USER` (service systemd), Bun rend « unknown » : refusé. */
+/** Le shell de connexion du compte (passwd), jamais `$SHELL` : hérité du lanceur, il n'est pas celui de l'utilisateur. */
 export function shellDeLUtilisateur(): string {
-  const env = process.env['SHELL'];
-  if (env && env.startsWith('/')) return env;
-  const compte = userInfo().shell;
-  return compte && compte.startsWith('/') ? compte : '/bin/bash';
+  return compteDuPoste().shell;
 }
 
 export class Terminaux {

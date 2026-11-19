@@ -21,6 +21,9 @@ export interface PublicationAvis {
   maj(champs: Partial<ResumeSession>): void;
 }
 
+// Options de la permission, dans l'ordre affiché : Autoriser, Toujours autoriser, Refuser (voir decisionPermission).
+const DECISIONS_PERMISSION = ['autoriser', 'toujours', 'refuser'] as const;
+
 function autoriserSansQuestion(entree: Record<string, unknown>): PermissionResult {
   return { behavior: 'allow', updatedInput: entree };
 }
@@ -73,6 +76,11 @@ export class AvisSdk {
     const valeur = valeurReponse(courante, r);
     if ('erreur' in valeur) return valeur.erreur;
     a.reponses[courante.texte] = valeur.valeur;
+    this.publication.emettre({
+      type: 'dialogue_resolu',
+      dialogue: dialogueDeQuestion(a.id, courante),
+      reponses: [...valeur.valeurs],
+    });
     a.restantes.shift();
     if (a.restantes.length > 0) {
       this.publier(a);
@@ -85,6 +93,11 @@ export class AvisSdk {
   private repondrePlan(a: AvisEnAttente, r: ReponseDialogue): string | null {
     const decision = decisionPlan(a.entree, r);
     if (!decision) return 'réponse hors du plan proposé';
+    this.publication.emettre({
+      type: 'dialogue_resolu',
+      dialogue: dialogueDeQuestion(a.id, QUESTION_PLAN),
+      decision: r.index === 0 ? 'autoriser' : 'refuser',
+    });
     this.terminer(a, decision);
     return null;
   }
@@ -92,6 +105,11 @@ export class AvisSdk {
   private repondrePermission(a: AvisEnAttente, r: ReponseDialogue): string | null {
     const decision = decisionPermission(a.entree, a.suggestions, r);
     if (!decision) return 'réponse hors des options proposées';
+    this.publication.emettre({
+      type: 'dialogue_resolu',
+      dialogue: dialoguePermission(a.id, a.outil, a.entree, a.suggestions),
+      decision: DECISIONS_PERMISSION[r.index ?? 2] ?? 'refuser',
+    });
     this.terminer(a, decision);
     return null;
   }

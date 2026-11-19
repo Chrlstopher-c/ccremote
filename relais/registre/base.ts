@@ -31,6 +31,7 @@ export const MIGRATIONS: readonly string[] = [
      auteur TEXT NOT NULL, texte TEXT NOT NULL, ts TEXT NOT NULL, destinataires TEXT NOT NULL DEFAULT '[]');
    CREATE INDEX reunion_messages_reunion ON reunion_messages(reunion_id, seq);`,
   `ALTER TABLE sessions ADD COLUMN epinglee INTEGER NOT NULL DEFAULT 0;`,
+  `ALTER TABLE sessions ADD COLUMN non_lue INTEGER NOT NULL DEFAULT 0;`,
   `CREATE TABLE environnements (
      machine TEXT NOT NULL, dossier TEXT NOT NULL, enregistre_le TEXT NOT NULL, PRIMARY KEY (machine, dossier));`,
   `CREATE TABLE machines_ssh (
