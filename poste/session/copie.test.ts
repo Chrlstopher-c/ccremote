@@ -3,19 +3,22 @@ import type { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import { CONSIGNE_ANNEXE, TITRE_ANNEXE } from './annexe.ts';
 import { annexer, dupliquer, type DependancesCopie } from './copie.ts';
 import { journal, nouvelleSession } from './faux-sdk.ts';
-import type { TranscriptImportable } from './importation.ts';
+import type { TranscriptDecouvert } from './decouverte.ts';
 import { ControlesDifferes, estAuRepos } from './controle-differe.ts';
 
-const COPIE: TranscriptImportable = {
+const COPIE: TranscriptDecouvert = {
   id: 'copie-1',
   cwd: '/projets/app',
   chemin: '/tmp/fictif.jsonl',
   configDir: null,
   titre: 'Copie',
   modifieLe: '2026-11-19T10:00:00.000Z',
+  machine: 'tour',
+  branche: null,
+  messages: 1,
 };
 
-type Importe = { t: TranscriptImportable; surcharge: Record<string, unknown>; consignes: string | null };
+type Importe = { t: TranscriptDecouvert; surcharge: Record<string, unknown>; consignes: string | null };
 
 function deps(options: { fork?: 'ok' | 'echec'; trouve?: boolean; parente?: 'annexe' } = {}) {
   const parente = nouvelleSession(

@@ -33,7 +33,9 @@ import { type ProcessusClaude, processusClaude } from './processus.ts';
 import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, type EntreeCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
-import { ficheImportee, type TranscriptImportable, transcriptsImportables } from './importation.ts';
+import { ficheImportee } from './importation.ts';
+import { IndexDecouvertes, type TranscriptDecouvert } from './decouverte.ts';
+import type { Decouverte } from '../../commun/decouverte.ts';
 import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
 import { lireFichierSession } from '../presentation/lecture.ts';
 import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
@@ -74,6 +76,7 @@ export class GestionnaireSessions {
   private readonly modifications: ModificationsSessions;
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
   private readonly controles = new ControlesDifferes();
+  private readonly decouvertes: IndexDecouvertes;
 
   constructor(
     readonly config: ConfigPoste,
@@ -84,6 +87,13 @@ export class GestionnaireSessions {
     this.persistance = new PersistanceSessions(config.donnees);
     this.supprimees = new SessionsSupprimees(config.donnees);
     this.stockage = new Stockage(config.donnees);
+    this.decouvertes = new IndexDecouvertes({
+      machine: config.machine,
+      configDirs: () => this.configDirs(),
+      fichierCache: join(config.donnees, 'decouvertes.json'),
+      journal,
+      surChangement: () => this.sortie.decouvertes?.(this.listeDecouvertes()),
+    });
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
       machine: config.machine,
@@ -95,6 +105,7 @@ export class GestionnaireSessions {
   demarrer(): void {
     const persistees = this.persistance.charger().map((p) => this.titreRafraichi(p));
     for (const p of persistees) this.sessions.set(p.resume.id, this.creer(p));
+    setTimeout(() => this.decouvertes.demarrer(), 0); // premier index lourd : après le démarrage du poste
     void relancerApresRedemarrage(this.reprisesPrevues(persistees), this.journal);
     void this.decouvrir();
     setInterval(() => void this.decouvrir(), PERIODE_DECOUVERTE_MS);
@@ -261,25 +272,29 @@ export class GestionnaireSessions {
 
   // Sessions Claude Code du poste que Quart ne connaît pas encore (ni supprimées par Chris).
   importables(): Reponse {
-    return { ok: true, donnees: this.trouverImportables() };
+    return { ok: true, donnees: this.listeDecouvertes() };
   }
 
-  // Import des identifiants choisis : sessions fermées, reprenables ; l'historique vient du transcript.
+  // Sessions du poste (transcripts) pas encore ouvertes dans Lanterne, sans les identifiants supprimés par Chris.
+  listeDecouvertes(): Decouverte[] {
+    return this.decouvertes.liste((id) => this.fichePour(id) !== undefined || this.supprimees.has(id)).map(sansChemin);
+  }
+
+  // Ouverture des sessions découvertes choisies : fiches fermées, reprenables par le SDK ; l'historique vient du transcript.
   importer(ids: readonly string[]): Reponse {
     const trouves = this.trouverImportables();
     const aImporter = trouves.filter((t) => ids.includes(t.id));
     const absentes = ids.filter((id) => !aImporter.some((t) => t.id === id));
     for (const t of aImporter) this.importerUne(t);
     this.sauvegarder();
+    this.sortie.decouvertes?.(this.listeDecouvertes());
     return { ok: true, donnees: { importees: aImporter.length, absentes } };
   }
 
   // Une session qui tourne en ce moment (processus Claude Code) n'est pas à importer : elle s'écrit encore.
-  trouverImportables(): TranscriptImportable[] {
-    const configs = this.configDirs();
-    const vivantes = new Set(processusClaude(configs, this.journal).map((p) => p.sessionId));
-    const ecartee = (id: string): boolean => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id);
-    return transcriptsImportables(configs, ecartee, this.journal);
+  trouverImportables(): TranscriptDecouvert[] {
+    const vivantes = new Set(processusClaude(this.configDirs(), this.journal).map((p) => p.sessionId));
+    return this.decouvertes.liste((id) => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id));
   }
 
   // La fiche d'un identifiant : sa clé, son identifiant courant ou un identifiant SDK passé (rembobinage). Jamais une nouvelle fiche.
@@ -287,7 +302,7 @@ export class GestionnaireSessions {
     return fichePourIdentifiant(this.sessions.values(), id);
   }
 
-  importerUne(t: TranscriptImportable, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
+  importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
     const session = this.creer({
       resume: { ...ficheImportee(this.origine(), t), ...surcharge },
       consignes,
@@ -508,4 +523,10 @@ export class GestionnaireSessions {
       majLe: maintenant,
     };
   }
+}
+
+// Le chemin du transcript et son dossier de configuration restent sur le poste : le relais ne voit que la session.
+function sansChemin(t: TranscriptDecouvert): Decouverte {
+  const { chemin: _chemin, configDir: _configDir, ...decouverte } = t;
+  return decouverte;
 }

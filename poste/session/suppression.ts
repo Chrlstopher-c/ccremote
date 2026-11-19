@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import type { Logger } from 'pino';
-import { dossiersProjets } from './importation.ts';
+import { dossiersProjets } from './decouverte.ts';
 
 const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
 

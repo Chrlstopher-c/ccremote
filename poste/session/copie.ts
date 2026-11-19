@@ -6,7 +6,7 @@ import type { Logger } from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
 import { CONSIGNE_ANNEXE, TITRE_ANNEXE } from './annexe.ts';
 import type { Reponse } from './gestionnaire.ts';
-import type { TranscriptImportable } from './importation.ts';
+import type { TranscriptDecouvert } from './decouverte.ts';
 import type { SessionPoste } from './session-poste.ts';
 
 type Copie = { readonly ok: true; readonly id: string } | { readonly ok: false; readonly erreur: string };
@@ -15,8 +15,8 @@ type Copie = { readonly ok: true; readonly id: string } | { readonly ok: false; 
 export interface DependancesCopie {
   readonly sessions: ReadonlyMap<string, SessionPoste>;
   readonly journal: Logger;
-  trouverImportables(): TranscriptImportable[];
-  importerUne(t: TranscriptImportable, surcharge: Partial<ResumeSession>, consignes: string | null): void;
+  trouverImportables(): TranscriptDecouvert[];
+  importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession>, consignes: string | null): void;
   sauvegarder(): void;
   readonly fork?: typeof forkSession; // injectable : les tests ne touchent pas au SDK
 }

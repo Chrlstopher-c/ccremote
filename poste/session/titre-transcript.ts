@@ -63,19 +63,22 @@ export function titreDuMessage(brut: unknown): string | null {
   return ligne.length > LONGUEUR_MAX ? `${ligne.slice(0, LONGUEUR_MAX)}…` : ligne;
 }
 
-/** Titre d'une conversation à partir de son transcript ; null si aucun n'est lisible (le repli reste à l'appelant). */
-export function titreDuTranscript(chemin: string, cwd: string, journal: Logger): string | null {
-  if (!existsSync(chemin)) return null;
-  let contenu: string;
-  try {
-    contenu = readFileSync(chemin, 'utf8');
-  } catch (erreur) {
-    journal.warn({ chemin, err: erreur }, 'titre : transcript illisible');
-    return null;
-  }
+/** Titre d'une conversation à partir du contenu de son transcript ; null si aucun n'est lisible. */
+export function titreDeContenu(contenu: string, cwd: string): string | null {
   const indices: Indices = { renomme: null, genere: null, premier: null };
   for (const ligne of contenu.split('\n')) if (ligne) analyser(ligne, indices);
   const renomme = indices.renomme;
   const vraiRenomme = renomme !== null && !estNomParDefaut(renomme, cwd) ? renomme : null;
   return vraiRenomme ?? indices.genere ?? indices.premier;
+}
+
+/** Titre d'une conversation à partir de son transcript ; null si aucun n'est lisible (le repli reste à l'appelant). */
+export function titreDuTranscript(chemin: string, cwd: string, journal: Logger): string | null {
+  if (!existsSync(chemin)) return null;
+  try {
+    return titreDeContenu(readFileSync(chemin, 'utf8'), cwd);
+  } catch (erreur) {
+    journal.warn({ chemin, err: erreur }, 'titre : transcript illisible');
+    return null;
+  }
 }

@@ -40,6 +40,7 @@ const sessions = new GestionnaireSessions(
         ? envoyer({ kind: 'flux', sessionId, bloc: evt.bloc, delta: evt.delta, genre: evt.genre, agent: evt.agent })
         : envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
     resume: (session) => envoyer({ kind: 'session', session }),
+    decouvertes: (decouvertes) => envoyer({ kind: 'decouvertes', decouvertes }),
   },
   socket,
   journal,
@@ -69,6 +70,7 @@ function bonjour(): MessagePoste {
     comptes: Object.keys(config.comptes),
     etatComptes: comptes.lister(),
     sessions: sessions.lister(),
+    decouvertes: sessions.listeDecouvertes(),
     empreinte: process.env['CCREMOTE_EMPREINTE_CODE'] || undefined, // code installé par le relais (mise à jour)
   };
 }

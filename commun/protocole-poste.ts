@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { commandesConfiguration } from './configuration.ts';
+import { Decouverte } from './decouverte.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
@@ -37,8 +38,10 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     comptes: z.array(z.string()),
     etatComptes: z.array(EtatCompte).optional(),
     sessions: z.array(ResumeSession),
+    decouvertes: z.array(Decouverte).optional(), // transcripts du poste non encore ouverts dans Lanterne
     empreinte: z.string().optional(), // empreinte du code installé (install par SSH) ; absente pour un poste d'avant
   }),
+  z.object({ kind: z.literal('decouvertes'), decouvertes: z.array(Decouverte) }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
   z.object({ kind: z.literal('session'), session: ResumeSession }),

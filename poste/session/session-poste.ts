@@ -1,5 +1,6 @@
 // Responsabilité : le contrat qu'une session du poste offre au gestionnaire et au socket local, quel que soit son
 // moteur — `tmux` (TUI dans un serveur tmux) ou `sdk` (Claude Agent SDK). Le gestionnaire ne parle qu'à cette forme.
+import type { Decouverte } from '../../commun/decouverte.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
 import type { DecisionCrochet } from './garde-sous-agents.ts';
@@ -17,6 +18,7 @@ export type Reglage =
 export interface SortieSession {
   evenement(sessionId: string, evt: Evenement): void;
   resume(r: ResumeSession): void;
+  decouvertes?(liste: Decouverte[]): void; // sessions du poste pas encore ouvertes : liste complète à chaque changement
 }
 
 // Réponse d'un crochet du CLI (sessions pilotées dans tmux seulement).

@@ -13,6 +13,17 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 19/11 — Sessions découvertes sur les postes (agent Haiku, branche `lanterne/historique`)
+- Chaque poste liste les transcripts `<config>/projects/*/*.jsonl` (index incrémental mtime+taille, cache dans les données
+  du poste, surveillance des dossiers) ; le relais les expose dans `/api/etat` (`decouvertes`, hors fiches connues) ;
+  ouvrir une session découverte = fiche fermée moteur SDK + historique lu du transcript (`importer` avant `historique`).
+- Exclus : sous-agents (`agent-*`, `isSidechain`), vides, sans message de Chris (sessions automatiques), sans dossier.
+  Doublons d'identifiant (copies `ssh-<id>/`) : une seule entrée.
+- Mesure tour (lecture seule, 1234 transcripts) : 1182 découvertes, 25 + 22 exclus, 5 doublons ; premier index 6,0 s,
+  régime 8-9 ms par relecture+liste. Essai réel : `claude -p` dans lanterne-essai-reel = une seule nouvelle entrée.
+- Retiré : le bouton « Importer N sessions CLI » de la carte Créer (il importerait tout d'un coup) ; `importables`
+  reste côté relais/poste.
+
 ## 19/11 — Vague W2 Lanterne (agent Haiku, worktree `quart-w2`, branche `lanterne/w2`)
 - Session : `style_sortie`, `bac_a_sable` (`non`/`oui`/`strict` → `sandbox`), `controle_distant` à l'ouverture ; `POST
   /api/sessions/:id/style`, `GET …/styles`, `POST …/connecteurs/:nom` (`toggleMcpServer`), `POST|GET …/annexes`.

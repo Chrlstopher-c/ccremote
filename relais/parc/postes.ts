@@ -4,6 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Logger } from 'pino';
 import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/protocole-poste.ts';
+import type { Decouverte } from '../../commun/decouverte.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
@@ -25,6 +26,8 @@ const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
+  // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
+  private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -60,6 +63,14 @@ export class Postes {
     return this.connectes.has(machine);
   }
 
+  /** Sessions découvertes sur les postes connectés, sans celles que le relais connaît déjà (fiche, identifiant SDK). */
+  decouvertes(connues: ReadonlySet<string>): Decouverte[] {
+    return [...this.decouvertesDuPoste.entries()]
+      .filter(([machine]) => this.enLigne(machine))
+      .flatMap(([, liste]) => liste)
+      .filter((d) => !connues.has(d.id));
+  }
+
   vues(): VueMachine[] {
     const postes = this.registre.machines().map((m) => ({
       ...m,
@@ -83,6 +94,7 @@ export class Postes {
   ferme(ws: ServerWebSocket<DonneesPoste>): void {
     if (this.connectes.get(ws.data.machine) !== ws) return;
     this.connectes.delete(ws.data.machine);
+    this.decouvertesDuPoste.delete(ws.data.machine);
     this.journal.warn({ machine: ws.data.machine }, 'poste déconnecté');
     this.terminaux?.posteDeconnecte(ws.data.machine);
     this.diffuserMachine(ws.data.machine);
@@ -133,6 +145,7 @@ export class Postes {
     if (m.kind === 'terminal_sortie' || m.kind === 'terminal_fin') return this.terminaux?.duPoste(machine, m);
     if (m.kind === 'flux') return this.flux(machine, m);
     if (m.kind === 'bonjour') return this.bonjour(machine, m);
+    if (m.kind === 'decouvertes') return void this.decouvertesDuPoste.set(machine, m.decouvertes);
     if (m.kind === 'etat_machine') {
       this.registre.majEtatMachine(machine, m.etat);
       return this.diffuserMachine(machine);
@@ -164,6 +177,7 @@ export class Postes {
       derniereVue: new Date().toISOString(),
     });
     if (m.etatComptes) this.registre.majComptes(machine, m.etatComptes);
+    this.decouvertesDuPoste.set(machine, m.decouvertes ?? []);
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
       this.registre.enregistrerSession(s);

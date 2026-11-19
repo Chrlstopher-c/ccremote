@@ -204,9 +204,20 @@ function etat(d: DependancesApi, req: Request) {
     version: d.diffusion.version,
     machines: d.postes.vues(),
     sessions: d.registre.sessions(avecArchivees(req)),
+    decouvertes: decouvertes(d),
     notifications,
     reveilPossible: [...d.wol.keys()],
   };
+}
+
+// Sessions des postes que le relais ne connaît pas encore (transcripts seuls) ; une fiche, même archivée, les retire.
+function decouvertes(d: DependancesApi) {
+  const connues = new Set<string>();
+  for (const s of d.registre.sessions(true)) {
+    connues.add(s.id);
+    if (s.claudeSessionId) connues.add(s.claudeSessionId);
+  }
+  return d.postes.decouvertes(connues);
 }
 
 // Pour l'iPhone : une seule requête longue qui rend la main dès qu'il y a du nouveau (au-delà de `version`).
@@ -220,6 +231,7 @@ async function attente(d: DependancesApi, req: Request): Promise<Response> {
     version: d.diffusion.version,
     notifications: d.registre.notifications(apres),
     sessions: d.registre.sessions(avecArchivees(req)),
+    decouvertes: decouvertes(d),
     machines: d.postes.vues(),
   });
 }
