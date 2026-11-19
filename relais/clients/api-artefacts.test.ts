@@ -53,6 +53,7 @@ function postesSimules(parMachine: Record<string, ReponsePoste>): { postes: Post
       recues.push({ machine, commande });
       return Promise.resolve(parMachine[machine] ?? { ok: false, erreur: `${machine} est hors ligne` });
     },
+    decouvertes: () => [],
   } as unknown as Postes;
   return { postes, recues };
 }

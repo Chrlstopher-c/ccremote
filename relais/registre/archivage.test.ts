@@ -95,13 +95,14 @@ describe('archivage persisté', () => {
   });
 });
 
-function fauxPostes(reponse: ReponsePoste): { postes: Pick<Postes, 'commander'>; appels: string[] } {
+function fauxPostes(reponse: ReponsePoste): { postes: Pick<Postes, 'commander' | 'decouvertes'>; appels: string[] } {
   const appels: string[] = [];
   const postes = {
     commander: (machine: string, c: { kind: string }) => {
       appels.push(`${machine}:${c.kind}`);
       return Promise.resolve(reponse);
     },
+    decouvertes: () => [],
   };
   return { postes, appels };
 }

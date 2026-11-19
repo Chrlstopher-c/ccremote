@@ -2,14 +2,21 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { BacASable, EffortSession, ModeSession, Projet, ReponseDialogue } from '../../commun/session.ts';
+import {
+  BacASable,
+  EffortSession,
+  ModeSession,
+  Projet,
+  ReponseDialogue,
+  type ResumeSession,
+} from '../../commun/session.ts';
 import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../commun/presentation.ts';
 import { reponseFichier } from './fichiers-session.ts';
-import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
+import { type SessionAdoptable, sessionAdoptee } from './session-adoptee.ts';
 
 const CorpsOuverture = z.object({
   machine: z.string(),
@@ -54,7 +61,7 @@ type Lecture = { kind: 'contexte' } | { kind: 'connecteurs' } | { kind: 'taches'
 export class ApiSessions {
   constructor(
     private readonly registre: Registre,
-    private readonly postes: Pick<Postes, 'commander'>,
+    private readonly postes: SessionAdoptable,
     private readonly diffusion: Diffusion,
     private readonly isolees: ReadonlySet<string>,
     private readonly journal: Logger,
@@ -89,7 +96,8 @@ export class ApiSessions {
   async evenements(req: RequeteSession): Promise<Response> {
     const url = new URL(req.url);
     const id = req.params.id;
-    if (!this.registre.session(id)) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(id);
+    if (session instanceof Response) return session;
     if (!url.searchParams.has('apres')) return json(this.registre.derniersEvenements(id, 300));
     const apres = entier(url.searchParams.get('apres'), 0);
     const attendre = Math.min(entier(url.searchParams.get('attendre'), 0), 30);
@@ -113,16 +121,16 @@ export class ApiSessions {
   async rembobiner(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsMessageId);
     if (c instanceof Response) return c;
-    const session = this.registre.session(req.params.id);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
     const rang = this.registre.rangMessage(session.id, c.messageId);
-    if (rang === null) return erreur('message introuvable dans le fil', 404);
+    if (rang === null && !this.filVide(session.id)) return erreur('message introuvable dans le fil', 404);
     const r = await this.postes.commander(session.machine, { kind: 'rembobiner', sessionId: session.id, messageId: c.messageId });
     if (!r.ok) {
       this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'rembobinage refusé');
       return erreur(r.erreur ?? 'rembobinage refusé', REFUS_POSTE);
     }
-    this.registre.tronquerDepuis(session.id, rang);
+    if (rang !== null) this.registre.tronquerDepuis(session.id, rang);
     const vue = this.registre.session(session.id);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json(r.donnees ?? {});
@@ -133,9 +141,11 @@ export class ApiSessions {
   async dupliquer(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsMessageId);
     if (c instanceof Response) return c;
-    const session = this.registre.session(req.params.id);
-    if (!session) return erreur('session inconnue', 404);
-    if (this.registre.rangEntree(session.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
+    if (this.registre.rangEntree(session.id, c.messageId) === null && !this.filVide(session.id)) {
+      return erreur('message introuvable dans le fil', 404);
+    }
     const r = await this.postes.commander(session.machine, { kind: 'dupliquer', sessionId: session.id, messageId: c.messageId });
     if (!r.ok) {
       this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'duplication refusée');
@@ -148,7 +158,8 @@ export class ApiSessions {
   async chapitre(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsChapitre);
     if (c instanceof Response) return c;
-    if (!this.registre.session(req.params.id)) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
     if (this.registre.rangEntree(req.params.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
     const e = this.registre.ajouterEvenement(req.params.id, new Date().toISOString(), {
       type: 'chapitre',
@@ -161,8 +172,8 @@ export class ApiSessions {
 
   // Fichier présenté par la session (artefact, image, fichier) : lu sur le poste, servi tel quel. Le relais ne le garde pas.
   async fichier(req: RequeteFichier): Promise<Response> {
-    const session = this.registre.session(req.params.id);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
     if (!estIdFichier(req.params.fichier)) return erreur('fichier inconnu', 404);
     const r = await this.postes.commander(session.machine, {
       kind: 'fichier_session',
@@ -231,8 +242,8 @@ export class ApiSessions {
 
   // Le poste garde le relevé du SDK au repos ; hors ligne, la fiche garde le dernier relevé qu'elle a reçu.
   async connecteurs(req: RequeteSession): Promise<Response> {
-    const session = this.registre.session(req.params.id);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
     const r = await this.postes.commander(session.machine, { kind: 'connecteurs', sessionId: session.id });
     if (r.ok) return json(r.donnees ?? []);
     this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'connecteurs lus sur la fiche');
@@ -261,8 +272,8 @@ export class ApiSessions {
   // Ranger est manuel : une session vivante est fermée d'abord (le fil reste lisible), et l'archivage n'est pas écrit
   // si la fermeture échoue. Le poste n'est jamais appelé pour désarchiver.
   private async archiver(sessionId: string, archivee: boolean): Promise<Response> {
-    const session = this.registre.session(sessionId);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(sessionId);
+    if (session instanceof Response) return session;
     if (archivee && session.statut !== 'fermee') {
       const r = await this.postes.commander(session.machine, { kind: 'fermer', sessionId });
       if (!r.ok) return erreur(r.erreur ?? 'fermeture refusée, archivage annulé', REFUS_POSTE);
@@ -274,8 +285,9 @@ export class ApiSessions {
   }
 
   // Épingler ne touche pas au poste : c'est un drapeau du relais, comme l'archivage sans fermeture.
-  private epingler(sessionId: string, epinglee: boolean): Response {
-    if (!this.registre.session(sessionId)) return erreur('session inconnue', 404);
+  private async epingler(sessionId: string, epinglee: boolean): Promise<Response> {
+    const session = await this.sessionDe(sessionId);
+    if (session instanceof Response) return session;
     this.registre.definirEpinglee(sessionId, epinglee);
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
@@ -283,8 +295,9 @@ export class ApiSessions {
   }
 
   // Non lue : un drapeau du relais, comme l'épinglage ; le poste n'est pas appelé.
-  private marquerNonLue(sessionId: string, nonLue: boolean): Response {
-    if (!this.registre.session(sessionId)) return erreur('session inconnue', 404);
+  private async marquerNonLue(sessionId: string, nonLue: boolean): Promise<Response> {
+    const session = await this.sessionDe(sessionId);
+    if (session instanceof Response) return session;
     this.registre.definirNonLue(sessionId, nonLue);
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
@@ -294,8 +307,8 @@ export class ApiSessions {
   // Suppression sur demande explicite de Chris (la confirmation est côté interface) : le poste retire le transcript,
   // la fiche ne part du relais qu'ensuite. Si le poste refuse ou est hors ligne, rien n'est effacé ici.
   async supprimer(req: RequeteSession): Promise<Response> {
-    const session = this.registre.session(req.params.id);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
     const r = await this.postes.commander(session.machine, { kind: 'supprimer', sessionId: session.id });
     if (!r.ok) {
       this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'suppression refusée par le poste');
@@ -376,9 +389,19 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: 'arreter_tache', tache });
   }
 
+  // Session adoptée sans fil au relais (son historique n'y remonte pas) : le poste vérifie le message.
+  private filVide(id: string): boolean {
+    return this.registre.derniersEvenements(id, 1).length === 0;
+  }
+
+  // Session de l'action : connue du relais, ou découverte puis adoptée par le poste (voir session-adoptee.ts).
+  private sessionDe(id: string): Promise<ResumeSession | Response> {
+    return sessionAdoptee(this.registre, this.postes, id);
+  }
+
   private async lire(sessionId: string, c: Lecture, absenteEst404 = false): Promise<Response> {
-    const session = this.registre.session(sessionId);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(sessionId);
+    if (session instanceof Response) return session;
     const r = await this.postes.commander(session.machine, { ...c, sessionId });
     if (!r.ok) {
       this.journal.warn({ sessionId, lecture: c.kind, erreur: r.erreur }, 'lecture refusée');
@@ -403,8 +426,8 @@ export class ApiSessions {
       | { kind: 'arreter_tache'; tache: string }
       | { kind: Action },
   ): Promise<Response> {
-    const session = this.registre.session(sessionId);
-    if (!session) return erreur('session inconnue', 404);
+    const session = await this.sessionDe(sessionId);
+    if (session instanceof Response) return session;
     const r = await this.postes.commander(session.machine, { ...c, sessionId });
     if (!r.ok) this.journal.warn({ sessionId, commande: c.kind, erreur: r.erreur }, 'commande refusée');
     return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', REFUS_POSTE);

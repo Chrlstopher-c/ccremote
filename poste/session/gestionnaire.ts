@@ -43,6 +43,7 @@ import { estCommandeModifications, ModificationsSessions } from '../modification
 import { estFichiersSession, executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
 import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
+import { modeleDuTranscript } from './modele-transcript.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -120,6 +121,31 @@ export class GestionnaireSessions {
     return this.sessions.get(id);
   }
 
+  // Session à agir : sa fiche si elle est tenue ici, sinon une session découverte ou fermée du poste, adoptée
+  // (fiche fermée, reprenable par le SDK). Un identifiant inconnu partout rend `undefined`.
+  async hydrater(id: string): Promise<SessionPoste | undefined> {
+    const connue = this.sessions.get(id);
+    if (connue) return connue;
+    const decouverte = this.trouverImportables().find((t) => t.id === id);
+    if (decouverte) {
+      this.importerUne(decouverte);
+      this.sortie.decouvertes?.(this.listeDecouvertes());
+      this.sauvegarder();
+      return this.sessions.get(id);
+    }
+    if (this.supprimees.has(id)) return undefined;
+    const entree = lireRegistreCc(dossierRegistreCc(), this.journal).find((e) => e.id === id);
+    if (!entree) return undefined;
+    this.ajouterFermee(entree);
+    this.sauvegarder();
+    return this.sessions.get(id);
+  }
+
+  private reponseAdoption(id: string): Reponse {
+    const s = this.sessions.get(id);
+    return s ? { ok: true, donnees: s.resume } : { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+  }
+
   // Un compte ne se retire pas sous une session vivante : pane tmux ou requête SDK ouverte.
   enUsage(compte: string): boolean {
     return [...this.sessions.values()].some((s) => s.resume.compte === compte && s.vivante);
@@ -169,6 +195,8 @@ export class GestionnaireSessions {
   }
 
   async executer(c: CommandeSession): Promise<Reponse> {
+    await this.hydrater(c.sessionId);
+    if (c.kind === 'adopter') return this.reponseAdoption(c.sessionId);
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
     if (c.kind === 'annexer') return annexer(this, c.sessionId);
@@ -303,8 +331,9 @@ export class GestionnaireSessions {
   }
 
   importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
+    const modele = modeleDuTranscript(t.chemin, this.journal);
     const session = this.creer({
-      resume: { ...ficheImportee(this.origine(), t), ...surcharge },
+      resume: { ...ficheImportee(this.origine(), t), ...(modele ? { modele } : {}), ...surcharge },
       consignes,
       configDir: t.configDir,
       transcript: t.chemin,
@@ -354,7 +383,8 @@ export class GestionnaireSessions {
         this.planifierSauvegarde();
       },
     };
-    if (p.resume.moteur === 'sdk') {
+    // Une session fermée se reprend par le SDK, qu'elle ait été ouverte par le TUI ou non.
+    if (p.resume.moteur === 'sdk' || p.resume.statut === 'fermee') {
       const presentation = { stockage: this.stockage, racines: this.config.racines, api: this.config.api };
       const tours = this.modifications.toursDe(p.resume.id, p.resume.cwd);
       const env = { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket };
@@ -443,10 +473,25 @@ export class GestionnaireSessions {
     ]);
     for (const e of entrees.slice(0, FERMEES_MAX)) {
       if (this.fichePour(e.id) || vivants.has(e.id) || this.supprimees.has(e.id)) continue;
-      const titre = titreDuTranscript(cheminTranscript(e.cwd, e.id, null), e.cwd, this.journal) ?? titreDe(e.nom, null, e.cwd);
-      const resume = ficheFermee(this.origine(), e, titre);
-      this.sessions.set(e.id, this.creer({ resume, consignes: null, configDir: null, transcript: null, position: 0, aReprendre: false }));
+      this.ajouterFermee(e);
     }
+  }
+
+  // Fiche fermée d'une entrée du registre Claude Code : titre et modèle relus dans son transcript.
+  private ajouterFermee(e: EntreeCc): void {
+    const chemin = cheminTranscript(e.cwd, e.id, null);
+    const titre = titreDuTranscript(chemin, e.cwd, this.journal) ?? titreDe(e.nom, null, e.cwd);
+    const modele = modeleDuTranscript(chemin, this.journal) ?? 'défaut';
+    const resume = { ...ficheFermee(this.origine(), e, titre), modele };
+    const session = this.creer({
+      resume,
+      consignes: null,
+      configDir: null,
+      transcript: null,
+      position: 0,
+      aReprendre: false,
+    });
+    this.sessions.set(e.id, session);
   }
 
   // Une session lancée hors ccremote (bureau, Atrium, terminal) : suivie en lecture ; dans tmux, pilotable par tmux.

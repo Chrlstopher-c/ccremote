@@ -11,7 +11,10 @@ import { ResumeSession } from '../../commun/session.ts';
 
 const MAJ = '2026-11-19T10:00:00.000Z';
 const journal = pino({ enabled: false });
-const postesMuets = { commander: () => Promise.reject(new Error('le poste ne doit pas être appelé')) } as unknown as Postes;
+const postesMuets = {
+  commander: () => Promise.reject(new Error('le poste ne doit pas être appelé')),
+  decouvertes: () => [],
+} as unknown as Postes;
 
 function session(id: string, majLe = MAJ): ResumeSession {
   return ResumeSession.parse({

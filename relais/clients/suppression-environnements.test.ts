@@ -41,6 +41,7 @@ function fauxPostes(reponse: ReponsePoste): { postes: Postes; appels: unknown[] 
       appels.push(c);
       return Promise.resolve(reponse);
     },
+    decouvertes: () => [],
   } as unknown as Postes;
   return { postes, appels };
 }

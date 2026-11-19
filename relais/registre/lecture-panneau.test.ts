@@ -42,6 +42,7 @@ function api(reponse: ReponsePoste, appels: string[]): ApiSessions {
       appels.push(`${machine}:${c.kind}`);
       return Promise.resolve(reponse);
     },
+    decouvertes: () => [],
   };
   return new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
 }
@@ -78,7 +79,10 @@ describe('lectures du panneau de session', () => {
   test('poste refusé : la fiche garde le dernier relevé reçu du poste', async () => {
     const r = new Registre(ouvrirBase(':memory:'));
     r.enregistrerSession({ ...session('vivante'), connecteurs: [{ nom: 'agenda', statut: 'connected' }] });
-    const postes = { commander: () => Promise.resolve({ ok: false as const, erreur: 'hors ligne' }) };
+    const postes = {
+      commander: () => Promise.resolve({ ok: false as const, erreur: 'hors ligne' }),
+      decouvertes: () => [],
+    };
     const api = new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
     expect(await (await api.connecteurs(requete('vivante'))).json()).toEqual([{ nom: 'agenda', statut: 'connected' }]);
   });

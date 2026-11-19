@@ -46,6 +46,7 @@ function postesSimules(reponse: ReponsePoste | ((c: Record<string, unknown>) => 
       return Promise.resolve(typeof reponse === 'function' ? reponse(commande) : reponse);
     },
     vues: () => [],
+    decouvertes: () => [],
   } as unknown as Postes;
   return { postes, recues };
 }

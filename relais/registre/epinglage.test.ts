@@ -40,7 +40,10 @@ function requete(id: string, action: string): Request & { params: { id: string; 
   });
 }
 
-const postesMuets = { commander: () => Promise.reject(new Error('le poste ne doit pas être appelé')) } as unknown as Postes;
+const postesMuets = {
+  commander: () => Promise.reject(new Error('le poste ne doit pas être appelé')),
+  decouvertes: () => [],
+} as unknown as Postes;
 
 describe('épinglage persisté', () => {
   test('le drapeau epinglee est persisté, lu sur la vue, par défaut à false', () => {

@@ -42,6 +42,7 @@ function api(reponse: ReponsePoste): { api: ApiModifications; recues: unknown[] 
       recues.push({ machine, commande });
       return Promise.resolve(reponse);
     },
+    decouvertes: () => [],
   } as unknown as Postes;
   return { api: new ApiModifications(registre, postes, journal), recues };
 }

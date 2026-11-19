@@ -4,9 +4,10 @@
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from '../../commun/fichiers-session.ts';
-import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { Postes } from '../parc/postes.ts';
 import { erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
+import { type SessionAdoptable, sessionAdoptee } from './session-adoptee.ts';
 
 type Requete = Request & { params: Record<string, string> };
 
@@ -21,12 +22,12 @@ interface Cible {
 export class ApiFichiersSession {
   constructor(
     private readonly registre: Registre,
-    private readonly postes: Pick<Postes, 'commander'>,
+    private readonly postes: SessionAdoptable,
     private readonly journal: Logger,
   ) {}
 
   async arbre(req: Requete): Promise<Response> {
-    const cible = this.cible(req);
+    const cible = await this.cible(req);
     if (cible instanceof Response) return cible;
     const q = lireRequete(req, RequeteChemin);
     if (q instanceof Response) return q;
@@ -34,7 +35,7 @@ export class ApiFichiersSession {
   }
 
   async lire(req: Requete): Promise<Response> {
-    const cible = this.cible(req);
+    const cible = await this.cible(req);
     if (cible instanceof Response) return cible;
     const q = lireRequete(req, RequeteChemin);
     if (q instanceof Response) return q;
@@ -43,20 +44,20 @@ export class ApiFichiersSession {
 
   /** Menu « / » : compétences et commandes de la session, lues sur son poste. */
   async competences(req: Requete): Promise<Response> {
-    const cible = this.cible(req);
+    const cible = await this.cible(req);
     if (cible instanceof Response) return cible;
     return this.envoyer(cible, { kind: 'session_competences', sessionId: cible.sessionId });
   }
 
   /** Menu « @ » : fichiers du projet de la session, lus sur son poste. */
   async fichiers(req: Requete): Promise<Response> {
-    const cible = this.cible(req);
+    const cible = await this.cible(req);
     if (cible instanceof Response) return cible;
     return this.envoyer(cible, { kind: 'session_fichiers', sessionId: cible.sessionId });
   }
 
   async ecrire(req: Requete): Promise<Response> {
-    const cible = this.cible(req);
+    const cible = await this.cible(req);
     if (cible instanceof Response) return cible;
     const c = await lireCorps(req, CorpsEcriture);
     if (c instanceof Response) return c;
@@ -83,9 +84,9 @@ export class ApiFichiersSession {
     return json(r.donnees ?? { ok: true });
   }
 
-  private cible(req: Requete): Cible | Response {
-    const session = this.registre.session(req.params['id'] ?? '');
-    return session ? { machine: session.machine, sessionId: session.id } : erreur('session inconnue', 404);
+  private async cible(req: Requete): Promise<Cible | Response> {
+    const session = await sessionAdoptee(this.registre, this.postes, req.params['id'] ?? '');
+    return session instanceof Response ? session : { machine: session.machine, sessionId: session.id };
   }
 }
 

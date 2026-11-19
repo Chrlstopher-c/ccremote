@@ -85,6 +85,9 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('compacter'), ...avecSession }),
   z.object({ kind: z.literal('fermer'), ...avecSession }),
   z.object({ kind: z.literal('reprendre'), ...avecSession }),
+  // Adoption d'une session découverte ou fermée du poste : sa fiche (fermée, reprenable par le SDK) est créée,
+  // puis renvoyée.
+  z.object({ kind: z.literal('adopter'), ...avecSession }),
   z.object({ kind: z.literal('autonomie'), ...avecSession, active: z.boolean() }),
   z.object({ kind: z.literal('nuit'), ...avecSession, active: z.boolean(), objectif: z.string().max(300).optional() }),
   z.object({ kind: z.literal('remote_control'), ...avecSession, actif: z.boolean() }),
