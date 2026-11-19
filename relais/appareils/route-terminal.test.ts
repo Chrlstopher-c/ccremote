@@ -9,8 +9,8 @@ import type { Registre } from '../registre/registre.ts';
 
 const SESSION = {
   id: 's1',
-  machine: 'tour',
-  cwd: '/home/trinity/projets/demo',
+  machine: 'machine-a',
+  cwd: '/srv/projets/demo',
 };
 
 describe('terminal de session (relais)', () => {
@@ -63,8 +63,8 @@ describe('terminal de session (relais)', () => {
     expect(r).toBeUndefined();
     expect(recue).toMatchObject({
       type: 'terminal',
-      machine: 'tour',
-      cible: { type: 'shell', dossier: '/home/trinity/projets/demo' },
+      machine: 'machine-a',
+      cible: { type: 'shell', dossier: '/srv/projets/demo' },
       colonnes: 120,
       lignes: 40,
     });
