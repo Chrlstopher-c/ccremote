@@ -26,6 +26,7 @@ export interface SessionPoste {
   readonly resume: ResumeSession;
   readonly persistee: SessionPersistee;
   readonly transcriptConnu: boolean;
+  readonly identifiants: readonly string[]; // identifiants SDK anciens et courant (voir identifiants-fiche.ts)
   readonly vivante: boolean; // un processus Claude tourne pour cette session (tmux ou requête SDK ouverte)
 
   // Découverte : ce que la machine voit de la session.

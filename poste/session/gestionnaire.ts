@@ -30,6 +30,7 @@ import {
   titreDe,
 } from './adoption.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
+import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, type EntreeCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
 import { ficheImportee, type TranscriptImportable, transcriptsImportables } from './importation.ts';
@@ -263,8 +264,13 @@ export class GestionnaireSessions {
   trouverImportables(): TranscriptImportable[] {
     const configs = this.configDirs();
     const vivantes = new Set(processusClaude(configs, this.journal).map((p) => p.sessionId));
-    const ecartee = (id: string): boolean => this.sessions.has(id) || this.supprimees.has(id) || vivantes.has(id);
+    const ecartee = (id: string): boolean => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id);
     return transcriptsImportables(configs, ecartee, this.journal);
+  }
+
+  // La fiche d'un identifiant : sa clé, son identifiant courant ou un identifiant SDK passé (rembobinage). Jamais une nouvelle fiche.
+  private fichePour(id: string): SessionPoste | undefined {
+    return fichePourIdentifiant(this.sessions.values(), id);
   }
 
   importerUne(t: TranscriptImportable, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
@@ -388,9 +394,9 @@ export class GestionnaireSessions {
     const vivants = new Set(procs.map((p) => p.sessionId));
     for (const s of this.sessions.values()) if (s.resume.terminal) s.rattacherTerminal(vivants.has(s.resume.id));
     for (const p of procs) {
-      const connue = this.sessions.get(p.sessionId);
+      const connue = this.fichePour(p.sessionId);
       if (connue) connue.rattacherTerminal(true);
-      else this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
+      else if (!this.fichePour(p.sessionId)) this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
     }
   }
 
@@ -405,7 +411,7 @@ export class GestionnaireSessions {
       ...entrees.filter((e) => panes.some((p) => p.nom === e.tmux)).map((e) => e.id),
     ]);
     for (const e of entrees.slice(0, FERMEES_MAX)) {
-      if (this.sessions.has(e.id) || vivants.has(e.id) || this.supprimees.has(e.id)) continue;
+      if (this.fichePour(e.id) || vivants.has(e.id) || this.supprimees.has(e.id)) continue;
       const titre = titreDuTranscript(cheminTranscript(e.cwd, e.id, null), e.cwd, this.journal) ?? titreDe(e.nom, null, e.cwd);
       const resume = ficheFermee(this.origine(), e, titre);
       this.sessions.set(e.id, this.creer({ resume, consignes: null, configDir: null, transcript: null, position: 0, aReprendre: false }));
@@ -415,7 +421,7 @@ export class GestionnaireSessions {
   // Une session lancée hors ccremote (bureau, Atrium, terminal) : suivie en lecture ; dans tmux, pilotable par tmux.
   private adopter(a: Adoptee, pane: tmux.PaneTmux | null, dossier = pane?.dossier ?? ''): void {
     if (!adoptionAutorisee(a.id, this.supprimees)) return;
-    const connue = this.sessions.get(a.id);
+    const connue = this.fichePour(a.id);
     if (connue) return connue.rattacher(pane);
     const titre =
       (a.transcript ? titreDuTranscript(a.transcript.chemin, dossier, this.journal) : null) ??

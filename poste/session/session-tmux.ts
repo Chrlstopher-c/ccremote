@@ -74,6 +74,10 @@ export class SessionTmux implements SessionPoste {
     return this.lecteur !== null;
   }
 
+  get identifiants(): readonly string[] {
+    return []; // pas de rembobinage hors SDK : une seule conversation par fiche
+  }
+
   get vivante(): boolean {
     return this.etat.tmux !== null;
   }

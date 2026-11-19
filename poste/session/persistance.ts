@@ -13,6 +13,9 @@ export const SessionPersistee = z.object({
   // Vrai tant que la session tourne (ou a planté en tour) : à reprendre au démarrage du poste. Faux après une
   // fermeture par Chris ou une fin naturelle. Absent des fichiers d'avant : faux, donc rien ne se rouvre seul.
   aReprendre: z.boolean().default(false),
+  // Identifiants SDK passés par la fiche (avant un rembobinage du premier message, puis le courant) : leurs transcripts
+  // appartiennent à cette fiche et ne deviennent jamais des sessions adoptées. Absent des fichiers d'avant : vide.
+  identifiants: z.array(z.string()).optional(),
 });
 export type SessionPersistee = z.infer<typeof SessionPersistee>;
 

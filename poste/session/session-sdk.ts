@@ -115,6 +115,8 @@ export class SessionSdk implements SessionPoste {
   private pointReprise: string | null = null;
   // Conversation recommencée après le rembobinage du premier message : son identifiant SDK (sans reprise).
   private identifiantNeuf: string | null = null;
+  // Identifiants SDK de cette fiche (anciens et courant), persistés : leurs transcripts ne sont jamais adoptés à part.
+  private readonly identifiantsSdk: string[];
   // Chris a interrompu le tour en cours : le SDK coupe alors le flux par une erreur, qui n'est pas une panne.
   private interrompuParChris = false;
 
@@ -124,6 +126,7 @@ export class SessionSdk implements SessionPoste {
   ) {
     // Au démarrage du poste aucune requête ne vit : une session persistée est reprenable, pas active.
     this.aReprendre = p.aReprendre;
+    this.identifiantsSdk = [...(p.identifiants ?? [])];
     this.avis = new AvisSdk({ emettre: (evt) => this.emettre(evt), maj: (champs) => this.maj(champs) });
     const statut = p.aReprendre ? p.resume.statut : 'fermee';
     this.etat = { ...p.resume, statut, dialogue: null, tmux: null, attachee: false, moteur: 'sdk' };
@@ -160,7 +163,22 @@ export class SessionSdk implements SessionPoste {
   }
 
   get persistee(): SessionPersistee {
-    return { ...this.p, resume: this.etat, transcript: null, position: 0, aReprendre: this.aReprendre };
+    return {
+      ...this.p,
+      resume: this.etat,
+      transcript: null,
+      position: 0,
+      aReprendre: this.aReprendre,
+      identifiants: [...this.identifiantsSdk],
+    };
+  }
+
+  get identifiants(): readonly string[] {
+    return this.identifiantsSdk;
+  }
+
+  private memoriser(id: string | null): void {
+    if (id && !this.identifiantsSdk.includes(id)) this.identifiantsSdk.push(id);
   }
 
   get transcriptConnu(): boolean {
@@ -292,6 +310,8 @@ export class SessionSdk implements SessionPoste {
   // Premier message rembobiné : rien ne précède, la conversation repart de zéro (nouvel identifiant SDK, sans reprise).
   recommencer(): void {
     this.identifiantNeuf = randomUUID();
+    this.memoriser(this.etat.claudeSessionId);
+    this.memoriser(this.identifiantNeuf);
     this.pointReprise = null;
     this.maj({ claudeSessionId: null });
   }
@@ -554,6 +574,8 @@ export class SessionSdk implements SessionPoste {
     this.bilan.observer(evenements, sortie.compaction === true);
     this.presentation?.depuisMessage(msg);
     if (sortie.claudeSessionId && sortie.claudeSessionId !== this.etat.claudeSessionId) {
+      this.memoriser(this.etat.claudeSessionId);
+      this.memoriser(sortie.claudeSessionId);
       this.maj({ claudeSessionId: sortie.claudeSessionId });
     }
     if (sortie.compaction) this.maj({ statut: 'compaction' });
