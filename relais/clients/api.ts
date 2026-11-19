@@ -6,6 +6,7 @@ import type { Postes } from '../parc/postes.ts';
 import { reveiller } from '../parc/reveil.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ApiArtefacts } from './api-artefacts.ts';
+import type { ApiModifications } from './api-modifications.ts';
 import type { ApiSessions } from './api-sessions.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
@@ -26,6 +27,7 @@ export interface DependancesApi {
   readonly comptes: ApiComptes;
   readonly fichiers: ApiFichiers;
   readonly artefacts: ApiArtefacts;
+  readonly modifications: ApiModifications;
   readonly echo: LienEcho | null;
   readonly reunions: DependancesReunions;
   readonly wol: ReadonlyMap<string, string>;
@@ -119,6 +121,15 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/:nom/code': { POST: protege((req) => d.comptes.code(req as never)) },
     '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
     '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
+    '/api/sessions/:id/git/modifications': { GET: protege((req) => d.modifications.modifications(req as never)) },
+    '/api/sessions/:id/git/diff': { GET: protege((req) => d.modifications.diff(req as never)) },
+    '/api/sessions/:id/git/annuler': { POST: protege((req) => d.modifications.annuler(req as never)) },
+    '/api/sessions/:id/git/commiter': { POST: protege((req) => d.modifications.commiter(req as never)) },
+    '/api/sessions/:id/tours/:tour/modifications': {
+      GET: protege((req) => d.modifications.tourModifications(req as never)),
+    },
+    '/api/sessions/:id/tours/:tour/diff': { GET: protege((req) => d.modifications.tourDiff(req as never)) },
+    '/api/sessions/:id/tours/:tour/annuler': { POST: protege((req) => d.modifications.tourAnnuler(req as never)) },
     '/api/sessions/:id/artefacts/:artefact/renommer': { POST: protege((req) => d.artefacts.renommer(req as never)) },
     '/api/sessions/:id/artefacts/:artefact/dupliquer': { POST: protege((req) => d.artefacts.dupliquer(req as never)) },
     '/api/sessions/:id/artefacts/:artefact/supprimer': { POST: protege((req) => d.artefacts.supprimer(req as never)) },

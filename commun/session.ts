@@ -1,6 +1,7 @@
 // Responsabilité : le vocabulaire d'une session Claude Code persistante, partagé par le poste, le relais et les
 // clients.
 import { z } from 'zod';
+import { FichierModifie } from './modifications.ts';
 import { ModeFichier } from './presentation.ts';
 
 export const LanceurSession = z.enum(['kitty', 'quart', 'echo']); // qui a lancé la session (registre `cc`)
@@ -196,6 +197,10 @@ export const Evenement = z.discriminatedUnion('type', [
     origine: z.enum(['outil', 'utilisateur']),
     ...deAgent,
   }),
+  // Fichiers touchés par un tour (Edit/Write relevés par le poste), émis juste avant `tour_fini` ; `tour_annule`
+  // quand Chris a remis ces fichiers dans leur état d'avant le tour.
+  z.object({ type: z.literal('fichiers_tour'), tour: z.string(), fichiers: z.array(FichierModifie) }),
+  z.object({ type: z.literal('tour_annule'), tour: z.string() }),
   z.object({ type: z.literal('erreur'), message: z.string() }),
 ]);
 export type Evenement = z.infer<typeof Evenement>;

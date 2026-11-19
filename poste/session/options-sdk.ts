@@ -49,6 +49,7 @@ export interface ParametresSdk {
   readonly rythme: McpStdioServerConfig; // le même serveur d'outils de rythme que les sessions tmux
   readonly canUseTool: CanUseTool;
   readonly outils?: McpSdkServerConfigWithInstance; // serveur `lanterne` : présentation de fichiers, artefacts, widgets
+  readonly hooks?: Options['hooks']; // crochets des éditions (poste/modifications), sans effet sur les permissions
 }
 
 export function optionsSdk(p: ParametresSdk): Options {
@@ -66,6 +67,7 @@ export function optionsSdk(p: ParametresSdk): Options {
     canUseTool: p.canUseTool,
     mcpServers: { ccremote: p.rythme, ...(p.outils ? { lanterne: p.outils } : {}) },
     ...(p.modele ? { model: p.modele } : {}),
+    ...(p.hooks ? { hooks: p.hooks } : {}),
     ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),
   };
 }

@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
+import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
 import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 import {
   DemandeSession,
@@ -104,6 +105,15 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('artefact_dupliquer'), ...avecSession, artefact: z.string() }),
   z.object({ kind: z.literal('artefact_supprimer'), ...avecSession, artefact: z.string() }),
   z.object({ kind: z.literal('artefact_epingler'), ...avecSession, artefact: z.string(), epingle: z.boolean() }),
+  // Modifications d'une session : git du dossier (non commitées ou branche), annulation d'un fichier, commit ;
+  // puis les fichiers touchés par un tour (relevés par le poste), leur diff et leur annulation.
+  z.object({ kind: z.literal('git_modifications'), ...avecSession, portee: PorteeModifications }),
+  z.object({ kind: z.literal('git_diff'), ...avecSession, portee: PorteeModifications, chemin: CheminModifie }),
+  z.object({ kind: z.literal('git_annuler'), ...avecSession, chemin: CheminModifie }),
+  z.object({ kind: z.literal('git_commiter'), ...avecSession, message: z.string().min(1).max(2000) }),
+  z.object({ kind: z.literal('tour_modifications'), ...avecSession, tour: TourRef }),
+  z.object({ kind: z.literal('tour_diff'), ...avecSession, tour: TourRef, chemin: CheminModifie }),
+  z.object({ kind: z.literal('tour_annuler'), ...avecSession, tour: TourRef }),
   // Suppression d'une session sur demande explicite de Chris : transcript et sous-agents retirés du poste.
   z.object({ kind: z.literal('supprimer'), ...avecSession }),
   // Sessions Claude Code du poste non encore connues (liste), puis import des identifiants choisis.

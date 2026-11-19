@@ -19,6 +19,8 @@ import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '.
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { PiecesPreparees } from '../presentation/pieces.ts';
 import { PresentationSession } from '../presentation/session-presentation.ts';
+import { crochetEdition } from '../modifications/crochet-edition.ts';
+import type { ToursSession } from '../modifications/tours.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { BilanTour } from './bilan-tour.ts';
 import { contexteDe } from './contexte-sdk.ts';
@@ -60,6 +62,7 @@ export interface EnvironnementSdk {
   readonly executable: string | null;
   readonly socket: string; // socket local du poste : les outils de rythme y relaient leurs appels
   readonly requete?: FabriqueRequete; // injectable : les tests rejouent des messages sans appeler le modèle
+  readonly tours?: ToursSession; // tours de la session : fichiers relevés avant édition, fin de tour
   readonly presentation?: {
     readonly stockage: Stockage;
     readonly racines: readonly string[];
@@ -370,9 +373,17 @@ export class SessionSdk implements SessionPoste {
       outils: this.presentation?.serveur(),
       mode: this.etat.mode ?? 'bypassPermissions',
       effort: this.etat.effort ?? null,
+      hooks: this.crochets(),
       canUseTool: (nom, entree, opts) =>
         this.avis.autoriser(nom, entree, opts.suggestions ?? [], opts.signal, (this.etat.mode ?? 'bypassPermissions') === 'bypassPermissions'),
     });
+  }
+
+  // Relève le contenu d'un fichier avant que l'outil d'édition le modifie (sans jamais décider de l'outil).
+  private crochets(): Options['hooks'] {
+    const tours = this.env.tours;
+    if (!tours) return undefined;
+    return { PreToolUse: [crochetEdition(this.etat.cwd, (absolu) => tours.noterAvant(absolu), this.env.journal)] };
   }
 
   private demarrer(reprise: boolean, message?: string, uuid?: SDKUserMessage['uuid']): string | null {
@@ -447,7 +458,14 @@ export class SessionSdk implements SessionPoste {
     this.maj({ statut: 'erreur' });
   }
 
+  // Fichiers touchés par le tour, juste avant `tour_fini` (ou à la fin d'un tour interrompu, sans `tour_fini`).
+  private clorTour(): void {
+    const tour = this.env.tours?.finirTour();
+    if (tour) this.emettre({ type: 'fichiers_tour', tour: tour.tour, fichiers: tour.fichiers });
+  }
+
   private libererRequete(message: string): void {
+    this.clorTour();
     this.avis.refuserTous(message, true);
     this.requete = null;
     this.fil?.clore();
@@ -460,6 +478,7 @@ export class SessionSdk implements SessionPoste {
     // Après une interruption de Chris, le SDK rend son résultat en erreur : ce n'est pas une panne du tour.
     const evenements = sortie.evenements.filter((evt) => evt.type !== 'erreur' || !this.interrompuParChris);
     for (const evt of evenements) {
+      if (evt.type === 'tour_fini') this.clorTour();
       this.constater(evt);
       this.emettre(evt);
     }

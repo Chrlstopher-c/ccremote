@@ -32,6 +32,7 @@ import { ficheImportee, type TranscriptImportable, transcriptsImportables } from
 import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
 import { lireFichierSession } from '../presentation/lecture.ts';
 import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
+import { estCommandeModifications, ModificationsSessions } from '../modifications/commande-modifications.ts';
 import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 
@@ -77,6 +78,7 @@ export class GestionnaireSessions {
   private readonly persistance: PersistanceSessions;
   private readonly supprimees: SessionsSupprimees;
   private readonly stockage: Stockage;
+  private readonly modifications: ModificationsSessions;
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
@@ -88,6 +90,12 @@ export class GestionnaireSessions {
     this.persistance = new PersistanceSessions(config.donnees);
     this.supprimees = new SessionsSupprimees(config.donnees);
     this.stockage = new Stockage(config.donnees);
+    this.modifications = new ModificationsSessions({
+      donnees: config.donnees,
+      machine: config.machine,
+      journal,
+      sortie,
+    });
   }
 
   demarrer(): void {
@@ -160,6 +168,7 @@ export class GestionnaireSessions {
     if (c.kind === 'dupliquer') return this.dupliquer(c.sessionId, c.messageId);
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
+    if (estCommandeModifications(c)) return this.modifications.executer(c, this.sessions.get(c.sessionId));
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
@@ -220,6 +229,7 @@ export class GestionnaireSessions {
       return { ok: false, erreur: `suppression impossible : ${String(erreur)}` };
     }
     this.sessions.delete(id);
+    this.modifications.oublier(id);
     this.supprimerFichiers(id);
     this.sauvegarder();
     return { ok: true };
@@ -323,7 +333,9 @@ export class GestionnaireSessions {
     };
     if (p.resume.moteur === 'sdk') {
       const presentation = { stockage: this.stockage, racines: this.config.racines, api: this.config.api };
-      return new SessionSdk(p, { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket, presentation });
+      const tours = this.modifications.toursDe(p.resume.id, p.resume.cwd);
+      const env = { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket };
+      return new SessionSdk(p, { ...env, presentation, tours });
     }
     return new SessionTmux(p, { socket: this.socket, journal: this.journal, sortie });
   }
