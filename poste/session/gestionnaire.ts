@@ -121,7 +121,12 @@ export class GestionnaireSessions {
     const configDir = this.config.comptes[compte] ?? null;
     const session = this.creer({
       resume: this.resumeInitial(d, cwd, compte),
-      consignes: composerConsignes({ machine: this.config.machine, cwd, demande: d }),
+      consignes: composerConsignes({
+        machine: this.config.machine,
+        cwd,
+        demande: d,
+        presentation: (d.moteur ?? 'sdk') === 'sdk',
+      }),
       configDir,
       transcript: cheminTranscript(cwd, d.sessionId, configDir),
       position: 0,

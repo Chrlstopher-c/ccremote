@@ -65,6 +65,45 @@ describe('traduction SDK → événements', () => {
     ).toEqual([{ type: 'outil', id: 't2', nom: 'Edit', resume: '/a/b.ts', detail: JSON.stringify(entree, null, 1) }]);
   });
 
+  test('TodoWrite : liste de tâches du fil principal, sans carte d’outil ; statuts traduits', () => {
+    const sortie = traduireSdk(
+      assistant([
+        {
+          type: 'tool_use',
+          id: 'td1',
+          name: 'TodoWrite',
+          input: {
+            todos: [
+              { content: 'Lire le code', status: 'completed', activeForm: 'Lisant' },
+              { content: 'Écrire le test', status: 'in_progress', activeForm: 'Écrivant' },
+              { content: 'Pousser', status: 'pending', activeForm: 'Poussant' },
+              { content: '   ', status: 'pending' },
+            ],
+          },
+        },
+      ]),
+      nouvelEtatTraduction(),
+    );
+    expect(sortie.evenements).toEqual([
+      {
+        type: 'taches',
+        taches: [
+          { contenu: 'Lire le code', etat: 'fait' },
+          { contenu: 'Écrire le test', etat: 'en_cours' },
+          { contenu: 'Pousser', etat: 'attente' },
+        ],
+      },
+    ]);
+  });
+
+  test('TodoWrite d’un sous-agent : pas de liste (seul le fil principal la porte)', () => {
+    const sortie = traduireSdk(
+      assistant([{ type: 'tool_use', id: 'td2', name: 'TodoWrite', input: { todos: [] } }], { parent_tool_use_id: 'p1' }),
+      nouvelEtatTraduction(),
+    );
+    expect(sortie.evenements.some((e) => e.type === 'taches')).toBe(false);
+  });
+
   test('sous-agent Task : outil marqué et sous_agent (description, modèle, genre)', () => {
     const entree = { description: 'explorer', model: 'sonnet', subagent_type: 'Explore', prompt: 'cherche' };
     const evenements = traduireSdk(

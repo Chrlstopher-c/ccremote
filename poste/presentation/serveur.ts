@@ -11,10 +11,10 @@ import * as machines from './machines-outils.ts';
 export const NOM_SERVEUR = 'lanterne';
 
 const DESCRIPTION_ENVOYER =
-  'Présenter un fichier à Chris dans le fil : image, PDF, page HTML ou Markdown, texte ou code, pris sur le poste ' +
-  '(chemin absolu, ou relatif au dossier de la session). À utiliser quand Chris doit voir ou récupérer ce que tu as ' +
-  'produit (capture, rapport, graphique, export) plutôt que de le décrire. Mode « afficher » (défaut) pour l’aperçu, ' +
-  '« joindre » pour un fichier à télécharger. 5 Mo au plus.';
+  'Joindre, envoyer ou présenter un fichier à Chris dans le fil (« joins X à la discussion », « envoie-moi X », ' +
+  '« montre-moi X ») : image, PDF, page HTML ou Markdown, texte ou code, pris sur le poste (chemin absolu, ou relatif ' +
+  'au dossier de la session). Mode « joindre » : fichier à télécharger, carte dans le fil ; « afficher » (défaut) : ' +
+  'aperçu. Ne jamais répondre qu’on ne peut pas joindre un fichier sans essayer cet outil. 5 Mo au plus.';
 
 const DESCRIPTION_ARTEFACT =
   'Publier une page HTML autonome que Chris ouvre dans le lecteur d’artefacts (tableau de bord, mini-application, ' +
@@ -77,10 +77,13 @@ function outilsMachines(c: ContexteOutils) {
   ];
 }
 
+// `alwaysLoad` : les outils de présentation sont dans le prompt dès le premier tour, jamais différés derrière ToolSearch
+// (sinon l'agent répond sans les chercher). `searchHint` sert si la recherche d'outils reste active.
 export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithInstance {
   return createSdkMcpServer({
     name: NOM_SERVEUR,
     version: '1.0.0',
+    alwaysLoad: true,
     tools: [
       tool(
         'envoyer_fichier',
@@ -91,6 +94,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
           mode: ModeFichier.optional(),
         },
         async (args) => enResultat(envoyerFichier(c, args)),
+        { searchHint: 'joindre envoyer présenter fichier partager montre-moi télécharger pièce jointe' },
       ),
       tool(
         'publier_artefact',

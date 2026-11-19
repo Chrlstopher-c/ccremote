@@ -134,6 +134,11 @@ export const Evenement = z.discriminatedUnion('type', [
     detail: z.string(),
     ...deAgent,
   }),
+  // Liste de tâches (TodoWrite) : chaque mise à jour remplace la précédente dans le fil.
+  z.object({
+    type: z.literal('taches'),
+    taches: z.array(z.object({ contenu: z.string(), etat: z.enum(['attente', 'en_cours', 'fait']) })),
+  }),
   z.object({
     type: z.literal('resultat_outil'),
     outilId: z.string(),

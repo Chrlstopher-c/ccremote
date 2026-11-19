@@ -120,6 +120,7 @@ function traduireOutil(bloc: Objet, marque: Marque, etat: EtatTraduction): Evene
   const entree = objet(bloc['input']);
   if (nom.startsWith(PREFIXE_PRESENTATION)) etat.outilsPresentation.add(id);
   if (!nom || nom.startsWith(PREFIXE_OUTILS_HARNESS) || nom.startsWith(PREFIXE_PRESENTATION)) return [];
+  if (nom === 'TodoWrite' && marque.agent === undefined) return [{ type: 'taches', taches: tachesDe(entree['todos']) }];
   const outil: Evenement = {
     type: 'outil',
     id,
@@ -258,4 +259,16 @@ function texteDe(v: unknown): string {
 
 function nombreDe(v: unknown): number {
   return typeof v === 'number' ? v : 0;
+}
+
+// Liste de tâches de TodoWrite (statuts du SDK → états du fil). Entrée inconnue : liste vide, jamais d'exception.
+function tachesDe(brut: unknown): { contenu: string; etat: 'attente' | 'en_cours' | 'fait' }[] {
+  if (!Array.isArray(brut)) return [];
+  return brut.flatMap((t) => {
+    const tache = objet(t);
+    const contenu = texteDe(tache['content']).trim();
+    if (contenu === '') return [];
+    const etat = tache['status'] === 'completed' ? 'fait' : tache['status'] === 'in_progress' ? 'en_cours' : 'attente';
+    return [{ contenu, etat }];
+  });
 }

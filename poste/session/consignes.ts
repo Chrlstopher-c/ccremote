@@ -6,6 +6,7 @@ export interface ContexteConsignes {
   readonly machine: string;
   readonly cwd: string;
   readonly demande: DemandeSession;
+  readonly presentation?: boolean; // serveur `lanterne` présent (moteur SDK) : ses outils de présentation sont décrits
 }
 
 export function composerConsignes(c: ContexteConsignes): string {
@@ -13,6 +14,7 @@ export function composerConsignes(c: ContexteConsignes): string {
     enteteSession(c),
     blocProjet(c),
     blocParc(c),
+    c.presentation ? BLOC_PRESENTATION : '',
     REGLES_TRAVAIL,
     c.demande.objectif ? `## Objectif de la session\n${c.demande.objectif}` : '',
   ]
@@ -50,7 +52,18 @@ function blocParc(c: ContexteConsignes): string {
   ].join('\n');
 }
 
+const BLOC_PRESENTATION = `## Présenter des fichiers à Chris
+Chris lit le fil depuis son téléphone ou le web ; il ne voit pas le poste.
+Pour lui donner un fichier, utilise les outils du serveur \`lanterne\` (toujours disponibles, pas à chercher) :
+- \`envoyer_fichier\` : « joins X à la discussion », « envoie-moi X », « montre-moi X ». Mode \`joindre\`
+  (téléchargement) ou \`afficher\` (aperçu, défaut). Ne réponds jamais « je ne peux pas joindre de fichier » sans
+  avoir essayé cet outil.
+- \`publier_artefact\` : une page HTML autonome (tableau de bord, mini-application) que Chris ouvre dans le lecteur.
+- \`afficher_widget\` : un petit SVG ou fragment HTML en place dans une réponse.`;
+
 const REGLES_TRAVAIL = `## Règles de travail
+- Demande en plusieurs étapes : tiens une liste de tâches (TodoWrite si cet outil est disponible, sinon la barre
+  de progression) et mets-la à jour à chaque étape.
 - Autonomie : avance jusqu'à l'objectif sans t'arrêter pour demander. Tranche les choix techniques toi-même.
   N'utilise \`poser_question\` que pour une décision qui appartient réellement à Chris ; puis termine ton tour.
 - Étapes : à chaque palier livré et vérifié, appelle \`etape_terminee\` (résumé + suite). Le harness compacte

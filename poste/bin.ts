@@ -5,6 +5,7 @@ import type { CommandeRelais, MessagePoste } from '../commun/protocole-poste.ts'
 import { Comptes } from './comptes/comptes.ts';
 import { chargerConfig } from './config.ts';
 import { eteindreMachine } from './parc/alimentation.ts';
+import { type CommandeAppareil, estAppareil } from './fichiers/appareil.ts';
 import { executerFichiers } from './fichiers/explorateur.ts';
 import { SondeMachine } from './parc/etat-machine.ts';
 import { LienRelais } from './parc/lien-relais.ts';
@@ -66,10 +67,6 @@ function bonjour(): MessagePoste {
 }
 
 // Fichiers et terminaux : l'accès à l'appareil lui-même, hors de toute session Claude.
-type CommandeAppareil = Extract<CommandeRelais, { kind: `fichier${string}` | 'dossier_creer' | `terminal_${string}` }>;
-const estAppareil = (c: CommandeRelais): c is CommandeAppareil =>
-  c.kind.startsWith('fichier') || c.kind === 'dossier_creer' || c.kind.startsWith('terminal_');
-
 async function executerAppareil(c: CommandeAppareil): Promise<Reponse> {
   switch (c.kind) {
     case 'fichiers_lister':

@@ -43,4 +43,20 @@ describe('consignes de session', () => {
     });
     expect(t).toContain('Aucune autre machine');
   });
+
+  test('moteur SDK : les outils de présentation sont décrits (joindre, envoyer)', () => {
+    const t = composerConsignes({ machine: 'tour', cwd: '/x', demande: demande(), presentation: true });
+    expect(t).toContain('envoyer_fichier');
+    expect(t).toContain('joins X à la discussion');
+    expect(t).toContain('Ne réponds jamais « je ne peux pas joindre de fichier »');
+  });
+
+  test('moteur tmux : aucun outil de présentation décrit', () => {
+    const t = composerConsignes({ machine: 'tour', cwd: '/x', demande: demande(), presentation: false });
+    expect(t).not.toContain('envoyer_fichier');
+  });
+
+  test('toute session : liste de tâches encouragée pour les demandes en plusieurs étapes', () => {
+    expect(composerConsignes({ machine: 'tour', cwd: '/x', demande: demande() })).toContain('plusieurs étapes');
+  });
 });
