@@ -70,7 +70,11 @@ function traduireLigne(l: Ligne, agent?: string): Evenement[] {
 function traduireUtilisateur(l: Ligne): Evenement[] {
   if (l.isMeta === true || l.isCompactSummary === true) return [];
   const contenu = l.message?.content;
-  if (typeof contenu === 'string') return messageDeChris(contenu);
+  if (typeof contenu === 'string') {
+    return contenu.trimStart().startsWith('<task-notification>')
+      ? resultatDeNotification(contenu)
+      : messageDeChris(contenu);
+  }
   const r = resultats(l, {});
   if (r.length > 0) return r;
   return messageDeChris(
@@ -81,9 +85,14 @@ function traduireUtilisateur(l: Ligne): Evenement[] {
   );
 }
 
-// Fin d'un sous-agent lancé en arrière-plan : le CLI la met en file sous forme de <task-notification>.
+// Fin d'une tâche de fond (sous-agent, commande en arrière-plan) : le CLI la met en file sous forme de
+// <task-notification>, en pièce jointe ou en tour utilisateur. Elle complète l'outil lancé, jamais une bulle.
 function finDeTache(l: Ligne): Evenement[] {
   const prompt = l.attachment?.type === 'queued_command' ? texte(l.attachment.prompt) : '';
+  return resultatDeNotification(prompt);
+}
+
+function resultatDeNotification(prompt: string): Evenement[] {
   if (!prompt.includes('<task-notification>')) return [];
   const champ = (nom: string): string => prompt.match(new RegExp(`<${nom}>([\\s\\S]*?)</${nom}>`))?.[1]?.trim() ?? '';
   const outilId = champ('tool-use-id');

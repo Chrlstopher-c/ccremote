@@ -45,3 +45,44 @@ describe('branche active du transcript', () => {
     expect(brancheActive(lignes)).toHaveLength(2);
   });
 });
+
+describe('branche active : compaction dont le message précédent manque', () => {
+  test('la suite se rattache au message écrit juste avant la frontière', () => {
+    const lignes = [
+      l('user', 'u0', null),
+      l('assistant', 'a0', 'u0'),
+      l('system', 's1', null, { subtype: 'compact_boundary', logicalParentUuid: 'absent' }),
+      l('user', 'u2', 's1'),
+      l('assistant', 'a2', 'u2'),
+    ];
+    expect(brancheActive(lignes).map((x) => String(x.uuid))).toEqual(['u0', 'a0', 's1', 'u2', 'a2']);
+  });
+
+  test('une frontière dont le message précédent manque ne remonte pas au-delà de la compaction voisine', () => {
+    const lignes = [
+      l('user', 'u0', null),
+      l('system', 's0', null, { subtype: 'compact_boundary', logicalParentUuid: 'u0' }),
+      l('user', 'u1', 's0'),
+      l('system', 's1', null, { subtype: 'compact_boundary', logicalParentUuid: 'absent' }),
+      l('user', 'u2', 's1'),
+    ];
+    expect(brancheActive(lignes)).toHaveLength(5);
+  });
+});
+
+describe('branche active : réponse d’un appel de la branche écrite sur un embranchement', () => {
+  test('la réponse à un appel actif reste, la suite abandonnée non', () => {
+    const appel: Partial<Ligne> = { message: { content: [{ type: 'tool_use', id: 'T1' }] } };
+    const reponse: Partial<Ligne> = { message: { content: [{ type: 'tool_result', tool_use_id: 'T1' }] } };
+    const abandon: Partial<Ligne> = { message: { content: [{ type: 'tool_result', tool_use_id: 'T9' }] } };
+    const lignes = [
+      l('user', 'u0', null),
+      l('assistant', 'a1', 'u0', appel),
+      l('user', 'r1', 'a1', reponse),
+      l('user', 'u2', 'a1'),
+      l('user', 'r9', 'a1', abandon),
+      l('assistant', 'a2', 'u2'),
+    ];
+    expect(brancheActive(lignes).map((x) => String(x.uuid))).toEqual(['u0', 'a1', 'r1', 'u2', 'a2']);
+  });
+});

@@ -83,6 +83,20 @@ describe('traduction transcript → événements', () => {
     ]);
   });
 
+  test('fin de tâche de fond écrite en tour utilisateur : résultat de l’outil, pas une bulle de Chris', () => {
+    const texteTour =
+      '<task-notification>\n<tool-use-id>toolu_9</tool-use-id>\n<status>failed</status>\n' +
+      '<summary>Background command "CI" failed (exit code 1)</summary>\n</task-notification>';
+    expect(traduire({ type: 'user', message: { content: texteTour } })).toEqual([
+      {
+        type: 'resultat_outil',
+        outilId: 'toolu_9',
+        extrait: 'Background command "CI" failed (exit code 1)',
+        erreur: true,
+      },
+    ]);
+  });
+
   test('erreur d’API (réponse synthétique) : événement d’erreur, fin de tour, contexte ignoré', () => {
     const l = { type: 'assistant', isApiErrorMessage: true, message: {
       model: '<synthetic>', stop_reason: 'stop_sequence',

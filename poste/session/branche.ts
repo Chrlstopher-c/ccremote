@@ -6,36 +6,81 @@ import type { Ligne } from './traduction.ts';
 const CHAINEES = new Set(['user', 'assistant', 'attachment', 'system']);
 
 const texte = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
-const chainee = (l: Ligne): boolean => CHAINEES.has(String(l.type)) && l.isSidechain !== true;
+const chainee = (l: Ligne | undefined): boolean =>
+  l !== undefined && CHAINEES.has(String(l.type)) && l.isSidechain !== true;
+const frontiere = (l: Ligne): boolean => l.type === 'system' && l.subtype === 'compact_boundary';
 
-function derniereChainee(lignes: readonly Ligne[]): Ligne | undefined {
+function indiceDerniere(lignes: readonly Ligne[]): number | undefined {
   for (let i = lignes.length - 1; i >= 0; i -= 1) {
     const l = lignes[i];
-    if (l && chainee(l) && texte(l.uuid) !== null) return l;
+    if (chainee(l) && texte(l?.uuid) !== null) return i;
   }
   return undefined;
 }
 
-// Les lignes hors de la conversation (titre, métadonnées) restent ; une entrée chaînée du fil principal n'est gardée
-// que si elle est sur la chaîne de la dernière. Sans uuid exploitable, rien n'est retiré.
+// Frontière de compaction dont le message précédent n'est pas écrit (écriture interrompue) : la suite se rattache
+// au message chaîné écrit juste avant dans le fichier, sans quoi tout ce qui précède la compaction disparaît.
+function precedentEcrit(lignes: readonly Ligne[], avant: number, actives: ReadonlySet<number>): number | undefined {
+  for (let i = avant - 1; i >= 0; i -= 1) {
+    if (chainee(lignes[i]) && texte(lignes[i]?.uuid) !== null && !actives.has(i)) return i;
+  }
+  return undefined;
+}
+
+function suivant(
+  lignes: readonly Ligne[],
+  i: number,
+  parUuid: ReadonlyMap<string, number>,
+  actives: ReadonlySet<number>,
+): number | undefined {
+  const l = lignes[i];
+  if (!l) return undefined;
+  const parent = texte(l.parentUuid) ?? texte(l.logicalParentUuid);
+  const trouve = parent === null ? undefined : parUuid.get(parent);
+  if (trouve !== undefined) return trouve;
+  return frontiere(l) ? precedentEcrit(lignes, i, actives) : undefined;
+}
+
+// Les lignes hors de la conversation (titre, métadonnées) restent ; une entrée chaînée du fil principal n'est
+// gardée que si elle est sur la chaîne de la dernière. Sans uuid exploitable, rien n'est retiré.
 export function brancheActive(lignes: readonly Ligne[]): Ligne[] {
-  const parUuid = new Map<string, Ligne>();
-  for (const l of lignes) {
+  const parUuid = new Map<string, number>();
+  lignes.forEach((l, i) => {
     const uuid = texte(l.uuid);
-    if (uuid && chainee(l)) parUuid.set(uuid, l);
-  }
-  const actives = new Set<string>();
-  let courant: Ligne | undefined = derniereChainee(lignes);
-  if (!courant) return [...lignes];
-  while (courant) {
-    const uuid = texte(courant.uuid);
-    if (!uuid || actives.has(uuid)) break;
-    actives.add(uuid);
-    const parent: string | null = texte(courant.parentUuid) ?? texte(courant.logicalParentUuid);
-    courant = parent ? parUuid.get(parent) : undefined;
-  }
-  return lignes.filter((l) => {
-    const uuid = texte(l.uuid);
-    return !chainee(l) || uuid === null || actives.has(uuid);
+    if (uuid && chainee(l)) parUuid.set(uuid, i);
   });
+  const dernier = indiceDerniere(lignes);
+  if (dernier === undefined) return [...lignes];
+  const actives = new Set<number>();
+  let courant: number | undefined = dernier;
+  while (courant !== undefined && !actives.has(courant)) {
+    actives.add(courant);
+    courant = suivant(lignes, courant, parUuid, actives);
+  }
+  const appels = new Set(appelsDe(lignes, actives));
+  return lignes.filter((l, i) => !chainee(l) || texte(l.uuid) === null || actives.has(i) || reponseA(l, appels));
+}
+
+// Un appel d'outil de la branche active garde sa réponse même si le CLI l'a écrite sur un embranchement voisin.
+function appelsDe(lignes: readonly Ligne[], actives: ReadonlySet<number>): string[] {
+  const ids: string[] = [];
+  lignes.forEach((l, i) => {
+    if (!actives.has(i) || l.type !== 'assistant') return;
+    for (const b of blocs(l.message?.content))
+      if (b.type === 'tool_use' && texte(b.id) !== null) ids.push(String(b.id));
+  });
+  return ids;
+}
+
+function reponseA(l: Ligne, appels: ReadonlySet<string>): boolean {
+  return (
+    l.type === 'user' &&
+    blocs(l.message?.content).some((b) => b.type === 'tool_result' && appels.has(String(b.tool_use_id)))
+  );
+}
+
+function blocs(contenu: unknown): Record<string, unknown>[] {
+  return Array.isArray(contenu)
+    ? contenu.filter((b): b is Record<string, unknown> => typeof b === 'object' && b !== null && 'type' in b)
+    : [];
 }
