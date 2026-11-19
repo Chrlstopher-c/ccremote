@@ -31,6 +31,7 @@ import { cheminTranscript } from './transcript.ts';
 import { ficheImportee, type TranscriptImportable, transcriptsImportables } from './importation.ts';
 import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
 import { lireFichierSession } from '../presentation/lecture.ts';
+import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
 import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 
@@ -158,6 +159,7 @@ export class GestionnaireSessions {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return this.dupliquer(c.sessionId, c.messageId);
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
+    if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };

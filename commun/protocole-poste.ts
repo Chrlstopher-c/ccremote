@@ -93,6 +93,17 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tache'), ...avecSession, tache: z.string().min(1).max(200) }),
   // Arrêt d'une tâche de fond du SDK (commande ou sous-agent) ; `stopTask` du SDK.
   z.object({ kind: z.literal('arreter_tache'), ...avecSession, tache: z.string().min(1).max(200) }),
+  // Artefacts d'une session (registre du dossier de la session) : liste, puis gestes sur un artefact.
+  z.object({ kind: z.literal('artefacts'), ...avecSession }),
+  z.object({
+    kind: z.literal('artefact_renommer'),
+    ...avecSession,
+    artefact: z.string(),
+    titre: z.string().min(1).max(120),
+  }),
+  z.object({ kind: z.literal('artefact_dupliquer'), ...avecSession, artefact: z.string() }),
+  z.object({ kind: z.literal('artefact_supprimer'), ...avecSession, artefact: z.string() }),
+  z.object({ kind: z.literal('artefact_epingler'), ...avecSession, artefact: z.string(), epingle: z.boolean() }),
   // Suppression d'une session sur demande explicite de Chris : transcript et sous-agents retirés du poste.
   z.object({ kind: z.literal('supprimer'), ...avecSession }),
   // Sessions Claude Code du poste non encore connues (liste), puis import des identifiants choisis.

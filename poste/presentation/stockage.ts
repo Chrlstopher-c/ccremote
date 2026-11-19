@@ -18,7 +18,7 @@ export interface FichierStocke {
   readonly octets: Buffer;
 }
 
-function ecrireAtomique(chemin: string, contenu: Uint8Array | string): void {
+export function ecrireAtomique(chemin: string, contenu: Uint8Array | string): void {
   const temporaire = `${chemin}.tmp`;
   writeFileSync(temporaire, contenu);
   renameSync(temporaire, chemin);

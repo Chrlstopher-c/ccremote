@@ -5,6 +5,7 @@ import { cookieDeSession } from '../acces/acces.ts';
 import type { Postes } from '../parc/postes.ts';
 import { reveiller } from '../parc/reveil.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { ApiArtefacts } from './api-artefacts.ts';
 import type { ApiSessions } from './api-sessions.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
@@ -24,6 +25,7 @@ export interface DependancesApi {
   readonly sessions: ApiSessions;
   readonly comptes: ApiComptes;
   readonly fichiers: ApiFichiers;
+  readonly artefacts: ApiArtefacts;
   readonly echo: LienEcho | null;
   readonly reunions: DependancesReunions;
   readonly wol: ReadonlyMap<string, string>;
@@ -116,6 +118,11 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/relever': { POST: protege((req) => d.comptes.relever(req as never)) },
     '/api/machines/:id/comptes/:nom/code': { POST: protege((req) => d.comptes.code(req as never)) },
     '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
+    '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
+    '/api/sessions/:id/artefacts/:artefact/renommer': { POST: protege((req) => d.artefacts.renommer(req as never)) },
+    '/api/sessions/:id/artefacts/:artefact/dupliquer': { POST: protege((req) => d.artefacts.dupliquer(req as never)) },
+    '/api/sessions/:id/artefacts/:artefact/supprimer': { POST: protege((req) => d.artefacts.supprimer(req as never)) },
+    '/api/sessions/:id/artefacts/:artefact/epingler': { POST: protege((req) => d.artefacts.epingler(req as never)) },
     ...routesFichiers(d.fichiers, protege),
     ...routesEcho(d.echo, protege),
     ...routesReunions(d.reunions, protege),

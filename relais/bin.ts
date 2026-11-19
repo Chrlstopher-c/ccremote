@@ -8,6 +8,7 @@ import { construireRoutes } from './clients/api.ts';
 import { routesAcces } from './acces/api-acces.ts';
 import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
 import { ApiFichiers } from './appareils/api-fichiers.ts';
+import { ApiArtefacts } from './clients/api-artefacts.ts';
 import { ouvrirTerminal } from './appareils/route-terminal.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
@@ -59,6 +60,7 @@ const machines = new ApiMachines({
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
+const artefacts = new ApiArtefacts(registre, postes, journal);
 const terminaux = new TerminauxRelais(postes, journal);
 postes.terminaux = terminaux;
 const salleReunions = new SalleDeReunion({
@@ -84,6 +86,7 @@ const routes = avecCors(
     sessions,
     comptes,
     fichiers,
+    artefacts,
     echo,
     reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
     wol: config.wol,

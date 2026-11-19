@@ -11,6 +11,8 @@ import {
 } from '../../commun/presentation.ts';
 import { echec, ok, protege, type ContexteOutils, type Resultat } from './outils.ts';
 import { resoudreChemin } from './chemins.ts';
+import { enregistrerVersion } from './artefacts.ts';
+import { lireRegistre } from './registre.ts';
 
 export interface ArgsEnvoi {
   readonly chemin: string;
@@ -42,21 +44,27 @@ export interface ArgsArtefact {
   readonly id?: string;
 }
 
-// Le contenu HTML : soit un fichier du poste, soit le texte donné. Une seule des deux sources.
-function contenuHtml(c: ContexteOutils, args: ArgsArtefact): { octets: Buffer } | { erreur: string } {
+// Le contenu HTML : soit un fichier du poste (et son chemin absolu, source de l'artefact), soit le texte donné.
+function contenuHtml(
+  c: ContexteOutils,
+  args: ArgsArtefact,
+): { octets: Buffer; source: string | null } | { erreur: string } {
   if ((args.chemin === undefined) === (args.contenu === undefined))
     return { erreur: 'donner soit un chemin, soit un contenu' };
-  if (args.contenu !== undefined) return verifierTaille(Buffer.from(args.contenu, 'utf8'));
+  if (args.contenu !== undefined) return verifierTaille(Buffer.from(args.contenu, 'utf8'), null);
   const trouve = resoudreChemin(args.chemin ?? '', c.cwd, c.racines);
   if (!trouve.ok) return { erreur: trouve.erreur };
   if (!/\.html?$/i.test(trouve.chemin)) return { erreur: 'un artefact est une page HTML (.html)' };
-  return verifierTaille(readFileSync(trouve.chemin));
+  return verifierTaille(readFileSync(trouve.chemin), trouve.chemin);
 }
 
-function verifierTaille(octets: Buffer): { octets: Buffer } | { erreur: string } {
+function verifierTaille(
+  octets: Buffer,
+  source: string | null,
+): { octets: Buffer; source: string | null } | { erreur: string } {
   if (octets.length === 0) return { erreur: 'contenu vide' };
   if (octets.length > TAILLE_MAX_FICHIER) return { erreur: 'page trop volumineuse (5 Mo au plus)' };
-  return { octets };
+  return { octets, source };
 }
 
 export function publierArtefact(c: ContexteOutils, args: ArgsArtefact): Resultat {
@@ -73,7 +81,15 @@ export function publierArtefact(c: ContexteOutils, args: ArgsArtefact): Resultat
     const titre = args.titre.trim();
     const nom = nomAffiche(`${titre.replace(/[\\/]/g, '-')}.html`);
     const taille = source.octets.length;
+    const registre = lireRegistre(c.stockage, c.sessionId);
     c.stockage.ecrire(c.sessionId, fichier, source.octets, { nom, mime: 'text/html', taille });
+    enregistrerVersion(c.stockage, c.sessionId, registre, {
+      id: artefact,
+      titre,
+      version,
+      fichier,
+      source: source.source,
+    });
     c.emettre({ type: 'artefact', artefact, version, fichier, titre, mime: 'text/html', taille });
     return ok(`Artefact publié : « ${titre} », version ${version}. Identifiant pour la mise à jour : ${artefact}.`);
   });
