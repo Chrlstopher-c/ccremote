@@ -8,6 +8,7 @@ import { consignesAvecPresentation, consignesSansPresentation } from './consigne
 import type { Reponse } from './gestionnaire.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { SessionPoste } from './session-poste.ts';
+import { SessionSdk } from './session-sdk.ts';
 import { SessionTmux } from './session-tmux.ts';
 import { cheminTranscript } from './transcript.ts';
 
@@ -96,6 +97,35 @@ function remplacer(g: GestionBascule, ancienne: SessionPoste, moteur: Moteur): S
   g.sessions.set(p.resume.id, nouvelle);
   g.sauvegarder();
   return nouvelle;
+}
+
+/** Sort proprement une session pilotée du TUI : Remote Control coupé d'abord, puis `/exit` (tmux arrêté au délai). */
+export async function sortirTui(s: SessionTmux): Promise<string | null> {
+  if (s.resume.remoteControl?.actif) {
+    const erreur = await s.basculerControle(false);
+    if (erreur) return erreur;
+  }
+  return s.quitterTui();
+}
+
+/** Rembobinage d'une session tmux : elle repasse au SDK (TUI quitté, Remote Control coupé), puis le SDK rembobine. */
+export async function rembobinerTui(g: GestionBascule, s: SessionTmux, messageId: string): Promise<Reponse> {
+  const id = s.resume.id;
+  if (EN_COURS.has(id)) return { ok: false, erreur: 'bascule Remote Control en cours : réessayer' };
+  if (s.resume.statut === 'travail' || s.resume.statut === 'compaction' || s.resume.dialogue)
+    return { ok: false, erreur: 'session occupée : rembobinage impossible pendant un tour' };
+  EN_COURS.add(id);
+  try {
+    const erreur = await sortirTui(s);
+    if (erreur) return { ok: false, erreur };
+    const sdk = remplacer(g, s, 'sdk');
+    if (!(sdk instanceof SessionSdk)) return { ok: false, erreur: 'retour au SDK impossible' };
+    const refus = await sdk.rembobiner(messageId);
+    g.sauvegarder();
+    return refus ? { ok: false, erreur: refus } : { ok: true, donnees: sdk.resume };
+  } finally {
+    EN_COURS.delete(id);
+  }
 }
 
 function tailleTranscript(chemin: string): number {

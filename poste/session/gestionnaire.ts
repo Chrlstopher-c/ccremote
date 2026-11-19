@@ -7,7 +7,7 @@ import type { PieceJointe } from '../../commun/presentation.ts';
 import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
 import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
-import { basculerControle, enBascule } from './bascule-controle.ts';
+import { basculerControle, enBascule, rembobinerTui, sortirTui } from './bascule-controle.ts';
 import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
@@ -174,8 +174,7 @@ export class GestionnaireSessions {
     let erreur: string | null = null;
     if (c.kind === 'envoyer') erreur = await this.envoyerMessage(s, c.texte, c.pieces ?? []);
     else if (c.kind === 'interrompre') erreur = await s.interrompre();
-    else if (c.kind === 'rembobiner')
-      erreur = s instanceof SessionSdk ? await s.rembobiner(c.messageId) : 'non pris en charge hors SDK';
+    else if (c.kind === 'rembobiner') return this.rembobiner(s, c.messageId);
     else if (c.kind === 'compacter') erreur = await s.compacter();
     else if (c.kind === 'fermer') erreur = await s.fermer();
     else if (c.kind === 'reprendre') erreur = await s.reprendre();
@@ -200,11 +199,26 @@ export class GestionnaireSessions {
 
   // Suppression sur demande explicite de Chris : la session s'arrête (SDK), son transcript part, son identifiant est
   // retenu pour qu'aucune découverte ne la fasse réapparaître. Une session ouverte dans un terminal reste intacte.
+  // Rembobinage : une session SDK rembobine sur place ; une session du TUI repasse d'abord au SDK (voir bascule-controle).
+  // Une session tmux qui n'a pas été lancée par le poste (adoptée d'un terminal de Chris) n'est pas touchée.
+  private async rembobiner(s: SessionPoste, messageId: string): Promise<Reponse> {
+    if (s instanceof SessionSdk) {
+      const erreur = await s.rembobiner(messageId);
+      return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
+    }
+    if (s instanceof SessionTmux && s.resume.pilotee) return rembobinerTui(this, s, messageId);
+    return { ok: false, erreur: 'rembobinage impossible : session ouverte hors de l’appli (tmux de Chris)' };
+  }
+
   async supprimer(id: string): Promise<Reponse> {
     const s = this.sessions.get(id);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     if (s instanceof SessionSdk && s.vivante) {
       const erreur = await s.fermer();
+      if (erreur) return { ok: false, erreur };
+    }
+    if (s instanceof SessionTmux && s.vivante && s.resume.pilotee && !s.resume.terminal) {
+      const erreur = await sortirTui(s);
       if (erreur) return { ok: false, erreur };
     }
     if (s.vivante || s.resume.terminal) {
