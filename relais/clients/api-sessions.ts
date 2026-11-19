@@ -90,6 +90,10 @@ export class ApiSessions {
     const url = new URL(req.url);
     const id = req.params.id;
     if (!this.registre.session(id)) return erreur('session inconnue', 404);
+    if (url.searchParams.has('avant')) {
+      const limite = Math.min(Math.max(entier(url.searchParams.get('limite'), 300), 1), 1000);
+      return json(this.registre.evenementsAvant(id, entier(url.searchParams.get('avant'), 0), limite));
+    }
     if (!url.searchParams.has('apres')) return json(this.registre.derniersEvenements(id, 300));
     const apres = entier(url.searchParams.get('apres'), 0);
     const attendre = Math.min(entier(url.searchParams.get('attendre'), 0), 30);
@@ -142,6 +146,12 @@ export class ApiSessions {
       return erreur(r.erreur ?? 'duplication refusée', REFUS_POSTE);
     }
     return json(r.donnees ?? {}, 201);
+  }
+
+  // Chapitres épinglés de la session (uuid), tous rangs confondus : le fil partiel les applique à chaque page.
+  async chapitres(req: RequeteSession): Promise<Response> {
+    if (!this.registre.session(req.params.id)) return erreur('session inconnue', 404);
+    return json(this.registre.chapitresEpingles(req.params.id));
   }
 
   // Chapitre : épingle un message de Chris ou une réponse dans le fil (événement persisté, retirable).
