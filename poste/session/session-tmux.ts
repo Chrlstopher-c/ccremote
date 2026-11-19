@@ -218,6 +218,7 @@ export class SessionTmux implements SessionPoste {
     if (contexte !== null) this.etat = { ...this.etat, contexte: { ...this.etat.contexte, tokens: contexte } };
     if (l.type === 'custom-title' && typeof l.customTitle === 'string' && !titreProvisoire(l.customTitle, this.etat.cwd))
       this.etat = { ...this.etat, titre: l.customTitle };
+    else if (titreProvisoire(this.etat.titre, this.etat.cwd)) this.etat = this.titreDeLigne(l);
     const travail = travailEnCours(l);
     const vivante = this.etat.tmux !== null || this.etat.terminal === true;
     if (!this.etat.pilotee && travail !== null && vivante)
