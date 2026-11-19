@@ -85,7 +85,7 @@ describe('capture d’un tour', () => {
 });
 
 describe('annulation d’un tour', () => {
-  test('remet l’avant, supprime ce qui a été créé, et ne peut pas servir deux fois', () => {
+  test('remet l’avant, supprime ce qui a été créé, et ne peut pas servir deux fois', async () => {
     const t = nouvelle();
     const a = ecrire('a.txt', 'un\n');
     const nouveau = join(racine, 'nouveau.txt');
@@ -99,6 +99,7 @@ describe('annulation d’un tour', () => {
     expect(readFileSync(a, 'utf8')).toBe('un\n');
     expect(existsSync(nouveau)).toBe(false);
     expect(() => t.annuler(fin?.tour ?? '')).toThrow('tour déjà annulé');
+    expect((await t.modifications(fin?.tour ?? '')).fichiers).toEqual([]);
   });
 
   test('un fichier supprimé pendant le tour revient', () => {

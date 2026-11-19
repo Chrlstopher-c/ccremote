@@ -87,7 +87,9 @@ export class ToursSession {
   async modifications(ref: string): Promise<Modifications> {
     const tour = this.charger(ref);
     const branche = await new DepotGit(this.p.racine, this.p.journal).brancheCourante();
-    return { racine: this.p.racine, branche, fichiers: tour.fichiers.map((f) => this.ficheDe(f)) };
+    // Un tour annulé n'a plus de modifications à montrer : ses fichiers sont revenus dans leur état d'avant.
+    const fichiers = tour.annule ? [] : tour.fichiers.map((f) => this.ficheDe(f));
+    return { racine: this.p.racine, branche, fichiers };
   }
 
   diff(ref: string, chemin: string): Diff {
