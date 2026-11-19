@@ -31,13 +31,14 @@ export const MIGRATIONS: readonly string[] = [
      auteur TEXT NOT NULL, texte TEXT NOT NULL, ts TEXT NOT NULL, destinataires TEXT NOT NULL DEFAULT '[]');
    CREATE INDEX reunion_messages_reunion ON reunion_messages(reunion_id, seq);`,
   `ALTER TABLE sessions ADD COLUMN epinglee INTEGER NOT NULL DEFAULT 0;`,
-  `ALTER TABLE sessions ADD COLUMN non_lue INTEGER NOT NULL DEFAULT 0;`,
   `CREATE TABLE environnements (
      machine TEXT NOT NULL, dossier TEXT NOT NULL, enregistre_le TEXT NOT NULL, PRIMARY KEY (machine, dossier));`,
   `CREATE TABLE machines_ssh (
      id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', hote TEXT NOT NULL, port INTEGER NOT NULL DEFAULT 22,
      utilisateur TEXT NOT NULL, cle TEXT NOT NULL, dossier TEXT NOT NULL DEFAULT '~',
      cree_le TEXT NOT NULL, maj_le TEXT NOT NULL);`,
+  // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
+  `ALTER TABLE sessions ADD COLUMN non_lue INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 export function ouvrirBase(chemin: string): Database {
