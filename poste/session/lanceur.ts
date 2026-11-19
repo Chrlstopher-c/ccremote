@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { McpStdioServerConfig } from '@anthropic-ai/claude-agent-sdk';
-import type { LanceurSession } from '../../commun/session.ts';
+import type { EffortSession, LanceurSession, ModeSession } from '../../commun/session.ts';
 
 export const VAR_SESSION = 'CCREMOTE_SESSION';
 export const VAR_SOCKET = 'CCREMOTE_SOCKET';
@@ -20,6 +20,8 @@ export interface Lancement {
   readonly consignes: string;
   readonly modele: string | null;
   readonly reprise: boolean;
+  readonly mode?: ModeSession | undefined; // absent ou bypassPermissions : défaut de ccremote
+  readonly effort?: EffortSession | null | undefined;
 }
 
 export function binaireClaude(): string {
@@ -78,9 +80,15 @@ export function commandeClaude(l: Lancement): string[] {
     CC, '--lanceur', 'quart', '--id', l.sessionId, '--nom', l.titre, '--',
     '--mcp-config', rythme(),
     '--settings', crochets(),
-    '--dangerously-skip-permissions',
+    ...permission(l.mode),
     '--append-system-prompt', l.consignes,
     ...(l.modele ? ['--model', l.modele] : []),
+    ...(l.effort ? ['--effort', l.effort] : []),
     ...(l.reprise ? ['--resume', l.sessionId] : []),
   ];
+}
+
+// Un mode autre que bypass se passe au CLI tel quel (une session SDK repassée au TUI garde son mode).
+function permission(mode: ModeSession | undefined): string[] {
+  return mode && mode !== 'bypassPermissions' ? ['--permission-mode', mode] : ['--dangerously-skip-permissions'];
 }

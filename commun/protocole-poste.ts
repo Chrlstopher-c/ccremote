@@ -81,6 +81,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('reprendre'), ...avecSession }),
   z.object({ kind: z.literal('autonomie'), ...avecSession, active: z.boolean() }),
   z.object({ kind: z.literal('nuit'), ...avecSession, active: z.boolean(), objectif: z.string().max(300).optional() }),
+  z.object({ kind: z.literal('remote_control'), ...avecSession, actif: z.boolean() }),
   z.object({ kind: z.literal('repondre'), ...avecSession, reponse: ReponseDialogue }),
   // Réglages d'une session SDK en cours : mode de permission, modèle, effort (null = défaut), titre.
   z.object({ kind: z.literal('mode'), ...avecSession, mode: ModeSession }),

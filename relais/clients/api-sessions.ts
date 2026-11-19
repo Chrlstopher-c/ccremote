@@ -25,6 +25,7 @@ const CorpsOuverture = z.object({
 const CorpsMessage = z.object({ texte: z.string().min(1), pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional() });
 const CorpsAutonomie = z.object({ active: z.boolean() });
 const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).optional() });
+const CorpsRemoteControl = z.object({ actif: z.boolean() });
 const CorpsMode = z.object({ mode: ModeSession });
 const CorpsModele = z.object({ modele: z.string().min(1).max(120) });
 const CorpsEffort = z.object({ effort: EffortSession.nullable() });
@@ -176,6 +177,13 @@ export class ApiSessions {
     const c = await lireCorps(req, CorpsNuit);
     if (c instanceof Response) return c;
     return this.commander(req.params.id, { kind: 'nuit', active: c.active, objectif: c.objectif });
+  }
+
+  // Remote Control : le poste bascule la session entre le SDK et le TUI (voir gestionnaire), la réponse attend ce tour.
+  async remoteControl(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsRemoteControl);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'remote_control', actif: c.actif });
   }
 
   async mode(req: RequeteSession): Promise<Response> {
@@ -346,6 +354,7 @@ export class ApiSessions {
       | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[] }
       | { kind: 'autonomie'; active: boolean }
       | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
+      | { kind: 'remote_control'; actif: boolean }
       | { kind: 'repondre'; reponse: ReponseDialogue }
       | { kind: 'mode'; mode: ModeSession }
       | { kind: 'modele'; modele: string }

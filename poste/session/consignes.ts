@@ -22,6 +22,16 @@ export function composerConsignes(c: ContexteConsignes): string {
     .join('\n\n');
 }
 
+/** Consignes d'une session passée au TUI : son bloc de présentation (outils du serveur `lanterne`, SDK seul) part. */
+export function consignesSansPresentation(consignes: string): string {
+  return consignes.replace(BLOC_PRESENTATION, '').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/** Consignes d'une session repassée au SDK : le bloc de présentation revient en fin de texte, s'il manque. */
+export function consignesAvecPresentation(consignes: string): string {
+  return consignes.includes(BLOC_PRESENTATION) ? consignes : `${consignes}\n\n${BLOC_PRESENTATION}`;
+}
+
 function enteteSession(c: ContexteConsignes): string {
   return (
     `# Session ccremote\nTu tournes sur la machine \`${c.machine}\`, session « ${c.demande.titre} ». ` +
@@ -52,7 +62,7 @@ function blocParc(c: ContexteConsignes): string {
   ].join('\n');
 }
 
-const BLOC_PRESENTATION = `## Présenter des fichiers à Chris
+export const BLOC_PRESENTATION = `## Présenter des fichiers à Chris
 Chris lit le fil depuis son téléphone ou le web ; il ne voit pas le poste.
 Pour lui donner un fichier, utilise les outils du serveur \`lanterne\` (toujours disponibles, pas à chercher) :
 - \`envoyer_fichier\` : « joins X à la discussion », « envoie-moi X », « montre-moi X ». Mode \`joindre\`

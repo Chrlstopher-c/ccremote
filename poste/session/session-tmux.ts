@@ -12,6 +12,7 @@ import { deciderSuite, type Suite } from './suite-du-tour.ts';
 import { effetRythme } from './rythme.ts';
 import * as tmux from './tmux.ts';
 import { SuiviSousAgents } from './sous-agents.ts';
+import { basculerDansTui, sortirDuTui } from './remote-control.ts';
 import type { ReponseCrochet, SessionPoste, SortieSession } from './session-poste.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
 import { SuiviNuit } from './suivi-nuit.ts';
@@ -273,7 +274,7 @@ export class SessionTmux implements SessionPoste {
   }
 
   // Jamais deux processus sur une conversation : on ne reprend qu'une session sans tmux.
-  async reprendre(message?: string): Promise<string | null> {
+  async reprendre(message?: string, reglages = false): Promise<string | null> {
     const occupee = this.refusTerminal();
     if (occupee) return occupee;
     if (this.etat.tmux) return null;
@@ -288,13 +289,29 @@ export class SessionTmux implements SessionPoste {
             sessionId: this.etat.claudeSessionId,
             titre: this.etat.titre,
             consignes: this.p.consignes,
-            modele: null,
+            modele: reglages ? this.etat.modele : null,
             reprise: true,
+            ...(reglages ? { mode: this.etat.mode, effort: this.etat.effort } : {}),
           });
     const r = await tmux.creer(nom, this.etat.cwd, message ? [...commande, message] : commande, this.variables());
     if (r.code !== 0) return `tmux refuse la reprise : ${r.erreur}`;
     this.maj({ tmux: nom, statut: message ? 'travail' : 'attente' });
     return null;
+  }
+
+  async basculerControle(actif: boolean): Promise<string | null> {
+    if (!this.etat.tmux) return this.refusTerminal() ?? 'session fermée';
+    const r = await basculerDansTui(this.etat.tmux, actif);
+    if ('erreur' in r) return r.erreur;
+    this.maj({ remoteControl: { actif, url: r.url } });
+    return null;
+  }
+
+  async quitterTui(): Promise<string | null> {
+    if (!this.etat.tmux) return null;
+    const erreur = await sortirDuTui(this.etat.tmux);
+    if (!erreur) this.maj({ tmux: null, attachee: false, statut: 'fermee' });
+    return erreur;
   }
 
   async lancer(message: string, modele: string | null): Promise<string | null> {

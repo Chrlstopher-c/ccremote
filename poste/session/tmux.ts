@@ -100,6 +100,10 @@ export function touche(nom: string, cle: string): Promise<Resultat> {
   return tmux(['send-keys', '-t', `=${nom}:`, cle]);
 }
 
+export async function existe(nom: string): Promise<boolean> {
+  return (await tmux(['has-session', '-t', `=${nom}`])).code === 0;
+}
+
 export function tuer(nom: string): Promise<Resultat> {
   return tmux(['kill-session', '-t', `=${nom}`]);
 }

@@ -64,6 +64,10 @@ export const ReponseDialogue = z.object({
 });
 export type ReponseDialogue = z.infer<typeof ReponseDialogue>;
 
+// Remote Control : la session est connectée à claude.ai (TUI seulement). `url` : la page à ouvrir sur le téléphone.
+export const RemoteControl = z.object({ actif: z.boolean(), url: z.string().nullable() });
+export type RemoteControl = z.infer<typeof RemoteControl>;
+
 // Mode nuit (config Claude Code : ~/.claude/night) : Chris dort, la session travaille seule jusqu'à tout finir.
 export const Nuit = z.object({
   depuisH: z.number(), // heures écoulées depuis l'activation
@@ -98,6 +102,8 @@ export const ResumeSession = z.object({
   lanceur: LanceurSession.optional(), // qui a lancé la session (registre `cc`) : kitty, quart ou echo
   dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
   nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
+  // Remote Control (`/remote-control` du TUI) : session connectée à claude.ai, `url` à ouvrir sur le téléphone.
+  remoteControl: RemoteControl.nullable().optional(),
   // Calculé par le relais, jamais par le poste : ISO de la dernière activité quand le tour est fini (attente ou
   // terminée) depuis le seuil d'inactivité ; null sinon (travail, compaction, question, démarrage, erreur, fermée).
   inactiveDepuis: z.string().nullable().optional(),

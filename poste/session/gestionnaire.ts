@@ -4,11 +4,12 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'pino';
-import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
 import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
+import { basculerControle, enBascule } from './bascule-controle.ts';
+import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
@@ -41,19 +42,6 @@ export interface Reponse {
   readonly erreur?: string;
   readonly donnees?: unknown;
 }
-type CommandeSession = Extract<CommandeRelais, { sessionId: string }>;
-type LecturePanneau = Extract<CommandeSession, { kind: 'contexte' | 'connecteurs' | 'taches' | 'tache' }>;
-const estLecture = (c: CommandeSession): c is LecturePanneau =>
-  c.kind === 'contexte' || c.kind === 'connecteurs' || c.kind === 'taches' || c.kind === 'tache';
-
-// Le panneau ne lit que le SDK ; une session tmux n'a ni contexte ni tâche à relayer (listes vides, détail absent).
-async function lecturePanneau(s: SessionPoste, c: LecturePanneau): Promise<unknown> {
-  if (!(s instanceof SessionSdk)) return c.kind === 'connecteurs' || c.kind === 'taches' ? [] : null;
-  if (c.kind === 'contexte') return s.contexte();
-  if (c.kind === 'connecteurs') return s.connecteurs();
-  if (c.kind === 'taches') return s.taches();
-  return s.tache(c.tache);
-}
 
 const HISTORIQUE_ADOPTION = 150;
 const PERIODE_DECOUVERTE_MS = 2_000;
@@ -74,7 +62,7 @@ export function moteurDe(d: DemandeSession): Moteur {
 }
 
 export class GestionnaireSessions {
-  private readonly sessions = new Map<string, SessionPoste>();
+  readonly sessions = new Map<string, SessionPoste>();
   private readonly persistance: PersistanceSessions;
   private readonly supprimees: SessionsSupprimees;
   private readonly stockage: Stockage;
@@ -82,10 +70,10 @@ export class GestionnaireSessions {
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
-    private readonly config: ConfigPoste,
+    readonly config: ConfigPoste,
     private readonly sortie: SortieSession,
     private readonly socket: string,
-    private readonly journal: Logger,
+    readonly journal: Logger,
   ) {
     this.persistance = new PersistanceSessions(config.donnees);
     this.supprimees = new SessionsSupprimees(config.donnees);
@@ -169,8 +157,10 @@ export class GestionnaireSessions {
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
     if (estCommandeModifications(c)) return this.modifications.executer(c, this.sessions.get(c.sessionId));
+    if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
     const s = this.sessions.get(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    if (enBascule(c.sessionId)) return { ok: false, erreur: 'bascule Remote Control en cours : réessayer' };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
     let erreur: string | null = null;
     if (c.kind === 'envoyer') erreur = await this.envoyerMessage(s, c.texte, c.pieces ?? []);
@@ -323,7 +313,7 @@ export class GestionnaireSessions {
     });
   }
 
-  private creer(p: SessionPersistee): SessionPoste {
+  creer(p: SessionPersistee): SessionPoste {
     const sortie: SortieSession = {
       evenement: (id, evt) => this.sortie.evenement(id, evt),
       resume: (r) => {

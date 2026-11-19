@@ -78,6 +78,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/fichiers/:fichier': { GET: protege((req) => d.sessions.fichier(req as never)) },
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
     '/api/sessions/:id/nuit': { POST: protege((req) => d.sessions.nuit(req as never)) },
+    '/api/sessions/:id/remote-control': { POST: protege((req) => d.sessions.remoteControl(req as never)) },
     '/api/sessions/:id/repondre': { POST: protege((req) => d.sessions.repondre(req as never)) },
     '/api/sessions/:id/rembobiner': { POST: protege((req) => d.sessions.rembobiner(req as never)) },
     '/api/sessions/:id/dupliquer': { POST: protege((req) => d.sessions.dupliquer(req as never)) },
