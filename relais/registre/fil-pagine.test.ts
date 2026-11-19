@@ -86,7 +86,9 @@ describe('fil paginé : evenementsAvant et chapitres', () => {
     r.ajouterEvenement('a', MAJ, { type: 'chapitre', uuid: 'u2', epingle: true });
     const api = new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
     const chapitres = (req: Request & { params: { id: string } }) => api.chapitres(req as never);
-    expect((await (await chapitres(Object.assign(new Request('http://x/c'), { params: { id: 'a' } }))).json()) as string[]).toEqual(['u2']);
+    expect(
+      (await (await chapitres(Object.assign(new Request('http://x/c'), { params: { id: 'a' } }))).json()) as string[],
+    ).toEqual(['u2']);
     expect((await chapitres(Object.assign(new Request('http://x/c'), { params: { id: 'zz' } }))).status).toBe(404);
   });
 });
