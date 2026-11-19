@@ -24,6 +24,7 @@ const CorpsOuverture = z.object({
   style_sortie: z.string().min(1).max(80).nullable().optional(),
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(),
+  pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
 });
 const CorpsMessage = z.object({ texte: z.string().min(1), pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional() });
 const CorpsAutonomie = z.object({ active: z.boolean() });
@@ -78,6 +79,7 @@ export class ApiSessions {
       style_sortie: c.style_sortie ?? null,
       bac_a_sable: c.bac_a_sable ?? 'non',
       controle_distant: c.controle_distant ?? false,
+      ...(c.pieces ? { pieces: c.pieces } : {}),
     };
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
     if (!r.ok) this.journal.warn({ machine: c.machine, erreur: r.erreur }, 'ouverture de session refusée');

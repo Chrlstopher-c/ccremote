@@ -39,7 +39,7 @@ export interface SessionPoste {
   veillerNuit(maintenant?: number): Promise<void>;
 
   // Commandes de Chris, relayées par le gestionnaire.
-  lancer(message: string, modele: string | null): Promise<string | null>;
+  lancer(message: string, modele: string | null, pieces?: readonly PieceJointe[]): Promise<string | null>;
   envoyer(texte: string, pieces?: readonly PieceJointe[]): Promise<string | null>;
   interrompre(): Promise<string | null>;
   compacter(): Promise<string | null>;

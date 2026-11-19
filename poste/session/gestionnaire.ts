@@ -141,7 +141,7 @@ export class GestionnaireSessions {
       this.sessions.delete(d.sessionId);
       return { ok: false, erreur: refusReglage };
     }
-    const erreur = await session.lancer(d.message, d.modele ?? null);
+    const erreur = await session.lancer(d.message, d.modele ?? null, d.pieces ?? []);
     if (erreur) {
       this.sessions.delete(d.sessionId);
       return { ok: false, erreur };

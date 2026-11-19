@@ -2,7 +2,7 @@
 // clients.
 import { z } from 'zod';
 import { FichierModifie } from './modifications.ts';
-import { ModeFichier } from './presentation.ts';
+import { ModeFichier, NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 
 export const LanceurSession = z.enum(['kitty', 'quart', 'echo']); // qui a lancé la session (registre `cc`)
 export type LanceurSession = z.infer<typeof LanceurSession>;
@@ -233,6 +233,7 @@ export const DemandeSession = z.object({
   style_sortie: z.string().min(1).max(80).nullable().optional(),
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(), // Remote Control branché à la fin du premier tour
+  pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(), // jointes au premier message (moteur SDK)
   // Composé par le relais pour la machine cible : ce que la session a le droit de joindre.
   parc: z.array(z.object({ id: z.string(), description: z.string(), racines: z.array(z.string()) })),
 });

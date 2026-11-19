@@ -35,6 +35,7 @@ export function champsReglage(r: Reglage): Partial<ResumeSession> {
 
 // Mode et modèle voulus à l'ouverture s'appliquent avant le premier message (SDK seulement) ; rend le refus éventuel.
 export async function reglagesDeOuverture(session: SessionPoste, d: DemandeSession): Promise<string | null> {
+  if (d.pieces?.length && (d.moteur ?? 'sdk') !== 'sdk') return 'pièces jointes : moteur SDK seulement';
   if ((d.moteur ?? 'sdk') !== 'sdk') return null;
   const reglages: Reglage[] = [];
   if (d.mode && d.mode !== 'bypassPermissions') reglages.push({ kind: 'mode', mode: d.mode });

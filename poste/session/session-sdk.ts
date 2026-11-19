@@ -180,10 +180,17 @@ export class SessionSdk implements SessionPoste {
 
   // Les messages de Chris entrent dans le fil tout de suite : le SDK ne les renvoie pas (contrairement au transcript
   // relu par les sessions tmux).
-  async lancer(message: string): Promise<string | null> {
+  // Pièces du premier message : préparées avant tout démarrage (une pièce refusée ne lance rien), comme `envoyer`.
+  async lancer(message: string, _modele?: string | null, pieces: readonly PieceJointe[] = []): Promise<string | null> {
+    const jointes =
+      pieces.length > 0
+        ? (this.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session')
+        : null;
+    if (typeof jointes === 'string') return jointes;
     const uuid = randomUUID();
     this.emettre({ type: 'message', texte: message, uuid });
-    return this.demarrer(false, message, uuid);
+    jointes?.evenements.forEach((evt) => this.emettre(evt));
+    return this.demarrer(false, message + (jointes?.complement ?? ''), uuid, jointes?.blocs);
   }
 
   // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
@@ -416,7 +423,12 @@ export class SessionSdk implements SessionPoste {
     return { PreToolUse: [crochetEdition(this.etat.cwd, (absolu) => tours.noterAvant(absolu), this.env.journal)] };
   }
 
-  private demarrer(reprise: boolean, message?: string, uuid?: SDKUserMessage['uuid']): string | null {
+  private demarrer(
+    reprise: boolean,
+    message?: string,
+    uuid?: SDKUserMessage['uuid'],
+    blocs?: PiecesPreparees['blocs'],
+  ): string | null {
     const fil = new FileAsynchrone<SDKUserMessage>();
     let liberer: () => void = () => undefined;
     const pret = new Promise<void>((r) => {
@@ -432,7 +444,7 @@ export class SessionSdk implements SessionPoste {
       void this.attendreConnecteurs(requete).then(() => liberer());
       void this.ecouter(requete, this.traduction.nouvelEtat());
       this.maj({ statut: message ? 'travail' : 'attente' });
-      if (message) this.pousser(message, undefined, uuid);
+      if (message) this.pousser(message, blocs, uuid);
       return null;
     } catch (erreur) {
       this.requete = null;
