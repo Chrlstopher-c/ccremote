@@ -355,8 +355,10 @@ export class SessionSdk implements SessionPoste {
     return this.reglagesVivants.connecteur(nom, actif);
   }
 
-  stylesVivants(): Promise<StylesSession | null> {
-    return this.reglagesVivants.styles();
+  // `initializationResult` garde le style du lancement : un style changé en cours de session vient de la fiche.
+  async stylesVivants(): Promise<StylesSession | null> {
+    const lus = await this.reglagesVivants.styles();
+    return lus && this.etat.style_sortie ? { ...lus, actuel: this.etat.style_sortie } : lus;
   }
 
   rechargerStyles(): Promise<void> {
