@@ -119,3 +119,31 @@ describe('panneau Fichiers de session (poste)', () => {
     expect(readdirSync(racine).filter((n) => n.endsWith('.tmp'))).toEqual([]);
   });
 });
+
+describe('menus et couleurs git du panneau Fichiers (poste)', () => {
+  test('fichiers du projet et compétences par la commande du poste ; hors dépôt, pas de couleur', async () => {
+    const fichiers = await executerFichiersSession(
+      { kind: 'session_fichiers', id: 'r', sessionId: 's' },
+      racine,
+      journal,
+    );
+    expect(fichiers.ok).toBe(true);
+    expect(fichiers.donnees).toContain('notes.md');
+    expect(fichiers.donnees).not.toContain('lien-dehors');
+    const competences = await executerFichiersSession(
+      { kind: 'session_competences', id: 'r', sessionId: 's' },
+      racine,
+      journal,
+    );
+    expect(competences.ok).toBe(true);
+    expect(Array.isArray(competences.donnees)).toBe(true);
+    const arbre = await executerFichiersSession(
+      { kind: 'session_arbre', id: 'r', sessionId: 's', chemin: '' },
+      racine,
+      journal,
+    );
+    const entrees = (arbre.donnees as { entrees: { etat: unknown }[] }).entrees;
+    expect(entrees.length).toBeGreaterThan(0);
+    expect(entrees.every((entree) => entree.etat === null)).toBe(true);
+  });
+});

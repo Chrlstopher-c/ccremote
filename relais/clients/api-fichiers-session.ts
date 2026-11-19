@@ -41,6 +41,20 @@ export class ApiFichiersSession {
     return this.envoyer(cible, { kind: 'session_lire', sessionId: cible.sessionId, chemin: q.chemin });
   }
 
+  /** Menu « / » : compétences et commandes de la session, lues sur son poste. */
+  async competences(req: Requete): Promise<Response> {
+    const cible = this.cible(req);
+    if (cible instanceof Response) return cible;
+    return this.envoyer(cible, { kind: 'session_competences', sessionId: cible.sessionId });
+  }
+
+  /** Menu « @ » : fichiers du projet de la session, lus sur son poste. */
+  async fichiers(req: Requete): Promise<Response> {
+    const cible = this.cible(req);
+    if (cible instanceof Response) return cible;
+    return this.envoyer(cible, { kind: 'session_fichiers', sessionId: cible.sessionId });
+  }
+
   async ecrire(req: Requete): Promise<Response> {
     const cible = this.cible(req);
     if (cible instanceof Response) return cible;

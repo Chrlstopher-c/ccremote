@@ -119,6 +119,9 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   // Panneau Fichiers d'une session (arbre, lecture, écriture) : chemins relatifs au dossier de la session.
   z.object({ kind: z.literal('session_arbre'), ...avecSession, chemin: CheminSession }),
   z.object({ kind: z.literal('session_lire'), ...avecSession, chemin: CheminSession }),
+  // Menus « / » et « @ » d'une session : compétences et fichiers du projet, lus sur le poste de la session.
+  z.object({ kind: z.literal('session_competences'), ...avecSession }),
+  z.object({ kind: z.literal('session_fichiers'), ...avecSession }),
   z.object({
     kind: z.literal('session_ecrire'),
     ...avecSession,

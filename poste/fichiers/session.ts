@@ -4,14 +4,25 @@
 import { randomUUID } from 'node:crypto';
 import { lstat, open, readdir, realpath, rename, rm, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, sep } from 'node:path';
+import { homedir } from 'node:os';
 import type { Logger } from 'pino';
+import { z } from 'zod';
 import type { EntreeFichier } from '../../commun/appareil.ts';
-import { ContenuSession, ListeSession, TAILLE_MAX_TEXTE_SESSION } from '../../commun/fichiers-session.ts';
+import {
+  CompetenceSession,
+  ContenuSession,
+  EntreeSession,
+  type EtatGitSession,
+  ListeFichiersSession,
+  ListeSession,
+  TAILLE_MAX_TEXTE_SESSION,
+} from '../../commun/fichiers-session.ts';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
+import { competencesSession, etatsGit, fichiersProjet } from './completion-session.ts';
 
 export type CommandeFichiersSession = Extract<
   CommandeRelais,
-  { kind: 'session_arbre' | 'session_lire' | 'session_ecrire' }
+  { kind: 'session_arbre' | 'session_lire' | 'session_ecrire' | 'session_competences' | 'session_fichiers' }
 >;
 
 export interface ResultatFichiersSession {
@@ -24,7 +35,11 @@ const MAX_ENTREES = 2000;
 const FENETRE_BINAIRE = 8000;
 
 export const estFichiersSession = (c: CommandeRelais): c is CommandeFichiersSession =>
-  c.kind === 'session_arbre' || c.kind === 'session_lire' || c.kind === 'session_ecrire';
+  c.kind === 'session_arbre' ||
+  c.kind === 'session_lire' ||
+  c.kind === 'session_ecrire' ||
+  c.kind === 'session_competences' ||
+  c.kind === 'session_fichiers';
 
 /** Erreur de confinement : le chemin sort du dossier de la session (ou n'en est pas un). */
 class HorsSession extends Error {
@@ -65,7 +80,12 @@ function relatifDe(racine: string, absolu: string): string {
   return absolu === racine ? '' : absolu.slice(base.length).split(sep).join('/');
 }
 
-async function entree(dossier: string, nom: string): Promise<EntreeFichier | null> {
+async function entree(
+  dossier: string,
+  nom: string,
+  etats: Map<string, EtatGitSession>,
+  base: string,
+): Promise<EntreeSession | null> {
   const chemin = join(dossier, nom);
   const brut = await lstat(chemin).catch(() => null);
   if (!brut) return null;
@@ -82,15 +102,17 @@ async function entree(dossier: string, nom: string): Promise<EntreeFichier | nul
     if (cible?.isDirectory()) type = 'dossier';
     else if (cible?.isFile()) taille = cible.size;
   }
-  return { nom, type, taille, modifie: brut.mtime.toISOString(), cache: nom.startsWith('.') };
+  const etat = etats.get(relatifDe(base, chemin)) ?? null;
+  return { nom, type, taille, modifie: brut.mtime.toISOString(), cache: nom.startsWith('.'), etat };
 }
 
-async function arbre(racine: string, relatif: string): Promise<ListeSession> {
+async function arbre(racine: string, relatif: string, journal: Logger): Promise<ListeSession> {
   const dossier = await cibleDans(racine, relatif);
   const base = await realpath(racine);
   const noms = (await readdir(dossier)).filter((nom) => nom !== '.git');
-  const entrees = (await Promise.all(noms.map((nom) => entree(dossier, nom)))).filter(
-    (e): e is EntreeFichier => e !== null,
+  const etats = await etatsGit(base, journal);
+  const entrees = (await Promise.all(noms.map((nom) => entree(dossier, nom, etats, base)))).filter(
+    (e): e is EntreeSession => e !== null,
   );
   entrees.sort((a, b) => {
     if ((a.type === 'dossier') !== (b.type === 'dossier')) return a.type === 'dossier' ? -1 : 1;
@@ -187,8 +209,17 @@ export async function executerFichiersSession(
   journal: Logger,
 ): Promise<ResultatFichiersSession> {
   try {
-    if (c.kind === 'session_arbre') return { ok: true, donnees: ListeSession.parse(await arbre(racine, c.chemin)) };
+    if (c.kind === 'session_arbre') {
+      return { ok: true, donnees: ListeSession.parse(await arbre(racine, c.chemin, journal)) };
+    }
     if (c.kind === 'session_lire') return { ok: true, donnees: ContenuSession.parse(await lire(racine, c.chemin)) };
+    if (c.kind === 'session_competences') {
+      const liste = await competencesSession(racine, homedir(), journal);
+      return { ok: true, donnees: z.array(CompetenceSession).parse(liste) };
+    }
+    if (c.kind === 'session_fichiers') {
+      return { ok: true, donnees: ListeFichiersSession.parse(await fichiersProjet(racine, journal)) };
+    }
     const taille = await ecrire(racine, c.chemin, c.texte, journal);
     journal.info({ commande: c.kind, taille }, 'fichier de session enregistré');
     return { ok: true, donnees: { taille } };
