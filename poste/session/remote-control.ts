@@ -6,7 +6,6 @@ import * as tmux from './tmux.ts';
 export type ResultatControle = { readonly erreur: string } | { readonly url: string | null };
 
 // L'URL peut être repliée sur la ligne suivante (pane de 80 colonnes) : la recherche traverse les retours à la ligne.
-// L'URL peut être repliée sur la ligne suivante (pane de 80 colonnes) : la recherche traverse les retours à la ligne.
 const URL_CONTROLE = /is active\b[\s\S]{0,300}?(https:\/\/claude\.ai\/code\/session_[A-Za-z0-9_-]+)/;
 const LIBELLE_DECONNEXION = 'Disconnect this session';
 const CONFIRMATION_DECONNEXION = 'Remote Control disconnected.';

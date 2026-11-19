@@ -316,3 +316,11 @@ Ce que cet essai a trouvé et qui est corrigé :
 - Limites connues : les sous-agents émettent leurs fichiers dans le fil principal (l'appel n'est pas attribuable) ;
   dans Claude Code les outils MCP sont différés (`ToolSearch`), l'agent doit les charger avant de s'en servir ; le
   bureau de Quart ne rend pas les nouveaux genres (Lanterne les rend).
+
+## Remote Control par bascule (19/11/2026, branche lanterne/remote-control)
+- Remote Control n'existe que dans le TUI : `POST /api/sessions/:id/remote-control {actif}` bascule la session entre le
+  SDK et `claude --resume` dans tmux (`poste/session/bascule-controle.ts`, `remote-control.ts`). Fiche : `remoteControl {actif, url}`.
+- Essai réel (session jetable, haiku, relais et poste de test sur socket tmux `rc-test`) : ON → URL
+  `https://claude.ai/code/session_…` ; message pendant ON → réponse dans le .jsonl et dans le fil du relais ; OFF →
+  `disconnected`, moteur sdk, message SDK → réponse dans le fil.
+- Limite : après ON, la fiche affiche `statut: fermee` alors que le TUI tourne (cause non trouvée, voir TODO).
