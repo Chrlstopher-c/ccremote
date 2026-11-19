@@ -217,14 +217,14 @@ describe('migrerFiches', () => {
     expect(compter(cible, "SELECT count(*) AS n FROM machines_ssh WHERE id = 'portable'")).toBe(0);
   });
 
-  test('source à un autre schéma : refusée sans toucher à la cible', () => {
+  test('source plus récente que ce code : refusée sans toucher à la cible', () => {
     const source = join(dossier, 'source.db');
     ecrireSource(source);
     const db = new Database(source, { strict: true });
-    db.exec('PRAGMA user_version = 8');
+    db.exec('PRAGMA user_version = 99');
     db.close();
     const cible = join(dossier, 'cible.db');
-    expect(() => migrerFiches(options(cible), JOURNAL)).toThrow('schéma 8');
+    expect(() => migrerFiches(options(cible), JOURNAL)).toThrow('schéma 99');
     expect(existsSync(cible)).toBe(false);
   });
 });

@@ -44,16 +44,25 @@ function executer(
   };
 }
 
-// La source est une copie du relais de la tour : lue seule, et seulement au schéma que ce code connaît.
+// La source est une COPIE du relais de la tour : mise au schéma courant si elle est plus ancienne (le relais en service
+// peut tourner un code d'avant), puis lue seule. Une source plus récente que ce code est refusée.
 function ouvrirSource(chemin: string): Database {
   if (!existsSync(chemin)) throw new Error(`source introuvable : ${chemin}`);
-  const source = new Database(chemin, { readonly: true, strict: true });
-  const { user_version: version } = source.query('PRAGMA user_version').get() as { user_version: number };
-  if (version !== MIGRATIONS.length) {
-    source.close();
-    throw new Error(`source au schéma ${version}, attendu ${MIGRATIONS.length} : la mettre à jour avant migration`);
+  const version = versionDe(chemin);
+  if (version > MIGRATIONS.length) {
+    throw new Error(`source au schéma ${version}, plus récent que ce code (${MIGRATIONS.length})`);
   }
-  return source;
+  if (version < MIGRATIONS.length) ouvrirBase(chemin).close();
+  return new Database(chemin, { readonly: true, strict: true });
+}
+
+function versionDe(chemin: string): number {
+  const base = new Database(chemin, { readonly: true, strict: true });
+  try {
+    return (base.query('PRAGMA user_version').get() as { user_version: number }).user_version;
+  } finally {
+    base.close();
+  }
 }
 
 // Simulation : la cible est copiée à côté (VACUUM INTO, cohérent même avec un journal WAL) ; seule la copie est écrite.
