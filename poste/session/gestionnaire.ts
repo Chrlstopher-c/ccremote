@@ -34,6 +34,7 @@ import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from 
 import { lireFichierSession } from '../presentation/lecture.ts';
 import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
 import { estCommandeModifications, ModificationsSessions } from '../modifications/commande-modifications.ts';
+import { estFichiersSession, executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
 import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 
@@ -151,11 +152,19 @@ export class GestionnaireSessions {
     return { ok: true, donnees: session.resume };
   }
 
+  /** Panneau Fichiers d'une session : le dossier de la session borne tous les chemins. */
+  private fichiersSession(c: CommandeFichiersSession): Promise<Reponse> {
+    const s = this.sessions.get(c.sessionId);
+    if (!s) return Promise.resolve({ ok: false, erreur: `session inconnue sur ${this.config.machine}` });
+    return executerFichiersSession(c, s.resume.cwd, this.journal);
+  }
+
   async executer(c: CommandeSession): Promise<Reponse> {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return this.dupliquer(c.sessionId, c.messageId);
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
+    if (estFichiersSession(c)) return this.fichiersSession(c);
     if (estCommandeModifications(c)) return this.modifications.executer(c, this.sessions.get(c.sessionId));
     if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
     const s = this.sessions.get(c.sessionId);

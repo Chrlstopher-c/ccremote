@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
+import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
 import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 import {
@@ -115,6 +116,15 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tour_modifications'), ...avecSession, tour: TourRef }),
   z.object({ kind: z.literal('tour_diff'), ...avecSession, tour: TourRef, chemin: CheminModifie }),
   z.object({ kind: z.literal('tour_annuler'), ...avecSession, tour: TourRef }),
+  // Panneau Fichiers d'une session (arbre, lecture, écriture) : chemins relatifs au dossier de la session.
+  z.object({ kind: z.literal('session_arbre'), ...avecSession, chemin: CheminSession }),
+  z.object({ kind: z.literal('session_lire'), ...avecSession, chemin: CheminSession }),
+  z.object({
+    kind: z.literal('session_ecrire'),
+    ...avecSession,
+    chemin: CheminSession,
+    texte: z.string().max(TAILLE_MAX_TEXTE_SESSION * 4),
+  }),
   // Suppression d'une session sur demande explicite de Chris : transcript et sous-agents retirés du poste.
   z.object({ kind: z.literal('supprimer'), ...avecSession }),
   // Sessions Claude Code du poste non encore connues (liste), puis import des identifiants choisis.

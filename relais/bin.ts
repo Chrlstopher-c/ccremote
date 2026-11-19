@@ -11,6 +11,7 @@ import { ApiFichiers } from './appareils/api-fichiers.ts';
 import { ApiArtefacts } from './clients/api-artefacts.ts';
 import { ApiModifications } from './clients/api-modifications.ts';
 import { ouvrirTerminal, ouvrirTerminalSession } from './appareils/route-terminal.ts';
+import { ApiFichiersSession } from './clients/api-fichiers-session.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
@@ -63,6 +64,7 @@ const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
 const artefacts = new ApiArtefacts(registre, postes, journal);
 const modifications = new ApiModifications(registre, postes, journal);
+const fichiersSession = new ApiFichiersSession(registre, postes, journal);
 const terminaux = new TerminauxRelais(postes, journal);
 postes.terminaux = terminaux;
 const salleReunions = new SalleDeReunion({
@@ -90,6 +92,7 @@ const routes = avecCors(
     fichiers,
     artefacts,
     modifications,
+    fichiersSession,
     echo,
     reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
     wol: config.wol,
