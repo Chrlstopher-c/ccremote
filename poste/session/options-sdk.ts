@@ -54,7 +54,7 @@ export interface ParametresSdk {
 export function optionsSdk(p: ParametresSdk): Options {
   return {
     cwd: p.cwd,
-    env: envSdk(p.source, p.configDir),
+    env: { ...envSdk(p.source, p.configDir), CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' },
     ...(p.reprise ? { resume: p.identifiant } : { sessionId: p.identifiant }),
     ...(p.reprise && p.reprisePoint ? { resumeSessionAt: p.reprisePoint } : {}),
     systemPrompt: { type: 'preset', preset: 'claude_code', ...(p.consignes ? { append: p.consignes } : {}) },

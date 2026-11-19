@@ -1,7 +1,7 @@
 // Responsabilité : tests de la traduction des messages du Claude Agent SDK en événements du fil.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { describe, expect, test } from 'bun:test';
-import { nouvelEtatTraduction, traduireSdk } from './traduction-sdk.ts';
+import { nouvelEtatTraduction, type SortieTraduction, traduireSdk } from './traduction-sdk.ts';
 
 // Fixtures partielles : seuls les champs lus par la traduction sont renseignés. Le cast ne sert qu'aux tests.
 const sdk = (m: object): SDKMessage => m as SDKMessage;
@@ -331,5 +331,91 @@ describe('flux de réflexion', () => {
       { type: 'flux', bloc: '0:0', delta: 'je pèse', genre: 'reflexion' },
     ]);
     expect(traduireSdk(dit, etat).evenements).toEqual([{ type: 'flux', bloc: '1:1', delta: 'Bon' }]);
+  });
+});
+
+describe('liste de tâches du SDK (TaskCreate / TaskUpdate)', () => {
+  const creer = (id: string, subject: string): SDKMessage =>
+    assistant([{ type: 'tool_use', id, name: 'TaskCreate', input: { subject, description: subject } }]);
+  const resultatCreation = (id: string, texte: string): SDKMessage =>
+    utilisateur([{ type: 'tool_result', tool_use_id: id, content: texte }]);
+  const miseAJour = (id: string, taskId: string, status: string): SDKMessage =>
+    assistant([{ type: 'tool_use', id, name: 'TaskUpdate', input: { taskId, status } }]);
+
+  test('trois créations : id du résultat, ordre de création, pas de carte d’outil ni de résultat affiché', () => {
+    const etat = nouvelEtatTraduction();
+    const sorties = [
+      traduireSdk(creer('c1', 'Lire'), etat),
+      traduireSdk(resultatCreation('c1', 'Task #1 created successfully: Lire'), etat),
+      traduireSdk(creer('c2', 'Écrire'), etat),
+      traduireSdk(resultatCreation('c2', 'Task #2 created successfully: Écrire'), etat),
+      traduireSdk(creer('c3', 'Tester'), etat),
+      traduireSdk(resultatCreation('c3', 'Task #3 created successfully: Tester'), etat),
+    ];
+    expect(sorties.map((s) => s.evenements.length)).toEqual([0, 1, 0, 1, 0, 1]);
+    expect(sorties[5]?.evenements).toEqual([
+      {
+        type: 'taches',
+        taches: [
+          { contenu: 'Lire', etat: 'attente' },
+          { contenu: 'Écrire', etat: 'attente' },
+          { contenu: 'Tester', etat: 'attente' },
+        ],
+      },
+    ]);
+  });
+
+  test('TaskUpdate : passage en cours puis fait, émis à chaque changement', () => {
+    const etat = nouvelEtatTraduction();
+    traduireSdk(creer('c1', 'Lire'), etat);
+    traduireSdk(resultatCreation('c1', 'Task #1 created'), etat);
+    expect(traduireSdk(miseAJour('u1', '1', 'in_progress'), etat).evenements).toEqual([
+      { type: 'taches', taches: [{ contenu: 'Lire', etat: 'en_cours' }] },
+    ]);
+    expect(traduireSdk(miseAJour('u2', '1', 'completed'), etat).evenements).toEqual([
+      { type: 'taches', taches: [{ contenu: 'Lire', etat: 'fait' }] },
+    ]);
+  });
+
+  test('résultat sans id : numérotation dans l’ordre de création ; TaskUpdate sur id inconnu ignoré', () => {
+    const etat = nouvelEtatTraduction();
+    traduireSdk(creer('c1', 'A'), etat);
+    traduireSdk(resultatCreation('c1', 'ok'), etat);
+    expect(traduireSdk(miseAJour('u1', '99', 'completed'), etat).evenements).toEqual([]);
+    expect(traduireSdk(miseAJour('u2', '1', 'completed'), etat).evenements).toEqual([
+      { type: 'taches', taches: [{ contenu: 'A', etat: 'fait' }] },
+    ]);
+  });
+
+  test('scénario complet : 3 tâches créées, passées en cours puis fait, toutes terminées', () => {
+    const etat = nouvelEtatTraduction();
+    const noms = ['Créer', 'Remplir', 'Vérifier'];
+    noms.forEach((nom, i) => {
+      traduireSdk(creer(`c${i}`, nom), etat);
+      traduireSdk(resultatCreation(`c${i}`, `Task #${i + 1} created`), etat);
+    });
+    let derniere: SortieTraduction | undefined;
+    for (let i = 1; i <= 3; i++) {
+      traduireSdk(miseAJour(`ec${i}`, String(i), 'in_progress'), etat);
+      derniere = traduireSdk(miseAJour(`fc${i}`, String(i), 'completed'), etat);
+    }
+    expect(derniere?.evenements).toEqual([
+      {
+        type: 'taches',
+        taches: noms.map((contenu) => ({ contenu, etat: 'fait' })),
+      },
+    ]);
+  });
+
+  test('TaskCreate d’un sous-agent : pas de liste du fil principal', () => {
+    const etat = nouvelEtatTraduction();
+    const sortie = traduireSdk(
+      assistant([{ type: 'tool_use', id: 's1', name: 'TaskCreate', input: { subject: 'x', description: 'x' } }], {
+        parent_tool_use_id: 'p1',
+      }),
+      etat,
+    );
+    expect(sortie.evenements.some((e) => e.type === 'taches')).toBe(false);
+    expect(etat.taches).toEqual([]);
   });
 });

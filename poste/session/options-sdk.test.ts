@@ -47,6 +47,12 @@ describe('envSdk', () => {
 });
 
 describe('optionsSdk', () => {
+  test('active les outils de tâches du SDK, sans perdre l’environnement hérité', () => {
+    const env = optionsSdk(parametres({ source: { HOME: '/h' } })).env;
+    expect(env?.['CLAUDE_CODE_ENABLE_TODO_TOOLS']).toBe('1');
+    expect(env?.['HOME']).toBe('/h');
+  });
+
   test('nouvelle conversation : sessionId fixé, pas de resume', () => {
     const o = optionsSdk(parametres());
     expect(o.sessionId).toBe('conv-1');

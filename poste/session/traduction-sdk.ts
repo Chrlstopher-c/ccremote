@@ -11,6 +11,8 @@ const PREFIXE_OUTILS_HARNESS = 'mcp__ccremote__';
 // Outils de présentation : leur effet arrive par les événements fichier, artefact, widget ; l'appel n'a pas de carte.
 const PREFIXE_PRESENTATION = 'mcp__lanterne__';
 const OUTILS_SOUS_AGENT = new Set(['Agent', 'Task']);
+// Liste de tâches du SDK (CLAUDE_CODE_ENABLE_TODO_TOOLS) : pas de carte d'outil, la liste du fil la remplace.
+const OUTILS_TACHES = new Set(['TaskCreate', 'TaskUpdate']);
 const FIL_PRINCIPAL = '';
 
 type Objet = Record<string, unknown>;
@@ -20,6 +22,12 @@ type Utilisateur = Extract<SDKMessage, { type: 'user' }>;
 type Flux = Extract<SDKMessage, { type: 'stream_event' }>;
 type Resultat = Extract<SDKMessage, { type: 'result' }>;
 type Systeme = Extract<SDKMessage, { type: 'system' }>;
+type EtatTache = 'attente' | 'en_cours' | 'fait';
+interface Tache {
+  id: string;
+  contenu: string;
+  etat: EtatTache;
+}
 
 export interface EtatTraduction {
   // Id du message en flux, par fil (clé : parent_tool_use_id, '' = principal) : les deltas n'en portent pas.
@@ -32,6 +40,14 @@ export interface EtatTraduction {
   readonly outilsPresentation: Set<string>;
   // Dernière entrée assistant du fil principal pendant le tour : son uuid désigne la réponse (dupliquer, épingler).
   dernierUuid: string | null;
+  // Liste de tâches (TaskCreate/TaskUpdate) du fil principal, par ordre de création ; vit toute la session.
+  readonly taches: Tache[];
+  // TaskCreate en attente de son résultat (id de l'appel → sujet) : l'id de la tâche vient du résultat.
+  readonly creations: Map<string, string>;
+  // Appels TaskCreate/TaskUpdate : leurs résultats sont masqués comme leurs appels.
+  readonly outilsTaches: Set<string>;
+  // Dernier numéro de tâche vu : repli (numérotation de Claude Code) si le résultat ne porte pas d'id.
+  dernierNumeroTache: number;
 }
 
 export interface SortieTraduction {
@@ -50,6 +66,10 @@ export function nouvelEtatTraduction(): EtatTraduction {
     erreurDuTour: false,
     outilsPresentation: new Set(),
     dernierUuid: null,
+    taches: [],
+    creations: new Map(),
+    outilsTaches: new Set(),
+    dernierNumeroTache: 0,
   };
 }
 
@@ -121,6 +141,7 @@ function traduireOutil(bloc: Objet, marque: Marque, etat: EtatTraduction): Evene
   if (nom.startsWith(PREFIXE_PRESENTATION)) etat.outilsPresentation.add(id);
   if (!nom || nom.startsWith(PREFIXE_OUTILS_HARNESS) || nom.startsWith(PREFIXE_PRESENTATION)) return [];
   if (nom === 'TodoWrite' && marque.agent === undefined) return [{ type: 'taches', taches: tachesDe(entree['todos']) }];
+  if (OUTILS_TACHES.has(nom) && marque.agent === undefined) return traduireTache(nom, id, entree, etat);
   const outil: Evenement = {
     type: 'outil',
     id,
@@ -142,15 +163,21 @@ function traduireOutil(bloc: Objet, marque: Marque, etat: EtatTraduction): Evene
 
 function traduireUtilisateur(msg: Utilisateur, etat: EtatTraduction): Evenement[] {
   const marque = marqueDe(msg.parent_tool_use_id);
-  return blocsDe(msg.message.content)
-    .filter((b) => b['type'] === 'tool_result' && !etat.outilsPresentation.has(texteDe(b['tool_use_id'])))
-    .map((b): Evenement => ({
-      type: 'resultat_outil',
-      outilId: texteDe(b['tool_use_id']),
-      extrait: texteDuResultat(b['content']).slice(0, TAILLE_RESULTAT),
-      erreur: b['is_error'] === true,
-      ...marque,
-    }));
+  return blocsDe(msg.message.content).flatMap((b): Evenement[] => {
+    if (b['type'] !== 'tool_result') return [];
+    const outilId = texteDe(b['tool_use_id']);
+    if (etat.outilsPresentation.has(outilId)) return [];
+    if (etat.outilsTaches.has(outilId)) return resultatTache(outilId, b, etat);
+    return [
+      {
+        type: 'resultat_outil',
+        outilId,
+        extrait: texteDuResultat(b['content']).slice(0, TAILLE_RESULTAT),
+        erreur: b['is_error'] === true,
+        ...marque,
+      },
+    ];
+  });
 }
 
 function traduireFlux(msg: Flux, etat: EtatTraduction): Evenement[] {
@@ -271,4 +298,61 @@ function tachesDe(brut: unknown): { contenu: string; etat: 'attente' | 'en_cours
     const etat = tache['status'] === 'completed' ? 'fait' : tache['status'] === 'in_progress' ? 'en_cours' : 'attente';
     return [{ contenu, etat }];
   });
+}
+
+// TaskCreate : le sujet attend son résultat, qui porte l'id de la tâche. TaskUpdate : effet immédiat sur la liste.
+function traduireTache(nom: string, id: string, entree: Objet, etat: EtatTraduction): Evenement[] {
+  etat.outilsTaches.add(id);
+  if (nom === 'TaskCreate') {
+    const sujet = texteDe(entree['subject']).trim();
+    if (sujet) etat.creations.set(id, sujet);
+    return [];
+  }
+  return miseAJourTache(entree, etat) ? [evenementTaches(etat)] : [];
+}
+
+function resultatTache(outilId: string, bloc: Objet, etat: EtatTraduction): Evenement[] {
+  const sujet = etat.creations.get(outilId);
+  if (sujet === undefined) return [];
+  etat.creations.delete(outilId);
+  if (bloc['is_error'] === true) return [];
+  const id = identifiantDeCreation(bloc['content']) ?? String(++etat.dernierNumeroTache);
+  etat.dernierNumeroTache = Math.max(etat.dernierNumeroTache, Number(id) || 0);
+  etat.taches.push({ id, contenu: sujet, etat: 'attente' });
+  return [evenementTaches(etat)];
+}
+
+// Applique un TaskUpdate (statut, sujet, suppression) ; vrai si la liste a changé.
+function miseAJourTache(entree: Objet, etat: EtatTraduction): boolean {
+  const index = etat.taches.findIndex((t) => t.id === texteDe(entree['taskId']));
+  const tache = etat.taches[index];
+  if (!tache) return false;
+  const statut = texteDe(entree['status']);
+  if (statut === 'deleted') {
+    etat.taches.splice(index, 1);
+    return true;
+  }
+  const etatNouveau = etatDeStatut(statut);
+  const sujet = texteDe(entree['subject']).trim();
+  if (sujet) tache.contenu = sujet;
+  if (etatNouveau) tache.etat = etatNouveau;
+  return true;
+}
+
+function etatDeStatut(statut: string): EtatTache | null {
+  if (statut === 'completed') return 'fait';
+  if (statut === 'in_progress') return 'en_cours';
+  if (statut === 'pending') return 'attente';
+  return null;
+}
+
+// Id d'une tâche créée : champ id d'un JSON, ou « #n » du texte de résultat. Absent : null (repli sur la numérotation).
+function identifiantDeCreation(contenu: unknown): string | null {
+  const texte = texteDuResultat(contenu);
+  const trouve = /#(\d+)\b/.exec(texte) ?? /"id"\s*:\s*"?([\w-]+)"?/.exec(texte);
+  return trouve?.[1] ?? null;
+}
+
+function evenementTaches(etat: EtatTraduction): Evenement {
+  return { type: 'taches', taches: etat.taches.map((t) => ({ contenu: t.contenu, etat: t.etat })) };
 }

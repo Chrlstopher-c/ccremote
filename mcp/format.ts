@@ -81,6 +81,8 @@ function ligneEvenement(e: EvenementDate): string | null {
       return `[${heure}] ERREUR : ${couper(v.message)}`;
     case 'reflexion':
       return null;
+    default:
+      return null;
   }
 }
 

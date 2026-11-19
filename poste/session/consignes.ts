@@ -62,8 +62,8 @@ Pour lui donner un fichier, utilise les outils du serveur \`lanterne\` (toujours
 - \`afficher_widget\` : un petit SVG ou fragment HTML en place dans une réponse.`;
 
 const REGLES_TRAVAIL = `## Règles de travail
-- Demande en plusieurs étapes : tiens une liste de tâches (TodoWrite si cet outil est disponible, sinon la barre
-  de progression) et mets-la à jour à chaque étape.
+- Demande en plusieurs étapes : tiens une liste de tâches (TaskCreate une fois par étape, TaskUpdate pour passer
+  \`in_progress\` puis \`completed\` ; TodoWrite si seul cet outil est disponible, sinon la barre de progression).
 - Autonomie : avance jusqu'à l'objectif sans t'arrêter pour demander. Tranche les choix techniques toi-même.
   N'utilise \`poser_question\` que pour une décision qui appartient réellement à Chris ; puis termine ton tour.
 - Étapes : à chaque palier livré et vérifié, appelle \`etape_terminee\` (résumé + suite). Le harness compacte

@@ -105,7 +105,7 @@ describe('titre d une session adoptée dans tmux', () => {
 
   test('un nom par défaut (« alpha-93 », nom cc) ne remplace pas le titre provisoire du dossier', () => {
     const { session, emis } = montage(fiche({ cwd: '/home/x/alpha', titre: 'alpha', terminal: false, tmux: null }));
-    session.nommer('alpha-93', null);
+    session.nommer('alpha-93');
     session.rattacher(pane('claude-alpha-93', 'alpha'));
 
     expect(session.resume.titre).toBe('alpha');
@@ -114,7 +114,7 @@ describe('titre d une session adoptée dans tmux', () => {
 
   test('un nom donné par Chris (registre cc) devient le titre', () => {
     const { session } = montage(fiche({ cwd: '/home/x/alpha', titre: 'alpha', terminal: false, tmux: null }));
-    session.nommer('Migration de la base', null);
+    session.nommer('Migration de la base');
     session.rattacher(pane('claude-alpha', 'alpha'));
 
     expect(session.resume.titre).toBe('Migration de la base');

@@ -144,7 +144,11 @@ describe('SessionSdk', () => {
       configDir: '/comptes/2',
     });
     await session.lancer('un');
-    expect(requetes[0]?.options.env).toEqual({ CHEMIN: '/ok', CLAUDE_CONFIG_DIR: '/comptes/2' });
+    expect(requetes[0]?.options.env).toEqual({
+      CHEMIN: '/ok',
+      CLAUDE_CONFIG_DIR: '/comptes/2',
+      CLAUDE_CODE_ENABLE_TODO_TOOLS: '1',
+    });
   });
 
   test('le premier message attend que les connecteurs MCP ne soient plus en attente', async () => {
