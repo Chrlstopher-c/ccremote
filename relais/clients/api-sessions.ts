@@ -161,6 +161,15 @@ export class ApiSessions {
     return json(r.donnees ?? {}, 201);
   }
 
+  // Recherche dans tout le fil : `q` (texte, sans casse), `limite` (1 à 200, 50 par défaut). Rend le total et les
+  // occurrences les plus récentes en ordre croissant ; le poste ouvre la page qui contient une occurrence.
+  async rechercherFil(req: RequeteSession): Promise<Response> {
+    const url = new URL(req.url);
+    if (!this.registre.session(req.params.id)) return erreur('session inconnue', 404);
+    const limite = Math.min(Math.max(entier(url.searchParams.get('limite'), 50), 1), 200);
+    return json(this.registre.rechercherFil(req.params.id, url.searchParams.get('q') ?? '', limite));
+  }
+
   // Chapitres épinglés de la session (uuid), tous rangs confondus : le fil partiel les applique à chaque page.
   async chapitres(req: RequeteSession): Promise<Response> {
     if (!this.registre.session(req.params.id)) return erreur('session inconnue', 404);

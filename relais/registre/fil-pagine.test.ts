@@ -81,6 +81,20 @@ describe('fil paginé : evenementsAvant et chapitres', () => {
     expect(derniers[299]?.seq).toBe(1500);
   });
 
+  test('recherche dans tout le fil : sans casse, messages seuls, les plus récents en ordre croissant, total exact', async () => {
+    const r = registreAvec(5);
+    r.ajouterEvenement('a', MAJ, { type: 'message', texte: 'Rapport Lanterne', uuid: 'm1' });
+    r.ajouterEvenement('a', MAJ, { type: 'outil', id: 'o1', nom: 'Bash', entree: 'lanterne', etat: 'termine' } as never);
+    r.ajouterEvenement('a', MAJ, { type: 'texte', texte: 'lanterne encore', uuid: 'u9' });
+    expect(r.rechercherFil('a', 'LANTERNE', 50).total).toBe(2);
+    expect(r.rechercherFil('a', 'lanterne', 1).resultats.map((e) => e.seq)).toEqual([8]);
+    expect(r.rechercherFil('a', '', 50)).toEqual({ total: 0, resultats: [] });
+    const api = new ApiSessions(r, postes, new Diffusion(), new Set(), journal);
+    const reponse = await api.rechercherFil(Object.assign(new Request('http://x/r?q=t3&limite=5'), { params: { id: 'a' } }) as never);
+    expect(((await reponse.json()) as { total: number }).total).toBe(1);
+    expect((await api.rechercherFil(Object.assign(new Request('http://x/r?q=t'), { params: { id: 'zz' } }) as never)).status).toBe(404);
+  });
+
   test('GET chapitres : liste des uuid épinglés, 404 pour une session inconnue', async () => {
     const r = registreAvec(2);
     r.ajouterEvenement('a', MAJ, { type: 'chapitre', uuid: 'u2', epingle: true });

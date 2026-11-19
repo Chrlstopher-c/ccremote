@@ -95,6 +95,7 @@ export function construireRoutes(d: DependancesApi) {
       GET: protege((req) => d.sessionConfig.annexes(req as never)),
       POST: protege((req) => d.sessionConfig.annexer(req as never)),
     },
+    '/api/sessions/:id/recherche': { GET: protege((req) => d.sessions.rechercherFil(req as never)) },
     '/api/sessions/:id/chapitres': {
       GET: protege((req) => d.sessions.chapitres(req as never)),
       POST: protege((req) => d.sessions.chapitre(req as never)),

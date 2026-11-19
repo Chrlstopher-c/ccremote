@@ -234,6 +234,27 @@ export class Registre {
       .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
   }
 
+  // Messages (Chris et Claude) de toute la session qui contiennent `texte`, sans casse ; les `limite` plus récents,
+  // en ordre croissant. `total` compte toutes les occurrences. Parcours complet : le fil entier n'est pas chargé.
+  rechercherFil(sessionId: string, texte: string, limite: number): { total: number; resultats: EvenementDate[] } {
+    const aiguille = texte.toLocaleLowerCase();
+    if (aiguille === '') return { total: 0, resultats: [] };
+    const lignes = this.db
+      .query(
+        `SELECT seq, session_id, ts, evt FROM evenements WHERE session_id = $s
+      AND json_extract(evt, '$.type') IN ('message', 'texte') ORDER BY seq`,
+      )
+      .all({ s: sessionId }) as { seq: number; session_id: string; ts: string; evt: string }[];
+    const trouvees: EvenementDate[] = [];
+    for (const l of lignes) {
+      const evt = Evenement.parse(JSON.parse(l.evt));
+      if (evt.type !== 'message' && evt.type !== 'texte') continue;
+      if (!evt.texte.toLocaleLowerCase().includes(aiguille)) continue;
+      trouvees.push({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt });
+    }
+    return { total: trouvees.length, resultats: trouvees.slice(-limite) };
+  }
+
   // Messages épinglés comme chapitres : dernier état de chaque chapitre (un retrait l'annule).
   chapitresEpingles(sessionId: string): string[] {
     const lignes = this.db
