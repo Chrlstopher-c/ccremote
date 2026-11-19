@@ -60,7 +60,11 @@ export interface EnvironnementSdk {
   readonly executable: string | null;
   readonly socket: string; // socket local du poste : les outils de rythme y relaient leurs appels
   readonly requete?: FabriqueRequete; // injectable : les tests rejouent des messages sans appeler le modèle
-  readonly presentation?: { readonly stockage: Stockage; readonly racines: readonly string[] }; // sans lui, pas d'outils `lanterne`
+  readonly presentation?: {
+    readonly stockage: Stockage;
+    readonly racines: readonly string[];
+    readonly api?: { readonly url: string; readonly jeton: string };
+  }; // sans lui, pas d'outils `lanterne`
   readonly traduction?: TraductionSdk;
   readonly env?: Record<string, string | undefined>;
   readonly delaiMcpMs?: number;
@@ -119,6 +123,7 @@ export class SessionSdk implements SessionPoste {
           stockage: pres.stockage,
           emettre: (evt) => this.emettre(evt),
           journal: env.journal,
+          ...(pres.api ? { api: pres.api } : {}),
         })
       : null;
     this.suiviNuit = new SuiviNuit({

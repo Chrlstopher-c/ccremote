@@ -6,6 +6,7 @@ import { ModeFichier } from '../../commun/presentation.ts';
 import { afficherWidget } from './widget.ts';
 import { envoyerFichier, publierArtefact } from './envoi.ts';
 import type { ContexteOutils, Resultat } from './outils.ts';
+import * as machines from './machines-outils.ts';
 
 export const NOM_SERVEUR = 'lanterne';
 
@@ -34,6 +35,46 @@ interface ResultatOutil {
 
 function enResultat(r: Resultat): ResultatOutil {
   return { content: [{ type: 'text', text: r.texte }], ...(r.erreur ? { isError: true } : {}) };
+}
+
+/** Les outils `machines` n’existent que si le relais est joignable (API et jeton configurés). */
+function outilsMachines(c: ContexteOutils) {
+  if (!c.api) return [];
+  const api = c.api;
+  return [
+    tool('lister_machines', 'Lister les machines configurées (connexion SSH) de Chris, avec l’état de leur poste.', {}, async () =>
+      enResultat(await machines.listerMachines(api)),
+    ),
+    tool('tester_machine', 'Tester une machine : SSH, Claude Code, tmux, bun, poste connecté.', { id: z.string().min(1).max(40) }, async (a) =>
+      enResultat(await machines.testerMachine(api, a.id)),
+    ),
+    tool(
+      'ajouter_machine',
+      'Ajouter une machine configurée (SSH, joignable par le VPN du parc). La clé est un chemin de fichier local au relais.',
+      {
+        id: z.string().min(1).max(40),
+        description: z.string().max(200).optional(),
+        hote: z.string().min(1).max(253),
+        port: z.number().int().min(1).max(65535).optional(),
+        utilisateur: z.string().min(1).max(32),
+        cle: z.string().min(1).max(1000),
+        dossier: z.string().min(1).max(1000).optional(),
+      },
+      async (a) => enResultat(await machines.ajouterMachine(api, a)),
+    ),
+    tool(
+      'modifier_machine',
+      'Modifier une machine configurée. Chris doit confirmer dans l’appli avant toute modification.',
+      { id: z.string().min(1).max(40), modif: z.record(z.string(), z.unknown()) },
+      async (a) => enResultat(await machines.modifierMachine(api, a.id, a.modif, c.journal)),
+    ),
+    tool(
+      'supprimer_machine',
+      'Supprimer la configuration d’une machine. Chris doit confirmer dans l’appli ; sans accord, rien n’est supprimé.',
+      { id: z.string().min(1).max(40) },
+      async (a) => enResultat(await machines.supprimerMachine(api, a.id, c.journal)),
+    ),
+  ];
 }
 
 export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithInstance {
@@ -68,6 +109,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
         { titre: z.string().min(1).max(120), code: z.string().min(1), type: z.enum(['svg', 'html']) },
         async (args) => enResultat(afficherWidget(c, args)),
       ),
+      ...outilsMachines(c),
     ],
   });
 }

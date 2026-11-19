@@ -33,6 +33,10 @@ export const MIGRATIONS: readonly string[] = [
   `ALTER TABLE sessions ADD COLUMN epinglee INTEGER NOT NULL DEFAULT 0;`,
   `CREATE TABLE environnements (
      machine TEXT NOT NULL, dossier TEXT NOT NULL, enregistre_le TEXT NOT NULL, PRIMARY KEY (machine, dossier));`,
+  `CREATE TABLE machines_ssh (
+     id TEXT PRIMARY KEY, description TEXT NOT NULL DEFAULT '', hote TEXT NOT NULL, port INTEGER NOT NULL DEFAULT 22,
+     utilisateur TEXT NOT NULL, cle TEXT NOT NULL, dossier TEXT NOT NULL DEFAULT '~',
+     cree_le TEXT NOT NULL, maj_le TEXT NOT NULL);`,
 ];
 
 export function ouvrirBase(chemin: string): Database {

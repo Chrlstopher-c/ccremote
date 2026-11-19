@@ -20,6 +20,8 @@ export interface ConfigRelais {
   readonly origines: ReadonlySet<string>;
   readonly echo: { readonly url: string; readonly jeton: string } | null;
   readonly reunionLimite: number; // demandes de Chris relayées par réunion (CCREMOTE_REUNION_LIMITE)
+  readonly relaisPostes: string | null; // adresse WebSocket du relais vue des machines SSH (CCREMOTE_RELAIS_POSTES)
+  readonly urlApiPostes: string | null; // URL HTTP de l'API vue des postes distants (CCREMOTE_URL_API_POUR_POSTES)
 }
 
 // « a=x,b=y » → Map ; « a,b » → Set
@@ -72,6 +74,8 @@ export function chargerConfig(): ConfigRelais {
     inactiviteMs: minutes(process.env['CCREMOTE_INACTIVITE_MIN'], 30) * 60_000,
     echo: configEcho(),
     reunionLimite: entierPositif(process.env['CCREMOTE_REUNION_LIMITE'], 20),
+    relaisPostes: process.env['CCREMOTE_RELAIS_POSTES'] || null,
+    urlApiPostes: process.env['CCREMOTE_URL_API_POUR_POSTES'] || null,
     origines: new Set(
       liste(process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420'),
     ),

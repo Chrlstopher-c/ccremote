@@ -11,6 +11,8 @@ export interface ContexteOutils {
   readonly stockage: Stockage;
   readonly emettre: (evt: Evenement) => void;
   readonly journal: Logger;
+  // Relais pour les outils de machines (absent : pas d'outils `machines`).
+  readonly api?: { readonly url: string; readonly jeton: string };
 }
 
 export interface Resultat {

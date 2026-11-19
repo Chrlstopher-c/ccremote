@@ -315,7 +315,7 @@ export class GestionnaireSessions {
       },
     };
     if (p.resume.moteur === 'sdk') {
-      const presentation = { stockage: this.stockage, racines: this.config.racines };
+      const presentation = { stockage: this.stockage, racines: this.config.racines, api: this.config.api };
       return new SessionSdk(p, { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket, presentation });
     }
     return new SessionTmux(p, { socket: this.socket, journal: this.journal, sortie });

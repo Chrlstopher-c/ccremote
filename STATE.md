@@ -13,6 +13,16 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 19/11 — Machines SSH (agent Haiku) — relais et outils, testé en loopback
+- Nouveau : `relais/machines/` (config SSH, test, dossiers, installation du poste par SSH, confirmations), routes
+  `/api/machines/config…`, `/api/machines/:id/dossiers`, `/api/confirmations…`, migration 9 (`machines_ssh`), outils
+  `lister/tester/ajouter/modifier/supprimer_machine` dans le serveur `lanterne` du poste (`poste/presentation/machines-outils.ts`).
+- Variables (environnement du relais, hors dépôt) : `CCREMOTE_RELAIS_POSTES` (WebSocket du relais vu des machines),
+  `CCREMOTE_URL_API_POUR_POSTES` (HTTP de l'API vue des machines). Secrets des postes : `~/.config/quart-lanterne/postes/`.
+  Poste distant : `~/.config/quart-poste/` (600), unité `quart-poste-distant.service`.
+- Tests : `bun test commun poste relais mcp` vert (383). Essai réel fait sur une copie privée (voir STATE Lanterne, 19/11).
+- Non déployé sur `/mnt/projects/quart-lanterne` (worktree sale d'autres agents) : fusion et redémarrage à décider.
+
 ## 18/11 (agent Haiku) — Suppression, environnements, import CLI (branche `lanterne/moteur`, 0ec7d23, 111d001)
 
 - Suppression : `POST /api/sessions/:id/supprimer` → poste : ferme la session SDK, retire `<config>/projects/<dossier>/<id>.jsonl` et `<id>/` (sous-agents) seulement, retient l'id dans `supprimees.json` (sinon la découverte la ferait réapparaître). Refus si la session tourne dans un terminal. Relais : efface la fiche, le fil et les notifications après accord du poste.

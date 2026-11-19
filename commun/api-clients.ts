@@ -53,7 +53,18 @@ export type MessageClient =
   | { readonly type: 'machine'; readonly machine: VueMachine }
   | { readonly type: 'notification'; readonly notification: Notification }
   | { readonly type: 'echo'; readonly echo: MessageEcho } // WebSocket seulement : n'avance pas le long-poll
-  | { readonly type: 'reunion'; readonly reunion: Reunion }; // WebSocket seulement : la salle de réunion (HQ)
+  | { readonly type: 'reunion'; readonly reunion: Reunion } // WebSocket seulement : la salle de réunion (HQ)
+  | { readonly type: 'confirmation'; readonly confirmation: ConfirmationDemandee }; // une question de Claude à Chris
+
+/** Forme publique d'une confirmation demandée par un outil (voir relais/machines/confirmations.ts). */
+export interface ConfirmationDemandee {
+  readonly id: string;
+  readonly action: string;
+  readonly cible: string;
+  readonly resume: string;
+  readonly statut: 'en_attente' | 'accordee' | 'refusee' | 'expiree';
+  readonly cree_le: string;
+}
 
 export interface DemandeOuverture {
   readonly machine: string;

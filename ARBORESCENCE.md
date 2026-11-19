@@ -292,6 +292,8 @@ poste/fichiers/explorateur.ts                        fichiers de la machine vus 
 poste/parc/alimentation.ts                           éteindre la machine du poste à la demande de Chris.
 poste/parc/etat-machine.ts                           mesurer l'état de la machine (CPU, mémoire, disque, charge) pour le t…
 poste/parc/lien-relais.ts                            le lien sortant du poste vers le relais — connexion authentifiée, rec…
+poste/presentation/machines-outils.test.ts          tests des outils machines contre un faux relais
+poste/presentation/machines-outils.ts               les outils machines du serveur lanterne : lister, tester, ajouter, modifier, supprimer (confirmation)
 poste/projets/decouverte.ts                          lister les projets présents sur la machine (sous-dossiers des racines…
 poste/session/adoption.ts                            la fiche d'une session adoptée — lancée hors ccremote, dans tmux ou d…
 poste/session/bilan-tour.ts                          bilan d'UN tour d'une session SDK, puis la suite à en tirer (suite-du-tour.ts)
@@ -378,6 +380,21 @@ relais/connecteurs/mcp-http.test.ts                  tests de mcp-http.ts et des
 relais/connecteurs/mcp-http.ts                       le MCP « quart » servi en HTTP pour claude.ai (/mcp/<jeton>) et Claude Code (/mcp + Bearer)
 relais/echo/api-echo.ts                              routes Echo des clients — parler, interrompre, relire, savoir si Echo répond
 relais/echo/lien-echo.ts                             lien du relais vers Echo, relayé dans le flux des clients
+relais/machines/api-confirmations.ts                les routes des confirmations (demander, lire, attendre, répondre)
+relais/machines/api-machines.test.ts                tests des routes des machines configurées
+relais/machines/api-machines.ts                     les routes des machines SSH : liste, ajout, modification, suppression, test, dossiers, installation
+relais/machines/confirmations.ts                    les demandes de confirmation de Chris : demander, répondre, attendre (expiration 5 min)
+relais/machines/dossiers.ts                         parcourir les dossiers d’une machine SSH (commande distante et lecture de sa sortie)
+relais/machines/installer.test.ts                   tests de l’installation du poste (script, configuration, archive)
+relais/machines/installer.ts                        installer le poste Quart sur une machine SSH (archive, script distant, unité systemd utilisateur)
+relais/machines/modele.test.ts                      tests de la validation des machines et des chemins distants
+relais/machines/modele.ts                           le vocabulaire des machines configurées : validation des entrées et chemins distants
+relais/machines/registre-machines.ts                la table des machines configurées (connexion SSH) dans la base du relais
+relais/machines/registre-secrets-confirmations.test.tstests du registre des machines, des secrets des postes et des confirmations
+relais/machines/secrets.ts                          les secrets des postes installés par SSH (fichiers 600, hors dépôt)
+relais/machines/ssh-dossiers.test.ts                tests de ssh, des dossiers distants et du test de machine
+relais/machines/ssh.ts                              lancer ssh vers une machine configurée (arguments en tableau, délai, lanceur injectable)
+relais/machines/tester.ts                           tester une machine : SSH, Claude Code, tmux, bun, poste connecté
 relais/notifications/regles.ts                       quels événements méritent une notification, et laquelle. Pur.
 relais/parc/postes.ts                                les postes connectés au relais — authentification, comptes rendus reç…
 relais/parc/reveil.test.ts                           tests de reveil.ts

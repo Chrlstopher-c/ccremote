@@ -1,4 +1,5 @@
 // Responsabilité : point d'entrée du relais — deux serveurs : clients (web, iPhone) et postes (machines de travail).
+import { join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
@@ -19,6 +20,12 @@ import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
 import { type DonneesPoste, Postes } from './parc/postes.ts';
+import { ApiMachines } from './machines/api-machines.ts';
+import { ApiConfirmations } from './machines/api-confirmations.ts';
+import { Confirmations } from './machines/confirmations.ts';
+import { RegistreMachines } from './machines/registre-machines.ts';
+import { chargerSecretsPostes, dossierSecretsPostes } from './machines/secrets.ts';
+import { Ssh } from './machines/ssh.ts';
 import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
@@ -33,7 +40,22 @@ const registre = new Registre(base, journal, config.inactiviteMs);
 const diffusion = new Diffusion();
 const plafond = new PlafondEchecs(config.fichierEchecs, journal.child({ domaine: 'acces' }));
 const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
-const postes = new Postes(registre, diffusion, config.secretsPostes, journal);
+const dossierSecrets = dossierSecretsPostes();
+const secretsPostes = new Map<string, string>([...config.secretsPostes, ...chargerSecretsPostes(dossierSecrets)]);
+const postes = new Postes(registre, diffusion, secretsPostes, journal);
+const confirmations = new ApiConfirmations(new Confirmations((m) => diffusion.diffuser(m)));
+const machines = new ApiMachines({
+  registre: new RegistreMachines(base),
+  postes,
+  ssh: new Ssh(undefined, journal.child({ domaine: 'ssh' })),
+  secrets: secretsPostes,
+  dossierSecrets,
+  relaisPostes: config.relaisPostes,
+  acces,
+  urlApi: config.urlApiPostes,
+  racineCode: join(import.meta.dir, '..'),
+  journal: journal.child({ domaine: 'machines' }),
+});
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const comptes = new ApiComptes(postes, journal);
 const fichiers = new ApiFichiers(postes, journal);
@@ -66,6 +88,8 @@ const routes = avecCors(
     reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
     wol: config.wol,
     diffusionWol: config.diffusionWol,
+    machines,
+    confirmations,
   }),
   config.origines,
 );

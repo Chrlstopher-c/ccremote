@@ -11,6 +11,8 @@ import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
 import type { LienEcho } from '../echo/lien-echo.ts';
 import { routesEcho } from '../echo/api-echo.ts';
+import type { ApiMachines } from '../machines/api-machines.ts';
+import type { ApiConfirmations } from '../machines/api-confirmations.ts';
 import { type DependancesReunions, routesReunions } from '../reunion/api-reunions.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
@@ -26,6 +28,8 @@ export interface DependancesApi {
   readonly reunions: DependancesReunions;
   readonly wol: ReadonlyMap<string, string>;
   readonly diffusionWol: string;
+  readonly machines: ApiMachines;
+  readonly confirmations: ApiConfirmations;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -79,6 +83,21 @@ export function construireRoutes(d: DependancesApi) {
       GET: protege(() => d.sessions.environnements()),
       POST: protege((req) => d.sessions.enregistrerEnvironnement(req)),
     },
+    '/api/machines/config': {
+      GET: protege(() => d.machines.liste()),
+      POST: protege((req) => d.machines.ajouter(req)),
+    },
+    '/api/machines/config/:id': {
+      PATCH: protege((req) => d.machines.modifier(req as never)),
+      DELETE: protege((req) => d.machines.supprimer(req as never)),
+    },
+    '/api/machines/config/:id/tester': { POST: protege((req) => d.machines.tester(req as never)) },
+    '/api/machines/config/:id/installer': { POST: protege((req) => d.machines.installer(req as never)) },
+    '/api/machines/:id/dossiers': { GET: protege((req) => d.machines.dossiers(req as never)) },
+    '/api/confirmations': { POST: protege((req) => d.confirmations.demander(req)) },
+    '/api/confirmations/:id': { GET: protege((req) => d.confirmations.lire(req as never)) },
+    '/api/confirmations/:id/attendre': { GET: protege((req) => d.confirmations.attendre(req as never)) },
+    '/api/confirmations/:id/reponse': { POST: protege((req) => d.confirmations.repondre(req as never)) },
     '/api/machines/:id/importables': { GET: protege((req) => d.sessions.importables(req as never)) },
     '/api/machines/:id/importer': { POST: protege((req) => d.sessions.importer(req as never)) },
     '/api/sessions/:id/mode': { POST: protege((req) => d.sessions.mode(req as never)) },

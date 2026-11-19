@@ -25,6 +25,8 @@ export interface ConfigPoste {
   readonly comptes: Record<string, string | null>;
   readonly donnees: string;
   readonly fenetreContexte: number;
+  // API du relais pour les outils de machines (session SDK) : URL et jeton claude-code (environnement).
+  readonly api?: { readonly url: string; readonly jeton: string };
 }
 
 export function developper(chemin: string): string {
@@ -46,7 +48,14 @@ export function chargerConfig(): ConfigPoste {
     racines: brut.racines.map(developper),
     comptes: Object.fromEntries(Object.entries(brut.comptes).map(([k, v]) => [k, v === null ? null : developper(v)])),
     donnees: developper(brut.donnees ?? '~/.local/share/ccremote/poste'),
+    api: apiDepuisEnvironnement(),
   };
+}
+
+function apiDepuisEnvironnement(): { url: string; jeton: string } | undefined {
+  const url = process.env['CCREMOTE_URL_API'];
+  const jeton = process.env['CCREMOTE_JETON_API'];
+  return url && jeton ? { url: url.replace(/\/+$/, ''), jeton } : undefined;
 }
 
 /** Réécrit la liste des comptes dans le fichier de config, sans toucher au reste (écriture atomique). */
