@@ -90,6 +90,7 @@ export const ResumeSession = z.object({
   titre: z.string(),
   objectif: z.string().nullable(),
   modele: z.string(),
+  modeleNom: z.string().nullable().optional(), // nom affiché par le SDK pour ce modèle (absent : Lanterne le dérive)
   compte: z.string(),
   autonomie: z.boolean(),
   statut: StatutSession,

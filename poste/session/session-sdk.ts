@@ -23,6 +23,7 @@ import { crochetEdition } from '../modifications/crochet-edition.ts';
 import type { ToursSession } from '../modifications/tours.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { BilanTour } from './bilan-tour.ts';
+import { pointDeRembobinage } from './rembobinage.ts';
 import { contexteDe } from './contexte-sdk.ts';
 import { AvisSdk } from './avis-sdk.ts';
 import { attendreConnecteurs, FileAsynchrone, messageUtilisateur, messagesAvecConnecteurs } from './file-messages-sdk.ts';
@@ -54,6 +55,7 @@ export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   initializationResult(): Promise<{
     readonly output_style: string;
     readonly available_output_styles: readonly string[];
+    readonly models?: readonly { readonly value: string; readonly resolvedModel?: string; readonly displayName: string }[];
   }>;
   reloadOutputStyles(): Promise<unknown>;
 }
@@ -111,6 +113,8 @@ export class SessionSdk implements SessionPoste {
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
   // Rembobinage en attente : la prochaine reprise part de cette entrée du transcript (resumeSessionAt).
   private pointReprise: string | null = null;
+  // Conversation recommencée après le rembobinage du premier message : son identifiant SDK (sans reprise).
+  private identifiantNeuf: string | null = null;
   // Chris a interrompu le tour en cours : le SDK coupe alors le flux par une erreur, qui n'est pas une panne.
   private interrompuParChris = false;
 
@@ -195,6 +199,7 @@ export class SessionSdk implements SessionPoste {
 
   // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
   async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
+    if (!this.fil && !this.etat.claudeSessionId && this.identifiantNeuf) return this.lancer(texte, null, pieces);
     if (!this.fil) return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : this.reprendre(texte);
     const jointes = pieces.length > 0 ? (this.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session') : null;
     if (typeof jointes === 'string') return jointes;
@@ -275,14 +280,20 @@ export class SessionSdk implements SessionPoste {
       this.env.journal.warn({ err: erreur, session: this.etat.id }, 'lecture du transcript impossible');
       return `lecture du transcript impossible : ${String(erreur)}`;
     }
-    const rang = messages.findIndex((m) => m.uuid === messageId && m.type === 'user');
-    if (rang < 0) return 'message introuvable dans la conversation';
-    const precedent = rang > 0 ? messages[rang - 1]?.uuid : undefined;
-    if (!precedent) return 'premier message : rembobinage impossible';
+    const point = pointDeRembobinage(messages, messageId);
+    if (point.tag === 'absent') return point.raison;
     const refus = await this.fermer();
     if (refus) return refus;
-    this.pointReprise = precedent;
+    if (point.tag === 'premier') this.recommencer();
+    else this.pointReprise = point.uuid;
     return null;
+  }
+
+  // Premier message rembobiné : rien ne précède, la conversation repart de zéro (nouvel identifiant SDK, sans reprise).
+  recommencer(): void {
+    this.identifiantNeuf = randomUUID();
+    this.pointReprise = null;
+    this.maj({ claudeSessionId: null });
   }
 
   async fermer(): Promise<string | null> {
@@ -331,7 +342,20 @@ export class SessionSdk implements SessionPoste {
       }
     }
     this.maj(champsReglage(r));
+    if (requete && r.kind === 'modele') void this.nommerModele(requete);
     return null;
+  }
+
+  // Nom affiché du modèle, lu dans la liste du SDK pour le compte ; absent de la liste : pas de nom (Lanterne dérive).
+  private async nommerModele(requete: RequeteSdk): Promise<void> {
+    try {
+      const init = await requete.initializationResult();
+      const voulu = this.etat.modele;
+      const nom = init.models?.find((m) => m.value === voulu || m.resolvedModel === voulu)?.displayName ?? null;
+      if (nom !== (this.etat.modeleNom ?? null)) this.maj({ modeleNom: nom });
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'nom du modèle non lu dans la requête');
+    }
   }
 
   // Panneau de session : lectures seules. Le contexte n'existe que pendant une requête ouverte (null sinon).
@@ -396,7 +420,7 @@ export class SessionSdk implements SessionPoste {
 
   private optionsDe(reprise: boolean): Options {
     return optionsSdk({
-      identifiant: reprise ? (this.etat.claudeSessionId ?? this.etat.id) : this.etat.id,
+      identifiant: reprise ? (this.etat.claudeSessionId ?? this.etat.id) : (this.identifiantNeuf ?? this.etat.id),
       reprise,
       reprisePoint: this.pointReprise,
       cwd: this.etat.cwd,
@@ -445,6 +469,7 @@ export class SessionSdk implements SessionPoste {
       this.fil = fil;
       void this.attendreConnecteurs(requete).then(() => liberer());
       void this.ecouter(requete, this.traduction.nouvelEtat());
+      void this.nommerModele(requete);
       this.maj({ statut: message ? 'travail' : 'attente' });
       if (message) this.pousser(message, blocs, uuid);
       return null;

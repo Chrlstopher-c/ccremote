@@ -126,11 +126,17 @@ export class RequeteFausse implements RequeteSdk {
     this.connecteursBascules.push(`${nom}:${actif ? 'actif' : 'inactif'}`);
   }
 
+  readonly modelesInitiaux = [
+    { value: 'claude-mythos-5-2', displayName: 'Mythos 5.2', description: '' },
+    { value: 'claude-haiku-5-5', displayName: 'Haiku 5.5', description: '' },
+  ];
+
   async initializationResult(): Promise<{
     readonly output_style: string;
     readonly available_output_styles: readonly string[];
+    readonly models: readonly { readonly value: string; readonly displayName: string }[];
   }> {
-    return this.styleInitial;
+    return { ...this.styleInitial, models: this.modelesInitiaux };
   }
 
   async reloadOutputStyles(): Promise<unknown> {
