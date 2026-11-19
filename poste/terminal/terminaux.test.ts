@@ -67,18 +67,26 @@ describe('environnement du terminal à distance', () => {
 });
 
 describe('shell du terminal à distance', () => {
-  test('un $SHELL absolu prime ; sans lui, jamais « unknown » (Bun le rend sans $USER)', () => {
+  test('le shell de connexion du compte (passwd) prime sur $SHELL hérité du lanceur, jamais « unknown »', () => {
     const avant = process.env['SHELL'];
     try {
-      process.env['SHELL'] = '/usr/bin/zsh';
-      expect(shellDeLUtilisateur()).toBe('/usr/bin/zsh');
-      delete process.env['SHELL'];
+      process.env['SHELL'] = '/bin/sh';
+      expect(shellDeLUtilisateur()).not.toBe('/bin/sh');
       expect(shellDeLUtilisateur().startsWith('/')).toBe(true);
-      process.env['SHELL'] = 'zsh';
-      expect(shellDeLUtilisateur().startsWith('/')).toBe(true);
+      expect(commandeDe({ type: 'shell' })).toEqual([shellDeLUtilisateur(), '-il']);
     } finally {
       if (avant === undefined) delete process.env['SHELL'];
       else process.env['SHELL'] = avant;
     }
+  });
+
+  test('HOME, USER, LOGNAME et SHELL viennent du compte ; ZDOTDIR du lanceur est retiré', () => {
+    const env = environnementDuTerminal(
+      { PATH: '/usr/bin', HOME: '/', SHELL: '/bin/sh', ZDOTDIR: '/mauvais' },
+      { nom: 'chris', accueil: '/home/chris', shell: '/usr/bin/zsh' },
+    );
+    expect(env).toMatchObject({ HOME: '/home/chris', USER: 'chris', LOGNAME: 'chris', SHELL: '/usr/bin/zsh' });
+    expect(env['ZDOTDIR']).toBeUndefined();
+    expect(env['PATH']).toBe('/usr/bin');
   });
 });

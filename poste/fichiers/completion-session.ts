@@ -114,10 +114,12 @@ function valeur(brute: string): string {
   return brute.trim().replace(/^["']|["']$/g, '').trim();
 }
 
-/** Chemins relatifs des fichiers du dossier, triés. Dans un dépôt : suivis et non ignorés (`.gitignore`). */
+/**
+ * Chemins relatifs des fichiers du dossier, triés. Même règle que le menu local (lanterne-poste) : parcours sans
+ * lire le `.gitignore`, dossiers cachés, dépendances et sorties de build ignorés, liens non suivis.
+ */
 export async function fichiersProjet(racine: string, journal: Logger): Promise<string[]> {
-  const sortie = await git(racine, ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], journal);
-  const fichiers = sortie !== null ? sortie.split('\0').filter((c) => c !== '') : parcourir(racine);
+  const fichiers = parcourir(racine);
   fichiers.sort();
   if (fichiers.length > MAX_FICHIERS_PROJET) {
     journal.warn({ total: fichiers.length }, 'liste des fichiers du menu @ coupée');
@@ -126,7 +128,7 @@ export async function fichiersProjet(racine: string, journal: Logger): Promise<s
   return fichiers;
 }
 
-/** Parcours sans dépôt : dossiers cachés, dépendances et sorties de build ignorés, liens non suivis. */
+/** Parcours du dossier : dossiers cachés, dépendances et sorties de build ignorés, liens non suivis. */
 function parcourir(racine: string): string[] {
   const fichiers: string[] = [];
   const pile: string[] = [''];

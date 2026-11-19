@@ -245,6 +245,9 @@ export class ApiSessions {
     const action = req.params.action ?? '';
     if (action === 'archiver' || action === 'desarchiver') return this.archiver(req.params.id, action === 'archiver');
     if (action === 'epingler' || action === 'desepingler') return this.epingler(req.params.id, action === 'epingler');
+    if (action === 'marquer_non_lue' || action === 'marquer_lue') {
+      return this.marquerNonLue(req.params.id, action === 'marquer_non_lue');
+    }
     if (!estAction(action)) return erreur('action inconnue', 404);
     return this.commander(req.params.id, { kind: action });
   }
@@ -271,6 +274,15 @@ export class ApiSessions {
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, epinglee });
+  }
+
+  // Non lue : un drapeau du relais, comme l'épinglage ; le poste n'est pas appelé.
+  private marquerNonLue(sessionId: string, nonLue: boolean): Response {
+    if (!this.registre.session(sessionId)) return erreur('session inconnue', 404);
+    this.registre.definirNonLue(sessionId, nonLue);
+    const vue = this.registre.session(sessionId);
+    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    return json({ ok: true, nonLue });
   }
 
   // Suppression sur demande explicite de Chris (la confirmation est côté interface) : le poste retire le transcript,

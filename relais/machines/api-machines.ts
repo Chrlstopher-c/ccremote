@@ -25,7 +25,7 @@ export interface DependancesMachines {
   readonly dossierSecrets: string;
   readonly relaisPostes: string | null; // URL WebSocket du relais vue depuis les machines (env, jamais dans le dépôt)
   readonly racineCode: string;
-  readonly acces: Pick<Acces, 'emettre'>; // jeton claude-code du poste, pour les outils `machines` des sessions
+  readonly acces: Pick<Acces, 'emettre' | 'idsDeAppareil' | 'revoquer'>; // jeton claude-code du poste, pour les outils `machines` des sessions
   readonly urlApi: string | null; // URL de l'API du relais vue du poste distant (CCREMOTE_URL_API_POUR_POSTES)
   readonly journal: Logger;
   readonly maintenant?: () => string;
@@ -131,22 +131,33 @@ export class ApiMachines {
     // Un secret créé par cette tentative est retiré si elle échoue : « installé » ne vaut qu'après une installation réussie.
     const nouveau = !this.d.secrets.has(c.id);
     const secret = secretPoste(this.d.dossierSecrets, c.id, this.d.secrets);
-    const api = this.d.urlApi ? { url: this.d.urlApi, jeton: this.d.acces.emettre({ nom: `poste ${c.id}`, genre: 'claude-code', jours: 365 }).jeton } : undefined;
+    // Un jeton par installation : les précédents sont révoqués si la nouvelle réussit, le sien si elle échoue.
+    const nomPoste = `poste ${c.id}`;
+    const anciens = this.d.acces.idsDeAppareil(nomPoste, 'claude-code');
+    const jeton = this.d.urlApi ? this.d.acces.emettre({ nom: nomPoste, genre: 'claude-code', jours: 365 }) : null;
+    const api = jeton && this.d.urlApi ? { url: this.d.urlApi, jeton: jeton.jeton } : undefined;
     const fichiers = fichiersPoste(c.id, c.description, this.d.relaisPostes, secret, api);
     const dossier = await preparerDossier(c.id, fichiers);
     try {
       const archive = await archiver(this.d.racineCode, dossier);
       const r = await installerPoste(this.d.ssh, connexion(c), archive);
       this.d.journal.info({ machine: c.id, ok: r.ok }, 'installation du poste distante');
-      if (!r.ok && nouveau) retirerSecretPoste(this.d.dossierSecrets, c.id, this.d.secrets);
+      if (!r.ok) this.annulerJetons(c.id, nouveau, jeton?.id);
+      else for (const id of anciens) this.d.acces.revoquer(id);
       return r.ok ? json({ ok: true, sortie: r.sortie }) : erreur(`installation échouée : ${r.sortie}`, REFUS_POSTE);
     } catch (e) {
       this.d.journal.warn({ machine: c.id, err: e }, 'installation du poste impossible');
-      if (nouveau) retirerSecretPoste(this.d.dossierSecrets, c.id, this.d.secrets);
+      this.annulerJetons(c.id, nouveau, jeton?.id);
       return erreur(`installation impossible : ${String(e)}`, 500);
     } finally {
       await rm(dossier, { recursive: true, force: true });
     }
+  }
+
+  // Échec d'installation : le secret créé pour elle est retiré, et le jeton qu'elle a émis aussi.
+  private annulerJetons(id: string, secretNouveau: boolean, jeton: string | undefined): void {
+    if (secretNouveau) retirerSecretPoste(this.d.dossierSecrets, id, this.d.secrets);
+    if (jeton) this.d.acces.revoquer(jeton);
   }
 }
 

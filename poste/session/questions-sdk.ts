@@ -18,7 +18,7 @@ export interface Question {
   readonly saisie: number | null; // index de l'option qui accepte une réponse libre
 }
 
-export type ValeurReponse = { readonly valeur: string } | { readonly erreur: string };
+export type ValeurReponse = { readonly valeur: string; readonly valeurs: readonly string[] } | { readonly erreur: string };
 
 const SchemaQuestions = z.object({
   questions: z
@@ -72,7 +72,7 @@ function valeurCases(q: Question, cases: readonly number[], texte: string): Vale
   const choisies = [...new Set(cases)].filter((i) => i < q.options.length).sort((a, b) => a - b);
   if (choisies.includes(q.saisie ?? -1) && !texte) return { erreur: 'réponse libre attendue' };
   const valeurs = choisies.map((i) => (i === q.saisie ? texte : (q.options[i]?.libelle ?? '')));
-  return valeurs.length > 0 ? { valeur: valeurs.join(', ') } : { erreur: 'aucune case cochée' };
+  return valeurs.length > 0 ? { valeur: valeurs.join(', '), valeurs } : { erreur: 'aucune case cochée' };
 }
 
 /** La réponse de Chris à une question, sous forme de texte pour le SDK. */
@@ -80,8 +80,9 @@ export function valeurReponse(q: Question, r: ReponseDialogue): ValeurReponse {
   const texte = r.texte?.trim() ?? '';
   if (q.multiple) return valeurCases(q, r.cases ?? [], texte);
   if (r.index === undefined || r.index >= q.options.length) return { erreur: 'option hors de la question affichée' };
-  if (r.index === q.saisie) return texte ? { valeur: texte } : { erreur: 'réponse libre attendue' };
-  return { valeur: q.options[r.index]?.libelle ?? '' };
+  if (r.index === q.saisie) return texte ? { valeur: texte, valeurs: [texte] } : { erreur: 'réponse libre attendue' };
+  const libelle = q.options[r.index]?.libelle ?? '';
+  return { valeur: libelle, valeurs: [libelle] };
 }
 
 /** La décision à rendre au SDK pour ExitPlanMode : approuver (option 0) ou refuser, avec le texte éventuel. */

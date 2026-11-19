@@ -85,6 +85,14 @@ export class Acces {
     }));
   }
 
+  /** Identifiants (préfixes) des jetons émis à un appareil donné : à révoquer quand il est réinstallé. */
+  idsDeAppareil(nom: string, genre: GenreAcces): string[] {
+    return this.registre
+      .jetons()
+      .filter((j) => j.appareil === nom && j.genre === genre)
+      .map((j) => j.empreinte.slice(0, LONGUEUR_ID));
+  }
+
   revoquer(id: string): boolean {
     if (!new RegExp(`^[0-9a-f]{${LONGUEUR_ID}}$`).test(id)) return false;
     for (const e of this.usages.keys()) if (e.startsWith(id)) this.usages.delete(e);

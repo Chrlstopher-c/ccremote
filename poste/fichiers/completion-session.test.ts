@@ -52,7 +52,7 @@ describe('menu / : compétences et commandes de la session', () => {
 });
 
 describe('menu @ : fichiers du projet', () => {
-  test('dans un dépôt : fichiers suivis et non ignorés, le .gitignore est respecté', async () => {
+  test('dans un dépôt : même liste que hors dépôt, le .gitignore n’est pas lu (comme le menu local)', async () => {
     const racine = nouveau('a5-depot-');
     git(racine, 'init', '-q');
     ecrire(racine, '.gitignore', 'ignore.log\ndist/\n');
@@ -60,8 +60,9 @@ describe('menu @ : fichiers du projet', () => {
     ecrire(racine, 'src/a.ts', 'export {};\n');
     ecrire(racine, 'ignore.log', 'bruit\n');
     ecrire(racine, 'dist/x.js', '//\n');
+    ecrire(racine, '.claude/skills/s/SKILL.md', 'x\n');
     const fichiers = await fichiersProjet(racine, journal);
-    expect(fichiers).toEqual(['.gitignore', 'notes.md', 'src/a.ts']);
+    expect(fichiers).toEqual(['.gitignore', 'ignore.log', 'notes.md', 'src/a.ts']);
   });
 
   test('hors dépôt : parcours sans dépendances ni dossiers cachés', async () => {
