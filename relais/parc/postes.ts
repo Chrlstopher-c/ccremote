@@ -7,7 +7,7 @@ import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/
 import type { Decouverte } from '../../commun/decouverte.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
-import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
+import type { AccesVue, EvenementDate, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import { decouverteParIdentifiant } from './decouvertes-postes.ts';
@@ -58,6 +58,8 @@ export class Postes {
   private readonly jumelles = new Map<string, { jumelle: string | null; essai: number }>();
   // Sessions dont une relecture complète a été demandée au poste (queue sans l'ancre du fil) : une fois par session.
   private readonly relecturesCompletesDemandees = new Set<string>();
+  // Relecture complète demandée et pas encore reçue : son premier lot la consomme (fusion chronologique).
+  private readonly completesAttendues = new Set<string>();
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -261,32 +263,60 @@ export class Postes {
   }
 
   // Relecture du transcript d'une session découverte, adoptée ou suivie hors de Lanterne : un lot ne s'ajoute au fil
-  // que s'il contient sa suite (voir fusion-historique.ts). Sur un fil vide, tout s'écrit ; sur un fil rempli, seule la
-  // suite du dernier événement connu part, en diffusion. Ce sont des événements anciens : aucune notification.
+  // que s'il contient sa suite (voir fusion-historique.ts), sans doublon. Une relecture complète demandée par le relais
+  // (queue sans l'ancre) comble les trous, chaque événement à sa place chronologique. Ce sont des événements anciens :
+  // aucune notification.
   private historique(machine: string, sessionId: string, replay: string, lot: readonly EvenementHorodate[]): void {
-    const { etat, ajout } = avancerRelecture(
-      this.relectures.get(sessionId),
-      replay,
-      () => this.ancreDuFil(sessionId),
-      lot,
-    );
+    const precedent = this.relectures.get(sessionId);
+    const premier = precedent?.replay !== replay;
+    const complet = premier ? this.completesAttendues.delete(sessionId) : precedent?.complet === true;
+    if (complet) return this.historiqueComplet(sessionId, replay, lot, premier);
+    const { etat, ajout } = avancerRelecture(precedent, replay, () => this.ancreDuFil(sessionId), lot);
     this.relectures.set(sessionId, etat);
     if (ajout.length === 0) {
       this.journal.debug({ sessionId, lot: lot.length }, 'relecture : rien à ajouter au fil');
-      if (queueSansAncre(etat.ancre, lot) && !this.relecturesCompletesDemandees.has(sessionId)) {
+      const desaccorde = queueSansAncre(etat.ancre, lot) || !this.registre.lotRaccorde(sessionId, lot);
+      if (desaccorde && !this.relecturesCompletesDemandees.has(sessionId)) {
         this.relecturesCompletesDemandees.add(sessionId);
+        this.completesAttendues.add(sessionId);
         this.journal.info({ sessionId }, 'relecture : ancre du fil absente de la queue, relecture complète demandée');
         this.envoyer(machine, { kind: 'historique', sessionId });
       }
       return;
     }
-    const ajoutes = this.registre.ajouterSuite(sessionId, ajout);
-    if (etat.fusion) for (const evenement of ajoutes) this.diffusion.diffuser({ type: 'evenement', evenement });
+    const fusion = this.registre.fusionnerHistorique(sessionId, ajout, { complet: false, premier: false });
+    if (etat.fusion && !fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
     this.diffuserSession(sessionId);
     this.journal.info(
-      { sessionId, ajoutes: ajout.length, fusion: etat.fusion },
+      { sessionId, ajoutes: fusion.ajoutes.length, reecrit: fusion.reecrit, fusion: etat.fusion },
       'historique relu : suite ajoutée au fil',
     );
+  }
+
+  private historiqueComplet(
+    sessionId: string,
+    replay: string,
+    lot: readonly EvenementHorodate[],
+    premier: boolean,
+  ): void {
+    this.relectures.set(sessionId, { replay, ancre: null, fusion: true, complet: true });
+    const fusion = this.registre.fusionnerHistorique(sessionId, lot, { complet: true, premier });
+    if (!fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
+    this.diffuserSession(sessionId);
+    this.journal.info(
+      {
+        sessionId,
+        lot: lot.length,
+        ajoutes: fusion.ajoutes.length,
+        reecrit: fusion.reecrit,
+        remplace: fusion.remplace,
+      },
+      'relecture complète : fil comblé',
+    );
+  }
+
+  private diffuserFil(evenement: EvenementDate): void {
+    this.diffusion.diffuser({ type: 'evenement', evenement });
   }
 
   // Session Remote Control (claude.ai) qui est la même conversation qu'une session de poste (Desktop sur la tour) :

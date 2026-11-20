@@ -33,6 +33,8 @@ interface Tache {
 export interface EtatTraduction {
   // Id du message en flux, par fil (clé : parent_tool_use_id, '' = principal) : les deltas n'en portent pas.
   readonly messagesEnFlux: Map<string, string>;
+  // Blocs démarrés sans message_start connu (reprise de flux) : chaque content_block_start en ouvre un ; ses deltas le suivent.
+  blocsAnonymes: number;
   // Tokens relus par le dernier appel modèle du fil principal ; null tant qu'aucun n'a été vu.
   contexte: number | null;
   // Une erreur d'API a déjà été émise pour le tour en cours : le result qui suit ne la répète pas.
@@ -64,6 +66,7 @@ type Corps = Omit<SortieTraduction, 'claudeSessionId'>;
 export function nouvelEtatTraduction(): EtatTraduction {
   return {
     messagesEnFlux: new Map(),
+    blocsAnonymes: 0,
     contexte: null,
     erreurDuTour: false,
     outilsPresentation: new Set(),
@@ -198,10 +201,16 @@ function traduireFlux(msg: Flux, etat: EtatTraduction): Evenement[] {
     etat.messagesEnFlux.delete(fil);
     return [];
   }
+  if (evenement['type'] === 'content_block_start') {
+    etat.blocsAnonymes += 1;
+    return [];
+  }
   const delta = objet(evenement['delta']);
   if (evenement['type'] !== 'content_block_delta') return [];
   const index = nombreDe(evenement['index']);
-  const id = etat.messagesEnFlux.get(fil) || String(index);
+  // Sans message_start, l'identifiant du bloc vient de son content_block_start (dernier vu) : deux blocs d'index 0 de
+  // messages différents ne se confondent pas (un texte écrit entre deux outils ne devient pas une réflexion).
+  const id = etat.messagesEnFlux.get(fil) || (etat.blocsAnonymes > 0 ? `bloc-${etat.blocsAnonymes}` : String(index));
   const bloc = `${id}:${index}`;
   if (delta['type'] === 'text_delta') return [{ type: 'flux', bloc, delta: texteDe(delta['text']), ...marque }];
   if (delta['type'] === 'thinking_delta') {

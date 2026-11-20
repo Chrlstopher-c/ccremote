@@ -7,6 +7,8 @@ import { EtatCompte } from '../../commun/comptes.ts';
 import { type Categorie, ListeCategories, normaliserCategories } from '../../commun/categories.ts';
 import { type GroupeMasque, ListeGroupesMasques, normaliserGroupesMasques } from '../../commun/groupes-masques.ts';
 import { Evenement, ResumeSession } from '../../commun/session.ts';
+import type { EvenementHorodate } from '../parc/fusion-historique.ts';
+import { fusionnerDansFil, type OptionsFusion, partageUneLigne, type ResultatFusion } from './fusion-fil.ts';
 import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 import type { JetonsSession, RencontreMessage } from '../../commun/reste.ts';
 import { jetonsSessionBase, rechercherMessagesBase } from './recherche.ts';
@@ -293,6 +295,16 @@ export class Registre {
     this.db
       .query('UPDATE sessions SET resume = $r, maj_le = $maj WHERE id = $id')
       .run({ id: sessionId, r: JSON.stringify(maj), maj: ts });
+  }
+
+  /** Vrai si le lot de l'historique se raccorde au fil (une de ses lignes y est déjà). */
+  lotRaccorde(sessionId: string, lot: readonly EvenementHorodate[]): boolean {
+    return partageUneLigne(this.db, sessionId, lot);
+  }
+
+  /** Fusion d'un lot de l'historique dans le fil : sans doublon, chaque événement à sa place chronologique (fusion-fil.ts). */
+  fusionnerHistorique(sessionId: string, lot: readonly EvenementHorodate[], options: OptionsFusion): ResultatFusion {
+    return fusionnerDansFil(this.db, sessionId, lot, options);
   }
 
   evenements(sessionId: string, apres: number, limite = 500): EvenementDate[] {

@@ -82,12 +82,11 @@ function traduireUtilisateur(l: Ligne): Evenement[] {
   }
   const r = resultats(l, {});
   if (r.length > 0) return r;
-  return messageDeChris(
-    blocs(contenu)
-      .filter((b) => b.type === 'text')
-      .map((b) => texte(b['text']))
-      .join('\n'),
-  );
+  const brut = blocs(contenu)
+    .filter((b) => b.type === 'text')
+    .map((b) => texte(b['text']))
+    .join('\n');
+  return brut.trimStart().startsWith('<task-notification>') ? resultatDeNotification(brut) : messageDeChris(brut);
 }
 
 // Fin d'une tâche de fond (sous-agent, commande en arrière-plan) : le CLI la met en file sous forme de
@@ -131,7 +130,7 @@ function resultatDeNotification(prompt: string): Evenement[] {
 
 // Une commande tapée (/compact …) arrive balisée ; ses sorties locales et les rappels système ne sont pas des messages.
 function messageDeChris(brut: string): Evenement[] {
-  if (/^<(local-command|system-reminder|command-message)/.test(brut.trim())) return [];
+  if (/^<(local-command|system-reminder|command-message|task-notification)/.test(brut.trim())) return [];
   const commande = brut.match(/<command-name>([^<]*)<\/command-name>/);
   const texteFinal = commande
     ? `${commande[1]} ${brut.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim()

@@ -54,9 +54,15 @@ function messageUtilisateur(payload: SDKMessage, pieces?: StockeurPieces): Evene
   if (typeof p['parent_tool_use_id'] === 'string' && p['parent_tool_use_id'] !== '') return [];
   const contenu = objet(p['message'])['content'];
   const origine = objet(p['origin'])['kind'];
-  if (origine === 'task-notification') return notificationDeTache(typeof contenu === 'string' ? contenu : '');
-  if (origine !== undefined && origine !== 'human') return [];
   const blocs = typeof contenu === 'string' ? [{ type: 'text', text: contenu }] : blocsDe(contenu);
+  const brut = blocs
+    .filter((b) => b['type'] === 'text')
+    .map((b) => String(b['text'] ?? ''))
+    .join('\n');
+  if (origine === 'task-notification' || brut.trimStart().startsWith('<task-notification>')) {
+    return notificationDeTache(brut);
+  }
+  if (origine !== undefined && origine !== 'human') return [];
   if (blocs.some((b) => b['type'] === 'tool_result')) return [];
   const uuid = typeof p['uuid'] === 'string' ? { uuid: p['uuid'] } : {};
   const { textes, joints } = lireBlocs(blocs, pieces);
