@@ -41,6 +41,13 @@ export const FenetresUsage = z.object({
 });
 export type FenetresUsage = z.infer<typeof FenetresUsage>;
 
+// Fenêtre lue dans un `rate_limit_event` du SDK (session de 5 h ou semaine) : la dernière valeur du compte.
+export const LimiteSdk = z.object({
+  genre: z.enum(['session', 'semaine']),
+  fenetre: FenetreUsage,
+});
+export type LimiteSdk = z.infer<typeof LimiteSdk>;
+
 export const DonneesReleve = z.object({
   fenetres: FenetresUsage.nullable(),
   usage: z.unknown(), // corps brut de l'endpoint d'usage (détail du compte)

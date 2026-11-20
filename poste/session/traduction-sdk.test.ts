@@ -98,7 +98,9 @@ describe('traduction SDK → événements', () => {
 
   test('TodoWrite d’un sous-agent : pas de liste (seul le fil principal la porte)', () => {
     const sortie = traduireSdk(
-      assistant([{ type: 'tool_use', id: 'td2', name: 'TodoWrite', input: { todos: [] } }], { parent_tool_use_id: 'p1' }),
+      assistant([{ type: 'tool_use', id: 'td2', name: 'TodoWrite', input: { todos: [] } }], {
+        parent_tool_use_id: 'p1',
+      }),
       nouvelEtatTraduction(),
     );
     expect(sortie.evenements.some((e) => e.type === 'taches')).toBe(false);
@@ -417,5 +419,54 @@ describe('liste de tâches du SDK (TaskCreate / TaskUpdate)', () => {
     );
     expect(sortie.evenements.some((e) => e.type === 'taches')).toBe(false);
     expect(etat.taches).toEqual([]);
+  });
+});
+
+describe('quota vu dans le flux SDK (rate_limit_event)', () => {
+  test('fenêtre de session : fraction 0-1 lue en pourcentage, remise à zéro en date ISO (secondes unix)', () => {
+    const msg = sdk({
+      type: 'rate_limit_event',
+      session_id: 's1',
+      rate_limit_info: {
+        status: 'allowed_warning',
+        rateLimitType: 'five_hour',
+        utilization: 0.42,
+        resetsAt: 1_795_000_000,
+      },
+    });
+    expect(traduireSdk(msg, nouvelEtatTraduction())).toEqual({
+      evenements: [],
+      claudeSessionId: 's1',
+      limite: {
+        genre: 'session',
+        fenetre: { libelle: 'Session (5 h)', pourcent: 42, reinitialiseLe: new Date(1_795_000_000_000).toISOString() },
+      },
+    });
+  });
+
+  test('fenêtre semaine ; utilisation déjà en pourcentage (> 1) gardée telle quelle', () => {
+    const msg = sdk({
+      type: 'rate_limit_event',
+      session_id: 's1',
+      rate_limit_info: { status: 'allowed', rateLimitType: 'seven_day', utilization: 63 },
+    });
+    const sortie = traduireSdk(msg, nouvelEtatTraduction());
+    expect(sortie.limite).toEqual({
+      genre: 'semaine',
+      fenetre: { libelle: 'Semaine', pourcent: 63, reinitialiseLe: null },
+    });
+  });
+
+  test('autres plafonds (Opus, dépassement) ou valeur absente : aucune mise à jour', () => {
+    const etat = nouvelEtatTraduction();
+    for (const info of [
+      { status: 'allowed', rateLimitType: 'seven_day_opus', utilization: 0.5 },
+      { status: 'rejected', rateLimitType: 'five_hour' },
+    ]) {
+      expect(traduireSdk(sdk({ type: 'rate_limit_event', session_id: 's1', rate_limit_info: info }), etat)).toEqual({
+        evenements: [],
+        claudeSessionId: 's1',
+      });
+    }
   });
 });

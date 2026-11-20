@@ -201,3 +201,37 @@ describe('dernière valeur bonne', () => {
     expect(m.usage.brutPour(CLE)).toEqual({ usage: { limits: [] }, cedar: { ok: true } });
   });
 });
+
+describe('quota vu dans le flux SDK', () => {
+  test('la fenêtre reçue devient la dernière valeur, sans appel au poste ni changement du délai', async () => {
+    const m = monde({ tour: [compte('principal')] });
+    await m.usage.releverSiDu(CLE);
+    const appelsAvant = m.appels.length;
+    const prochainAvant = (m.base.query('SELECT prochain_le FROM usage_comptes').get() as { prochain_le: string })
+      .prochain_le;
+    m.horloge.t += 60_000;
+    m.usage.recevoirLimite(CLE, {
+      genre: 'session',
+      fenetre: { libelle: 'Session (5 h)', pourcent: 77, reinitialiseLe: null },
+    });
+    const [vu] = m.usage.appliquer(m.machines['tour'] ?? []);
+    expect(vu?.session?.pourcent).toBe(77);
+    expect(vu?.usageLe).toBe(new Date(m.horloge.t).toISOString());
+    expect(vu?.prochainReleve).toBe(prochainAvant);
+    await m.usage.releverSiDu(CLE);
+    expect(m.appels).toHaveLength(appelsAvant);
+  });
+
+  test('première fenêtre sans aucun relevé : la ligne est créée, le compte n’est pas relevé avant 5 min', async () => {
+    const m = monde({ tour: [compte('principal')] });
+    m.usage.recevoirLimite(CLE, {
+      genre: 'semaine',
+      fenetre: { libelle: 'Semaine', pourcent: 10, reinitialiseLe: null },
+    });
+    const [vu] = m.usage.appliquer([compte('principal')]);
+    expect(vu?.semaine?.pourcent).toBe(10);
+    expect(vu?.session).toBeNull();
+    await m.usage.releverSiDu(CLE);
+    expect(m.appels).toHaveLength(0);
+  });
+});

@@ -4,7 +4,7 @@ import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
-import { type DonneesReleve, type EtatCompte, NOM_COMPTE } from '../../commun/comptes.ts';
+import { type DonneesReleve, type EtatCompte, type LimiteSdk, NOM_COMPTE } from '../../commun/comptes.ts';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
 import { type ConfigPoste, enregistrerComptes } from '../config.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
@@ -24,6 +24,8 @@ export interface DependancesComptes {
   readonly config: ConfigPoste;
   readonly journal: Logger;
   readonly publier: (comptes: EtatCompte[]) => void;
+  /** Fenêtre de quota vue dans le flux SDK d'un compte : envoyée au relais, qui la garde comme dernière valeur. */
+  readonly publierLimite: (cle: string, limite: LimiteSdk) => void;
   /** Vrai si une session ouverte utilise ce compte : on ne le retire pas sous ses pieds. */
   readonly enUsage: (compte: string) => boolean;
   /** Vue détaillée et réinitialisations : lectures sur l'API OAuth, cache de 60 s par compte. */
@@ -76,7 +78,8 @@ export class Comptes {
     if (!NOM_COMPTE.test(nom)) return { ok: false, erreur: 'nom de compte invalide (minuscules, chiffres, tirets)' };
     // Un compte déjà configuré mais déconnecté se reconnecte dans son propre dossier (« Se connecter » de Lanterne).
     const connu = Object.hasOwn(this.d.config.comptes, nom) ? this.d.config.comptes[nom] : undefined;
-    if (connu === null) return { ok: false, erreur: 'le compte par défaut de la machine se connecte avec claude auth login' };
+    if (connu === null)
+      return { ok: false, erreur: 'le compte par défaut de la machine se connecte avec claude auth login' };
     if (connu !== undefined && this.etats.get(nom)?.connecte === true)
       return { ok: false, erreur: `le compte ${nom} est déjà connecté sur ${this.d.config.machine}` };
     const r = await demarrerConnexion(nom, connu ?? join(dossierComptes(), nom), email);
@@ -104,13 +107,7 @@ export class Comptes {
   async detail(nom: string, fourni?: Fourni | null): Promise<Reponse> {
     if (!Object.hasOwn(this.d.config.comptes, nom)) return this.inconnu(nom);
     const dossier = this.d.config.comptes[nom] ?? null;
-    const detail = await this.d.lecteur.detail(
-      nom,
-      dossier,
-      this.d.config.machine,
-      () => this.d.usageSdk(nom),
-      fourni,
-    );
+    const detail = await this.d.lecteur.detail(nom, dossier, this.d.config.machine, () => this.d.usageSdk(nom), fourni);
     return { ok: true, donnees: detail };
   }
 
@@ -164,6 +161,12 @@ export class Comptes {
     const etats = await Promise.all(comptes.map(([id, dir]) => releverCompte(id, dir, this.d.journal)));
     for (const e of etats) this.etats.set(e.id, e);
     this.publier();
+  }
+
+  /** Une fenêtre lue dans le flux SDK d'une session du compte : transmise au relais (sans appel à l'API). */
+  limiteSdk(compte: string, limite: LimiteSdk): void {
+    const cle = this.etats.get(compte)?.cle ?? null;
+    if (cle !== null) this.d.publierLimite(cle, limite);
   }
 
   private publier(): void {

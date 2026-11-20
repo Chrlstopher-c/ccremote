@@ -3,7 +3,7 @@
 // 5 min, recul exponentiel sur 429, Retry-After respecté), garde la dernière valeur bonne en base et la pose sur les vues.
 import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
-import { DonneesReleve, type EtatCompte, FenetresUsage } from '../../commun/comptes.ts';
+import { DonneesReleve, type EtatCompte, FenetresUsage, type LimiteSdk } from '../../commun/comptes.ts';
 
 export const CADENCE_MS = 5 * 60_000;
 const RECUL_DEPART_MIN = 5;
@@ -79,6 +79,29 @@ export class ReleveUsage {
     for (const m of this.registre.machines())
       for (const c of m.etatComptes) if (c.connecte && c.cle !== null) cles.add(c.cle);
     await Promise.all([...cles].map((cle) => this.releverSiDu(cle)));
+  }
+
+  /** Fenêtre vue dans le flux SDK d'un poste : elle devient la dernière valeur de sa fenêtre, sans appel à l'API. */
+  recevoirLimite(cle: string, limite: LimiteSdk): void {
+    const t = this.maintenant();
+    const l = this.ligne(cle);
+    const lue = l?.fenetres ? FenetresUsage.safeParse(JSON.parse(l.fenetres)) : null;
+    const actuelles = lue?.success ? lue.data : { session: null, semaine: null, autres: [] };
+    const fenetres = { ...actuelles, [limite.genre]: limite.fenetre };
+    this.base
+      .query(
+        `INSERT INTO usage_comptes (cle, prochain_le, recul_min, fenetres, releve_le)
+      VALUES ($cle, $prochain, $recul, $fenetres, $releveLe)
+      ON CONFLICT(cle) DO UPDATE SET fenetres = $fenetres, releve_le = $releveLe`,
+      )
+      .run({
+        cle,
+        prochain: l?.prochain_le ?? new Date(t + CADENCE_MS).toISOString(),
+        recul: l?.recul_min ?? RECUL_DEPART_MIN,
+        fenetres: JSON.stringify(fenetres),
+        releveLe: new Date(t).toISOString(),
+      });
+    this.rafraichir();
   }
 
   /** Usage brut d'un compte, pour le détail : null tant que le relais n'a rien relevé. */

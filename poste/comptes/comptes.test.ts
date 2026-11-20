@@ -19,6 +19,7 @@ function comptes(appels: string[]): Comptes {
     config,
     journal,
     publier: () => undefined,
+    publierLimite: () => undefined,
     enUsage: () => false,
     lecteur,
     usageSdk: async () => null,
@@ -53,5 +54,26 @@ describe('reconnexion d’un compte configuré', () => {
     const c = comptes([]);
     Object.assign(c, { etats: new Map([['travail', { id: 'travail', connecte: true }]]) });
     expect(await c.connecter('travail')).toEqual({ ok: false, erreur: 'le compte travail est déjà connecté sur tour' });
+  });
+});
+
+describe('quota vu dans le flux SDK', () => {
+  test('transmis au relais avec la clé du compte ; compte sans clé : rien', () => {
+    const publies: { cle: string; limite: unknown }[] = [];
+    const c = comptes([]);
+    Object.assign(c, {
+      d: {
+        ...(c as unknown as { d: object }).d,
+        publierLimite: (cle: string, limite: unknown) => publies.push({ cle, limite }),
+      },
+      etats: new Map([
+        ['travail', { id: 'travail', cle: 'courriel:chris@example.com' }],
+        ['sans-cle', { id: 'sans-cle', cle: null }],
+      ]),
+    });
+    const limite = { genre: 'session', fenetre: { libelle: 'Session (5 h)', pourcent: 42, reinitialiseLe: null } };
+    c.limiteSdk('travail', limite as never);
+    c.limiteSdk('sans-cle', limite as never);
+    expect(publies).toEqual([{ cle: 'courriel:chris@example.com', limite }]);
   });
 });

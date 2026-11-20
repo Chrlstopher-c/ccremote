@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
+import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
 import type { ConfigPoste } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
@@ -192,6 +193,9 @@ export class GestionnaireSessions {
   }
 
   /** Usage SDK d'un compte (abonnement, contributeurs) : lu sur une session vivante du compte, gardé 5 min. */
+  /** Fenêtre de quota vue dans le flux SDK d'une session d'un compte (posée par le poste, relayée au relais). */
+  surLimite: ((compte: string, limite: LimiteSdk) => void) | null = null;
+
   usageCompte(compte: string): Promise<UsageSdk | null> {
     return this.usages.lire(compte);
   }
@@ -347,7 +351,8 @@ export class GestionnaireSessions {
 
   // Les pièces jointes ne partent qu'avec une session SDK : le moteur tmux n'a pas de message structuré.
   private envoyerMessage(s: SessionPoste, texte: string, pieces: readonly PieceJointe[]): Promise<string | null> {
-    if (pieces.length > 0 && !(s instanceof SessionSdk)) return Promise.resolve('pièces jointes : moteur SDK seulement');
+    if (pieces.length > 0 && !(s instanceof SessionSdk))
+      return Promise.resolve('pièces jointes : moteur SDK seulement');
     return s.envoyer(texte, pieces);
   }
 
@@ -375,7 +380,9 @@ export class GestionnaireSessions {
   // Une session qui tourne en ce moment (processus Claude Code) n'est pas à importer : elle s'écrit encore.
   trouverImportables(): TranscriptDecouvert[] {
     const vivantes = new Set(processusClaude(this.configDirs(), this.journal).map((p) => p.sessionId));
-    return this.decouvertes.liste((id) => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id));
+    return this.decouvertes.liste(
+      (id) => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id),
+    );
   }
 
   // La fiche d'un identifiant : sa clé, son identifiant courant ou un identifiant SDK passé (rembobinage). Jamais une nouvelle fiche.
@@ -461,7 +468,10 @@ export class GestionnaireSessions {
     if (p.resume.moteur === 'sdk' || p.resume.statut === 'fermee') {
       const presentation = { stockage: this.stockage, racines: this.config.racines, api: this.config.api };
       const tours = this.modifications.toursDe(p.resume.id, p.resume.cwd);
-      const env = { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket };
+      const limite = (l: LimiteSdk): void => {
+        if (p.resume.compte !== null) this.surLimite?.(p.resume.compte, l);
+      };
+      const env = { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket, limite };
       return new SessionSdk(p, { ...env, presentation, tours });
     }
     return new SessionTmux(p, { socket: this.socket, journal: this.journal, sortie });

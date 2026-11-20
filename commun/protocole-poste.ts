@@ -8,7 +8,7 @@ import { commandesParite } from './parite.ts';
 import { commandesReste } from './reste.ts';
 import { commandesResteLot2 } from './reste-lot2.ts';
 import { Decouverte } from './decouverte.ts';
-import { EtatCompte, NOM_COMPTE } from './comptes.ts';
+import { EtatCompte, LimiteSdk, NOM_COMPTE } from './comptes.ts';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
 import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
@@ -57,6 +57,8 @@ export const MessagePoste = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('decouvertes'), decouvertes: z.array(Decouverte) }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
+  // Fenêtre de quota vue dans le flux SDK d'une session du compte (rate_limit_event) : le relais la retient.
+  z.object({ kind: z.literal('compte_limite'), cle: z.string(), limite: LimiteSdk }),
   z.object({ kind: z.literal('session'), session: ResumeSession }),
   z.object({ kind: z.literal('evenement'), sessionId: z.string(), ts: z.string(), evt: Evenement }),
   // Un lot de l'historique (replay : identifiant de la relecture ; le relais ne reçoit une relecture que sur un fil vide).

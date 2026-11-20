@@ -3,6 +3,7 @@
 // Un message inconnu ou incomplet donne une sortie vide, jamais une exception. Pendant de traduction.ts (transcript).
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Evenement } from '../../commun/session.ts';
+import type { LimiteSdk } from '../../commun/comptes.ts';
 import { contexteDe, resumerEntree } from './traduction.ts';
 
 const TAILLE_DETAIL = 8_000;
@@ -55,6 +56,7 @@ export interface SortieTraduction {
   claudeSessionId?: string;
   finDeTour?: { dureeMs: number; contexte: number; erreur: string | null };
   compaction?: boolean;
+  limite?: LimiteSdk;
 }
 
 type Corps = Omit<SortieTraduction, 'claudeSessionId'>;
@@ -88,6 +90,10 @@ function traduireCorps(msg: SDKMessage, etat: EtatTraduction): Corps {
       return { evenements: traduireUtilisateur(msg, etat) };
     case 'stream_event':
       return { evenements: traduireFlux(msg, etat) };
+    case 'rate_limit_event': {
+      const limite = limiteDe(objet(msg)['rate_limit_info']);
+      return limite ? { evenements: [], limite } : { evenements: [] };
+    }
     case 'result':
       return traduireResultat(msg, etat);
     case 'system':
@@ -225,6 +231,20 @@ function jetonsDuTour(msg: Resultat): { entree: number; sortie: number } {
   return { entree: entree + nombreDe(u['cache_creation_input_tokens']), sortie: nombreDe(u['output_tokens']) };
 }
 
+// `utilization` du SDK : fraction 0-1 (les en-têtes de quota le sont) ; une valeur au-dessus de 1 est lue en pourcentage.
+// Non documenté par le SDK : à vérifier sur une vraie limite. Seules les fenêtres session (5 h) et semaine comptent.
+export function limiteDe(info: unknown): LimiteSdk | null {
+  const r = objet(info);
+  const type = r['rateLimitType'];
+  const genre = type === 'five_hour' ? 'session' : type === 'seven_day' ? 'semaine' : null;
+  const u = nombreOuNull(r['utilization']);
+  if (genre === null || u === null) return null;
+  const pourcent = u <= 1 ? u * 100 : u;
+  const fin = nombreOuNull(r['resetsAt']);
+  const reinitialiseLe = fin === null ? null : new Date(fin < 1e12 ? fin * 1000 : fin).toISOString();
+  return { genre, fenetre: { libelle: genre === 'session' ? 'Session (5 h)' : 'Semaine', pourcent, reinitialiseLe } };
+}
+
 function erreurDuResultat(msg: Resultat): string | null {
   if (msg.subtype === 'success') return msg.is_error ? msg.result || 'erreur' : null;
   return msg.errors?.join(' ') || msg.subtype;
@@ -286,6 +306,10 @@ function texteDe(v: unknown): string {
 
 function nombreDe(v: unknown): number {
   return typeof v === 'number' ? v : 0;
+}
+
+function nombreOuNull(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 // Liste de tâches de TodoWrite (statuts du SDK → états du fil). Entrée inconnue : liste vide, jamais d'exception.

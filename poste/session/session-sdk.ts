@@ -61,6 +61,7 @@ import { OUTILS_INTERDITS_ANNEXE } from './annexe.ts';
 import { ReglagesVivants } from './session-sdk-vivante.ts';
 import type { StylesSession } from '../../commun/configuration.ts';
 import { RegistreTaches } from './taches-sdk.ts';
+import type { LimiteSdk } from '../../commun/comptes.ts';
 import { type EtatTraduction, nouvelEtatTraduction, type SortieTraduction, traduireSdk } from './traduction-sdk.ts';
 
 // Ce que la session attend du SDK : une requête (flux de messages, interruption, fermeture).
@@ -77,7 +78,11 @@ export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   initializationResult(): Promise<{
     readonly output_style: string;
     readonly available_output_styles: readonly string[];
-    readonly models?: readonly { readonly value: string; readonly resolvedModel?: string; readonly displayName: string }[];
+    readonly models?: readonly {
+      readonly value: string;
+      readonly resolvedModel?: string;
+      readonly displayName: string;
+    }[];
   }>;
   reloadOutputStyles(): Promise<unknown>;
 }
@@ -95,6 +100,7 @@ export interface EnvironnementSdk {
   readonly executable: string | null;
   readonly socket: string; // socket local du poste : les outils de rythme y relaient leurs appels
   readonly requete?: FabriqueRequete; // injectable : les tests rejouent des messages sans appeler le modèle
+  readonly limite?: (limite: LimiteSdk) => void; // fenêtre de quota vue dans le flux SDK (rate_limit_event)
   readonly tours?: ToursSession; // tours de la session : fichiers relevés avant édition, fin de tour
   readonly presentation?: {
     readonly stockage: Stockage;
@@ -274,8 +280,12 @@ export class SessionSdk implements SessionPoste {
   // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
   async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
     if (!this.fil && !this.etat.claudeSessionId && this.identifiantNeuf) return this.lancer(texte, null, pieces);
-    if (!this.fil) return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : this.reprendre(texte);
-    const jointes = pieces.length > 0 ? (this.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session') : null;
+    if (!this.fil)
+      return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : this.reprendre(texte);
+    const jointes =
+      pieces.length > 0
+        ? (this.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session')
+        : null;
     if (typeof jointes === 'string') return jointes;
     const uuid = randomUUID();
     this.emettre({ type: 'message', texte, uuid });
@@ -503,7 +513,10 @@ export class SessionSdk implements SessionPoste {
 
   private memoriserEtats(requete: RequeteSdk, etats: readonly EtatMcp[]): void {
     if (this.requete !== requete) return;
-    const liste = etats.map((etat) => ({ nom: etat.name, statut: this.reglagesVivants.statut(etat.name, etat.status) }));
+    const liste = etats.map((etat) => ({
+      nom: etat.name,
+      statut: this.reglagesVivants.statut(etat.name, etat.status),
+    }));
     if (JSON.stringify(liste) !== JSON.stringify(this.etat.connecteurs ?? [])) this.maj({ connecteurs: liste });
   }
 
@@ -568,7 +581,13 @@ export class SessionSdk implements SessionPoste {
       interdits: this.etat.annexe_de ? OUTILS_INTERDITS_ANNEXE : undefined,
       hooks: this.crochets(),
       canUseTool: (nom, entree, opts) =>
-        this.avis.autoriser(nom, entree, opts.suggestions ?? [], opts.signal, (this.etat.mode ?? 'bypassPermissions') === 'bypassPermissions'),
+        this.avis.autoriser(
+          nom,
+          entree,
+          opts.suggestions ?? [],
+          opts.signal,
+          (this.etat.mode ?? 'bypassPermissions') === 'bypassPermissions',
+        ),
     });
   }
 
@@ -707,6 +726,7 @@ export class SessionSdk implements SessionPoste {
       this.maj({ claudeSessionId: sortie.claudeSessionId });
     }
     if (sortie.compaction) this.maj({ statut: 'compaction' });
+    if (sortie.limite) this.env.limite?.(sortie.limite);
     if (sortie.finDeTour) this.finDeTour(sortie.finDeTour);
   }
 

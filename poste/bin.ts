@@ -76,10 +76,12 @@ const terminaux = new Terminaux(
   },
   journal,
 );
+sessions.surLimite = (compte, limite) => comptes.limiteSdk(compte, limite);
 const comptes = new Comptes({
   config,
   journal,
   publier: (etats) => envoyer({ kind: 'comptes', comptes: etats }),
+  publierLimite: (cle, limite) => envoyer({ kind: 'compte_limite', cle, limite }),
   enUsage: (compte) => sessions.enUsage(compte),
   lecteur: new LecteurCompte({ journal }),
   usageSdk: (compte) => sessions.usageCompte(compte),

@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/protocole-poste.ts';
 import type { Decouverte } from '../../commun/decouverte.ts';
 import type { Evenement } from '../../commun/session.ts';
+import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
@@ -40,6 +41,12 @@ const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
+  private surLimiteCompte: ((machine: string, cle: string, limite: LimiteSdk) => void) | null = null;
+
+  /** Fenêtre de quota vue dans le flux SDK d'un poste : posée sur le relevé du compte (sans appel à l'API). */
+  surCompteLimite(fn: (machine: string, cle: string, limite: LimiteSdk) => void): void {
+    this.surLimiteCompte = fn;
+  }
   // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
   private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
   private readonly infos = new Map<string, InfosPoste>();
@@ -177,6 +184,7 @@ export class Postes {
       if (m.etat.reseau) this.reseauRecu?.(machine, m.etat.reseau);
       return this.diffuserMachine(machine);
     }
+    if (m.kind === 'compte_limite') return this.surLimiteCompte?.(machine, m.cle, m.limite);
     if (m.kind === 'comptes') {
       this.registre.majComptes(machine, m.comptes);
       return this.diffuserMachine(machine);

@@ -72,7 +72,11 @@ const tunnels = integre
         registreMachines
           .lister()
           .filter((c) => secretsPostes.has(c.id))
-          .map((c) => ({ id: c.id, connexion: { hote: c.hote, port: c.port, utilisateur: c.utilisateur, cle: c.cle }, portDistant: c.portDistant })),
+          .map((c) => ({
+            id: c.id,
+            connexion: { hote: c.hote, port: c.port, utilisateur: c.utilisateur, cle: c.cle },
+            portDistant: c.portDistant,
+          })),
       portPostes: config.portPostes,
       surChangement: (id) => postes.rafraichirMachine(id),
       journal: journal.child({ domaine: 'tunnels' }),
@@ -160,6 +164,7 @@ const usage = new ReleveUsage(base, registre, postes, journal.child({ domaine: '
   for (const m of registre.machines()) postes.rafraichirMachine(m.id);
 });
 registre.surFusionComptes((c) => usage.appliquer(c));
+postes.surCompteLimite((_machine, cle, limite) => usage.recevoirLimite(cle, limite));
 void usage.tick();
 setInterval(() => void usage.tick(), 60_000);
 const comptes = new ApiComptes(postes, journal, usage);
@@ -241,7 +246,14 @@ for (const hostname of config.hotesWeb) {
       },
       '/api/terminal': (req, serveur) => ouvrirTerminal(req, serveur, acces, postes),
       '/api/sessions/:id/terminal': (req, serveur) =>
-        ouvrirTerminalSession(req, serveur, acces, postes, registre, (req as Request & { params: Record<string, string> }).params['id'] ?? ''),
+        ouvrirTerminalSession(
+          req,
+          serveur,
+          acces,
+          postes,
+          registre,
+          (req as Request & { params: Record<string, string> }).params['id'] ?? '',
+        ),
       '/api/*': () => erreur('route inconnue', 404),
     },
     fetch: fichierBureau,
