@@ -263,6 +263,17 @@ export class Registre {
     })();
   }
 
+  // La suite d'un fil déjà rempli (relecture fusionnée) : chaque événement reçoit son rang, renvoyé pour diffusion.
+  ajouterSuite(sessionId: string, lot: readonly { readonly ts: string; readonly evt: Evenement }[]): EvenementDate[] {
+    const inserer = this.db.query('INSERT INTO evenements (session_id, ts, evt) VALUES ($s, $ts, $e) RETURNING seq');
+    return this.db.transaction(() =>
+      lot.map((e) => {
+        const r = inserer.get({ s: sessionId, ts: e.ts, e: JSON.stringify(e.evt) }) as { seq: number };
+        return { seq: r.seq, sessionId, ts: e.ts, evt: e.evt };
+      }),
+    )();
+  }
+
   evenements(sessionId: string, apres: number, limite = 500): EvenementDate[] {
     const lignes = this.db
       .query(

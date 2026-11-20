@@ -11,6 +11,7 @@ import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
+import { avancerRelecture, cleEvenement, type EtatRelecture, type EvenementHorodate } from './fusion-historique.ts';
 
 export interface DonneesPoste {
   readonly machine: string;
@@ -36,7 +37,8 @@ export class Postes {
   // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
   private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
   private readonly infos = new Map<string, InfosPoste>();
-  private readonly replays = new Map<string, string>(); // session → identifiant de la dernière relecture d'historique acceptée
+  // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
+  private readonly relectures = new Map<string, EtatRelecture>();
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -239,22 +241,33 @@ export class Postes {
     });
   }
 
-  // Historique d'une session découverte ou adoptée (transcript relu sur le poste) : une relecture ne s'écrit que sur un
-  // fil vide ; ses lots suivants (même replay) s'ajoutent. Ce sont des événements anciens : aucune notification.
-  private historique(
-    sessionId: string,
-    replay: string,
-    lot: readonly { readonly ts: string; readonly evt: Evenement }[],
-  ): void {
-    if (this.replays.get(sessionId) !== replay) {
-      if (this.registre.derniersEvenements(sessionId, 1).length > 0) {
-        this.journal.info({ sessionId, lot: lot.length }, 'historique ignoré : le fil de la session n’est pas vide');
-        return;
-      }
-      this.replays.set(sessionId, replay);
+  // Relecture du transcript d'une session découverte, adoptée ou suivie hors de Lanterne : un lot ne s'ajoute au fil
+  // que s'il contient sa suite (voir fusion-historique.ts). Sur un fil vide, tout s'écrit ; sur un fil rempli, seule la
+  // suite du dernier événement connu part, en diffusion. Ce sont des événements anciens : aucune notification.
+  private historique(sessionId: string, replay: string, lot: readonly EvenementHorodate[]): void {
+    const { etat, ajout } = avancerRelecture(
+      this.relectures.get(sessionId),
+      replay,
+      () => this.ancreDuFil(sessionId),
+      lot,
+    );
+    this.relectures.set(sessionId, etat);
+    if (ajout.length === 0) {
+      this.journal.debug({ sessionId, lot: lot.length }, 'relecture : rien à ajouter au fil');
+      return;
     }
-    this.registre.ajouterHistorique(sessionId, lot);
+    const ajoutes = this.registre.ajouterSuite(sessionId, ajout);
+    if (etat.fusion) for (const evenement of ajoutes) this.diffusion.diffuser({ type: 'evenement', evenement });
     this.diffuserSession(sessionId);
+    this.journal.info(
+      { sessionId, ajoutes: ajout.length, fusion: etat.fusion },
+      'historique relu : suite ajoutée au fil',
+    );
+  }
+
+  private ancreDuFil(sessionId: string): string | null {
+    const dernier = this.registre.derniersEvenements(sessionId, 1)[0];
+    return dernier ? cleEvenement(dernier) : null;
   }
 
   private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {

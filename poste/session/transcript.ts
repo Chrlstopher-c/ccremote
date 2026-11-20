@@ -12,6 +12,13 @@ export function cheminTranscript(dossier: string, sessionId: string, configDir: 
   return join(dossierTranscripts(dossier, configDir), `${sessionId}.jsonl`);
 }
 
+/** Signature d'un transcript (taille et date de modification) : change à chaque écriture ; null s'il n'existe pas. */
+export function signatureTranscript(chemin: string): string | null {
+  if (!existsSync(chemin)) return null;
+  const s = statSync(chemin);
+  return `${s.size}:${s.mtimeMs}`;
+}
+
 export class LecteurTranscript {
   private reste: Buffer = Buffer.alloc(0); // octets d'une ligne incomplète (un caractère UTF-8 peut y être coupé)
 
