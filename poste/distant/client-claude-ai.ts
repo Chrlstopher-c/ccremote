@@ -110,7 +110,8 @@ export async function lireEvenements(
   return { ok: true, donnees: lirePage(parser(r.reponse.corps, journal)) };
 }
 
-/** Envoie un événement à la session (`{events: [evt]}`). Rend seulement si claude.ai l'a accepté. */
+/** Envoie un événement à la session (`{events: [{payload: evt}]}`, forme du CLI ; sans l'enveloppe `payload`,
+ * claude.ai répond 400 « event_type is required »). Rend seulement si claude.ai l'a accepté. */
 export async function envoyerEvenement(
   configDir: string | null,
   idSession: string,
@@ -120,7 +121,7 @@ export async function envoyerEvenement(
   const type = texte(evenement['type']);
   const sousType = texte(objet(evenement['request'])['subtype']);
   const r = await requeter(configDir, 'POST', `/v1/code/sessions/${encodeURIComponent(idSession)}/events`, journal, {
-    events: [evenement],
+    events: [{ payload: evenement }],
   });
   if (!r.ok) {
     journal.warn({ type, sousType, statut: r.statut }, 'envoi à la session claude.ai refusé');

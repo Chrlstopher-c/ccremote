@@ -80,7 +80,10 @@ const demandeQuestion = (requestId: string): Record<string, unknown> =>
 const corpsPost = (indice = -1): { events: Record<string, unknown>[] } => {
   const p = api.posts.at(indice);
   if (!p) throw new Error('aucun POST');
-  return p.corps as { events: Record<string, unknown>[] };
+  // Forme du CLI : chaque événement voyage dans une enveloppe `payload`.
+  const corps = p.corps as { events: { payload: Record<string, unknown> }[] };
+  expect(corps.events.every((e) => typeof e.payload === 'object')).toBe(true);
+  return { events: corps.events.map((e) => e.payload) };
 };
 
 beforeEach(() => {
