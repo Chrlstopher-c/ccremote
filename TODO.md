@@ -42,6 +42,9 @@
 
 ## Ensuite
 
+- [ ] Multi-compte, marche 3 : pilotage d'une session claude.ai (envoyer, interrompre, répondre, modèle) via `POST …/events` ; l'appareil de confiance (403) est à traiter côté Lanterne (carte « Ouvrir claude.ai »).
+- [ ] Sessions Remote Control : paginer la liste claude.ai au-delà de 50 (`poste/distant/client-claude-ai.ts`, `next_cursor`).
+- [ ] Sessions Remote Control : problème au niveau du compte (EtatCompte) et non seulement des sessions ; `hq/src/donnees/contrat.ts` à aligner sur `claude_ai`.
 - [ ] Relever la consommation réelle d'une vraie session autonome longue (contexte avant/après chaque compaction,
       nombre de relances) et ajuster les seuils 120 k / 350 k si besoin.
 - [x] Terminal intégré à l'app (xterm.js + PTY `Bun.Terminal` sur le poste) pour le web et le bureau (28/09).

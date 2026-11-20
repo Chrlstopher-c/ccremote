@@ -66,7 +66,7 @@ function entetes(jeton: string): Record<string, string> {
 }
 
 /** Le jeton que Claude Code tient à jour dans `.credentials.json` ; absent, illisible ou expiré : null. */
-function lireJetonFichier(configDir: string | null): string | null {
+export function lireJetonFichier(configDir: string | null): string | null {
   const fichier = join(configDir ?? join(homedir(), '.claude'), '.credentials.json');
   if (!existsSync(fichier)) return null;
   const brut: unknown = JSON.parse(readFileSync(fichier, 'utf8'));

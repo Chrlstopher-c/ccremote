@@ -11,6 +11,8 @@ const FichierConfig = z.object({
   racines: z.array(z.string()),
   // id du compte → CLAUDE_CONFIG_DIR (null = la config Claude Code par défaut de l'utilisateur)
   comptes: z.record(z.string(), z.string().nullable()).default({ principal: null }),
+  // Comptes dont les sessions Remote Control sont vues depuis ce poste (interrupteur par compte, défaut : aucun).
+  distants: z.array(z.string()).default([]),
   donnees: z.string().optional(),
   fenetreContexte: z.number().int().positive().default(1_000_000),
 });
@@ -23,6 +25,7 @@ export interface ConfigPoste {
   readonly racines: readonly string[];
   // Modifiable à chaud : un compte ajouté ou retiré depuis Quart vaut aussitôt pour les sessions à ouvrir.
   readonly comptes: Record<string, string | null>;
+  readonly distants: string[]; // mutée en place à chaque bascule (écrite dans le fichier par enregistrerDistants)
   readonly donnees: string;
   readonly fenetreContexte: number;
   // API du relais pour les outils de machines (session SDK) : URL et jeton claude-code (environnement).
@@ -60,9 +63,18 @@ function apiDepuisEnvironnement(): { url: string; jeton: string } | undefined {
 
 /** Réécrit la liste des comptes dans le fichier de config, sans toucher au reste (écriture atomique). */
 export function enregistrerComptes(comptes: Readonly<Record<string, string | null>>): void {
+  ecrireChamps({ comptes });
+}
+
+/** Réécrit la liste des comptes suivis en Remote Control, sans toucher au reste (écriture atomique). */
+export function enregistrerDistants(distants: readonly string[]): void {
+  ecrireChamps({ distants: [...distants] });
+}
+
+function ecrireChamps(champs: Record<string, unknown>): void {
   const chemin = cheminConfig();
   const brut = JSON.parse(readFileSync(chemin, 'utf8')) as Record<string, unknown>;
   const temporaire = `${chemin}.tmp`;
-  writeFileSync(temporaire, `${JSON.stringify({ ...brut, comptes }, null, 2)}\n`, { mode: 0o600 });
+  writeFileSync(temporaire, `${JSON.stringify({ ...brut, ...champs }, null, 2)}\n`, { mode: 0o600 });
   renameSync(temporaire, chemin);
 }

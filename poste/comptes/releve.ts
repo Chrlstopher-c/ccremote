@@ -74,7 +74,7 @@ async function usage(configDir: string | null): Promise<Releve> {
 }
 
 export async function releverCompte(id: string, configDir: string | null, journal: Logger): Promise<EtatCompte> {
-  const base = { id, defaut: configDir === null, releveLe: new Date().toISOString(), connexion: null };
+  const base = { id, defaut: configDir === null, releveLe: new Date().toISOString(), connexion: null, distant: false };
   try {
     const qui = await identite(configDir);
     if (!qui.connecte)

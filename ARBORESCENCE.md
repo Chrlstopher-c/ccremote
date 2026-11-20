@@ -302,6 +302,17 @@ poste/comptes/fixtures/prepaid.json                  réponse réelle anonymisé
 poste/comptes/fixtures/profile.json                  réponse réelle anonymisée de /api/oauth/profile (tests)
 poste/comptes/fixtures/usage.json                    réponse réelle anonymisée de /api/oauth/usage (tests)
 poste/comptes/fixtures/usage_cedar.json              réponse réelle anonymisée de /api/oauth/usage avec cedar_ember (tests)
+poste/distant/client-claude-ai.test.ts                  tests de client-claude-ai.ts : en-têtes, erreurs HTTP, jeton jamais journalisé
+poste/distant/client-claude-ai.ts                       client HTTP de l’API des sessions claude.ai (liste, fil) ; jeton lu au moment de l’appel, erreurs typées
+poste/distant/donnees.test.ts                           tests de donnees.ts et du statut Quart d’une session distante
+poste/distant/donnees.ts                                lecture pure des sessions et des événements renvoyés par claude.ai
+poste/distant/faux-claude-ai.ts                         faux serveur de l’API claude.ai pour les tests (sessions et fils paginés)
+poste/distant/resume-distant.ts                         résumé Quart d’une session Remote Control (pur)
+poste/distant/session-distante.test.ts                  tests de session-distante.ts : historique, suivi direct, commandes refusées
+poste/distant/session-distante.ts                       une session Remote Control d’un compte, vue depuis le poste (lecture seule)
+poste/distant/spectateur.test.ts                        tests de spectateur.ts : filtrage, dédoublonnage, 401, bascule
+poste/distant/spectateur.ts                             suit les comptes activés : liste toutes les 5 s, dédoublonne, marque les erreurs de compte
+poste/distant/traduction-distante.ts                    payloads claude.ai → événements du fil (pur, ordre conservé)
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
 poste/configuration/commande.test.ts                tests de l'aiguillage des commandes de configuration
 poste/configuration/commande.ts                     commandes de configuration reçues du relais, exécutées sur le poste (hors session)

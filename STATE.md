@@ -13,6 +13,16 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 20/11 — Multi-compte, marches 1 et 2 côté Quart (agent Haiku, worktree `quart-mc`, branche `lanterne/multi-compte`)
+
+- Dossier des comptes isolable : `CCREMOTE_DOSSIER_COMPTES` (lu à l'appel, défaut `~/.claude-comptes`) ; le moteur intégré le pose sous `<données>/comptes`.
+- Interrupteur par compte « sessions Remote Control » : `EtatCompte.distant`, `poste.json` → `distants`, commande `compte_distant`, route relais `POST /api/machines/:id/comptes/:nom/distant`.
+- `poste/distant/` : le spectateur lit `GET /v1/code/sessions` (bridge + active) toutes les 5 s par compte activé, dédoublonne avec les sessions locales (`remoteControl.url`), historique des ~400 derniers événements puis suivi direct (dédoublonné par `event_id`). Rien sur disque.
+- Sessions claude.ai : lecture seule. Pilotage (envoyer, interrompre, répondre…) rend « pas encore pris en charge » (marche 3).
+- Essai réel en lecture (`essais/spectateur-lecture.ts`, compte par défaut) : 5 sessions RC actives, historique d'une session de 113 événements traduit.
+- Limites connues : liste lue en une page (50) sans pagination ; une session qui sort de la liste active passe `fermee` côté relais ; un refus 401/403 marque les sessions du compte, pas le compte (EtatCompte) ; le contrat miroir `hq/src/donnees/contrat.ts` ne connaît pas `claude_ai`.
+- Tests : `bun test commun poste relais mcp integre` 816 verts (779 avant) ; `tsc --noEmit` vert.
+
 ## 20/11 — Catégories de la barre latérale (agent Haiku, branche `lanterne/categories`)
 - `GET|PUT /api/categories` (`{ categories: [{ id, nom, replie, sessions }] }`) : PUT remplace tout, rend la liste normalisée
   (une session = une catégorie, première occurrence gagne) ; doublon d'`id` ou format invalide → 400. Pas de diffusion WebSocket.

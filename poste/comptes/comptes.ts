@@ -15,7 +15,10 @@ import { environnementCompte, releverCompte } from './releve.ts';
 import { LecteurCompte } from './lecture-compte.ts';
 
 const PERIODE_RELEVE_MS = 5 * 60_000;
-const DOSSIER_COMPTES = join(homedir(), '.claude-comptes');
+/** Dossier des comptes créés par Quart, lu à l'appel (CCREMOTE_DOSSIER_COMPTES l'emporte sur ~/.claude-comptes). */
+export function dossierComptes(): string {
+  return process.env['CCREMOTE_DOSSIER_COMPTES'] || join(homedir(), '.claude-comptes');
+}
 
 export interface DependancesComptes {
   readonly config: ConfigPoste;
@@ -46,7 +49,12 @@ export class Comptes {
     const enCours = [...this.connexions.keys()]
       .filter((id) => !(id in this.d.config.comptes))
       .map((id) => this.provisoire(id));
-    return [...connus, ...enCours].map((e) => ({ ...e, connexion: this.connexions.get(e.id) ?? null }));
+    const distants = this.d.config.distants;
+    return [...connus, ...enCours].map((e) => ({
+      ...e,
+      connexion: this.connexions.get(e.id) ?? null,
+      distant: distants.includes(e.id),
+    }));
   }
 
   /** Relève tous les comptes (un seul relevé à la fois), puis publie. */
@@ -61,7 +69,7 @@ export class Comptes {
     if (!NOM_COMPTE.test(nom)) return { ok: false, erreur: 'nom de compte invalide (minuscules, chiffres, tirets)' };
     if (nom in this.d.config.comptes)
       return { ok: false, erreur: `le compte ${nom} existe déjà sur ${this.d.config.machine}` };
-    const r = await demarrerConnexion(nom, join(DOSSIER_COMPTES, nom), email);
+    const r = await demarrerConnexion(nom, join(dossierComptes(), nom), email);
     if ('erreur' in r) return { ok: false, erreur: r.erreur };
     this.connexions.set(nom, { url: r.url, depuis: new Date().toISOString() });
     this.publier();
@@ -70,7 +78,7 @@ export class Comptes {
 
   async valider(nom: string, code: string): Promise<Reponse> {
     if (!this.connexions.has(nom)) return { ok: false, erreur: 'aucune connexion en cours pour ce compte' };
-    const dossier = join(DOSSIER_COMPTES, nom);
+    const dossier = join(dossierComptes(), nom);
     const erreur = await validerConnexion(nom, dossier, code);
     if (erreur) return { ok: false, erreur };
     this.connexions.delete(nom);
@@ -105,7 +113,7 @@ export class Comptes {
     if (this.connexions.has(nom)) {
       await abandonnerConnexion(nom);
       this.connexions.delete(nom);
-      rmSync(join(DOSSIER_COMPTES, nom), { recursive: true, force: true });
+      rmSync(join(dossierComptes(), nom), { recursive: true, force: true });
       this.publier();
       return { ok: true };
     }
@@ -118,7 +126,7 @@ export class Comptes {
     this.etats.delete(nom);
     enregistrerComptes(this.d.config.comptes);
     // Seuls les dossiers créés par Quart sont effacés : un dossier configuré à la main reste en place.
-    if (dossier.startsWith(`${DOSSIER_COMPTES}/`)) rmSync(dossier, { recursive: true, force: true });
+    if (dossier.startsWith(`${dossierComptes()}/`)) rmSync(dossier, { recursive: true, force: true });
     this.d.journal.info({ compte: nom }, 'compte retiré');
     this.publier();
     return { ok: true };
@@ -144,6 +152,7 @@ export class Comptes {
   private provisoire(id: string): EtatCompte {
     const vide = { session: null, semaine: null, autres: [], email: null, organisation: null, abonnement: null };
     const defaut = this.d.config.comptes[id] === null;
-    return { id, defaut, connecte: false, ...vide, probleme: 'pas encore relevé', releveLe: '', connexion: null };
+    const releve = { probleme: 'pas encore relevé', releveLe: '', connexion: null, distant: false };
+    return { id, defaut, connecte: false, ...vide, ...releve };
   }
 }

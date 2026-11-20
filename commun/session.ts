@@ -22,7 +22,8 @@ export type StatutSession = z.infer<typeof StatutSession>;
 
 // Comment la session tourne sur le poste : `sdk` = Claude Agent SDK piloté par le poste (défaut des sessions ouvertes
 // depuis l'app), `tmux` = vrai TUI dans `tmux -L claude` (sessions tapées au clavier, anciennes sessions).
-export const Moteur = z.enum(['sdk', 'tmux']);
+// `claude_ai` = session Remote Control d'un compte, lue sur claude.ai (lecture seule pour l'instant).
+export const Moteur = z.enum(['sdk', 'tmux', 'claude_ai']);
 export type Moteur = z.infer<typeof Moteur>;
 
 // Mode de permission d'une session SDK. `bypassPermissions` = défaut de Lanterne : aucune demande d'outil.
@@ -111,6 +112,16 @@ export const ResumeSession = z.object({
   nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
   // Remote Control (`/remote-control` du TUI) : session connectée à claude.ai, `url` à ouvrir sur le téléphone.
   remoteControl: RemoteControl.nullable().optional(),
+  // Session Remote Control suivie depuis un compte (moteur `claude_ai`) : compte, id claude.ai, connexion.
+  distant: z
+    .object({
+      compte: z.string(),
+      idDistant: z.string(),
+      connexion: z.enum(['connectee', 'deconnectee']),
+      probleme: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
   // Calculé par le relais, jamais par le poste : ISO de la dernière activité quand le tour est fini (attente ou
   // terminée) depuis le seuil d'inactivité ; null sinon (travail, compaction, question, démarrage, erreur, fermée).
   inactiveDepuis: z.string().nullable().optional(),

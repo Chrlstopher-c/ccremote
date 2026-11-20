@@ -164,6 +164,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/:nom/retirer': { POST: protege((req) => d.comptes.retirer(req as never)) },
     '/api/machines/:id/comptes/:nom/detail': { GET: protege((req) => d.comptes.detail(req as never)) },
     '/api/machines/:id/comptes/:nom/reinitialiser': { POST: protege((req) => d.comptes.reinitialiser(req as never)) },
+    '/api/machines/:id/comptes/:nom/distant': { POST: protege((req) => d.comptes.distant(req as never)) },
     '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
     '/api/sessions/:id/dossier': { GET: protege((req) => d.fichiersSession.arbre(req as never)) },
     '/api/sessions/:id/competences': { GET: protege((req) => d.fichiersSession.competences(req as never)) },

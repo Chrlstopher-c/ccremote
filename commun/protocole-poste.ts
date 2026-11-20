@@ -186,6 +186,13 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
     nom: z.string().regex(NOM_COMPTE),
     offre: z.string().regex(/^[a-z0-9_-]{1,40}$/),
   }),
+  // Sessions Remote Control d'un compte : vues depuis le poste via claude.ai (interrupteur des Paramètres > Comptes).
+  z.object({
+    kind: z.literal('compte_distant'),
+    id: z.string(),
+    nom: z.string().regex(NOM_COMPTE),
+    actif: z.boolean(),
+  }),
   ...commandesAppareil,
   ...commandesConfiguration,
 ]);

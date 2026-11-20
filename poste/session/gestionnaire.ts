@@ -46,6 +46,8 @@ import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { modeleDuTranscript } from './modele-transcript.ts';
 import { UsageComptes } from './usage-compte.ts';
+import { Spectateur } from '../distant/spectateur.ts';
+import { PAS_ENCORE_CLAUDE_AI } from '../distant/session-distante.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -81,6 +83,8 @@ export class GestionnaireSessions {
   private readonly controles = new ControlesDifferes();
   private readonly decouvertes: IndexDecouvertes;
   private readonly usages: UsageComptes;
+  // Sessions Remote Control des comptes suivis, lues sur claude.ai : jamais persistées, jamais dans `sessions`.
+  private readonly distantes: Spectateur;
 
   constructor(
     readonly config: ConfigPoste,
@@ -99,6 +103,12 @@ export class GestionnaireSessions {
       surChangement: () => this.sortie.decouvertes?.(this.listeDecouvertes()),
     });
     this.usages = new UsageComptes(() => this.sessions.values(), journal);
+    this.distantes = new Spectateur({
+      config,
+      journal,
+      sortie,
+      locale: (id) => this.estLocale(id),
+    });
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
       machine: config.machine,
@@ -115,10 +125,21 @@ export class GestionnaireSessions {
     void this.decouvrir();
     setInterval(() => void this.decouvrir(), PERIODE_DECOUVERTE_MS);
     setInterval(() => this.lireTout(), PERIODE_LECTURE_MS);
+    this.distantes.demarrer();
   }
 
   lister(): ResumeSession[] {
-    return [...this.sessions.values()].map((s) => s.resume);
+    return [...this.sessions.values()].map((s) => s.resume).concat(this.distantes.lister());
+  }
+
+  /** Bascule la lecture des sessions Remote Control d'un compte (interrupteur des Paramètres > Comptes). */
+  basculerDistant(nom: string, actif: boolean): Reponse {
+    return this.distantes.basculer(nom, actif);
+  }
+
+  // Remote Control déjà ouvert sur ce poste : le spectateur ne double pas la session.
+  private estLocale(idDistant: string): boolean {
+    return [...this.sessions.values()].some((s) => s.resume.remoteControl?.url?.includes(idDistant) === true);
   }
 
   session(id: string): SessionPoste | undefined {
@@ -130,6 +151,8 @@ export class GestionnaireSessions {
   async hydrater(id: string): Promise<SessionPoste | undefined> {
     const connue = this.sessions.get(id);
     if (connue) return connue;
+    const distante = this.distantes.session(id);
+    if (distante) return distante;
     const decouverte = this.trouverImportables().find((t) => t.id === id);
     if (decouverte) {
       this.importerUne(decouverte);
@@ -219,6 +242,7 @@ export class GestionnaireSessions {
   async executer(c: CommandeSession): Promise<Reponse> {
     await this.hydrater(c.sessionId);
     if (c.kind === 'adopter') return this.reponseAdoption(c.sessionId);
+    if (c.kind === 'historique' && this.distantes.session(c.sessionId)) return this.distantes.rejouer(c.sessionId);
     if (c.kind === 'historique') return this.rejouerHistorique(c.sessionId);
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
@@ -229,8 +253,9 @@ export class GestionnaireSessions {
     if (estFichiersSession(c)) return this.fichiersSession(c);
     if (estCommandeModifications(c)) return this.modifications.executer(c, this.sessions.get(c.sessionId));
     if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
-    const s = this.sessions.get(c.sessionId);
+    const s = this.sessions.get(c.sessionId) ?? this.distantes.session(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    if (this.distantes.session(c.sessionId) && !estLecture(c)) return { ok: false, erreur: PAS_ENCORE_CLAUDE_AI };
     if (enBascule(c.sessionId)) return { ok: false, erreur: 'bascule Remote Control en cours : réessayer' };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
     let erreur: string | null = null;
@@ -273,6 +298,7 @@ export class GestionnaireSessions {
   }
 
   async supprimer(id: string): Promise<Reponse> {
+    if (this.distantes.session(id)) return { ok: false, erreur: 'session claude.ai : elle se gère depuis claude.ai' };
     const s = this.sessions.get(id);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     if (s instanceof SessionSdk && s.vivante) {

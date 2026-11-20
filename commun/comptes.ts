@@ -25,5 +25,6 @@ export const EtatCompte = z.object({
   probleme: z.string().nullable(), // pourquoi l'usage n'a pas pu être relevé
   releveLe: z.string(),
   connexion: z.object({ url: z.string(), depuis: z.string() }).nullable(), // connexion OAuth en cours
+  distant: z.boolean().default(false), // sessions Remote Control de ce compte vues depuis le poste (claude.ai)
 });
 export type EtatCompte = z.infer<typeof EtatCompte>;

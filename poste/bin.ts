@@ -130,6 +130,11 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
   if (c.kind === 'comptes_relever') return comptes.relever().then(() => ({ ok: true, donnees: comptes.lister() }));
   if (c.kind === 'compte_detail') return comptes.detail(c.nom);
+  if (c.kind === 'compte_distant') {
+    const r = sessions.basculerDistant(c.nom, c.actif);
+    envoyer({ kind: 'comptes', comptes: comptes.lister() });
+    return r;
+  }
   if (c.kind === 'compte_reinitialiser') return comptes.reinitialiser(c.nom, c.offre);
   if (estCommandeConfiguration(c)) return executerConfiguration(c, configuration);
   return sessions.executer(c);

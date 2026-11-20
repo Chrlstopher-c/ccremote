@@ -49,6 +49,7 @@ export function construireEnvironnement(p: ParametresEnvironnement): Record<stri
     CCREMOTE_WEB: sansInterface,
     CCREMOTE_HQ: sansInterface,
     CCREMOTE_CONFIG_POSTE: chemins.posteJson,
+    CCREMOTE_DOSSIER_COMPTES: join(p.donnees, 'comptes'), // les comptes du moteur restent dans ses données
     CCREMOTE_SECRET_POSTE: p.secret,
     CCREMOTE_TMUX_SOCKET: p.socketTmux,
     CCREMOTE_JOURNAL: p.journal,

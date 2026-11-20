@@ -66,3 +66,25 @@ describe('réinitialisation d’une limite (relais)', () => {
     expect(recues).toHaveLength(0);
   });
 });
+
+describe('sessions Remote Control d’un compte (relais)', () => {
+  test('transmet compte_distant au poste avec l’interrupteur, rend le résultat', async () => {
+    const { api: a, recues } = api({ tour: { ok: true } });
+    const reponse = await a.distant(requete('principal', { actif: true }));
+    expect(reponse.status).toBe(200);
+    expect(recues).toEqual([{ machine: 'tour', commande: { kind: 'compte_distant', nom: 'principal', actif: true } }]);
+  });
+
+  test('interrupteur absent ou mal typé : 400, rien n’est transmis', async () => {
+    const { api: a, recues } = api({ tour: { ok: true } });
+    expect((await a.distant(requete('principal', {}))).status).toBe(400);
+    expect((await a.distant(requete('principal', { actif: 'oui' }))).status).toBe(400);
+    expect(recues).toHaveLength(0);
+  });
+
+  test('nom de compte invalide : 400', async () => {
+    const { api: a, recues } = api({ tour: { ok: true } });
+    expect((await a.distant(requete('Mauvais Nom', { actif: false }))).status).toBe(400);
+    expect(recues).toHaveLength(0);
+  });
+});

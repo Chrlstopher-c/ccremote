@@ -36,6 +36,7 @@ describe('environnement du relais et du poste', () => {
     expect(env['CCREMOTE_CC']).toBe('/x/cc');
     expect(env['CCREMOTE_TMUX_CONF']).toBe('/x/tmux.conf');
     expect(env['CCREMOTE_CONFIG_POSTE']).toBe('/d/moteur/poste/poste.json');
+    expect(env['CCREMOTE_DOSSIER_COMPTES']).toBe('/d/moteur/comptes');
   });
 
   test('poste.json vise le relais embarqué sur la boucle, racine au répertoire personnel', () => {
