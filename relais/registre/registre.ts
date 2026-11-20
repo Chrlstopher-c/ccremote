@@ -5,6 +5,7 @@ import type { EvenementDate, GenreAcces, Notification, VueMachine } from '../../
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
 import { EtatCompte } from '../../commun/comptes.ts';
 import { type Categorie, ListeCategories, normaliserCategories } from '../../commun/categories.ts';
+import { type GroupeMasque, ListeGroupesMasques, normaliserGroupesMasques } from '../../commun/groupes-masques.ts';
 import { Evenement, ResumeSession } from '../../commun/session.ts';
 import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 
@@ -166,6 +167,39 @@ export class Registre {
       throw e;
     }
     return normalisees;
+  }
+
+  // Groupes masqués de la barre latérale : un seul document, remplacé d'un bloc (comme les catégories).
+  groupesMasques(): GroupeMasque[] {
+    const l = this.db.query('SELECT document FROM groupes_masques WHERE id = 1').get() as { document: string } | null;
+    return l ? this.lireGroupesMasques(l.document) : [];
+  }
+
+  enregistrerGroupesMasques(liste: readonly GroupeMasque[]): GroupeMasque[] {
+    const normalises = normaliserGroupesMasques(liste);
+    try {
+      this.db
+        .query(
+          `INSERT INTO groupes_masques (id, document, maj_le) VALUES (1, $d, $m)
+        ON CONFLICT(id) DO UPDATE SET document = $d, maj_le = $m`,
+        )
+        .run({ d: JSON.stringify(normalises), m: new Date().toISOString() });
+    } catch (e) {
+      this.journal?.error({ erreur: String(e) }, 'groupes masqués : écriture impossible');
+      throw e;
+    }
+    return normalises;
+  }
+
+  private lireGroupesMasques(brut: string): GroupeMasque[] {
+    try {
+      const r = ListeGroupesMasques.safeParse(JSON.parse(brut));
+      if (r.success) return normaliserGroupesMasques(r.data);
+      this.journal?.warn({ erreur: r.error.message.slice(0, 300) }, 'groupes masqués illisibles, ignorés');
+    } catch (e) {
+      this.journal?.warn({ erreur: String(e) }, 'groupes masqués illisibles, ignorés');
+    }
+    return [];
   }
 
   private lireCategories(brut: string): Categorie[] {

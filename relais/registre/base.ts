@@ -42,6 +42,8 @@ export const MIGRATIONS: readonly string[] = [
   `ALTER TABLE machines_ssh ADD COLUMN port_distant INTEGER NOT NULL DEFAULT 47321;`,
   // Catégories de la barre latérale : un seul document (JSON), remplacé d'un bloc.
   `CREATE TABLE categories (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL, maj_le TEXT NOT NULL);`,
+  // Groupes masqués de la barre latérale : même forme que les catégories, un seul document.
+  `CREATE TABLE groupes_masques (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL, maj_le TEXT NOT NULL);`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 
