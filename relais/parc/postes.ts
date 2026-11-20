@@ -11,6 +11,8 @@ import type { AccesVue, EvenementDate, VueInstallation, VueMachine } from '../..
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import { decouverteParIdentifiant } from './decouvertes-postes.ts';
+import { fantomesARetirer } from './fantomes.ts';
+import { avecJumelleReelle } from './jumelle-distante.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
 import {
@@ -51,6 +53,8 @@ export class Postes {
   }
   // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
   private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
+  // Identifiants de tous les transcripts de chaque poste : une fiche dont la conversation n'existe nulle part est fantôme.
+  private readonly transcriptsDuPoste = new Map<string, ReadonlySet<string>>();
   private readonly infos = new Map<string, InfosPoste>();
   // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
   private readonly relectures = new Map<string, EtatRelecture>();
@@ -133,6 +137,7 @@ export class Postes {
     if (this.connectes.get(ws.data.machine) !== ws) return;
     this.connectes.delete(ws.data.machine);
     this.decouvertesDuPoste.delete(ws.data.machine);
+    this.transcriptsDuPoste.delete(ws.data.machine);
     this.infos.delete(ws.data.machine);
     this.journal.warn({ machine: ws.data.machine }, 'poste déconnecté');
     this.terminaux?.posteDeconnecte(ws.data.machine);
@@ -184,7 +189,7 @@ export class Postes {
     if (m.kind === 'terminal_sortie' || m.kind === 'terminal_fin') return this.terminaux?.duPoste(machine, m);
     if (m.kind === 'flux') return this.flux(machine, m);
     if (m.kind === 'bonjour') return this.bonjour(machine, m);
-    if (m.kind === 'decouvertes') return void this.decouvertesDuPoste.set(machine, m.decouvertes);
+    if (m.kind === 'decouvertes') return this.recevoirDecouvertes(machine, m.decouvertes, m.transcripts);
     if (m.kind === 'etat_machine') {
       this.registre.majEtatMachine(machine, m.etat);
       if (m.etat.reseau) this.reseauRecu?.(machine, m.etat.reseau);
@@ -222,7 +227,7 @@ export class Postes {
       derniereVue: new Date().toISOString(),
     });
     if (m.etatComptes) this.registre.majComptes(machine, m.etatComptes);
-    this.decouvertesDuPoste.set(machine, m.decouvertes ?? []);
+    this.recevoirDecouvertes(machine, m.decouvertes ?? [], m.transcripts);
     this.infos.set(machine, {
       commit: m.commit ?? null,
       empreinte: m.empreinte ?? null,
@@ -234,8 +239,36 @@ export class Postes {
       this.diffuserSession(s.id);
     }
     this.fermerNonAnnoncees(machine, new Set(m.sessions.map((s) => s.id)));
+    this.retirerFantomes();
     this.diffuserMachine(machine);
     this.miseAJour?.(machine, m.empreinte);
+  }
+
+  private recevoirDecouvertes(
+    machine: string,
+    decouvertes: readonly Decouverte[],
+    transcripts?: readonly string[],
+  ): void {
+    this.decouvertesDuPoste.set(machine, decouvertes);
+    if (transcripts) this.transcriptsDuPoste.set(machine, new Set(transcripts));
+    this.retirerFantomes();
+  }
+
+  // Une fiche fermée dont la conversation n'existe sur aucun poste en ligne est masquée (archivée), jamais supprimée.
+  private retirerFantomes(): void {
+    if (this.transcriptsDuPoste.size === 0) return; // aucun poste n'a encore annoncé ses transcripts
+    const fiches = this.registre.sessions(false).map((s) => ({
+      id: s.id,
+      machine: s.machine,
+      conversation: s.claudeSessionId ?? null,
+      statut: s.statut,
+      archivee: false,
+    }));
+    for (const id of fantomesARetirer(fiches, this.transcriptsDuPoste, new Set(this.connectes.keys()))) {
+      this.journal.info({ sessionId: id }, 'fiche sans transcript sur aucun poste en ligne : masquée');
+      this.registre.definirArchivee(id, true);
+      this.diffuserSession(id);
+    }
   }
 
   // Une session que le poste n'annonce plus n'a plus de processus qu'il suit : elle est fermée, pas laissée « en
@@ -337,9 +370,7 @@ export class Postes {
       jumelle = this.registre.sessionPartageantUuid(uuids, s.id);
       this.jumelles.set(s.id, { jumelle, essai: Date.now() });
     }
-    const fiche = jumelle ? this.registre.session(jumelle) : null;
-    if (!fiche) return s;
-    return { ...s, distant: { ...s.distant, conversation: fiche.claudeSessionId ?? fiche.id } };
+    return avecJumelleReelle(s, jumelle ? this.registre.session(jumelle) : null);
   }
 
   private ancreDuFil(sessionId: string): string | null {

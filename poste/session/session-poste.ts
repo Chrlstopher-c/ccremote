@@ -24,7 +24,7 @@ export interface SortieSession {
   /** Historique complet d'une session (transcript relu à l'ouverture) : un lot, sans notifications. */
   historique?(sessionId: string, evenements: readonly EvenementHorodate[]): void;
   resume(r: ResumeSession): void;
-  decouvertes?(liste: Decouverte[]): void; // sessions du poste pas encore ouvertes : liste complète à chaque changement
+  decouvertes?(liste: Decouverte[], transcripts: string[]): void; // découvertes et transcripts : à chaque changement
 }
 
 // Réponse d'un crochet du CLI (sessions pilotées dans tmux seulement).
@@ -43,7 +43,7 @@ export interface SessionPoste {
   rattacher(pane: PaneTmux | null): void;
   /** Nom donné par `cc` (tmux seulement ; une session SDK porte son titre). */
   nommer?(nom: string | null): void;
-  rattacherTerminal(vivant: boolean): void;
+  rattacherTerminal(vivant: boolean, enTour?: boolean): void;
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void;
   lire(): void;
   releverEcran(): Promise<void>;

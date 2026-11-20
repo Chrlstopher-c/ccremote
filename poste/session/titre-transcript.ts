@@ -72,6 +72,15 @@ export function titreDeContenu(contenu: string, cwd: string): string | null {
   return vraiRenomme ?? indices.genere ?? indices.premier;
 }
 
+/** Le titre que Claude ou Chris a donné (renommage, titre généré) ; le premier message n'en est pas un. */
+export function titreGenereOuRenomme(contenu: string, cwd: string): string | null {
+  const indices: Indices = { renomme: null, genere: null, premier: null };
+  for (const ligne of contenu.split('\n')) if (ligne) analyser(ligne, indices);
+  const renomme = indices.renomme;
+  const vraiRenomme = renomme !== null && !estNomParDefaut(renomme, cwd) ? renomme : null;
+  return vraiRenomme ?? indices.genere;
+}
+
 /** Titre d'une conversation à partir de son transcript ; null si aucun n'est lisible (le repli reste à l'appelant). */
 export function titreDuTranscript(chemin: string, cwd: string, journal: Logger): string | null {
   if (!existsSync(chemin)) return null;
@@ -79,6 +88,17 @@ export function titreDuTranscript(chemin: string, cwd: string, journal: Logger):
     return titreDeContenu(readFileSync(chemin, 'utf8'), cwd);
   } catch (erreur) {
     journal.warn({ chemin, err: erreur }, 'titre : transcript illisible');
+    return null;
+  }
+}
+
+/** Titre généré ou renommé d'une conversation lu dans son transcript ; null si absent ou illisible. */
+export function titreGenereDuTranscript(chemin: string, cwd: string, journal: Logger): string | null {
+  if (!existsSync(chemin)) return null;
+  try {
+    return titreGenereOuRenomme(readFileSync(chemin, 'utf8'), cwd);
+  } catch (erreur) {
+    journal.warn({ chemin, err: erreur }, 'titre généré : transcript illisible');
     return null;
   }
 }

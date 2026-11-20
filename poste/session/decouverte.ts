@@ -8,6 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import type { Logger } from 'pino';
 import type { Decouverte } from '../../commun/decouverte.ts';
 import { titreDeContenu, titreDuMessage } from './titre-transcript.ts';
+import { type FicheDesktop, RACINE_DESKTOP_DEFAUT, fichesDesktop } from './fiche-desktop.ts';
 
 export interface TranscriptDecouvert extends Decouverte {
   readonly chemin: string;
@@ -34,6 +35,9 @@ export interface OptionsIndex {
   readonly fichierCache: string;
   readonly journal: Logger;
   readonly surChangement: () => void;
+  // Fiches Claude Desktop par conversation : une session qu'elles connaissent est découverte même si son premier
+  // message est une balise (tâche planifiée, commande).
+  readonly fichesDesktop?: () => ReadonlyMap<string, FicheDesktop>;
 }
 
 const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
@@ -80,19 +84,23 @@ function parserLigne(ligne: string): Record<string, unknown> | null {
   }
 }
 
-// Une session exclue (sous-agent, vide, sans message de Chris, sans dossier) : pas d'entrée.
+// Une session exclue (sous-agent, vide, sans message de Chris, sans dossier) : pas d'entrée, sauf si Claude Desktop
+// la connaît (son premier message peut être une balise).
 function transcriptDe(
   analyse: Analyse,
   contenu: string,
   base: { id: string; chemin: string; configDir: string | null; mtime: number },
   machine: string,
+  desktop: FicheDesktop | undefined,
 ): TranscriptDecouvert | null {
-  if (!IDENTIFIANT.test(base.id) || analyse.sousAgent || !analyse.aMessageDeChris || !analyse.cwd) return null;
-  const titre = titreDeContenu(contenu, analyse.cwd) ?? basename(analyse.cwd);
+  const cwd = analyse.cwd ?? desktop?.cwd ?? null;
+  if (!IDENTIFIANT.test(base.id) || analyse.sousAgent || !cwd) return null;
+  if (!analyse.aMessageDeChris && desktop === undefined) return null;
+  const titre = titreDeContenu(contenu, cwd) ?? desktop?.titre ?? basename(cwd);
   return {
     id: base.id,
     machine,
-    cwd: analyse.cwd,
+    cwd,
     titre,
     modifieLe: new Date(base.mtime).toISOString(),
     branche: analyse.branche,
@@ -104,6 +112,7 @@ function transcriptDe(
 
 export class IndexDecouvertes {
   private entrees = new Map<string, EntreeCache>();
+  private fichesDesktopVues: ReadonlyMap<string, FicheDesktop> | null = null; // une lecture par passage
   private veilles = new Map<string, FSWatcher>();
   private delai: ReturnType<typeof setTimeout> | null = null;
   private secours: ReturnType<typeof setInterval> | null = null;
@@ -140,6 +149,7 @@ export class IndexDecouvertes {
   /** Relit les seuls transcripts nouveaux ou modifiés ; true si l'index a bougé. */
   rafraichir(): boolean {
     let change = false;
+    this.fichesDesktopVues = null;
     const vus = new Set<string>();
     for (const base of dossiersProjets(this.options.configDirs())) {
       for (const dossier of this.sousDossiers(base)) {
@@ -195,7 +205,15 @@ export class IndexDecouvertes {
       return null;
     }
     const configDir = dirname(projets) === join(homedir(), '.claude') ? null : dirname(projets);
-    return transcriptDe(analyserTranscript(contenu), contenu, { id, chemin, configDir, mtime }, this.options.machine);
+    const analyse = analyserTranscript(contenu);
+    const desktop = analyse.aMessageDeChris ? undefined : this.fichesDesktopDe().get(id);
+    return transcriptDe(analyse, contenu, { id, chemin, configDir, mtime }, this.options.machine, desktop);
+  }
+
+  private fichesDesktopDe(): ReadonlyMap<string, FicheDesktop> {
+    this.fichesDesktopVues ??=
+      this.options.fichesDesktop?.() ?? fichesDesktop(RACINE_DESKTOP_DEFAUT, this.options.journal);
+    return this.fichesDesktopVues;
   }
 
   private sousDossiers(base: string): string[] {
@@ -269,4 +287,15 @@ export class IndexDecouvertes {
       this.options.journal.error({ err: erreur, fichier }, 'cache des sessions découvertes non écrit');
     }
   }
+}
+
+/** Identifiants de tous les transcripts du poste (existants, même vides ou sans message) : le relais s'en sert pour
+ *  reconnaître une fiche fantôme, c'est-à-dire dont la conversation n'existe plus nulle part. */
+export function identifiantsTranscripts(configDirs: readonly (string | null)[]): string[] {
+  return dossiersProjets(configDirs).flatMap((base) =>
+    readdirSync(base, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .flatMap((e) => readdirSync(join(base, e.name)).filter((f) => f.endsWith('.jsonl')))
+      .map((f) => f.slice(0, -'.jsonl'.length)),
+  );
 }

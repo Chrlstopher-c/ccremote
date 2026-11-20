@@ -43,6 +43,7 @@ import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
 import { stockeurImages } from './historique.ts';
 import { cheminTranscript } from './transcript.ts';
+import { titreGenereDuTranscript } from './titre-transcript.ts';
 import { SuiviTranscript } from './suivi-transcript.ts';
 import {
   appliquerReglage,
@@ -667,11 +668,21 @@ export class SessionSdk implements SessionPoste {
         if (this.requete !== requete) break;
         this.nommerModeleVu(msg);
         this.traiter(msg, etatTraduction);
+        if (msg.type === 'result') this.titreRelu();
       }
       this.arreterSansErreur(requete);
     } catch (erreur) {
       this.echouer(requete, erreur);
     }
+  }
+
+  // Titre généré par Claude (ai-title) ou renommage, relu dans le transcript à la fin de chaque tour.
+  private titreRelu(): void {
+    const conversation = this.etat.claudeSessionId;
+    if (!conversation) return;
+    const chemin = cheminTranscript(this.etat.cwd, conversation, this.p.configDir);
+    const titre = titreGenereDuTranscript(chemin, this.etat.cwd, this.env.journal);
+    if (titre && titre !== this.etat.titre) this.maj({ titre });
   }
 
   // Session sur le modèle par défaut du compte : le nom réel est celui du dernier message assistant.

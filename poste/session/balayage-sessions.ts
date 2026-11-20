@@ -14,6 +14,8 @@ import {
   titreDe,
 } from './adoption.ts';
 import { cheminTranscript } from './transcript.ts';
+import { type EtatTranscript, etatDuTranscript, tourEnCours as tourEnCoursEtat } from './etat-transcript.ts';
+import { statSync } from 'node:fs';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
 import { recalerFiche, sourcesDe } from './recalage-fiche.ts';
@@ -52,6 +54,8 @@ function entreeDe(
 }
 
 export class BalayageSessions {
+  private readonly etats = new Map<string, EtatTranscript>(); // dernier état lu par transcript
+
   constructor(private readonly d: DependancesBalayage) {}
 
   /** Un passage : panes, terminaux et registre sont relus, les sessions nouvelles adoptées, les disparues marquées. */
@@ -94,14 +98,33 @@ export class BalayageSessions {
   // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.
   private suivreTerminaux(procs: readonly ProcessusClaude[], entrees: readonly EntreeCc[]): void {
     const vivants = new Set(procs.map((p) => p.sessionId));
-    for (const s of this.d.sessions.values()) if (s.resume.terminal) s.rattacherTerminal(vivants.has(s.resume.id));
+    for (const s of this.d.sessions.values()) {
+      if (!s.resume.terminal) continue;
+      const vivant = vivants.has(s.resume.id);
+      const enTour = vivant && this.tourEnCours(s.resume.cwd, s.resume.claudeSessionId, s.persistee.configDir);
+      s.rattacherTerminal(vivant, enTour);
+    }
     for (const p of procs) {
       const connue = this.d.fichePour(p.sessionId);
-      if (connue) connue.rattacherTerminal(true);
+      if (connue) connue.rattacherTerminal(true, this.tourEnCours(p.cwd, p.sessionId, p.configDir));
       else if (!this.d.fichePour(p.sessionId)) {
         this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
       }
     }
+  }
+
+  // Un tour en cours dans une session tenue ailleurs (Desktop, terminal) : lu dans son transcript, relu seulement quand
+  // le fichier change.
+  private tourEnCours(cwd: string, conversation: string | null, configDir: string | null): boolean {
+    if (!conversation) return false;
+    const chemin = cheminTranscript(cwd, conversation, configDir);
+    const ecritLe = mtimeDe(chemin);
+    const memoire = this.etats.get(chemin);
+    if (memoire && memoire.ecritLe === ecritLe) return tourEnCoursEtat(memoire, Date.now());
+    const etat = etatDuTranscript(chemin, this.d.journal);
+    if (!etat) return false;
+    this.etats.set(chemin, etat);
+    return tourEnCoursEtat(etat, Date.now());
   }
 
   // Sessions cc sans processus ni pane : listées fermées, reprenables par `cc reprendre` (via Quart).
@@ -168,5 +191,13 @@ export class BalayageSessions {
       (autre) => autre !== s && autre.resume.claudeSessionId === a.transcript?.id,
     );
     if (a.transcript && !pris) s.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
+  }
+}
+
+function mtimeDe(chemin: string): number {
+  try {
+    return statSync(chemin).mtimeMs;
+  } catch {
+    return 0; // transcript absent : aucune écriture connue
   }
 }

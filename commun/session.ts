@@ -154,6 +154,9 @@ export const ResumeSession = z.object({
       cwd: z.string().optional(), // dossier réel annoncé par la session (system/init) : la reconnaît dans le parc
       // conversation Claude Code (session_id du fil) : la rattache à sa session de poste
       conversation: z.string().optional(),
+      // machine et dossier réels de la jumelle de poste (affichage seulement ; `machine` reste la machine technique)
+      machineReelle: z.string().optional(),
+      cwdReel: z.string().optional(),
     })
     .nullable()
     .optional(),

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
-import { etatDuTranscript } from './etat-transcript.ts';
+import { etatDuTranscript, tourEnCours } from './etat-transcript.ts';
 import { fichesDesktop } from './fiche-desktop.ts';
 import { recalerFiche } from './recalage-fiche.ts';
 
@@ -70,6 +70,8 @@ describe('etatDuTranscript', () => {
         modele: 'claude-opus-5-5',
         mode: 'auto',
         contexte: 102_004,
+        travailDernier: true,
+        ecritLe: expect.any(Number) as number,
       });
     } finally {
       nettoyer();
@@ -99,6 +101,12 @@ describe('recalerFiche', () => {
 
   test('sans transcript ni fiche Desktop, la fiche ne change pas', () => {
     expect(recalerFiche(fiche(), { etat: null, desktop: null })).toEqual(fiche());
+  });
+
+  test('un tour en cours rend la session travaillante ; une session fermée reste fermée', () => {
+    const etat = { majLe: null, modele: null, mode: null, contexte: null, travailDernier: true, ecritLe: 0 };
+    expect(recalerFiche({ ...fiche(), statut: 'attente' }, { etat, desktop: null }).statut).toBe('travail');
+    expect(recalerFiche(fiche(), { etat, desktop: null }).statut).toBe('fermee');
   });
 
   test('une session archivée dans Desktop est archivée ici', () => {
@@ -142,5 +150,17 @@ describe('fichesDesktop', () => {
     } finally {
       rmSync(racine, { recursive: true, force: true });
     }
+  });
+});
+
+describe('tourEnCours (#6)', () => {
+  const base = { majLe: null, modele: null, mode: null, contexte: null };
+  test('un signal « en cours » l emporte ; une fin de tour rend la session inactive, même écrite à l instant', () => {
+    expect(tourEnCours({ ...base, travailDernier: true, ecritLe: 0 }, 10)).toBe(true);
+    expect(tourEnCours({ ...base, travailDernier: false, ecritLe: 9 }, 10)).toBe(false);
+  });
+  test('sans signal : en cours seulement si le transcript a bougé il y a peu', () => {
+    expect(tourEnCours({ ...base, travailDernier: null, ecritLe: 1_000 }, 60_000)).toBe(true);
+    expect(tourEnCours({ ...base, travailDernier: null, ecritLe: 1_000 }, 600_000)).toBe(false);
   });
 });

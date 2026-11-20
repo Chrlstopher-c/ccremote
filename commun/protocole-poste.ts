@@ -50,11 +50,16 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     etatComptes: z.array(EtatCompte).optional(),
     sessions: z.array(ResumeSession),
     decouvertes: z.array(Decouverte).optional(), // transcripts du poste non encore ouverts dans Lanterne
+    transcripts: z.array(z.string()).optional(), // identifiants de tous les transcripts du poste (fiches fantômes)
     empreinte: z.string().optional(), // empreinte du code installé (install par SSH) ; absente pour un poste d'avant
     commit: z.string().nullable().optional(), // commit du code (absent pour un poste d'avant)
     claudeCode: VersionsClaude.optional(), // versions de Claude Code (CLI, SDK) relevées au démarrage du poste
   }),
-  z.object({ kind: z.literal('decouvertes'), decouvertes: z.array(Decouverte) }),
+  z.object({
+    kind: z.literal('decouvertes'),
+    decouvertes: z.array(Decouverte),
+    transcripts: z.array(z.string()).optional(),
+  }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
   // Fenêtre de quota vue dans le flux SDK d'une session du compte (rate_limit_event) : le relais la retient.

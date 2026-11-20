@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
-import { titreDuTranscript } from './titre-transcript.ts';
+import { titreDuTranscript, titreGenereOuRenomme } from './titre-transcript.ts';
 
 const journal = pino({ level: 'silent' });
 const CWD = '/home/x/projet-alpha';
@@ -77,5 +77,19 @@ describe('titreDuTranscript', () => {
     const chemin = transcript([]);
     writeFileSync(chemin, `{pas du json\n${JSON.stringify({ type: 'ai-title', aiTitle: 'Utile' })}\n`);
     expect(titreDuTranscript(chemin, CWD, journal)).toBe('Utile');
+  });
+});
+
+describe('titre généré ou renommé, sans repli sur le premier message (#22)', () => {
+  test('le titre généré (ai-title) est retenu seul, sans premier message', () => {
+    const contenu = [
+      '{"type":"user","cwd":"/p","message":{"content":"Analyse le fichier"}}',
+      '{"type":"ai-title","aiTitle":"Analyse du fichier"}',
+    ].join('\n');
+    expect(titreGenereOuRenomme(contenu, '/p')).toBe('Analyse du fichier');
+  });
+
+  test('sans titre généré ni renommage : rien (le premier message n est pas un titre ici)', () => {
+    expect(titreGenereOuRenomme('{"type":"user","message":{"content":"Bonjour"}}', '/p')).toBeNull();
   });
 });

@@ -167,3 +167,47 @@ describe('index des sessions découvertes', () => {
     expect(idx.liste(() => false)[0]?.configDir).toBe(config);
   });
 });
+
+describe('sessions Desktop au premier message balisé (#21)', () => {
+  test('une session dont la fiche Desktop existe est découverte même sans message de Chris lisible', () => {
+    const config = join(racine, 'cfg');
+    const balise = '{"type":"user","message":{"content":"<scheduled-task x>"}}';
+    ecrire(config, '-home-x', A, [LIGNE_CWD('/travail/projet'), balise]);
+    const fiche = {
+      conversation: A,
+      cwd: '/travail/projet',
+      modele: null,
+      mode: null,
+      archivee: false,
+      titre: 'Tâche planifiée',
+      remoteControl: false,
+      ponts: [],
+    };
+    const idx = new IndexDecouvertes({
+      machine: 'tour',
+      configDirs: () => [config],
+      fichierCache: join(racine, 'cache.json'),
+      journal,
+      surChangement: (): void => {},
+      fichesDesktop: () => new Map([[A, fiche]]),
+    });
+    idx.rafraichir();
+    expect(idx.liste(() => false).map((t) => t.id)).toEqual([A]);
+  });
+
+  test('sans fiche Desktop, la balise reste exclue', () => {
+    const config = join(racine, 'cfg');
+    const balise = '{"type":"user","message":{"content":"<scheduled-task x>"}}';
+    ecrire(config, '-home-x', B, [LIGNE_CWD('/travail/projet'), balise]);
+    const idx = new IndexDecouvertes({
+      machine: 'tour',
+      configDirs: () => [config],
+      fichierCache: join(racine, 'cache.json'),
+      journal,
+      surChangement: (): void => {},
+      fichesDesktop: () => new Map(),
+    });
+    idx.rafraichir();
+    expect(idx.liste(() => false)).toEqual([]);
+  });
+});

@@ -116,7 +116,7 @@ export class SessionTmux implements SessionPoste {
   }
 
   /** Session lancée dans un terminal ordinaire : ouverte tant que son processus vit, fermée ensuite. */
-  rattacherTerminal(vivant: boolean): void {
+  rattacherTerminal(vivant: boolean, enTour = false): void {
     // Un pane tmux l'emporte : un processus hors tmux qui porte le même identifiant (requête SDK fermée, pas encore
     // morte) ne fait pas de cette session un terminal, et son départ ne la ferme pas.
     if (this.etat.tmux !== null) {
@@ -124,7 +124,7 @@ export class SessionTmux implements SessionPoste {
       return;
     }
     if (vivant && (this.etat.statut === 'fermee' || !this.etat.terminal))
-      this.maj({ terminal: true, statut: 'attente' });
+      this.maj({ terminal: true, statut: enTour ? 'travail' : 'attente' });
     if (!vivant && this.etat.terminal) this.maj({ terminal: false, statut: 'fermee' });
   }
 

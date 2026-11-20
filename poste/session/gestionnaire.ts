@@ -16,18 +16,17 @@ import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './r
 import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
-import { stylesDeSession } from './styles-session.ts';
+import { stylesDeSessionId } from './styles-session.ts';
 import { reglagesDeOuverture } from './reglages-sdk.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
-import * as tmux from './tmux.ts';
-import { conversationsVivantes, tenueAilleurs } from './processus.ts';
-import { recalerFiche, sourcesDe } from './recalage-fiche.ts';
+import { tenueAilleurs } from './processus.ts';
+import { titreRelu } from './recalage-fiche.ts';
 import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
-import { ficheImportee } from './importation.ts';
-import { IndexDecouvertes, type TranscriptDecouvert } from './decouverte.ts';
+import { IndexDecouvertes, type TranscriptDecouvert, identifiantsTranscripts } from './decouverte.ts';
+import { ImportationSessions } from './importation-sessions.ts';
 import type { Decouverte } from '../../commun/decouverte.ts';
 import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
 import { lireFichierSession } from '../presentation/lecture.ts';
@@ -35,10 +34,9 @@ import { estCommandeArtefact, executerArtefacts } from '../presentation/commande
 import { estCommandeModifications, ModificationsSessions } from '../modifications/commande-modifications.ts';
 import { estFichiersSession, executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
 import { Stockage } from '../presentation/stockage.ts';
-import { titreDuTranscript } from './titre-transcript.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
-import { BalayageSessions, HISTORIQUE_ADOPTION, origineDe } from './balayage-sessions.ts';
+import { BalayageSessions } from './balayage-sessions.ts';
 import { repertoireDe, resumeInitial } from './fiche-initiale.ts';
 import { TraceRelais, avecTraceRelais } from '../relais-sessions/trace.ts';
 
@@ -61,6 +59,7 @@ export class GestionnaireSessions {
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
   private readonly controles = new ControlesDifferes();
   private readonly decouvertes: IndexDecouvertes;
+  private readonly importation: ImportationSessions;
   private readonly usages: UsageComptes;
   // Sessions Remote Control des comptes suivis, lues sur claude.ai : jamais persistées, jamais dans `sessions`.
   private readonly distantes: Spectateur;
@@ -84,7 +83,7 @@ export class GestionnaireSessions {
       configDirs: () => this.configDirs(),
       fichierCache: join(config.donnees, 'decouvertes.json'),
       journal,
-      surChangement: () => this.sortie.decouvertes?.(this.listeDecouvertes()),
+      surChangement: () => this.annoncer(),
     });
     this.usages = new UsageComptes(() => this.sessions.values(), journal);
     this.trace = new TraceRelais(config.donnees, journal);
@@ -102,6 +101,18 @@ export class GestionnaireSessions {
       journal,
       sortie,
     });
+    this.importation = new ImportationSessions({
+      config,
+      journal,
+      decouvertes: this.decouvertes,
+      sessions: this.sessions,
+      supprimees: this.supprimees,
+      creer: (p) => this.creer(p),
+      configDirs: () => this.configDirs(),
+      annoncer: () => this.annoncer(),
+      sauvegarder: () => this.sauvegarder(),
+      publier: (r) => this.sortie.resume(r),
+    });
     this.balayage = new BalayageSessions({
       config,
       journal,
@@ -113,7 +124,7 @@ export class GestionnaireSessions {
   }
 
   demarrer(): void {
-    const persistees = this.persistance.charger().map((p) => this.titreRafraichi(p));
+    const persistees = this.persistance.charger().map((p) => titreRelu(p, this.journal));
     for (const p of persistees) this.sessions.set(p.resume.id, this.creer(p));
     setTimeout(() => this.decouvertes.demarrer(), 0); // premier index lourd : après le démarrage du poste
     void relancerApresRedemarrage(this.reprisesPrevues(persistees), this.journal);
@@ -157,7 +168,7 @@ export class GestionnaireSessions {
     const decouverte = this.trouverImportables().find((t) => t.id === id);
     if (decouverte) {
       this.importerUne(decouverte);
-      this.sortie.decouvertes?.(this.listeDecouvertes());
+      this.annoncer();
       this.sauvegarder();
       return this.sessions.get(id);
     }
@@ -252,7 +263,7 @@ export class GestionnaireSessions {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
     if (c.kind === 'annexer') return annexer(this, c.sessionId);
-    if (c.kind === 'styles') return this.styles(c.sessionId);
+    if (c.kind === 'styles') return stylesDeSessionId(this.sessions, c.sessionId, this.config.machine, this.journal);
     if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
     if (estFichiersSession(c)) return this.fichiersSession(c);
@@ -286,12 +297,6 @@ export class GestionnaireSessions {
     else if (c.kind === 'connecteur')
       erreur = s instanceof SessionSdk ? await s.basculerConnecteur(c.nom, c.actif) : 'non pris en charge hors SDK';
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
-  }
-
-  private async styles(id: string): Promise<Reponse> {
-    const s = this.sessions.get(id);
-    if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
-    return { ok: true, donnees: await stylesDeSession(s, this.journal) };
   }
 
   // Suppression sur demande explicite de Chris : la session s'arrête (SDK), son transcript part, son identifiant est
@@ -364,52 +369,34 @@ export class GestionnaireSessions {
     return { ok: true, donnees: this.listeDecouvertes() };
   }
 
-  // Sessions du poste (transcripts) pas encore ouvertes dans Lanterne, sans les identifiants supprimés par Chris.
   listeDecouvertes(): Decouverte[] {
-    const vivantes = conversationsVivantes(this.configDirs(), this.journal);
-    return this.decouvertes
-      .liste((id) => this.fichePour(id) !== undefined || this.supprimees.has(id))
-      .map((t) => ({ ...sansChemin(t), ...(vivantes.has(t.id) ? { vivante: true } : {}) }));
+    return this.importation.listeDecouvertes();
   }
 
-
-  // Ouverture des sessions découvertes choisies : fiches fermées, reprenables par le SDK ; l'historique vient du transcript.
   importer(ids: readonly string[]): Reponse {
-    const trouves = this.trouverImportables();
-    const aImporter = trouves.filter((t) => ids.includes(t.id));
-    const absentes = ids.filter((id) => !aImporter.some((t) => t.id === id));
-    for (const t of aImporter) this.importerUne(t);
-    this.sauvegarder();
-    this.sortie.decouvertes?.(this.listeDecouvertes());
-    return { ok: true, donnees: { importees: aImporter.length, absentes } };
+    return { ok: true, donnees: this.importation.importer(ids) };
   }
 
-  // Une session qui tourne en ce moment (processus Claude Code) n'est pas à importer : elle s'écrit encore.
   trouverImportables(): TranscriptDecouvert[] {
-    const vivantes = conversationsVivantes(this.configDirs(), this.journal);
-    return this.decouvertes.liste(
-      (id) => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id),
-    );
+    return this.importation.trouverImportables();
+  }
+
+  importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
+    this.importation.importerUne(t, surcharge, consignes);
+  }
+
+  // Annonce au relais : sessions découvertes et identifiants de tous les transcripts du poste (fantômes).
+  annoncer(): void {
+    this.sortie.decouvertes?.(this.listeDecouvertes(), this.transcriptsConnus());
+  }
+
+  transcriptsConnus(): string[] {
+    return identifiantsTranscripts(this.configDirs());
   }
 
   // La fiche d'un identifiant : sa clé, son identifiant courant ou un identifiant SDK passé (rembobinage). Jamais une nouvelle fiche.
   private fichePour(id: string): SessionPoste | undefined {
     return fichePourIdentifiant(this.sessions.values(), id);
-  }
-
-  importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
-    const fiche = recalerFiche(ficheImportee(origineDe(this.config), t), sourcesDe(t.chemin, t.id, this.journal));
-    const session = this.creer({
-      resume: { ...fiche, ...surcharge },
-      consignes,
-      configDir: t.configDir,
-      transcript: t.chemin,
-      position: 0,
-      aReprendre: false,
-    });
-    this.sessions.set(t.id, session);
-    session.definirTranscript(t.chemin, HISTORIQUE_ADOPTION, t.id);
-    this.sortie.resume(session.resume);
   }
 
   // Copie dupliquée pas encore découverte : fiche déjà ouverte → parent posé ici ; sinon il attend l'import.
@@ -439,15 +426,6 @@ export class GestionnaireSessions {
     } catch (erreur) {
       this.journal.error({ err: erreur }, 'écriture des sessions impossible');
     }
-  }
-
-  // Les sessions SDK qui tournaient à l'arrêt du poste, avec le texte de leur reprise.
-  // Une session fermée gardée avant la lecture du titre dans le transcript : son titre est relu une fois au démarrage.
-  private titreRafraichi(p: SessionPersistee): SessionPersistee {
-    if (p.resume.statut !== 'fermee') return p;
-    const { cwd, id } = p.resume;
-    const titre = titreDuTranscript(cheminTranscript(cwd, id, null), cwd, this.journal) ?? p.resume.titre;
-    return { ...p, resume: { ...p.resume, titre } };
   }
 
   private reprisesPrevues(persistees: readonly SessionPersistee[]): ReprisePrevue[] {
@@ -515,8 +493,3 @@ export class GestionnaireSessions {
   }
 }
 
-// Le chemin du transcript et son dossier de configuration restent sur le poste : le relais ne voit que la session.
-function sansChemin(t: TranscriptDecouvert): Decouverte {
-  const { chemin: _chemin, configDir: _configDir, ...decouverte } = t;
-  return decouverte;
-}

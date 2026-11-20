@@ -66,7 +66,7 @@ const sessions = new GestionnaireSessions(
       }
     },
     resume: (session) => envoyer({ kind: 'session', session }),
-    decouvertes: (decouvertes) => envoyer({ kind: 'decouvertes', decouvertes }),
+    decouvertes: (decouvertes, transcripts) => envoyer({ kind: 'decouvertes', decouvertes, transcripts }),
   },
   socket,
   journal,
@@ -101,6 +101,7 @@ function bonjour(): MessagePoste {
     etatComptes: comptes.lister(),
     sessions: sessions.lister(),
     decouvertes: sessions.listeDecouvertes(),
+    transcripts: sessions.transcriptsConnus(),
     empreinte: process.env['CCREMOTE_EMPREINTE_CODE'] || undefined, // code installé par le relais (mise à jour)
     commit: COMMIT,
     claudeCode: versionsClaude,
