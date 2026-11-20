@@ -152,3 +152,13 @@ describe('message de Chris envoyé pendant un tour (queued_command)', () => {
     expect(traduire(tache).map((e) => e.type)).toEqual(['resultat_outil']);
   });
 });
+
+test('message relayé par Remote Control (ligne meta d’une autre session sans expéditeur) : bulle de Chris', () => {
+  const contenu =
+    'Another Claude session sent a message:\ntiens-moi informé.\n\nThis came from another Claude session — not typed.';
+  const ligne = { type: 'user', isMeta: true, origin: { kind: 'peer', from: 'unknown' }, uuid: 'u1' };
+  const evenements = traduire({ ...ligne, message: { content: contenu } });
+  expect(evenements[0]).toMatchObject({ type: 'message', texte: 'tiens-moi informé.' });
+  const autre = { ...ligne, origin: { kind: 'peer', from: 'session-b' }, message: { content: contenu } };
+  expect(traduire(autre)).toEqual([]);
+});

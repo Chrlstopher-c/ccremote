@@ -32,6 +32,7 @@ export interface Ligne {
     origin?: { kind?: unknown };
   };
   readonly isApiErrorMessage?: unknown;
+  readonly origin?: { kind?: unknown; from?: unknown };
 }
 
 // Erreur d'API (connexion expirée, surcharge…) : le CLI l'écrit comme une réponse synthétique de l'assistant.
@@ -72,7 +73,28 @@ function traduireLigne(l: Ligne, agent?: string): Evenement[] {
   return [];
 }
 
+const ENTETE_RELAIS = /^Another Claude session sent a message:\n/;
+const PIED_RELAIS = /\n\nThis came from another Claude session[\s\S]*$/;
+
+// Message tapé par Chris dans Lanterne et remis par Remote Control : Claude Code l'écrit en ligne « meta » venue
+// d'une autre session, sans expéditeur nommé. C'est une bulle de Chris, sans l'habillage du harnais.
+function messageRelaye(l: Ligne): string | null {
+  if (l.origin?.kind !== 'peer' || l.origin.from !== 'unknown') return null;
+  const contenu = l.message?.content;
+  const brut =
+    typeof contenu === 'string'
+      ? contenu
+      : blocs(contenu)
+          .filter((b) => b.type === 'text')
+          .map((b) => texte(b['text']))
+          .join('\n');
+  if (!ENTETE_RELAIS.test(brut)) return null;
+  return brut.replace(ENTETE_RELAIS, '').replace(PIED_RELAIS, '').trim() || null;
+}
+
 function traduireUtilisateur(l: Ligne): Evenement[] {
+  const relaye = messageRelaye(l);
+  if (relaye !== null) return messageDeChris(relaye);
   if (l.isMeta === true || l.isCompactSummary === true) return [];
   const contenu = l.message?.content;
   if (typeof contenu === 'string') {
