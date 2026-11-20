@@ -42,3 +42,16 @@ describe('vue et réinitialisation par compte', () => {
     expect(appels).toEqual(['principal:null', 'travail:/x/travail']);
   });
 });
+
+describe('reconnexion d’un compte configuré', () => {
+  test('compte par défaut : refus clair, aucune connexion lancée', async () => {
+    const c = comptes([]);
+    expect(await c.connecter('principal')).toMatchObject({ ok: false });
+  });
+
+  test('compte déjà connecté : refus', async () => {
+    const c = comptes([]);
+    Object.assign(c, { etats: new Map([['travail', { id: 'travail', connecte: true }]]) });
+    expect(await c.connecter('travail')).toEqual({ ok: false, erreur: 'le compte travail est déjà connecté sur tour' });
+  });
+});

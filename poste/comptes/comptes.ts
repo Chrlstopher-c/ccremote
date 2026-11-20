@@ -67,9 +67,12 @@ export class Comptes {
 
   async connecter(nom: string, email?: string): Promise<Reponse> {
     if (!NOM_COMPTE.test(nom)) return { ok: false, erreur: 'nom de compte invalide (minuscules, chiffres, tirets)' };
-    if (nom in this.d.config.comptes)
-      return { ok: false, erreur: `le compte ${nom} existe déjà sur ${this.d.config.machine}` };
-    const r = await demarrerConnexion(nom, join(dossierComptes(), nom), email);
+    // Un compte déjà configuré mais déconnecté se reconnecte dans son propre dossier (« Se connecter » de Lanterne).
+    const connu = Object.hasOwn(this.d.config.comptes, nom) ? this.d.config.comptes[nom] : undefined;
+    if (connu === null) return { ok: false, erreur: 'le compte par défaut de la machine se connecte avec claude auth login' };
+    if (connu !== undefined && this.etats.get(nom)?.connecte === true)
+      return { ok: false, erreur: `le compte ${nom} est déjà connecté sur ${this.d.config.machine}` };
+    const r = await demarrerConnexion(nom, connu ?? join(dossierComptes(), nom), email);
     if ('erreur' in r) return { ok: false, erreur: r.erreur };
     this.connexions.set(nom, { url: r.url, depuis: new Date().toISOString() });
     this.publier();
@@ -78,7 +81,7 @@ export class Comptes {
 
   async valider(nom: string, code: string): Promise<Reponse> {
     if (!this.connexions.has(nom)) return { ok: false, erreur: 'aucune connexion en cours pour ce compte' };
-    const dossier = join(dossierComptes(), nom);
+    const dossier = this.d.config.comptes[nom] ?? join(dossierComptes(), nom);
     const erreur = await validerConnexion(nom, dossier, code);
     if (erreur) return { ok: false, erreur };
     this.connexions.delete(nom);
@@ -113,6 +116,11 @@ export class Comptes {
     if (this.connexions.has(nom)) {
       await abandonnerConnexion(nom);
       this.connexions.delete(nom);
+      // Reconnexion abandonnée d'un compte configuré : le compte reste, seule la connexion s'arrête.
+      if (Object.hasOwn(this.d.config.comptes, nom)) {
+        this.publier();
+        return { ok: true };
+      }
       rmSync(join(dossierComptes(), nom), { recursive: true, force: true });
       this.publier();
       return { ok: true };
