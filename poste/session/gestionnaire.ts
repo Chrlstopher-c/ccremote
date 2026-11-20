@@ -21,7 +21,8 @@ import { reglagesDeOuverture } from './reglages-sdk.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
 import * as tmux from './tmux.ts';
-import { processusClaude } from './processus.ts';
+import { conversationsVivantes, tenueAilleurs } from './processus.ts';
+import { recalerFiche, sourcesDe } from './recalage-fiche.ts';
 import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
@@ -35,7 +36,6 @@ import { estCommandeModifications, ModificationsSessions } from '../modification
 import { estFichiersSession, executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
 import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
-import { modeleDuTranscript } from './modele-transcript.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
 import { BalayageSessions, HISTORIQUE_ADOPTION, origineDe } from './balayage-sessions.ts';
@@ -270,7 +270,10 @@ export class GestionnaireSessions {
     else if (c.kind === 'rembobiner') return this.rembobiner(s, c.messageId);
     else if (c.kind === 'compacter') erreur = await s.compacter();
     else if (c.kind === 'fermer') erreur = await s.fermer();
-    else if (c.kind === 'reprendre') erreur = await s.reprendre();
+    else if (c.kind === 'reprendre') {
+      const tenue = tenueAilleurs(s.resume.claudeSessionId, this.configDirs(), this.journal);
+      erreur = tenue ?? (await s.reprendre());
+    }
     else if (c.kind === 'autonomie') s.basculerAutonomie(c.active);
     else if (c.kind === 'nuit') erreur = await s.basculerNuit(c.active, c.objectif);
     else if (c.kind === 'repondre') erreur = await s.repondre(c.reponse);
@@ -363,8 +366,12 @@ export class GestionnaireSessions {
 
   // Sessions du poste (transcripts) pas encore ouvertes dans Lanterne, sans les identifiants supprimés par Chris.
   listeDecouvertes(): Decouverte[] {
-    return this.decouvertes.liste((id) => this.fichePour(id) !== undefined || this.supprimees.has(id)).map(sansChemin);
+    const vivantes = conversationsVivantes(this.configDirs(), this.journal);
+    return this.decouvertes
+      .liste((id) => this.fichePour(id) !== undefined || this.supprimees.has(id))
+      .map((t) => ({ ...sansChemin(t), ...(vivantes.has(t.id) ? { vivante: true } : {}) }));
   }
+
 
   // Ouverture des sessions découvertes choisies : fiches fermées, reprenables par le SDK ; l'historique vient du transcript.
   importer(ids: readonly string[]): Reponse {
@@ -379,7 +386,7 @@ export class GestionnaireSessions {
 
   // Une session qui tourne en ce moment (processus Claude Code) n'est pas à importer : elle s'écrit encore.
   trouverImportables(): TranscriptDecouvert[] {
-    const vivantes = new Set(processusClaude(this.configDirs(), this.journal).map((p) => p.sessionId));
+    const vivantes = conversationsVivantes(this.configDirs(), this.journal);
     return this.decouvertes.liste(
       (id) => this.fichePour(id) !== undefined || this.supprimees.has(id) || vivantes.has(id),
     );
@@ -391,9 +398,9 @@ export class GestionnaireSessions {
   }
 
   importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
-    const modele = modeleDuTranscript(t.chemin, this.journal);
+    const fiche = recalerFiche(ficheImportee(origineDe(this.config), t), sourcesDe(t.chemin, t.id, this.journal));
     const session = this.creer({
-      resume: { ...ficheImportee(origineDe(this.config), t), ...(modele ? { modele } : {}), ...surcharge },
+      resume: { ...fiche, ...surcharge },
       consignes,
       configDir: t.configDir,
       transcript: t.chemin,
@@ -419,6 +426,11 @@ export class GestionnaireSessions {
   // Configurations de comptes connues, plus la configuration par défaut de Claude Code.
   private configDirs(): (string | null)[] {
     return [null, ...Object.values(this.config.comptes)];
+  }
+
+  // Arrêt du poste : chaque processus SDK s'arrête ; les sessions tmux ne sont pas touchées.
+  arreterProcessus(): void {
+    for (const s of this.sessions.values()) if (s instanceof SessionSdk) s.arreterProcessus();
   }
 
   sauvegarder(): void {

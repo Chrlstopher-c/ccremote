@@ -6,7 +6,6 @@ import type { Origine } from './adoption.ts';
 import type { TranscriptDecouvert } from './decouverte.ts';
 
 export function ficheImportee(o: Origine, t: TranscriptDecouvert): ResumeSession {
-  const maintenant = new Date().toISOString();
   return {
     id: t.id,
     machine: o.machine,
@@ -27,6 +26,6 @@ export function ficheImportee(o: Origine, t: TranscriptDecouvert): ResumeSession
     attachee: false,
     pilotee: false,
     creeLe: t.modifieLe,
-    majLe: maintenant,
+    majLe: t.modifieLe,
   };
 }

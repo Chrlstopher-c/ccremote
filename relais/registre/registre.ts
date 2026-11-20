@@ -93,12 +93,13 @@ export class Registre {
   private fusionComptes: (comptes: readonly EtatCompte[]) => EtatCompte[] = (comptes) => [...comptes];
 
   enregistrerSession(s: ResumeSession): void {
+    // Archivée côté Desktop (fiche lue par le poste) : appliqué à la première apparition seulement, Chris garde la main.
     this.db
       .query(
-        `INSERT INTO sessions (id, machine, resume, maj_le) VALUES ($id, $m, $r, $maj)
+        `INSERT INTO sessions (id, machine, resume, maj_le, archivee) VALUES ($id, $m, $r, $maj, $arch)
       ON CONFLICT(id) DO UPDATE SET resume = $r, maj_le = $maj`,
       )
-      .run({ id: s.id, m: s.machine, r: JSON.stringify(s), maj: s.majLe });
+      .run({ id: s.id, m: s.machine, r: JSON.stringify(s), maj: s.majLe, arch: s.archivee === true ? 1 : 0 });
   }
 
   session(id: string): ResumeSession | null {
@@ -273,12 +274,25 @@ export class Registre {
   // La suite d'un fil déjà rempli (relecture fusionnée) : chaque événement reçoit son rang, renvoyé pour diffusion.
   ajouterSuite(sessionId: string, lot: readonly { readonly ts: string; readonly evt: Evenement }[]): EvenementDate[] {
     const inserer = this.db.query('INSERT INTO evenements (session_id, ts, evt) VALUES ($s, $ts, $e) RETURNING seq');
-    return this.db.transaction(() =>
+    const ajoutes = this.db.transaction(() =>
       lot.map((e) => {
         const r = inserer.get({ s: sessionId, ts: e.ts, e: JSON.stringify(e.evt) }) as { seq: number };
         return { seq: r.seq, sessionId, ts: e.ts, evt: e.evt };
       }),
     )();
+    const dernier = lot.reduce<string | null>((max, e) => (max === null || e.ts > max ? e.ts : max), null);
+    if (dernier) this.recalerActivite(sessionId, dernier);
+    return ajoutes;
+  }
+
+  // La date d'activité d'une fiche est celle du transcript (dernier événement relu), jamais l'heure de la relecture.
+  private recalerActivite(sessionId: string, ts: string): void {
+    const fiche = this.session(sessionId);
+    if (!fiche) return;
+    const maj = { ...fiche, majLe: ts };
+    this.db
+      .query('UPDATE sessions SET resume = $r, maj_le = $maj WHERE id = $id')
+      .run({ id: sessionId, r: JSON.stringify(maj), maj: ts });
   }
 
   evenements(sessionId: string, apres: number, limite = 500): EvenementDate[] {

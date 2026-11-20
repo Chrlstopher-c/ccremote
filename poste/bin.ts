@@ -263,10 +263,11 @@ lien.demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);
 journal.info({ machine: config.machine, relais: config.relais }, 'poste démarré');
 
-// Les Claude vivent dans tmux, pas dans le poste : arrêter le poste ne coupe aucune session.
+// Les Claude tmux ne sont pas au poste : arrêter le poste ne les coupe pas. Les processus SDK s'arrêtent avec lui.
 function arreter(): void {
-  journal.info('arrêt du poste (les sessions tmux continuent)');
+  journal.info('arrêt du poste (les sessions tmux continuent, les processus SDK s’arrêtent)');
   sessions.sauvegarder();
+  sessions.arreterProcessus();
   minuterieTaches.arreter();
   dicteeService.arreterSurveillance();
   terminaux.fermerTout();

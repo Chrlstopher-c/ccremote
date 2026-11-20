@@ -37,7 +37,7 @@ export type AutreSession = z.infer<typeof AutreSession>;
 export type Moteur = z.infer<typeof Moteur>;
 
 // Mode de permission d'une session SDK. `bypassPermissions` = défaut de Lanterne : aucune demande d'outil.
-export const ModeSession = z.enum(['bypassPermissions', 'default', 'acceptEdits', 'plan']);
+export const ModeSession = z.enum(['bypassPermissions', 'default', 'acceptEdits', 'plan', 'auto']);
 export type ModeSession = z.infer<typeof ModeSession>;
 
 // Bac à sable Bash d'une session SDK : `non` (défaut), `oui` (sandbox, Bash auto-approuvé), `strict` (sans

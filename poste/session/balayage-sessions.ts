@@ -15,8 +15,8 @@ import {
 } from './adoption.ts';
 import { cheminTranscript } from './transcript.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
-import { modeleDuTranscript } from './modele-transcript.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
+import { recalerFiche, sourcesDe } from './recalage-fiche.ts';
 import { type EntreeCc, dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { SessionPoste } from './session-poste.ts';
@@ -124,8 +124,8 @@ export class BalayageSessions {
   ajouterFermee(e: EntreeCc): void {
     const chemin = cheminTranscript(e.cwd, e.id, null);
     const titre = titreDuTranscript(chemin, e.cwd, this.d.journal) ?? titreDe(e.nom, null, e.cwd);
-    const modele = modeleDuTranscript(chemin, this.d.journal) ?? 'défaut';
-    const resume = { ...ficheFermee(origineDe(this.d.config), e, titre), modele };
+    const fiche = ficheFermee(origineDe(this.d.config), e, titre);
+    const resume = recalerFiche(fiche, sourcesDe(chemin, e.id, this.d.journal));
     const session = this.d.creer({
       resume,
       consignes: null,
@@ -145,8 +145,10 @@ export class BalayageSessions {
     const titre =
       (a.transcript ? titreDuTranscript(a.transcript.chemin, dossier, this.d.journal) : null) ??
       titreDe(a.nom, pane?.titre ?? null, dossier);
+    const fiche = ficheAdoptee(origineDe(this.d.config), a, dossier, titre, pane);
+    const resume = a.transcript ? recalerFiche(fiche, sourcesDe(a.transcript.chemin, a.id, this.d.journal)) : fiche;
     const session = this.d.creer({
-      resume: ficheAdoptee(origineDe(this.d.config), a, dossier, titre, pane),
+      resume,
       consignes: null,
       configDir: null,
       transcript: null,

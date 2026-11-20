@@ -351,5 +351,13 @@ describe('SessionSdk — rythme, fin de tour et mode nuit', () => {
     await session.fermer();
     expect(session.vivante).toBe(false);
   });
-});
 
+  test('arrêt du poste : le processus part, la fiche reste reprenable', async () => {
+    const { session, requetes } = nouvelleSession(async () => [{ type: 'result' }]);
+    await session.lancer('un');
+    await attendre(() => session.resume.statut === 'attente');
+    session.arreterProcessus();
+    expect(requetes[0]?.fermee).toBe(true);
+    expect(session.resume.statut).not.toBe('fermee');
+  });
+});

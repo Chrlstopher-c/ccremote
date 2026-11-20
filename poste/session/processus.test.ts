@@ -27,3 +27,51 @@ describe('processusClaude : déclarations illisibles', () => {
     }
   });
 });
+
+// Claude Desktop : son CLI tourne sous un nom de version, et sa déclaration porte l'heure de démarrage du processus.
+const decl = (pid: number, procStart: string): string =>
+  JSON.stringify({ pid, sessionId: `sess-${pid}`, cwd: '/home/x', kind: 'interactive', procStart });
+
+describe('processusClaude : Claude Desktop reconnu vivant', () => {
+  test('un CLI lancé sous un nom de version (2.1.325-…) est un processus Claude vivant', () => {
+    const { dossier, nettoyer } = configAvec({ '2243.json': decl(2243, '2530') });
+    try {
+      const lecteur = (pid: number) =>
+        pid === 2243
+          ? {
+              comm: '2.1.325-1ef04b3',
+              exe: '/home/x/.claude/remote/ccd-cli/2.1.325-1ef04b3',
+              demarrage: '2530',
+              enTmux: false,
+            }
+          : null;
+      expect(processusClaude([dossier], journal, lecteur).map((p) => p.sessionId)).toEqual(['sess-2243']);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('un pid recyclé (même nom, autre heure de démarrage) n est pas la session déclarée', () => {
+    const { dossier, nettoyer } = configAvec({ '2243.json': decl(2243, '2530') });
+    try {
+      const lecteur = (): { comm: string; exe: string; demarrage: string; enTmux: boolean } => ({
+        comm: 'claude', exe: '/usr/bin/claude', demarrage: '9999', enTmux: false,
+      });
+      expect(processusClaude([dossier], journal, lecteur)).toEqual([]);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('un processus qui n est pas Claude ne compte pas, même déclaré', () => {
+    const { dossier, nettoyer } = configAvec({ '77.json': decl(77, '1') });
+    try {
+      const lecteur = (): { comm: string; exe: string; demarrage: string; enTmux: boolean } => ({
+        comm: 'bash', exe: '/usr/bin/bash', demarrage: '1', enTmux: false,
+      });
+      expect(processusClaude([dossier], journal, lecteur)).toEqual([]);
+    } finally {
+      nettoyer();
+    }
+  });
+});

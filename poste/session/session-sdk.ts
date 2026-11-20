@@ -385,6 +385,15 @@ export class SessionSdk implements SessionPoste {
     this.maj({ claudeSessionId: null });
   }
 
+  // Arrêt du poste : le processus Claude de la session s'arrête, la fiche ne change pas (reprise au redémarrage).
+  arreterProcessus(): void {
+    try {
+      this.requete?.close();
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'arrêt du processus SDK imparfait');
+    }
+  }
+
   async fermer(): Promise<string | null> {
     const requete = this.requete;
     this.aReprendre = false;

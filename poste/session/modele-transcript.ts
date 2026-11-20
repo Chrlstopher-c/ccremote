@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 
 const FENETRE_OCTETS = 2 * 1024 * 1024;
 
-function lireFin(chemin: string): string {
+export function lireFin(chemin: string): string {
   const fd = openSync(chemin, 'r');
   try {
     const taille = fstatSync(fd).size;

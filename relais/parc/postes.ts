@@ -10,6 +10,7 @@ import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
+import { decouverteParIdentifiant } from './decouvertes-postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
 import {
@@ -100,10 +101,10 @@ export class Postes {
 
   /** Sessions découvertes sur les postes connectés, sans celles que le relais connaît déjà (fiche, identifiant SDK). */
   decouvertes(connues: ReadonlySet<string>): Decouverte[] {
-    return [...this.decouvertesDuPoste.entries()]
+    const candidates = [...this.decouvertesDuPoste.entries()]
       .filter(([machine]) => this.enLigne(machine))
-      .flatMap(([, liste]) => liste)
-      .filter((d) => !connues.has(d.id));
+      .flatMap(([machine, liste]) => liste.map((decouverte) => ({ machine, decouverte })));
+    return decouverteParIdentifiant(candidates).filter((d) => !connues.has(d.id));
   }
 
   vues(): VueMachine[] {
@@ -238,11 +239,10 @@ export class Postes {
   // Une session que le poste n'annonce plus n'a plus de processus qu'il suit : elle est fermée, pas laissée « en
   // attente » pour toujours.
   private fermerNonAnnoncees(machine: string, annoncees: ReadonlySet<string>): void {
-    const maintenant = new Date().toISOString();
     for (const s of this.registre.sessions(true)) {
       if (s.machine !== machine || s.statut === 'fermee' || annoncees.has(s.id)) continue;
       this.journal.info({ machine, sessionId: s.id, statut: s.statut }, 'session absente de l’annonce : fermée');
-      this.registre.enregistrerSession({ ...s, statut: 'fermee', majLe: maintenant });
+      this.registre.enregistrerSession({ ...s, statut: 'fermee' });
       this.diffuserSession(s.id);
     }
   }

@@ -10,5 +10,6 @@ export const Decouverte = z.object({
   modifieLe: z.string(),
   branche: z.string().nullable(),
   messages: z.number().int().nonnegative(),
+  vivante: z.boolean().optional(), // un processus Claude tient cette conversation sur ce poste
 });
 export type Decouverte = z.infer<typeof Decouverte>;

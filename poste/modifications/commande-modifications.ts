@@ -6,6 +6,7 @@ import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { SortieSession } from '../session/session-poste.ts';
 import { dossierDeTravail } from '../parite/depot.ts';
+import { RefusDepot } from './refus-depot.ts';
 import { transcriptDeSession } from '../parite/transcript-session.ts';
 import { DepotGit } from './git.ts';
 import { ToursSession } from './tours.ts';
@@ -101,6 +102,7 @@ export interface ParametresModificationsSessions {
 /** Les tours des sessions SDK du poste, créés à la demande ; l'état d'un tour vit sur le disque, pas ici. */
 export class ModificationsSessions {
   private readonly tours = new Map<string, ToursSession>();
+  private readonly refus = new RefusDepot();
 
   constructor(private readonly p: ParametresModificationsSessions) {}
 
@@ -115,6 +117,7 @@ export class ModificationsSessions {
 
   oublier(sessionId: string): void {
     this.tours.delete(sessionId);
+    this.refus.oublier(sessionId);
   }
 
   async executer(
@@ -127,7 +130,12 @@ export class ModificationsSessions {
     const cwd = c.kind.startsWith('git_')
       ? await dossierDeTravail(s.resume.cwd, transcript, this.p.journal)
       : s.resume.cwd;
+    if (c.kind.startsWith('git_')) {
+      const connu = this.refus.pour(c.sessionId, cwd);
+      if (connu) return { ok: false, erreur: connu };
+    }
     const r = await executerModifications(c, { cwd, tours, journal: this.p.journal });
+    if (c.kind.startsWith('git_')) this.refus.noter(c.sessionId, cwd, r.ok ? null : (r.erreur ?? null));
     if (r.evenement) this.p.sortie.evenement(c.sessionId, r.evenement);
     return r;
   }
