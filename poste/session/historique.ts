@@ -10,6 +10,7 @@ import { TAILLE_MAX_FICHIER } from '../../commun/presentation.ts';
 import { type ImageSdk, imagesDeContenu } from '../presentation/images.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { brancheActive } from './branche.ts';
+import { CompteTours } from './tours-transcript.ts';
 import { type Ligne, messageEnFile, traduire } from './traduction.ts';
 
 export interface EvenementHorodate {
@@ -51,13 +52,14 @@ function horodatage(l: Ligne, dernier: string): string {
 /** Traduit les lignes d'une branche, une à une et dans l'ordre : sans horodatage, une ligne reprend la précédente. */
 export class TraducteurHistorique {
   private dernier = EPOQUE;
+  private readonly tours = new CompteTours(); // état d'un tour à l'autre : gardé entre les passages du suivi
 
   constructor(private readonly stockerImage?: StockerImage) {}
 
   evenements(l: Ligne): EvenementHorodate[] {
     const ts = horodatage(l, this.dernier);
     this.dernier = ts;
-    const sortie: EvenementHorodate[] = traduire(l).map((evt) => ({ ts, evt }));
+    const sortie: EvenementHorodate[] = [...traduire(l), ...this.tours.ligne(l)].map((evt) => ({ ts, evt }));
     const stocker = this.stockerImage;
     const enFile = l.type === 'attachment' && messageEnFile(l);
     if (stocker && (l.type === 'user' || enFile) && l.isSidechain !== true) {

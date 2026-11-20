@@ -318,6 +318,7 @@ poste/distant/controle-distant.ts                       événements de contrôl
 poste/distant/pilotage-distant.test.ts                  tests du pilotage d’une session claude.ai : corps des POST, dialogues, erreurs
 poste/relais-sessions/trace.test.ts                     tests de trace.ts : persistance, ordre, réinsertion par date
 poste/relais-sessions/trace.ts                          trace des messages relayés entre sessions : persistée, datée, réinsérée dans l’historique
+poste/session/fixtures/tours-transcript.jsonl       transcript d'exemple anonyme pour les tests des tours (deux réponses, un sous-agent, une erreur d'API)
 poste/session/gestionnaire-distant.test.ts              tests du gestionnaire face à une session suivie : trace, garde des commandes, historique
 relais/clients/api-session-relais.test.ts               tests de la route POST /api/sessions/:id/relais
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
@@ -409,6 +410,8 @@ poste/session/tmux.conf                              config du serveur tmux déd
 poste/session/taches-sdk.test.ts                     tests de taches-sdk.ts
 poste/session/taches-sdk.ts                          registre des tâches de fond d'une session SDK, alimenté par les messages task_* (pur)
 poste/session/tmux.ts                                parler au serveur tmux dédié aux Claude (`tmux -L claude`, socket via CCREMOTE_TMUX_SOCKET)
+poste/session/tours-transcript.test.ts              tests des tours lus dans le transcript : relecture complète et suivi incrémental, mêmes valeurs
+poste/session/tours-transcript.ts                   les tours d'une session lue dans son transcript (hors Lanterne) : jetons et durée par tour, au format du tour SDK (pur)
 poste/session/traduction-sdk.test.ts                 tests de traduction-sdk.ts
 poste/session/traduction-sdk.ts                      message du SDK → événements du fil et fin de tour (pur)
 poste/session/traduction.test.ts                     tests de traduction.ts
@@ -474,6 +477,7 @@ relais/registre/lecture-panneau.test.ts              tests des routes de lecture
 relais/registre/registre.ts                          lire et écrire l'état du relais — machines, sessions, fil d'événement…
 relais/registre/retention.test.ts                    tests de retention.ts
 relais/registre/retention.ts                         rétention du fil — purger les événements des sessions fermées depuis…
+relais/registre/tours-transcript.test.ts            tests des jetons et tours d'une session suivie hors de Lanterne : suite chevauchante, relecture complète
 relais/reunion/api-reunions.test.ts                  tests de api-reunions.ts
 relais/reunion/api-reunions.ts                       routes de la salle de réunion — créer ou poursuivre, lister, lire
 relais/reunion/destinataires.test.ts                 tests de destinataires.ts

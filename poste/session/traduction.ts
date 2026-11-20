@@ -17,8 +17,9 @@ export interface Ligne {
   readonly isSidechain?: unknown;
   readonly isMeta?: unknown;
   readonly isCompactSummary?: unknown;
-  readonly message?: { content?: unknown; usage?: Objet; stop_reason?: unknown; model?: unknown };
+  readonly message?: { id?: unknown; content?: unknown; usage?: Objet; stop_reason?: unknown; model?: unknown };
   readonly compactMetadata?: Objet;
+  readonly durationMs?: unknown; // `system` `turn_duration` : durée du tour, ms
   readonly customTitle?: unknown;
   readonly aiTitle?: unknown;
   readonly uuid?: unknown;

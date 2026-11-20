@@ -89,13 +89,17 @@ function texteDe(brut: string, journal?: Logger): TexteEvenement | null {
   return { type, texte };
 }
 
-/** Jetons d'une session : somme des `tour_fini` (entrée, sortie) et nombre de tours ; zéros si session inconnue. */
+/** Jetons d'une session : somme des `tour_fini` (entrée, sortie) et nombre de tours ; zéros si session inconnue.
+ * Un tour porté deux fois (SDK puis transcript relu, chevauchement) ne compte qu'une fois : même `uuid` de réponse. */
 export function jetonsSessionBase(db: Database, sessionId: string): JetonsSession {
   const l = db
     .query(
       `SELECT COALESCE(SUM(json_extract(evt, '$.entree')), 0) AS entree,
         COALESCE(SUM(json_extract(evt, '$.sortie')), 0) AS sortie, COUNT(*) AS tours
-      FROM evenements WHERE session_id = $s AND json_extract(evt, '$.type') = 'tour_fini'`,
+      FROM evenements WHERE session_id = $s AND json_extract(evt, '$.type') = 'tour_fini'
+        AND (json_extract(evt, '$.uuid') IS NULL OR seq IN (
+          SELECT MIN(seq) FROM evenements WHERE session_id = $s AND json_extract(evt, '$.type') = 'tour_fini'
+            AND json_extract(evt, '$.uuid') IS NOT NULL GROUP BY json_extract(evt, '$.uuid')))`,
     )
     .get({ s: sessionId }) as { entree: number; sortie: number; tours: number } | null;
   return { entree: l?.entree ?? 0, sortie: l?.sortie ?? 0, tours: l?.tours ?? 0 };
