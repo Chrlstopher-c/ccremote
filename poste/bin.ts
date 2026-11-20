@@ -1,6 +1,7 @@
 // Responsabilité : point d'entrée du poste — assemble config, sessions tmux, socket local, sonde et lien au relais.
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { COMMIT, VERSION } from '../commun/version.ts';
 import { type CommandeRelais, type MessagePoste, TAILLE_LOT_HISTORIQUE } from '../commun/protocole-poste.ts';
@@ -28,6 +29,8 @@ import { versionsClaudeCode } from './entretien/claude-code.ts';
 import { estReste, executerReste, type ContexteReste } from './reste/executer.ts';
 import { fichierClaudeJson } from './reste/memoire.ts';
 import { cheminSocketDictee } from './reste/dictee.ts';
+import { decouvrirScript } from './reste/dictee-moteur.ts';
+import { ServiceMoteurDictee } from './reste/dictee-service.ts';
 import { estResteLot2, executerResteLot2, type ContexteResteLot2 } from './reste/executer-lot2.ts';
 import { type ContextePariteposte, estParite, executerParite } from './parite/executer.ts';
 import { transcriptDeSession } from './parite/transcript-session.ts';
@@ -170,6 +173,13 @@ const taches = new ServiceTaches({
   ouvrir: (d) => sessions.ouvrir(d),
   journal,
 });
+// Le service de dictée : pilote le script moteur de ce poste et arrête le moteur qu'il a lancé après inactivité.
+const dicteeService = new ServiceMoteurDictee({
+  script: decouvrirScript(process.env, homedir()),
+  dossierRun: dirname(cheminSocketDictee(process.env, process.getuid?.())),
+  fichierReglages: join(config.donnees, 'dictee-service.json'),
+  journal: journal.child({ domaine: 'dictee' }),
+});
 const contexteResteLot2: ContexteResteLot2 = {
   session: (id) => {
     const s = sessions.session(id);
@@ -180,6 +190,7 @@ const contexteResteLot2: ContexteResteLot2 = {
   },
   taches,
   socketDictee: () => cheminSocketDictee(process.env, process.getuid?.()),
+  dicteeService,
   journal,
 };
 const minuterieTaches = new MinuterieTaches(taches, journal.child({ domaine: 'taches' }));
@@ -238,6 +249,7 @@ async function surCommande(c: CommandeRelais): Promise<MessagePoste | null> {
 servirLocal(socket, sessions, journal);
 sessions.demarrer();
 minuterieTaches.demarrer();
+dicteeService.demarrerSurveillance();
 comptes.demarrer();
 lien = new LienRelais({
   url: config.relais,
@@ -256,6 +268,7 @@ function arreter(): void {
   journal.info('arrêt du poste (les sessions tmux continuent)');
   sessions.sauvegarder();
   minuterieTaches.arreter();
+  dicteeService.arreterSurveillance();
   terminaux.fermerTout();
   lien?.arreter();
   process.exit(0);

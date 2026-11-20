@@ -2,6 +2,7 @@
 // compaction (B5), demande de fusion (P3), dictée (P6), tâches planifiées (P7). Mêmes formes JSON que
 // app/ui/src/reste/contrat-lot2.ts.
 import { z } from 'zod';
+import { CorpsServiceDictee } from './dictee-service.ts';
 
 export const MAX_TITRE_FUSION = 256;
 export const MAX_CORPS_FUSION = 65_536;
@@ -82,6 +83,7 @@ export type ResultatDictee = z.infer<typeof ResultatDictee>;
 export const CorpsDictee = z.object({
   pcm16: z.string().min(1).max(MAX_PCM16_BASE64),
   langue: z.string().min(2).max(10).optional(),
+  machine: z.string().min(1).max(100).optional(), // machine nommée : elle transcrit si elle a le service
 });
 export type CorpsDictee = z.infer<typeof CorpsDictee>;
 
@@ -134,6 +136,8 @@ export const commandesResteLot2 = [
   z.object({ kind: z.literal('pr_etat'), id: z.string(), sessionId: IdSession }),
   z.object({ kind: z.literal('pr_creer'), id: z.string(), sessionId: IdSession, ...CorpsFusion.shape }),
   z.object({ kind: z.literal('dictee_etat'), id: z.string() }),
+  z.object({ kind: z.literal('dictee_service_etat'), id: z.string() }),
+  z.object({ kind: z.literal('dictee_service'), id: z.string(), ...CorpsServiceDictee.shape }),
   z.object({
     kind: z.literal('dictee_transcrire'),
     id: z.string(),
@@ -156,6 +160,8 @@ export const GENRES_RESTE_LOT2 = [
   'pr_etat',
   'pr_creer',
   'dictee_etat',
+  'dictee_service_etat',
+  'dictee_service',
   'dictee_transcrire',
   'taches_lister',
   'tache_enregistrer',

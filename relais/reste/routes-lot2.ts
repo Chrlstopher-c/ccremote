@@ -24,6 +24,8 @@ export function routesResteLot2(api: ApisResteLot2, protege: Protection) {
       GET: protege(() => api.dictee.etat()),
       POST: protege((req) => api.dictee.transcrire(req)),
     },
+    '/api/dictee/service': { GET: protege(() => api.dictee.service()) },
+    '/api/machines/:id/dictee': { POST: protege((req) => api.dictee.piloter(req)) },
     '/api/machines/:id/taches-planifiees': { GET: protege((req) => api.taches.lister(req)) },
     '/api/machines/:id/taches-planifiees/:tid': {
       PUT: protege((req) => api.taches.enregistrer(req)),
