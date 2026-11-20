@@ -57,7 +57,7 @@ function pause(ms: number): Promise<void> {
 }
 
 /** Conversations qu'un processus Claude vivant hors du poste tient déjà (Desktop, terminal), par identifiant. */
-export function conversationsTenuesAilleurs(comptes: readonly string[], journal: Logger): Set<string> {
+export function conversationsTenuesAilleurs(comptes: readonly (string | null)[], journal: Logger): Set<string> {
   try {
     return new Set(processusClaude([null, ...comptes], journal).map((proc) => proc.sessionId));
   } catch (erreur) {
