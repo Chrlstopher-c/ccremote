@@ -44,6 +44,12 @@ export function suiteAjoutee(
   return { ancre: null, ajout: suite };
 }
 
+/** Vrai quand le lot commence après l'ancre du fil : il manque le milieu, seule une relecture complète le comble. */
+export function queueSansAncre(ancre: string | null, lot: readonly EvenementHorodate[]): boolean {
+  const premier = lot[0];
+  return ancre !== null && premier !== undefined && premier.ts > heureDe(ancre);
+}
+
 function heureDe(cle: string): string {
   return cle.slice(0, cle.indexOf('\u0000'));
 }

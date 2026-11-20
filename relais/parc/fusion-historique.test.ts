@@ -9,7 +9,7 @@ import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import { Diffusion } from '../clients/diffusion.ts';
 import { ouvrirBase } from '../registre/base.ts';
 import { Registre } from '../registre/registre.ts';
-import { cleEvenement, suiteAjoutee } from './fusion-historique.ts';
+import { cleEvenement, queueSansAncre, suiteAjoutee } from './fusion-historique.ts';
 import { type DonneesPoste, Postes } from './postes.ts';
 
 const MAJ = '2026-11-15T10:00:00.000Z';
@@ -165,5 +165,7 @@ describe('ancre d’un fil importé sans uuid (version antérieure)', () => {
   test('un lot entièrement postérieur attend : le milieu manquerait', () => {
     const lot = [{ ts: '2026-11-20T10:00:00.000Z', evt: { type: 'message', texte: 'suite', uuid: 'c' } as Evenement }];
     expect(suiteAjoutee(ancienne, lot)).toEqual({ ancre: ancienne, ajout: [] });
+    expect(queueSansAncre(ancienne, lot)).toBe(true);
+    expect(queueSansAncre(null, lot)).toBe(false);
   });
 });

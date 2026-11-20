@@ -11,7 +11,13 @@ import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
-import { avancerRelecture, cleEvenement, type EtatRelecture, type EvenementHorodate } from './fusion-historique.ts';
+import {
+  avancerRelecture,
+  cleEvenement,
+  queueSansAncre,
+  type EtatRelecture,
+  type EvenementHorodate,
+} from './fusion-historique.ts';
 
 export interface DonneesPoste {
   readonly machine: string;
@@ -39,6 +45,8 @@ export class Postes {
   private readonly infos = new Map<string, InfosPoste>();
   // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
   private readonly relectures = new Map<string, EtatRelecture>();
+  // Sessions dont une relecture complète a été demandée au poste (queue sans l'ancre du fil) : une fois par session.
+  private readonly relecturesCompletesDemandees = new Set<string>();
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -183,7 +191,7 @@ export class Postes {
       return this.diffuserSession(m.session.id);
     }
     if (m.kind === 'historique') {
-      this.historique(sessionId, m.replay, m.evenements);
+      this.historique(machine, sessionId, m.replay, m.evenements);
       return;
     }
     this.evenement(sessionId, m.ts, m.evt);
@@ -244,7 +252,7 @@ export class Postes {
   // Relecture du transcript d'une session découverte, adoptée ou suivie hors de Lanterne : un lot ne s'ajoute au fil
   // que s'il contient sa suite (voir fusion-historique.ts). Sur un fil vide, tout s'écrit ; sur un fil rempli, seule la
   // suite du dernier événement connu part, en diffusion. Ce sont des événements anciens : aucune notification.
-  private historique(sessionId: string, replay: string, lot: readonly EvenementHorodate[]): void {
+  private historique(machine: string, sessionId: string, replay: string, lot: readonly EvenementHorodate[]): void {
     const { etat, ajout } = avancerRelecture(
       this.relectures.get(sessionId),
       replay,
@@ -254,6 +262,11 @@ export class Postes {
     this.relectures.set(sessionId, etat);
     if (ajout.length === 0) {
       this.journal.debug({ sessionId, lot: lot.length }, 'relecture : rien à ajouter au fil');
+      if (queueSansAncre(etat.ancre, lot) && !this.relecturesCompletesDemandees.has(sessionId)) {
+        this.relecturesCompletesDemandees.add(sessionId);
+        this.journal.info({ sessionId }, 'relecture : ancre du fil absente de la queue, relecture complète demandée');
+        this.envoyer(machine, { kind: 'historique', sessionId });
+      }
       return;
     }
     const ajoutes = this.registre.ajouterSuite(sessionId, ajout);
