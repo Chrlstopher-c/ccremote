@@ -81,3 +81,33 @@ describe('ouverture avec pièces en moteur tmux', () => {
     expect(appels).toEqual([]);
   });
 });
+
+describe('réglages de l’ouverture', () => {
+  test('mode, modèle et effort voulus sont posés avant le premier message', async () => {
+    const appels: unknown[] = [];
+    const session = {
+      reglerSession: async (r: unknown) => {
+        appels.push(r);
+        return null;
+      },
+    } as unknown as SessionPoste;
+    const demande = {
+      parc: [],
+      sessionId: 'x',
+      projet: { machine: 'tour', chemin: '/p', nom: 'p' },
+      titre: 't',
+      message: 'm',
+      objectif: null,
+      autonomie: false,
+      mode: 'default',
+      modele: 'claude-haiku-4-5',
+      effort: 'low',
+    } as DemandeSession;
+    expect(await reglagesDeOuverture(session, demande)).toBeNull();
+    expect(appels).toEqual([
+      { kind: 'mode', mode: 'default' },
+      { kind: 'modele', modele: 'claude-haiku-4-5' },
+      { kind: 'effort', effort: 'low' },
+    ]);
+  });
+});

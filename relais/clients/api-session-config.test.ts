@@ -171,6 +171,19 @@ describe('création et suppression côté relais', () => {
     expect([defaut['style_sortie'], defaut['bac_a_sable'], defaut['controle_distant']]).toEqual([null, 'non', false]);
   });
 
+  test('ouverture : l’effort voulu part avec la demande (premier tour compris), absent sinon', async () => {
+    const { postes, recues } = postesSimules({ ok: true, donnees: {} });
+    const base = { machine: 'tour', projet: { machine: 'tour', chemin: '/p', nom: 'p' }, message: 'bonjour' };
+    await sessions(postes, registreAvec()).ouvrir(
+      new Request('http://r/api', { method: 'POST', body: JSON.stringify({ ...base, effort: 'high' }) }),
+    );
+    await sessions(postes, registreAvec()).ouvrir(
+      new Request('http://r/api', { method: 'POST', body: JSON.stringify(base) }),
+    );
+    const demandes = recues.map((r) => (r.commande['demande'] ?? {}) as Record<string, unknown>);
+    expect(demandes.map((d) => d['effort'])).toEqual(['high', undefined]);
+  });
+
   test('pièces du premier message : transmises au poste ; plus de trois : refusées sans appel', async () => {
     const { postes, recues } = postesSimules({ ok: true, donnees: {} });
     const base = { machine: 'tour', projet: { machine: 'tour', chemin: '/p', nom: 'p' }, message: 'bonjour' };

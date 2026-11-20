@@ -242,6 +242,7 @@ export const DemandeSession = z.object({
   compte: z.string().optional(),
   moteur: Moteur.optional(), // absent = sdk
   mode: ModeSession.optional(), // absent = bypassPermissions
+  effort: EffortSession.optional(), // posé avant le premier tour ; absent = défaut du modèle
   style_sortie: z.string().min(1).max(80).nullable().optional(),
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(), // Remote Control branché à la fin du premier tour
