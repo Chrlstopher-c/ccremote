@@ -1,9 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
-import { analyserTranscript, IndexDecouvertes, type OptionsIndex } from './decouverte.ts';
+import {
+  analyserTranscript,
+  IndexDecouvertes,
+  identifiantsTranscripts,
+  type OptionsIndex,
+  normaliserPont,
+} from './decouverte.ts';
 
 const journal = pino({ enabled: false });
 const A = 'a0000000-0000-4000-8000-000000000001';
@@ -153,6 +159,27 @@ describe('index des sessions découvertes', () => {
     neuf.arreter();
   });
 
+  test('un cache d une version précédente est ignoré : chaque transcript est relu une fois', () => {
+    const config = join(racine, 'config');
+    const chemin = ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('relu')]);
+    const cache = join(racine, 'cache.json');
+    const etat = statSync(chemin);
+    const ancien = { entrees: { [chemin]: { mtime: etat.mtimeMs, taille: etat.size, transcript: null } } };
+    writeFileSync(cache, JSON.stringify(ancien));
+    const idx = index(config, cache);
+    idx.demarrer();
+    expect(idx.liste(() => false).map((t) => t.id)).toEqual([A]);
+    idx.arreter();
+  });
+
+  test('le cache écrit porte sa version de format', () => {
+    const config = join(racine, 'config');
+    ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('x')]);
+    const cache = join(racine, 'cache.json');
+    index(config, cache).rafraichir();
+    expect(JSON.parse(readFileSync(cache, 'utf8')).version).toBe(2);
+  });
+
   test('une configuration absente ne lève rien', () => {
     const idx = index(join(racine, 'absente'), join(racine, 'cache.json'));
     expect(idx.rafraichir()).toBe(false);
@@ -165,6 +192,65 @@ describe('index des sessions découvertes', () => {
     const idx = index(config, join(racine, 'cache.json'));
     idx.rafraichir();
     expect(idx.liste(() => false)[0]?.configDir).toBe(config);
+  });
+});
+
+describe('sous-agents et identifiants de conversation', () => {
+  test('les identifiants de conversation excluent les transcripts de sous-agents', () => {
+    const config = join(racine, 'config');
+    ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('ok')]);
+    ecrire(config, '-p', SOUS, [LIGNE_CWD('/p'), humain('sous-agent')]);
+    expect(identifiantsTranscripts([config])).toEqual([A]);
+  });
+});
+
+describe('ponts Remote Control', () => {
+  const PONT = (id: string): string => `{"type":"bridge-session","bridgeSessionId":"${id}"}`;
+
+  test('session_X de Desktop devient cse_X ; le reste est gardé tel quel', () => {
+    expect(normaliserPont('session_011HAB')).toBe('cse_011HAB');
+    expect(normaliserPont('cse_011HAB')).toBe('cse_011HAB');
+  });
+
+  test('une ligne bridge-session du transcript donne le pont de la session', () => {
+    const config = join(racine, 'config');
+    ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('pont'), PONT('cse_011HAA')]);
+    const idx = index(config, join(racine, 'cache.json'));
+    idx.rafraichir();
+    expect(idx.liste(() => false)[0]?.ponts).toEqual(['cse_011HAA']);
+  });
+
+  test('les ponts de la fiche Desktop sont ajoutés, normalisés et dédoublonnés', () => {
+    const config = join(racine, 'config');
+    ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('pont'), PONT('cse_011HAA')]);
+    const fiche = {
+      conversation: A,
+      cwd: '/p',
+      modele: null,
+      mode: null,
+      archivee: false,
+      titre: null,
+      remoteControl: true,
+      ponts: ['session_011HBB', 'cse_011HAA'],
+    };
+    const idx = new IndexDecouvertes({
+      machine: 'tour',
+      configDirs: () => [config],
+      fichierCache: join(racine, 'cache.json'),
+      journal,
+      surChangement: (): void => {},
+      fichesDesktop: () => new Map([[A, fiche]]),
+    });
+    idx.rafraichir();
+    expect(idx.liste(() => false)[0]?.ponts).toEqual(['cse_011HAA', 'cse_011HBB']);
+  });
+
+  test('sans pont, le champ est absent', () => {
+    const config = join(racine, 'config');
+    ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('nu')]);
+    const idx = index(config, join(racine, 'cache.json'));
+    idx.rafraichir();
+    expect(idx.liste(() => false)[0]).not.toHaveProperty('ponts');
   });
 });
 

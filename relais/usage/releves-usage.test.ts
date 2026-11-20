@@ -2,7 +2,13 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import pino from 'pino';
 import type { EtatCompte } from '../../commun/comptes.ts';
-import { CADENCE_MS, type MachinesReleve, type PosteReleve, ReleveUsage } from './releves-usage.ts';
+import {
+  CADENCE_MS,
+  type MachinesReleve,
+  type PosteReleve,
+  ReleveUsage,
+  problemeAffiche,
+} from './releves-usage.ts';
 
 const journal = pino({ enabled: false });
 const MAINTENANT = Date.UTC(2026, 10, 20, 10, 0, 0);
@@ -162,10 +168,10 @@ describe('cadence et recul', () => {
 });
 
 describe('dernière valeur bonne', () => {
-  test('après un 429, les barres restent et le prochain relevé est annoncé', async () => {
+  test('après un 429 sur donnée de plus de 30 min : barres gardées, prochain relevé annoncé', async () => {
     const m = monde({ tour: [compte('principal')] });
     await m.usage.releverSiDu(CLE);
-    m.horloge.t += CADENCE_MS;
+    m.horloge.t += 40 * 60_000;
     m.reponses.push(LIMITE);
     await m.usage.releverSiDu(CLE);
     const [vu] = m.usage.appliquer(m.machines['tour'] ?? []);
@@ -173,6 +179,17 @@ describe('dernière valeur bonne', () => {
     expect(vu?.usageLe).toBe(new Date(MAINTENANT).toISOString());
     expect(vu?.prochainReleve).not.toBeNull();
     expect(vu?.probleme).toContain('prochain relevé vers');
+  });
+
+  test('après un 429 sur une donnée de moins de 30 min, aucun problème affiché', async () => {
+    const m = monde({ tour: [compte('principal')] });
+    await m.usage.releverSiDu(CLE);
+    m.horloge.t += CADENCE_MS;
+    m.reponses.push(LIMITE);
+    await m.usage.releverSiDu(CLE);
+    const [vu] = m.usage.appliquer(m.machines['tour'] ?? []);
+    expect(vu?.session?.pourcent).toBe(42);
+    expect(vu?.probleme).toBeNull();
   });
 
   test('sans aucune valeur : « pas encore relevé », pas « indisponible » sans raison', async () => {
@@ -203,12 +220,10 @@ describe('dernière valeur bonne', () => {
 });
 
 describe('quota vu dans le flux SDK', () => {
-  test('la fenêtre reçue devient la dernière valeur, sans appel au poste ni changement du délai', async () => {
+  test('la fenêtre reçue devient la dernière valeur, sans appel au poste, relevé repoussé à 5 min', async () => {
     const m = monde({ tour: [compte('principal')] });
     await m.usage.releverSiDu(CLE);
     const appelsAvant = m.appels.length;
-    const prochainAvant = (m.base.query('SELECT prochain_le FROM usage_comptes').get() as { prochain_le: string })
-      .prochain_le;
     m.horloge.t += 60_000;
     m.usage.recevoirLimite(CLE, {
       genre: 'session',
@@ -217,12 +232,53 @@ describe('quota vu dans le flux SDK', () => {
     const [vu] = m.usage.appliquer(m.machines['tour'] ?? []);
     expect(vu?.session?.pourcent).toBe(77);
     expect(vu?.usageLe).toBe(new Date(m.horloge.t).toISOString());
-    expect(vu?.prochainReleve).toBe(prochainAvant);
+    expect(vu?.prochainReleve).toBe(new Date(m.horloge.t + CADENCE_MS).toISOString());
     await m.usage.releverSiDu(CLE);
     expect(m.appels).toHaveLength(appelsAvant);
   });
 
-  test('première fenêtre sans aucun relevé : la ligne est créée, le compte n’est pas relevé avant 5 min', async () => {
+  test('la fenêtre reçue efface l’erreur précédente', async () => {
+    const m = monde({ tour: [compte('principal')] });
+    m.reponses.push(LIMITE);
+    await m.usage.releverSiDu(CLE);
+    m.horloge.t += 40 * 60_000;
+    m.usage.recevoirLimite(CLE, {
+      genre: 'session',
+      fenetre: { libelle: 'Session (5 h)', pourcent: 77, reinitialiseLe: null },
+    });
+    const erreur = m.base.query('SELECT erreur FROM usage_comptes').get() as { erreur: string | null };
+    expect(erreur.erreur).toBeNull();
+    const [vu] = m.usage.appliquer(m.machines['tour'] ?? []);
+    expect(vu?.probleme).toBeNull();
+  });
+
+  test('un relevé prévu dans moins de 5 min est repoussé à maintenant + 5 min', async () => {
+    const m = monde({ tour: [compte('principal')] });
+    await m.usage.releverSiDu(CLE);
+    m.horloge.t += 4 * 60_000;
+    m.usage.recevoirLimite(CLE, {
+      genre: 'session',
+      fenetre: { libelle: 'Session (5 h)', pourcent: 77, reinitialiseLe: null },
+    });
+    const ligne = m.base.query('SELECT prochain_le FROM usage_comptes').get() as { prochain_le: string };
+    expect(Date.parse(ligne.prochain_le)).toBe(m.horloge.t + CADENCE_MS);
+  });
+
+  test('un relevé prévu plus tard (recul 429) n’est pas avancé', async () => {
+    const m = monde({ tour: [compte('principal')] });
+    m.reponses.push({ ...LIMITE, retryApresMs: 60 * 60_000 });
+    await m.usage.releverSiDu(CLE);
+    const prevu = MAINTENANT + 60 * 60_000;
+    m.horloge.t += 60_000;
+    m.usage.recevoirLimite(CLE, {
+      genre: 'session',
+      fenetre: { libelle: 'Session (5 h)', pourcent: 78, reinitialiseLe: null },
+    });
+    const ligne = m.base.query('SELECT prochain_le FROM usage_comptes').get() as { prochain_le: string };
+    expect(Date.parse(ligne.prochain_le)).toBe(prevu);
+  });
+
+  test('première fenêtre sans relevé : ligne créée, compte non relevé avant 5 min', async () => {
     const m = monde({ tour: [compte('principal')] });
     m.usage.recevoirLimite(CLE, {
       genre: 'semaine',
@@ -233,5 +289,30 @@ describe('quota vu dans le flux SDK', () => {
     expect(vu?.session).toBeNull();
     await m.usage.releverSiDu(CLE);
     expect(m.appels).toHaveLength(0);
+  });
+});
+
+describe('problème affiché selon la fraîcheur', () => {
+  const T = Date.UTC(2026, 10, 20, 10, 0, 0);
+  const MIN = 60_000;
+
+  test('aucune erreur : rien à afficher', () => {
+    expect(problemeAffiche(null, null, null, T)).toBeNull();
+  });
+
+  test('donnée de moins de 30 min : rien à afficher, même avec une erreur 429', () => {
+    const releve = new Date(T - 29 * MIN).toISOString();
+    expect(problemeAffiche('usage HTTP 429', releve, null, T)).toBeNull();
+  });
+
+  test('donnée de plus de 30 min : la limite 429 est annoncée avec l’heure du prochain relevé', () => {
+    const releve = new Date(T - 31 * MIN).toISOString();
+    const prochain = new Date(T + 5 * MIN).toISOString();
+    expect(problemeAffiche('usage HTTP 429', releve, prochain, T)).toContain('limite de l’API d’usage atteinte');
+  });
+
+  test('aucune valeur jamais lue : le problème d’erreur est affiché', () => {
+    const texte = problemeAffiche('poste injoignable', null, null, T);
+    expect(texte).toContain('relevé d’usage impossible (poste injoignable)');
   });
 });

@@ -40,6 +40,23 @@ export interface UsageBrut {
 }
 
 const heure = (ms: number): string => new Date(ms).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+const FRAICHEUR_MS = 30 * 60_000;
+
+/** Le problème à afficher pour un compte. Rien si la valeur affichée a moins de 30 min : elle est fraîche,
+ *  quelle que soit la dernière erreur d'appel. */
+export function problemeAffiche(
+  erreur: string | null,
+  releveLe: string | null,
+  prochainLe: string | null,
+  maintenant: number,
+): string | null {
+  if (erreur === null) return null;
+  const releve = Date.parse(releveLe ?? '');
+  if (Number.isFinite(releve) && maintenant - releve < FRAICHEUR_MS) return null;
+  const prochain = prochainLe ? heure(Date.parse(prochainLe)) : 'inconnu';
+  if (erreur.includes('429')) return `limite de l’API d’usage atteinte : prochain relevé vers ${prochain}`;
+  return `relevé d’usage impossible (${erreur}) : nouvel essai vers ${prochain}`;
+}
 
 export class ReleveUsage {
   private readonly enCours = new Map<string, Promise<void>>();
@@ -88,15 +105,19 @@ export class ReleveUsage {
     const lue = l?.fenetres ? FenetresUsage.safeParse(JSON.parse(l.fenetres)) : null;
     const actuelles = lue?.success ? lue.data : { session: null, semaine: null, autres: [] };
     const fenetres = { ...actuelles, [limite.genre]: limite.fenetre };
+    // Donnée fraîche : l'erreur précédente ne vaut plus ; pas de relevé API avant 5 min (ni avant un recul plus long).
+    const deja = Date.parse(l?.prochain_le ?? '') || 0;
+    const prochain = Math.max(deja, t + CADENCE_MS);
     this.base
       .query(
         `INSERT INTO usage_comptes (cle, prochain_le, recul_min, fenetres, releve_le)
       VALUES ($cle, $prochain, $recul, $fenetres, $releveLe)
-      ON CONFLICT(cle) DO UPDATE SET fenetres = $fenetres, releve_le = $releveLe`,
+      ON CONFLICT(cle) DO UPDATE SET fenetres = $fenetres, releve_le = $releveLe,
+      erreur = NULL, prochain_le = $prochain`,
       )
       .run({
         cle,
-        prochain: l?.prochain_le ?? new Date(t + CADENCE_MS).toISOString(),
+        prochain: new Date(prochain).toISOString(),
         recul: l?.recul_min ?? RECUL_DEPART_MIN,
         fenetres: JSON.stringify(fenetres),
         releveLe: new Date(t).toISOString(),
@@ -134,10 +155,7 @@ export class ReleveUsage {
   }
 
   private problemeDe(l: Ligne): string | null {
-    if (l.erreur === null) return null;
-    const prochain = l.prochain_le ? heure(Date.parse(l.prochain_le)) : 'inconnu';
-    if (l.erreur.includes('429')) return `limite de l’API d’usage atteinte : prochain relevé vers ${prochain}`;
-    return `relevé d’usage impossible (${l.erreur}) : nouvel essai vers ${prochain}`;
+    return problemeAffiche(l.erreur, l.releve_le, l.prochain_le, this.maintenant());
   }
 
   private releverCle(cle: string): Promise<void> {

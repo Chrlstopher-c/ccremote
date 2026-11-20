@@ -21,6 +21,7 @@ interface Analyse {
   readonly messages: number;
   readonly sousAgent: boolean;
   readonly aMessageDeChris: boolean;
+  readonly ponts: readonly string[];
 }
 
 interface EntreeCache {
@@ -41,6 +42,8 @@ export interface OptionsIndex {
 }
 
 const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
+const PREFIXE_SOUS_AGENT = 'agent-'; // transcripts des sous-agents : pas des conversations
+const VERSION_CACHE = 2; // à incrémenter quand une règle d'analyse change : tout le cache est relu une fois
 const PERIODE_SECOURS_MS = 60_000; // balayage complet si une surveillance rate un événement
 const DELAI_SURVEILLANCE_MS = 3_000; // une session active écrit en continu : on regroupe les événements
 
@@ -53,17 +56,24 @@ export function dossiersProjets(configDirs: readonly (string | null)[]): string[
 const enObjet = (v: unknown): Record<string, unknown> | null =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
 
-/** Lit un transcript en une passe : dossier de travail, branche, nombre de messages, sous-agent ou non. */
+/** Identifiant Remote Control d'une conversation : Desktop le note `session_X`, le transcript `cse_X`. */
+export function normaliserPont(id: string): string {
+  return id.startsWith('session_') ? `cse_${id.slice('session_'.length)}` : id;
+}
+
+/** Lit un transcript en une passe : dossier de travail, branche, messages, sous-agent, ponts Remote Control. */
 export function analyserTranscript(contenu: string): Analyse {
   let cwd: string | null = null;
   let branche: string | null = null;
   let messages = 0;
   let sousAgent: boolean | null = null;
   let aMessageDeChris = false;
+  const ponts: string[] = [];
   for (const ligne of contenu.split('\n')) {
     if (!ligne) continue;
     if (ligne.includes('"type":"user"') || ligne.includes('"type":"assistant"')) messages++;
     if (sousAgent === null && ligne.includes('"isSidechain"')) sousAgent = ligne.includes('"isSidechain":true');
+    if (ligne.includes('"bridge-session"')) ponts.push(...pontDe(ligne));
     if (cwd !== null && branche !== null && aMessageDeChris) continue;
     const objet = parserLigne(ligne);
     if (!objet) continue;
@@ -73,7 +83,7 @@ export function analyserTranscript(contenu: string): Analyse {
     }
     if (!aMessageDeChris && objet['type'] === 'user' && titreDuMessage(objet) !== null) aMessageDeChris = true;
   }
-  return { cwd, branche, messages, sousAgent: sousAgent === true, aMessageDeChris };
+  return { cwd, branche, messages, sousAgent: sousAgent === true, aMessageDeChris, ponts };
 }
 
 function parserLigne(ligne: string): Record<string, unknown> | null {
@@ -84,12 +94,19 @@ function parserLigne(ligne: string): Record<string, unknown> | null {
   }
 }
 
+/** Le pont d'une ligne `{"type":"bridge-session","bridgeSessionId":"cse_…"}`, sinon rien. */
+function pontDe(ligne: string): string[] {
+  const objet = parserLigne(ligne);
+  const id = objet?.['bridgeSessionId'];
+  return objet?.['type'] === 'bridge-session' && typeof id === 'string' && id !== '' ? [id] : [];
+}
+
 // Une session exclue (sous-agent, vide, sans message de Chris, sans dossier) : pas d'entrée, sauf si Claude Desktop
 // la connaît (son premier message peut être une balise).
 function transcriptDe(
   analyse: Analyse,
   contenu: string,
-  base: { id: string; chemin: string; configDir: string | null; mtime: number },
+  base: { id: string; chemin: string; configDir: string | null; mtime: number; ponts: readonly string[] },
   machine: string,
   desktop: FicheDesktop | undefined,
 ): TranscriptDecouvert | null {
@@ -107,6 +124,7 @@ function transcriptDe(
     messages: analyse.messages,
     chemin: base.chemin,
     configDir: base.configDir,
+    ...(base.ponts.length > 0 ? { ponts: [...base.ponts] } : {}),
   };
 }
 
@@ -196,7 +214,7 @@ export class IndexDecouvertes {
     mtime: number,
     taille: number,
   ): TranscriptDecouvert | null {
-    if (taille === 0 || id.startsWith('agent-')) return null;
+    if (taille === 0 || id.startsWith(PREFIXE_SOUS_AGENT)) return null;
     let contenu: string;
     try {
       contenu = readFileSync(chemin, 'utf8');
@@ -206,8 +224,10 @@ export class IndexDecouvertes {
     }
     const configDir = dirname(projets) === join(homedir(), '.claude') ? null : dirname(projets);
     const analyse = analyserTranscript(contenu);
-    const desktop = analyse.aMessageDeChris ? undefined : this.fichesDesktopDe().get(id);
-    return transcriptDe(analyse, contenu, { id, chemin, configDir, mtime }, this.options.machine, desktop);
+    const fiche = this.fichesDesktopDe().get(id);
+    const ponts = [...new Set([...analyse.ponts, ...(fiche?.ponts ?? [])].map(normaliserPont))];
+    const desktop = analyse.aMessageDeChris ? undefined : fiche;
+    return transcriptDe(analyse, contenu, { id, chemin, configDir, mtime, ponts }, this.options.machine, desktop);
   }
 
   private fichesDesktopDe(): ReadonlyMap<string, FicheDesktop> {
@@ -268,9 +288,11 @@ export class IndexDecouvertes {
   private charger(): void {
     try {
       const brut = JSON.parse(readFileSync(this.options.fichierCache, 'utf8')) as {
+        version?: number;
         entrees?: Record<string, EntreeCache>;
       };
-      this.entrees = new Map(Object.entries(brut.entrees ?? {}));
+      // Autre version du format (analyse changée) : rien de réutilisable, tout est relu une fois.
+      this.entrees = brut.version === VERSION_CACHE ? new Map(Object.entries(brut.entrees ?? {})) : new Map();
     } catch {
       this.entrees = new Map(); // pas de cache (premier démarrage) : rien à perdre, on relit tout
     }
@@ -281,7 +303,7 @@ export class IndexDecouvertes {
     try {
       mkdirSync(dirname(fichier), { recursive: true });
       const temp = `${fichier}.tmp`;
-      writeFileSync(temp, JSON.stringify({ entrees: Object.fromEntries(this.entrees) }));
+      writeFileSync(temp, JSON.stringify({ version: VERSION_CACHE, entrees: Object.fromEntries(this.entrees) }));
       renameSync(temp, fichier);
     } catch (erreur) {
       this.options.journal.error({ err: erreur, fichier }, 'cache des sessions découvertes non écrit');
@@ -289,13 +311,14 @@ export class IndexDecouvertes {
   }
 }
 
-/** Identifiants de tous les transcripts du poste (existants, même vides ou sans message) : le relais s'en sert pour
- *  reconnaître une fiche fantôme, c'est-à-dire dont la conversation n'existe plus nulle part. */
+/** Identifiants des transcripts de conversation du poste (même vides ou sans message ; sous-agents exclus) : le relais
+ *  s'en sert pour reconnaître une fiche fantôme, dont la conversation n'existe plus nulle part. */
 export function identifiantsTranscripts(configDirs: readonly (string | null)[]): string[] {
+  const conversation = (f: string): boolean => f.endsWith('.jsonl') && !f.startsWith(PREFIXE_SOUS_AGENT);
   return dossiersProjets(configDirs).flatMap((base) =>
     readdirSync(base, { withFileTypes: true })
       .filter((e) => e.isDirectory())
-      .flatMap((e) => readdirSync(join(base, e.name)).filter((f) => f.endsWith('.jsonl')))
+      .flatMap((e) => readdirSync(join(base, e.name)).filter(conversation))
       .map((f) => f.slice(0, -'.jsonl'.length)),
   );
 }

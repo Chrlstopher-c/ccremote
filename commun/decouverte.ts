@@ -11,5 +11,6 @@ export const Decouverte = z.object({
   branche: z.string().nullable(),
   messages: z.number().int().nonnegative(),
   vivante: z.boolean().optional(), // un processus Claude tient cette conversation sur ce poste
+  ponts: z.array(z.string()).optional(), // identifiants Remote Control (cse_…) de la conversation, dédoublonnés
 });
 export type Decouverte = z.infer<typeof Decouverte>;
