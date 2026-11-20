@@ -384,3 +384,24 @@ Ce que cet essai a trouvé et qui est corrigé :
   session en bypassPermissions, livré en mode default/acceptEdits.
 - Correctifs de l'essai : poste.json du moteur intégré conserve `comptes`/`distants` ; republication des sessions
   distantes toutes les 30 s ; messages tapés rendus dans le fil distant ; mode relu dans les `system`.
+
+## 20/11 — Entretien pour Lanterne (audit TOP 7, branche `lanterne/audit-top7`, agent Haiku 5.5)
+- Livré côté Quart : `GET /api/entretien/etat` (versions relais/poste/Claude Code, empreinte attendue, ressources, réveil,
+  contrôles `controlesMachine`), `GET /api/entretien/chantiers` (suivis d'agents, lecture seule, normalisés), `GET
+  /api/entretien/processus` + `POST …/processus/arreter` + `POST …/tmux/arreter` (inventaire par parenté `/proc`, jamais par
+  motif ; registre `processus.json` 0600 ; SIGTERM puis SIGKILL seulement si `force` après un SIGTERM du même processus),
+  `GET …/liaisons/:id/occupant` + `POST …/liberer` (sshd de l'utilisateur de la fiche seulement, puis `Tunnels.relancer`),
+  `POST /api/machines/:id/reveiller` (MAC relevée et stockée dans `reveil.json` du relais, envoi délégué à un poste du même
+  réseau, banc `CCREMOTE_REVEIL_FACTICE`).
+- Build : `commun/version.ts` (VERSION '2.0.0', COMMIT). Ligne de construction attendue côté Lanterne :
+  `bun build --compile --target=bun-linux-x64-baseline --define 'process.env.QUART_COMMIT="<sha>"' integre/bin.ts --outfile dist/integre/lanterne-moteur`
+  Sans cette option, COMMIT vient du fichier `COMMIT` de l'archive du poste, sinon `null`.
+- Environnement : `CCREMOTE_MACHINE_LOCALE` posé par le moteur (machine locale). `LANTERNE_DOSSIER_CHANTIERS` et
+  `CCREMOTE_REVEIL_FACTICE` ne sont pas reposés : le moteur est un seul processus, il hérite de l'environnement de l'appli.
+- Limite connue : le gestionnaire ne relie pas encore un pid SDK à son id de session (`sessionDePid` renvoie `null`) ; les
+  sessions tmux sont listées sans id de session. Le réveil d'une machine sans MAC relevée reste impossible tant qu'elle n'a
+  jamais été en ligne avec ce code.
+- Essai réel (tour, lecture) : `essais/entretien-inventaire.ts` sur le PID d'un `sleep 300` lancé pour l'essai : le
+  processus est bien trouvé comme descendant de la racine. Chantiers réels : 101 fichiers (en cours 6, échec 1, inconnu
+  19, terminé 75).
+- Tests : 920 → 1009 (`bun test commun poste relais mcp integre`), `tsc --noEmit` vert.
