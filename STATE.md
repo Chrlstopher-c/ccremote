@@ -376,3 +376,11 @@ Ce que cet essai a trouvé et qui est corrigé :
 - Limite levée (19/11, branche lanterne/rc-statut) : après ON, `statut: fermee` venait de `rattacherTerminal` : le processus SDK
   fermé (même identifiant, hors tmux) passait la session tmux en terminal, puis sa mort la fermait. Un pane tmux l'emporte désormais.
 - 19/11 correctifs V1 (suite 2) : `fichier_session` n'est plus une commande de l'appareil (poste/fichiers/appareil.ts, cause de « Aperçu indisponible » et de « undefined is not an object (r.ok) ») ; serveur `lanterne` en `alwaysLoad` avec `searchHint` ; consignes : bloc « Présenter des fichiers » (moteur SDK) et encouragement à une liste de tâches ; événement `taches` (TodoWrite du fil principal). Haiku 5.5 n'expose ni TodoWrite ni TaskCreate en SDK : la liste est prête, pas encore alimentée. Pour la suite : tester un vrai TodoWrite dès qu'un réglage le rend disponible (`CLAUDE_CODE_ENABLE_TODO_TOOLS` n'a pas suffi).
+
+## 20/11 ~06 h — Multi-compte vérifié au banc (orchestrateur Opus)
+- Sessions Remote Control d'un compte (poste/distant/) lues et pilotées depuis une seconde instance isolée, sur une session
+  jetable : envoi, interruption, permission, modèle, mode. Forme des POST : `{events:[{payload: evt}]}` (sans enveloppe :
+  400 « event_type is required »). Un message posté avec un jeton du CLI arrive comme message de PAIR : retenu par une
+  session en bypassPermissions, livré en mode default/acceptEdits.
+- Correctifs de l'essai : poste.json du moteur intégré conserve `comptes`/`distants` ; republication des sessions
+  distantes toutes les 30 s ; messages tapés rendus dans le fil distant ; mode relu dans les `system`.
