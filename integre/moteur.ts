@@ -1,6 +1,5 @@
 // Responsabilité : démarrer le relais puis le poste local dans ce processus, dans cet ordre, puis les arrêter
 // proprement (sessions sauvées par le poste) quand l'appli ferme le tuyau d'entrée ou envoie SIGTERM.
-import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import type { Logger } from 'pino';
@@ -9,6 +8,7 @@ import { preparerDonnees, type Donnees } from './donnees.ts';
 import { empreinteMotDePasse, secretDuPoste } from './secrets.ts';
 import { extraireCodePoste } from './code.ts';
 import { enregistrerJeton } from './jeton.ts';
+import { ecrirePosteJson } from './poste-json.ts';
 import { attendrePosteLocal, ligneDePret } from './pret.ts';
 import type { ParametresLancement } from './parametres.ts';
 
@@ -47,7 +47,7 @@ async function demarrer(p: ParametresLancement, donnees: Donnees, journal: Logge
     journal: donnees.journal,
   };
   Object.assign(process.env, construireEnvironnement(parametresEnv));
-  writeFileSync(chemins.posteJson, `${JSON.stringify(contenuPosteJson(parametresEnv), null, 2)}\n`, { mode: 0o600 });
+  ecrirePosteJson(chemins.posteJson, contenuPosteJson(parametresEnv), journal);
   enregistrerJeton(chemins.base, p.jeton, journal);
   arretALaFermetureEntree(journal);
   await import('../relais/bin.ts');
