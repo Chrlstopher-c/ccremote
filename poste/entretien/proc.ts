@@ -29,6 +29,13 @@ export function parserStat(texte: string): { comm: string; ppid: number; debut: 
   return { comm: texte.slice(ouvre + 1, ferme), ppid, debut };
 }
 
+/** Vrai pour un processus déjà terminé que son parent n'a pas encore relevé (zombie `Z`, mort `X`) : rien à montrer
+ *  ni à arrêter. */
+export function estTermine(statTexte: string): boolean {
+  const etat = statTexte.charAt(statTexte.lastIndexOf(')') + 2);
+  return etat === 'Z' || etat === 'X';
+}
+
 /** La mémoire résidente (VmRSS) en octets ; 0 si absente. */
 export function parserMemoire(statusTexte: string): number {
   const m = /^VmRSS:\s+(\d+)\s+kB/m.exec(statusTexte);
@@ -67,7 +74,7 @@ function lire(chemin: string, journal: Logger): string | null {
 export function lireProcessus(pid: number, journal: Logger): EntreeProc | null {
   const base = `/proc/${pid}`;
   const stat = lire(`${base}/stat`, journal);
-  const parse = stat ? parserStat(stat) : null;
+  const parse = stat && !estTermine(stat) ? parserStat(stat) : null;
   if (!parse) return null;
   const status = lire(`${base}/status`, journal) ?? '';
   const cmdline = lire(`${base}/cmdline`, journal) ?? '';

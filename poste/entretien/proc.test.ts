@@ -1,6 +1,6 @@
 // Responsabilité : tests des analyseurs /proc (parenté, heure de démarrage, mémoire, commande) sur des textes réels.
 import { describe, expect, test } from 'bun:test';
-import { commandeDe, debutIso, parserBtime, parserMemoire, parserStat } from './proc.ts';
+import { commandeDe, debutIso, estTermine, parserBtime, parserMemoire, parserStat } from './proc.ts';
 
 describe('/proc/<pid>/stat', () => {
   test('ppid et heure de démarrage (champ 22), même avec des espaces dans le nom', () => {
@@ -29,5 +29,13 @@ describe('mémoire, commande, démarrage', () => {
     expect(parserBtime('cpu 1 2 3\nbtime 1700000000\nprocesses 9\n')).toBe(1_700_000_000);
     expect(parserBtime('cpu 1 2 3\n')).toBeNull();
     expect(debutIso(1_700_000_000, '250')).toBe(new Date(1_700_000_002_500).toISOString());
+  });
+});
+
+describe('processus terminés', () => {
+  test('un zombie ou un mort n’est pas un processus à montrer', () => {
+    expect(estTermine('4242 (tar) Z 4000 1 1 0 -1 0')).toBe(true);
+    expect(estTermine('4242 (a) b) X 4000 1')).toBe(true);
+    expect(estTermine('4242 (bash) S 4000 1 1 0 -1 0')).toBe(false);
   });
 });
