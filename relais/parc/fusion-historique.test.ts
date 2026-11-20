@@ -121,6 +121,20 @@ describe('relecture fusionnée dans un fil déjà rempli', () => {
   });
 });
 
+describe('queue à chevauchement (relecture après croissance)', () => {
+  test('une queue qui reprend 100 événements déjà au fil n’ajoute que les nouveaux, un par un en diffusion', () => {
+    const { postes, registre, recus } = montage();
+    const tous = Array.from({ length: 160 }, (_, i) => msg(`m${i}`, `l${i}`));
+    envoyerLot(postes, 'r-1', tous.slice(0, 150));
+    envoyerLot(postes, 'r-2', tous.slice(50));
+
+    const fil = textesDuFil(registre);
+    expect(fil).toHaveLength(160);
+    expect(fil.slice(-2)).toEqual(['l158', 'l159']);
+    expect(recus.filter((m) => m.type === 'evenement')).toHaveLength(10);
+  });
+});
+
 describe('pas de réimportation quand rien ne se raccorde', () => {
   test('session pilotée par le poste (fil écrit en direct, horodatages propres) : la relecture n’ajoute rien', () => {
     const { postes, registre } = montage();

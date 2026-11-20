@@ -44,6 +44,11 @@ export class Stockage {
     ecrireAtomique(join(dossier, `${id}.json`), JSON.stringify(meta));
   }
 
+  /** Le fichier est déjà stocké : même identifiant, même contenu (identifiant tiré de l'empreinte). */
+  existe(sessionId: string, id: string): boolean {
+    return estIdFichier(id) && existsSync(join(this.dossier(sessionId), `${id}.json`));
+  }
+
   /** Le fichier et ses métadonnées, ou null si l'identifiant est inconnu. Une lecture illisible lève. */
   lire(sessionId: string, id: string): FichierStocke | null {
     if (!estIdFichier(id)) return null;

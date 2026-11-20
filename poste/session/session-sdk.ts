@@ -42,7 +42,8 @@ import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
 import { lireHistorique, stockeurImages } from './historique.ts';
-import { cheminTranscript, signatureTranscript } from './transcript.ts';
+import { cheminTranscript } from './transcript.ts';
+import { PERIODE_RELECTURE_MS, SuiviTranscript } from './suivi-transcript.ts';
 import {
   appliquerReglage,
   basculerMode,
@@ -108,7 +109,6 @@ export interface EnvironnementSdk {
 }
 
 const DELAI_MCP_MS = 15_000;
-const PERIODE_RELECTURE_MS = 5_000;
 const PERIODE_MCP_MS = 250;
 const TRADUCTION_PAR_DEFAUT: TraductionSdk = { nouvelEtat: nouvelEtatTraduction, traduire: traduireSdk };
 const TEXTE_INTERRUPTION = 'Interrompu par Chris';
@@ -135,9 +135,7 @@ export class SessionSdk implements SessionPoste {
   private readonly reglagesVivants: ReglagesVivants;
   private aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
   private historiqueEmis = false; // l'historique du transcript n'est envoyé qu'à l'ouverture de la fiche
-  // Signature (taille, date) du transcript relu pour la dernière fois : il est relu quand elle change.
-  private signatureVue: string | null = null;
-  private prochaineRelecture = 0; // une écriture externe ne relance pas la relecture avant ce moment
+  private readonly suivi: SuiviTranscript; // relecture du transcript quand il grossit (voir suivi-transcript.ts)
   // Rembobinage en attente : la prochaine reprise part de cette entrée du transcript (resumeSessionAt).
   private pointReprise: string | null = null;
   // Conversation recommencée après le rembobinage du premier message : son identifiant SDK (sans reprise).
@@ -162,6 +160,7 @@ export class SessionSdk implements SessionPoste {
     this.traduction = env.traduction ?? TRADUCTION_PAR_DEFAUT;
     this.delaiMcp = env.delaiMcpMs ?? DELAI_MCP_MS;
     this.periodeMcp = env.periodeMcpMs ?? PERIODE_MCP_MS;
+    this.suivi = new SuiviTranscript(env.periodeRelectureMs ?? PERIODE_RELECTURE_MS);
     const pres = env.presentation;
     this.presentation = pres
       ? new PresentationSession({
@@ -222,36 +221,28 @@ export class SessionSdk implements SessionPoste {
     this.rejouerHistorique(chemin);
   }
 
-  // Relit tout le transcript vers le relais, en lots ; le relais n'ajoute que la suite de son fil (sans doublon).
-  rejouerHistorique(chemin: string): number {
+  // Relit le transcript vers le relais, en lots. Le relais n'ajoute que la suite de son fil (sans doublon) : sauf
+  // `complet` (fil vide au relais), seule la queue part, avec un chevauchement (voir suivi-transcript.ts).
+  rejouerHistorique(chemin: string, complet = false): number {
     this.historiqueEmis = true;
-    this.signatureVue = signatureTranscript(chemin);
+    this.suivi.marquerLu(chemin);
     const stockage = this.env.presentation?.stockage;
     const images = stockage ? stockeurImages(stockage, this.etat.id, this.env.journal) : undefined;
     const evenements = lireHistorique(chemin, this.env.journal, images);
-    this.env.sortie.historique?.(this.etat.id, evenements);
+    this.env.sortie.historique?.(this.etat.id, this.suivi.queue(evenements, complet));
     return evenements.length;
   }
-  // Session non pilotée ici (découverte, ou fermée au démarrage du poste) : son transcript est relu dès qu'il change,
-  // pour qu'un échange fait hors de Lanterne arrive dans le fil. Pilotée par le poste, son fil vient du direct :
-  // rien à relire, et sa première vue après la fermeture ne relit rien non plus.
+  // Session non pilotée ici (découverte, ou fermée au démarrage du poste) : son transcript est relu dès qu'il grossit,
+  // pour qu'un échange fait hors de Lanterne arrive dans le fil. Pilotée par le poste, son fil vient du direct.
   lire(): void {
     if (this.vivante) {
-      this.signatureVue = null;
+      this.suivi.reinitialiser();
       return;
     }
     const conversation = this.etat.claudeSessionId;
     if (!conversation) return;
     const chemin = cheminTranscript(this.etat.cwd, conversation, this.p.configDir);
-    const signature = signatureTranscript(chemin);
-    if (signature === null) return;
-    if (this.signatureVue === null) {
-      this.signatureVue = signature;
-      return;
-    }
-    if (signature === this.signatureVue || Date.now() < this.prochaineRelecture) return;
-    this.prochaineRelecture = Date.now() + (this.env.periodeRelectureMs ?? PERIODE_RELECTURE_MS);
-    this.rejouerHistorique(chemin);
+    if (this.suivi.aRelire(chemin, Date.now())) this.rejouerHistorique(chemin);
   }
 
   // Pas de pane tmux ni de terminal : le fil vient du SDK, la veille est celle du poste.

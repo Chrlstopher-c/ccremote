@@ -77,9 +77,8 @@ function fabriquer(tours: number): Fabrique {
 
 function fauxStockage(): { stockage: Stockage; ecrits: string[] } {
   const ecrits: string[] = [];
-  let n = 0;
   const stockage = {
-    nouvelId: () => `img-${(n += 1)}`,
+    existe: (_session: string, id: string) => ecrits.includes(id),
     ecrire: (_session: string, id: string) => {
       ecrits.push(id);
     },
@@ -132,7 +131,8 @@ describe('historique du transcript : fil complet, branche active, sans sous-agen
     const evts = evenementsDuTranscript(contenu, stocker).map((e) => e.evt);
     const images = evts.filter((e): e is Extract<Evenement, { type: 'image' }> => e.type === 'image');
     expect(images.length).toBe(chaine.images);
-    expect(ecrits.length).toBe(chaine.images);
+    // Identifiant tiré du contenu : toutes les images du transcript ont les mêmes octets, un seul fichier écrit.
+    expect(ecrits.length).toBe(1);
     expect(images.every((i) => i.origine === 'utilisateur' && i.mime === 'image/png')).toBe(true);
   });
 

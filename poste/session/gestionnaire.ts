@@ -177,7 +177,7 @@ export class GestionnaireSessions {
     const conversation = s.resume.claudeSessionId;
     if (!conversation) return { ok: true, donnees: { evenements: 0 } };
     const chemin = cheminTranscript(s.resume.cwd, conversation, s.persistee.configDir);
-    return { ok: true, donnees: { evenements: s.rejouerHistorique(chemin) } };
+    return { ok: true, donnees: { evenements: s.rejouerHistorique(chemin, true) } };
   }
 
   private reponseAdoption(id: string): Reponse {

@@ -1,6 +1,7 @@
 // Responsabilité : l'historique complet d'un transcript Claude Code, traduit en événements du fil avec leur horodatage
 // d'origine. Sert à l'ouverture d'une session découverte ou adoptée : le relais n'a encore rien reçu de sa conversation.
 // Les images des blocs sont stockées par le poste (`stockerImage`) ; sans lui, elles sont ignorées. Pur hors lecture.
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Logger } from 'pino';
 import type { Evenement } from '../../commun/session.ts';
@@ -75,7 +76,12 @@ export function lireHistorique(
   }
 }
 
-/** Stockeur d'images de l'historique : chaque image va dans le stockage de la session, comme en direct. */
+/** Identifiant d'une image tiré de son contenu : la même image relue donne le même fichier et le même événement. */
+export function identifiantImage(octets: Uint8Array): string {
+  return createHash('sha256').update(octets).digest('hex').slice(0, 16);
+}
+
+/** Stockeur d'images de l'historique : une image va dans le stockage de la session, une seule fois (même contenu). */
 export function stockeurImages(stockage: Stockage, sessionId: string, journal: Logger): StockerImage {
   return (image, rang, origine) => {
     try {
@@ -84,9 +90,11 @@ export function stockeurImages(stockage: Stockage, sessionId: string, journal: L
         journal.warn({ session: sessionId, taille: octets.length }, 'image trop lourde pour le fil, écartée');
         return null;
       }
-      const fichier = stockage.nouvelId();
+      const fichier = identifiantImage(octets);
       const nom = `image-${rang + 1}.${image.mime.split('/')[1] ?? 'png'}`;
-      stockage.ecrire(sessionId, fichier, octets, { nom, mime: image.mime, taille: octets.length });
+      if (!stockage.existe(sessionId, fichier)) {
+        stockage.ecrire(sessionId, fichier, octets, { nom, mime: image.mime, taille: octets.length });
+      }
       return { type: 'image', fichier, nom, mime: image.mime, taille: octets.length, origine };
     } catch (erreur) {
       journal.error({ err: erreur, session: sessionId }, 'image de l’historique impossible à stocker');
