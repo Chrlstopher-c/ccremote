@@ -42,7 +42,15 @@ import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
 import { lireHistorique, stockeurImages } from './historique.ts';
-import { champsReglage, appliquerReglage, type RequeteReglable } from './reglages-sdk.ts';
+import {
+  appliquerReglage,
+  basculerMode,
+  champsReglage,
+  lireModes,
+  type ReglageMode,
+  type RequeteReglable,
+} from './reglages-sdk.ts';
+import { etatRapideLu, rapideLu, ultracodeDefaut, ultracodeLu } from './modes-sdk.ts';
 import { effetRythme } from './rythme.ts';
 import type { ReponseCrochet, Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import type { Suite } from './suite-du-tour.ts';
@@ -381,18 +389,43 @@ export class SessionSdk implements SessionPoste {
 
   // Réglages en cours de session : appliqués à la requête vivante s'il y en a une, sinon au prochain démarrage.
   async reglerSession(r: Reglage): Promise<string | null> {
+    if (r.kind === 'rapide' || r.kind === 'ultracode') return this.reglerMode(r);
     const requete = this.requete;
     if (requete && r.kind !== 'renommer') {
       try {
-        await appliquerReglage(requete, r);
+        await appliquerReglage(requete, r, this.etat.ultracode?.demande === true);
       } catch (erreur) {
         this.env.journal.warn({ err: erreur, session: this.etat.id, reglage: r.kind }, 'réglage refusé par le SDK');
         return `réglage impossible : ${String(erreur)}`;
       }
     }
     this.maj(champsReglage(r));
-    if (requete && r.kind === 'modele') void this.nommerModele(requete);
+    if (requete && r.kind === 'modele') {
+      void this.nommerModele(requete);
+      void this.relever(requete);
+    }
     return null;
+  }
+
+  // Mode rapide et Ultracode : la requête vivante reçoit la bascule, la fiche reçoit ce que le SDK en fait.
+  private async reglerMode(r: ReglageMode): Promise<string | null> {
+    try {
+      this.maj(await basculerMode(this.requete, r, this.etat, this.env.journal));
+      return null;
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id, reglage: r.kind }, 'réglage refusé par le SDK');
+      return `réglage impossible : ${String(erreur)}`;
+    }
+  }
+
+  // Compatibilité du mode rapide et dispo d'Ultracode : relevées à l'initialisation, puis après un modèle.
+  private async relever(requete: RequeteSdk): Promise<void> {
+    const lu = await lireModes(requete, this.etat.modele, this.env.journal, this.etat.id);
+    if (this.requete !== requete) return;
+    this.maj({
+      rapide: rapideLu(this.etat.rapide, lu.rapide, lu.compatible),
+      ultracode: ultracodeLu(this.etat.ultracode ?? ultracodeDefaut(), lu.reglages),
+    });
   }
 
   // Nom affiché du modèle, lu dans la liste du SDK pour le compte ; absent de la liste : pas de nom (Lanterne dérive).
@@ -502,6 +535,8 @@ export class SessionSdk implements SessionPoste {
       cwd: this.etat.cwd,
       consignes: this.p.consignes ?? '',
       modele: this.etat.modele === 'défaut' ? undefined : this.etat.modele,
+      rapide: this.etat.rapide?.demande === true,
+      ultracode: this.etat.ultracode?.demande === true,
       executable: this.env.executable,
       configDir: this.p.configDir,
       source: this.env.env ?? process.env,
@@ -546,6 +581,7 @@ export class SessionSdk implements SessionPoste {
       void this.attendreConnecteurs(requete).then(() => liberer());
       void this.ecouter(requete, this.traduction.nouvelEtat());
       void this.nommerModele(requete);
+      void this.relever(requete);
       this.maj({ statut: message ? 'travail' : 'attente' });
       if (message) this.pousser(message, blocs, uuid);
       return null;
@@ -644,6 +680,8 @@ export class SessionSdk implements SessionPoste {
     }
     this.bilan.observer(evenements, sortie.compaction === true);
     this.presentation?.depuisMessage(msg);
+    const modeRapide = etatRapideLu(msg);
+    if (modeRapide) this.maj({ rapide: rapideLu(this.etat.rapide, modeRapide) });
     if (sortie.claudeSessionId && sortie.claudeSessionId !== this.etat.claudeSessionId) {
       this.memoriser(this.etat.claudeSessionId);
       this.memoriser(sortie.claudeSessionId);

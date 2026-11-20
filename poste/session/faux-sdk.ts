@@ -26,6 +26,8 @@ type Faux = {
   readonly texte?: string;
   readonly erreur?: string | null;
   readonly contexte?: number;
+  readonly fast_mode_state?: string;
+  readonly fast_mode_disabled_reason?: string;
 };
 const faux = (f: Faux): SDKMessage => f as unknown as SDKMessage; // forme factice, voir ci-dessus
 const lireFaux = (m: SDKMessage): Faux => m as unknown as Faux; // inverse de faux
@@ -119,12 +121,40 @@ export class RequeteFausse implements RequeteSdk {
     this.reglages.push(`modele:${model ?? 'défaut'}`);
   }
 
+  // Réglages de flag reçus tels quels (clés présentes seulement) : les tests lisent ce que la session a envoyé.
+  readonly flagSettings: Record<string, unknown>[] = [];
+  ultracodeActif = false;
+  ultracodeDisponible: boolean | null = true;
+  echecReglages = false; // getSettings refusé
+  refusReglages = false; // applyFlagSettings refusé
+
   async applyFlagSettings(settings: {
     readonly effortLevel?: string | null;
     readonly outputStyle?: string | null;
+    readonly fastMode?: boolean;
+    readonly ultracode?: boolean;
   }): Promise<void> {
+    if (this.refusReglages) throw new Error('réglage refusé par le faux SDK');
+    this.flagSettings.push({ ...settings });
+    // Comme le SDK : un effort sans clé ultracode coupe Ultracode ; la clé ultracode, si elle est là, fait foi.
+    if (settings.ultracode !== undefined) this.ultracodeActif = settings.ultracode;
+    else if (settings.effortLevel !== undefined) this.ultracodeActif = false;
     if (settings.outputStyle !== undefined) this.reglages.push(`style:${settings.outputStyle ?? 'défaut'}`);
-    else this.reglages.push(`effort:${settings.effortLevel ?? 'défaut'}`);
+    else if (settings.fastMode !== undefined) this.reglages.push(`rapide:${settings.fastMode ? 'on' : 'off'}`);
+    else if (settings.effortLevel !== undefined) this.reglages.push(`effort:${settings.effortLevel ?? 'défaut'}`);
+    else this.reglages.push(`ultracode:${this.ultracodeActif ? 'on' : 'off'}`);
+  }
+
+  // Réglages appliqués tels que le SDK les rend (get_settings) : absent des types publics, présent à l'exécution.
+  async getSettings(): Promise<unknown> {
+    if (this.echecReglages) throw new Error('get_settings en échec');
+    return {
+      applied: {
+        ultracode: this.ultracodeActif,
+        ultracodeRequested: this.ultracodeActif,
+        ultracodeAvailable: this.ultracodeDisponible,
+      },
+    };
   }
 
   readonly connecteursBascules: string[] = [];
@@ -139,13 +169,16 @@ export class RequeteFausse implements RequeteSdk {
     { value: 'claude-mythos-5-2', displayName: 'Mythos 5.2' },
     { value: 'claude-haiku-5-5', displayName: 'Haiku 5.5' },
   ];
+  initRapide: { readonly fast_mode_state?: string; readonly fast_mode_disabled_reason?: string } = {};
 
   async initializationResult(): Promise<{
     readonly output_style: string;
     readonly available_output_styles: readonly string[];
     readonly models: readonly ModeleFaux[];
+    readonly fast_mode_state?: string;
+    readonly fast_mode_disabled_reason?: string;
   }> {
-    return { ...this.styleInitial, models: this.modelesInitiaux };
+    return { ...this.styleInitial, models: this.modelesInitiaux, ...this.initRapide };
   }
 
   async reloadOutputStyles(): Promise<unknown> {
@@ -190,12 +223,16 @@ interface Reglages {
   readonly configDir?: string | null;
   readonly reprise?: Reprise;
   readonly modeles?: ModeleFaux[]; // liste de modèles renvoyée par le SDK (défaut : deux modèles)
+  readonly initRapide?: RequeteFausse['initRapide']; // état du mode rapide rendu à l'initialisation
+  readonly echecReglages?: boolean; // get_settings refusé
+  readonly refusReglages?: boolean; // apply_flag_settings refusé
 }
 
 interface ModeleFaux {
   readonly value: string;
   readonly resolvedModel?: string;
   readonly displayName: string;
+  readonly supportsFastMode?: boolean;
 }
 
 // L'état d'une session persistée avant l'arrêt du poste.
@@ -248,6 +285,9 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
   const fabrique: FabriqueRequete = (p) => {
     const requete = new RequeteFausse(p.prompt, p.options, scenario, reglages.mcp ?? []);
     if (reglages.modeles) requete.modelesInitiaux = reglages.modeles;
+    if (reglages.initRapide) requete.initRapide = reglages.initRapide;
+    requete.echecReglages = reglages.echecReglages === true;
+    requete.refusReglages = reglages.refusReglages === true;
     requetes.push(requete);
     return requete;
   };

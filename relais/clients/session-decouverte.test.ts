@@ -88,6 +88,8 @@ describe('session découverte sur un poste : adoptée puis action', () => {
       { kind: 'modele', modele: 'claude-opus-5-5' },
     ],
     ['effort', (a) => a.effort(requete('d1', { effort: 'high' }) as never), { kind: 'effort', effort: 'high' }],
+    ['mode rapide', (a) => a.rapide(requete('d1', { actif: true }) as never), { kind: 'rapide', actif: true }],
+    ['ultracode', (a) => a.ultracode(requete('d1', { actif: false }) as never), { kind: 'ultracode', actif: false }],
     ['mode', (a) => a.mode(requete('d1', { mode: 'plan' }) as never), { kind: 'mode', mode: 'plan' }],
     [
       'renommer',

@@ -32,6 +32,8 @@ const CorpsOuverture = z.object({
   compte: z.string().optional(),
   mode: ModeSession.optional(),
   effort: EffortSession.optional(),
+  rapide: z.boolean().optional(), // mode rapide demandé à l'ouverture (SDK)
+  ultracode: z.boolean().optional(), // Ultracode demandé à l'ouverture (SDK)
   style_sortie: z.string().min(1).max(80).nullable().optional(),
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(),
@@ -52,6 +54,7 @@ const CorpsRemoteControl = z.object({ actif: z.boolean() });
 const CorpsMode = z.object({ mode: ModeSession });
 const CorpsModele = z.object({ modele: z.string().min(1).max(120) });
 const CorpsEffort = z.object({ effort: EffortSession.nullable() });
+const CorpsActif = z.object({ actif: z.boolean() });
 const CorpsMessageId = z.object({ messageId: z.string().min(1).max(200) });
 const CorpsChapitre = z.object({ messageId: z.string().min(1).max(200), epingle: z.boolean() });
 const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
@@ -96,6 +99,8 @@ export class ApiSessions {
       ...(c.compte ? { compte: c.compte } : {}),
       ...(c.mode ? { mode: c.mode } : {}),
       ...(c.effort ? { effort: c.effort } : {}),
+      ...(c.rapide ? { rapide: true } : {}),
+      ...(c.ultracode ? { ultracode: true } : {}),
       style_sortie: c.style_sortie ?? null,
       bac_a_sable: c.bac_a_sable ?? 'non',
       controle_distant: c.controle_distant ?? false,
@@ -274,6 +279,18 @@ export class ApiSessions {
     const c = await lireCorps(req, CorpsEffort);
     if (c instanceof Response) return c;
     return this.commander(req.params.id, { kind: 'effort', effort: c.effort });
+  }
+
+  async rapide(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsActif);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'rapide', actif: c.actif });
+  }
+
+  async ultracode(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsActif);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'ultracode', actif: c.actif });
   }
 
   async renommer(req: RequeteSession): Promise<Response> {
@@ -490,6 +507,8 @@ export class ApiSessions {
       | { kind: 'mode'; mode: ModeSession }
       | { kind: 'modele'; modele: string }
       | { kind: 'effort'; effort: EffortSession | null }
+      | { kind: 'rapide'; actif: boolean }
+      | { kind: 'ultracode'; actif: boolean }
       | { kind: 'renommer'; titre: string }
       | { kind: 'arreter_tache'; tache: string }
       | { kind: Action },

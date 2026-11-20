@@ -9,13 +9,15 @@ import type { EvenementHorodate } from './historique.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { PaneTmux } from './tmux.ts';
 
-// Réglage changé en cours de session (commande `mode`, `modele`, `effort`, `renommer`, `style` du relais).
+// Réglage changé en cours de session (`mode`, `modele`, `effort`, `renommer`, `style`, `rapide`, `ultracode`).
 export type Reglage =
   | { readonly kind: 'mode'; readonly mode: ModeSession }
   | { readonly kind: 'modele'; readonly modele: string }
   | { readonly kind: 'effort'; readonly effort: EffortSession | null }
   | { readonly kind: 'renommer'; readonly titre: string }
-  | { readonly kind: 'style'; readonly style: string | null };
+  | { readonly kind: 'style'; readonly style: string | null }
+  | { readonly kind: 'rapide'; readonly actif: boolean }
+  | { readonly kind: 'ultracode'; readonly actif: boolean };
 
 export interface SortieSession {
   evenement(sessionId: string, evt: Evenement): void;

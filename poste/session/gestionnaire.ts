@@ -16,7 +16,7 @@ import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes, estAuRepos } from './controle-differe.ts';
 import { stylesDeSession } from './styles-session.ts';
-import { reglagesDeOuverture } from './reglages-sdk.ts';
+import { modesDeOuverture, reglagesDeOuverture } from './reglages-sdk.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import * as tmux from './tmux.ts';
@@ -285,6 +285,7 @@ export class GestionnaireSessions {
     else if (c.kind === 'mode' || c.kind === 'modele' || c.kind === 'effort' || c.kind === 'renommer')
       erreur = await s.reglerSession(c);
     else if (c.kind === 'style') erreur = await s.reglerSession({ kind: 'style', style: c.style });
+    else if (c.kind === 'rapide' || c.kind === 'ultracode') erreur = await s.reglerSession(c);
     else if (c.kind === 'connecteur')
       erreur = s instanceof SessionSdk ? await s.basculerConnecteur(c.nom, c.actif) : 'non pris en charge hors SDK';
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
@@ -622,6 +623,7 @@ export class GestionnaireSessions {
       claudeSessionId: d.sessionId,
       moteur: moteurDe(d),
       style_sortie: d.style_sortie ?? null,
+      ...modesDeOuverture(d),
       bac_a_sable: d.bac_a_sable ?? 'non',
       tmux: null,
       attachee: false,

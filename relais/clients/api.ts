@@ -150,6 +150,8 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/mode': { POST: protege((req) => d.sessions.mode(req as never)) },
     '/api/sessions/:id/modele': { POST: protege((req) => d.sessions.modele(req as never)) },
     '/api/sessions/:id/effort': { POST: protege((req) => d.sessions.effort(req as never)) },
+    '/api/sessions/:id/rapide': { POST: protege((req) => d.sessions.rapide(req as never)) },
+    '/api/sessions/:id/ultracode': { POST: protege((req) => d.sessions.ultracode(req as never)) },
     '/api/sessions/:id/renommer': { POST: protege((req) => d.sessions.renommer(req as never)) },
     '/api/sessions/:id/:action': { POST: protege((req) => d.sessions.action(req as never)) },
     '/api/notifications': {

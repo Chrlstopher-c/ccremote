@@ -52,9 +52,23 @@ export interface ParametresSdk {
   readonly outils?: McpSdkServerConfigWithInstance; // serveur `lanterne` : présentation de fichiers, artefacts, widgets
   readonly hooks?: Options['hooks']; // crochets des éditions (poste/modifications), sans effet sur les permissions
   readonly style?: string | null; // style de sortie, réappliqué au démarrage comme à la reprise
+  readonly rapide?: boolean; // mode rapide demandé : réglage `fastMode` du calque, réappliqué à la reprise
+  readonly ultracode?: boolean; // Ultracode demandé : réglage de session, non persisté par le SDK
   readonly bacASable?: BacASable; // absent ou `non` : pas de sandbox
   readonly interdits?: readonly string[]; // outils retirés de la session (conversation annexe)
 }
+
+// Calque de réglages de `query()` : style, mode rapide, Ultracode. Absent si aucun n'est demandé.
+function reglagesDeCalque(p: ParametresSdk): CalqueReglages | undefined {
+  const reglages: CalqueReglages = {
+    ...(p.style ? { outputStyle: p.style } : {}),
+    ...(p.rapide ? { fastMode: true } : {}),
+    ...(p.ultracode ? { ultracode: true } : {}),
+  };
+  return Object.keys(reglages).length > 0 ? reglages : undefined;
+}
+
+type CalqueReglages = { outputStyle?: string; fastMode?: true; ultracode?: true };
 
 // `oui` : Bash sandboxé et auto-approuvé dans le bac ; `strict` : et aucune commande hors du bac.
 function sandboxDe(mode: Exclude<BacASable, 'non'>): SandboxSettings {
@@ -66,6 +80,7 @@ function sandboxDe(mode: Exclude<BacASable, 'non'>): SandboxSettings {
 }
 
 export function optionsSdk(p: ParametresSdk): Options {
+  const calque = reglagesDeCalque(p);
   return {
     cwd: p.cwd,
     env: { ...envSdk(p.source, p.configDir), CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' },
@@ -82,7 +97,7 @@ export function optionsSdk(p: ParametresSdk): Options {
     ...(p.modele ? { model: p.modele } : {}),
     ...(p.hooks ? { hooks: p.hooks } : {}),
     ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),
-    ...(p.style ? { settings: { outputStyle: p.style } } : {}),
+    ...(calque ? { settings: calque } : {}),
     ...(p.bacASable && p.bacASable !== 'non' ? { sandbox: sandboxDe(p.bacASable) } : {}),
     ...(p.interdits?.length ? { disallowedTools: [...p.interdits] } : {}),
   };

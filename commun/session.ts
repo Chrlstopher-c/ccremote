@@ -49,6 +49,28 @@ export type BacASable = z.infer<typeof BacASable>;
 export const EffortSession = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export type EffortSession = z.infer<typeof EffortSession>;
 
+// Mode rapide (SDK `fastMode`) : `etat` et `raison` sont ce que le SDK rapporte (null tant qu'il n'a pas répondu
+// depuis la bascule) ; `raison` n'est jamais `sdk_opt_in_required` quand la demande est fausse ; `compatible` : le
+// modèle courant accepte le mode rapide (null : inconnu).
+export const EtatRapideSdk = z.enum(['on', 'off', 'cooldown']);
+export type EtatRapideSdk = z.infer<typeof EtatRapideSdk>;
+export const ModeRapide = z.object({
+  demande: z.boolean(),
+  etat: EtatRapideSdk.nullable(),
+  raison: z.string().nullable(),
+  compatible: z.boolean().nullable(),
+});
+export type ModeRapide = z.infer<typeof ModeRapide>;
+
+// Ultracode (clé de session `ultracode`, pas un niveau d'effort) : `demande` ce que Chris veut, `actif` ce que le SDK
+// applique, `disponible` ce que le modèle courant permet (null : inconnu).
+export const ModeUltracode = z.object({
+  demande: z.boolean(),
+  actif: z.boolean(),
+  disponible: z.boolean().nullable(),
+});
+export type ModeUltracode = z.infer<typeof ModeUltracode>;
+
 export const Projet = z.object({
   machine: z.string(),
   chemin: z.string(),
@@ -111,6 +133,8 @@ export const ResumeSession = z.object({
   moteur: Moteur.optional(), // absent = tmux (postes antérieurs)
   mode: ModeSession.optional(), // absent = bypassPermissions (comportement antérieur : tout autorisé)
   effort: EffortSession.nullable().optional(), // absent ou null = défaut du modèle
+  rapide: ModeRapide.optional(), // mode rapide : absent hors SDK ou avant le premier démarrage de la requête
+  ultracode: ModeUltracode.optional(),
   tmux: z.string().nullable(), // nom de la session tmux (serveur `tmux -L claude`), null si fermée
   attachee: z.boolean(), // un terminal est attaché (kitty, web)
   pilotee: z.boolean(), // lancée par ccremote : crochets et outils de rythme actifs (autonomie, compaction)
@@ -264,6 +288,8 @@ export const DemandeSession = z.object({
   moteur: Moteur.optional(), // absent = sdk
   mode: ModeSession.optional(), // absent = bypassPermissions
   effort: EffortSession.optional(), // posé avant le premier tour ; absent = défaut du modèle
+  rapide: z.boolean().optional(), // mode rapide demandé à l'ouverture (moteur SDK)
+  ultracode: z.boolean().optional(), // Ultracode demandé à l'ouverture (moteur SDK)
   style_sortie: z.string().min(1).max(80).nullable().optional(),
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(), // Remote Control branché à la fin du premier tour

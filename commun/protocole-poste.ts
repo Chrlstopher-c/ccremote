@@ -124,6 +124,9 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('mode'), ...avecSession, mode: ModeSession }),
   z.object({ kind: z.literal('modele'), ...avecSession, modele: z.string().min(1).max(120) }),
   z.object({ kind: z.literal('effort'), ...avecSession, effort: EffortSession.nullable() }),
+  // Mode rapide et Ultracode (SDK seulement) : activés ou coupés dans la requête vivante, gardés pour la reprise.
+  z.object({ kind: z.literal('rapide'), ...avecSession, actif: z.boolean() }),
+  z.object({ kind: z.literal('ultracode'), ...avecSession, actif: z.boolean() }),
   z.object({ kind: z.literal('renommer'), ...avecSession, titre: z.string().min(1).max(120) }),
   // Lectures du panneau de session (SDK) : rien ne change dans la session.
   z.object({ kind: z.literal('contexte'), ...avecSession }),

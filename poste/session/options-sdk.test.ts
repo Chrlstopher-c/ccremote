@@ -112,3 +112,29 @@ describe('rembobinage : point de reprise', () => {
     expect(optionsSdk(parametres({ reprise: true })).resumeSessionAt).toBeUndefined();
   });
 });
+
+describe('calque de réglages : style, mode rapide, Ultracode', () => {
+  test('aucun réglage demandé : pas de calque', () => {
+    expect(optionsSdk(parametres()).settings).toBeUndefined();
+  });
+
+  test('mode rapide demandé : fastMode dans le calque', () => {
+    expect(optionsSdk(parametres({ rapide: true })).settings).toEqual({ fastMode: true });
+  });
+
+  test('Ultracode demandé : ultracode dans le calque', () => {
+    expect(optionsSdk(parametres({ ultracode: true })).settings).toEqual({ ultracode: true });
+  });
+
+  test('style, mode rapide et Ultracode s ajoutent dans le même calque', () => {
+    expect(optionsSdk(parametres({ style: 'Learning', rapide: true, ultracode: true })).settings).toEqual({
+      outputStyle: 'Learning',
+      fastMode: true,
+      ultracode: true,
+    });
+  });
+
+  test('un calque vide n apparaît pas : rapide et ultracode faux', () => {
+    expect(optionsSdk(parametres({ rapide: false, ultracode: false })).settings).toBeUndefined();
+  });
+});
