@@ -46,6 +46,7 @@ describe('script d’installation Lanterne', () => {
     expect(script).toContain('\n$JETONS\n$BORNES\n');
     expect(script).toContain('bornes-lanterne.conf');
     expect(script).toContain("'MemoryMax=1G' 'MemorySwapMax=0' 'CPUQuota=150%' 'Nice=10'");
+    expect(script).toContain('"MemoryMax=$M"G');
   });
 
   test('marqueurs d’étape lus par le relais, dans l’ordre', () => {
@@ -79,7 +80,7 @@ describe('script d’installation Lanterne', () => {
     }).toString();
     expect(sortie).toContain('EnvironmentFile=-%h/.config/quart-poste/claude-token.env');
     expect(sortie).not.toContain('poste.env');
-    expect(sortie).toContain('MemoryMax=1G');
+    expect(sortie).toMatch(/MemoryMax=[1-8]G/);
   });
 });
 
