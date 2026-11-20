@@ -45,7 +45,11 @@ function poste(e: EntreeControles): Controle {
   if (!e.installee) return ko('poste', 'Poste non installé.');
   if (e.enLigne) return ok('poste', 'Poste connecté.');
   // Port de la liaison pris : la machine répond en SSH, elle est allumée ; c'est la liaison qu'il faut réparer.
-  if (e.acces?.detail?.startsWith(PORT_DISTANT_PRIS)) return ko('poste', 'Poste injoignable tant que la liaison est occupée.');
+  if (e.acces?.detail?.startsWith(PORT_DISTANT_PRIS)) {
+    return ko('poste', 'Poste injoignable tant que la liaison est occupée.');
+  }
+  // Liaison ouverte : la machine est allumée, c'est son poste qui ne s'est pas encore connecté.
+  if (e.acces?.etat === 'connexion') return ko('poste', 'Le poste de la machine ne répond pas encore.');
   if (e.reveilPossible) return ko('poste', 'Machine éteinte ou hors ligne.', 'reveiller');
   return ko('poste', 'Poste hors ligne.');
 }

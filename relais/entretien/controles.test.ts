@@ -19,6 +19,12 @@ const par = (liste: Controle[], id: string): Controle => {
 };
 
 describe('contrôles d’une machine', () => {
+  test('liaison ouverte sans poste : la machine est allumée, pas de réveil', () => {
+    const acces = { etat: 'connexion', detail: null } as const;
+    const liste = controlesMachine({ ...BASE, enLigne: false, reveilPossible: true, acces });
+    expect(par(liste, 'poste')).toMatchObject({ ok: false, action: null });
+  });
+
   test('port de la liaison pris : la machine est allumée, aucun réveil proposé', () => {
     const liste = controlesMachine({
       ...BASE,
