@@ -128,6 +128,9 @@ export function trouverClaude(): string | null {
   return Bun.which(binaireClaude());
 }
 
+const TENUE_AILLEURS =
+  'conversation ouverte dans Claude Desktop ou un terminal : écrivez-y par Remote Control, ou fermez-la là-bas d’abord';
+
 export class SessionSdk implements SessionPoste {
   private etat: ResumeSession;
   private requete: RequeteSdk | null = null;
@@ -313,6 +316,9 @@ export class SessionSdk implements SessionPoste {
   }
 
   async reprendre(message?: string): Promise<string | null> {
+    // Conversation tenue par un processus vivant ailleurs (Claude Desktop, terminal) : la relancer ici ferait deux
+    // processus sur le même transcript. On y écrit par sa session Remote Control, jamais par une reprise.
+    if (this.etat.terminal === true && !this.vivante) return TENUE_AILLEURS;
     if (this.fil) return message ? this.envoyer(message) : null;
     if (!this.etat.claudeSessionId) return 'conversation inconnue : impossible de la reprendre';
     const uuid = message ? randomUUID() : undefined;
