@@ -422,6 +422,9 @@ export class Postes {
   private avecJumelle(s: ResumeSession): ResumeSession {
     if (!s.distant || !s.id.startsWith('cse_')) return s;
     const parPont = this.decouverteDuPont(s.id);
+    // Conversation déjà ouverte par un poste : sa fiche dit la vraie machine (le même transcript peut exister ailleurs).
+    const ouverte = parPont ? this.registre.session(parPont.id) : null;
+    if (ouverte && !ouverte.distant) return avecJumelleReelle(s, ouverte);
     if (parPont) return avecDecouverteJumelle(s, parPont);
     const connu = this.jumelles.get(s.id);
     let jumelle = connu?.jumelle ?? null;
