@@ -145,3 +145,52 @@ describe('flux : deltas de texte relayés sans persistance', () => {
     expect(recus).toEqual([]);
   });
 });
+
+describe('statut d’une conversation vue par sa fiche de poste et sa jumelle Remote Control', () => {
+  const avecConversation = (s: ResumeSession, conversation: string): ResumeSession => ({
+    ...s,
+    claudeSessionId: conversation,
+  });
+  const rc = (statut: ResumeSession['statut']): ResumeSession => ({
+    ...session('cse_1', 'portable', statut),
+    cwd: 'Remote Control',
+    distant: {
+      compte: 'principal',
+      idDistant: 'cse_1',
+      connexion: 'connectee',
+      probleme: null,
+      conversation: 'conv-1',
+    },
+  });
+  const rapporte = (postes: Postes, machine: string, s: ResumeSession): void =>
+    postes.recu(fauxPoste(machine), JSON.stringify({ kind: 'session', session: s }));
+
+  test('la fiche de poste reste « travail » tant que sa jumelle Remote Control travaille (poste : « attente »)', () => {
+    const { postes, registre } = montage([rc('travail')]);
+    rapporte(postes, 'tour', avecConversation(session('tour-1', 'tour', 'attente'), 'conv-1'));
+    expect(registre.session('tour-1')?.statut).toBe('travail');
+    expect(registre.session('cse_1')?.statut).toBe('travail');
+  });
+
+  test('la fiche de poste et la fiche Remote Control redeviennent « attente » quand la conversation s’arrête', () => {
+    const { postes, registre } = montage([rc('travail')]);
+    rapporte(postes, 'tour', avecConversation(session('tour-1', 'tour', 'attente'), 'conv-1'));
+    rapporte(postes, 'portable', rc('attente'));
+    expect(registre.session('tour-1')?.statut).toBe('attente');
+    expect(registre.session('cse_1')?.statut).toBe('attente');
+  });
+
+  test('le poste qui travaille reste « travail » quand la jumelle Remote Control s’arrête', () => {
+    const { postes, registre } = montage([]);
+    rapporte(postes, 'tour', avecConversation(session('tour-1', 'tour', 'travail'), 'conv-1'));
+    rapporte(postes, 'portable', rc('attente'));
+    expect(registre.session('tour-1')?.statut).toBe('travail');
+    expect(registre.session('cse_1')?.statut).toBe('travail');
+  });
+
+  test('une fiche de poste sans jumelle garde son statut rapporté', () => {
+    const { postes, registre } = montage([]);
+    rapporte(postes, 'tour', session('seule', 'tour', 'attente'));
+    expect(registre.session('seule')?.statut).toBe('attente');
+  });
+});

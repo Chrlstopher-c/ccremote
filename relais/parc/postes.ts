@@ -14,7 +14,8 @@ import { decouverteParIdentifiant } from './decouvertes-postes.ts';
 import { fantomesARetirer } from './fantomes.ts';
 import { DesktopDesPostes } from './desktop-postes.ts';
 import { ArchivagesEnMemoire } from '../registre/archivages-desktop.ts';
-import { avecDecouverteJumelle, avecJumelleReelle } from './jumelle-distante.ts';
+import { RechercheJumelle } from './recherche-jumelle.ts';
+import { StatutsPaires } from './statut-paire.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { LignesTranscript } from '../registre/nettoyage-fil.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
@@ -43,7 +44,6 @@ export interface ReponsePoste {
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30 s la confirmation du CLI
-const ESSAI_JUMELLE_MS = 60_000; // une jumelle Remote Control introuvable est recherchée de nouveau après ce délai
 
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
@@ -63,8 +63,8 @@ export class Postes {
   desktop = new DesktopDesPostes(new ArchivagesEnMemoire());
   // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
   private readonly relectures = new Map<string, EtatRelecture>();
-  // Session Remote Control → session de poste qui tient la même conversation (voir avecJumelle).
-  private readonly jumelles = new Map<string, { jumelle: string | null; essai: number }>();
+  private readonly paires: StatutsPaires;
+  private readonly jumelles: RechercheJumelle;
   // Sessions dont une relecture complète a été demandée au poste (queue sans l'ancre du fil) : une fois par session.
   private readonly relecturesCompletesDemandees = new Set<string>();
   // Relecture complète demandée et pas encore reçue : son premier lot la consomme (fusion chronologique).
@@ -92,7 +92,10 @@ export class Postes {
     private readonly diffusion: Diffusion,
     private readonly secrets: ReadonlyMap<string, string>,
     private readonly journal: Logger,
-  ) {}
+  ) {
+    this.paires = new StatutsPaires(registre);
+    this.jumelles = new RechercheJumelle(registre, (id) => this.decouverteDuPont(id));
+  }
 
   authentifier(req: Request): string | null {
     const machine = req.headers.get(ENTETE_MACHINE) ?? '';
@@ -212,7 +215,7 @@ export class Postes {
       return;
     }
     if (m.kind === 'session') {
-      this.registre.enregistrerSession(this.desktop.avecDesktop(this.avecJumelle(m.session)));
+      this.enregistrerRapportee(m.session);
       return this.diffuserSession(m.session.id);
     }
     if (m.kind === 'historique') {
@@ -248,7 +251,7 @@ export class Postes {
     });
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
-      this.registre.enregistrerSession(this.desktop.avecDesktop(this.avecJumelle(s)));
+      this.enregistrerRapportee(s);
       this.diffuserSession(s.id);
     }
     this.fermerNonAnnoncees(machine, new Set(m.sessions.map((s) => s.id)));
@@ -424,30 +427,10 @@ export class Postes {
     this.diffusion.diffuser({ type: 'fil_modifie', sessionId });
   }
 
-  // Session Remote Control (claude.ai) qui est la même conversation qu'une session de poste (Desktop sur la tour) :
-  // les deux fils partagent les uuid des lignes du transcript. Sa `conversation` devient celle du poste, ce qui la
-  // rattache à sa jumelle dans la liste. Recherche gardée en cache ; un échec est retenté au plus une fois par minute.
-  private avecJumelle(s: ResumeSession): ResumeSession {
-    if (!s.distant || !s.id.startsWith('cse_')) return s;
-    const parPont = this.decouverteDuPont(s.id);
-    // Conversation déjà ouverte par un poste : sa fiche dit la vraie machine (le même transcript peut exister ailleurs).
-    const ouverte = parPont ? this.registre.session(parPont.id) : null;
-    if (ouverte && !ouverte.distant) return avecJumelleReelle(s, ouverte);
-    if (parPont) return avecDecouverteJumelle(s, parPont);
-    const connu = this.jumelles.get(s.id);
-    let jumelle = connu?.jumelle ?? null;
-    if (!jumelle && (!connu || Date.now() - connu.essai > ESSAI_JUMELLE_MS)) {
-      const uuids = this.registre
-        .derniersEvenements(s.id, 200)
-        .map((e) => {
-          const evt = e.evt as { type: string; uuid?: unknown; id?: unknown };
-          return evt.type === 'outil' ? evt.id : evt.uuid;
-        })
-        .filter((u): u is string => typeof u === 'string' && u !== '');
-      jumelle = this.registre.sessionPartageantUuid(uuids, s.id);
-      this.jumelles.set(s.id, { jumelle, essai: Date.now() });
-    }
-    return avecJumelleReelle(s, jumelle ? this.registre.session(jumelle) : null);
+  // Fiche rapportée par son poste : le statut affiché tient compte de la jumelle Remote Control (voir statut-paire).
+  private enregistrerRapportee(s: ResumeSession): void {
+    const jumelle = this.paires.enregistrer(this.desktop.avecDesktop(this.jumelles.avecJumelle(s)));
+    if (jumelle) this.diffuserSession(jumelle.id);
   }
 
   // Conversation pas encore ouverte (découverte d'un poste en ligne) dont le transcript ou la fiche Desktop nomme
