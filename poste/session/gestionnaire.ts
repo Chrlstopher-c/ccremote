@@ -66,6 +66,8 @@ export class GestionnaireSessions {
   private readonly trace: TraceRelais;
   private readonly balayage: BalayageSessions;
   private readonly sortieFil: SortieSession; // la sortie, dont l'historique repasse par la trace de relais
+  // Parent d'une copie dupliquée avant que son transcript soit découvert : posé à sa création (voir creer).
+  private readonly parentsAttendus = new Map<string, string>();
 
   constructor(
     readonly config: ConfigPoste,
@@ -394,6 +396,17 @@ export class GestionnaireSessions {
     this.sortie.resume(session.resume);
   }
 
+  // Copie dupliquée pas encore découverte : fiche déjà ouverte → parent posé ici ; sinon il attend l'import.
+  attendreParent(idCopie: string, idParent: string): void {
+    const ouverte = this.sessions.get(idCopie);
+    if (!ouverte) {
+      this.parentsAttendus.set(idCopie, idParent);
+      return;
+    }
+    ouverte.resume.parent = idParent;
+    this.sortie.resume(ouverte.resume);
+  }
+
   // Configurations de comptes connues, plus la configuration par défaut de Claude Code.
   private configDirs(): (string | null)[] {
     return [null, ...Object.values(this.config.comptes)];
@@ -424,7 +437,16 @@ export class GestionnaireSessions {
     });
   }
 
-  creer(p: SessionPersistee): SessionPoste {
+  // Point unique de création de fiche : une copie attendue reçoit son parent ici, quel que soit le chemin d'import.
+  private avecParentAttendu(p: SessionPersistee): SessionPersistee {
+    const parent = this.parentsAttendus.get(p.resume.id);
+    if (parent === undefined) return p;
+    this.parentsAttendus.delete(p.resume.id);
+    return p.resume.parent ? p : { ...p, resume: { ...p.resume, parent } };
+  }
+
+  creer(recue: SessionPersistee): SessionPoste {
+    const p = this.avecParentAttendu(recue);
     const sortie: SortieSession = {
       evenement: (id, evt) => this.sortie.evenement(id, evt),
       historique: (id, evts) => this.sortieFil.historique?.(id, evts),

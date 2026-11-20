@@ -17,6 +17,8 @@ export interface DependancesCopie {
   readonly journal: Logger;
   trouverImportables(): TranscriptDecouvert[];
   importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession>, consignes: string | null): void;
+  // Copie pas encore découverte : son parent sera posé à son import (ou tout de suite si sa fiche existe déjà).
+  attendreParent(idCopie: string, idParent: string): void;
   sauvegarder(): void;
   readonly fork?: typeof forkSession; // injectable : les tests ne touchent pas au SDK
 }
@@ -29,6 +31,7 @@ export async function dupliquer(d: DependancesCopie, id: string, messageId: stri
   if (!r.ok) return r;
   const copie = d.trouverImportables().find((t) => t.id === r.id);
   if (copie) d.importerUne(copie, { parent: id }, null);
+  else d.attendreParent(r.id, id);
   d.sauvegarder();
   return { ok: true, donnees: { sessionId: r.id } };
 }

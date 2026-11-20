@@ -27,6 +27,7 @@ function deps(options: { fork?: 'ok' | 'echec'; trouve?: boolean; parente?: 'ann
   );
   const forks: { id: string; options: unknown }[] = [];
   const importes: Importe[] = [];
+  const attentes: { copie: string; parent: string }[] = [];
   let sauvegardes = 0;
   const fork = (async (id: string, opts: unknown) => {
     forks.push({ id, options: opts });
@@ -39,12 +40,13 @@ function deps(options: { fork?: 'ok' | 'echec'; trouve?: boolean; parente?: 'ann
     trouverImportables: () => (options.trouve === false ? [] : [COPIE]),
     importerUne: (t, surcharge, consignes) =>
       importes.push({ t, surcharge: surcharge as Record<string, unknown>, consignes }),
+    attendreParent: (copie, parent) => attentes.push({ copie, parent }),
     sauvegarder: () => {
       sauvegardes += 1;
     },
     fork,
   };
-  return { d, forks, importes, sauvegardes: () => sauvegardes };
+  return { d, forks, importes, attentes, sauvegardes: () => sauvegardes };
 }
 
 describe('conversation annexe', () => {
@@ -90,6 +92,14 @@ describe('duplication', () => {
     expect(r).toEqual({ ok: true, donnees: { sessionId: 'copie-1' } });
     expect(t.forks[0]?.options).toEqual({ dir: '/projets/app', upToMessageId: 'msg-1' });
     expect(t.importes[0]).toEqual({ t: COPIE, surcharge: { parent: 'parente' }, consignes: null });
+  });
+
+  test('copie pas encore découverte : rien d’importé, le parent est confié au gestionnaire', async () => {
+    const t = deps({ trouve: false });
+    expect(await dupliquer(t.d, 'parente', 'msg-1')).toEqual({ ok: true, donnees: { sessionId: 'copie-1' } });
+    expect(t.importes.length).toBe(0);
+    expect(t.attentes).toEqual([{ copie: 'copie-1', parent: 'parente' }]);
+    expect(t.sauvegardes()).toBe(1);
   });
 });
 
