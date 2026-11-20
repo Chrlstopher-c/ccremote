@@ -24,6 +24,7 @@ import { crochetEdition } from '../modifications/crochet-edition.ts';
 import type { ToursSession } from '../modifications/tours.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { BilanTour } from './bilan-tour.ts';
+import { decisionCession } from './cession-sdk.ts';
 import { nomAffiche, nomLisibleModele } from './modele-affiche.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
 import { contexteDe } from './contexte-sdk.ts';
@@ -122,6 +123,7 @@ const PERIODE_MCP_MS = 250;
 const TRADUCTION_PAR_DEFAUT: TraductionSdk = { nouvelEtat: nouvelEtatTraduction, traduire: traduireSdk };
 const TEXTE_INTERRUPTION = 'Interrompu par Chris';
 const TEXTE_FERMETURE = 'Session fermée par Chris';
+const TEXTE_CESSION = 'Conversation reprise par un autre processus Claude';
 
 /** Le claude installé sur la machine, ou null (le SDK prend alors son binaire embarqué). */
 export function trouverClaude(): string | null {
@@ -156,6 +158,8 @@ export class SessionSdk implements SessionPoste {
   private readonly identifiantsSdk: string[];
   // Chris a interrompu le tour en cours : le SDK coupe alors le flux par une erreur, qui n'est pas une panne.
   private interrompuParChris = false;
+  // Conversation tenue ailleurs pendant un tour : la requête se ferme à la fin de ce tour (voir cederSiTenue).
+  private cessionEnAttente = false;
 
   constructor(
     private readonly p: SessionPersistee,
@@ -416,6 +420,31 @@ export class SessionSdk implements SessionPoste {
     } catch (erreur) {
       this.env.journal.warn({ err: erreur, session: this.etat.id }, 'arrêt du processus SDK imparfait');
     }
+  }
+
+  /** Le balayage voit la conversation tenue (ou non) par un processus Claude interactif hors Lanterne. */
+  cederSiTenue(tenue: boolean): void {
+    const decision = decisionCession(this.vivante, this.bilan.enVol > 0, tenue);
+    this.cessionEnAttente = decision === 'attendre';
+    if (decision === 'fermer') this.ceder();
+  }
+
+  // Conversation reprise ailleurs : la requête se ferme sans passer par fermer() (ni statut « fermee » ni message).
+  private ceder(): void {
+    const requete = this.requete;
+    this.cessionEnAttente = false;
+    this.aReprendre = false;
+    this.libererRequete(TEXTE_CESSION);
+    this.env.journal.info(
+      { session: this.etat.id },
+      'conversation reprise par un autre processus : le poste rend la main',
+    );
+    try {
+      requete?.close();
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'fermeture imparfaite du SDK à la cession');
+    }
+    this.rattacherTerminal(true, false, null);
   }
 
   async fermer(): Promise<string | null> {
@@ -795,7 +824,8 @@ export class SessionSdk implements SessionPoste {
     const panne = fin.erreur && !this.interrompuParChris;
     const statut: StatutSession = suite.action === 'laisser' ? 'travail' : panne ? 'erreur' : 'attente';
     this.maj({ statut, contexte: { ...this.etat.contexte, tokens } });
-    this.appliquerSuite(suite);
+    if (this.cessionEnAttente) this.ceder();
+    else this.appliquerSuite(suite);
     void this.suiviNuit.tick();
   }
 

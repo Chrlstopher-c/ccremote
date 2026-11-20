@@ -75,3 +75,25 @@ describe('processusClaude : Claude Desktop reconnu vivant', () => {
     }
   });
 });
+
+const declSdk = (pid: number, sessionId: string, entrypoint: string): string =>
+  JSON.stringify({ pid, sessionId, cwd: '/home/x', kind: 'interactive', entrypoint });
+
+describe('processusClaude : processus SDK repérés', () => {
+  test('un processus lancé par le SDK (sdk-ts) est marqué sdk ; Claude Desktop ne l’est pas', () => {
+    const { dossier, nettoyer } = configAvec({
+      '2243.json': declSdk(2243, 'sess-sdk', 'sdk-ts'),
+      '2244.json': declSdk(2244, 'sess-desk', 'claude-desktop'),
+    });
+    try {
+      const lecteur = (): { comm: string; exe: string; demarrage: string; enTmux: boolean } => ({
+        comm: 'claude', exe: '/usr/bin/claude', demarrage: '1', enTmux: false,
+      });
+      const trouves = processusClaude([dossier], journal, lecteur);
+      expect(trouves.find((p) => p.sessionId === 'sess-sdk')?.sdk).toBe(true);
+      expect(trouves.find((p) => p.sessionId === 'sess-desk')?.sdk).toBe(false);
+    } finally {
+      nettoyer();
+    }
+  });
+});

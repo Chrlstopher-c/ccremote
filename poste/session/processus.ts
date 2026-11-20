@@ -24,6 +24,7 @@ export interface ProcessusClaude {
   readonly enTmux: boolean;
   readonly configDir: string | null;
   readonly nom: string | null; // nom donné par Claude (/rename, --name) dans son registre natif
+  readonly sdk?: boolean; // lancé par le Claude Agent SDK (entrypoint sdk-ts) : une de nos sessions, jamais cédée
 }
 
 /** Ce que le système dit d'un processus : nom, binaire, heure de démarrage (jiffies), environnement tmux. */
@@ -120,6 +121,7 @@ export function processusClaude(
         enTmux: etat?.enTmux ?? false,
         configDir,
         nom: d.name ?? null,
+        sdk: d.entrypoint === 'sdk-ts',
       });
     }
   }

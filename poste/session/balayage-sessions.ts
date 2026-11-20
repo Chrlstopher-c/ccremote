@@ -14,6 +14,7 @@ import {
   titreDe,
 } from './adoption.ts';
 import { cheminTranscript } from './transcript.ts';
+import { tenueParAilleurs } from './cession-sdk.ts';
 import { type EtatTranscript, etatDuTranscript, tourEnCours as tourEnCoursEtat } from './etat-transcript.ts';
 import { statSync } from 'node:fs';
 import { titreDuTranscript } from './titre-transcript.ts';
@@ -78,6 +79,7 @@ export class BalayageSessions {
     for (const pane of panes.filter((p) => !vus.has(p.nom))) this.adopterPane(pane, panes, parPid, entrees);
     // CCREMOTE_ADOPTER_TERMINAUX=non : ne lit pas les Claude lancés hors tmux (moteur intégré, isolement d'essai).
     const terminaux = process.env['CCREMOTE_ADOPTER_TERMINAUX'] !== 'non';
+    this.cederTenues(procs);
     this.suivreTerminaux(terminaux ? procs.filter((p) => !p.enTmux) : [], entrees);
     this.suivreFermees(entrees, panes, procs);
   }
@@ -114,6 +116,14 @@ export class BalayageSessions {
       else if (!this.d.fichePour(p.sessionId)) {
         this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
       }
+    }
+  }
+
+  // Conversation tenue par un processus interactif hors SDK : la session SDK qui la porte rend la main.
+  cederTenues(procs: readonly ProcessusClaude[]): void {
+    for (const s of this.d.sessions.values()) {
+      const conversation = s.resume.claudeSessionId ?? s.resume.id;
+      s.cederSiTenue?.(tenueParAilleurs(procs, conversation));
     }
   }
 

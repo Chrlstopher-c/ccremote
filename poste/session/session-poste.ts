@@ -48,6 +48,8 @@ export interface SessionPoste {
   /** Nom donné par `cc` (tmux seulement ; une session SDK porte son titre). */
   nommer?(nom: string | null): void;
   rattacherTerminal(vivant: boolean, enTour?: boolean, modeleLu?: string | null): void;
+  /** Conversation tenue (ou non) par un processus Claude interactif hors Lanterne : une session SDK rend la main. */
+  cederSiTenue?(tenue: boolean): void;
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void;
   lire(): void;
   releverEcran(): Promise<void>;
