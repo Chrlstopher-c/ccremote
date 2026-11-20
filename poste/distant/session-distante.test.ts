@@ -6,7 +6,7 @@ import pino from 'pino';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { EvenementHorodate } from '../session/historique.ts';
 import type { SortieSession } from '../session/session-poste.ts';
-import { demarrerFauxApi, type FauxApi, sessionApi, tourApi } from './faux-claude-ai.ts';
+import { demarrerFauxApi, evenementApi, type FauxApi, sessionApi, tourApi } from './faux-claude-ai.ts';
 import { type SessionBrute, lireSession } from './donnees.ts';
 import { SessionDistante, PAS_ENCORE_CLAUDE_AI } from './session-distante.ts';
 import { estMessageSdk, traduireLot } from './traduction-distante.ts';
@@ -119,6 +119,28 @@ describe('suivi en direct d’une session claude.ai', () => {
 
     expect(await s.synchroniser(bruteDe('cse_d', { last_event_at: '2026-11-20T10:02:00.000Z' }))).toBeNull();
     expect(textes(evenements)).toEqual(['Deuxième']);
+  });
+
+  test('pendant un tour (last_event_at figé), message de Chris, outils et texte arrivent en direct', async () => {
+    api.fils.set('cse_t', tourApi(1, 'Premier'));
+    const { s, evenements } = creer(bruteDe('cse_t'));
+    await s.synchroniser(bruteDe('cse_t'));
+    const enCours = bruteDe('cse_t', { worker_status: 'running' }); // last_event_at inchangé, comme claude.ai
+    const t = '2026-11-20T10:05:00.000Z';
+    const chris = { type: 'user', uuid: 'u2', origin: { kind: 'human' }, message: { role: 'user', content: 'Vas-y' } };
+    const appel = {
+      type: 'assistant',
+      uuid: 'a2',
+      parent_tool_use_id: null,
+      message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } }] },
+    };
+    api.fils.set('cse_t', [evenementApi('ev-a2', appel, t), evenementApi('ev-u2', chris, t), ...tourApi(1, 'Premier')]);
+    expect(await s.synchroniser(enCours)).toBeNull();
+    expect(evenements.map((e) => e.type)).toEqual(['message', 'outil']);
+    api.fils.set('cse_t', [...tourApi(2, 'Fini'), evenementApi('ev-a2', appel, t), evenementApi('ev-u2', chris, t), ...tourApi(1, 'Premier')]);
+    // Le passage qui voit la fin du tour relit encore le fil, même si last_event_at n'avait pas bougé avant.
+    expect(await s.synchroniser(bruteDe('cse_t', { worker_status: 'idle' }))).toBeNull();
+    expect(textes(evenements)).toEqual(['Fini']);
   });
 
   test('une lecture échouée ne fait pas perdre le repère : le tour suivant reprend', async () => {

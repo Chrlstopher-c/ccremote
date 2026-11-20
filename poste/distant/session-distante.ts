@@ -21,7 +21,9 @@ import {
 } from './controle-distant.ts';
 import { AttenteDistante, type Resolution, titreDe } from './attente-distante.ts';
 import { type ContexteDistant, resumeDistant } from './resume-distant.ts';
-import { traduireLot } from './traduction-distante.ts';
+import { type StockeurPieces, traduireLot } from './traduction-distante.ts';
+import { stockeurPieces } from './pieces-distantes.ts';
+import type { Stockage } from '../presentation/stockage.ts';
 
 export const PAS_ENCORE_CLAUDE_AI = 'pilotage claude.ai : pas encore pris en charge';
 const PIECES_REFUSEES = 'pièces jointes non prises en charge à distance';
@@ -32,6 +34,7 @@ const JETON_EXPIRE = 'jeton expiré : reconnecte le compte';
 const TAILLE_PAGE = 100;
 const PAGES_HISTORIQUE = 4; // ~400 derniers événements au premier chargement
 const PAGES_DIRECT = 5; // plafond d'une lecture de suivi : au-delà, le reste n'est pas relu
+const TAILLE_PAGE_DIRECT = 30; // relu toutes les 5 s pendant un tour : petite page, la suivante si besoin
 
 export interface DependancesDistante {
   readonly contexte: ContexteDistant;
@@ -40,11 +43,18 @@ export interface DependancesDistante {
   readonly sortie: SortieSession;
   /** Republie le résumé après un changement (dialogue, erreur, réglage). */
   readonly publier: () => void;
+  /** Stockage des pièces du fil (images, documents) ; sans lui, elles deviennent des pastilles. */
+  readonly stockage?: Stockage;
 }
 
 type EchecEnvoi = Extract<ResultatApi<null>, { ok: false }>;
 
 const REPUBLICATION_MS = 30_000;
+
+/** La session travaille (ou attend Chris) selon claude.ai : son fil avance sans que last_event_at ne bouge. */
+export function enTour(travail: string | null): boolean {
+  return travail === 'running' || travail === 'requires_action';
+}
 
 export class SessionDistante implements SessionPoste {
   // Le résumé publié se dérive de `base` (l'état de la liste, réglages compris) plus le dialogue et les erreurs.
@@ -62,12 +72,17 @@ export class SessionDistante implements SessionPoste {
   private problemePilotage: string | null = null; // erreur du dernier envoi (levée par le prochain succès)
   private publie = ''; // dernier résumé publié, pour ne publier que les changements
   private modeVu: ModeSession | null = null; // dernier mode de permission annoncé par la session (system)
+  private cwdVu: string | null = null; // dossier de travail annoncé par la session (system/init)
+  private travail: string | null; // worker_status de la liste : pendant un tour, le fil est relu à chaque passage
+  private readonly pieces: StockeurPieces | undefined;
 
   constructor(
     private readonly d: DependancesDistante,
     brute: SessionBrute,
   ) {
     this.derniereListe = brute.dernierEvenement;
+    this.travail = brute.travail;
+    this.pieces = d.stockage ? stockeurPieces(d.stockage, brute.id, d.journal) : undefined;
     this.base = resumeDistant(brute, d.contexte, new Date().toISOString());
     this.resume = this.avecEtat(this.base);
   }
@@ -83,11 +98,15 @@ export class SessionDistante implements SessionPoste {
 
   /** Met le résumé et le fil à jour depuis la liste : historique au premier passage, suite ensuite. Rend l'erreur. */
   async synchroniser(brute: SessionBrute): Promise<string | null> {
+    const travaillait = this.travail;
     this.derniereListe = brute.dernierEvenement;
+    this.travail = brute.travail;
     this.base = resumeDistant(brute, this.d.contexte, this.base.creeLe);
     this.maj();
     if (!this.chargee) return this.erreurDe(await this.charger());
-    if (this.derniereListe === this.vuJusqua) return null;
+    // last_event_at ne bouge qu'en fin de tour (événement `result`) : pendant un tour, ou au passage qui le clôt, le
+    // fil est relu quand même, sinon message de Chris, outils et texte n'arrivent qu'à la fin.
+    if (this.derniereListe === this.vuJusqua && !enTour(brute.travail) && !enTour(travaillait)) return null;
     return this.erreurDe(await this.suivre());
   }
 
@@ -124,10 +143,10 @@ export class SessionDistante implements SessionPoste {
   async charger(): Promise<ResultatApi<number>> {
     this.etat = nouvelEtatTraduction();
     this.vus = new Set();
-    const r = await this.lirePages(PAGES_HISTORIQUE, () => false);
+    const r = await this.lirePages(PAGES_HISTORIQUE, () => false, TAILLE_PAGE);
     if (!r.ok) return r;
     const chronologique = [...r.donnees].reverse();
-    const evenements = traduireLot(chronologique, this.etat);
+    const evenements = traduireLot(chronologique, this.etat, this.pieces);
     this.releverMode(chronologique);
     this.traiterControle(chronologique, false);
     for (const e of r.donnees) this.vus.add(e.id);
@@ -139,14 +158,14 @@ export class SessionDistante implements SessionPoste {
 
   /** Suivi en direct : émet un à un les événements arrivés depuis le dernier passage. */
   async suivre(): Promise<ResultatApi<number>> {
-    const r = await this.lirePages(PAGES_DIRECT, (id) => this.vus.has(id));
+    const r = await this.lirePages(PAGES_DIRECT, (id) => this.vus.has(id), TAILLE_PAGE_DIRECT);
     if (!r.ok) return r;
     const nouveaux = [...r.donnees].reverse();
     for (const e of nouveaux) this.vus.add(e.id);
     this.vuJusqua = this.derniereListe;
     this.releverMode(nouveaux);
     const questions = this.traiterControle(nouveaux, true);
-    for (const h of traduireLot(nouveaux, this.etat)) this.d.sortie.evenement(this.resume.id, h.evt);
+    for (const h of traduireLot(nouveaux, this.etat, this.pieces)) this.d.sortie.evenement(this.resume.id, h.evt);
     for (const evt of questions) this.d.sortie.evenement(this.resume.id, evt);
     return { ok: true, donnees: nouveaux.length };
   }
@@ -190,15 +209,18 @@ export class SessionDistante implements SessionPoste {
 
   private maj(): void {
     const etat = this.avecEtat(this.base);
-    this.resume = this.modeVu === null ? etat : { ...etat, mode: this.modeVu };
+    const avecCwd = this.cwdVu !== null && etat.distant ? { ...etat, distant: { ...etat.distant, cwd: this.cwdVu } } : etat;
+    this.resume = this.modeVu === null ? avecCwd : { ...avecCwd, mode: this.modeVu };
   }
 
-  /** Le mode de permission de la session, tel que ses messages `system` l'annoncent (le plus récent l'emporte). */
+  /** Mode de permission et dossier de travail, tels que les messages `system` les annoncent (le plus récent gagne). */
   private releverMode(lot: readonly EvenementBrut[]): void {
     for (const e of lot) {
-      const p = e.payload as { type?: unknown; permissionMode?: unknown } | null; // lecture défensive d'un JSON libre
+      // lecture défensive d'un JSON libre
+      const p = e.payload as { type?: unknown; subtype?: unknown; permissionMode?: unknown; cwd?: unknown } | null;
       const mode = ModeSession.safeParse(p?.permissionMode);
       if (p?.type === 'system' && mode.success) this.modeVu = mode.data;
+      if (p?.type === 'system' && p.subtype === 'init' && typeof p.cwd === 'string' && p.cwd) this.cwdVu = p.cwd;
     }
     this.maj();
   }
@@ -209,13 +231,17 @@ export class SessionDistante implements SessionPoste {
   }
 
   /** Les événements lus page par page, du plus récent au plus ancien ; s'arrête avant le premier déjà connu. */
-  private async lirePages(pages: number, dejaConnu: (id: string) => boolean): Promise<ResultatApi<EvenementBrut[]>> {
+  private async lirePages(
+    pages: number,
+    dejaConnu: (id: string) => boolean,
+    taille: number,
+  ): Promise<ResultatApi<EvenementBrut[]>> {
     const lus: EvenementBrut[] = [];
     let curseur: string | null = null;
     for (let i = 0; i < pages; i++) {
       const page = await lireEvenements(this.d.configDir, this.resume.id, this.d.journal, {
         curseur,
-        limite: TAILLE_PAGE,
+        limite: taille,
       });
       if (!page.ok) return { ok: false, statut: page.statut, probleme: page.probleme };
       for (const e of page.donnees.evenements) {

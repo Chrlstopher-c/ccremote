@@ -5,7 +5,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { join } from 'node:path';
 import { estIdFichier } from '../../commun/presentation.ts';
 
-const IDENTIFIANT_SESSION = /^[A-Za-z0-9-]{1,100}$/;
+// Sessions claude.ai (Remote Control) : identifiants « cse_… », d'où le souligné.
+const IDENTIFIANT_SESSION = /^[A-Za-z0-9_-]{1,100}$/;
 
 export interface MetaFichier {
   readonly nom: string;

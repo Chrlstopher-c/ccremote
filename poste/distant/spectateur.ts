@@ -9,6 +9,7 @@ import type { Reponse } from '../session/gestionnaire.ts';
 import type { SortieSession } from '../session/session-poste.ts';
 import { listerSessions } from './client-claude-ai.ts';
 import type { SessionBrute } from './donnees.ts';
+import type { Stockage } from '../presentation/stockage.ts';
 import { PAS_ENCORE_CLAUDE_AI, SessionDistante } from './session-distante.ts';
 
 const PERIODE_MS = 5_000;
@@ -21,6 +22,8 @@ export interface DependancesSpectateur {
   doublée. */
   readonly locales: () => readonly ResumeSession[];
   readonly periodeMs?: number;
+  /** Stockage des pièces du fil (images, documents des messages). */
+  readonly stockage?: Stockage;
 }
 
 // Commandes que claude.ai sait recevoir ; les autres (compacter, fermer, autonomie…) restent refusées.
@@ -167,6 +170,7 @@ export class Spectateur {
       journal: this.d.journal,
       sortie: this.d.sortie,
       publier: () => this.publier(s),
+      ...(this.d.stockage ? { stockage: this.d.stockage } : {}),
     };
     const s = new SessionDistante(deps, brute);
     this.sessions.set(brute.id, s);

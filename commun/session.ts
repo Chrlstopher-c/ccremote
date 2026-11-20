@@ -151,6 +151,7 @@ export const ResumeSession = z.object({
       idDistant: z.string(),
       connexion: z.enum(['connectee', 'deconnectee']),
       probleme: z.string().nullable(),
+      cwd: z.string().optional(), // dossier réel annoncé par la session (system/init) : la reconnaît dans le parc
     })
     .nullable()
     .optional(),

@@ -93,6 +93,7 @@ export class GestionnaireSessions {
       journal,
       sortie: this.sortieFil,
       locales: () => [...this.sessions.values()].map((s) => s.resume),
+      stockage: this.stockage,
     });
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
