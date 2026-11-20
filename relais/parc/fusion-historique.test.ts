@@ -169,3 +169,20 @@ describe('ancre d’un fil importé sans uuid (version antérieure)', () => {
     expect(queueSansAncre(null, lot)).toBe(false);
   });
 });
+
+describe('jumelle Remote Control d’une session de poste', () => {
+  test('une session claude.ai qui partage des lignes du transcript prend la conversation du poste', () => {
+    const { postes, registre } = montage();
+    registre.ajouterHistorique('s', [msg('m1', 'un'), rep('r1', 'deux')]);
+    const distante = {
+      ...session('cse_x'),
+      machine: 'tour',
+      claudeSessionId: null,
+      distant: { compte: 'c', idDistant: 'cse_x', connexion: 'connectee', probleme: null, conversation: 'cse_x' },
+    } as unknown as ResumeSession;
+    registre.enregistrerSession(distante);
+    registre.ajouterHistorique('cse_x', [rep('r1', 'deux')]);
+    postes.recu(fauxPoste, JSON.stringify({ kind: 'session', session: distante }));
+    expect(registre.session('cse_x')?.distant?.conversation).toBe('conv');
+  });
+});

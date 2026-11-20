@@ -110,6 +110,8 @@ export interface EnvironnementSdk {
   readonly traduction?: TraductionSdk;
   readonly env?: Record<string, string | undefined>;
   readonly delaiMcpMs?: number;
+  /** Transcript modifié depuis moins longtemps : sa queue est relue dès la première vue (0 : jamais, tests). */
+  readonly relectureRecenteMs?: number;
   readonly periodeMcpMs?: number;
 }
 
@@ -169,6 +171,7 @@ export class SessionSdk implements SessionPoste {
     this.suivi = new SuiviTranscript({
       journal: env.journal,
       emettre: (evenements) => this.env.sortie.historique?.(this.etat.id, evenements),
+      ...(env.relectureRecenteMs !== undefined ? { recentMs: env.relectureRecenteMs } : {}),
       ...(stockage ? { stockerImage: stockeurImages(stockage, p.resume.id, env.journal) } : {}),
     });
     const pres = env.presentation;

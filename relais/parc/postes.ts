@@ -5,7 +5,7 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Logger } from 'pino';
 import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/protocole-poste.ts';
 import type { Decouverte } from '../../commun/decouverte.ts';
-import type { Evenement } from '../../commun/session.ts';
+import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
@@ -37,6 +37,7 @@ export interface ReponsePoste {
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
 
 const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30 s la confirmation du CLI
+const ESSAI_JUMELLE_MS = 60_000; // une jumelle Remote Control introuvable est recherchée de nouveau après ce délai
 
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
@@ -52,6 +53,8 @@ export class Postes {
   private readonly infos = new Map<string, InfosPoste>();
   // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
   private readonly relectures = new Map<string, EtatRelecture>();
+  // Session Remote Control → session de poste qui tient la même conversation (voir avecJumelle).
+  private readonly jumelles = new Map<string, { jumelle: string | null; essai: number }>();
   // Sessions dont une relecture complète a été demandée au poste (queue sans l'ancre du fil) : une fois par session.
   private readonly relecturesCompletesDemandees = new Set<string>();
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
@@ -195,7 +198,7 @@ export class Postes {
       return;
     }
     if (m.kind === 'session') {
-      this.registre.enregistrerSession(m.session);
+      this.registre.enregistrerSession(this.avecJumelle(m.session));
       return this.diffuserSession(m.session.id);
     }
     if (m.kind === 'historique') {
@@ -224,7 +227,7 @@ export class Postes {
     });
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
-      this.registre.enregistrerSession(s);
+      this.registre.enregistrerSession(this.avecJumelle(s));
       this.diffuserSession(s.id);
     }
     this.fermerNonAnnoncees(machine, new Set(m.sessions.map((s) => s.id)));
@@ -284,6 +287,26 @@ export class Postes {
       { sessionId, ajoutes: ajout.length, fusion: etat.fusion },
       'historique relu : suite ajoutée au fil',
     );
+  }
+
+  // Session Remote Control (claude.ai) qui est la même conversation qu'une session de poste (Desktop sur la tour) :
+  // les deux fils partagent les uuid des lignes du transcript. Sa `conversation` devient celle du poste, ce qui la
+  // rattache à sa jumelle dans la liste. Recherche gardée en cache ; un échec est retenté au plus une fois par minute.
+  private avecJumelle(s: ResumeSession): ResumeSession {
+    if (!s.distant || !s.id.startsWith('cse_')) return s;
+    const connu = this.jumelles.get(s.id);
+    let jumelle = connu?.jumelle ?? null;
+    if (!jumelle && (!connu || Date.now() - connu.essai > ESSAI_JUMELLE_MS)) {
+      const uuids = this.registre
+        .derniersEvenements(s.id, 60)
+        .map((e) => (e.evt as { uuid?: unknown }).uuid)
+        .filter((u): u is string => typeof u === 'string' && u !== '');
+      jumelle = this.registre.sessionPartageantUuid(uuids, s.id);
+      this.jumelles.set(s.id, { jumelle, essai: Date.now() });
+    }
+    const fiche = jumelle ? this.registre.session(jumelle) : null;
+    if (!fiche) return s;
+    return { ...s, distant: { ...s.distant, conversation: fiche.claudeSessionId ?? fiche.id } };
   }
 
   private ancreDuFil(sessionId: string): string | null {

@@ -38,6 +38,7 @@ function montage(): {
   mkdirSync(dirname(chemin), { recursive: true });
   const appels: Evenement[][] = [];
   const env: EnvironnementSdk = {
+    relectureRecenteMs: 0,
     journal: pino({ enabled: false }),
     sortie: {
       evenement: () => undefined,
@@ -145,6 +146,7 @@ function ligneImage(uuid: string, parent: string | null, rang: number): string {
 
 function environnement(appels: Evenement[][], presentation?: EnvironnementSdk['presentation']): EnvironnementSdk {
   return {
+    relectureRecenteMs: 0,
     journal: pino({ enabled: false }),
     sortie: {
       evenement: () => undefined,

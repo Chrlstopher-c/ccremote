@@ -309,6 +309,22 @@ export class Registre {
       .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
   }
 
+  /** Autre session dont le fil contient l'une de ces lignes de transcript (uuid) : la même conversation vue ailleurs
+   * (jumelle Remote Control d'une session de poste). La plus récente des correspondances, ou null. */
+  sessionPartageantUuid(uuids: readonly string[], sauf: string): string | null {
+    if (uuids.length === 0) return null;
+    const marques = uuids.map((_, i) => `$u${i}`).join(', ');
+    const valeurs: Record<string, string> = { sauf };
+    uuids.forEach((u, i) => (valeurs[`u${i}`] = u));
+    const l = this.db
+      .query(
+        `SELECT session_id FROM evenements WHERE session_id <> $sauf AND substr(session_id, 1, 4) <> 'cse_'
+      AND json_extract(evt, '$.uuid') IN (${marques}) ORDER BY seq DESC LIMIT 1`,
+      )
+      .get(valeurs) as { session_id: string } | null;
+    return l?.session_id ?? null;
+  }
+
   // Une page du fil antérieure au rang `avant` : les `limite` événements qui le précèdent, en ordre croissant.
   evenementsAvant(sessionId: string, avant: number, limite: number): EvenementDate[] {
     const lignes = this.db

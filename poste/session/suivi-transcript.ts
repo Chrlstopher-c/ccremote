@@ -2,6 +2,7 @@
 // démarrage). Chaque écriture part au fil dans la seconde : le fichier est surveillé, et le balayage périodique n'est
 // qu'un filet. Seule la suite part, avec quelques événements déjà envoyés en chevauchement pour que le relais retrouve
 // son ancre. Une réécriture ou une branche cassée repart d'une relecture complète (voir lecture-incrementale.ts).
+import { statSync } from 'node:fs';
 import type { Logger } from 'pino';
 import type { EvenementHorodate, StockerImage } from './historique.ts';
 import { LectureIncrementale } from './lecture-incrementale.ts';
@@ -9,6 +10,7 @@ import { SurveillanceFichier } from './surveillance-fichier.ts';
 
 export const ANTI_REBOND_MS = 150;
 export const CHEVAUCHEMENT = 100; // relecture complète : événements repris avant la queue, pour retrouver l'ancre
+export const RECENT_MS = 30 * 60_000; // transcript modifié depuis moins longtemps : relu dès la première vue
 export const CHEVAUCHEMENT_DIRECT = 5; // suite au fil : derniers événements déjà envoyés, repris devant les nouveaux
 
 export interface DependancesSuivi {
@@ -16,6 +18,7 @@ export interface DependancesSuivi {
   readonly emettre: (evenements: readonly EvenementHorodate[]) => void;
   readonly stockerImage?: StockerImage;
   readonly antiRebondMs?: number;
+  readonly recentMs?: number;
 }
 
 export class SuiviTranscript {
@@ -38,7 +41,10 @@ export class SuiviTranscript {
     this.surveillancePour(chemin).armer();
     const lecture = this.lecturePour(chemin);
     if (!lecture.etablie) {
-      this.etablir(lecture);
+      // Transcript écrit récemment : le relais a pu manquer ses dernières lignes (poste ou appli relancés entre-temps),
+      // sa queue part tout de suite au lieu d'attendre la prochaine écriture.
+      if (ecritRecemment(chemin, this.d.recentMs ?? RECENT_MS)) this.relecture(chemin);
+      else this.etablir(lecture);
       return;
     }
     const ajout = lecture.ajout();
@@ -97,5 +103,13 @@ export class SuiviTranscript {
     this.envoyes = (this.envoyes ?? 0) + ajout.length;
     this.recents = envoi.slice(-CHEVAUCHEMENT_DIRECT);
     this.d.emettre(envoi);
+  }
+}
+
+function ecritRecemment(chemin: string, recentMs: number): boolean {
+  try {
+    return recentMs > 0 && Date.now() - statSync(chemin).mtimeMs < recentMs;
+  } catch {
+    return false;
   }
 }
