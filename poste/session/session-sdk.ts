@@ -23,6 +23,7 @@ import { crochetEdition } from '../modifications/crochet-edition.ts';
 import type { ToursSession } from '../modifications/tours.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { BilanTour } from './bilan-tour.ts';
+import { nomAffiche, nomLisibleModele } from './modele-affiche.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
 import { contexteDe } from './contexte-sdk.ts';
 import { AvisSdk } from './avis-sdk.ts';
@@ -394,8 +395,7 @@ export class SessionSdk implements SessionPoste {
   private async nommerModele(requete: RequeteSdk): Promise<void> {
     try {
       const init = await requete.initializationResult();
-      const voulu = this.etat.modele;
-      const nom = init.models?.find((m) => m.value === voulu || m.resolvedModel === voulu)?.displayName ?? null;
+      const nom = nomAffiche(this.etat.modele, init.models);
       if (nom !== (this.etat.modeleNom ?? null)) this.maj({ modeleNom: nom });
     } catch (erreur) {
       this.env.journal.warn({ err: erreur, session: this.etat.id }, 'nom du modèle non lu dans la requête');
@@ -563,12 +563,22 @@ export class SessionSdk implements SessionPoste {
     try {
       for await (const msg of requete) {
         if (this.requete !== requete) break;
+        this.nommerModeleVu(msg);
         this.traiter(msg, etatTraduction);
       }
       this.arreterSansErreur(requete);
     } catch (erreur) {
       this.echouer(requete, erreur);
     }
+  }
+
+  // Session sur le modèle par défaut du compte : le nom réel est celui du dernier message assistant.
+  private nommerModeleVu(msg: SDKMessage): void {
+    if (msg.type !== 'assistant' || this.etat.modele !== 'défaut') return;
+    const modele: unknown = msg.message.model;
+    if (typeof modele !== 'string' || modele === '' || modele.startsWith('<')) return;
+    const nom = nomLisibleModele(modele);
+    if (nom !== (this.etat.modeleNom ?? null)) this.maj({ modeleNom: nom });
   }
 
   private arreterSansErreur(requete: RequeteSdk): void {

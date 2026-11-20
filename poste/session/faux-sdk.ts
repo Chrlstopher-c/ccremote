@@ -126,15 +126,15 @@ export class RequeteFausse implements RequeteSdk {
     this.connecteursBascules.push(`${nom}:${actif ? 'actif' : 'inactif'}`);
   }
 
-  readonly modelesInitiaux = [
-    { value: 'claude-mythos-5-2', displayName: 'Mythos 5.2', description: '' },
-    { value: 'claude-haiku-5-5', displayName: 'Haiku 5.5', description: '' },
+  modelesInitiaux: readonly ModeleFaux[] = [
+    { value: 'claude-mythos-5-2', displayName: 'Mythos 5.2' },
+    { value: 'claude-haiku-5-5', displayName: 'Haiku 5.5' },
   ];
 
   async initializationResult(): Promise<{
     readonly output_style: string;
     readonly available_output_styles: readonly string[];
-    readonly models: readonly { readonly value: string; readonly displayName: string }[];
+    readonly models: readonly ModeleFaux[];
   }> {
     return { ...this.styleInitial, models: this.modelesInitiaux };
   }
@@ -175,6 +175,13 @@ interface Reglages {
   readonly mcp?: string[][];
   readonly configDir?: string | null;
   readonly reprise?: Reprise;
+  readonly modeles?: ModeleFaux[]; // liste de modèles renvoyée par le SDK (défaut : deux modèles)
+}
+
+interface ModeleFaux {
+  readonly value: string;
+  readonly resolvedModel?: string;
+  readonly displayName: string;
 }
 
 // L'état d'une session persistée avant l'arrêt du poste.
@@ -226,6 +233,7 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
   const evenements: Evenement[] = [];
   const fabrique: FabriqueRequete = (p) => {
     const requete = new RequeteFausse(p.prompt, p.options, scenario, reglages.mcp ?? []);
+    if (reglages.modeles) requete.modelesInitiaux = reglages.modeles;
     requetes.push(requete);
     return requete;
   };
