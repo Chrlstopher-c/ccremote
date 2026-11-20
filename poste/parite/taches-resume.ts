@@ -66,19 +66,24 @@ function resumerTache(t: TacheVue, transcript: string, maintenant: number, journ
 
 function statutPresente(t: TacheVue, transcript: string, maintenant: number, journal: Logger): StatutPresente {
   if (t.notifiee) return { statut: t.statut, finLe: t.finLe };
-  const deduit =
-    t.genre === 'agent' ? statutAgentSansFin(t, transcript, journal) : statutCommandeSansFin(t, maintenant, journal);
-  return deduit ?? { statut: 'en_cours', finLe: null };
+  if (t.genre === 'agent') return statutAgentSansFin(t, transcript, maintenant, journal);
+  return statutCommandeSansFin(t, maintenant, journal) ?? { statut: 'en_cours', finLe: null };
 }
 
-// Un sous-agent dont le méta-fichier dit « finished » est terminé, même sans notification.
-function statutAgentSansFin(t: TacheVue, transcript: string, journal: Logger): StatutPresente | null {
-  if (t.tacheId === null) return null;
+// Agent sans notification : terminé si son méta-fichier dit « finished » ; en cours si son journal a bougé depuis
+// moins de 10 min ; sinon arrêté si la tâche a commencé il y a 10 min ou plus, en cours sinon.
+// finLe : mtime du journal, sinon début de la tâche.
+function statutAgentSansFin(t: TacheVue, transcript: string, maintenant: number, journal: Logger): StatutPresente {
   const dossier = dossierSousAgents(transcript);
-  const meta = lireMeta(join(dossier, `agent-${t.tacheId}.meta.json`), journal);
-  if (meta?.['finished'] !== true) return null;
-  const fin = mtimeDe(join(dossier, `agent-${t.tacheId}.jsonl`), journal);
-  return { statut: 'terminee', finLe: fin === null ? null : new Date(fin).toISOString() };
+  const identifiant = t.tacheId;
+  const meta = identifiant === null ? null : lireMeta(join(dossier, `agent-${identifiant}.meta.json`), journal);
+  const mtime = identifiant === null ? null : mtimeDe(join(dossier, `agent-${identifiant}.jsonl`), journal);
+  const finLe = new Date(mtime ?? Date.parse(t.debutLe)).toISOString();
+  if (meta?.['finished'] === true) return { statut: 'terminee', finLe };
+  if (mtime !== null && maintenant - mtime < DELAI_SORTIE_FIGEE_MS) return { statut: 'en_cours', finLe: null };
+  const debut = Date.parse(t.debutLe);
+  if (!Number.isNaN(debut) && maintenant - debut >= DELAI_SORTIE_FIGEE_MS) return { statut: 'arretee', finLe };
+  return { statut: 'en_cours', finLe: null };
 }
 
 // Une commande dont la sortie n'a pas bougé depuis 10 min est arrêtée (son processus n'écrit plus rien).

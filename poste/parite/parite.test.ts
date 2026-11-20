@@ -279,3 +279,67 @@ describe('résultats servis et commandes de la parité', () => {
     expect(tache.donnees).toEqual({ tache: null });
   });
 });
+
+describe('agent sans notification de fin', () => {
+  const MINUTE = 60_000;
+  const iso = (ms: number): string => new Date(ms).toISOString();
+
+  // Transcript d'un agent lancé à `debut`, avec son identifiant d'exécution ; dossier sous-agents à part.
+  function agentSansFin(nom: string, debut: number): { chemin: string; sousAgents: string } {
+    const chemin = ecrireTranscript(`${nom}.jsonl`, [
+      assistant(iso(debut), [
+        outil(`u-${nom}`, 'Agent', { description: 'Test', prompt: 'p', run_in_background: true }),
+      ]),
+      utilisateur(iso(debut + 1000), [resultatOutil(`u-${nom}`, 'lancé')], {
+        isAsync: true,
+        agentId: `ag-${nom}`,
+      }),
+    ]);
+    const sousAgents = join(dossier, nom, 'subagents');
+    mkdirSync(sousAgents, { recursive: true });
+    return { chemin, sousAgents };
+  }
+
+  async function statutDe(chemin: string): Promise<{ statut: string; finLe: string | null }> {
+    const etat = lireEtat(chemin, JOURNAL);
+    if (!etat) throw new Error('état attendu');
+    const p = await resumeParite({ cwd: dossier, transcript: chemin, fenetre: 1000, journal: JOURNAL }, etat);
+    const t = p.taches[0];
+    if (!t) throw new Error('tâche attendue');
+    return { statut: t.statut, finLe: t.finLe };
+  }
+
+  test('lancé il y a moins de 10 min, rien sur disque : en cours', async () => {
+    const { chemin } = agentSansFin('recent', Date.now() - MINUTE);
+    expect(await statutDe(chemin)).toEqual({ statut: 'en_cours', finLe: null });
+  });
+
+  test('lancé il y a 1 h, aucun journal ni méta : arrêté, fin = début', async () => {
+    const debut = Date.now() - 60 * MINUTE;
+    const { chemin } = agentSansFin('ancien', debut);
+    expect(await statutDe(chemin)).toEqual({ statut: 'arretee', finLe: iso(debut) });
+  });
+
+  test('journal écrit il y a moins de 10 min : en cours malgré un lancement ancien', async () => {
+    const { chemin, sousAgents } = agentSansFin('vivant', Date.now() - 60 * MINUTE);
+    writeFileSync(join(sousAgents, 'agent-ag-vivant.jsonl'), '{}\n');
+    expect((await statutDe(chemin)).statut).toBe('en_cours');
+  });
+
+  test('journal immobile depuis 20 min, méta non terminé : arrêté, fin = mtime du journal', async () => {
+    const { chemin, sousAgents } = agentSansFin('fige', Date.now() - 60 * MINUTE);
+    const journal = join(sousAgents, 'agent-ag-fige.jsonl');
+    writeFileSync(journal, '{}\n');
+    writeFileSync(join(sousAgents, 'agent-ag-fige.meta.json'), JSON.stringify({ finished: false }));
+    const ancien = new Date(Date.now() - 20 * MINUTE);
+    utimesSync(journal, ancien, ancien);
+    expect(await statutDe(chemin)).toEqual({ statut: 'arretee', finLe: iso(ancien.getTime()) });
+  });
+
+  test('méta « finished » : terminé, fin = début faute de journal', async () => {
+    const debut = Date.now() - 60 * MINUTE;
+    const { chemin, sousAgents } = agentSansFin('fini', debut);
+    writeFileSync(join(sousAgents, 'agent-ag-fini.meta.json'), JSON.stringify({ finished: true }));
+    expect(await statutDe(chemin)).toEqual({ statut: 'terminee', finLe: iso(debut) });
+  });
+});
