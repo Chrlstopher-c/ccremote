@@ -28,6 +28,7 @@ import { routesParite } from '../parite/routes.ts';
 import type { ApiConfirmations } from '../machines/api-confirmations.ts';
 import { type DependancesReunions, routesReunions } from '../reunion/api-reunions.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
+import { lireModules, servirFichierModule } from '../modules/api-modules.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -181,6 +182,8 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/:nom/reinitialiser': { POST: protege((req) => d.comptes.reinitialiser(req as never)) },
     '/api/machines/:id/comptes/:nom/distant': { POST: protege((req) => d.comptes.distant(req as never)) },
     '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
+    '/api/modules': { GET: protege(() => lireModules(d.registre)) },
+    '/api/modules/*': { GET: protege((req) => servirFichierModule(d.registre, req)) },
     '/api/sessions/:id/dossier': { GET: protege((req) => d.fichiersSession.arbre(req as never)) },
     '/api/sessions/:id/competences': { GET: protege((req) => d.fichiersSession.competences(req as never)) },
     '/api/sessions/:id/fichiers': { GET: protege((req) => d.fichiersSession.fichiers(req as never)) },

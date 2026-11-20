@@ -13,6 +13,7 @@ import { fusionnerDansFil, type OptionsFusion, partageUneLigne, type ResultatFus
 import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 import type { JetonsSession, RencontreMessage } from '../../commun/reste.ts';
 import { jetonsSessionBase, rechercherMessagesBase } from './recherche.ts';
+import { RegistreModules } from '../modules/registre-modules.ts';
 
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
 export type { EvenementDate, Notification };
@@ -40,11 +41,15 @@ type LigneNotif = {
 };
 
 export class Registre {
+  readonly modules: RegistreModules;
+
   constructor(
     private readonly db: Database,
     private readonly journal?: Logger,
     private readonly seuilInactiviteMs: number = SEUIL_INACTIVITE_MS,
-  ) {}
+  ) {
+    this.modules = new RegistreModules(db, journal);
+  }
 
   enregistrerMachine(m: Omit<FicheMachine, 'etat' | 'etatComptes'>): void {
     this.db

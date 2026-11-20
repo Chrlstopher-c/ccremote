@@ -44,6 +44,10 @@ export const MIGRATIONS: readonly string[] = [
   `CREATE TABLE categories (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL, maj_le TEXT NOT NULL);`,
   // Groupes masqués de la barre latérale : même forme que les catégories, un seul document.
   `CREATE TABLE groupes_masques (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL, maj_le TEXT NOT NULL);`,
+  // Modules (Quart) : un enregistrement par identifiant, le plus récent gagne ; `erreur` non nul = module refusé.
+  `CREATE TABLE modules (
+     id TEXT PRIMARY KEY, machine TEXT NOT NULL, manifeste TEXT, fichiers TEXT NOT NULL DEFAULT '[]',
+     empreinte TEXT, maj_le TEXT NOT NULL, erreur TEXT);`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 

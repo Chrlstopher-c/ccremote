@@ -209,6 +209,9 @@ export class Postes {
       this.registre.majComptes(machine, m.comptes);
       return this.diffuserMachine(machine);
     }
+    if (m.kind === 'module' || m.kind === 'module_erreur' || m.kind === 'module_retire') {
+      return this.modulesRecus(machine, m);
+    }
     const sessionId = m.kind === 'session' ? m.session.id : m.sessionId;
     if (!this.appartient(sessionId, machine) || (m.kind === 'session' && m.session.machine !== machine)) {
       this.journal.warn({ machine, sessionId }, 'compte rendu refusé : session d’une autre machine');
@@ -230,6 +233,15 @@ export class Postes {
       return this.recaler(sessionId, m.archiver, transcript);
     }
     this.evenement(sessionId, m.ts, m.evt);
+  }
+
+  // Modules (Quart) : seul un changement visible est diffusé ; un module déjà connu, renvoyé, ne l'est pas.
+  private modulesRecus(machine: string, m: Extract<MessagePoste, { kind: 'module' | 'module_erreur' | 'module_retire' }>): void {
+    const change =
+      m.kind === 'module_retire'
+        ? this.registre.modules.retirer(m.id, machine)
+        : this.registre.modules.enregistrer(machine, m);
+    if (change) this.diffusion.diffuser({ type: 'modules_modifies' });
   }
 
   private bonjour(machine: string, m: Extract<MessagePoste, { kind: 'bonjour' }>): void {

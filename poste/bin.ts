@@ -39,6 +39,7 @@ import { ServiceTaches } from './reste/taches-planifiees.ts';
 import { cheminTranscript } from './session/transcript.ts';
 import { dossiersProjets } from './session/decouverte.ts';
 import { SOCKET } from './session/tmux.ts';
+import { DOSSIER_MODULES_SOURCE, SurveillanceModules } from './modules/surveillance.ts';
 
 const PERIODE_ETAT_MS = 15_000;
 
@@ -272,6 +273,7 @@ lien = new LienRelais({
 });
 sessions.relaisOuvert = () => lien?.estOuvert === true;
 lien.demarrer();
+new SurveillanceModules({ dossier: DOSSIER_MODULES_SOURCE, envoyer, journal }).demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);
 journal.info({ machine: config.machine, relais: config.relais }, 'poste démarré');
 

@@ -5,6 +5,7 @@ import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { commandesConfiguration } from './configuration.ts';
 import { commandesEntretien, EchangePoste, ReseauPoste, VersionsClaude } from './entretien.ts';
 import { commandesParite } from './parite.ts';
+import { messagesModules } from './modules.ts';
 import { commandesReste } from './reste.ts';
 import { commandesResteLot2 } from './reste-lot2.ts';
 import { Decouverte, FicheDesktopAnnoncee } from './decouverte.ts';
@@ -104,6 +105,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     donnees: z.unknown().optional(),
   }),
   ...messagesAppareil,
+  ...messagesModules,
 ]);
 export type MessagePoste = z.infer<typeof MessagePoste>;
 
