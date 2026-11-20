@@ -1,0 +1,29 @@
+:keepalive
+
+event: session_update
+data: {"connection_status":"connected"}
+
+event: catch_up_truncated
+data: {"at_sequence_num":"21719"}
+
+event: client_event
+id: 21750
+data: {"event_id":"even-0001","sequence_num":"21750","event_type":"system","source":"worker","payload":{"agents":["x","x","x"],"analytics_disabled":false,"apiKeySource":"x","capabilities":["x","x","x"],"claude_code_version":"x","cwd":"x","effort":"x","fast_mode_disabled_reason":"x","fast_mode_state":"x","mcp_servers":[],"model":"claude-opus-5-5","output_style":"x","permissionMode":"bypassPermissions","plugins":[],"product_feedback_disabled":false,"session_id":"sess-0002","skills":["x","x","x"],"slash_commands":["x","x","x"],"subtype":"init","terminal_slash_commands":["x"],"tools":[],"type":"system","ultrathink_typed_raises":true,"uuid":"uuid-0003","view_mode":"x"},"created_at":"2026-11-20T10:00:00.000Z"}
+
+event: client_event
+id: 21738
+data: {"event_id":"even-0004","sequence_num":"21738","event_type":"user","source":"worker","payload":{"message":{"content":"x","role":"user"},"origin":{"kind":"x","producer":"x","runId":"x"},"parent_tool_use_id":null,"session_id":"sess-0005","timestamp":"2026-11-20T10:00:00.000Z","type":"user","uuid":"uuid-0006"},"created_at":"2026-11-20T10:00:00.000Z"}
+
+event: client_event
+id: 21739
+data: {"event_id":"even-0007","sequence_num":"21739","event_type":"assistant","source":"worker","payload":{"message":{"container":null,"content":[{"signature":"x","thinking":"x","type":"thinking"}],"context_management":null,"diagnostics":null,"id":"id-0008","input_transformations":[{"path":"x","reason":"x","type":"thinking_dropped"}],"model":"claude-opus-5-5","role":"assistant","stop_details":null,"stop_reason":null,"stop_sequence":null,"type":"message","usage":{"cache_creation":{"ephemeral_1h_input_tokens":1613,"ephemeral_5m_input_tokens":0},"cache_creation_input_tokens":1613,"cache_read_input_tokens":223427,"inference_geo":"x","input_tokens":4,"output_tokens":8,"service_tier":"x","speed":"x"}},"parent_tool_use_id":null,"request_id":"requ-0009","session_id":"sess-0010","thinking_display":"x","thinking_duration_ms":679,"timestamp":"2026-11-20T10:00:00.000Z","type":"assistant","uuid":"uuid-0011"},"created_at":"2026-11-20T10:00:00.000Z"}
+
+event: client_event
+id: 21730
+data: {"event_id":"even-0012","sequence_num":"21730","event_type":"rate_limit_event","source":"worker","payload":{"rate_limit_info":{"isUsingOverage":false,"overageDisabledReason":"x","overageStatus":"x","rateLimitType":"x","resetsAt":1795192800,"status":"allowed","unifiedWindows":{"five_hour":{"resetsAt":1795192800,"status":"allowed","utilization":0.19},"seven_day":{"resetsAt":1795374000,"status":"allowed","utilization":0.06}}},"session_id":"sess-0013","type":"rate_limit_event","uuid":"uuid-0014"},"created_at":"2026-11-20T10:00:00.000Z"}
+
+event: client_event
+id: 21751
+data: {"event_id":"even-0015","sequence_num":"21751","event_type":"result","source":"worker","payload":{"duration_api_ms":0,"duration_ms":0,"is_error":false,"modelUsage":{},"num_turns":5,"permission_denials":[],"result":"x","session_id":"sess-0016","stop_reason":"end_turn","subtype":"success","terminal_reason":"x","total_cost_usd":0,"type":"result","usage":{"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"fallback_credit":null,"inference_geo":"x","input_tokens":0,"iterations":[],"output_tokens":0,"output_tokens_details":{"thinking_tokens":0},"server_tool_use":{"web_fetch_requests":0,"web_search_requests":0},"service_tier":"x","speed":"x"},"uuid":"uuid-0017"},"created_at":"2026-11-20T10:00:00.000Z"}
+
+

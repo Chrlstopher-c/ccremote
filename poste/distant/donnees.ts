@@ -22,6 +22,7 @@ export interface EvenementBrut {
   readonly id: string; // event_id : identifiant stable, sert à ne pas émettre deux fois un événement
   readonly creeLe: string | null;
   readonly payload: unknown; // message du Claude Agent SDK, à traduire par traduireSdk
+  readonly seq?: number | null; // sequence_num : repère du flux (reprise après coupure)
 }
 
 export interface PageEvenements {
@@ -55,13 +56,23 @@ export function lireSession(v: unknown): SessionBrute | null {
   };
 }
 
+/** Un événement du fil (page ou flux) ; null sans event_id. Le numéro de séquence arrive en texte ou en nombre. */
+export function lireEvenement(v: unknown): EvenementBrut | null {
+  const e = objet(v);
+  const id = texte(e['event_id']);
+  if (id === null) return null;
+  const brut = e['sequence_num'];
+  const seq = typeof brut === 'string' ? Number(brut) : brut;
+  const valide = typeof seq === 'number' && Number.isSafeInteger(seq) && seq >= 0;
+  return { id, creeLe: texte(e['created_at']), payload: e['payload'], seq: valide ? seq : null };
+}
+
 /** Une page d'événements (`{data, next_cursor}`) ; les entrées sans event_id sont écartées. */
 export function lirePage(v: unknown): PageEvenements {
   const o = objet(v);
   const evenements = tableau(o['data']).flatMap((brut): EvenementBrut[] => {
-    const e = objet(brut);
-    const id = texte(e['event_id']);
-    return id === null ? [] : [{ id, creeLe: texte(e['created_at']), payload: e['payload'] }];
+    const e = lireEvenement(brut);
+    return e === null ? [] : [e];
   });
   return { evenements, suivant: texte(o['next_cursor']) };
 }

@@ -1,6 +1,7 @@
 // Responsabilité : le spectateur claude.ai du poste — pour chaque compte suivi en Remote Control, relit la liste de ses
-// sessions toutes les 5 s et tient à jour les SessionDistante publiées au relais. Rien n'est persisté : la liste vient
-// de claude.ai à chaque tour. Une session déjà tenue par le gestionnaire du poste n'est pas doublée.
+// sessions toutes les 5 s et tient à jour les SessionDistante publiées au relais ; le fil de chaque session arrive en
+// direct par son flux SSE (le sondage ne sert qu'en secours). Rien n'est persisté. Une session déjà tenue par le
+// gestionnaire du poste n'est pas doublée.
 import type { Logger } from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
 import { type CommandeSession, estLecture } from '../session/lecture-panneau.ts';
@@ -53,6 +54,7 @@ export class Spectateur {
   arreter(): void {
     for (const minuterie of this.minuteries.values()) clearInterval(minuterie);
     this.minuteries.clear();
+    for (const s of this.sessions.values()) s.arreterFlux();
   }
 
   lister(): ResumeSession[] {

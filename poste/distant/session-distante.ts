@@ -10,7 +10,8 @@ import type { SessionPersistee } from '../session/persistance.ts';
 import type { Reglage, ReponseCrochet, SessionPoste, SortieSession } from '../session/session-poste.ts';
 import { type EtatTraduction, nouvelEtatTraduction } from '../session/traduction-sdk.ts';
 import { type ResultatApi, envoyerEvenement, lireEvenements } from './client-claude-ai.ts';
-import { type EvenementBrut, type SessionBrute } from './donnees.ts';
+import { type EvenementBrut, type SessionBrute, lireEvenement } from './donnees.ts';
+import { FluxDistant, type TrameSse } from './flux-distant.ts';
 import {
   demandeCloseePar,
   demandeEntrante,
@@ -75,6 +76,10 @@ export class SessionDistante implements SessionPoste {
   private cwdVu: string | null = null; // dossier de travail annoncé par la session (system/init)
   private travail: string | null; // worker_status de la liste : pendant un tour, le fil est relu à chaque passage
   private readonly pieces: StockeurPieces | undefined;
+  private flux: FluxDistant | null = null; // flux SSE : porte le fil en direct, le sondage sert de secours
+  private fluxRefuse = false; // refus durable du flux : pas de nouvel essai avant le prochain changement de travail
+  private combler = false; // le flux a signalé un trou (catch_up_truncated) : le fil est relu une fois
+  private dernierSeq: number | null = null; // plus haut numéro de séquence vu : la reprise du flux part de là
 
   constructor(
     private readonly d: DependancesDistante,
@@ -103,11 +108,73 @@ export class SessionDistante implements SessionPoste {
     this.travail = brute.travail;
     this.base = resumeDistant(brute, this.d.contexte, this.base.creeLe);
     this.maj();
-    if (!this.chargee) return this.erreurDe(await this.charger());
+    if (!this.chargee) {
+      const erreur = this.erreurDe(await this.charger());
+      if (this.chargee) this.gererFlux(brute.travail, brute.travail);
+      return erreur;
+    }
+    this.gererFlux(brute.travail, travaillait);
+    const comble = this.combler;
+    this.combler = false;
+    // Flux vivant pendant un tour : il pousse le fil, le sondage ne revient qu'en secours.
+    if (!comble && this.fluxVivant() && enTour(brute.travail)) return null;
     // last_event_at ne bouge qu'en fin de tour (événement `result`) : pendant un tour, ou au passage qui le clôt, le
     // fil est relu quand même, sinon message de Chris, outils et texte n'arrivent qu'à la fin.
-    if (this.derniereListe === this.vuJusqua && !enTour(brute.travail) && !enTour(travaillait)) return null;
+    if (!comble && this.derniereListe === this.vuJusqua && !enTour(brute.travail) && !enTour(travaillait)) return null;
     return this.erreurDe(await this.suivre());
+  }
+
+  // Le flux s'ouvre à la première synchronisation du fil et reste ouvert tant que la session est suivie. Un refus
+  // durable n'est retenté qu'au prochain changement d'état de travail.
+  private gererFlux(travail: string | null, avant: string | null): void {
+    if (travail !== avant) this.fluxRefuse = false;
+    if (this.flux || this.fluxRefuse) return;
+    const flux = new FluxDistant({
+      configDir: this.d.configDir,
+      idSession: this.resume.id,
+      journal: this.d.journal,
+      depuis: this.dernierSeq,
+      surTrame: (trame: TrameSse) => this.trameDirecte(trame),
+      surRefus: (statut: number) => this.refusFlux(statut),
+    });
+    this.flux = flux;
+    flux.demarrer();
+  }
+
+  private fluxVivant(): boolean {
+    return this.flux?.vivant === true;
+  }
+
+  /** Ferme le flux de la session (session retirée du suivi, arrêt du poste). */
+  arreterFlux(): void {
+    this.flux?.arreter();
+    this.flux = null;
+  }
+
+  private refusFlux(statut: number): void {
+    this.flux = null;
+    this.fluxRefuse = true;
+    this.d.journal.warn({ statut }, 'flux Remote Control refusé : fil relu par sondage');
+  }
+
+  // Une trame du flux : un événement du fil est traité une seule fois (identifiant), un trou demande une relecture.
+  private trameDirecte(trame: TrameSse): void {
+    if (trame.event === 'catch_up_truncated') {
+      this.combler = true;
+      return;
+    }
+    if (trame.event !== 'client_event') return;
+    let json: unknown;
+    try {
+      json = JSON.parse(trame.data);
+    } catch (erreur) {
+      this.d.journal.warn({ err: erreur }, 'flux claude.ai : trame illisible, ignorée');
+      return;
+    }
+    const brut = lireEvenement(json);
+    if (brut === null || this.vus.has(brut.id)) return;
+    this.appliquer([brut]);
+    this.publier();
   }
 
   /** Le résumé s'il a changé depuis la dernière publication, sinon null. */
@@ -130,6 +197,7 @@ export class SessionDistante implements SessionPoste {
 
   /** La session n'est plus dans la liste active de claude.ai : elle est rangée ou la connexion est tombée. */
   passerFermee(): void {
+    this.arreterFlux();
     const distant = this.base.distant ?? null;
     this.base = {
       ...this.base,
@@ -150,6 +218,7 @@ export class SessionDistante implements SessionPoste {
     this.releverMode(chronologique);
     this.traiterControle(chronologique, false);
     for (const e of r.donnees) this.vus.add(e.id);
+    this.avancerSeq(r.donnees);
     this.vuJusqua = this.derniereListe;
     this.chargee = true;
     if (evenements.length > 0) this.d.sortie.historique?.(this.resume.id, evenements);
@@ -161,13 +230,25 @@ export class SessionDistante implements SessionPoste {
     const r = await this.lirePages(PAGES_DIRECT, (id) => this.vus.has(id), TAILLE_PAGE_DIRECT);
     if (!r.ok) return r;
     const nouveaux = [...r.donnees].reverse();
-    for (const e of nouveaux) this.vus.add(e.id);
     this.vuJusqua = this.derniereListe;
-    this.releverMode(nouveaux);
-    const questions = this.traiterControle(nouveaux, true);
-    for (const h of traduireLot(nouveaux, this.etat, this.pieces)) this.d.sortie.evenement(this.resume.id, h.evt);
-    for (const evt of questions) this.d.sortie.evenement(this.resume.id, evt);
+    this.appliquer(nouveaux);
     return { ok: true, donnees: nouveaux.length };
+  }
+
+  // Événements nouveaux, du plus ancien au plus récent : repères, mode, demandes, traduction, émission dans le fil.
+  private appliquer(lot: readonly EvenementBrut[]): void {
+    for (const e of lot) this.vus.add(e.id);
+    this.avancerSeq(lot);
+    this.releverMode(lot);
+    const questions = this.traiterControle(lot, true);
+    for (const h of traduireLot(lot, this.etat, this.pieces)) this.d.sortie.evenement(this.resume.id, h.evt);
+    for (const evt of questions) this.d.sortie.evenement(this.resume.id, evt);
+  }
+
+  private avancerSeq(lot: readonly EvenementBrut[]): void {
+    for (const seq of lot.map((e) => e.seq ?? null)) {
+      if (seq !== null && (this.dernierSeq === null || seq > this.dernierSeq)) this.dernierSeq = seq;
+    }
   }
 
   // Les demandes de Claude (permission, question, plan) entrent dans la file ; les messages qui les closent en sortent.

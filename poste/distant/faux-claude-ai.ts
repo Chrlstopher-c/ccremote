@@ -1,6 +1,7 @@
-// Faux serveur de l'API claude.ai pour les tests : sessions et fils paginés (plus récent d'abord), aucune requête
-// réelle.
+// Faux serveur de l'API claude.ai pour les tests : sessions et fils paginés (plus récent d'abord), flux SSE scénarisés,
+// aucune requête réelle.
 // Les données sont modifiables pendant le test ; `statutForce` fait répondre une erreur HTTP à tout appel.
+// Un flux SSE consomme un scénario par connexion : des trames, un statut d'erreur, ou un flux qui reste ouvert.
 
 export interface FauxApi {
   url: string;
@@ -11,7 +12,20 @@ export interface FauxApi {
   readonly posts: { chemin: string; corps: unknown }[]; // corps JSON de chaque POST d'événements
   statutForce: number | null;
   reponsePost: { statut: number; corps: string } | null; // réponse imposée aux POST (sinon 200 avec results)
+  readonly scenariosFlux: Map<string, ScenarioFlux[]>; // identifiant de session → un scénario par connexion au flux
   arreter(): void;
+}
+
+export interface ScenarioFlux {
+  readonly statut?: number; // répond cette erreur HTTP, sans flux
+  readonly trames?: string[]; // trames SSE envoyées dans l'ordre (voir trameFlux)
+  readonly tenir?: boolean; // le flux reste ouvert après ses trames (sinon il se ferme)
+}
+
+/** Une trame SSE au format de claude.ai (`event`, `id`, `data` JSON). */
+export function trameFlux(evenement: string, id: number | null, data: unknown): string {
+  const ligneId = id === null ? '' : `id: ${id}\n`;
+  return `event: ${evenement}\n${ligneId}data: ${JSON.stringify(data)}\n\n`;
 }
 
 const JSON_VIDE = '{}';
@@ -26,6 +40,7 @@ export function demarrerFauxApi(): FauxApi {
     posts: [],
     statutForce: null,
     reponsePost: null,
+    scenariosFlux: new Map<string, ScenarioFlux[]>(),
     arreter: () => undefined,
   };
   const serveur = Bun.serve({
@@ -45,6 +60,8 @@ export function demarrerFauxApi(): FauxApi {
       if (u.pathname === '/v1/code/sessions') return Response.json({ data: api.sessions, next_cursor: null });
       const fil = /^\/v1\/code\/sessions\/([^/]+)\/events$/.exec(u.pathname);
       if (fil) return pageDuFil(api.fils.get(decodeURIComponent(fil[1] ?? '')) ?? [], u.searchParams);
+      const flux = /^\/v1\/code\/sessions\/([^/]+)\/events\/stream$/.exec(u.pathname);
+      if (flux) return reponseFlux(api, decodeURIComponent(flux[1] ?? ''));
       return new Response(JSON_VIDE, { status: 404 });
     },
   });
@@ -109,4 +126,21 @@ export function tourApi(numero: number, texte: string): Record<string, unknown>[
     session_id: session,
   };
   return [evenementApi(`ev-${numero}-a`, assistant, creeLe), evenementApi(`ev-${numero}-r`, fin, creeLe)];
+}
+
+// Un flux SSE : le scénario suivant de la session (sans scénario, le flux est vide et se ferme aussitôt).
+function reponseFlux(api: FauxApi, idSession: string): Response {
+  const scenario = api.scenariosFlux.get(idSession)?.shift();
+  if (scenario?.statut !== undefined) return new Response(JSON_VIDE, { status: scenario.statut });
+  const encodeur = new TextEncoder();
+  const trames = scenario?.trames ?? [];
+  const corps = new ReadableStream<Uint8Array>({
+    start(controleur) {
+      // Un premier octet (commentaire, comme le keepalive réel) : sans lui, les en-têtes ne partent pas.
+      controleur.enqueue(encodeur.encode(':ouvert\n\n'));
+      for (const trame of trames) controleur.enqueue(encodeur.encode(trame));
+      if (scenario?.tenir !== true) controleur.close();
+    },
+  });
+  return new Response(corps, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }

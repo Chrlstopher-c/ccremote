@@ -110,6 +110,47 @@ export async function lireEvenements(
   return { ok: true, donnees: lirePage(parser(r.reponse.corps, journal)) };
 }
 
+export type ResultatFlux = ResultatApi<ReadableStream<Uint8Array>>;
+
+/** Ouvre le flux SSE d'une session : ses événements arrivent au fil de l'eau. `depuis` reprend après ce numéro de
+ * séquence. Le délai ne vaut que pour la réponse d'ouverture ; la suite du flux est lue par l'appelant. */
+export async function ouvrirFlux(
+  configDir: string | null,
+  idSession: string,
+  depuis: number | null,
+  arret: AbortSignal,
+  journal: Logger,
+): Promise<ResultatFlux> {
+  const chemin = `/v1/code/sessions/${encodeURIComponent(idSession)}/events/stream`;
+  const requete = depuis === null ? chemin : `${chemin}?from_sequence_num=${depuis}`;
+  const ctl = new AbortController();
+  const arreter = (): void => ctl.abort();
+  arret.addEventListener('abort', arreter, { once: true });
+  const minuterie = setTimeout(arreter, DELAI_MS);
+  try {
+    const jeton = lireJetonFichier(configDir);
+    if (jeton === null)
+      return { ok: false, statut: 0, probleme: 'jeton absent ou expiré : relancer la connexion du compte' };
+    const entete: Record<string, string> = { ...entetes(jeton), accept: 'text/event-stream' };
+    if (depuis !== null) entete['last-event-id'] = String(depuis);
+    const reponse = await fetch(`${apiClaudeAi()}${requete}`, { headers: entete, signal: ctl.signal });
+    if (reponse.ok && reponse.body) return { ok: true, donnees: reponse.body };
+    if (reponse.ok) return { ok: false, statut: reponse.status, probleme: 'flux sans corps de réponse' };
+    const corps = await reponse.text().catch((erreur: unknown) => {
+      journal.debug({ err: erreur }, 'flux claude.ai : corps d’erreur illisible');
+      return '';
+    });
+    const refusAppareil = reponse.status === 403 && estRefusAppareil(corps);
+    journal.warn({ statut: reponse.status, chemin }, 'flux claude.ai : réponse refusée');
+    return { ok: false, statut: reponse.status, probleme: problemeHttp(reponse.status), refusAppareil };
+  } catch (erreur) {
+    journal.warn({ err: erreur, chemin }, 'flux claude.ai : ouverture en échec');
+    return { ok: false, statut: 0, probleme: 'claude.ai injoignable ou réponse illisible' };
+  } finally {
+    clearTimeout(minuterie);
+  }
+}
+
 /** Envoie un événement à la session (`{events: [{payload: evt}]}`, forme du CLI ; sans l'enveloppe `payload`,
  * claude.ai répond 400 « event_type is required »). Rend seulement si claude.ai l'a accepté. */
 export async function envoyerEvenement(
