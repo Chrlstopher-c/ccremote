@@ -10,7 +10,12 @@ import type { ConfigPoste } from '../config.ts';
 import { basculerControle, enBascule, rembobinerTui, sortirTui } from './bascule-controle.ts';
 import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
-import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
+import {
+  type ReprisePrevue,
+  conversationsTenuesAilleurs,
+  relancerApresRedemarrage,
+  reprisePrevue,
+} from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
@@ -419,11 +424,20 @@ export class GestionnaireSessions {
     }
   }
 
+  // Une conversation tenue par un processus Claude vivant hors du poste (Desktop, terminal) n'est jamais reprise : la
+  // relancer ferait deux processus sur le même transcript, et le fil de l'autre ne serait plus suivi.
   private reprisesPrevues(persistees: readonly SessionPersistee[]): ReprisePrevue[] {
+    const tenues = conversationsTenuesAilleurs(Object.values(this.config.comptes), this.journal);
     return persistees.flatMap((p) => {
       const prevue = reprisePrevue(p);
       const session = this.sessions.get(p.resume.id);
-      return prevue && session instanceof SessionSdk ? [{ session, texte: prevue.texte }] : [];
+      if (!prevue || !(session instanceof SessionSdk)) return [];
+      if (tenues.has(p.resume.claudeSessionId ?? p.resume.id) || tenues.has(p.resume.id)) {
+        this.journal.info({ session: p.resume.id }, 'conversation tenue ailleurs : pas de reprise au démarrage');
+        session.renoncerReprise();
+        return [];
+      }
+      return [{ session, texte: prevue.texte }];
     });
   }
 

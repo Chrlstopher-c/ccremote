@@ -326,6 +326,11 @@ export class SessionSdk implements SessionPoste {
     return this.demarrer(true, message, uuid);
   }
 
+  /** Le poste ne reprendra pas cette session à son démarrage : sa conversation est tenue par un autre processus. */
+  renoncerReprise(): void {
+    this.aReprendre = false;
+  }
+
   reprendreApresRedemarrage(texte: string | null): string | null {
     if (texte) this.emettre({ type: 'relance', raison: RAISON_REDEMARRAGE });
     const erreur = this.etat.claudeSessionId ? this.demarrer(true, texte ?? undefined) : 'conversation inconnue';

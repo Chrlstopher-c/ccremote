@@ -3,6 +3,7 @@
 import type { Logger } from 'pino';
 import type { StatutSession } from '../../commun/session.ts';
 import type { SessionPersistee } from './persistance.ts';
+import { processusClaude } from './processus.ts';
 
 export const PAUSE_REPRISE_MS = 1_000;
 export const RAISON_REDEMARRAGE = 'redémarrage du poste';
@@ -53,4 +54,14 @@ function relancerUne(session: SessionReprenable, texte: string | null, journal: 
 
 function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Conversations qu'un processus Claude vivant hors du poste tient déjà (Desktop, terminal), par identifiant. */
+export function conversationsTenuesAilleurs(comptes: readonly string[], journal: Logger): Set<string> {
+  try {
+    return new Set(processusClaude([null, ...comptes], journal).map((proc) => proc.sessionId));
+  } catch (erreur) {
+    journal.warn({ err: erreur }, 'processus Claude non lus : reprises décidées sans eux');
+    return new Set();
+  }
 }
