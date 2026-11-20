@@ -3,7 +3,6 @@ import { z } from 'zod';
 import type { Acces } from '../acces/acces.ts';
 import { cookieDeSession } from '../acces/acces.ts';
 import type { Postes } from '../parc/postes.ts';
-import { reveiller } from '../parc/reveil.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ApiArtefacts } from './api-artefacts.ts';
 import type { ApiModifications } from './api-modifications.ts';
@@ -19,6 +18,8 @@ import type { Diffusion } from './diffusion.ts';
 import type { LienEcho } from '../echo/lien-echo.ts';
 import { routesEcho } from '../echo/api-echo.ts';
 import type { ApiMachines } from '../machines/api-machines.ts';
+import type { ApiEntretien } from '../entretien/api-entretien.ts';
+import { routesEntretien } from '../entretien/routes.ts';
 import type { ApiConfirmations } from '../machines/api-confirmations.ts';
 import { type DependancesReunions, routesReunions } from '../reunion/api-reunions.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
@@ -38,9 +39,8 @@ export interface DependancesApi {
   readonly fichiersSession: ApiFichiersSession;
   readonly echo: LienEcho | null;
   readonly reunions: DependancesReunions;
-  readonly wol: ReadonlyMap<string, string>;
-  readonly diffusionWol: string;
   readonly machines: ApiMachines;
+  readonly entretien: ApiEntretien;
   readonly confirmations: ApiConfirmations;
 }
 
@@ -163,7 +163,6 @@ export function construireRoutes(d: DependancesApi) {
       GET: protege((req) => json(d.registre.notifications(entier(new URL(req.url).searchParams.get('apres'), 0)))),
     },
     '/api/notifications/lues': { POST: protege((req) => marquerLues(d, req)) },
-    '/api/machines/:id/reveiller': { POST: protege((req) => reveil(d, req.params['id'] ?? '')) },
     '/api/machines/:id/eteindre': { POST: protege((req) => machine(d, req.params['id'] ?? '', 'eteindre')) },
     '/api/machines/:id/projets': { GET: protege((req) => machine(d, req.params['id'] ?? '', 'projets')) },
     '/api/machines/:id/comptes': { POST: protege((req) => d.comptes.connecter(req as never)) },
@@ -196,6 +195,7 @@ export function construireRoutes(d: DependancesApi) {
     '/api/sessions/:id/artefacts/:artefact/epingler': { POST: protege((req) => d.artefacts.epingler(req as never)) },
     ...routesFichiers(d.fichiers, protege),
     ...routesEcho(d.echo, protege),
+    ...routesEntretien(d.entretien, protege),
     ...routesReunions(d.reunions, protege),
   };
 }
@@ -226,7 +226,7 @@ function etat(d: DependancesApi, req: Request) {
     sessions: d.registre.sessions(avecArchivees(req)),
     decouvertes: decouvertes(d),
     notifications,
-    reveilPossible: [...d.wol.keys()],
+    reveilPossible: d.entretien.reveilPossibles(),
   };
 }
 
@@ -261,17 +261,6 @@ async function marquerLues(d: DependancesApi, req: Request): Promise<Response> {
   if (c instanceof Response) return c;
   d.registre.marquerLues(c.jusqua);
   return json({ ok: true });
-}
-
-async function reveil(d: DependancesApi, id: string): Promise<Response> {
-  const mac = d.wol.get(id);
-  if (!mac) return erreur(`${id} ne se réveille pas à distance`, 404);
-  try {
-    await reveiller(mac, d.diffusionWol);
-    return json({ ok: true });
-  } catch (e) {
-    return erreur(`réveil impossible : ${String(e)}`, 500);
-  }
 }
 
 async function machine(d: DependancesApi, id: string, kind: 'eteindre' | 'projets'): Promise<Response> {

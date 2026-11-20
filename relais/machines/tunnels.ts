@@ -175,6 +175,22 @@ export class Tunnels {
     this.entrees.clear();
   }
 
+  /** Les processus ssh ouverts, par machine : l'inventaire du poste local y reconnaît ses tunnels. */
+  pids(): { readonly id: string; readonly pid: number }[] {
+    return [...this.entrees.values()].flatMap((e) => (e.processus ? [{ id: e.cible.id, pid: e.processus.pid }] : []));
+  }
+
+  /** Relance immédiate (le port distant vient d'être libéré) : le ssh en cours part, l'attente repart de zéro. */
+  relancer(id: string): void {
+    const e = this.entrees.get(id);
+    if (!e) return;
+    this.annulerRelance(e);
+    e.processus?.arreter();
+    e.processus = null;
+    e.essais = 0;
+    this.demarrer(e);
+  }
+
   private annulerRelance(e: Entree): void {
     if (e.minuterie === null) return;
     this.planificateur.annuler(e.minuterie);
@@ -210,11 +226,11 @@ export class Tunnels {
     e.processus = null;
     e.detail = `${message} — relance dans ${Math.round(attente / 1000)} s`;
     this.d.journal?.warn({ machine: e.cible.id, code, brut, attenteMs: attente }, 'tunnel SSH tombé, relance programmée');
-    e.minuterie = this.planificateur.planifier(() => this.relancer(e), attente);
+    e.minuterie = this.planificateur.planifier(() => this.redemarrerApresAttente(e), attente);
     this.d.surChangement(e.cible.id);
   }
 
-  private relancer(e: Entree): void {
+  private redemarrerApresAttente(e: Entree): void {
     if (this.entrees.get(e.cible.id) !== e) return;
     this.demarrer(e);
   }

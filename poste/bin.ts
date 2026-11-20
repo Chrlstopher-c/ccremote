@@ -125,7 +125,7 @@ const configuration = {
   journal,
 };
 
-// L'entretien : chantiers, processus, sessions tmux, réveil. Les sessions suivies sont celles des fiches du gestionnaire.
+// L'entretien : chantiers, processus, sessions tmux, réveil. Sessions suivies : celles des fiches du gestionnaire.
 const contexteEntretien: ContexteEntretien = {
   machine: config.machine,
   racine: process.pid,
@@ -134,7 +134,8 @@ const contexteEntretien: ContexteEntretien = {
   dossierChantiers: dossierChantiers(),
   reveilFactice: process.env['CCREMOTE_REVEIL_FACTICE'] || undefined,
   sessionDePid: () => null, // le gestionnaire ne relie pas encore un pid SDK à sa session : null (voir STATE)
-  suivis: () => new Set([...sessions.sessions.values()].map((s) => s.resume.tmux).filter((n): n is string => n !== null)),
+  suivis: () =>
+    new Set([...sessions.sessions.values()].map((s) => s.resume.tmux).filter((n): n is string => n !== null)),
   partage: SOCKET === 'claude',
   envoyes: new Set(),
   journal,

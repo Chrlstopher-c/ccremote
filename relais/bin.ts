@@ -1,6 +1,7 @@
 // Responsabilité : point d'entrée du relais — deux serveurs : clients (web, iPhone) et postes (machines de travail).
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
+import { COMMIT, VERSION } from '../commun/version.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
@@ -35,6 +36,9 @@ import { nommageLanterne } from './machines/script-installation.ts';
 import { chargerSecretsPostes, dossierSecretsPostes } from './machines/secrets.ts';
 import { Ssh } from './machines/ssh.ts';
 import { Tunnels } from './machines/tunnels.ts';
+import { ApiEntretien } from './entretien/api-entretien.ts';
+import { ReseauxConnus } from './entretien/reseaux.ts';
+import { Reveil } from './entretien/reveil.ts';
 import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
@@ -80,10 +84,11 @@ const accesMachines = integre
     })
   : null;
 postes.acces = accesMachines;
+const ssh = new Ssh(undefined, journal.child({ domaine: 'ssh' }));
 const machines = new ApiMachines({
   registre: registreMachines,
   postes,
-  ssh: new Ssh(undefined, journal.child({ domaine: 'ssh' })),
+  ssh,
   secrets: secretsPostes,
   dossierSecrets,
   relaisPostes: config.relaisPostes,
@@ -111,6 +116,29 @@ if (tunnels) {
     process.once(signal, () => process.exit(0));
   }
 }
+// Entretien : le dernier réseau de chaque machine (réveil), les gestes de l'entretien et le réveil délégué.
+const reseaux = new ReseauxConnus(join(dirname(config.base), 'reveil.json'), journal.child({ domaine: 'reveil' }));
+postes.reseauRecu = (id, reseau) => reseaux.retenir(id, reseau);
+const reveil = new Reveil({
+  wol: config.wol,
+  diffusionWol: config.diffusionWol,
+  reseaux,
+  envoyerPar: (poste, envoi) =>
+    postes.commander(poste, { kind: 'reveiller', mac: envoi.mac, diffusion: envoi.diffusion }),
+  factice: process.env['CCREMOTE_REVEIL_FACTICE'] || undefined,
+  journal: journal.child({ domaine: 'reveil' }),
+});
+const entretien = new ApiEntretien({
+  postes,
+  machines,
+  registre: registreMachines,
+  ssh,
+  tunnels,
+  reveil,
+  locale: process.env['CCREMOTE_MACHINE_LOCALE'] || null,
+  relais: { version: VERSION, commit: COMMIT },
+  journal: journal.child({ domaine: 'entretien' }),
+});
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
@@ -151,9 +179,8 @@ const routes = avecCors(
     fichiersSession,
     echo,
     reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
-    wol: config.wol,
-    diffusionWol: config.diffusionWol,
     machines,
+    entretien,
     confirmations,
   }),
   config.origines,

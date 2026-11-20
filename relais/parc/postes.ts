@@ -10,9 +10,16 @@ import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-cli
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
 
 export interface DonneesPoste {
   readonly machine: string;
+}
+/** Ce qu'un poste annonce au bonjour, gardé le temps de sa connexion (versions, empreinte). */
+export interface InfosPoste {
+  readonly commit: string | null;
+  readonly empreinte: string | null;
+  readonly claudeCode: VersionsClaude | null;
 }
 export interface ReponsePoste {
   readonly ok: boolean;
@@ -28,6 +35,7 @@ export class Postes {
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
   // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
   private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
+  private readonly infos = new Map<string, InfosPoste>();
   private readonly replays = new Map<string, string>(); // session → identifiant de la dernière relecture d'historique acceptée
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
@@ -42,6 +50,8 @@ export class Postes {
     sansPoste(): VueMachine[];
     installation(machine: string): VueInstallation | null;
   } | null = null;
+  /** Le réseau d'un poste (MAC, diffusion) relevé avec son état : le relais le retient pour le réveil. */
+  reseauRecu: ((machine: string, reseau: ReseauPoste) => void) | null = null;
   /** Un poste s'est annoncé avec l'empreinte de son code : le relais peut le mettre à jour (une fois par connexion). */
   miseAJour: ((machine: string, empreinte: string | undefined) => void) | null = null;
 
@@ -58,6 +68,10 @@ export class Postes {
     const fourni = req.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
     if (!attendu || fourni.length !== attendu.length) return null;
     return timingSafeEqual(Buffer.from(fourni), Buffer.from(attendu)) ? machine : null;
+  }
+
+  infosPoste(machine: string): InfosPoste | null {
+    return this.infos.get(machine) ?? null;
   }
 
   enLigne(machine: string): boolean {
@@ -96,6 +110,7 @@ export class Postes {
     if (this.connectes.get(ws.data.machine) !== ws) return;
     this.connectes.delete(ws.data.machine);
     this.decouvertesDuPoste.delete(ws.data.machine);
+    this.infos.delete(ws.data.machine);
     this.journal.warn({ machine: ws.data.machine }, 'poste déconnecté');
     this.terminaux?.posteDeconnecte(ws.data.machine);
     this.diffuserMachine(ws.data.machine);
@@ -149,6 +164,7 @@ export class Postes {
     if (m.kind === 'decouvertes') return void this.decouvertesDuPoste.set(machine, m.decouvertes);
     if (m.kind === 'etat_machine') {
       this.registre.majEtatMachine(machine, m.etat);
+      if (m.etat.reseau) this.reseauRecu?.(machine, m.etat.reseau);
       return this.diffuserMachine(machine);
     }
     if (m.kind === 'comptes') {
@@ -183,6 +199,11 @@ export class Postes {
     });
     if (m.etatComptes) this.registre.majComptes(machine, m.etatComptes);
     this.decouvertesDuPoste.set(machine, m.decouvertes ?? []);
+    this.infos.set(machine, {
+      commit: m.commit ?? null,
+      empreinte: m.empreinte ?? null,
+      claudeCode: m.claudeCode ?? null,
+    });
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
       this.registre.enregistrerSession(s);

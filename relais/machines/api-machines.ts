@@ -177,6 +177,15 @@ export class ApiMachines {
     return json(this.installations.de(id));
   }
 
+  /** L'empreinte que chaque poste doit annoncer (celle que `surConnexion` compare) ; null hors relais intégré. */
+  async empreinteAttendue(): Promise<string | null> {
+    if (!this.d.integre) return null;
+    return this.avecCode(empreinteCode).catch((e: unknown) => {
+      this.d.journal.warn({ err: e }, 'empreinte du code embarqué illisible');
+      return null;
+    });
+  }
+
   /** Le code du poste, lu dans l'archive embarquée (extraite le temps de l'action) ou dans le dépôt. */
   private async avecCode<T>(fonction: (racine: string) => Promise<T>): Promise<T> {
     const codePoste = this.d.integre?.codePoste ?? null;
