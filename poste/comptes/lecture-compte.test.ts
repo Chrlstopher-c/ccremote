@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import pino from 'pino';
 import { DetailCompte, type UsageSdk } from '../../commun/compte-detail.ts';
-import { LecteurCompte } from './lecture-compte.ts';
+import { AGENT_CLI, LecteurCompte } from './lecture-compte.ts';
 
 // Faux serveur d'Anthropic (Bun.serve sur un port libre) : aucune requête réseau réelle.
 const ORG = '00000000-0000-4000-8000-000000000002';
@@ -98,6 +98,13 @@ describe('lecture du détail d’un compte', () => {
     expect(entetes?.get('authorization')).toBe(`Bearer ${JETON}`);
     expect(entetes?.get('anthropic-beta')).toBe('oauth-2025-04-20');
     expect(entetes?.get('anthropic-version')).toBe('2023-06-01');
+  });
+
+  test('chaque requête se présente comme le CLI (le serveur en déduit la surface)', async () => {
+    await lecteur().detail('principal', null, 'tour', SDK_NUL);
+    await lecteur().reinitialiser('principal', null, 'full-reset-2611');
+    expect(recues.length).toBeGreaterThan(4);
+    for (const r of recues) expect(r.entetes.get('user-agent')).toBe(AGENT_CLI);
   });
 
   test('ni le jeton ni l’uuid d’organisation ne sortent dans le résultat', async () => {

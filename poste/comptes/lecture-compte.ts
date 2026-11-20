@@ -51,9 +51,14 @@ const AUCUNE: Lues = { profil: null, usage: null, cedar: null, prepaye: null, sd
 
 const motif = (erreur: unknown): string => (erreur instanceof Error ? erreur.name : 'erreur');
 
+// Le serveur déduit la surface de l'agent utilisateur : sans celui du CLI, le programme de réinitialisation répond
+// « pas sur cette surface » (constaté le 20/11, lecture seule). Les sessions de Quart sont des Claude Code.
+export const AGENT_CLI = 'claude-cli/2.1.323 (external, cli)';
+
 function entetes(jeton: string): Record<string, string> {
   return {
     authorization: `Bearer ${jeton}`,
+    'user-agent': AGENT_CLI,
     'anthropic-beta': 'oauth-2025-04-20',
     'anthropic-version': '2023-06-01',
     'content-type': 'application/json',
