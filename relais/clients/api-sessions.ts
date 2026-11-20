@@ -16,6 +16,7 @@ import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../c
 import { reponseFichier } from './fichiers-session.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from '../../commun/fichiers-session.ts';
 import type { Registre } from '../registre/registre.ts';
+import { aiguillage, TEXTE_REFUS_SANS_JUMELLE } from '../parc/aiguillage.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
@@ -515,7 +516,13 @@ export class ApiSessions {
   ): Promise<Response> {
     const session = await this.sessionDe(sessionId);
     if (session instanceof Response) return session;
-    const r = await this.postes.commander(session.machine, { ...c, sessionId });
+    const aiguille = aiguillage(session, c.kind, this.registre.sessions(false));
+    if (aiguille.kind === 'refus') {
+      this.journal.warn({ sessionId, commande: c.kind }, 'session tenue ailleurs sans Remote Control');
+      return erreur(TEXTE_REFUS_SANS_JUMELLE, REFUS_POSTE);
+    }
+    const cible = aiguille.kind === 'jumelle' ? aiguille.session : session;
+    const r = await this.postes.commander(cible.machine, { ...c, sessionId: cible.id });
     if (!r.ok) this.journal.warn({ sessionId, commande: c.kind, erreur: r.erreur }, 'commande refusée');
     return r.ok ? json(r.donnees ?? {}) : erreur(r.erreur ?? 'commande refusée', REFUS_POSTE);
   }
