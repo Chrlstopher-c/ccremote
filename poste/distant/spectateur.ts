@@ -3,12 +3,13 @@
 // de claude.ai à chaque tour. Une session déjà tenue par le gestionnaire du poste n'est pas doublée.
 import type { Logger } from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
+import { type CommandeSession, estLecture } from '../session/lecture-panneau.ts';
 import { type ConfigPoste, enregistrerDistants } from '../config.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
 import type { SortieSession } from '../session/session-poste.ts';
 import { listerSessions } from './client-claude-ai.ts';
 import type { SessionBrute } from './donnees.ts';
-import { SessionDistante } from './session-distante.ts';
+import { PAS_ENCORE_CLAUDE_AI, SessionDistante } from './session-distante.ts';
 
 const PERIODE_MS = 5_000;
 
@@ -16,10 +17,23 @@ export interface DependancesSpectateur {
   readonly config: ConfigPoste;
   readonly journal: Logger;
   readonly sortie: SortieSession;
-  /** Vrai si le gestionnaire tient déjà cette session du poste (Remote Control ouvert ici). */
-  readonly locale: (idDistant: string) => boolean;
+  /** Les sessions que le gestionnaire tient déjà sur ce poste : une session Remote Control ouverte ici n'est pas
+  doublée. */
+  readonly locales: () => readonly ResumeSession[];
   readonly periodeMs?: number;
 }
+
+// Commandes que claude.ai sait recevoir ; les autres (compacter, fermer, autonomie…) restent refusées.
+const COMMANDES_DISTANTES = new Set([
+  'envoyer',
+  'interrompre',
+  'repondre',
+  'mode',
+  'modele',
+  'effort',
+  'style',
+  'renommer',
+]);
 
 export class Spectateur {
   private readonly sessions = new Map<string, SessionDistante>();
@@ -64,6 +78,14 @@ export class Spectateur {
     else this.couper(nom);
     this.d.journal.info({ compte: nom, actif }, 'sessions Remote Control d’un compte');
     return { ok: true };
+  }
+
+  /** Le message d'erreur si cette commande ne peut pas viser cette session suivie ; null si elle peut, ou si la
+  session n'est pas suivie. */
+  refusPour(id: string, c: CommandeSession): string | null {
+    if (!this.sessions.has(id) || estLecture(c)) return null;
+    if (c.kind === 'envoyer' && (c.pieces?.length ?? 0) > 0) return 'pièces jointes non prises en charge à distance';
+    return COMMANDES_DISTANTES.has(c.kind) ? null : PAS_ENCORE_CLAUDE_AI;
   }
 
   /** Relit l'historique d'une session suivie et le réémet au relais. */
@@ -118,7 +140,12 @@ export class Spectateur {
   }
 
   private estSuivable(s: SessionBrute): boolean {
-    return s.bridge && s.active && !this.d.locale(s.id);
+    return s.bridge && s.active && !this.estLocale(s.id);
+  }
+
+  // Remote Control déjà ouvert sur ce poste : le gestionnaire la tient, le spectateur ne la double pas.
+  private estLocale(idDistant: string): boolean {
+    return this.d.locales().some((r) => r.remoteControl?.url?.includes(idDistant) === true);
   }
 
   private async synchroniser(nom: string, dossier: string | null, brute: SessionBrute): Promise<void> {
@@ -134,10 +161,14 @@ export class Spectateur {
 
   private creer(nom: string, dossier: string | null, brute: SessionBrute): SessionDistante {
     const contexte = { machine: this.d.config.machine, compte: nom, fenetreContexte: this.d.config.fenetreContexte };
-    const s = new SessionDistante(
-      { contexte, configDir: dossier, journal: this.d.journal, sortie: this.d.sortie },
-      brute,
-    );
+    const deps = {
+      contexte,
+      configDir: dossier,
+      journal: this.d.journal,
+      sortie: this.d.sortie,
+      publier: () => this.publier(s),
+    };
+    const s = new SessionDistante(deps, brute);
     this.sessions.set(brute.id, s);
     return s;
   }

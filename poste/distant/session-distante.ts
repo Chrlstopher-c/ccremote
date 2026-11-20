@@ -1,17 +1,33 @@
 // Responsabilité : UNE session Remote Control d'un compte, vue depuis le poste par l'API de claude.ai. Implémente le
-// contrat SessionPoste en lecture seule : historique relu (~400 derniers événements), suivi du fil en direct. Le
-// pilotage (envoyer, interrompre, répondre…) n'est pas encore pris en charge. Rien n'est écrit sur disque.
+// contrat SessionPoste : historique relu (~400 derniers événements), suivi du fil en direct, pilotage (message,
+// interruption, réglages, réponse aux permissions et questions). Rien n'est écrit sur disque.
+import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
-import type { ResumeSession } from '../../commun/session.ts';
+import type { PieceJointe } from '../../commun/presentation.ts';
+import type { Evenement, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
+import { champsReglage } from '../session/reglages-sdk.ts';
 import type { SessionPersistee } from '../session/persistance.ts';
-import type { ReponseCrochet, SessionPoste, SortieSession } from '../session/session-poste.ts';
+import type { Reglage, ReponseCrochet, SessionPoste, SortieSession } from '../session/session-poste.ts';
 import { type EtatTraduction, nouvelEtatTraduction } from '../session/traduction-sdk.ts';
-import { type ResultatApi, lireEvenements } from './client-claude-ai.ts';
-import type { EvenementBrut, SessionBrute } from './donnees.ts';
+import { type ResultatApi, envoyerEvenement, lireEvenements } from './client-claude-ai.ts';
+import { type EvenementBrut, type SessionBrute } from './donnees.ts';
+import {
+  demandeCloseePar,
+  demandeEntrante,
+  messageUtilisateur,
+  reponseControle,
+  requeteControle,
+  requeteReglage,
+} from './controle-distant.ts';
+import { AttenteDistante, type Resolution, titreDe } from './attente-distante.ts';
 import { type ContexteDistant, resumeDistant } from './resume-distant.ts';
 import { traduireLot } from './traduction-distante.ts';
 
 export const PAS_ENCORE_CLAUDE_AI = 'pilotage claude.ai : pas encore pris en charge';
+const PIECES_REFUSEES = 'pièces jointes non prises en charge à distance';
+const REGLAGE_REFUSE = 'réglage non pris en charge à distance';
+const APPAREIL_REFUSE = 'Ce compte exige un appareil de confiance pour piloter cette session';
+const JETON_EXPIRE = 'jeton expiré : reconnecte le compte';
 
 const TAILLE_PAGE = 100;
 const PAGES_HISTORIQUE = 4; // ~400 derniers événements au premier chargement
@@ -22,25 +38,35 @@ export interface DependancesDistante {
   readonly configDir: string | null;
   readonly journal: Logger;
   readonly sortie: SortieSession;
+  /** Republie le résumé après un changement (dialogue, erreur, réglage). */
+  readonly publier: () => void;
 }
 
+type EchecEnvoi = Extract<ResultatApi<null>, { ok: false }>;
+
 export class SessionDistante implements SessionPoste {
+  // Le résumé publié se dérive de `base` (l'état de la liste, réglages compris) plus le dialogue et les erreurs.
+  private base: ResumeSession;
   resume: ResumeSession;
   readonly identifiants: readonly string[] = [];
   readonly transcriptConnu = false;
   private etat: EtatTraduction = nouvelEtatTraduction();
-  private vus = new Set<string>(); // identifiants des événements déjà émis : jamais deux fois le même
+  private readonly attente = new AttenteDistante();
+  private vus = new Set<string>(); // identifiants des événements déjà traités : jamais deux fois le même
   private derniereListe: string | null; // dernier événement vu dans la liste claude.ai (repère du suivi)
   private vuJusqua: string | null = null; // le même repère, au moment où le fil a été lu pour la dernière fois
   private chargee = false; // historique lu avec succès : sans lui, le premier passage recommence
+  private probleme: string | null = null; // erreur de la liste ou du fil (tour suivant : réessai)
+  private problemePilotage: string | null = null; // erreur du dernier envoi (levée par le prochain succès)
   private publie = ''; // dernier résumé publié, pour ne publier que les changements
 
   constructor(
     private readonly d: DependancesDistante,
     brute: SessionBrute,
   ) {
-    this.resume = resumeDistant(brute, d.contexte, new Date().toISOString());
     this.derniereListe = brute.dernierEvenement;
+    this.base = resumeDistant(brute, d.contexte, new Date().toISOString());
+    this.resume = this.avecEtat(this.base);
   }
 
   get persistee(): SessionPersistee {
@@ -54,15 +80,12 @@ export class SessionDistante implements SessionPoste {
 
   /** Met le résumé et le fil à jour depuis la liste : historique au premier passage, suite ensuite. Rend l'erreur. */
   async synchroniser(brute: SessionBrute): Promise<string | null> {
-    this.resume = resumeDistant(brute, this.d.contexte, this.resume.creeLe);
     this.derniereListe = brute.dernierEvenement;
+    this.base = resumeDistant(brute, this.d.contexte, this.base.creeLe);
+    this.maj();
     if (!this.chargee) return this.erreurDe(await this.charger());
     if (this.derniereListe === this.vuJusqua) return null;
     return this.erreurDe(await this.suivre());
-  }
-
-  private erreurDe(r: ResultatApi<number>): string | null {
-    return r.ok ? null : r.probleme;
   }
 
   /** Le résumé s'il a changé depuis la dernière publication, sinon null. */
@@ -74,18 +97,19 @@ export class SessionDistante implements SessionPoste {
   }
 
   marquerProbleme(probleme: string | null): void {
-    const distant = this.resume.distant ?? null;
-    if (distant) this.resume = { ...this.resume, distant: { ...distant, probleme } };
+    this.probleme = probleme;
+    this.maj();
   }
 
   /** La session n'est plus dans la liste active de claude.ai : elle est rangée ou la connexion est tombée. */
   passerFermee(): void {
-    const distant = this.resume.distant ?? null;
-    this.resume = {
-      ...this.resume,
+    const distant = this.base.distant ?? null;
+    this.base = {
+      ...this.base,
       statut: 'fermee',
       distant: distant ? { ...distant, connexion: 'deconnectee' } : null,
     };
+    this.maj();
   }
 
   /** Historique : relit les derniers événements (le fil repart de zéro), les émet en lot dans l'ordre d'origine. */
@@ -94,7 +118,9 @@ export class SessionDistante implements SessionPoste {
     this.vus = new Set();
     const r = await this.lirePages(PAGES_HISTORIQUE, () => false);
     if (!r.ok) return r;
-    const evenements = traduireLot([...r.donnees].reverse(), this.etat);
+    const chronologique = [...r.donnees].reverse();
+    const evenements = traduireLot(chronologique, this.etat);
+    this.traiterControle(chronologique, false);
     for (const e of r.donnees) this.vus.add(e.id);
     this.vuJusqua = this.derniereListe;
     this.chargee = true;
@@ -109,8 +135,56 @@ export class SessionDistante implements SessionPoste {
     const nouveaux = [...r.donnees].reverse();
     for (const e of nouveaux) this.vus.add(e.id);
     this.vuJusqua = this.derniereListe;
+    const questions = this.traiterControle(nouveaux, true);
     for (const h of traduireLot(nouveaux, this.etat)) this.d.sortie.evenement(this.resume.id, h.evt);
+    for (const evt of questions) this.d.sortie.evenement(this.resume.id, evt);
     return { ok: true, donnees: nouveaux.length };
+  }
+
+  // Les demandes de Claude (permission, question, plan) entrent dans la file ; les messages qui les closent en sortent.
+  // En direct, une nouvelle demande est annoncée dans le fil (événement `question`), comme au terminal.
+  private traiterControle(brutes: readonly EvenementBrut[], direct: boolean): Evenement[] {
+    const annonces: Evenement[] = [];
+    let change = false;
+    for (const b of brutes) {
+      const demande = demandeEntrante(b.payload);
+      if (demande) {
+        const nouvelle = this.attente.ajouter(demande);
+        change = change || nouvelle !== null;
+        if (nouvelle && direct) annonces.push({ type: 'question', question: titreDe(nouvelle) });
+        continue;
+      }
+      const close = demandeCloseePar(b.payload);
+      change = (close !== null && this.attente.fermer(close)) || change;
+    }
+    if (change) this.maj();
+    return annonces;
+  }
+
+  private erreurDe(r: ResultatApi<number>): string | null {
+    this.probleme = r.ok ? null : r.probleme;
+    return this.probleme;
+  }
+
+  /** Le résumé tel que Quart le publie : dialogue et erreurs de pilotage par-dessus l'état de la liste. */
+  private avecEtat(base: ResumeSession): ResumeSession {
+    const dialogue = base.statut === 'fermee' ? null : this.attente.dialogue();
+    const distant = base.distant ?? null;
+    return {
+      ...base,
+      statut: dialogue ? 'question' : base.statut,
+      dialogue,
+      distant: distant ? { ...distant, probleme: this.problemePilotage ?? this.probleme } : null,
+    };
+  }
+
+  private maj(): void {
+    this.resume = this.avecEtat(this.base);
+  }
+
+  private publier(): void {
+    this.maj();
+    this.d.publier();
   }
 
   /** Les événements lus page par page, du plus récent au plus ancien ; s'arrête avant le premier déjà connu. */
@@ -133,14 +207,78 @@ export class SessionDistante implements SessionPoste {
     return { ok: true, donnees: lus };
   }
 
-  // Commandes : le pilotage n'est pas encore pris en charge pour une session claude.ai.
+  // Pilotage : chaque envoi est un événement POSTé à la session ; la réponse de claude.ai dit si elle est acceptée.
+  async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
+    if (pieces.length > 0) return PIECES_REFUSEES;
+    return this.poster(messageUtilisateur(this.resume.id, texte, randomUUID()));
+  }
+
+  async interrompre(): Promise<string | null> {
+    return this.controle({ subtype: 'interrupt' });
+  }
+
+  async reglerSession(r: Reglage): Promise<string | null> {
+    const requete = requeteReglage(r);
+    if (!requete) return REGLAGE_REFUSE;
+    return this.controle(requete, champsReglage(r));
+  }
+
+  async repondre(r: ReponseDialogue): Promise<string | null> {
+    const res = this.attente.repondre(r);
+    if (typeof res === 'string') return res;
+    if (res.resultat === null) return this.progres(res);
+    const erreur = await this.poster(reponseControle(randomUUID(), res.demande.requestId, res.resultat));
+    if (erreur) return erreur;
+    this.attente.fermer(res.demande.requestId);
+    this.annoncerResolu(res);
+    this.publier();
+    return null;
+  }
+
+  // Une question répondue parmi d'autres : rien n'est envoyé, la suivante s'affiche.
+  private progres(res: Resolution): null {
+    this.annoncerResolu(res);
+    this.publier();
+    return null;
+  }
+
+  private annoncerResolu(res: Resolution): void {
+    const base = { type: 'dialogue_resolu' as const, dialogue: res.dialogue };
+    const evt: Evenement = res.decision ? { ...base, decision: res.decision } : { ...base, reponses: [...res.valeurs] };
+    this.d.sortie.evenement(this.resume.id, evt);
+  }
+
+  private controle(requete: Record<string, unknown>, miseAJour?: Partial<ResumeSession>): Promise<string | null> {
+    return this.poster(requeteControle(randomUUID(), requete), miseAJour);
+  }
+
+  private async poster(evt: Record<string, unknown>, miseAJour?: Partial<ResumeSession>): Promise<string | null> {
+    const r = await envoyerEvenement(this.d.configDir, this.resume.id, evt, this.d.journal);
+    if (!r.ok) {
+      const erreur = this.erreurDePilotage(r);
+      this.publier();
+      return erreur;
+    }
+    this.problemePilotage = null;
+    if (miseAJour) this.base = { ...this.base, ...miseAJour };
+    this.publier();
+    return null;
+  }
+
+  private erreurDePilotage(r: EchecEnvoi): string {
+    if (r.refusAppareil) {
+      this.problemePilotage = 'appareil_de_confiance';
+      return APPAREIL_REFUSE;
+    }
+    if (r.statut === 401) {
+      this.problemePilotage = 'jeton_expire';
+      return JETON_EXPIRE;
+    }
+    return r.statut > 0 ? `${r.probleme} (HTTP ${r.statut})` : r.probleme;
+  }
+
+  // Commandes qui restent hors de portée depuis claude.ai : pas encore pris en charge.
   lancer(): Promise<string | null> {
-    return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
-  }
-  envoyer(): Promise<string | null> {
-    return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
-  }
-  interrompre(): Promise<string | null> {
     return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
   }
   compacter(): Promise<string | null> {
@@ -153,12 +291,6 @@ export class SessionDistante implements SessionPoste {
     return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
   }
   basculerNuit(): Promise<string | null> {
-    return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
-  }
-  repondre(): Promise<string | null> {
-    return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
-  }
-  reglerSession(): Promise<string | null> {
     return Promise.resolve(PAS_ENCORE_CLAUDE_AI);
   }
   /** Sans effet : l'autonomie d'une session claude.ai ne se règle pas encore depuis le poste. */

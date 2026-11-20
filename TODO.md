@@ -42,7 +42,10 @@
 
 ## Ensuite
 
-- [ ] Multi-compte, marche 3 : pilotage d'une session claude.ai (envoyer, interrompre, répondre, modèle) via `POST …/events` ; l'appareil de confiance (403) est à traiter côté Lanterne (carte « Ouvrir claude.ai »).
+- [ ] Multi-compte, essai d'écriture réel sur une session jetable (Chris) : envoyer, interrompre, permission, question, réglage.
+- [ ] Multi-compte : `poste/session/gestionnaire.ts` à découper sous 500 lignes (601 à HEAD, hors de mon périmètre ; proposer un découpage).
+- [ ] Multi-compte : l'historique claude.ai relit 400 événements bruts, la plupart non traduits : viser un nombre d'événements traduits.
+- [ ] Multi-compte : l'appareil de confiance (403) est à afficher côté Lanterne (carte « Ouvrir claude.ai »), et le type d'événement `relais` à rendre dans le fil.
 - [ ] Sessions Remote Control : paginer la liste claude.ai au-delà de 50 (`poste/distant/client-claude-ai.ts`, `next_cursor`).
 - [ ] Sessions Remote Control : problème au niveau du compte (EtatCompte) et non seulement des sessions ; `hq/src/donnees/contrat.ts` à aligner sur `claude_ai`.
 - [ ] Relever la consommation réelle d'une vraie session autonome longue (contexte avant/après chaque compaction,

@@ -54,7 +54,7 @@ export interface ResumeSession {
   readonly etapes: number;
   readonly compactions: number;
   readonly claudeSessionId: string | null;
-  readonly moteur?: 'sdk' | 'tmux';
+  readonly moteur?: 'sdk' | 'tmux' | 'claude_ai';
   readonly tmux: string | null;
   readonly attachee: boolean;
   readonly pilotee: boolean;

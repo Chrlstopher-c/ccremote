@@ -3,15 +3,18 @@ import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import {
+  AutreSession,
   BacASable,
   EffortSession,
   ModeSession,
   Projet,
   ReponseDialogue,
   type ResumeSession,
+  SensRelais,
 } from '../../commun/session.ts';
 import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../commun/presentation.ts';
 import { reponseFichier } from './fichiers-session.ts';
+import { TAILLE_MAX_TEXTE_SESSION } from '../../commun/fichiers-session.ts';
 import type { Registre } from '../registre/registre.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
@@ -34,7 +37,15 @@ const CorpsOuverture = z.object({
   controle_distant: z.boolean().optional(),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
 });
-const CorpsMessage = z.object({ texte: z.string().min(1), pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional() });
+const CorpsMessage = z.object({
+  texte: z.string().min(1),
+  pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
+});
+const CorpsRelais = z.object({
+  sens: SensRelais,
+  autre: AutreSession,
+  texte: z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION),
+});
 const CorpsAutonomie = z.object({ active: z.boolean() });
 const CorpsNuit = z.object({ active: z.boolean(), objectif: z.string().max(300).optional() });
 const CorpsRemoteControl = z.object({ actif: z.boolean() });
@@ -127,7 +138,11 @@ export class ApiSessions {
   async envoyer(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsMessage);
     if (c instanceof Response) return c;
-    return this.commander(req.params.id, { kind: 'envoyer', texte: c.texte, ...(c.pieces ? { pieces: c.pieces } : {}) });
+    return this.commander(req.params.id, {
+      kind: 'envoyer',
+      texte: c.texte,
+      ...(c.pieces ? { pieces: c.pieces } : {}),
+    });
   }
 
   // Rembobinage : le poste ferme la session et retient le point de reprise ; le fil du relais est retiré à partir du
@@ -139,7 +154,11 @@ export class ApiSessions {
     if (session instanceof Response) return session;
     const rang = this.registre.rangMessage(session.id, c.messageId);
     if (rang === null && !this.filVide(session.id)) return erreur('message introuvable dans le fil', 404);
-    const r = await this.postes.commander(session.machine, { kind: 'rembobiner', sessionId: session.id, messageId: c.messageId });
+    const r = await this.postes.commander(session.machine, {
+      kind: 'rembobiner',
+      sessionId: session.id,
+      messageId: c.messageId,
+    });
     if (!r.ok) {
       this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'rembobinage refusé');
       return erreur(r.erreur ?? 'rembobinage refusé', REFUS_POSTE);
@@ -160,7 +179,11 @@ export class ApiSessions {
     if (this.registre.rangEntree(session.id, c.messageId) === null && !this.filVide(session.id)) {
       return erreur('message introuvable dans le fil', 404);
     }
-    const r = await this.postes.commander(session.machine, { kind: 'dupliquer', sessionId: session.id, messageId: c.messageId });
+    const r = await this.postes.commander(session.machine, {
+      kind: 'dupliquer',
+      sessionId: session.id,
+      messageId: c.messageId,
+    });
     if (!r.ok) {
       this.journal.warn({ sessionId: session.id, erreur: r.erreur }, 'duplication refusée');
       return erreur(r.erreur ?? 'duplication refusée', REFUS_POSTE);
@@ -189,7 +212,8 @@ export class ApiSessions {
     if (c instanceof Response) return c;
     const session = await this.sessionDe(req.params.id);
     if (session instanceof Response) return session;
-    if (this.registre.rangEntree(req.params.id, c.messageId) === null) return erreur('message introuvable dans le fil', 404);
+    if (this.registre.rangEntree(req.params.id, c.messageId) === null)
+      return erreur('message introuvable dans le fil', 404);
     const e = this.registre.ajouterEvenement(req.params.id, new Date().toISOString(), {
       type: 'chapitre',
       uuid: c.messageId,
@@ -256,6 +280,13 @@ export class ApiSessions {
     const c = await lireCorps(req, CorpsTitre);
     if (c instanceof Response) return c;
     return this.commander(req.params.id, { kind: 'renommer', titre: c.titre });
+  }
+
+  // Trace d'un message relayé entre deux sessions : le poste de la session la garde et la montre dans son fil.
+  async relais(req: RequeteSession): Promise<Response> {
+    const c = await lireCorps(req, CorpsRelais);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'tracer_relais', sens: c.sens, autre: c.autre, texte: c.texte });
   }
 
   async repondre(req: RequeteSession): Promise<Response> {
@@ -455,6 +486,7 @@ export class ApiSessions {
       | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
       | { kind: 'remote_control'; actif: boolean }
       | { kind: 'repondre'; reponse: ReponseDialogue }
+      | { kind: 'tracer_relais'; sens: SensRelais; autre: AutreSession; texte: string }
       | { kind: 'mode'; mode: ModeSession }
       | { kind: 'modele'; modele: string }
       | { kind: 'effort'; effort: EffortSession | null }

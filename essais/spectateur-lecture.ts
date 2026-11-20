@@ -17,7 +17,8 @@ const actives = liste.donnees.filter((s) => s.bridge && s.active);
 console.log(`sessions listées : ${liste.donnees.length} ; Remote Control actives : ${actives.length}`);
 for (const s of actives) {
   console.log(
-    `- ${s.titre ?? '(sans titre)'} | travail=${s.travail ?? '?'} | connexion=${s.connectee ? 'connectée' : 'déconnectée'}`,
+    `- ${s.titre ?? '(sans titre)'} | travail=${s.travail ?? '?'} | ` +
+      `connexion=${s.connectee ? 'connectée' : 'déconnectée'}`,
   );
 }
 

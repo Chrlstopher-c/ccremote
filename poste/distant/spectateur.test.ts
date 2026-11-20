@@ -10,6 +10,14 @@ import type { SortieSession } from '../session/session-poste.ts';
 import type { ConfigPoste } from '../config.ts';
 import { demarrerFauxApi, type FauxApi, sessionApi, tourApi } from './faux-claude-ai.ts';
 import { Spectateur } from './spectateur.ts';
+import { resumeDistant } from './resume-distant.ts';
+import { lireSession } from './donnees.ts';
+
+const bruteBrute = (id: string) => {
+  const s = lireSession(sessionApi(id));
+  if (!s) throw new Error('session de test invalide');
+  return s;
+};
 
 // Faux serveur claude.ai, faux compte (dossier temporaire), suivi accéléré : tout tourne en local.
 const JETON = 'jeton-factice-spectateur-ne-pas-utiliser';
@@ -44,8 +52,17 @@ function configDeTest(distants: string[]): ConfigPoste {
   };
 }
 
-function spectateurDe(distants: string[], locale: (id: string) => boolean = () => false): Spectateur {
-  const s = new Spectateur({ config: configDeTest(distants), journal, sortie, locale, periodeMs: PERIODE_MS });
+/** Les sessions déjà tenues par le gestionnaire du poste : leur Remote Control pointe vers claude.ai/code/<id>. */
+function spectateurDe(distants: string[], locales: string[] = []): Spectateur {
+  const contexte = { machine: 'tour', compte: 'local', fenetreContexte: 1_000_000 };
+  const tenues = locales.map((id) => resumeDistant(bruteBrute(id), contexte, '2026-11-20T09:00:00.000Z'));
+  const s = new Spectateur({
+    config: configDeTest(distants),
+    journal,
+    sortie,
+    locales: () => tenues,
+    periodeMs: PERIODE_MS,
+  });
   spectateurs.push(s);
   return s;
 }
@@ -100,7 +117,7 @@ describe('sessions Remote Control d’un compte suivi', () => {
 
   test('une session déjà ouverte sur ce poste n’est pas doublée', async () => {
     api.sessions = [sessionApi('cse_local'), sessionApi('cse_distant')];
-    const s = spectateurDe(['principal'], (id) => id === 'cse_local');
+    const s = spectateurDe(['principal'], ['cse_local']);
     s.demarrer();
     await attendre(() => s.lister().length > 0);
     expect(s.lister().map((r) => r.id)).toEqual(['cse_distant']);
@@ -135,7 +152,7 @@ describe('sessions Remote Control d’un compte suivi', () => {
   });
 
   test('l’historique traduit part en un lot, dans l’ordre, puis le suivi émet chaque nouveauté une fois', async () => {
-    api.fils.set('cse_f', [...tourApi(2, 'Deux'), ...tourApi(1, 'Un')]);
+    api.fils.set('cse_f', [...[...tourApi(1, 'Un'), ...tourApi(2, 'Deux')]].reverse());
     api.sessions = [sessionApi('cse_f')];
     const s = spectateurDe(['principal']);
     s.demarrer();
@@ -143,7 +160,7 @@ describe('sessions Remote Control d’un compte suivi', () => {
     const textesHistorique = historiques[0]?.flatMap((h) => (h.evt.type === 'texte' ? [h.evt.texte] : []));
     expect(textesHistorique).toEqual(['Un', 'Deux']);
 
-    api.fils.set('cse_f', [...tourApi(3, 'Trois'), ...tourApi(2, 'Deux'), ...tourApi(1, 'Un')]);
+    api.fils.set('cse_f', [...[...tourApi(1, 'Un'), ...tourApi(2, 'Deux'), ...tourApi(3, 'Trois')]].reverse());
     api.sessions = [sessionApi('cse_f', { last_event_at: '2026-11-20T10:03:00.000Z' })];
     await attendre(() => evenements.some((e) => e.type === 'texte'));
     await new Promise((r) => setTimeout(r, 80));

@@ -1,4 +1,5 @@
-// Faux serveur de l'API claude.ai pour les tests : sessions et fils paginés (plus récent d'abord), aucune requête réelle.
+// Faux serveur de l'API claude.ai pour les tests : sessions et fils paginés (plus récent d'abord), aucune requête
+// réelle.
 // Les données sont modifiables pendant le test ; `statutForce` fait répondre une erreur HTTP à tout appel.
 
 export interface FauxApi {
@@ -7,7 +8,9 @@ export interface FauxApi {
   readonly fils: Map<string, unknown[]>; // identifiant de session → événements, du plus récent au plus ancien
   readonly entetes: Headers[]; // en-têtes de chaque requête reçue
   readonly chemins: string[];
+  readonly posts: { chemin: string; corps: unknown }[]; // corps JSON de chaque POST d'événements
   statutForce: number | null;
+  reponsePost: { statut: number; corps: string } | null; // réponse imposée aux POST (sinon 200 avec results)
   arreter(): void;
 }
 
@@ -20,18 +23,25 @@ export function demarrerFauxApi(): FauxApi {
     fils: new Map<string, unknown[]>(),
     entetes: [],
     chemins: [],
+    posts: [],
     statutForce: null,
+    reponsePost: null,
     arreter: () => undefined,
   };
   const serveur = Bun.serve({
     port: 0,
     hostname: '127.0.0.1',
-    fetch(req) {
+    async fetch(req) {
       const u = new URL(req.url);
       api.entetes.push(req.headers);
       api.chemins.push(`${u.pathname}${u.search}`);
       if (api.statutForce !== null) return new Response(JSON_VIDE, { status: api.statutForce });
       if (!req.headers.get('authorization')?.startsWith('Bearer ')) return new Response(JSON_VIDE, { status: 401 });
+      if (req.method === 'POST' && u.pathname.endsWith('/events')) {
+        api.posts.push({ chemin: u.pathname, corps: await req.json() });
+        if (api.reponsePost) return new Response(api.reponsePost.corps, { status: api.reponsePost.statut });
+        return Response.json({ results: [{ sequence_num: '1' }] }, { status: 200 });
+      }
       if (u.pathname === '/v1/code/sessions') return Response.json({ data: api.sessions, next_cursor: null });
       const fil = /^\/v1\/code\/sessions\/([^/]+)\/events$/.exec(u.pathname);
       if (fil) return pageDuFil(api.fils.get(decodeURIComponent(fil[1] ?? '')) ?? [], u.searchParams);

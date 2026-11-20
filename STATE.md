@@ -13,6 +13,16 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 20/11 — Multi-compte, marche 3 côté Quart (agent Haiku, worktree `quart-mc`, branche `lanterne/multi-compte`)
+
+- Pilotage d'une session claude.ai : `POST /v1/code/sessions/{id}/events` (`{events:[evt]}`) pour message (`user`), interruption (`interrupt`), réglages (`set_model`, `set_permission_mode`, `rename_session` : noms du SDK, identiques aux modes Quart), réponses (`control_response`). Les demandes entrantes `can_use_tool` deviennent un dialogue (permission, AskUserQuestion, ExitPlanMode) ; une réponse close par ailleurs l'efface.
+- 403 dont le corps parle d'appareil → `distant.probleme = 'appareil_de_confiance'` et erreur explicite ; 401 → jeton expiré ; le succès suivant lève le problème. Le jeton est lu à chaque appel, le journal ne garde que statut et type.
+- Trace de relais : commande `tracer_relais`, route `POST /api/sessions/:id/relais`, événement de fil `relais`, fichier `<données>/relais/<session>.jsonl`, réinsertion par date dans l'historique (`poste/relais-sessions/trace.ts`).
+- Pièces jointes refusées à distance ; effort, style, compacter, fermer, autonomie restent refusés (« pas encore pris en charge »).
+- `gestionnaire.ts` : le branchement distant est réduit à des appels (le fichier reste au-dessus de 500 lignes, déjà 601 à HEAD : à découper, décision à prendre).
+- Tests : `bun test commun poste relais mcp integre` 846 verts (816 avant) ; `tsc --noEmit` vert. Aucun POST réel : l'essai d'écriture reste à faire par Chris sur une session jetable.
+- Limites : l'historique relit 400 événements bruts, dont la plupart sont des `system` non traduits (session longue : quelques dizaines d'événements visibles seulement) ; une demande de permission non répondue dans l'historique reste affichée ; le dialogue de question non lisible devient une demande de permission.
+
 ## 20/11 — Multi-compte, marches 1 et 2 côté Quart (agent Haiku, worktree `quart-mc`, branche `lanterne/multi-compte`)
 
 - Dossier des comptes isolable : `CCREMOTE_DOSSIER_COMPTES` (lu à l'appel, défaut `~/.claude-comptes`) ; le moteur intégré le pose sous `<données>/comptes`.

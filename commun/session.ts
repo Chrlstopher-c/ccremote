@@ -24,6 +24,16 @@ export type StatutSession = z.infer<typeof StatutSession>;
 // depuis l'app), `tmux` = vrai TUI dans `tmux -L claude` (sessions tapées au clavier, anciennes sessions).
 // `claude_ai` = session Remote Control d'un compte, lue sur claude.ai (lecture seule pour l'instant).
 export const Moteur = z.enum(['sdk', 'tmux', 'claude_ai']);
+
+// Trace d'un message relayé entre deux sessions : `sortant` = envoyé à l'autre session, `entrant` = reçu de lui.
+export const SensRelais = z.enum(['sortant', 'entrant']);
+export type SensRelais = z.infer<typeof SensRelais>;
+export const AutreSession = z.object({
+  session: z.string().min(1).max(120),
+  titre: z.string().max(200),
+  compte: z.string().max(60),
+});
+export type AutreSession = z.infer<typeof AutreSession>;
 export type Moteur = z.infer<typeof Moteur>;
 
 // Mode de permission d'une session SDK. `bypassPermissions` = défaut de Lanterne : aucune demande d'outil.
@@ -56,9 +66,7 @@ export const Dialogue = z.object({
   saisie: z.number().int().nullable(), // l'option « Type something » : réponse libre
   coches: z.array(z.number().int()), // cases déjà cochées
   // Demande de permission d'un outil (mode autre que bypass) : options Autoriser / Toujours / Refuser.
-  permission: z
-    .object({ outil: z.string(), entree: z.string(), suggestion: z.boolean() })
-    .optional(),
+  permission: z.object({ outil: z.string(), entree: z.string(), suggestion: z.boolean() }).optional(),
 });
 export type Dialogue = z.infer<typeof Dialogue>;
 
@@ -239,6 +247,8 @@ export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('fichiers_tour'), tour: z.string(), fichiers: z.array(FichierModifie) }),
   z.object({ type: z.literal('tour_annule'), tour: z.string() }),
   z.object({ type: z.literal('erreur'), message: z.string() }),
+  // Message relayé vers / depuis une autre session (`autre` : la session à l'autre bout). Gardé par le poste, daté.
+  z.object({ type: z.literal('relais'), sens: SensRelais, ...AutreSession.shape, texte: z.string() }),
 ]);
 export type Evenement = z.infer<typeof Evenement>;
 

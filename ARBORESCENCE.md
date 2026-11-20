@@ -313,6 +313,13 @@ poste/distant/session-distante.ts                       une session Remote Contr
 poste/distant/spectateur.test.ts                        tests de spectateur.ts : filtrage, dédoublonnage, 401, bascule
 poste/distant/spectateur.ts                             suit les comptes activés : liste toutes les 5 s, dédoublonne, marque les erreurs de compte
 poste/distant/traduction-distante.ts                    payloads claude.ai → événements du fil (pur, ordre conservé)
+poste/distant/attente-distante.ts                       demandes qui attendent Chris dans une session claude.ai (permission, question, plan) : file, décision à rendre (pur)
+poste/distant/controle-distant.ts                       événements de contrôle claude.ai : messages et réglages sortants, demandes entrantes (pur)
+poste/distant/pilotage-distant.test.ts                  tests du pilotage d’une session claude.ai : corps des POST, dialogues, erreurs
+poste/relais-sessions/trace.test.ts                     tests de trace.ts : persistance, ordre, réinsertion par date
+poste/relais-sessions/trace.ts                          trace des messages relayés entre sessions : persistée, datée, réinsérée dans l’historique
+poste/session/gestionnaire-distant.test.ts              tests du gestionnaire face à une session suivie : trace, garde des commandes, historique
+relais/clients/api-session-relais.test.ts               tests de la route POST /api/sessions/:id/relais
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
 poste/configuration/commande.test.ts                tests de l'aiguillage des commandes de configuration
 poste/configuration/commande.ts                     commandes de configuration reçues du relais, exécutées sur le poste (hors session)

@@ -47,7 +47,7 @@ import { titreDuTranscript } from './titre-transcript.ts';
 import { modeleDuTranscript } from './modele-transcript.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
-import { PAS_ENCORE_CLAUDE_AI } from '../distant/session-distante.ts';
+import { TraceRelais, avecTraceRelais } from '../relais-sessions/trace.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -85,6 +85,8 @@ export class GestionnaireSessions {
   private readonly usages: UsageComptes;
   // Sessions Remote Control des comptes suivis, lues sur claude.ai : jamais persistées, jamais dans `sessions`.
   private readonly distantes: Spectateur;
+  private readonly trace: TraceRelais;
+  private readonly sortieFil: SortieSession; // la sortie, dont l'historique repasse par la trace de relais
 
   constructor(
     readonly config: ConfigPoste,
@@ -103,11 +105,13 @@ export class GestionnaireSessions {
       surChangement: () => this.sortie.decouvertes?.(this.listeDecouvertes()),
     });
     this.usages = new UsageComptes(() => this.sessions.values(), journal);
+    this.trace = new TraceRelais(config.donnees, journal);
+    this.sortieFil = avecTraceRelais(sortie, this.trace);
     this.distantes = new Spectateur({
       config,
       journal,
-      sortie,
-      locale: (id) => this.estLocale(id),
+      sortie: this.sortieFil,
+      locales: () => [...this.sessions.values()].map((s) => s.resume),
     });
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
@@ -137,9 +141,15 @@ export class GestionnaireSessions {
     return this.distantes.basculer(nom, actif);
   }
 
-  // Remote Control déjà ouvert sur ce poste : le spectateur ne double pas la session.
-  private estLocale(idDistant: string): boolean {
-    return [...this.sessions.values()].some((s) => s.resume.remoteControl?.url?.includes(idDistant) === true);
+  // Message relayé entre deux sessions : tracé sur le poste (daté), puis émis en direct dans le fil de la session.
+  private tracer(c: Extract<CommandeSession, { kind: 'tracer_relais' }>): Reponse {
+    if (!this.sessions.has(c.sessionId) && !this.distantes.session(c.sessionId)) {
+      return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    }
+    const evt = this.trace.tracer(c.sessionId, c);
+    if (!evt) return { ok: false, erreur: 'trace de relais impossible à écrire' };
+    this.sortie.evenement(c.sessionId, evt.evt);
+    return { ok: true };
   }
 
   session(id: string): SessionPoste | undefined {
@@ -243,6 +253,7 @@ export class GestionnaireSessions {
     await this.hydrater(c.sessionId);
     if (c.kind === 'adopter') return this.reponseAdoption(c.sessionId);
     if (c.kind === 'historique' && this.distantes.session(c.sessionId)) return this.distantes.rejouer(c.sessionId);
+    if (c.kind === 'tracer_relais') return this.tracer(c);
     if (c.kind === 'historique') return this.rejouerHistorique(c.sessionId);
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
@@ -255,7 +266,8 @@ export class GestionnaireSessions {
     if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
     const s = this.sessions.get(c.sessionId) ?? this.distantes.session(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
-    if (this.distantes.session(c.sessionId) && !estLecture(c)) return { ok: false, erreur: PAS_ENCORE_CLAUDE_AI };
+    const refus = this.distantes.refusPour(c.sessionId, c);
+    if (refus) return { ok: false, erreur: refus };
     if (enBascule(c.sessionId)) return { ok: false, erreur: 'bascule Remote Control en cours : réessayer' };
     if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
     let erreur: string | null = null;
@@ -427,7 +439,7 @@ export class GestionnaireSessions {
   creer(p: SessionPersistee): SessionPoste {
     const sortie: SortieSession = {
       evenement: (id, evt) => this.sortie.evenement(id, evt),
-      historique: (id, evts) => this.sortie.historique?.(id, evts),
+      historique: (id, evts) => this.sortieFil.historique?.(id, evts),
       resume: (r) => {
         this.sortie.resume(r);
         this.planifierSauvegarde();

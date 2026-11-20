@@ -46,7 +46,7 @@ function creer(brute: SessionBrute): {
 } {
   const { sortie, evenements, historiques } = sortieDeTest();
   const contexte = { machine: 'tour', compte: 'principal', fenetreContexte: 1_000_000 };
-  const s = new SessionDistante({ contexte, configDir: dossier, journal, sortie }, brute);
+  const s = new SessionDistante({ contexte, configDir: dossier, journal, sortie, publier: () => undefined }, brute);
   return { s, evenements, historiques };
 }
 
@@ -72,7 +72,10 @@ afterEach(() => {
 describe('historique d’une session claude.ai', () => {
   test('les événements sont émis en un lot, dans l’ordre d’origine, traduits du SDK', async () => {
     // Le fil est servi du plus récent au plus ancien, comme l'API.
-    api.fils.set('cse_h', [...tourApi(3, 'Troisième'), ...tourApi(2, 'Deuxième'), ...tourApi(1, 'Premier')]);
+    api.fils.set(
+      'cse_h',
+      [...[...tourApi(1, 'Premier'), ...tourApi(2, 'Deuxième'), ...tourApi(3, 'Troisième')]].reverse(),
+    );
     const { s, evenements, historiques } = creer(bruteDe('cse_h'));
     const r = await s.charger();
     expect(r.ok).toBe(true);
@@ -131,11 +134,10 @@ describe('suivi en direct d’une session claude.ai', () => {
     expect(textes(evenements)).toEqual(['Deuxième']);
   });
 
-  test('les commandes de pilotage ne sont pas prises en charge', async () => {
+  test('les outils de rythme et la compaction ne sont pas servis depuis claude.ai', async () => {
     const { s } = creer(bruteDe('cse_c'));
-    expect(await s.envoyer()).toBe(PAS_ENCORE_CLAUDE_AI);
-    expect(await s.interrompre()).toBe(PAS_ENCORE_CLAUDE_AI);
     expect(s.rythme()).toBe(PAS_ENCORE_CLAUDE_AI);
+    expect(await s.compacter()).toBe(PAS_ENCORE_CLAUDE_AI);
   });
 
   test('la publication ne repart que sur changement ; une session rangée passe fermée', () => {

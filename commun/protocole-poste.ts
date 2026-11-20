@@ -9,7 +9,9 @@ import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
 import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 import {
+  AutreSession,
   DemandeSession,
+  SensRelais,
   EffortSession,
   Evenement,
   ModeSession,
@@ -89,6 +91,14 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   // Lecture d'un fichier présenté (sortie d'outil, image du fil) stocké par la session sur le poste.
   z.object({ kind: z.literal('fichier_session'), ...avecSession, fichier: z.string() }),
   z.object({ kind: z.literal('interrompre'), ...avecSession }),
+  // Trace d'un message relayé entre deux sessions (sens sortant ou entrant), gardée sur le poste avec sa date.
+  z.object({
+    kind: z.literal('tracer_relais'),
+    ...avecSession,
+    sens: SensRelais,
+    autre: AutreSession,
+    texte: z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION),
+  }),
   // Rembobiner à un message de Chris (la suite est retirée de la reprise) ; dupliquer : nouvelle session jusqu'à ce message.
   z.object({ kind: z.literal('rembobiner'), ...avecSession, messageId: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('dupliquer'), ...avecSession, messageId: z.string().min(1).max(200) }),
