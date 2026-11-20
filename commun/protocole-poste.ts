@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { commandesConfiguration } from './configuration.ts';
 import { commandesEntretien, EchangePoste, ReseauPoste, VersionsClaude } from './entretien.ts';
+import { commandesReste } from './reste.ts';
 import { Decouverte } from './decouverte.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
@@ -214,6 +215,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   ...commandesAppareil,
   ...commandesConfiguration,
   ...commandesEntretien,
+  ...commandesReste,
 ]);
 export type CommandeRelais = z.infer<typeof CommandeRelais>;
 

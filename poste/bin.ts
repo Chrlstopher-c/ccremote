@@ -25,6 +25,9 @@ import { lanceurClaude } from './configuration/exec.ts';
 import { dossierChantiers } from './entretien/chantiers.ts';
 import { type ContexteEntretien, estEntretien, executerEntretien } from './entretien/commandes.ts';
 import { versionsClaudeCode } from './entretien/claude-code.ts';
+import { estReste, executerReste, type ContexteReste } from './reste/executer.ts';
+import { fichierClaudeJson } from './reste/memoire.ts';
+import { dossiersProjets } from './session/decouverte.ts';
 import { SOCKET } from './session/tmux.ts';
 
 const PERIODE_ETAT_MS = 15_000;
@@ -141,9 +144,18 @@ const contexteEntretien: ContexteEntretien = {
   journal,
 };
 
+// La vague « reste » : recherche dans les transcripts, mémoire Hippocampe, commandes Claude (lecture, sauf une création).
+const contexteReste: ContexteReste = {
+  racines: () => dossiersProjets([null, ...Object.values(config.comptes)]),
+  dossierConfig: dossierClaudeDefaut(),
+  fichierClaudeJson: fichierClaudeJson(),
+  journal,
+};
+
 async function executer(c: CommandeRelais): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
   if (estEntretien(c)) return executerEntretien(c, contexteEntretien);
+  if (estReste(c)) return executerReste(c, contexteReste);
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
   if (c.kind === 'importables') return sessions.importables();

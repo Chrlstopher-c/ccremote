@@ -20,6 +20,8 @@ import { routesEcho } from '../echo/api-echo.ts';
 import type { ApiMachines } from '../machines/api-machines.ts';
 import type { ApiEntretien } from '../entretien/api-entretien.ts';
 import { routesEntretien } from '../entretien/routes.ts';
+import type { ApiReste } from '../reste/api-reste.ts';
+import { routesReste } from '../reste/routes.ts';
 import type { ApiConfirmations } from '../machines/api-confirmations.ts';
 import { type DependancesReunions, routesReunions } from '../reunion/api-reunions.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
@@ -41,6 +43,7 @@ export interface DependancesApi {
   readonly reunions: DependancesReunions;
   readonly machines: ApiMachines;
   readonly entretien: ApiEntretien;
+  readonly reste: ApiReste;
   readonly confirmations: ApiConfirmations;
 }
 
@@ -196,6 +199,7 @@ export function construireRoutes(d: DependancesApi) {
     ...routesFichiers(d.fichiers, protege),
     ...routesEcho(d.echo, protege),
     ...routesEntretien(d.entretien, protege),
+    ...routesReste(d.reste, protege),
     ...routesReunions(d.reunions, protege),
   };
 }

@@ -37,6 +37,7 @@ import { chargerSecretsPostes, dossierSecretsPostes } from './machines/secrets.t
 import { Ssh } from './machines/ssh.ts';
 import { Tunnels } from './machines/tunnels.ts';
 import { ApiEntretien } from './entretien/api-entretien.ts';
+import { ApiReste } from './reste/api-reste.ts';
 import { ReseauxConnus } from './entretien/reseaux.ts';
 import { Reveil } from './entretien/reveil.ts';
 import { ouvrirBase } from './registre/base.ts';
@@ -139,6 +140,7 @@ const entretien = new ApiEntretien({
   relais: { version: VERSION, commit: COMMIT },
   journal: journal.child({ domaine: 'entretien' }),
 });
+const reste = new ApiReste({ registre, postes, journal: journal.child({ domaine: 'reste' }) });
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
@@ -181,6 +183,7 @@ const routes = avecCors(
     reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
     machines,
     entretien,
+    reste,
     confirmations,
   }),
   config.origines,

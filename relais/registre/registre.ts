@@ -8,6 +8,8 @@ import { type Categorie, ListeCategories, normaliserCategories } from '../../com
 import { type GroupeMasque, ListeGroupesMasques, normaliserGroupesMasques } from '../../commun/groupes-masques.ts';
 import { Evenement, ResumeSession } from '../../commun/session.ts';
 import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
+import type { JetonsSession, RencontreMessage } from '../../commun/reste.ts';
+import { jetonsSessionBase, rechercherMessagesBase } from './recherche.ts';
 
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
 export type { EvenementDate, Notification };
@@ -321,6 +323,21 @@ export class Registre {
       trouvees.push({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt });
     }
     return { total: trouvees.length, resultats: trouvees.slice(-limite) };
+  }
+
+  // Recherche globale : les messages (Chris et Claude) de toutes les sessions qui contiennent `requete`, les plus
+  // récents d'abord, au plus `parSession` par session. Fiche de session (machine, titre, dossier) lue à chaque résultat.
+  rechercherMessages(requete: string, maximum: number, parSession: number): RencontreMessage[] {
+    const fiche = (id: string) => {
+      const f = this.session(id);
+      return f ? { machine: f.machine, titre: f.titre, cwd: f.cwd } : null;
+    };
+    return rechercherMessagesBase(this.db, fiche, requete, maximum, parSession, this.journal);
+  }
+
+  // Jetons d'une session (tours terminés) : somme des entrées et sorties relevées par le relais.
+  jetonsSession(sessionId: string): JetonsSession {
+    return jetonsSessionBase(this.db, sessionId);
   }
 
   // Messages épinglés comme chapitres : dernier état de chaque chapitre (un retrait l'annule).
