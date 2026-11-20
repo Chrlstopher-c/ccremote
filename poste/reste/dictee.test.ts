@@ -119,3 +119,45 @@ describe('transcription', () => {
     expect(r.etat).toBe('erreur');
   });
 });
+
+// Démon qui compte l'audio reçu, répond `final` seulement à `fermer` : un audio tronqué ne le fait jamais répondre.
+function demonQuiCompte(chemin: string, bilan: { octetsAvantFermer: number | null }): ReturnType<typeof Bun.listen> {
+  let reste = Buffer.alloc(0);
+  let octets = 0;
+  return Bun.listen({
+    unix: chemin,
+    socket: {
+      data(socket, donnees) {
+        reste = Buffer.concat([reste, Buffer.from(donnees)]);
+        for (let fin = reste.indexOf(0x0a); fin >= 0; fin = reste.indexOf(0x0a)) {
+          const m = JSON.parse(reste.subarray(0, fin).toString('utf8')) as Message;
+          reste = reste.subarray(fin + 1);
+          if (m['op'] === 'audio') octets += Buffer.from(String(m['pcm16']), 'base64').length;
+          if (m['op'] === 'ping') socket.write(`${JSON.stringify(reponseDe(m, 'normal'))}\n`);
+          if (m['op'] !== 'fermer') continue;
+          bilan.octetsAvantFermer = octets;
+          socket.write(`${JSON.stringify(reponseDe(m, 'normal'))}\n`);
+        }
+      },
+      open() {},
+      close() {},
+      error() {},
+    },
+  });
+}
+
+describe('envoi d’un audio long', () => {
+  test('400 Ko d’audio : tous les morceaux partent avant fermer, puis final', async () => {
+    const chemin = join(dossier, 'long.sock');
+    const bilan: { octetsAvantFermer: number | null } = { octetsAvantFermer: null };
+    const demon = demonQuiCompte(chemin, bilan);
+    try {
+      const audio = Buffer.alloc(400_000, 7).toString('base64');
+      const r = await transcrire(chemin, audio, 'fr', journal);
+      expect(r.etat).toBe('ok');
+      expect(bilan.octetsAvantFermer).toBe(400_000);
+    } finally {
+      demon.stop(true);
+    }
+  }, 40_000);
+});

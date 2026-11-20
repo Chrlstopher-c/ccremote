@@ -94,7 +94,16 @@ function dialoguer<T>(
   return new Promise<T>((resoudre, rejeter) => {
     let fini = false;
     let reste = Buffer.alloc(0);
-    let connexion: { end(): void; write(donnees: string): number } | null = null;
+    // Octets pas encore acceptés par le noyau : `write` rend le nombre écrit, la suite part au `drain`.
+    let envoi = Buffer.from(lignes.map((l) => `${l}\n`).join(''));
+    let connexion: { end(): void; write(donnees: Uint8Array): number } | null = null;
+    const pousser = (s: { write(donnees: Uint8Array): number }): void => {
+      while (!fini && envoi.length > 0) {
+        const ecrits = s.write(envoi);
+        if (ecrits <= 0) return;
+        envoi = envoi.subarray(ecrits);
+      }
+    };
     const termine = (suite: () => void): void => {
       if (fini) return;
       fini = true;
@@ -124,8 +133,9 @@ function dialoguer<T>(
             s.end();
             return;
           }
-          s.write(lignes.map((l) => `${l}\n`).join(''));
+          pousser(s);
         },
+        drain: (s) => pousser(s),
         data: (_s, octets) => {
           reste = Buffer.concat([reste, Buffer.from(octets)]);
           for (let fin = reste.indexOf(0x0a); fin >= 0 && !fini; fin = reste.indexOf(0x0a)) {
