@@ -13,6 +13,12 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 20/11 — Catégories de la barre latérale (agent Haiku, branche `lanterne/categories`)
+- `GET|PUT /api/categories` (`{ categories: [{ id, nom, replie, sessions }] }`) : PUT remplace tout, rend la liste normalisée
+  (une session = une catégorie, première occurrence gagne) ; doublon d'`id` ou format invalide → 400. Pas de diffusion WebSocket.
+- Table `categories` (migration n°11, un seul document JSON, ligne `id = 1`) ; contrat zod dans `commun/categories.ts`.
+- Tests : `bun test commun poste relais mcp integre` vert (727), `tsc --noEmit` propre.
+
 ## 19/11 — Sessions découvertes sur les postes (agent Haiku, branche `lanterne/historique`)
 - Chaque poste liste les transcripts `<config>/projects/*/*.jsonl` (index incrémental mtime+taille, cache dans les données
   du poste, surveillance des dossiers) ; le relais les expose dans `/api/etat` (`decouvertes`, hors fiches connues) ;

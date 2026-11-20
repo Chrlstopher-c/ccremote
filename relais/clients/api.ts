@@ -12,6 +12,7 @@ import type { ApiSessions } from './api-sessions.ts';
 import type { ApiSessionConfig } from './api-session-config.ts';
 import type { ApiConfiguration } from './api-configuration.ts';
 import type { ApiComptes } from './api-comptes.ts';
+import { lireCategories, remplacerCategories } from './api-categories.ts';
 import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
 import type { LienEcho } from '../echo/lien-echo.ts';
@@ -104,6 +105,10 @@ export function construireRoutes(d: DependancesApi) {
     '/api/environnements': {
       GET: protege(() => d.sessions.environnements()),
       POST: protege((req) => d.sessions.enregistrerEnvironnement(req)),
+    },
+    '/api/categories': {
+      GET: protege(() => lireCategories(d.registre)),
+      PUT: protege((req) => remplacerCategories(d.registre, req)),
     },
     '/api/machines/config': {
       GET: protege(() => d.machines.liste()),

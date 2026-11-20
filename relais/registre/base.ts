@@ -40,6 +40,8 @@ export const MIGRATIONS: readonly string[] = [
   `ALTER TABLE sessions ADD COLUMN non_lue INTEGER NOT NULL DEFAULT 0;`,
   // Port d'écoute du tunnel inverse sur la machine distante (défaut de l'instance banc : voir le relais).
   `ALTER TABLE machines_ssh ADD COLUMN port_distant INTEGER NOT NULL DEFAULT 47321;`,
+  // Catégories de la barre latérale : un seul document (JSON), remplacé d'un bloc.
+  `CREATE TABLE categories (id INTEGER PRIMARY KEY CHECK (id = 1), document TEXT NOT NULL, maj_le TEXT NOT NULL);`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 

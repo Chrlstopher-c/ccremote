@@ -4,6 +4,7 @@ import type { Database } from 'bun:sqlite';
 import type { EvenementDate, GenreAcces, Notification, VueMachine } from '../../commun/api-clients.ts';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
 import { EtatCompte } from '../../commun/comptes.ts';
+import { type Categorie, ListeCategories, normaliserCategories } from '../../commun/categories.ts';
 import { Evenement, ResumeSession } from '../../commun/session.ts';
 import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 
@@ -143,6 +144,39 @@ export class Registre {
       machine: string;
       dossier: string;
     }[];
+  }
+
+  // Catégories de la barre latérale : un seul document, remplacé d'un bloc. Illisible → liste vide, journalisée.
+  categories(): Categorie[] {
+    const l = this.db.query('SELECT document FROM categories WHERE id = 1').get() as { document: string } | null;
+    return l ? this.lireCategories(l.document) : [];
+  }
+
+  enregistrerCategories(liste: readonly Categorie[]): Categorie[] {
+    const normalisees = normaliserCategories(liste);
+    try {
+      this.db
+        .query(
+          `INSERT INTO categories (id, document, maj_le) VALUES (1, $d, $m)
+        ON CONFLICT(id) DO UPDATE SET document = $d, maj_le = $m`,
+        )
+        .run({ d: JSON.stringify(normalisees), m: new Date().toISOString() });
+    } catch (e) {
+      this.journal?.error({ erreur: String(e) }, 'catégories : écriture impossible');
+      throw e;
+    }
+    return normalisees;
+  }
+
+  private lireCategories(brut: string): Categorie[] {
+    try {
+      const r = ListeCategories.safeParse(JSON.parse(brut));
+      if (r.success) return r.data;
+      this.journal?.warn({ erreur: r.error.message.slice(0, 300) }, 'catégories illisibles, ignorées');
+    } catch (e) {
+      this.journal?.warn({ erreur: String(e) }, 'catégories illisibles, ignorées');
+    }
+    return [];
   }
 
   // La vue rendue aux clients : la fiche du poste, le drapeau d'archivage (colonne, jamais écrasé par le poste) et

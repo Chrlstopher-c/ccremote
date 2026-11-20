@@ -121,6 +121,7 @@ bureau/tsconfig.json                                 TypeScript de l'app
 bureau/vite.config.ts                                Vite + React + Tailwind
 commun/api-clients.ts                                le contrat de l'API des clients (app de bureau, iPhone, web) — ce que…
 commun/appareil.ts                                   le vocabulaire de l'accès à un appareil du parc — fichiers et terminaux
+commun/categories.ts                                 le vocabulaire des catégories de la barre latérale — forme validée et normalisation (une session = une catégorie)
 commun/comptes.ts                                    le vocabulaire des comptes Claude Code d'une machine — identité, usag…
 commun/configuration.ts                             contrat de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
 commun/echo.ts                                       ce que Quart relaie d'Echo — copie des seuls champs affichés
@@ -389,6 +390,8 @@ relais/appareils/api-fichiers.ts                     fichiers d'un appareil par 
 relais/appareils/route-terminal.ts                   ouverture d'un terminal à distance — authentifier, valider, WebSocket
 relais/appareils/terminaux.ts                        terminaux à distance côté relais — WebSocket client relié à un PTY de poste
 relais/bin.ts                                        point d'entrée du relais — deux serveurs : clients (web, iPhone) et p…
+relais/clients/api-categories.test.ts                tests des routes des catégories (GET, PUT, refus, doublons)
+relais/clients/api-categories.ts                     les routes des catégories de la barre latérale — lire le document, le remplacer
 relais/clients/api-comptes.ts                        les routes des comptes Claude Code d'une machine — connexion OAuth en…
 relais/clients/api-configuration.test.ts            tests des routes de configuration de machine
 relais/clients/api-configuration.ts                 routes de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
@@ -429,6 +432,7 @@ relais/parc/reveil.test.ts                           tests de reveil.ts
 relais/parc/reveil.ts                                réveiller une machine éteinte par Wake-on-LAN (paquet magique en diff…
 relais/registre/archivage.test.ts                    tests de l'archivage : archiver ferme d'abord, désarchiver sans poste
 relais/registre/base.ts                              la base SQLite du relais et ses migrations (numérotées, jamais réécri…
+relais/registre/categories.test.ts                   tests des catégories persistées — normalisation, réouverture, document illisible
 relais/registre/lecture-panneau.test.ts              tests des routes de lecture du panneau (contexte, connecteurs, tâches)
 relais/registre/registre.ts                          lire et écrire l'état du relais — machines, sessions, fil d'événement…
 relais/registre/retention.test.ts                    tests de retention.ts
