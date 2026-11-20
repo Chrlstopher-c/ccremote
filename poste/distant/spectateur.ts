@@ -89,7 +89,6 @@ export class Spectateur {
   session n'est pas suivie. */
   refusPour(id: string, c: CommandeSession): string | null {
     if (!this.sessions.has(id) || estLecture(c)) return null;
-    if (c.kind === 'envoyer' && (c.pieces?.length ?? 0) > 0) return 'pièces jointes non prises en charge à distance';
     return COMMANDES_DISTANTES.has(c.kind) ? null : PAS_ENCORE_CLAUDE_AI;
   }
 

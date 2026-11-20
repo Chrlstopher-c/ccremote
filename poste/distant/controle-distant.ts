@@ -11,7 +11,11 @@ export interface DemandeEntrante {
   readonly suggestions: PermissionUpdate[];
 }
 
-export function messageUtilisateur(idSession: string, contenu: string, uuid: string): Record<string, unknown> {
+export function messageUtilisateur(
+  idSession: string,
+  contenu: string | readonly unknown[],
+  uuid: string,
+): Record<string, unknown> {
   return {
     uuid,
     session_id: idSession,
@@ -69,4 +73,17 @@ export function demandeCloseePar(payload: unknown): string | null {
   const type = texte(o['type']);
   if (type !== 'control_response' && type !== 'control_cancel_request') return null;
   return texte(o['request_id']) ?? texte(objet(o['response'])['request_id']);
+}
+
+/** Le contenu d'un message avec ses images jointes (blocs image en base64, puis le texte). */
+export function contenuAvecImages(
+  texteMessage: string,
+  images: readonly { mime: string; base64: string }[],
+): readonly unknown[] {
+  const blocs: unknown[] = images.map((i) => ({
+    type: 'image',
+    source: { type: 'base64', media_type: i.mime, data: i.base64 },
+  }));
+  if (texteMessage.trim() !== '') blocs.push({ type: 'text', text: texteMessage });
+  return blocs;
 }

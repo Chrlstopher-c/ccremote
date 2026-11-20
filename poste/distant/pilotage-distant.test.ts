@@ -123,11 +123,25 @@ describe('envoi de messages et d’interruption', () => {
     expect(typeof evt?.['uuid']).toBe('string');
   });
 
-  test('envoyer avec une pièce jointe : refus clair, aucun POST', async () => {
+  test('envoyer avec une image : blocs image puis texte dans le message', async () => {
     const s = creer();
-    const piece = { nom: 'a.png', mime: 'image/png', donnees: 'AAAA' };
-    const r = await s.envoyer('Voir', [piece] as never);
-    expect(r).toBe('pièces jointes non prises en charge à distance');
+    expect(await s.envoyer('Voir', [{ nom: 'a.png', mime: 'image/png', base64: 'AAAA' }])).toBeNull();
+    const [evt] = corpsPost().events;
+    expect(evt).toMatchObject({
+      type: 'user',
+      message: {
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+          { type: 'text', text: 'Voir' },
+        ],
+      },
+    });
+  });
+
+  test('envoyer avec une pièce qui n’est pas une image : refus clair, aucun POST', async () => {
+    const s = creer();
+    const r = await s.envoyer('Voir', [{ nom: 'a.pdf', mime: 'application/pdf', base64: 'AAAA' }]);
+    expect(r).toBe('à distance, seules les images peuvent être jointes');
     expect(api.posts).toHaveLength(0);
   });
 

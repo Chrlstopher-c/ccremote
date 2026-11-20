@@ -15,6 +15,7 @@ import { FluxDistant, type TrameSse } from './flux-distant.ts';
 import {
   demandeCloseePar,
   demandeEntrante,
+  contenuAvecImages,
   messageUtilisateur,
   reponseControle,
   requeteControle,
@@ -27,7 +28,7 @@ import { stockeurPieces } from './pieces-distantes.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 
 export const PAS_ENCORE_CLAUDE_AI = 'pilotage claude.ai : pas encore pris en charge';
-const PIECES_REFUSEES = 'pièces jointes non prises en charge à distance';
+const PIECES_REFUSEES = 'à distance, seules les images peuvent être jointes';
 const REGLAGE_REFUSE = 'réglage non pris en charge à distance';
 const APPAREIL_REFUSE = 'Ce compte exige un appareil de confiance pour piloter cette session';
 const JETON_EXPIRE = 'jeton expiré : reconnecte le compte';
@@ -354,8 +355,9 @@ export class SessionDistante implements SessionPoste {
 
   // Pilotage : chaque envoi est un événement POSTé à la session ; la réponse de claude.ai dit si elle est acceptée.
   async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
-    if (pieces.length > 0) return PIECES_REFUSEES;
-    return this.poster(messageUtilisateur(this.resume.id, texte, randomUUID()));
+    if (pieces.some((p) => !p.mime.startsWith('image/'))) return PIECES_REFUSEES;
+    const contenu = pieces.length > 0 ? contenuAvecImages(texte, pieces) : texte;
+    return this.poster(messageUtilisateur(this.resume.id, contenu, randomUUID()));
   }
 
   async interrompre(): Promise<string | null> {
