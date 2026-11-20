@@ -6,6 +6,7 @@ import { GENRES_RESTE_LOT2 } from '../../commun/reste-lot2.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
 import { lireResumesCompaction } from './compactions.ts';
 import { etatDictee, transcrire } from './dictee.ts';
+import { dossierDeTravail } from '../parite/depot.ts';
 import { creerFusion, etatFusion } from './fusion.ts';
 import type { ServiceTaches } from './taches-planifiees.ts';
 
@@ -32,7 +33,7 @@ export async function executerResteLot2(c: CommandeResteLot2, x: ContexteResteLo
     case 'pr_etat': {
       const s = x.session(c.sessionId);
       const donnees = s
-        ? await etatFusion(s.cwd, x.journal)
+        ? await etatFusion(await dossierDeTravail(s.cwd, s.transcript, x.journal), x.journal)
         : { etat: 'absente', raison: 'session inconnue sur ce poste' };
       return { ok: true, donnees };
     }
@@ -40,7 +41,7 @@ export async function executerResteLot2(c: CommandeResteLot2, x: ContexteResteLo
       const s = x.session(c.sessionId);
       const corps = { titre: c.titre, corps: c.corps, brouillon: c.brouillon };
       const donnees = s
-        ? await creerFusion(s.cwd, corps, x.journal)
+        ? await creerFusion(await dossierDeTravail(s.cwd, s.transcript, x.journal), corps, x.journal)
         : { etat: 'erreur', raison: 'session inconnue sur ce poste' };
       return { ok: true, donnees };
     }

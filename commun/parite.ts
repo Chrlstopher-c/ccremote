@@ -93,3 +93,32 @@ export const PARITE_VIDE: PariteSession = { transcript: false, contexte: null, r
 /** Contenu d'un résultat (seulement un chemin présent dans `resultats`). */
 export const ContenuResultat = z.object({ mime: z.string(), base64: z.string() });
 export type ContenuResultat = z.infer<typeof ContenuResultat>;
+
+/** Cible d'une commande de parité : le relais fournit l'identifiant de conversation Claude et le dossier de la session
+ * (sa fiche), le poste trouve le transcript à partir de là. */
+const CiblePariteCommun = {
+  id: z.string(),
+  sessionId: z.string().min(1).max(200),
+  claudeSessionId: z.string().min(1).max(200).nullable(),
+  cwd: z.string().min(1).max(4096),
+};
+
+/** Commandes de la parité (ajoutées à `CommandeRelais`). `id` est posé par le relais. */
+export const commandesParite = [
+  z.object({ kind: z.literal('parite'), ...CiblePariteCommun }),
+  z.object({ kind: z.literal('parite_tache'), ...CiblePariteCommun, tache: z.string().min(1).max(200) }),
+  z.object({ kind: z.literal('parite_resultat'), ...CiblePariteCommun, chemin: z.string().min(1).max(4096) }),
+];
+
+export const GENRES_PARITE = ['parite', 'parite_tache', 'parite_resultat'] as const;
+
+/** Réponse du poste à `parite_tache` : null si la tâche est inconnue de ce transcript (le relais rend 404). */
+export const ReponseTacheParite = z.object({ tache: DetailTacheParite.nullable() });
+export type ReponseTacheParite = z.infer<typeof ReponseTacheParite>;
+
+/** Réponse du poste à `parite_resultat` : contenu, ou refus avec le statut HTTP à rendre (404 ou 413). */
+export const ReponseResultatParite = z.discriminatedUnion('etat', [
+  z.object({ etat: z.literal('ok'), mime: z.string(), base64: z.string() }),
+  z.object({ etat: z.literal('refus'), statut: z.union([z.literal(404), z.literal(413)]), raison: z.string() }),
+]);
+export type ReponseResultatParite = z.infer<typeof ReponseResultatParite>;

@@ -41,6 +41,7 @@ import { ApiEntretien } from './entretien/api-entretien.ts';
 import { ApiReste } from './reste/api-reste.ts';
 import { ApiDictee } from './reste/api-dictee.ts';
 import { ApiResteSessions } from './reste/api-reste-sessions.ts';
+import { ApiParite } from './parite/api-parite.ts';
 import { ApiTaches } from './reste/api-taches.ts';
 import { ReseauxConnus } from './entretien/reseaux.ts';
 import { Reveil } from './entretien/reveil.ts';
@@ -150,6 +151,7 @@ const resteLot2 = {
   dictee: new ApiDictee({ postes, journal: journal.child({ domaine: 'dictee' }) }),
   taches: new ApiTaches({ postes, journal: journal.child({ domaine: 'taches' }) }),
 };
+const parite = new ApiParite({ registre, postes, journal: journal.child({ domaine: 'parite' }) });
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
@@ -201,6 +203,7 @@ const routes = avecCors(
     entretien,
     reste,
     resteLot2,
+    parite,
     confirmations,
   }),
   config.origines,

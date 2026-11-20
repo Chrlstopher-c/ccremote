@@ -5,6 +5,8 @@ import type { Logger } from 'pino';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { SortieSession } from '../session/session-poste.ts';
+import { dossierDeTravail } from '../parite/depot.ts';
+import { transcriptDeSession } from '../parite/transcript-session.ts';
 import { DepotGit } from './git.ts';
 import { ToursSession } from './tours.ts';
 
@@ -117,11 +119,15 @@ export class ModificationsSessions {
 
   async executer(
     c: CommandeModifications,
-    s: { readonly resume: ResumeSession } | undefined,
+    s: { readonly resume: ResumeSession; readonly persistee?: { readonly configDir: string | null } } | undefined,
   ): Promise<ReponseModifications> {
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.p.machine}` };
     const tours = s.resume.moteur === 'sdk' ? this.toursDe(c.sessionId, s.resume.cwd) : null;
-    const r = await executerModifications(c, { cwd: s.resume.cwd, tours, journal: this.p.journal });
+    const transcript = transcriptDeSession(s.resume, s.persistee?.configDir, [], this.p.journal);
+    const cwd = c.kind.startsWith('git_')
+      ? await dossierDeTravail(s.resume.cwd, transcript, this.p.journal)
+      : s.resume.cwd;
+    const r = await executerModifications(c, { cwd, tours, journal: this.p.journal });
     if (r.evenement) this.p.sortie.evenement(c.sessionId, r.evenement);
     return r;
   }

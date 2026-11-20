@@ -1,0 +1,165 @@
+// Responsabilité : présenter les tâches d'arrière-plan comme le panneau les montre — statut déduit quand le transcript
+// n'a pas clos la tâche (sous-agent terminé, sortie figée depuis 10 min), liste récente, détail avec activité.
+import { readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Logger } from 'pino';
+import {
+  type DetailTacheParite,
+  MAX_ACTIVITE,
+  MAX_TACHES,
+  type StatutTacheParite,
+  type TacheParite,
+} from '../../commun/parite.ts';
+import type { EtatTranscript, TacheVue } from './etat.ts';
+import { estAbsent, lireFin } from './fichier.ts';
+import { blocs, estObjet, lireLigne, type Objet, texte } from './lignes.ts';
+
+export const DELAI_SORTIE_FIGEE_MS = 10 * 60_000;
+const OCTETS_FIN_SORTIE = 64 * 1024;
+const OCTETS_FIN_AGENT = 256 * 1024;
+const ACTIONS_RECENTES = 15;
+const LIBELLE_MAX = 160;
+const OUTILS_FICHIER = ['Edit', 'Write', 'Read', 'NotebookEdit'];
+
+interface StatutPresente {
+  readonly statut: StatutTacheParite;
+  readonly finLe: string | null;
+}
+
+export function tachesResumees(etat: EtatTranscript, transcript: string, journal: Logger): TacheParite[] {
+  const maintenant = Date.now();
+  return [...etat.taches.values()]
+    .sort((a, b) => b.debutLe.localeCompare(a.debutLe))
+    .slice(0, MAX_TACHES)
+    .map((t) => resumerTache(t, transcript, maintenant, journal));
+}
+
+/** Le détail d'une tâche (id = id du tool_use), ou null si ce transcript ne la connaît pas. */
+export function detailTache(
+  etat: EtatTranscript,
+  id: string,
+  transcript: string,
+  journal: Logger,
+): DetailTacheParite | null {
+  const t = etat.taches.get(id);
+  if (!t) return null;
+  return {
+    ...resumerTache(t, transcript, Date.now(), journal),
+    prompt: t.prompt,
+    activite: activiteDe(t, transcript, journal),
+  };
+}
+
+function resumerTache(t: TacheVue, transcript: string, maintenant: number, journal: Logger): TacheParite {
+  const presente = statutPresente(t, transcript, maintenant, journal);
+  return {
+    id: t.id,
+    genre: t.genre,
+    description: t.description,
+    statut: presente.statut,
+    debutLe: t.debutLe,
+    finLe: presente.finLe,
+    modele: t.modele,
+    tacheId: t.tacheId,
+  };
+}
+
+function statutPresente(t: TacheVue, transcript: string, maintenant: number, journal: Logger): StatutPresente {
+  if (t.notifiee) return { statut: t.statut, finLe: t.finLe };
+  const deduit =
+    t.genre === 'agent' ? statutAgentSansFin(t, transcript, journal) : statutCommandeSansFin(t, maintenant, journal);
+  return deduit ?? { statut: 'en_cours', finLe: null };
+}
+
+// Un sous-agent dont le méta-fichier dit « finished » est terminé, même sans notification.
+function statutAgentSansFin(t: TacheVue, transcript: string, journal: Logger): StatutPresente | null {
+  if (t.tacheId === null) return null;
+  const dossier = dossierSousAgents(transcript);
+  const meta = lireMeta(join(dossier, `agent-${t.tacheId}.meta.json`), journal);
+  if (meta?.['finished'] !== true) return null;
+  const fin = mtimeDe(join(dossier, `agent-${t.tacheId}.jsonl`), journal);
+  return { statut: 'terminee', finLe: fin === null ? null : new Date(fin).toISOString() };
+}
+
+// Une commande dont la sortie n'a pas bougé depuis 10 min est arrêtée (son processus n'écrit plus rien).
+function statutCommandeSansFin(t: TacheVue, maintenant: number, journal: Logger): StatutPresente | null {
+  const repere = (t.sortie === null ? null : mtimeDe(t.sortie, journal)) ?? Date.parse(t.debutLe);
+  if (Number.isNaN(repere) || maintenant - repere <= DELAI_SORTIE_FIGEE_MS) return null;
+  return { statut: 'arretee', finLe: new Date(repere).toISOString() };
+}
+
+function activiteDe(t: TacheVue, transcript: string, journal: Logger): string | null {
+  if (t.genre === 'commande') {
+    if (t.sortie === null) return null;
+    return enFin(lireFin(t.sortie, OCTETS_FIN_SORTIE, journal));
+  }
+  if (t.tacheId === null) return null;
+  const journalAgent = lireFin(
+    join(dossierSousAgents(transcript), `agent-${t.tacheId}.jsonl`),
+    OCTETS_FIN_AGENT,
+    journal,
+  );
+  return journalAgent === null ? null : actionsDe(journalAgent);
+}
+
+/** Les dernières actions du sous-agent : textes (première ligne) et appels d'outils « Outil : libellé ». */
+export function actionsDe(brut: string): string | null {
+  const actions = brut.split('\n').flatMap((l) => actionsDeLigne(lireLigne(l)));
+  const recentes = actions.slice(-ACTIONS_RECENTES).join('\n');
+  return recentes === '' ? null : recentes.slice(-MAX_ACTIVITE);
+}
+
+function actionsDeLigne(ligne: Objet | null): string[] {
+  if (ligne === null || ligne['type'] !== 'assistant') return [];
+  const message = ligne['message'];
+  if (!estObjet(message)) return [];
+  return blocs(message['content']).flatMap((bloc) => {
+    const action = actionDe(bloc);
+    return action === null ? [] : [action];
+  });
+}
+
+function actionDe(bloc: Objet): string | null {
+  if (bloc['type'] === 'text') {
+    const premiere = (texte(bloc['text']) ?? '').split('\n').find((l) => l.trim() !== '') ?? '';
+    return premiere.trim() === '' ? null : premiere.trim().slice(0, LIBELLE_MAX);
+  }
+  if (bloc['type'] !== 'tool_use') return null;
+  const nom = texte(bloc['name']) ?? 'outil';
+  const entree = estObjet(bloc['input']) ? bloc['input'] : {};
+  return `${nom} : ${libelleDe(nom, entree)}`.slice(0, LIBELLE_MAX);
+}
+
+function libelleDe(nom: string, entree: Objet): string {
+  const fichier = texte(entree['file_path']) ?? texte(entree['notebook_path']);
+  if (OUTILS_FICHIER.includes(nom) && fichier !== null) return fichier;
+  return texte(entree['description']) ?? texte(entree['command']) ?? '';
+}
+
+function enFin(texteFin: string | null): string | null {
+  if (texteFin === null || texteFin.trim() === '') return null;
+  return texteFin.slice(-MAX_ACTIVITE);
+}
+
+function dossierSousAgents(transcript: string): string {
+  return `${transcript.replace(/\.jsonl$/, '')}/subagents`;
+}
+
+function lireMeta(chemin: string, journal: Logger): Objet | null {
+  try {
+    const brut: unknown = JSON.parse(readFileSync(chemin, 'utf8'));
+    return estObjet(brut) ? brut : null;
+  } catch (erreur) {
+    if (!estAbsent(erreur)) journal.warn({ err: erreur, chemin }, 'méta-fichier de sous-agent illisible');
+    return null;
+  }
+}
+
+function mtimeDe(chemin: string, journal: Logger): number | null {
+  try {
+    return statSync(chemin).mtimeMs;
+  } catch (erreur) {
+    if (!estAbsent(erreur)) journal.warn({ err: erreur, chemin }, 'date de fichier illisible');
+    return null;
+  }
+}

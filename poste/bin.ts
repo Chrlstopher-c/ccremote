@@ -29,6 +29,8 @@ import { estReste, executerReste, type ContexteReste } from './reste/executer.ts
 import { fichierClaudeJson } from './reste/memoire.ts';
 import { cheminSocketDictee } from './reste/dictee.ts';
 import { estResteLot2, executerResteLot2, type ContexteResteLot2 } from './reste/executer-lot2.ts';
+import { type ContextePariteposte, estParite, executerParite } from './parite/executer.ts';
+import { transcriptDeSession } from './parite/transcript-session.ts';
 import { MinuterieTaches } from './reste/minuterie-taches.ts';
 import { ServiceTaches } from './reste/taches-planifiees.ts';
 import { cheminTranscript } from './session/transcript.ts';
@@ -180,11 +182,25 @@ const contexteResteLot2: ContexteResteLot2 = {
 };
 const minuterieTaches = new MinuterieTaches(taches, journal.child({ domaine: 'taches' }));
 
+// La parité : contexte, résultats, tâches et dépôt lus dans le transcript (lecture seule).
+const contexteParite: ContextePariteposte = {
+  transcript: (c) =>
+    transcriptDeSession(
+      c,
+      sessions.session(c.sessionId)?.persistee.configDir,
+      [null, ...Object.values(config.comptes)],
+      journal,
+    ),
+  fenetre: config.fenetreContexte,
+  journal: journal.child({ domaine: 'parite' }),
+};
+
 async function executer(c: CommandeRelais): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
   if (estEntretien(c)) return executerEntretien(c, contexteEntretien);
   if (estReste(c)) return executerReste(c, contexteReste);
   if (estResteLot2(c)) return executerResteLot2(c, contexteResteLot2);
+  if (estParite(c)) return executerParite(c, contexteParite);
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
   if (c.kind === 'importables') return sessions.importables();
