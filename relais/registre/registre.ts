@@ -309,7 +309,7 @@ export class Registre {
       .map((l) => ({ seq: l.seq, sessionId: l.session_id, ts: l.ts, evt: Evenement.parse(JSON.parse(l.evt)) }));
   }
 
-  /** Autre session dont le fil contient l'une de ces lignes de transcript (uuid) : la même conversation vue ailleurs
+  /** Autre session dont le fil contient l'une de ces lignes de transcript (uuid) ou l'un de ces appels d'outil (id) : la même conversation vue ailleurs
    * (jumelle Remote Control d'une session de poste). La plus récente des correspondances, ou null. */
   sessionPartageantUuid(uuids: readonly string[], sauf: string): string | null {
     if (uuids.length === 0) return null;
@@ -319,7 +319,8 @@ export class Registre {
     const l = this.db
       .query(
         `SELECT session_id FROM evenements WHERE session_id <> $sauf AND substr(session_id, 1, 4) <> 'cse_'
-      AND json_extract(evt, '$.uuid') IN (${marques}) ORDER BY seq DESC LIMIT 1`,
+      AND (json_extract(evt, '$.uuid') IN (${marques}) OR json_extract(evt, '$.id') IN (${marques}))
+      ORDER BY seq DESC LIMIT 1`,
       )
       .get(valeurs) as { session_id: string } | null;
     return l?.session_id ?? null;

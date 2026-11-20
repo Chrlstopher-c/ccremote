@@ -298,8 +298,11 @@ export class Postes {
     let jumelle = connu?.jumelle ?? null;
     if (!jumelle && (!connu || Date.now() - connu.essai > ESSAI_JUMELLE_MS)) {
       const uuids = this.registre
-        .derniersEvenements(s.id, 60)
-        .map((e) => (e.evt as { uuid?: unknown }).uuid)
+        .derniersEvenements(s.id, 200)
+        .map((e) => {
+          const evt = e.evt as { type: string; uuid?: unknown; id?: unknown };
+          return evt.type === 'outil' ? evt.id : evt.uuid;
+        })
         .filter((u): u is string => typeof u === 'string' && u !== '');
       jumelle = this.registre.sessionPartageantUuid(uuids, s.id);
       this.jumelles.set(s.id, { jumelle, essai: Date.now() });
