@@ -29,7 +29,8 @@ function fichiersRecents(dossier: string, journal: Logger): FichierDate[] {
   try {
     noms = readdirSync(dossier).filter((n) => n.endsWith('.json'));
   } catch (erreur) {
-    if ((erreur as NodeJS.ErrnoException).code !== 'ENOENT') journal.warn({ err: erreur }, 'dossier des chantiers illisible');
+    if ((erreur as NodeJS.ErrnoException).code !== 'ENOENT')
+      journal.warn({ err: erreur }, 'dossier des chantiers illisible');
     return [];
   }
   const fichiers: FichierDate[] = [];

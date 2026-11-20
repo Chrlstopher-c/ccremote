@@ -10,7 +10,17 @@ enp3s0\t0000A8C0\t00000000\t0001\t0\t0\t100\t00FFFFFF\t00\t0\t0
 
 function info(nom: string, mac: string, address: string, netmask: string): NodeJS.Dict<NetworkInterfaceInfo[]> {
   return {
-    [nom]: [{ address, netmask, family: 'IPv4', mac, internal: false, cidr: `${address}/24`, scopeid: -1 } as NetworkInterfaceInfo],
+    [nom]: [
+      {
+        address,
+        netmask,
+        family: 'IPv4',
+        mac,
+        internal: false,
+        cidr: `${address}/24`,
+        scopeid: -1,
+      } as NetworkInterfaceInfo,
+    ],
   };
 }
 
@@ -32,7 +42,9 @@ describe('réseau', () => {
       diffusion: '192.0.2.255',
     });
     expect(reseauDe(ROUTE, info('enp3s0', '00:00:00:00:00:00', '192.0.2.10', '255.255.255.0'))).toBeNull();
-    expect(reseauDe('Iface\tDestination\n', info('enp3s0', 'aa:bb:cc:dd:ee:ff', '192.0.2.10', '255.255.255.0'))).toBeNull();
+    expect(
+      reseauDe('Iface\tDestination\n', info('enp3s0', 'aa:bb:cc:dd:ee:ff', '192.0.2.10', '255.255.255.0')),
+    ).toBeNull();
   });
 });
 

@@ -26,7 +26,7 @@ const PHRASE_ARRETE = 'Processus arrêté';
 const PHRASE_INCONNU = 'Processus inconnu ou déjà terminé';
 const PHRASE_PROTEGE = 'Processus protégé : il fait tourner le poste ou l’appli';
 
-/** Un SIGTERM, trois secondes d'attente, et un SIGKILL seulement si `force` et qu'un SIGTERM précède (même processus). */
+/** Un SIGTERM, trois secondes d'attente ; SIGKILL seulement si `force` et qu'un SIGTERM précède (même processus). */
 export async function arreterProcessus(d: DependancesArret, c: CibleArret): Promise<ResultatGeste> {
   if (c.pid <= 1 || d.proteges.has(c.pid)) return { ok: false, phrase: PHRASE_PROTEGE };
   if (!d.inventaire().some((p) => p.pid === c.pid && p.debut === c.debut)) return { ok: false, phrase: PHRASE_INCONNU };
@@ -34,7 +34,9 @@ export async function arreterProcessus(d: DependancesArret, c: CibleArret): Prom
   if (c.force && d.envoyes.has(cle)) {
     d.signaler(c.pid, 'SIGKILL');
     await d.attendre(DELAI_KILL_MS);
-    return d.vivant(c.pid, c.debut) ? { ok: false, phrase: 'Toujours actif après SIGKILL' } : { ok: true, phrase: PHRASE_ARRETE };
+    return d.vivant(c.pid, c.debut)
+      ? { ok: false, phrase: 'Toujours actif après SIGKILL' }
+      : { ok: true, phrase: PHRASE_ARRETE };
   }
   d.signaler(c.pid, 'SIGTERM');
   d.envoyes.add(cle);
@@ -51,7 +53,8 @@ export interface DependancesArretTmux {
 
 /** Tuer une session tmux : seulement si elle figure dans l'inventaire courant. */
 export async function arreterTmux(d: DependancesArretTmux, nom: string): Promise<ResultatGeste> {
-  if (!(await d.sessions()).some((s) => s.nom === nom)) return { ok: false, phrase: 'Session inconnue ou déjà terminée' };
+  if (!(await d.sessions()).some((s) => s.nom === nom))
+    return { ok: false, phrase: 'Session inconnue ou déjà terminée' };
   const r = await d.tuer(nom);
   if (r.code === 0) return { ok: true, phrase: 'Session arrêtée' };
   d.journal.warn({ session: nom, erreur: r.erreur }, 'arrêt de session tmux refusé');

@@ -28,7 +28,10 @@ describe('banc : réveil factice', () => {
     try {
       await envoyerReveil({ mac: 'aa:bb:cc:dd:ee:ff', diffusion: '192.0.2.255', par: 'relais' }, fichier, JOURNAL_MUET);
       enregistrerReveilFactice(fichier, { mac: 'aa:bb:cc:dd:ee:ff', diffusion: '192.0.2.255', par: 'poste-x' }, 'T');
-      const lignes = readFileSync(fichier, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, string>);
+      const lignes = readFileSync(fichier, 'utf8')
+        .trim()
+        .split('\n')
+        .map((l) => JSON.parse(l) as Record<string, string>);
       expect(lignes).toHaveLength(2);
       expect(lignes[0]?.['par']).toBe('relais');
       expect(lignes[1]).toEqual({ ts: 'T', mac: 'aa:bb:cc:dd:ee:ff', diffusion: '192.0.2.255', par: 'poste-x' });

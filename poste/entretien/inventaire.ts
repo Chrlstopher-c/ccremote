@@ -29,7 +29,7 @@ export function descendants(racine: number, table: ReadonlyMap<number, EntreePro
 
 /**
  * Le rôle de chaque descendant. Tunnel : un `ssh` enfant direct de la racine (le relais ouvre ses tunnels). Session :
- * un `claude`, ou un enfant direct qui exécute Claude (SDK). Outil : tout ce qui descend d'une session. Autre : le reste.
+ * un `claude`, ou un enfant direct qui exécute Claude (SDK). Outil : ce qui descend d'une session. Autre : le reste.
  */
 export function rolesDe(desc: readonly EntreeProc[], racine: number): Map<number, RoleProcessus> {
   const roles = new Map<number, RoleProcessus>();
@@ -54,7 +54,13 @@ export interface EntreesInventaire {
   readonly sessionDePid: (pid: number) => string | null;
 }
 
-function versProcessus(e: EntreeProc, role: RoleProcessus, session: string | null, btime: number | null, reste: boolean): ProcessusPoste {
+function versProcessus(
+  e: EntreeProc,
+  role: RoleProcessus,
+  session: string | null,
+  btime: number | null,
+  reste: boolean,
+): ProcessusPoste {
   return {
     pid: e.pid,
     debut: e.debut,

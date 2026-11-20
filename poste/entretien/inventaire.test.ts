@@ -40,7 +40,7 @@ describe('descendants', () => {
 });
 
 describe('rôles', () => {
-  test('tunnel : ssh enfant direct ; session : node ou claude enfant ; outil : tout ce qui descend d’une session', () => {
+  test('tunnel, session, outil : ssh enfant direct ; node ou claude enfant ; ce qui descend d’une session', () => {
     const desc = descendants(RACINE, TABLE);
     const roles = rolesDe(desc, RACINE);
     expect(roles.get(1001)).toBe('tunnel');
@@ -59,7 +59,12 @@ describe('rôles', () => {
 describe('assemblage de l’inventaire', () => {
   test('actifs : rôle, commande (tunnel nommé sans hôte), démarrage en ISO, mémoire', () => {
     const { processus } = assemblerInventaire({
-      table: TABLE, racine: RACINE, btime: BTIME, precedent: [], lancement: 'L2', sessionDePid: () => 'sess-9',
+      table: TABLE,
+      racine: RACINE,
+      btime: BTIME,
+      precedent: [],
+      lancement: 'L2',
+      sessionDePid: () => 'sess-9',
     });
     const tunnel = processus.find((x) => x.pid === 1001);
     expect(tunnel).toMatchObject({ role: 'tunnel', commande: 'Tunnel SSH', reste: false, session: null });
@@ -69,14 +74,19 @@ describe('assemblage de l’inventaire', () => {
     expect(processus.find((x) => x.pid === 1003)?.session).toBeNull();
   });
 
-  test('un reste d’un lancement précédent, vivant avec la même heure, est signalé ; un PID réutilisé ne l’est pas', () => {
+  test('un reste vivant avec la même heure est signalé ; un PID réutilisé ne l’est pas', () => {
     const precedent: EntreeRegistre[] = [
       { pid: 1006, debut: '10060', session: null, lancement: 'L1' }, // ssh orphelin, vivant, même heure
       { pid: 1005, debut: '999', session: null, lancement: 'L1' }, // PID réutilisé : heure différente
       { pid: 4444, debut: '1', session: null, lancement: 'L1' }, // mort
     ];
     const { processus, registre } = assemblerInventaire({
-      table: TABLE, racine: RACINE, btime: BTIME, precedent, lancement: 'L2', sessionDePid: () => null,
+      table: TABLE,
+      racine: RACINE,
+      btime: BTIME,
+      precedent,
+      lancement: 'L2',
+      sessionDePid: () => null,
     });
     const restes = processus.filter((x) => x.reste);
     expect(restes.map((x) => x.pid)).toEqual([1006]);
@@ -86,7 +96,12 @@ describe('assemblage de l’inventaire', () => {
 
   test('le poste lui-même et ses ancêtres n’entrent jamais dans l’inventaire', () => {
     const { processus } = assemblerInventaire({
-      table: TABLE, racine: RACINE, btime: null, precedent: [], lancement: 'L', sessionDePid: () => null,
+      table: TABLE,
+      racine: RACINE,
+      btime: null,
+      precedent: [],
+      lancement: 'L',
+      sessionDePid: () => null,
     });
     expect(processus.some((x) => x.pid === RACINE || x.pid === 1)).toBe(false);
     expect(processus.every((x) => x.depuis === '')).toBe(true);

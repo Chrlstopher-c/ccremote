@@ -11,7 +11,7 @@ export interface EntreeProc {
   readonly pid: number;
   readonly ppid: number;
   readonly comm: string;
-  /** Heure de démarrage en battements du noyau (champ 22 de /proc/<pid>/stat) : avec le PID, l'identité du processus. */
+  /** Heure de démarrage en battements du noyau (champ 22 de /proc/<pid>/stat) : avec le PID, l'identité. */
   readonly debut: string;
   readonly memoire: number;
   readonly commande: string;

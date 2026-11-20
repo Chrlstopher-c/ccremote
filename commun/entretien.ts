@@ -73,6 +73,14 @@ export const commandesEntretien = [
   }),
 ];
 
+/** Qui tient la liaison d'une machine (port distant déjà pris) : le sshd de l'utilisateur de la fiche. */
+export const OccupantLiaison = z.object({
+  occupe: z.boolean(),
+  pid: z.number().nullable(),
+  depuis: z.string().nullable(),
+});
+export type OccupantLiaison = z.infer<typeof OccupantLiaison>;
+
 /** Le résultat d'un geste (arrêt, réveil) : ce qui s'est passé, en une phrase courte, jamais d'hôte ni de port. */
 export const ResultatGeste = z.object({ ok: z.boolean(), phrase: z.string() });
 export type ResultatGeste = z.infer<typeof ResultatGeste>;

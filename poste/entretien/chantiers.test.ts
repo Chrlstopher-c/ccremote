@@ -22,8 +22,18 @@ describe('lecture des chantiers', () => {
   test('seuls les .json comptent ; un JSON cassé et un fichier trop gros sont ignorés ; tri en cours d’abord', () => {
     const dossier = mkdtempSync(join(tmpdir(), 'chantiers-'));
     try {
-      fichier(dossier, 'ancien.json', JSON.stringify({ agent: 'a', statut: 'termine', mission: 'vieux' }), 1_700_000_000);
-      fichier(dossier, 'actif.json', JSON.stringify({ agent: 'b', statut: 'en cours', mission: 'neuf' }), 1_700_000_500);
+      fichier(
+        dossier,
+        'ancien.json',
+        JSON.stringify({ agent: 'a', statut: 'termine', mission: 'vieux' }),
+        1_700_000_000,
+      );
+      fichier(
+        dossier,
+        'actif.json',
+        JSON.stringify({ agent: 'b', statut: 'en cours', mission: 'neuf' }),
+        1_700_000_500,
+      );
       fichier(dossier, 'casse.json', '{pas du json', 1_700_000_600);
       fichier(dossier, 'notes.txt', 'ignoré', 1_700_000_700);
       fichier(dossier, 'gros.json', 'x'.repeat(MAX_OCTETS + 1), 1_700_000_800);
@@ -52,7 +62,9 @@ describe('lecture des chantiers', () => {
 
 describe('dossier des chantiers', () => {
   test('variable d’environnement, sinon ~/.local/state/chantier', () => {
-    expect(dossierChantiers({ LANTERNE_DOSSIER_CHANTIERS: '/banc/chantiers' } as NodeJS.ProcessEnv)).toBe('/banc/chantiers');
+    expect(dossierChantiers({ LANTERNE_DOSSIER_CHANTIERS: '/banc/chantiers' } as NodeJS.ProcessEnv)).toBe(
+      '/banc/chantiers',
+    );
     expect(dossierChantiers({} as NodeJS.ProcessEnv).endsWith(join('.local', 'state', 'chantier'))).toBe(true);
   });
 });

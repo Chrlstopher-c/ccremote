@@ -3,7 +3,14 @@ import { describe, expect, test } from 'bun:test';
 import type { PaneTmux } from '../session/tmux.ts';
 import { sessionsTmux } from './tmux-entretien.ts';
 
-const pane = (nom: string, creeLe = 1_700_000_000): PaneTmux => ({ nom, creeLe, attachee: false, dossier: '/x', titre: nom, pid: 1 });
+const pane = (nom: string, creeLe = 1_700_000_000): PaneTmux => ({
+  nom,
+  creeLe,
+  attachee: false,
+  dossier: '/x',
+  titre: nom,
+  pid: 1,
+});
 
 describe('sessions tmux de l’entretien', () => {
   test('serveur propre : toutes les sessions ; une session que le gestionnaire ne suit pas est un reste', () => {

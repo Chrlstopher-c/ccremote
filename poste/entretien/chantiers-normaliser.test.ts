@@ -6,15 +6,30 @@ const MAJ = '2026-11-20T10:00:00.000Z';
 
 describe('normalisation d’un fichier de suivi', () => {
   test('format « statut / mission / etape / fait »', () => {
-    const c = normaliserChantier('a.json', { agent: 'opus', projet: 'lanterne', statut: 'en cours', mission: 'M', etape: 'E', fait: ['x'] }, MAJ);
+    const c = normaliserChantier(
+      'a.json',
+      { agent: 'opus', projet: 'lanterne', statut: 'en cours', mission: 'M', etape: 'E', fait: ['x'] },
+      MAJ,
+    );
     expect(c).toEqual({
-      fichier: 'a.json', agent: 'opus', projet: 'lanterne', statut: 'en_cours', statutBrut: 'en cours',
-      mission: 'M', etape: 'E', fait: ['x'], majLe: MAJ,
+      fichier: 'a.json',
+      agent: 'opus',
+      projet: 'lanterne',
+      statut: 'en_cours',
+      statutBrut: 'en cours',
+      mission: 'M',
+      etape: 'E',
+      fait: ['x'],
+      majLe: MAJ,
     });
   });
 
   test('format « tache / etape / statut / maj » : la tâche sert de mission, model sert d’agent', () => {
-    const c = normaliserChantier('b.json', { model: 'haiku', tache: 'T', etape: 'S2', statut: 'terminé', maj: 'x' }, MAJ);
+    const c = normaliserChantier(
+      'b.json',
+      { model: 'haiku', tache: 'T', etape: 'S2', statut: 'terminé', maj: 'x' },
+      MAJ,
+    );
     expect(c?.agent).toBe('haiku');
     expect(c?.mission).toBe('T');
     expect(c?.statut).toBe('termine');
@@ -29,7 +44,14 @@ describe('normalisation d’un fichier de suivi', () => {
 
   test('format « titre / etat / agent » : sans étape ni projet', () => {
     const c = normaliserChantier('d.json', { titre: 'Seul', etat: 'running', agent: 'sonnet' }, MAJ);
-    expect(c).toMatchObject({ agent: 'sonnet', projet: null, etape: null, mission: 'Seul', statut: 'en_cours', fait: [] });
+    expect(c).toMatchObject({
+      agent: 'sonnet',
+      projet: null,
+      etape: null,
+      mission: 'Seul',
+      statut: 'en_cours',
+      fait: [],
+    });
   });
 
   test('format anglais avec tableau d’étapes : dernière étape, notes en faits', () => {
@@ -51,7 +73,7 @@ describe('normalisation d’un fichier de suivi', () => {
     expect(normaliserChantier('f.json', { statut: 'Bizarre' }, MAJ)?.statutBrut).toBe('Bizarre');
   });
 
-  test('fait : 20 éléments au plus, 300 caractères chacun, chaînes seulement ; une chaîne seule devient une liste', () => {
+  test('fait : 20 éléments au plus, 300 caractères, chaînes seules ; une chaîne devient une liste', () => {
     const longs = Array.from({ length: 25 }, (_, i) => (i % 2 ? 'x'.repeat(400) : i));
     const c = normaliserChantier('g.json', { fait: longs }, MAJ);
     expect(c?.fait).toHaveLength(12);

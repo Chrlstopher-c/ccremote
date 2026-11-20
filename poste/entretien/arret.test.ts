@@ -31,13 +31,19 @@ function banc(arret: 'SIGTERM' | 'SIGKILL' | 'jamais' = 'SIGTERM', inventaire: P
 describe('arrêt d’un processus', () => {
   test('SIGTERM, puis « Processus arrêté » si le processus disparaît', async () => {
     const { d, signaux } = banc('SIGTERM');
-    expect(await arreterProcessus(d, { pid: 500, debut: '42', force: false })).toEqual({ ok: true, phrase: 'Processus arrêté' });
+    expect(await arreterProcessus(d, { pid: 500, debut: '42', force: false })).toEqual({
+      ok: true,
+      phrase: 'Processus arrêté',
+    });
     expect(signaux).toEqual(['500:SIGTERM']);
   });
 
   test('toujours actif après l’attente : « Toujours actif après 3 s », sans SIGKILL sans force', async () => {
     const { d, signaux } = banc('jamais');
-    expect(await arreterProcessus(d, { pid: 500, debut: '42', force: false })).toEqual({ ok: false, phrase: 'Toujours actif après 3 s' });
+    expect(await arreterProcessus(d, { pid: 500, debut: '42', force: false })).toEqual({
+      ok: false,
+      phrase: 'Toujours actif après 3 s',
+    });
     expect(signaux).toEqual(['500:SIGTERM']);
   });
 
@@ -94,7 +100,11 @@ describe('arrêt d’une session tmux', () => {
   });
 
   test('échec de tmux : « Session non arrêtée »', async () => {
-    const d = { sessions: async () => sessions(['claude-a']), tuer: async () => ({ code: 1, erreur: 'boum' }), journal: JOURNAL };
+    const d = {
+      sessions: async () => sessions(['claude-a']),
+      tuer: async () => ({ code: 1, erreur: 'boum' }),
+      journal: JOURNAL,
+    };
     expect((await arreterTmux(d, 'claude-a')).ok).toBe(false);
   });
 });

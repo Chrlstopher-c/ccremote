@@ -19,10 +19,7 @@ describe('fusion du registre', () => {
       'courant',
       vivant,
     );
-    expect(registre).toEqual([
-      { pid: 200, debut: '7000', session: 'sess-1', lancement: 'courant' },
-      ANCIEN,
-    ]);
+    expect(registre).toEqual([{ pid: 200, debut: '7000', session: 'sess-1', lancement: 'courant' }, ANCIEN]);
     expect(restes).toEqual([ANCIEN]);
   });
 

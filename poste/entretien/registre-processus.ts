@@ -48,7 +48,8 @@ export function lireRegistre(chemin: string, journal: Logger): EntreeRegistre[] 
   try {
     brut = readFileSync(chemin, 'utf8');
   } catch (erreur) {
-    if ((erreur as NodeJS.ErrnoException).code !== 'ENOENT') journal.warn({ err: erreur }, 'registre des processus illisible');
+    if ((erreur as NodeJS.ErrnoException).code !== 'ENOENT')
+      journal.warn({ err: erreur }, 'registre des processus illisible');
     return [];
   }
   try {
