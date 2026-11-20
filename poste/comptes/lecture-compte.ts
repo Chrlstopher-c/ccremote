@@ -79,6 +79,8 @@ export class LecteurCompte {
   private readonly maintenant: () => number;
   private readonly details = new Map<string, Memo<Promise<DetailCompte>>>();
   private readonly profils = new Map<string, Memo<Profil>>();
+  // Dernière réponse lue de chaque partie : l'endpoint d'usage limite son débit (429), on garde alors la précédente.
+  private readonly derniers = new Map<string, unknown>();
 
   constructor(private readonly d: DependancesLecture) {
     this.api = d.api ?? API_PAR_DEFAUT;
@@ -155,16 +157,22 @@ export class LecteurCompte {
       const r = await fetch(this.api + chemin, { headers: entetes(jeton), signal });
       if (!r.ok) {
         this.d.journal.warn({ compte, lecture: quoi, statut: r.status }, 'lecture du compte refusée');
-        problemes.push(`${quoi} illisible : HTTP ${r.status}`);
-        return null;
+        return this.precedent(compte, quoi, `HTTP ${r.status}`, problemes);
       }
       const corps: unknown = await r.json();
+      this.derniers.set(`${compte}:${quoi}`, corps);
       return corps;
     } catch (erreur) {
       this.d.journal.warn({ compte, lecture: quoi, motif: motif(erreur) }, 'lecture du compte en échec');
-      problemes.push(`${quoi} illisible : ${motif(erreur)}`);
-      return null;
+      return this.precedent(compte, quoi, motif(erreur), problemes);
     }
+  }
+
+  /** Lecture en échec : la réponse précédente si on en a une (signalée comme ancienne), sinon rien. */
+  private precedent(compte: string, quoi: string, cause: string, problemes: string[]): unknown {
+    const ancien = this.derniers.get(`${compte}:${quoi}`);
+    problemes.push(ancien === undefined ? `${quoi} illisible : ${cause}` : `${quoi} : relevé précédent (${cause})`);
+    return ancien ?? null;
   }
 
   private async profilDe(compte: string, jeton: string, problemes: string[]): Promise<Profil | null> {
@@ -186,7 +194,7 @@ export class LecteurCompte {
       problemes.push('crédits prépayés non lus : organisation inconnue');
       return null;
     }
-    const chemin = `/api/organizations/${profil.orgUuid}/prepaid/credits`;
+    const chemin = `/api/oauth/organizations/${profil.orgUuid}/prepaid/credits`;
     return this.lire(compte, jeton, 'crédits prépayés', chemin, problemes);
   }
 

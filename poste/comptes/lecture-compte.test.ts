@@ -8,7 +8,7 @@ import { LecteurCompte } from './lecture-compte.ts';
 const ORG = '00000000-0000-4000-8000-000000000002';
 const JETON = 'jeton-factice-0123456789';
 const CHEMIN_RESET = `/api/organizations/${ORG}/reset_rate_limits`;
-const CHEMIN_PREPAYE = `/api/organizations/${ORG}/prepaid/credits`;
+const CHEMIN_PREPAYE = `/api/oauth/organizations/${ORG}/prepaid/credits`;
 const CHEMIN_CEDAR = '/api/oauth/usage?cedar_ember=1&skip_spend=1';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SDK_NUL = async (): Promise<UsageSdk | null> => null;
@@ -117,6 +117,16 @@ describe('lecture du détail d’un compte', () => {
     await l.detail('principal', null, 'tour', SDK_NUL);
     expect(compteur('/api/oauth/usage')).toBe(2);
     expect(compteur('/api/oauth/profile')).toBe(1);
+  });
+
+  test('un 429 après une lecture réussie garde la réponse précédente et le signale', async () => {
+    const l = lecteur();
+    const premier = await l.detail('principal', null, 'tour', SDK_NUL);
+    t += 61_000;
+    statuts.set(CHEMIN_CEDAR, 429);
+    const second = await l.detail('principal', null, 'tour', SDK_NUL);
+    expect(second.reinitialisations).toEqual(premier.reinitialisations);
+    expect(second.probleme).toContain('relevé précédent (HTTP 429)');
   });
 
   test('deux appels concurrents partagent une seule série de requêtes', async () => {
