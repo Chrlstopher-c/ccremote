@@ -11,8 +11,8 @@ import { enregistrerJeton } from './jeton.ts';
 import { ecrirePosteJson } from './poste-json.ts';
 import { attendrePosteLocal, ligneDePret } from './pret.ts';
 import type { ParametresLancement } from './parametres.ts';
+import { VERSION } from '../commun/version.ts';
 
-const VERSION_PAR_DEFAUT = '2.0.0';
 const DELAI_PRET_MS = 25_000;
 
 export async function lancerMoteur(parametres: ParametresLancement): Promise<void> {
@@ -53,7 +53,7 @@ async function demarrer(p: ParametresLancement, donnees: Donnees, journal: Logge
   await import('../relais/bin.ts');
   await import('../poste/bin.ts');
   await attendrePosteLocal(`http://127.0.0.1:${p.portWeb}`, p.jeton, donnees.machine, DELAI_PRET_MS, journal);
-  process.stdout.write(ligneDePret(donnees.machine, VERSION_PAR_DEFAUT));
+  process.stdout.write(ligneDePret(donnees.machine, VERSION));
   journal.info({ machine: donnees.machine, web: p.portWeb, postes: p.portPostes }, 'moteur intégré prêt');
 }
 

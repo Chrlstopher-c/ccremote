@@ -54,6 +54,7 @@ export function construireEnvironnement(p: ParametresEnvironnement): Record<stri
     CCREMOTE_TMUX_SOCKET: p.socketTmux,
     CCREMOTE_JOURNAL: p.journal,
     CCREMOTE_ADOPTER_TERMINAUX: 'non',
+    CCREMOTE_MACHINE_LOCALE: p.machine, // la machine de ce moteur : son poste n'a pas de tunnel, ses processus sont ici
   };
   if (p.claude) env['CCREMOTE_CLAUDE'] = p.claude;
   if (p.cc) env['CCREMOTE_CC'] = p.cc;

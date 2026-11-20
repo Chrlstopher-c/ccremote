@@ -1,7 +1,9 @@
 // Responsabilité : mesurer l'état de la machine (CPU, mémoire, disque, charge) pour le tableau de bord.
 import { statfsSync } from 'node:fs';
 import { cpus, freemem, loadavg, totalmem, uptime, userInfo } from 'node:os';
+import type { Logger } from 'pino';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
+import { lireEchange, lireReseau } from '../entretien/systeme.ts';
 
 interface Echantillon {
   readonly actif: number;
@@ -23,7 +25,10 @@ function echantillonCpu(): Echantillon {
 export class SondeMachine {
   private precedent = echantillonCpu();
 
-  constructor(private readonly disque: string) {}
+  constructor(
+    private readonly disque: string,
+    private readonly journal: Logger,
+  ) {}
 
   mesurer(): EtatMachine {
     const courant = echantillonCpu();
@@ -38,6 +43,8 @@ export class SondeMachine {
       charge: loadavg()[0] ?? 0,
       demarreeDepuis: Math.round(uptime()),
       utilisateur: userInfo().username,
+      echange: lireEchange(this.journal) ?? undefined,
+      reseau: lireReseau(this.journal),
     };
   }
 }

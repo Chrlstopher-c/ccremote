@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { commandesConfiguration } from './configuration.ts';
+import { commandesEntretien, EchangePoste, ReseauPoste, VersionsClaude } from './entretien.ts';
 import { Decouverte } from './decouverte.ts';
 import { EtatCompte, NOM_COMPTE } from './comptes.ts';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
@@ -30,6 +31,8 @@ export const EtatMachine = z.object({
   charge: z.number(),
   demarreeDepuis: z.number(),
   utilisateur: z.string().optional(), // le compte Unix du poste, à viser en SSH (sur le Pi : pi, pas trinity)
+  echange: EchangePoste.optional(), // swap utilisé / total (absent hors Linux)
+  reseau: ReseauPoste.nullable().optional(), // interface de la route par défaut : MAC et diffusion (réveil)
 });
 export type EtatMachine = z.infer<typeof EtatMachine>;
 
@@ -45,6 +48,8 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     sessions: z.array(ResumeSession),
     decouvertes: z.array(Decouverte).optional(), // transcripts du poste non encore ouverts dans Lanterne
     empreinte: z.string().optional(), // empreinte du code installé (install par SSH) ; absente pour un poste d'avant
+    commit: z.string().nullable().optional(), // commit du code (absent pour un poste d'avant)
+    claudeCode: VersionsClaude.optional(), // versions de Claude Code (CLI, SDK) relevées au démarrage du poste
   }),
   z.object({ kind: z.literal('decouvertes'), decouvertes: z.array(Decouverte) }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
@@ -208,6 +213,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   }),
   ...commandesAppareil,
   ...commandesConfiguration,
+  ...commandesEntretien,
 ]);
 export type CommandeRelais = z.infer<typeof CommandeRelais>;
 

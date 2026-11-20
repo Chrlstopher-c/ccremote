@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
+import { COMMIT, VERSION } from '../commun/version.ts';
 import { type CommandeRelais, type MessagePoste, TAILLE_LOT_HISTORIQUE } from '../commun/protocole-poste.ts';
 import { Comptes } from './comptes/comptes.ts';
 import { LecteurCompte } from './comptes/lecture-compte.ts';
@@ -21,14 +22,18 @@ import { dossierClaudeDefaut } from './configuration/styles.ts';
 import { rechargerStylesVivants } from './session/styles-session.ts';
 import { creerListeurConnecteurs, DELAI_CONNECTEURS_MS } from './configuration/connecteurs.ts';
 import { lanceurClaude } from './configuration/exec.ts';
+import { dossierChantiers } from './entretien/chantiers.ts';
+import { type ContexteEntretien, estEntretien, executerEntretien } from './entretien/commandes.ts';
+import { versionsClaudeCode } from './entretien/claude-code.ts';
+import { SOCKET } from './session/tmux.ts';
 
-const VERSION = '2.0.0';
 const PERIODE_ETAT_MS = 15_000;
 
 const journal = creerJournal('poste');
 const config = chargerConfig();
 const DELAI_CLAUDE_MS = 20_000;
-const sonde = new SondeMachine(config.racines[0] ?? '/');
+const sonde = new SondeMachine(config.racines[0] ?? '/', journal);
+const versionsClaude = await versionsClaudeCode(journal);
 const socket = join(config.donnees, 'poste.sock');
 
 let lien: LienRelais | null = null;
@@ -82,6 +87,8 @@ function bonjour(): MessagePoste {
     sessions: sessions.lister(),
     decouvertes: sessions.listeDecouvertes(),
     empreinte: process.env['CCREMOTE_EMPREINTE_CODE'] || undefined, // code installé par le relais (mise à jour)
+    commit: COMMIT,
+    claudeCode: versionsClaude,
   };
 }
 
@@ -118,8 +125,24 @@ const configuration = {
   journal,
 };
 
+// L'entretien : chantiers, processus, sessions tmux, réveil. Les sessions suivies sont celles des fiches du gestionnaire.
+const contexteEntretien: ContexteEntretien = {
+  machine: config.machine,
+  racine: process.pid,
+  lancement: randomUUID(),
+  fichierRegistre: join(config.donnees, 'processus.json'),
+  dossierChantiers: dossierChantiers(),
+  reveilFactice: process.env['CCREMOTE_REVEIL_FACTICE'] || undefined,
+  sessionDePid: () => null, // le gestionnaire ne relie pas encore un pid SDK à sa session : null (voir STATE)
+  suivis: () => new Set([...sessions.sessions.values()].map((s) => s.resume.tmux).filter((n): n is string => n !== null)),
+  partage: SOCKET === 'claude',
+  envoyes: new Set(),
+  journal,
+};
+
 async function executer(c: CommandeRelais): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
+  if (estEntretien(c)) return executerEntretien(c, contexteEntretien);
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
   if (c.kind === 'importables') return sessions.importables();
