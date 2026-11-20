@@ -152,6 +152,8 @@ export const ResumeSession = z.object({
       connexion: z.enum(['connectee', 'deconnectee']),
       probleme: z.string().nullable(),
       cwd: z.string().optional(), // dossier réel annoncé par la session (system/init) : la reconnaît dans le parc
+      // conversation Claude Code (session_id du fil) : la rattache à sa session de poste
+      conversation: z.string().optional(),
     })
     .nullable()
     .optional(),

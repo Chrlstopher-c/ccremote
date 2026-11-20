@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
@@ -9,11 +9,13 @@ import type { SortieSession } from '../session/session-poste.ts';
 import { demarrerFauxApi, evenementApi, type FauxApi, sessionApi, tourApi } from './faux-claude-ai.ts';
 import { type SessionBrute, lireSession } from './donnees.ts';
 import { SessionDistante, PAS_ENCORE_CLAUDE_AI } from './session-distante.ts';
+import { lireTrames } from './flux-distant.ts';
 import { estMessageSdk, traduireLot } from './traduction-distante.ts';
 import { nouvelEtatTraduction } from '../session/traduction-sdk.ts';
 
 const JETON = 'jeton-factice-session-distante';
 const journal = pino({ enabled: false });
+const FIXTURE_FLUX = join(import.meta.dir, 'fixtures', 'flux-sse.txt');
 
 let api: FauxApi;
 let dossier: string;
@@ -182,5 +184,47 @@ describe('mode de permission d’une session claude.ai', () => {
     const { s } = creer(bruteDe('cse_m'));
     expect(await s.synchroniser(bruteDe('cse_m'))).toBeNull();
     expect(s.resume.mode).toBe('default');
+  });
+});
+
+/** session_id porté par le payload d'un événement du fil (user, assistant, result), sinon null. */
+function sessionDuPayload(evt: Record<string, unknown>): string | null {
+  const p = evt['payload'];
+  if (typeof p !== 'object' || p === null) return null;
+  const sid = (p as Record<string, unknown>)['session_id'];
+  return typeof sid === 'string' && sid !== '' ? sid : null;
+}
+
+describe('conversation Claude Code d’une session claude.ai', () => {
+  test('le session_id du fil le plus récent devient la conversation du résumé (fixture SSE)', async () => {
+    const trames = lireTrames(readFileSync(FIXTURE_FLUX, 'utf8')).trames;
+    const evts = trames
+      .filter((t) => t.event === 'client_event')
+      .map((t): Record<string, unknown> => JSON.parse(t.data) as Record<string, unknown>);
+    const chronologique = [...evts].sort((a, b) => Number(a['sequence_num']) - Number(b['sequence_num']));
+    const attendu = chronologique.map(sessionDuPayload).filter((sid): sid is string => sid !== null).pop();
+    expect(attendu).toBeDefined();
+    api.fils.set('cse_conv_fixture', [...chronologique].reverse());
+    const { s } = creer(bruteDe('cse_conv_fixture'));
+    expect(await s.synchroniser(bruteDe('cse_conv_fixture'))).toBeNull();
+    expect(s.resume.distant?.conversation).toBe(attendu);
+  });
+
+  test('un message plus récent d’une autre conversation remplace la précédente', async () => {
+    const message = { role: 'assistant', content: [{ type: 'text', text: 'ok' }] };
+    const ancien = evenementApi(
+      'ev-conv-a',
+      { type: 'assistant', session_id: 'conv-ancienne', message },
+      '2026-11-20T10:01:00.000Z',
+    );
+    const recent = evenementApi(
+      'ev-conv-b',
+      { type: 'assistant', session_id: 'conv-recente', message },
+      '2026-11-20T10:02:00.000Z',
+    );
+    api.fils.set('cse_conv_deux', [recent, ancien]);
+    const { s } = creer(bruteDe('cse_conv_deux'));
+    expect(await s.synchroniser(bruteDe('cse_conv_deux'))).toBeNull();
+    expect(s.resume.distant?.conversation).toBe('conv-recente');
   });
 });

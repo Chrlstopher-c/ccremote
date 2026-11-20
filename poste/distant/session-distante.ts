@@ -74,6 +74,8 @@ export class SessionDistante implements SessionPoste {
   private publie = ''; // dernier résumé publié, pour ne publier que les changements
   private modeVu: ModeSession | null = null; // dernier mode de permission annoncé par la session (system)
   private cwdVu: string | null = null; // dossier de travail annoncé par la session (system/init)
+  // conversation Claude Code (session_id du fil) : rapproche la jumelle du poste
+  private conversationVue: string | null = null;
   private travail: string | null; // worker_status de la liste : pendant un tour, le fil est relu à chaque passage
   private readonly pieces: StockeurPieces | undefined;
   private flux: FluxDistant | null = null; // flux SSE : porte le fil en direct, le sondage sert de secours
@@ -291,17 +293,32 @@ export class SessionDistante implements SessionPoste {
   private maj(): void {
     const etat = this.avecEtat(this.base);
     const avecCwd = this.cwdVu !== null && etat.distant ? { ...etat, distant: { ...etat.distant, cwd: this.cwdVu } } : etat;
-    this.resume = this.modeVu === null ? avecCwd : { ...avecCwd, mode: this.modeVu };
+    const conversation = this.conversationVue;
+    const avecConv =
+      conversation !== null && avecCwd.distant
+        ? { ...avecCwd, distant: { ...avecCwd.distant, conversation } }
+        : avecCwd;
+    this.resume = this.modeVu === null ? avecConv : { ...avecConv, mode: this.modeVu };
   }
 
-  /** Mode de permission et dossier de travail, tels que les messages `system` les annoncent (le plus récent gagne). */
+  /**
+   * Mode de permission, dossier de travail et conversation, tels que le fil les annonce (le plus récent gagne).
+   * `session_id` du payload = conversation Claude Code, la même que `claudeSessionId` de la session du poste.
+   */
   private releverMode(lot: readonly EvenementBrut[]): void {
     for (const e of lot) {
       // lecture défensive d'un JSON libre
-      const p = e.payload as { type?: unknown; subtype?: unknown; permissionMode?: unknown; cwd?: unknown } | null;
+      const p = e.payload as {
+        type?: unknown;
+        subtype?: unknown;
+        permissionMode?: unknown;
+        cwd?: unknown;
+        session_id?: unknown;
+      } | null;
       const mode = ModeSession.safeParse(p?.permissionMode);
       if (p?.type === 'system' && mode.success) this.modeVu = mode.data;
       if (p?.type === 'system' && p.subtype === 'init' && typeof p.cwd === 'string' && p.cwd) this.cwdVu = p.cwd;
+      if (typeof p?.session_id === 'string' && p.session_id !== '') this.conversationVue = p.session_id;
     }
     this.maj();
   }
