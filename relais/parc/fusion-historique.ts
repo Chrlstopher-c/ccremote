@@ -34,7 +34,18 @@ export function suiteAjoutee(
 ): { readonly ancre: string | null; readonly ajout: readonly EvenementHorodate[] } {
   if (ancre === null) return { ancre: null, ajout: lot };
   const rang = rangDe(lot, ancre);
-  return rang < 0 ? { ancre, ajout: [] } : { ancre: null, ajout: lot.slice(rang + 1) };
+  if (rang >= 0) return { ancre: null, ajout: lot.slice(rang + 1) };
+  // Ancre introuvable par son contenu (fil importé par une version qui n'écrivait pas l'uuid de la ligne) : si le lot
+  // couvre son heure, la suite est ce qui est strictement postérieur.
+  const heure = heureDe(ancre);
+  const premier = lot[0];
+  const suite = lot.filter((e) => e.ts > heure);
+  if (premier === undefined || premier.ts > heure || suite.length === 0) return { ancre, ajout: [] };
+  return { ancre: null, ajout: suite };
+}
+
+function heureDe(cle: string): string {
+  return cle.slice(0, cle.indexOf('\u0000'));
 }
 
 /** Un lot de la relecture `replay` : une nouvelle relecture part de l'ancre du fil (lue seulement à ce moment). */

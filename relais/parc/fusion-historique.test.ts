@@ -9,6 +9,7 @@ import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import { Diffusion } from '../clients/diffusion.ts';
 import { ouvrirBase } from '../registre/base.ts';
 import { Registre } from '../registre/registre.ts';
+import { cleEvenement, suiteAjoutee } from './fusion-historique.ts';
 import { type DonneesPoste, Postes } from './postes.ts';
 
 const MAJ = '2026-11-15T10:00:00.000Z';
@@ -143,5 +144,26 @@ describe('pas de réimportation quand rien ne se raccorde', () => {
     envoyerLot(postes, 'r-p', [msg('m1', 'un'), rep('r1', 'deux'), msg('m2', 'trois')]);
 
     expect(textesDuFil(registre)).toEqual(['un', 'deux']);
+  });
+});
+
+describe('ancre d’un fil importé sans uuid (version antérieure)', () => {
+  const avant = '2026-11-19T05:06:01.722Z';
+  const ancienne = cleEvenement({ ts: avant, evt: { type: 'texte', texte: 'deux causes' } });
+
+  test('le lot qui couvre son heure ajoute seulement ce qui suit', () => {
+    const lot = [
+      { ts: '2026-11-19T05:00:00.000Z', evt: { type: 'message', texte: 'film', uuid: 'a' } as Evenement },
+      { ts: avant, evt: { type: 'texte', texte: 'deux causes', uuid: 'b' } as Evenement },
+      { ts: '2026-11-20T10:00:00.000Z', evt: { type: 'message', texte: 'suite', uuid: 'c' } as Evenement },
+    ];
+    const { ancre, ajout } = suiteAjoutee(ancienne, lot);
+    expect(ancre).toBeNull();
+    expect(ajout.map((e) => e.ts)).toEqual(['2026-11-20T10:00:00.000Z']);
+  });
+
+  test('un lot entièrement postérieur attend : le milieu manquerait', () => {
+    const lot = [{ ts: '2026-11-20T10:00:00.000Z', evt: { type: 'message', texte: 'suite', uuid: 'c' } as Evenement }];
+    expect(suiteAjoutee(ancienne, lot)).toEqual({ ancre: ancienne, ajout: [] });
   });
 });
