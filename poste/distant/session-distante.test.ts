@@ -149,3 +149,16 @@ describe('suivi en direct d’une session claude.ai', () => {
     expect(s.vivante).toBe(false);
   });
 });
+
+describe('mode de permission d’une session claude.ai', () => {
+  test('le mode annoncé par un message system remplace le défaut', async () => {
+    const init = {
+      event_id: 'ev-mode', event_type: 'system', sequence_num: '99', created_at: '2026-11-20T10:05:00.000Z',
+      source: 'worker', payload: { type: 'system', subtype: 'init', permissionMode: 'default' },
+    };
+    api.fils.set('cse_m', [init, ...tourApi(1, 'Premier')]);
+    const { s } = creer(bruteDe('cse_m'));
+    expect(await s.synchroniser(bruteDe('cse_m'))).toBeNull();
+    expect(s.resume.mode).toBe('default');
+  });
+});

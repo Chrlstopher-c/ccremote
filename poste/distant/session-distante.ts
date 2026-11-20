@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
-import type { Evenement, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
+import { type Evenement, ModeSession, type ReponseDialogue, type ResumeSession } from '../../commun/session.ts';
 import { champsReglage } from '../session/reglages-sdk.ts';
 import type { SessionPersistee } from '../session/persistance.ts';
 import type { Reglage, ReponseCrochet, SessionPoste, SortieSession } from '../session/session-poste.ts';
@@ -61,6 +61,7 @@ export class SessionDistante implements SessionPoste {
   private probleme: string | null = null; // erreur de la liste ou du fil (tour suivant : réessai)
   private problemePilotage: string | null = null; // erreur du dernier envoi (levée par le prochain succès)
   private publie = ''; // dernier résumé publié, pour ne publier que les changements
+  private modeVu: ModeSession | null = null; // dernier mode de permission annoncé par la session (system)
 
   constructor(
     private readonly d: DependancesDistante,
@@ -127,6 +128,7 @@ export class SessionDistante implements SessionPoste {
     if (!r.ok) return r;
     const chronologique = [...r.donnees].reverse();
     const evenements = traduireLot(chronologique, this.etat);
+    this.releverMode(chronologique);
     this.traiterControle(chronologique, false);
     for (const e of r.donnees) this.vus.add(e.id);
     this.vuJusqua = this.derniereListe;
@@ -142,6 +144,7 @@ export class SessionDistante implements SessionPoste {
     const nouveaux = [...r.donnees].reverse();
     for (const e of nouveaux) this.vus.add(e.id);
     this.vuJusqua = this.derniereListe;
+    this.releverMode(nouveaux);
     const questions = this.traiterControle(nouveaux, true);
     for (const h of traduireLot(nouveaux, this.etat)) this.d.sortie.evenement(this.resume.id, h.evt);
     for (const evt of questions) this.d.sortie.evenement(this.resume.id, evt);
@@ -186,7 +189,18 @@ export class SessionDistante implements SessionPoste {
   }
 
   private maj(): void {
-    this.resume = this.avecEtat(this.base);
+    const etat = this.avecEtat(this.base);
+    this.resume = this.modeVu === null ? etat : { ...etat, mode: this.modeVu };
+  }
+
+  /** Le mode de permission de la session, tel que ses messages `system` l'annoncent (le plus récent l'emporte). */
+  private releverMode(lot: readonly EvenementBrut[]): void {
+    for (const e of lot) {
+      const p = e.payload as { type?: unknown; permissionMode?: unknown } | null; // lecture défensive d'un JSON libre
+      const mode = ModeSession.safeParse(p?.permissionMode);
+      if (p?.type === 'system' && mode.success) this.modeVu = mode.data;
+    }
+    this.maj();
   }
 
   private publier(): void {
