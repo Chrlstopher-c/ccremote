@@ -44,6 +44,8 @@ export interface DependancesDistante {
 
 type EchecEnvoi = Extract<ResultatApi<null>, { ok: false }>;
 
+const REPUBLICATION_MS = 30_000;
+
 export class SessionDistante implements SessionPoste {
   // Le résumé publié se dérive de `base` (l'état de la liste, réglages compris) plus le dialogue et les erreurs.
   private base: ResumeSession;
@@ -89,10 +91,15 @@ export class SessionDistante implements SessionPoste {
   }
 
   /** Le résumé s'il a changé depuis la dernière publication, sinon null. */
-  resumePourPublication(): ResumeSession | null {
+  // Republiée au moins toutes les 30 s même inchangée : au démarrage, le premier relevé peut finir avant que le
+  // lien avec le relais soit ouvert, et une publication perdue ne doit pas cacher la session jusqu'au changement suivant.
+  private publieLe = 0;
+
+  resumePourPublication(maintenant: number = Date.now()): ResumeSession | null {
     const signature = JSON.stringify(this.resume);
-    if (signature === this.publie) return null;
+    if (signature === this.publie && maintenant - this.publieLe < REPUBLICATION_MS) return null;
     this.publie = signature;
+    this.publieLe = maintenant;
     return this.resume;
   }
 
