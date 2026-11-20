@@ -1,12 +1,12 @@
 // Responsabilité : les sessions Claude du poste — découverte dans tmux, ouverture, commandes du relais, crochets,
 // persistance.
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
-import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
-import { type ConfigPoste, developper } from '../config.ts';
+import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
+import type { ConfigPoste } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
 import { basculerControle, enBascule, rembobinerTui, sortirTui } from './bascule-controle.ts';
 import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
@@ -14,25 +14,15 @@ import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import { type ReprisePrevue, relancerApresRedemarrage, reprisePrevue } from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
-import { ControlesDifferes, estAuRepos } from './controle-differe.ts';
+import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSession } from './styles-session.ts';
-import { modesDeOuverture, reglagesDeOuverture } from './reglages-sdk.ts';
+import { reglagesDeOuverture } from './reglages-sdk.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
-import type { Reglage, SessionPoste, SortieSession } from './session-poste.ts';
+import type { SessionPoste, SortieSession } from './session-poste.ts';
 import * as tmux from './tmux.ts';
-import {
-  type Adoptee,
-  type Origine,
-  ficheAdoptee,
-  ficheFermee,
-  identitePane,
-  adoptionAutorisee,
-  identiteProcessus,
-  titreDe,
-} from './adoption.ts';
-import { type ProcessusClaude, processusClaude } from './processus.ts';
+import { processusClaude } from './processus.ts';
 import { fichePourIdentifiant } from './identifiants-fiche.ts';
-import { dossierRegistreCc, type EntreeCc, lireRegistreCc } from './registre-cc.ts';
+import { dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
 import { ficheImportee } from './importation.ts';
 import { IndexDecouvertes, type TranscriptDecouvert } from './decouverte.ts';
@@ -47,6 +37,8 @@ import { titreDuTranscript } from './titre-transcript.ts';
 import { modeleDuTranscript } from './modele-transcript.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
+import { BalayageSessions, HISTORIQUE_ADOPTION, origineDe } from './balayage-sessions.ts';
+import { repertoireDe, resumeInitial } from './fiche-initiale.ts';
 import { TraceRelais, avecTraceRelais } from '../relais-sessions/trace.ts';
 
 export interface Reponse {
@@ -55,23 +47,9 @@ export interface Reponse {
   readonly donnees?: unknown;
 }
 
-const HISTORIQUE_ADOPTION = 150;
 const PERIODE_DECOUVERTE_MS = 2_000;
 const PERIODE_LECTURE_MS = 700;
-const FERMEES_MAX = 50; // sessions cc fermées les plus récentes à proposer à la reprise
-
-function entreeDe(
-  entrees: readonly EntreeCc[],
-  pane: tmux.PaneTmux,
-  proc: ProcessusClaude | undefined,
-): EntreeCc | undefined {
-  return entrees.find((e) => e.tmux === pane.nom && (proc === undefined || e.id === proc.sessionId));
-}
-
-// Le moteur d'une session ouverte depuis l'app : le SDK, sauf demande explicite de tmux (sessions anciennes).
-export function moteurDe(d: DemandeSession): Moteur {
-  return d.moteur ?? 'sdk';
-}
+export { moteurDe } from './fiche-initiale.ts';
 
 export class GestionnaireSessions {
   readonly sessions = new Map<string, SessionPoste>();
@@ -86,6 +64,7 @@ export class GestionnaireSessions {
   // Sessions Remote Control des comptes suivis, lues sur claude.ai : jamais persistées, jamais dans `sessions`.
   private readonly distantes: Spectateur;
   private readonly trace: TraceRelais;
+  private readonly balayage: BalayageSessions;
   private readonly sortieFil: SortieSession; // la sortie, dont l'historique repasse par la trace de relais
 
   constructor(
@@ -118,6 +97,14 @@ export class GestionnaireSessions {
       machine: config.machine,
       journal,
       sortie,
+    });
+    this.balayage = new BalayageSessions({
+      config,
+      journal,
+      sessions: this.sessions,
+      supprimees: this.supprimees,
+      fichePour: (id) => this.fichePour(id),
+      creer: (p) => this.creer(p),
     });
   }
 
@@ -173,7 +160,7 @@ export class GestionnaireSessions {
     if (this.supprimees.has(id)) return undefined;
     const entree = lireRegistreCc(dossierRegistreCc(), this.journal).find((e) => e.id === id);
     if (!entree) return undefined;
-    this.ajouterFermee(entree);
+    this.balayage.ajouterFermee(entree);
     this.sauvegarder();
     return this.sessions.get(id);
   }
@@ -211,11 +198,11 @@ export class GestionnaireSessions {
     const compte = d.compte ?? Object.keys(this.config.comptes)[0] ?? 'principal';
     if (!(compte in this.config.comptes))
       return { ok: false, erreur: `compte inconnu sur ${this.config.machine} : ${compte}` };
-    const cwd = this.repertoire(d);
+    const cwd = repertoireDe(this.config, d);
     if (!existsSync(cwd)) return { ok: false, erreur: `projet introuvable sur ${this.config.machine} : ${cwd}` };
     const configDir = this.config.comptes[compte] ?? null;
     const session = this.creer({
-      resume: this.resumeInitial(d, cwd, compte),
+      resume: resumeInitial(this.config, d, cwd, compte),
       consignes: composerConsignes({
         machine: this.config.machine,
         cwd,
@@ -395,7 +382,7 @@ export class GestionnaireSessions {
   importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
     const modele = modeleDuTranscript(t.chemin, this.journal);
     const session = this.creer({
-      resume: { ...ficheImportee(this.origine(), t), ...(modele ? { modele } : {}), ...surcharge },
+      resume: { ...ficheImportee(origineDe(this.config), t), ...(modele ? { modele } : {}), ...surcharge },
       consignes,
       configDir: t.configDir,
       transcript: t.chemin,
@@ -464,6 +451,13 @@ export class GestionnaireSessions {
     }, 2_000);
   }
 
+  private async decouvrir(): Promise<void> {
+    await this.balayage.rafraichir();
+    await Promise.all([...this.sessions.values()].map((s) => s.releverEcran()));
+    await Promise.all([...this.sessions.values()].map((s) => s.veillerNuit()));
+    void this.controles.traiter(this);
+  }
+
   private lireTout(): void {
     for (const s of this.sessions.values()) {
       try {
@@ -472,165 +466,6 @@ export class GestionnaireSessions {
         this.journal.warn({ session: s.resume.id, err: erreur }, 'lecture du transcript en échec');
       }
     }
-  }
-
-  private async decouvrir(): Promise<void> {
-    const panes = await tmux.lister();
-    const procs = processusClaude([null, ...Object.values(this.config.comptes)], this.journal);
-    const parPid = new Map(procs.map((p) => [p.pid, p]));
-    const entrees = lireRegistreCc(dossierRegistreCc(), this.journal);
-    const vus = new Set<string>();
-    for (const s of this.sessions.values()) {
-      const pane = panes.find((p) => p.nom === s.resume.tmux) ?? null;
-      if (pane) vus.add(pane.nom);
-      s.rattacher(pane);
-      if (!pane) continue;
-      const proc = parPid.get(pane.pid);
-      const a = identitePane(pane, panes, proc, entreeDe(entrees, pane, proc));
-      s.nommer?.(a?.nom ?? null);
-      if (a && !s.transcriptConnu) this.associer(s, a);
-    }
-    for (const pane of panes.filter((p) => !vus.has(p.nom))) this.adopterPane(pane, panes, parPid, entrees);
-    // CCREMOTE_ADOPTER_TERMINAUX=non : ne lit pas les Claude lancés hors tmux (moteur intégré, isolement d'essai).
-    const terminaux = process.env['CCREMOTE_ADOPTER_TERMINAUX'] !== 'non';
-    this.suivreTerminaux(terminaux ? procs.filter((p) => !p.enTmux) : [], entrees);
-    this.suivreFermees(entrees, panes, procs);
-    await Promise.all([...this.sessions.values()].map((s) => s.releverEcran()));
-    await Promise.all([...this.sessions.values()].map((s) => s.veillerNuit()));
-    void this.controles.traiter(this);
-  }
-
-  // Un pane sans identifiant réel n'est pas une session adoptable : on le signale, on n'invente pas d'id.
-  private adopterPane(
-    pane: tmux.PaneTmux,
-    panes: readonly tmux.PaneTmux[],
-    parPid: ReadonlyMap<number, ProcessusClaude>,
-    entrees: readonly EntreeCc[],
-  ): void {
-    const proc = parPid.get(pane.pid);
-    const a = identitePane(pane, panes, proc, entreeDe(entrees, pane, proc));
-    if (a) this.adopter(a, pane, pane.dossier);
-    else this.journal.debug({ tmux: pane.nom }, 'pane claude sans identifiant : non adoptée');
-  }
-
-  // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.
-  private suivreTerminaux(procs: readonly ProcessusClaude[], entrees: readonly EntreeCc[]): void {
-    const vivants = new Set(procs.map((p) => p.sessionId));
-    for (const s of this.sessions.values()) if (s.resume.terminal) s.rattacherTerminal(vivants.has(s.resume.id));
-    for (const p of procs) {
-      const connue = this.fichePour(p.sessionId);
-      if (connue) connue.rattacherTerminal(true);
-      else if (!this.fichePour(p.sessionId)) this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
-    }
-  }
-
-  // Sessions cc sans processus ni pane : listées fermées, reprenables par `cc reprendre` (via Quart).
-  private suivreFermees(
-    entrees: readonly EntreeCc[],
-    panes: readonly tmux.PaneTmux[],
-    procs: readonly ProcessusClaude[],
-  ): void {
-    const vivants = new Set([
-      ...procs.map((p) => p.sessionId),
-      ...entrees.filter((e) => panes.some((p) => p.nom === e.tmux)).map((e) => e.id),
-    ]);
-    for (const e of entrees.slice(0, FERMEES_MAX)) {
-      if (this.fichePour(e.id) || vivants.has(e.id) || this.supprimees.has(e.id)) continue;
-      this.ajouterFermee(e);
-    }
-  }
-
-  // Fiche fermée d'une entrée du registre Claude Code : titre et modèle relus dans son transcript.
-  private ajouterFermee(e: EntreeCc): void {
-    const chemin = cheminTranscript(e.cwd, e.id, null);
-    const titre = titreDuTranscript(chemin, e.cwd, this.journal) ?? titreDe(e.nom, null, e.cwd);
-    const modele = modeleDuTranscript(chemin, this.journal) ?? 'défaut';
-    const resume = { ...ficheFermee(this.origine(), e, titre), modele };
-    const session = this.creer({
-      resume,
-      consignes: null,
-      configDir: null,
-      transcript: null,
-      position: 0,
-      aReprendre: false,
-    });
-    this.sessions.set(e.id, session);
-  }
-
-  // Une session lancée hors ccremote (bureau, Atrium, terminal) : suivie en lecture ; dans tmux, pilotable par tmux.
-  private adopter(a: Adoptee, pane: tmux.PaneTmux | null, dossier = pane?.dossier ?? ''): void {
-    if (!adoptionAutorisee(a.id, this.supprimees)) return;
-    const connue = this.fichePour(a.id);
-    if (connue) return connue.rattacher(pane);
-    const titre =
-      (a.transcript ? titreDuTranscript(a.transcript.chemin, dossier, this.journal) : null) ??
-      titreDe(a.nom, pane?.titre ?? null, dossier);
-    const session = this.creer({
-      resume: ficheAdoptee(this.origine(), a, dossier, titre, pane),
-      consignes: null,
-      configDir: null,
-      transcript: null,
-      position: 0,
-      aReprendre: false,
-    });
-    this.sessions.set(a.id, session);
-    if (a.transcript) session.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
-    else if (pane) session.rattacher(pane);
-    this.journal.info({ tmux: pane?.nom ?? null, id: a.id, terminal: pane === null }, 'session adoptée');
-  }
-
-  private origine(): Origine {
-    return {
-      machine: this.config.machine,
-      compte: Object.keys(this.config.comptes)[0] ?? 'principal',
-      fenetre: this.config.fenetreContexte,
-    };
-  }
-
-  // Le transcript d'une session tout juste lancée n'existe qu'après son premier échange : on le cherche à chaque
-  // passage.
-  private associer(s: SessionPoste, a: Adoptee): void {
-    const pris = [...this.sessions.values()].some(
-      (autre) => autre !== s && autre.resume.claudeSessionId === a.transcript?.id,
-    );
-    if (a.transcript && !pris) s.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
-  }
-
-  // Projet d'une autre machine : la session travaille via ssh depuis un espace local dédié.
-  private repertoire(d: DemandeSession): string {
-    if (d.projet.machine === this.config.machine) return developper(d.projet.chemin.trim() || '~');
-    const espace = join(this.config.donnees, 'espaces', d.sessionId);
-    mkdirSync(espace, { recursive: true });
-    return espace;
-  }
-
-  private resumeInitial(d: DemandeSession, cwd: string, compte: string): ResumeSession {
-    const maintenant = new Date().toISOString();
-    return {
-      id: d.sessionId,
-      machine: this.config.machine,
-      projet: d.projet,
-      cwd,
-      titre: d.titre,
-      objectif: d.objectif,
-      modele: d.modele ?? 'défaut',
-      compte,
-      autonomie: d.autonomie,
-      statut: 'demarrage',
-      contexte: { tokens: 0, max: this.config.fenetreContexte },
-      etapes: 0,
-      compactions: 0,
-      claudeSessionId: d.sessionId,
-      moteur: moteurDe(d),
-      style_sortie: d.style_sortie ?? null,
-      ...modesDeOuverture(d),
-      bac_a_sable: d.bac_a_sable ?? 'non',
-      tmux: null,
-      attachee: false,
-      pilotee: true,
-      creeLe: maintenant,
-      majLe: maintenant,
-    };
   }
 }
 

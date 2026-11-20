@@ -345,6 +345,7 @@ poste/parc/lien-relais.ts                            le lien sortant du poste ve
 poste/presentation/machines-outils.test.ts          tests des outils machines contre un faux relais
 poste/presentation/machines-outils.ts               les outils machines du serveur lanterne : lister, tester, ajouter, modifier, supprimer (confirmation)
 poste/projets/decouverte.ts                          lister les projets présents sur la machine (sous-dossiers des racines…
+poste/session/balayage-sessions.ts              le balayage du poste : panes tmux, terminaux et registre cc → sessions adoptées ou fermées
 poste/session/adoption.ts                            la fiche d'une session adoptée — lancée hors ccremote, dans tmux ou d…
 poste/session/annexe.ts                             réglages d'une conversation annexe : titre, outils retirés, consigne
 poste/session/bilan-tour.ts                          bilan d'UN tour d'une session SDK, puis la suite à en tirer (suite-du-tour.ts)
@@ -368,6 +369,7 @@ poste/session/garde-sous-agents.ts                   borner les sous-agents d'un
 poste/session/importation.ts                          sessions Claude Code du poste non encore connues de Quart — trouvées dans ~/.claude/projects, décrites pour l'import
 poste/session/importation.test.ts                     tests de importation.ts
 poste/session/gestionnaire.test.ts                   tests de gestionnaire.ts
+poste/session/fiche-initiale.ts                   la fiche de départ d'une session ouverte depuis l'app : dossier de travail, moteur, état initial
 poste/session/gestionnaire.ts                        les sessions Claude du poste — découverte dans tmux, ouverture, comma…
 poste/session/lanceur.test.ts                        tests de lanceur.ts
 poste/session/lanceur.ts                             la ligne de commande `claude` d'une session pilotée par ccremote (lan…
