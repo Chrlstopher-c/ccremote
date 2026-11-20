@@ -161,6 +161,7 @@ export const ResumeSession = z.object({
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
   style_sortie: z.string().nullable().optional(), // style de sortie Claude (SDK) ; null ou absent = défaut
   annexe_de: z.string().nullable().optional(), // conversation annexe : identifiant de la session parente
+  parent: z.string().nullable().optional(), // née d'une duplication : identifiant de la session d'origine
   bac_a_sable: BacASable.optional(), // réglé à la création, réappliqué à la reprise ; absent = non
   nonLue: z.boolean().optional(), // fin de tour pas encore vue par Chris (drapeau du relais)
   // Connecteurs MCP de la session relevés à l'initialisation du SDK et à chaque lecture vivante : gardés au repos.

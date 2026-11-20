@@ -89,7 +89,7 @@ describe('duplication', () => {
     const r = await dupliquer(t.d, 'parente', 'msg-1');
     expect(r).toEqual({ ok: true, donnees: { sessionId: 'copie-1' } });
     expect(t.forks[0]?.options).toEqual({ dir: '/projets/app', upToMessageId: 'msg-1' });
-    expect(t.importes[0]).toEqual({ t: COPIE, surcharge: {}, consignes: null });
+    expect(t.importes[0]).toEqual({ t: COPIE, surcharge: { parent: 'parente' }, consignes: null });
   });
 });
 

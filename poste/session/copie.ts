@@ -28,7 +28,7 @@ export async function dupliquer(d: DependancesCopie, id: string, messageId: stri
   const r = await copier(d, conversation, { dir: s.resume.cwd, upToMessageId: messageId }, 'duplication');
   if (!r.ok) return r;
   const copie = d.trouverImportables().find((t) => t.id === r.id);
-  if (copie) d.importerUne(copie, {}, null);
+  if (copie) d.importerUne(copie, { parent: id }, null);
   d.sauvegarder();
   return { ok: true, donnees: { sessionId: r.id } };
 }

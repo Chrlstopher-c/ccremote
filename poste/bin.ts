@@ -27,6 +27,11 @@ import { type ContexteEntretien, estEntretien, executerEntretien } from './entre
 import { versionsClaudeCode } from './entretien/claude-code.ts';
 import { estReste, executerReste, type ContexteReste } from './reste/executer.ts';
 import { fichierClaudeJson } from './reste/memoire.ts';
+import { cheminSocketDictee } from './reste/dictee.ts';
+import { estResteLot2, executerResteLot2, type ContexteResteLot2 } from './reste/executer-lot2.ts';
+import { MinuterieTaches } from './reste/minuterie-taches.ts';
+import { ServiceTaches } from './reste/taches-planifiees.ts';
+import { cheminTranscript } from './session/transcript.ts';
 import { dossiersProjets } from './session/decouverte.ts';
 import { SOCKET } from './session/tmux.ts';
 
@@ -152,10 +157,34 @@ const contexteReste: ContexteReste = {
   journal,
 };
 
+// Le lot 2 : compactions, fusion (PR), dictée, tâches planifiées (une minuterie du poste les exécute).
+const taches = new ServiceTaches({
+  fichier: join(config.donnees, 'taches-planifiees.json'),
+  machine: config.machine,
+  description: config.description,
+  racines: config.racines,
+  ouvrir: (d) => sessions.ouvrir(d),
+  journal,
+});
+const contexteResteLot2: ContexteResteLot2 = {
+  session: (id) => {
+    const s = sessions.session(id);
+    if (!s) return null;
+    const conversation = s.resume.claudeSessionId;
+    const transcript = conversation ? cheminTranscript(s.resume.cwd, conversation, s.persistee.configDir) : null;
+    return { cwd: s.resume.cwd, transcript };
+  },
+  taches,
+  socketDictee: () => cheminSocketDictee(process.env, process.getuid?.()),
+  journal,
+};
+const minuterieTaches = new MinuterieTaches(taches, journal.child({ domaine: 'taches' }));
+
 async function executer(c: CommandeRelais): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
   if (estEntretien(c)) return executerEntretien(c, contexteEntretien);
   if (estReste(c)) return executerReste(c, contexteReste);
+  if (estResteLot2(c)) return executerResteLot2(c, contexteResteLot2);
   if (c.kind === 'ouvrir') return sessions.ouvrir(c.demande);
   if (c.kind === 'projets') return { ok: true, donnees: decouvrirProjets(config.machine, config.racines) };
   if (c.kind === 'importables') return sessions.importables();
@@ -189,6 +218,7 @@ async function surCommande(c: CommandeRelais): Promise<MessagePoste | null> {
 
 servirLocal(socket, sessions, journal);
 sessions.demarrer();
+minuterieTaches.demarrer();
 comptes.demarrer();
 lien = new LienRelais({
   url: config.relais,
@@ -206,6 +236,7 @@ journal.info({ machine: config.machine, relais: config.relais }, 'poste démarr�
 function arreter(): void {
   journal.info('arrêt du poste (les sessions tmux continuent)');
   sessions.sauvegarder();
+  minuterieTaches.arreter();
   terminaux.fermerTout();
   lien?.arreter();
   process.exit(0);
