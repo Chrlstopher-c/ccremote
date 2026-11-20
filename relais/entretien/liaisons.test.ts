@@ -47,6 +47,14 @@ describe('occupant de la liaison', () => {
     expect(r.depuis).not.toBeNull();
   });
 
+  test('OpenSSH récent : la session s’appelle sshd-session et compte aussi', async () => {
+    const ssh = faux({
+      'ss ': 'LISTEN users:(("sshd-session",pid=4243,fd=7))',
+      'ps ': 'relais sshd-session Thu Nov 20 06:31:00 2026',
+    });
+    expect(await occupant({ ssh, journal: JOURNAL }, CONNEXION, 47321)).toMatchObject({ occupe: true, pid: 4243 });
+  });
+
   test('un autre utilisateur, un autre programme, ou rien d’écoutant : pas occupé', async () => {
     const autre = faux({ 'ss ': 'users:(("sshd",pid=4242))', 'ps ': 'root sshd Thu Nov 20 06:31:00 2026' });
     expect(await occupant({ ssh: autre, journal: JOURNAL }, CONNEXION, 47321)).toEqual({

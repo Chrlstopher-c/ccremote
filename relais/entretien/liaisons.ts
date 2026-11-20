@@ -5,6 +5,8 @@ import type { OccupantLiaison, ResultatGeste } from '../../commun/entretien.ts';
 import type { ConnexionSsh, Ssh } from '../machines/ssh.ts';
 
 const DELAI_MS = 10_000;
+/** OpenSSH ≥ 9.8 sépare la session dans `sshd-session` (Arch) ; avant, c'est `sshd` (Debian du Pi). */
+const PROGRAMMES_SSHD: ReadonlySet<string> = new Set(['sshd', 'sshd-session']);
 const AUCUN: OccupantLiaison = { occupe: false, pid: null, depuis: null };
 
 export interface DependancesLiaisons {
@@ -37,7 +39,7 @@ export async function occupant(d: DependancesLiaisons, c: ConnexionSsh, portDist
   if (pid === null || !pidValide(pid)) return AUCUN;
   const ps = await d.ssh.executer(c, `ps -o user=,comm=,lstart= -p ${pid}`, null, DELAI_MS);
   const proc = ps.code === 0 ? analyserProcessus(ps.sortie) : null;
-  if (!proc || proc.comm !== 'sshd' || proc.user !== c.utilisateur) return AUCUN;
+  if (!proc || !PROGRAMMES_SSHD.has(proc.comm) || proc.user !== c.utilisateur) return AUCUN;
   const depuis = new Date(proc.lstart);
   return { occupe: true, pid, depuis: Number.isNaN(depuis.getTime()) ? null : depuis.toISOString() };
 }
