@@ -114,6 +114,18 @@ export function identifiantsDuLot(lot: readonly EvenementHorodate[]): { uuids: s
   return { uuids: [...uuids], ids: [...ids] };
 }
 
+/** Écart maximal entre un message de Chris écrit en direct (sans uuid, à l'envoi) et sa ligne du transcript. */
+export const ECHO_MS = 10 * 60_000;
+
+/** Message de Chris écrit en direct (sans uuid, heure de l'envoi) que la relecture retrouve dans le transcript (avec
+ *  uuid, heure d'écriture) : le même message, à ne pas afficher deux fois. */
+export function estEchoDirect(direct: EvenementHorodate, relu: EvenementHorodate): boolean {
+  const a = direct.evt;
+  const b = relu.evt;
+  if (a.type !== 'message' || b.type !== 'message' || a.uuid || !b.uuid || a.texte !== b.texte) return false;
+  return Math.abs(Date.parse(direct.ts) - Date.parse(relu.ts)) <= ECHO_MS;
+}
+
 /** Fusion pure : chaque événement du lot absent du fil (clé inconnue) prend sa place chronologique (après les
  * événements de même horodatage ou antérieurs). Les lignes existantes gardent leur ordre ; si l'une d'elles est
  * décalée, toute la suite du fil doit être réécrite en base. */
@@ -124,10 +136,16 @@ export function planifierFusion(
 ): PlanFusion {
   const connues = new Set([...existants.map((l) => l.cle), ...dejaAuFil]);
   const fil: LigneFil[] = [...existants];
+  const echos = new Set<LigneFil>(); // messages directs déjà reconnus dans une ligne relue
   for (const e of lot) {
     const cle = cleDeDoublon(e);
     if (connues.has(cle)) continue;
     connues.add(cle);
+    const echo = existants.find((l) => !echos.has(l) && estEchoDirect(l, e));
+    if (echo) {
+      echos.add(echo);
+      continue;
+    }
     let rang = fil.length;
     while (rang > 0 && (fil[rang - 1]?.ts ?? '') > e.ts) rang--;
     fil.splice(rang, 0, { ts: e.ts, evt: e.evt, seq: null, cle });

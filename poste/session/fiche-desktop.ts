@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import { z } from 'zod';
+import type { FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import type { ModeSession } from '../../commun/session.ts';
 
 const FicheBrute = z.object({
@@ -17,6 +18,7 @@ const FicheBrute = z.object({
   title: z.string().optional(),
   remoteControlUserEnabled: z.boolean().optional(),
   bridgeSessionIds: z.array(z.string()).optional(),
+  sshConfig: z.object({ sshHost: z.string().optional() }).nullable().optional(),
 });
 
 export interface FicheDesktop {
@@ -28,6 +30,7 @@ export interface FicheDesktop {
   readonly titre: string | null;
   readonly remoteControl: boolean;
   readonly ponts: readonly string[];
+  readonly hote: string | null; // hôte ssh où Desktop fait tourner la conversation ; null : cette machine
 }
 
 const MODES: ReadonlySet<string> = new Set(['bypassPermissions', 'default', 'acceptEdits', 'plan', 'auto']);
@@ -61,6 +64,7 @@ function lireUne(chemin: string, journal: Logger): FicheDesktop | null {
       titre: f.title ?? null,
       remoteControl: f.remoteControlUserEnabled === true,
       ponts: f.bridgeSessionIds ?? [],
+      hote: f.sshConfig?.sshHost ?? null,
     };
   } catch (erreur) {
     journal.debug({ err: erreur, chemin }, 'fiche Desktop illisible ignorée');
@@ -77,4 +81,14 @@ export function fichesDesktop(racine: string, journal: Logger): Map<string, Fich
     if (f) carte.set(f.conversation, f);
   }
   return carte;
+}
+
+/** Les fiches Desktop de cette machine telles que le relais les reçoit (archivage, Remote Control, hôte). */
+export function fichesDesktopAnnoncees(racine: string, journal: Logger): FicheDesktopAnnoncee[] {
+  return [...fichesDesktop(racine, journal).values()].map((f) => ({
+    conversation: f.conversation,
+    archivee: f.archivee,
+    remoteControl: f.remoteControl,
+    hote: f.hote,
+  }));
 }

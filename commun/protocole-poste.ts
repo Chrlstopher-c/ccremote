@@ -7,7 +7,7 @@ import { commandesEntretien, EchangePoste, ReseauPoste, VersionsClaude } from '.
 import { commandesParite } from './parite.ts';
 import { commandesReste } from './reste.ts';
 import { commandesResteLot2 } from './reste-lot2.ts';
-import { Decouverte } from './decouverte.ts';
+import { Decouverte, FicheDesktopAnnoncee } from './decouverte.ts';
 import { EtatCompte, LimiteSdk, NOM_COMPTE } from './comptes.ts';
 import { CheminSession, TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { CheminModifie, PorteeModifications, TourRef } from './modifications.ts';
@@ -51,6 +51,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     sessions: z.array(ResumeSession),
     decouvertes: z.array(Decouverte).optional(), // transcripts du poste non encore ouverts dans Lanterne
     transcripts: z.array(z.string()).optional(), // identifiants de tous les transcripts du poste (fiches fantômes)
+    desktop: z.array(FicheDesktopAnnoncee).optional(), // fiches Claude Desktop du poste (archivage, Remote Control)
     empreinte: z.string().optional(), // empreinte du code installé (install par SSH) ; absente pour un poste d'avant
     commit: z.string().nullable().optional(), // commit du code (absent pour un poste d'avant)
     claudeCode: VersionsClaude.optional(), // versions de Claude Code (CLI, SDK) relevées au démarrage du poste
@@ -59,12 +60,25 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     kind: z.literal('decouvertes'),
     decouvertes: z.array(Decouverte),
     transcripts: z.array(z.string()).optional(),
+    desktop: z.array(FicheDesktopAnnoncee).optional(),
   }),
   z.object({ kind: z.literal('etat_machine'), etat: EtatMachine }),
   z.object({ kind: z.literal('comptes'), comptes: z.array(EtatCompte) }),
   // Fenêtre de quota vue dans le flux SDK d'une session du compte (rate_limit_event) : le relais la retient.
   z.object({ kind: z.literal('compte_limite'), cle: z.string(), limite: LimiteSdk }),
   z.object({ kind: z.literal('session'), session: ResumeSession }),
+  // Recalage d'une session connue (démarrage du poste, transcript changé) : le relais nettoie son fil (doublons,
+  // notifications en bulle), range la fiche si Desktop l'a archivée, et prend la relecture qui suit comme complète.
+  // `lignes` : clés des lignes du transcript (uuid des messages et textes, id des appels) jusqu'à `jusqua` ; une ligne
+  // du fil principal qui porte une clé de transcript absente est étrangère (fil pollué, embranchement abandonné).
+  z.object({
+    kind: z.literal('recalage'),
+    sessionId: z.string(),
+    archiver: z.boolean(),
+    lignes: z.array(z.string()).optional(),
+    messages: z.array(z.string()).optional(), // textes des messages de Chris du transcript (échos sans uuid)
+    jusqua: z.string().optional(),
+  }),
   z.object({ kind: z.literal('evenement'), sessionId: z.string(), ts: z.string(), evt: Evenement }),
   // Un lot de l'historique (replay : identifiant de la relecture ; le relais ne reçoit une relecture que sur un fil vide).
   z.object({

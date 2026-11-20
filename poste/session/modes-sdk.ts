@@ -1,6 +1,6 @@
 // Responsabilité : l'état du mode rapide et d'Ultracode d'une session SDK (ce que Chris demande, ce que le SDK
 // rapporte, ce que le modèle permet) — pur : lecture des messages du SDK, bascules, compatibilité. Sans requête.
-import type { ModeRapide, ModeUltracode } from '../../commun/session.ts';
+import type { ModeRapide, ModeSession, ModeUltracode } from '../../commun/session.ts';
 import { EtatRapideSdk } from '../../commun/session.ts';
 import type { ModeleSdk } from './modele-affiche.ts';
 import { modeleEffectif } from './modele-affiche.ts';
@@ -108,4 +108,14 @@ export function lireReglagesAppliques(retour: unknown): ReglagesAppliques | null
     ...(typeof demandee === 'boolean' ? { ultracodeRequested: demandee } : {}),
     ...(typeof disponible === 'boolean' ? { ultracodeAvailable: disponible } : {}),
   };
+}
+
+const MODES_INIT: ReadonlySet<string> = new Set(['bypassPermissions', 'default', 'acceptEdits', 'plan', 'auto']);
+
+/** Mode de permission réel annoncé par le message `system/init` du SDK ; null pour tout autre message. */
+export function modeDeInit(msg: unknown): ModeSession | null {
+  if (typeof msg !== 'object' || msg === null) return null;
+  const m = msg as { type?: unknown; subtype?: unknown; permissionMode?: unknown }; // lecture de trois champs seulement
+  if (m.type !== 'system' || m.subtype !== 'init' || typeof m.permissionMode !== 'string') return null;
+  return MODES_INIT.has(m.permissionMode) ? (m.permissionMode as ModeSession) : null; // vérifié juste avant
 }

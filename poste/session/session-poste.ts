@@ -1,7 +1,8 @@
 // Responsabilité : le contrat qu'une session du poste offre au gestionnaire et au socket local, quel que soit son
 // moteur — `tmux` (TUI dans un serveur tmux) ou `sdk` (Claude Agent SDK). Le gestionnaire ne parle qu'à cette forme.
 import type { SDKControlGetUsageResponse } from '@anthropic-ai/claude-agent-sdk';
-import type { Decouverte } from '../../commun/decouverte.ts';
+import type { LignesRelues } from './recalage-demarrage.ts';
+import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
 import type { DecisionCrochet } from './garde-sous-agents.ts';
@@ -24,7 +25,10 @@ export interface SortieSession {
   /** Historique complet d'une session (transcript relu à l'ouverture) : un lot, sans notifications. */
   historique?(sessionId: string, evenements: readonly EvenementHorodate[]): void;
   resume(r: ResumeSession): void;
-  decouvertes?(liste: Decouverte[], transcripts: string[]): void; // découvertes et transcripts : à chaque changement
+  /** Fil d'une session à recaler au relais (nettoyage, archivage Desktop) : la relecture complète suit. */
+  recalage?(sessionId: string, archiver: boolean, lignes: LignesRelues | null): void;
+  // Découvertes, transcripts et fiches Claude Desktop : à chaque changement.
+  decouvertes?(liste: Decouverte[], transcripts: string[], desktop?: FicheDesktopAnnoncee[]): void;
 }
 
 // Réponse d'un crochet du CLI (sessions pilotées dans tmux seulement).

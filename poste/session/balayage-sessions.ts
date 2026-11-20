@@ -100,7 +100,7 @@ export class BalayageSessions {
     const vivants = new Set(procs.map((p) => p.sessionId));
     for (const s of this.d.sessions.values()) {
       if (!s.resume.terminal) continue;
-      const vivant = vivants.has(s.resume.id);
+      const vivant = vivants.has(s.resume.claudeSessionId ?? s.resume.id) || vivants.has(s.resume.id);
       const enTour = vivant && this.tourEnCours(s.resume.cwd, s.resume.claudeSessionId, s.persistee.configDir);
       s.rattacherTerminal(vivant, enTour);
     }

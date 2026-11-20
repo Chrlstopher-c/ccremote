@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import type { Database } from 'bun:sqlite';
 import type { EvenementDate, GenreAcces, Notification, VueMachine } from '../../commun/api-clients.ts';
 import type { EtatMachine } from '../../commun/protocole-poste.ts';
+import { type LignesTranscript, nettoyerFil } from './nettoyage-fil.ts';
 import { EtatCompte } from '../../commun/comptes.ts';
 import { type Categorie, ListeCategories, normaliserCategories } from '../../commun/categories.ts';
 import { type GroupeMasque, ListeGroupesMasques, normaliserGroupesMasques } from '../../commun/groupes-masques.ts';
@@ -305,6 +306,11 @@ export class Registre {
   /** Fusion d'un lot de l'historique dans le fil : sans doublon, chaque événement à sa place chronologique (fusion-fil.ts). */
   fusionnerHistorique(sessionId: string, lot: readonly EvenementHorodate[], options: OptionsFusion): ResultatFusion {
     return fusionnerDansFil(this.db, sessionId, lot, options);
+  }
+
+  /** Recalage : notifications en bulle et doublons retirés du fil (voir nettoyage-fil.ts). */
+  nettoyerFil(sessionId: string, transcript?: LignesTranscript): number {
+    return nettoyerFil(this.db, sessionId, transcript);
   }
 
   evenements(sessionId: string, apres: number, limite = 500): EvenementDate[] {

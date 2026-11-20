@@ -13,6 +13,7 @@ export interface ParametresLien {
   readonly journal: Logger;
   readonly bonjour: () => MessagePoste;
   readonly surCommande: (c: CommandeRelais) => Promise<MessagePoste | null>;
+  readonly surOuverture?: () => void; // après le bonjour et la file d'attente (recalage des fils, par exemple)
 }
 
 export class LienRelais {
@@ -23,6 +24,10 @@ export class LienRelais {
   private ouvertA = 0;
 
   constructor(private readonly p: ParametresLien) {}
+
+  get estOuvert(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
 
   demarrer(): void {
     this.connecter();
@@ -59,6 +64,7 @@ export class LienRelais {
     const enAttente = this.tampon;
     this.tampon = [];
     for (const m of enAttente) ws.send(JSON.stringify(m));
+    this.p.surOuverture?.();
   }
 
   private async recevoir(ws: WebSocket, brut: string): Promise<void> {

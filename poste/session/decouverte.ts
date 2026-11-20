@@ -43,7 +43,7 @@ export interface OptionsIndex {
 
 const IDENTIFIANT = /^[A-Za-z0-9-]{1,100}$/;
 const PREFIXE_SOUS_AGENT = 'agent-'; // transcripts des sous-agents : pas des conversations
-const VERSION_CACHE = 2; // à incrémenter quand une règle d'analyse change : tout le cache est relu une fois
+const VERSION_CACHE = 3; // à incrémenter quand une règle d'analyse change : tout le cache est relu une fois
 const PERIODE_SECOURS_MS = 60_000; // balayage complet si une surveillance rate un événement
 const DELAI_SURVEILLANCE_MS = 3_000; // une session active écrit en continu : on regroupe les événements
 
@@ -106,7 +106,14 @@ function pontDe(ligne: string): string[] {
 function transcriptDe(
   analyse: Analyse,
   contenu: string,
-  base: { id: string; chemin: string; configDir: string | null; mtime: number; ponts: readonly string[] },
+  base: {
+    id: string;
+    chemin: string;
+    configDir: string | null;
+    mtime: number;
+    ponts: readonly string[];
+    hoteDesktop: string | null; // machine où Claude Desktop fait tourner cette conversation (fiche locale ou ssh)
+  },
   machine: string,
   desktop: FicheDesktop | undefined,
 ): TranscriptDecouvert | null {
@@ -125,6 +132,8 @@ function transcriptDe(
     chemin: base.chemin,
     configDir: base.configDir,
     ...(base.ponts.length > 0 ? { ponts: [...base.ponts] } : {}),
+    cwdExiste: existsSync(cwd),
+    ...(base.hoteDesktop ? { hoteDesktop: base.hoteDesktop } : {}),
   };
 }
 
@@ -227,7 +236,9 @@ export class IndexDecouvertes {
     const fiche = this.fichesDesktopDe().get(id);
     const ponts = [...new Set([...analyse.ponts, ...(fiche?.ponts ?? [])].map(normaliserPont))];
     const desktop = analyse.aMessageDeChris ? undefined : fiche;
-    return transcriptDe(analyse, contenu, { id, chemin, configDir, mtime, ponts }, this.options.machine, desktop);
+    const hoteDesktop = fiche ? (fiche.hote ?? this.options.machine) : null;
+    const base = { id, chemin, configDir, mtime, ponts, hoteDesktop };
+    return transcriptDe(analyse, contenu, base, this.options.machine, desktop);
   }
 
   private fichesDesktopDe(): ReadonlyMap<string, FicheDesktop> {

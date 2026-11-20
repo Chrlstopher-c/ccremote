@@ -1,6 +1,5 @@
 // Responsabilité : les sessions Claude du poste — découverte dans tmux, ouverture, commandes du relais, crochets,
 // persistance.
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
@@ -8,7 +7,6 @@ import type { UsageSdk } from '../../commun/compte-detail.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
 import type { ConfigPoste } from '../config.ts';
-import { composerConsignes } from './consignes.ts';
 import { basculerControle, enBascule, rembobinerTui, sortirTui } from './bascule-controle.ts';
 import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
@@ -17,17 +15,20 @@ import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSessionId } from './styles-session.ts';
-import { reglagesDeOuverture } from './reglages-sdk.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
 import { tenueAilleurs } from './processus.ts';
 import { titreRelu } from './recalage-fiche.ts';
+import { MarquesRecalage, RecalageFils, recalerAuChargement } from './recalage-demarrage.ts';
+import { stockeurImages } from './historique.ts';
 import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import { cheminTranscript } from './transcript.ts';
 import { IndexDecouvertes, type TranscriptDecouvert, identifiantsTranscripts } from './decouverte.ts';
 import { ImportationSessions } from './importation-sessions.ts';
-import type { Decouverte } from '../../commun/decouverte.ts';
+import { ouvrirSession } from './ouverture-session.ts';
+import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
+import { RACINE_DESKTOP_DEFAUT, fichesDesktopAnnoncees } from './fiche-desktop.ts';
 import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
 import { lireFichierSession } from '../presentation/lecture.ts';
 import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
@@ -37,7 +38,6 @@ import { Stockage } from '../presentation/stockage.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
 import { BalayageSessions } from './balayage-sessions.ts';
-import { repertoireDe, resumeInitial } from './fiche-initiale.ts';
 import { TraceRelais, avecTraceRelais } from '../relais-sessions/trace.ts';
 
 export interface Reponse {
@@ -65,6 +65,10 @@ export class GestionnaireSessions {
   private readonly distantes: Spectateur;
   private readonly trace: TraceRelais;
   private readonly balayage: BalayageSessions;
+  private readonly marques: MarquesRecalage;
+  private readonly recalage: RecalageFils;
+  /** Lien au relais ouvert : posé par le poste (bin.ts) ; le recalage des fils n'avance que lien ouvert. */
+  relaisOuvert: () => boolean = () => false;
   private readonly sortieFil: SortieSession; // la sortie, dont l'historique repasse par la trace de relais
   // Parent d'une copie dupliquée avant que son transcript soit découvert : posé à sa création (voir creer).
   private readonly parentsAttendus = new Map<string, string>();
@@ -121,10 +125,23 @@ export class GestionnaireSessions {
       fichePour: (id) => this.fichePour(id),
       creer: (p) => this.creer(p),
     });
+    this.marques = new MarquesRecalage(join(config.donnees, 'recalage.json'), journal);
+    this.recalage = new RecalageFils({
+      ...{ journal, marques: this.marques, relaisOuvert: () => this.relaisOuvert() },
+      fiches: () => [...this.sessions.values()].map((s) => ({ persistee: s.persistee, vivante: s.vivante })),
+      stockeur: (id) => stockeurImages(this.stockage, id, journal),
+      recalage: (id, archiver, lignes) => this.sortie.recalage?.(id, archiver, lignes),
+      historique: (id, evenements) => this.sortieFil.historique?.(id, evenements),
+    });
   }
 
+  /** Lien au relais (r)ouvert : les fils des sessions dont le transcript a changé depuis leur recalage sont relus. */
+  recalerFils = (): void => this.recalage.lancer();
+
   demarrer(): void {
-    const persistees = this.persistance.charger().map((p) => titreRelu(p, this.journal));
+    const persistees = this.persistance
+      .charger()
+      .map((p) => recalerAuChargement(titreRelu(p, this.journal), this.marques, { journal: this.journal }));
     for (const p of persistees) this.sessions.set(p.resume.id, this.creer(p));
     setTimeout(() => this.decouvertes.demarrer(), 0); // premier index lourd : après le démarrage du poste
     void relancerApresRedemarrage(this.reprisesPrevues(persistees), this.journal);
@@ -170,6 +187,7 @@ export class GestionnaireSessions {
       this.importerUne(decouverte);
       this.annoncer();
       this.sauvegarder();
+      this.recalage.lancer(); // fil complet relu (la reprise d'adoption n'envoie que la queue)
       return this.sessions.get(id);
     }
     if (this.supprimees.has(id)) return undefined;
@@ -211,40 +229,9 @@ export class GestionnaireSessions {
     return this.usages.lire(compte);
   }
 
-  async ouvrir(d: DemandeSession): Promise<Reponse> {
-    if (this.sessions.has(d.sessionId)) return { ok: false, erreur: 'session déjà ouverte' };
-    const compte = d.compte ?? Object.keys(this.config.comptes)[0] ?? 'principal';
-    if (!(compte in this.config.comptes))
-      return { ok: false, erreur: `compte inconnu sur ${this.config.machine} : ${compte}` };
-    const cwd = repertoireDe(this.config, d);
-    if (!existsSync(cwd)) return { ok: false, erreur: `projet introuvable sur ${this.config.machine} : ${cwd}` };
-    const configDir = this.config.comptes[compte] ?? null;
-    const session = this.creer({
-      resume: resumeInitial(this.config, d, cwd, compte),
-      consignes: composerConsignes({
-        machine: this.config.machine,
-        cwd,
-        demande: d,
-        presentation: (d.moteur ?? 'sdk') === 'sdk',
-      }),
-      configDir,
-      transcript: cheminTranscript(cwd, d.sessionId, configDir),
-      position: 0,
-      aReprendre: false,
-    });
-    this.sessions.set(d.sessionId, session);
-    if (d.controle_distant) this.controles.ajouter(d.sessionId);
-    const refusReglage = await reglagesDeOuverture(session, d);
-    if (refusReglage) {
-      this.sessions.delete(d.sessionId);
-      return { ok: false, erreur: refusReglage };
-    }
-    const erreur = await session.lancer(d.message, d.modele ?? null, d.pieces ?? []);
-    if (erreur) {
-      this.sessions.delete(d.sessionId);
-      return { ok: false, erreur };
-    }
-    return { ok: true, donnees: session.resume };
+  ouvrir(d: DemandeSession): Promise<Reponse> {
+    const controle = (id: string): void => this.controles.ajouter(id);
+    return ouvrirSession({ config: this.config, sessions: this.sessions, creer: (p) => this.creer(p), controle }, d);
   }
 
   /** Panneau Fichiers d'une session : le dossier de la session borne tous les chemins. */
@@ -387,7 +374,11 @@ export class GestionnaireSessions {
 
   // Annonce au relais : sessions découvertes et identifiants de tous les transcripts du poste (fantômes).
   annoncer(): void {
-    this.sortie.decouvertes?.(this.listeDecouvertes(), this.transcriptsConnus());
+    this.sortie.decouvertes?.(this.listeDecouvertes(), this.transcriptsConnus(), this.fichesDesktop());
+  }
+
+  fichesDesktop(): FicheDesktopAnnoncee[] {
+    return fichesDesktopAnnoncees(RACINE_DESKTOP_DEFAUT, this.journal);
   }
 
   transcriptsConnus(): string[] {

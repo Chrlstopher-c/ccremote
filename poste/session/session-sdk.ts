@@ -42,6 +42,7 @@ import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
 import { stockeurImages } from './historique.ts';
+import { statutExterne } from './recalage-demarrage.ts';
 import { cheminTranscript } from './transcript.ts';
 import { titreGenereDuTranscript } from './titre-transcript.ts';
 import { SuiviTranscript } from './suivi-transcript.ts';
@@ -53,7 +54,7 @@ import {
   type ReglageMode,
   type RequeteReglable,
 } from './reglages-sdk.ts';
-import { etatRapideLu, rapideLu, ultracodeDefaut, ultracodeLu } from './modes-sdk.ts';
+import { etatRapideLu, modeDeInit, rapideLu, ultracodeDefaut, ultracodeLu } from './modes-sdk.ts';
 import { effetRythme } from './rythme.ts';
 import type { ReponseCrochet, Reglage, SessionPoste, SortieSession } from './session-poste.ts';
 import type { Suite } from './suite-du-tour.ts';
@@ -259,7 +260,16 @@ export class SessionSdk implements SessionPoste {
 
   // Pas de pane tmux ni de terminal : le fil vient du SDK, la veille est celle du poste.
   rattacher(): void {}
-  rattacherTerminal(): void {}
+  // Conversation tenue par un processus Claude hors Lanterne (Desktop, terminal) : « en cours » ou « en attente », sans
+  // reprise possible ; fermée quand ce processus s'arrête. Une requête Lanterne vivante l'emporte. L'activité (majLe)
+  // reste celle du transcript.
+  rattacherTerminal(vivant: boolean, enTour = false): void {
+    if (this.vivante) return;
+    const statut = statutExterne(this.etat.statut, vivant, enTour);
+    if (statut === this.etat.statut && (this.etat.terminal === true) === vivant) return;
+    this.etat = { ...this.etat, statut, terminal: vivant };
+    this.env.sortie.resume(this.etat);
+  }
   async releverEcran(): Promise<void> {}
 
   veillerNuit(maintenant?: number): Promise<void> {
@@ -748,6 +758,8 @@ export class SessionSdk implements SessionPoste {
       this.memoriser(sortie.claudeSessionId);
       this.maj({ claudeSessionId: sortie.claudeSessionId });
     }
+    const mode = modeDeInit(msg);
+    if (mode && mode !== this.etat.mode) this.maj({ mode }); // la fiche dit le mode réel, pas « inconnu »
     if (sortie.compaction) this.maj({ statut: 'compaction' });
     if (sortie.limite) this.env.limite?.(sortie.limite);
     if (sortie.finDeTour) this.finDeTour(sortie.finDeTour);
@@ -805,12 +817,15 @@ export class SessionSdk implements SessionPoste {
     return null;
   }
 
+  // L'activité d'une session est son fil (et le début d'un tour) : une reprise, un réglage ou un titre ne la datent pas.
   private emettre(evt: Evenement): void {
+    if (evt.type !== 'flux') this.etat = { ...this.etat, majLe: new Date().toISOString() };
     this.env.sortie.evenement(this.etat.id, evt);
   }
 
   private maj(champs: Partial<ResumeSession>): void {
-    this.etat = { ...this.etat, ...champs, majLe: new Date().toISOString() };
+    const activite = champs.statut === 'travail';
+    this.etat = { ...this.etat, ...champs, majLe: activite ? new Date().toISOString() : this.etat.majLe };
     this.env.sortie.resume(this.etat);
   }
 }

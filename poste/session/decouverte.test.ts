@@ -177,7 +177,7 @@ describe('index des sessions découvertes', () => {
     ecrire(config, '-p', A, [LIGNE_CWD('/p'), humain('x')]);
     const cache = join(racine, 'cache.json');
     index(config, cache).rafraichir();
-    expect(JSON.parse(readFileSync(cache, 'utf8')).version).toBe(2);
+    expect(JSON.parse(readFileSync(cache, 'utf8')).version).toBe(3);
   });
 
   test('une configuration absente ne lève rien', () => {
@@ -232,6 +232,7 @@ describe('ponts Remote Control', () => {
       titre: null,
       remoteControl: true,
       ponts: ['session_011HBB', 'cse_011HAA'],
+      hote: null,
     };
     const idx = new IndexDecouvertes({
       machine: 'tour',
@@ -268,6 +269,7 @@ describe('sessions Desktop au premier message balisé (#21)', () => {
       titre: 'Tâche planifiée',
       remoteControl: false,
       ponts: [],
+      hote: null,
     };
     const idx = new IndexDecouvertes({
       machine: 'tour',

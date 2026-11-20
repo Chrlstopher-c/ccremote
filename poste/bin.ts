@@ -66,7 +66,15 @@ const sessions = new GestionnaireSessions(
       }
     },
     resume: (session) => envoyer({ kind: 'session', session }),
-    decouvertes: (decouvertes, transcripts) => envoyer({ kind: 'decouvertes', decouvertes, transcripts }),
+    recalage: (sessionId, archiver, lignes) =>
+      envoyer({
+        kind: 'recalage',
+        sessionId,
+        archiver,
+        ...(lignes ? { lignes: [...lignes.cles], messages: [...lignes.messages], jusqua: lignes.jusqua } : {}),
+      }),
+    decouvertes: (decouvertes, transcripts, desktop) =>
+      envoyer({ kind: 'decouvertes', decouvertes, transcripts, desktop }),
   },
   socket,
   journal,
@@ -102,6 +110,7 @@ function bonjour(): MessagePoste {
     sessions: sessions.lister(),
     decouvertes: sessions.listeDecouvertes(),
     transcripts: sessions.transcriptsConnus(),
+    desktop: sessions.fichesDesktop(),
     empreinte: process.env['CCREMOTE_EMPREINTE_CODE'] || undefined, // code installé par le relais (mise à jour)
     commit: COMMIT,
     claudeCode: versionsClaude,
@@ -259,7 +268,9 @@ lien = new LienRelais({
   journal,
   bonjour,
   surCommande,
+  surOuverture: () => sessions.recalerFils(),
 });
+sessions.relaisOuvert = () => lien?.estOuvert === true;
 lien.demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);
 journal.info({ machine: config.machine, relais: config.relais }, 'poste démarré');

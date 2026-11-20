@@ -4,10 +4,11 @@
 import type { Database } from 'bun:sqlite';
 import type { EvenementDate } from '../../commun/api-clients.ts';
 import type { Evenement } from '../../commun/session.ts';
+import { cleTranscript } from '../../commun/cle-transcript.ts';
 import {
+  ECHO_MS,
   cleDeDoublon,
   type EvenementHorodate,
-  estLigneDuTranscript,
   identifiantsDuLot,
   type LigneFil,
   planifierFusion,
@@ -65,20 +66,39 @@ function plusTot(lot: readonly EvenementHorodate[]): string {
   return lot.reduce((min, e) => (e.ts < min ? e.ts : min), lot[0]?.ts ?? '');
 }
 
-/** Fil désynchronisé : la relecture complète n'a aucune ligne du transcript en commun avec le fil (fil venu d'une autre
- * source, jamais recalé). Rien à remplacer si le fil ne porte aucune ligne du transcript. */
+/** Début de la fenêtre du fil relue pour un lot : un peu avant son premier événement, pour y retrouver l'écho direct
+ *  (sans uuid, écrit à l'envoi) d'un message de Chris que le transcript date un peu plus tard. */
+function debutFenetre(lot: readonly EvenementHorodate[]): string {
+  const debut = Date.parse(plusTot(lot));
+  return Number.isFinite(debut) ? new Date(debut - ECHO_MS).toISOString() : plusTot(lot);
+}
+
+/** Fil désynchronisé : le premier lot de la relecture complète couvre tout le fil principal (aucune de ses lignes de
+ *  transcript n'est plus récente que le lot) sans en partager une seule (fil venu d'une autre source, jamais recalé).
+ *  Un lot qui ne couvre pas le fil ne décide rien : la suite du transcript peut porter les lignes communes. Les lignes
+ *  des sous-agents (leur transcript est à part) ne comptent pas. */
 function filDesynchronise(db: Database, sessionId: string, lot: readonly EvenementHorodate[]): boolean {
   const tous = db
     .query('SELECT seq, ts, evt FROM evenements WHERE session_id = ? ORDER BY seq')
     .all(sessionId) as LigneBrute[];
-  const lignes = tous.map(ligneFil).filter((l) => estLigneDuTranscript(l.evt));
+  const lignes = tous.map(ligneFil).filter((l) => cleTranscript(l.evt) !== null);
   if (lignes.length === 0) return false;
+  const fin = lot.reduce((max, e) => (e.ts > max ? e.ts : max), '');
+  if (lignes.some((l) => l.ts > fin)) return false;
   const cles = new Set(lot.map(cleDeDoublon));
   return !lignes.some((l) => cles.has(l.cle));
 }
 
+/** Remplace le fil principal par le lot ; les lignes de sous-agents des appels du lot restent (fil à part). */
 function remplacerFil(db: Database, sessionId: string, lot: readonly EvenementHorodate[]): void {
-  db.query('DELETE FROM evenements WHERE session_id = ?').run(sessionId);
+  const appels = new Set(lot.flatMap(({ evt }) => (evt.type === 'sous_agent' || evt.type === 'outil' ? [evt.id] : [])));
+  const tous = db.query('SELECT seq, ts, evt FROM evenements WHERE session_id = ?').all(sessionId) as LigneBrute[];
+  const supprimer = db.query('DELETE FROM evenements WHERE seq = ?');
+  for (const b of tous) {
+    const evt = JSON.parse(b.evt) as Evenement; // écrit par le relais selon le schéma Evenement
+    const agent = 'agent' in evt ? evt.agent : undefined;
+    if (!agent || !appels.has(agent)) supprimer.run(b.seq);
+  }
   const inserer = db.query('INSERT INTO evenements (session_id, ts, evt) VALUES (?, ?, ?)');
   for (const e of lot) inserer.run(sessionId, e.ts, JSON.stringify(e.evt));
 }
@@ -96,7 +116,7 @@ export function fusionnerDansFil(
       remplacerFil(db, sessionId, lot);
       return { ajoutes: [], reecrit: false, remplace: true };
     }
-    const existants = lignesDepuis(db, sessionId, plusTot(lot));
+    const existants = lignesDepuis(db, sessionId, debutFenetre(lot));
     const plan = planifierFusion(existants, lot, clesPresentes(db, sessionId, lot));
     const inserer = db.query('INSERT INTO evenements (session_id, ts, evt) VALUES (?, ?, ?) RETURNING seq');
     if (plan.premierDeplace < 0) {

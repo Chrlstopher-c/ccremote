@@ -12,5 +12,16 @@ export const Decouverte = z.object({
   messages: z.number().int().nonnegative(),
   vivante: z.boolean().optional(), // un processus Claude tient cette conversation sur ce poste
   ponts: z.array(z.string()).optional(), // identifiants Remote Control (cse_…) de la conversation, dédoublonnés
+  cwdExiste: z.boolean().optional(), // le dossier de la conversation existe sur ce poste (copie synchronisée sinon)
+  hoteDesktop: z.string().optional(), // machine où Claude Desktop la fait tourner (sa fiche Desktop, locale ou ssh)
 });
 export type Decouverte = z.infer<typeof Decouverte>;
+
+/** Fiche Claude Desktop d'un poste, annoncée au relais : archivage et Remote Control de la conversation. */
+export const FicheDesktopAnnoncee = z.object({
+  conversation: z.string(),
+  archivee: z.boolean(),
+  remoteControl: z.boolean(),
+  hote: z.string().nullable(), // machine ssh où tourne la conversation ; null : ce poste
+});
+export type FicheDesktopAnnoncee = z.infer<typeof FicheDesktopAnnoncee>;

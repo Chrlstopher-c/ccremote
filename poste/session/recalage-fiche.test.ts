@@ -121,6 +121,7 @@ describe('recalerFiche', () => {
         titre: null,
         remoteControl: false,
         ponts: [],
+        hote: null,
       },
     });
     expect(r.archivee).toBe(true);

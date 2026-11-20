@@ -17,7 +17,8 @@ export interface SourcesFiche {
 /** La fiche avec la vérité du transcript (activité, modèle, mode, contexte) et l'archivage Desktop lu. */
 export function recalerFiche(fiche: ResumeSession, sources: SourcesFiche): ResumeSession {
   const { etat, desktop } = sources;
-  const mode = etat?.mode ?? desktop?.mode ?? fiche.mode;
+  // Desktop tient le réglage courant (changé après le dernier message, le transcript ne le dit pas encore).
+  const mode = desktop?.mode ?? etat?.mode ?? fiche.mode;
   const contexte = etat?.contexte != null ? { ...fiche.contexte, tokens: etat.contexte } : fiche.contexte;
   const statut = etat && fiche.statut !== 'fermee' ? (tourEnCours(etat, Date.now()) ? 'travail' : 'attente') : null;
   return {

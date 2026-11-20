@@ -4,7 +4,7 @@ import type { ServerWebSocket } from 'bun';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Logger } from 'pino';
 import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/protocole-poste.ts';
-import type { Decouverte } from '../../commun/decouverte.ts';
+import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { AccesVue, EvenementDate, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
@@ -12,8 +12,11 @@ import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import { decouverteParIdentifiant } from './decouvertes-postes.ts';
 import { fantomesARetirer } from './fantomes.ts';
-import { avecJumelleReelle } from './jumelle-distante.ts';
+import { DesktopDesPostes } from './desktop-postes.ts';
+import { ArchivagesEnMemoire } from '../registre/archivages-desktop.ts';
+import { avecDecouverteJumelle, avecJumelleReelle } from './jumelle-distante.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { LignesTranscript } from '../registre/nettoyage-fil.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
 import {
   avancerRelecture,
@@ -56,6 +59,8 @@ export class Postes {
   // Identifiants de tous les transcripts de chaque poste : une fiche dont la conversation n'existe nulle part est fantôme.
   private readonly transcriptsDuPoste = new Map<string, ReadonlySet<string>>();
   private readonly infos = new Map<string, InfosPoste>();
+  /** Fiches Claude Desktop des postes : Remote Control et archivage (base : ArchivagesDesktop, posé par bin.ts). */
+  desktop = new DesktopDesPostes(new ArchivagesEnMemoire());
   // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
   private readonly relectures = new Map<string, EtatRelecture>();
   // Session Remote Control → session de poste qui tient la même conversation (voir avecJumelle).
@@ -138,6 +143,7 @@ export class Postes {
     this.connectes.delete(ws.data.machine);
     this.decouvertesDuPoste.delete(ws.data.machine);
     this.transcriptsDuPoste.delete(ws.data.machine);
+    this.desktop.oublier(ws.data.machine);
     this.infos.delete(ws.data.machine);
     this.journal.warn({ machine: ws.data.machine }, 'poste déconnecté');
     this.terminaux?.posteDeconnecte(ws.data.machine);
@@ -189,7 +195,7 @@ export class Postes {
     if (m.kind === 'terminal_sortie' || m.kind === 'terminal_fin') return this.terminaux?.duPoste(machine, m);
     if (m.kind === 'flux') return this.flux(machine, m);
     if (m.kind === 'bonjour') return this.bonjour(machine, m);
-    if (m.kind === 'decouvertes') return this.recevoirDecouvertes(machine, m.decouvertes, m.transcripts);
+    if (m.kind === 'decouvertes') return this.recevoirDecouvertes(machine, m.decouvertes, m.transcripts, m.desktop);
     if (m.kind === 'etat_machine') {
       this.registre.majEtatMachine(machine, m.etat);
       if (m.etat.reseau) this.reseauRecu?.(machine, m.etat.reseau);
@@ -206,12 +212,19 @@ export class Postes {
       return;
     }
     if (m.kind === 'session') {
-      this.registre.enregistrerSession(this.avecJumelle(m.session));
+      this.registre.enregistrerSession(this.desktop.avecDesktop(this.avecJumelle(m.session)));
       return this.diffuserSession(m.session.id);
     }
     if (m.kind === 'historique') {
       this.historique(machine, sessionId, m.replay, m.evenements);
       return;
+    }
+    if (m.kind === 'recalage') {
+      const transcript =
+        m.lignes && m.jusqua
+          ? { cles: new Set(m.lignes), messages: new Set(m.messages ?? []), jusqua: m.jusqua }
+          : undefined;
+      return this.recaler(sessionId, m.archiver, transcript);
     }
     this.evenement(sessionId, m.ts, m.evt);
   }
@@ -227,7 +240,7 @@ export class Postes {
       derniereVue: new Date().toISOString(),
     });
     if (m.etatComptes) this.registre.majComptes(machine, m.etatComptes);
-    this.recevoirDecouvertes(machine, m.decouvertes ?? [], m.transcripts);
+    this.recevoirDecouvertes(machine, m.decouvertes ?? [], m.transcripts, m.desktop);
     this.infos.set(machine, {
       commit: m.commit ?? null,
       empreinte: m.empreinte ?? null,
@@ -235,10 +248,11 @@ export class Postes {
     });
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
-      this.registre.enregistrerSession(this.avecJumelle(s));
+      this.registre.enregistrerSession(this.desktop.avecDesktop(this.avecJumelle(s)));
       this.diffuserSession(s.id);
     }
     this.fermerNonAnnoncees(machine, new Set(m.sessions.map((s) => s.id)));
+    this.adopterOrphelines(machine, new Set(m.sessions.map((s) => s.id)), m.transcripts);
     this.retirerFantomes();
     this.diffuserMachine(machine);
     this.miseAJour?.(machine, m.empreinte);
@@ -248,10 +262,44 @@ export class Postes {
     machine: string,
     decouvertes: readonly Decouverte[],
     transcripts?: readonly string[],
+    desktop?: readonly FicheDesktopAnnoncee[],
   ): void {
     this.decouvertesDuPoste.set(machine, decouvertes);
     if (transcripts) this.transcriptsDuPoste.set(machine, new Set(transcripts));
+    this.desktop.recevoir(machine, desktop);
     this.retirerFantomes();
+    if (desktop) this.appliquerDesktop();
+  }
+
+  // Fiches Desktop reçues : Remote Control reporté sur la fiche de la conversation, archivage repris une fois.
+  private appliquerDesktop(): void {
+    for (const s of this.registre.sessions(false)) {
+      const conversation = s.claudeSessionId ?? s.id;
+      if (this.desktop.aArchiver(conversation)) {
+        this.desktop.archivee(conversation);
+        this.journal.info({ sessionId: s.id }, 'archivée dans Claude Desktop : rangée');
+        this.registre.definirArchivee(s.id, true);
+        this.diffuserSession(s.id);
+        continue;
+      }
+      const recalee = this.desktop.avecDesktop(s);
+      if (recalee === s) continue;
+      this.registre.enregistrerSession(recalee);
+      this.diffuserSession(s.id);
+    }
+  }
+
+  // Fiche que son poste n'annonce plus alors que sa conversation existe sur ce poste : le poste l'adopte (fiche recalée
+  // sur le transcript, fil relu), comme à l'ouverture d'une découverte.
+  private adopterOrphelines(machine: string, annoncees: ReadonlySet<string>, transcripts?: readonly string[]): void {
+    if (!transcripts) return;
+    const existants = new Set(transcripts);
+    for (const s of this.registre.sessions(false)) {
+      if (s.machine !== machine || annoncees.has(s.id) || s.distant || s.annexe_de) continue;
+      if (!existants.has(s.claudeSessionId ?? s.id)) continue;
+      this.journal.info({ machine, sessionId: s.id }, 'fiche orpheline : adoptée par son poste');
+      void this.commander(machine, { kind: 'adopter', sessionId: s.id });
+    }
   }
 
   // Une fiche fermée dont la conversation n'existe sur aucun poste en ligne est masquée (archivée), jamais supprimée.
@@ -348,6 +396,22 @@ export class Postes {
     );
   }
 
+  // Recalage d'une session par son poste : fil nettoyé, archivage Desktop appliqué (une fois) ; la relecture qui suit
+  // est complète.
+  private recaler(sessionId: string, archiver: boolean, transcript?: LignesTranscript): void {
+    const conversation = this.registre.session(sessionId)?.claudeSessionId ?? sessionId;
+    if (archiver && !this.desktop.dejaArchivee(conversation)) {
+      this.desktop.archivee(conversation);
+      this.registre.definirArchivee(sessionId, true);
+    }
+    const retires = this.registre.nettoyerFil(sessionId, transcript);
+    this.relectures.delete(sessionId);
+    this.relecturesCompletesDemandees.add(sessionId);
+    this.completesAttendues.add(sessionId);
+    this.journal.info({ sessionId, retires, archiver }, 'recalage : fil nettoyé, relecture complète attendue');
+    this.diffuserSession(sessionId);
+  }
+
   private diffuserFil(evenement: EvenementDate): void {
     this.diffusion.diffuser({ type: 'evenement', evenement });
   }
@@ -357,6 +421,8 @@ export class Postes {
   // rattache à sa jumelle dans la liste. Recherche gardée en cache ; un échec est retenté au plus une fois par minute.
   private avecJumelle(s: ResumeSession): ResumeSession {
     if (!s.distant || !s.id.startsWith('cse_')) return s;
+    const parPont = this.decouverteDuPont(s.id);
+    if (parPont) return avecDecouverteJumelle(s, parPont);
     const connu = this.jumelles.get(s.id);
     let jumelle = connu?.jumelle ?? null;
     if (!jumelle && (!connu || Date.now() - connu.essai > ESSAI_JUMELLE_MS)) {
@@ -371,6 +437,15 @@ export class Postes {
       this.jumelles.set(s.id, { jumelle, essai: Date.now() });
     }
     return avecJumelleReelle(s, jumelle ? this.registre.session(jumelle) : null);
+  }
+
+  // Conversation pas encore ouverte (découverte d'un poste en ligne) dont le transcript ou la fiche Desktop nomme
+  // cette session Remote Control (lien exact, sans fil à comparer).
+  private decouverteDuPont(id: string): Decouverte | null {
+    const candidates = [...this.decouvertesDuPoste.entries()]
+      .filter(([machine]) => this.enLigne(machine))
+      .flatMap(([machine, liste]) => liste.map((decouverte) => ({ machine, decouverte })));
+    return decouverteParIdentifiant(candidates).find((d) => d.ponts?.includes(id)) ?? null;
   }
 
   private ancreDuFil(sessionId: string): string | null {

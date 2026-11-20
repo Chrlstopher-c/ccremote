@@ -27,6 +27,8 @@ import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
 import { type DonneesPoste, Postes } from './parc/postes.ts';
+import { DesktopDesPostes } from './parc/desktop-postes.ts';
+import { ArchivagesDesktop } from './registre/archivages-desktop.ts';
 import { ApiMachines } from './machines/api-machines.ts';
 import { ApiConfirmations } from './machines/api-confirmations.ts';
 import { Confirmations } from './machines/confirmations.ts';
@@ -62,6 +64,7 @@ const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
 const dossierSecrets = dossierSecretsPostes();
 const secretsPostes = new Map<string, string>([...config.secretsPostes, ...chargerSecretsPostes(dossierSecrets)]);
 const postes = new Postes(registre, diffusion, secretsPostes, journal);
+postes.desktop = new DesktopDesPostes(new ArchivagesDesktop(base));
 const confirmations = new ApiConfirmations(new Confirmations((m) => diffusion.diffuser(m)));
 // Relais intégré (appli) : les postes Lanterne sont joints par des tunnels SSH inverses lancés d'ici.
 const integre = config.integre;

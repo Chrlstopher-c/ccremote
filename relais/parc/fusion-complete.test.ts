@@ -179,10 +179,21 @@ describe('dédoublonnage par uuid en suite', () => {
 describe('désynchronisation détectée sans ancre commune', () => {
   test('un lot ancien qui ne se raccorde à rien demande la relecture complète, qui remplace le fil désynchronisé', () => {
     const { postes, registre, envoyes } = montage();
-    registre.ajouterEvenement('s', T(5), { type: 'texte', texte: 'autre', uuid: 'rc-5' });
+    registre.ajouterEvenement('s', T(2), { type: 'texte', texte: 'autre', uuid: 'rc-2' });
     envoyerLot(postes, 'suite', [msg('a', 'un', T(1))]);
     expect(envoyes.some((m) => m.includes('"kind":"historique"'))).toBe(true);
-    envoyerLot(postes, 'complet', [msg('a', 'un', T(1)), msg('b', 'deux', T(2))]);
+    envoyerLot(postes, 'complet', [msg('a', 'un', T(1)), msg('b', 'deux', T(3))]);
     expect(textes(registre)).toEqual(['un', 'deux']);
+  });
+
+  test('un premier lot qui ne couvre pas le fil ne le remplace pas (ses lignes récentes peuvent être communes)', () => {
+    const { postes, registre } = montage();
+    registre.ajouterEvenement('s', T(9), { type: 'texte', texte: 'neuf', uuid: 'n' });
+    const outil = { type: 'outil' as const, id: 'o-1', nom: 'Bash', resume: 'ls', detail: '', agent: 'ag-1' };
+    registre.ajouterEvenement('s', T(9), outil);
+    envoyerLot(postes, 'queue', [msg('z', 'dix', T(10))]);
+    envoyerLot(postes, 'complet', [msg('a', 'un', T(1))]);
+    envoyerLot(postes, 'complet', [rep('n', 'neuf', T(9))]);
+    expect(textes(registre)).toEqual(['un', 'neuf', 'outil']);
   });
 });
