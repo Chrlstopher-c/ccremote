@@ -27,7 +27,7 @@ const PAR_SESSION = 3;
 const JOURS_DEFAUT = 7;
 const JOURS_MAX = 365;
 const LONGUEUR_MAX_PROJET = 200;
-const DELAI = Symbol('delai');
+export const DELAI = Symbol('delai');
 
 type Requete = Request & { params: Record<string, string> };
 
@@ -189,7 +189,7 @@ function demandeMemoire(p: URLSearchParams): { outil: OutilMemoire; projet?: str
 }
 
 // Une attente bornée : la réponse tardive du poste est ignorée (son délai de 60 s la rend sans effet).
-async function avecDelai<T>(attente: Promise<T>, ms: number): Promise<T | typeof DELAI> {
+export async function avecDelai<T>(attente: Promise<T>, ms: number): Promise<T | typeof DELAI> {
   let minuterie: ReturnType<typeof setTimeout> | undefined;
   const delai = new Promise<typeof DELAI>((resoudre) => {
     minuterie = setTimeout(() => resoudre(DELAI), ms);
