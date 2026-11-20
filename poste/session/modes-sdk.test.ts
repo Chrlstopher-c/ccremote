@@ -152,6 +152,15 @@ describe('Ultracode', () => {
     });
   });
 
+  test('à l ouverture avec settings.ultracode : le relevé du SDK rend Ultracode actif', () => {
+    expect(
+      ultracodeLu(
+        { demande: true, actif: false, disponible: null },
+        { ultracode: true, ultracodeRequested: true, ultracodeAvailable: true },
+      ),
+    ).toEqual({ demande: true, actif: true, disponible: true });
+  });
+
   test('lireReglagesAppliques rend null sans champ applied utile', () => {
     expect(lireReglagesAppliques({})).toBeNull();
     expect(lireReglagesAppliques(null)).toBeNull();

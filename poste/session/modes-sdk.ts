@@ -86,9 +86,14 @@ export function ultracodeBascule(actif: boolean, lus: ReglagesAppliques | null):
   };
 }
 
-/** Disponibilité d'Ultracode relevée à l'initialisation ou après un changement de modèle. */
+/** Ultracode relevé à l'initialisation ou après un changement de modèle : ce que le SDK applique l'emporte (une
+ * session ouverte avec `settings.ultracode` le rapporte actif dès l'initialisation) ; champ absent : on garde l'état. */
 export function ultracodeLu(anterieur: ModeUltracode, lus: ReglagesAppliques | null): ModeUltracode {
-  return { ...anterieur, disponible: lus?.ultracodeAvailable ?? null };
+  return {
+    demande: lus?.ultracodeRequested ?? anterieur.demande,
+    actif: lus?.ultracode ?? anterieur.actif,
+    disponible: lus?.ultracodeAvailable ?? null,
+  };
 }
 
 /** `getSettings()` → réglages appliqués ; null si la réponse n'a pas la forme attendue. */
