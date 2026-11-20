@@ -123,3 +123,32 @@ describe('traduction transcript → événements', () => {
     expect(travailEnCours({ type: 'user', message: { content: 'go' } })).toBe(true);
   });
 });
+
+describe('message de Chris envoyé pendant un tour (queued_command)', () => {
+  test('blocs texte + images : une bulle', () => {
+    const l = {
+      type: 'attachment',
+      uuid: 'u1',
+      attachment: {
+        type: 'queued_command',
+        humanTurn: true,
+        origin: { kind: 'human' },
+        prompt: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+          { type: 'text', text: 'Et effectivement' },
+        ],
+      },
+    };
+    expect(traduire(l)).toEqual([{ type: 'message', texte: 'Et effectivement', uuid: 'u1' }]);
+  });
+
+  test('texte seul en file : une bulle ; notification de tâche : un résultat, jamais une bulle', () => {
+    const texteSeul = { type: 'attachment', attachment: { type: 'queued_command', humanTurn: true, prompt: 'vas plus vite' } };
+    expect(traduire(texteSeul)).toEqual([{ type: 'message', texte: 'vas plus vite' }]);
+    const tache = {
+      type: 'attachment',
+      attachment: { type: 'queued_command', prompt: '<task-notification><tool-use-id>t1</tool-use-id><status>completed</status></task-notification>' },
+    };
+    expect(traduire(tache).map((e) => e.type)).toEqual(['resultat_outil']);
+  });
+});

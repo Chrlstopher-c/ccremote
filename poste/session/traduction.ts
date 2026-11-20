@@ -25,7 +25,12 @@ export interface Ligne {
   readonly timestamp?: unknown; // horodatage de la ligne (ISO), relu pour l'historique
   readonly parentUuid?: unknown; // entrée précédente de la conversation (branche active)
   readonly logicalParentUuid?: unknown; // idem à travers une compaction
-  readonly attachment?: { type?: unknown; prompt?: unknown };
+  readonly attachment?: {
+    type?: unknown;
+    prompt?: unknown;
+    humanTurn?: unknown;
+    origin?: { kind?: unknown };
+  };
   readonly isApiErrorMessage?: unknown;
 }
 
@@ -87,9 +92,26 @@ function traduireUtilisateur(l: Ligne): Evenement[] {
 
 // Fin d'une tâche de fond (sous-agent, commande en arrière-plan) : le CLI la met en file sous forme de
 // <task-notification>, en pièce jointe ou en tour utilisateur. Elle complète l'outil lancé, jamais une bulle.
+// Un message de Chris envoyé pendant un tour arrive aussi en file (`humanTurn`), texte seul ou blocs (texte, images) :
+// c'est une bulle comme un message normal (ses images sont relues à part, voir historique.ts).
 function finDeTache(l: Ligne): Evenement[] {
-  const prompt = l.attachment?.type === 'queued_command' ? texte(l.attachment.prompt) : '';
-  return resultatDeNotification(prompt);
+  if (l.attachment?.type !== 'queued_command') return [];
+  const brut = l.attachment.prompt;
+  const prompt =
+    typeof brut === 'string'
+      ? brut
+      : blocs(brut)
+          .filter((b) => b.type === 'text')
+          .map((b) => texte(b['text']))
+          .join('\n');
+  if (prompt.includes('<task-notification>')) return resultatDeNotification(prompt);
+  return messageEnFile(l) ? messageDeChris(prompt) : [];
+}
+
+/** Message de Chris mis en file pendant un tour (pas une notification de tâche ni une commande interne). */
+export function messageEnFile(l: Ligne): boolean {
+  const a = l.attachment;
+  return a?.type === 'queued_command' && (a.humanTurn === true || a.origin?.kind === 'human');
 }
 
 function resultatDeNotification(prompt: string): Evenement[] {

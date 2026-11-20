@@ -9,7 +9,7 @@ import { TAILLE_MAX_FICHIER } from '../../commun/presentation.ts';
 import { type ImageSdk, imagesDeContenu } from '../presentation/images.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { brancheActive } from './branche.ts';
-import { type Ligne, traduire } from './traduction.ts';
+import { type Ligne, messageEnFile, traduire } from './traduction.ts';
 
 export interface EvenementHorodate {
   readonly ts: string;
@@ -51,9 +51,11 @@ export function evenementsDuTranscript(contenu: string, stockerImage?: StockerIm
     const ts = horodatage(l, dernier);
     dernier = ts;
     for (const evt of traduire(l)) sortie.push({ ts, evt });
-    if (stockerImage && l.type === 'user' && l.isSidechain !== true) {
-      const origine = resultatDOutil(l) ? 'outil' : 'utilisateur';
-      imagesDeContenu(l.message?.content).forEach((image, rang) => {
+    const enFile = l.type === 'attachment' && messageEnFile(l);
+    if (stockerImage && (l.type === 'user' || enFile) && l.isSidechain !== true) {
+      const origine = !enFile && resultatDOutil(l) ? 'outil' : 'utilisateur';
+      const contenu = enFile ? l.attachment?.prompt : l.message?.content;
+      imagesDeContenu(contenu).forEach((image, rang) => {
         const evt = stockerImage(image, rang, origine);
         if (evt) sortie.push({ ts, evt });
       });
