@@ -85,6 +85,13 @@ export class Registre {
     }));
   }
 
+  // Le relevé d'usage du relais (dernière valeur bonne, prochain relevé) est posé sur les comptes lus de chaque machine.
+  surFusionComptes(fusion: (comptes: readonly EtatCompte[]) => EtatCompte[]): void {
+    this.fusionComptes = fusion;
+  }
+
+  private fusionComptes: (comptes: readonly EtatCompte[]) => EtatCompte[] = (comptes) => [...comptes];
+
   enregistrerSession(s: ResumeSession): void {
     this.db
       .query(
@@ -232,7 +239,7 @@ export class Registre {
   private lireComptes(machine: string, brut: string): EtatCompte[] {
     const r = EtatCompte.array().safeParse(JSON.parse(brut));
     if (!r.success) this.journal?.warn({ machine }, 'état des comptes illisible, ignoré');
-    return r.success ? r.data : [];
+    return this.fusionComptes(r.success ? r.data : []);
   }
 
   // Une fiche enregistrée par une version antérieure du contrat ne doit jamais faire tomber la lecture de toutes les

@@ -1,6 +1,8 @@
+import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import pino from 'pino';
 import type { Postes, ReponsePoste } from '../parc/postes.ts';
+import { ReleveUsage } from '../usage/releves-usage.ts';
 import { ApiComptes } from './api-comptes.ts';
 
 const journal = pino({ enabled: false });
@@ -14,7 +16,9 @@ function api(parMachine: Record<string, ReponsePoste>): { api: ApiComptes; recue
       return Promise.resolve(parMachine[machine] ?? { ok: false, erreur: `${machine} est hors ligne` });
     },
   } as unknown as Postes;
-  return { api: new ApiComptes(postes, journal), recues };
+  const registre = { machines: () => [] };
+  const usage = new ReleveUsage(new Database(':memory:', { strict: true }), registre, postes, journal, () => {});
+  return { api: new ApiComptes(postes, journal, usage), recues };
 }
 
 function requete(nom: string, corps?: unknown): Request & { params: { id: string; nom: string } } {

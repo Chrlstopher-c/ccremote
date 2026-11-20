@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { NOM_COMPTE } from '../../commun/comptes.ts';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { Postes } from '../parc/postes.ts';
+import type { ReleveUsage } from '../usage/releves-usage.ts';
 import { erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
@@ -24,6 +25,7 @@ export class ApiComptes {
   constructor(
     private readonly postes: Postes,
     private readonly journal: Logger,
+    private readonly usage: ReleveUsage,
   ) {}
 
   async connecter(req: RequeteCompte): Promise<Response> {
@@ -43,9 +45,17 @@ export class ApiComptes {
     return this.commander(req.params.id, { kind: 'compte_retirer', nom: req.params.nom ?? '' });
   }
 
-  detail(req: RequeteCompte): Promise<Response> {
-    if (!NOM_COMPTE.test(req.params.nom ?? '')) return Promise.resolve(erreur('nom de compte invalide', 400));
-    return this.commander(req.params.id, { kind: 'compte_detail', nom: req.params.nom ?? '' });
+  // L'usage vient du relais : il relève si le délai est écoulé, puis le poste reçoit la dernière valeur bonne.
+  async detail(req: RequeteCompte): Promise<Response> {
+    const nom = req.params.nom ?? '';
+    if (!NOM_COMPTE.test(nom)) return erreur('nom de compte invalide', 400);
+    const cle = this.usage.cleDe(req.params.id, nom);
+    let fourni: ReturnType<ReleveUsage['brutPour']> | undefined;
+    if (cle !== null) {
+      await this.usage.releverSiDu(cle);
+      fourni = this.usage.brutPour(cle);
+    }
+    return this.commander(req.params.id, { kind: 'compte_detail', nom, fourni });
   }
 
   async reinitialiser(req: RequeteCompte): Promise<Response> {
@@ -63,6 +73,7 @@ export class ApiComptes {
   }
 
   relever(req: RequeteCompte): Promise<Response> {
+    void this.usage.tick();
     return this.commander(req.params.id, { kind: 'comptes_relever' });
   }
 

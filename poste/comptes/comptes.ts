@@ -4,15 +4,15 @@ import { rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
-import { type EtatCompte, NOM_COMPTE } from '../../commun/comptes.ts';
+import { type DonneesReleve, type EtatCompte, NOM_COMPTE } from '../../commun/comptes.ts';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
 import { type ConfigPoste, enregistrerComptes } from '../config.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
 import { abandonnerConnexion, demarrerConnexion, validerConnexion } from './connexion.ts';
 import { binaireClaude } from '../session/lanceur.ts';
 import { marquerAccueilFait } from '../session/confiance.ts';
-import { environnementCompte, releverCompte } from './releve.ts';
-import { LecteurCompte } from './lecture-compte.ts';
+import { environnementCompte, releverCompte, releverUsage } from './releve.ts';
+import { type Fourni, LecteurCompte } from './lecture-compte.ts';
 
 const PERIODE_RELEVE_MS = 5 * 60_000;
 /** Dossier des comptes créés par Quart, lu à l'appel (CCREMOTE_DOSSIER_COMPTES l'emporte sur ~/.claude-comptes). */
@@ -57,7 +57,14 @@ export class Comptes {
     }));
   }
 
-  /** Relève tous les comptes (un seul relevé à la fois), puis publie. */
+  /** Relevé d'usage d'un compte, commandé par le relais (qui en gère la cadence). */
+  async releverUsageCompte(nom: string): Promise<Reponse> {
+    if (!Object.hasOwn(this.d.config.comptes, nom)) return this.inconnu(nom);
+    const donnees: DonneesReleve = await releverUsage(this.d.config.comptes[nom] ?? null);
+    return { ok: true, donnees };
+  }
+
+  /** Relève l'identité de tous les comptes (un seul relevé à la fois), puis publie. L'usage n'est pas lu ici. */
   relever(): Promise<void> {
     this.releveEnCours ??= this.releverTout().finally(() => {
       this.releveEnCours = null;
@@ -94,10 +101,16 @@ export class Comptes {
   }
 
   /** La vue complète d'un compte connecté sur cette machine. */
-  async detail(nom: string): Promise<Reponse> {
+  async detail(nom: string, fourni?: Fourni | null): Promise<Reponse> {
     if (!Object.hasOwn(this.d.config.comptes, nom)) return this.inconnu(nom);
     const dossier = this.d.config.comptes[nom] ?? null;
-    const detail = await this.d.lecteur.detail(nom, dossier, this.d.config.machine, () => this.d.usageSdk(nom));
+    const detail = await this.d.lecteur.detail(
+      nom,
+      dossier,
+      this.d.config.machine,
+      () => this.d.usageSdk(nom),
+      fourni,
+    );
     return { ok: true, donnees: detail };
   }
 
@@ -161,6 +174,6 @@ export class Comptes {
     const vide = { session: null, semaine: null, autres: [], email: null, organisation: null, abonnement: null };
     const defaut = this.d.config.comptes[id] === null;
     const releve = { probleme: 'pas encore relevé', releveLe: '', connexion: null, distant: false };
-    return { id, defaut, connecte: false, ...vide, ...releve };
+    return { id, defaut, connecte: false, cle: null, usageLe: null, prochainReleve: null, ...vide, ...releve };
   }
 }

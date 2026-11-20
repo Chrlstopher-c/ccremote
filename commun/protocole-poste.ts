@@ -198,8 +198,16 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('compte_code'), id: z.string(), nom: z.string(), code: z.string().min(1).max(2000) }),
   z.object({ kind: z.literal('compte_retirer'), id: z.string(), nom: z.string() }),
   z.object({ kind: z.literal('comptes_relever'), id: z.string() }),
-  // Vue complète d'un compte (profil, usage, crédits, réinitialisations, usage SDK) . Réinitialiser une limite :
-  z.object({ kind: z.literal('compte_detail'), id: z.string(), nom: z.string().regex(NOM_COMPTE) }),
+  // Relevé d'usage d'un compte (usage + réinitialisations) : commandé par le relais, qui décide du cadencement.
+  z.object({ kind: z.literal('compte_releve'), id: z.string(), nom: z.string().regex(NOM_COMPTE) }),
+  // Vue complète d'un compte (profil, usage, crédits, réinitialisations, usage SDK) . L'usage est celui que le relais
+  // a relevé (`fourni`) : le poste ne l'interroge pas. Réinitialiser une limite :
+  z.object({
+    kind: z.literal('compte_detail'),
+    id: z.string(),
+    nom: z.string().regex(NOM_COMPTE),
+    fourni: z.object({ usage: z.unknown(), cedar: z.unknown() }).nullable().optional(),
+  }),
   z.object({
     kind: z.literal('compte_reinitialiser'),
     id: z.string(),

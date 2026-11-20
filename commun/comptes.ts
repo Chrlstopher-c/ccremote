@@ -26,5 +26,27 @@ export const EtatCompte = z.object({
   releveLe: z.string(),
   connexion: z.object({ url: z.string(), depuis: z.string() }).nullable(), // connexion OAuth en cours
   distant: z.boolean().default(false), // sessions Remote Control de ce compte vues depuis le poste (claude.ai)
+  cle: z.string().nullable().default(null), // identité du compte (courriel) : un seul relevé d'usage par compte réel
+  usageLe: z.string().nullable().default(null), // quand session/semaine ont été lues pour la dernière fois (relais)
+  prochainReleve: z.string().nullable().default(null), // prochain relevé d'usage autorisé par le relais
 });
 export type EtatCompte = z.infer<typeof EtatCompte>;
+
+// Réponse d'un poste au relais pour un relevé d'usage : l'endpoint `usage` (fenêtres) et l'endpoint `réinitialisations`
+// (cedar, brut). `statut` est le pire statut HTTP des deux appels (429 d'abord), `retryApresMs` son Retry-After.
+export const FenetresUsage = z.object({
+  session: FenetreUsage.nullable(),
+  semaine: FenetreUsage.nullable(),
+  autres: z.array(FenetreUsage),
+});
+export type FenetresUsage = z.infer<typeof FenetresUsage>;
+
+export const DonneesReleve = z.object({
+  fenetres: FenetresUsage.nullable(),
+  usage: z.unknown(), // corps brut de l'endpoint d'usage (détail du compte)
+  cedar: z.unknown(), // corps brut de l'endpoint des réinitialisations
+  statut: z.number().nullable(),
+  retryApresMs: z.number().nullable(),
+  erreur: z.string().nullable(),
+});
+export type DonneesReleve = z.infer<typeof DonneesReleve>;

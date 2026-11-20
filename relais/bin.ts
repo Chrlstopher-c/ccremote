@@ -15,6 +15,7 @@ import { ouvrirTerminal, ouvrirTerminalSession } from './appareils/route-termina
 import { ApiFichiersSession } from './clients/api-fichiers-session.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
+import { ReleveUsage } from './usage/releves-usage.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
 import { ApiSessionConfig } from './clients/api-session-config.ts';
 import { ApiConfiguration } from './clients/api-configuration.ts';
@@ -152,7 +153,14 @@ const resteLot2 = {
 const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
-const comptes = new ApiComptes(postes, journal);
+// Un seul relevé d'usage par compte réel du parc : le relais choisit le poste, cadence et garde la dernière valeur.
+const usage = new ReleveUsage(base, registre, postes, journal.child({ domaine: 'usage' }), () => {
+  for (const m of registre.machines()) postes.rafraichirMachine(m.id);
+});
+registre.surFusionComptes((c) => usage.appliquer(c));
+void usage.tick();
+setInterval(() => void usage.tick(), 60_000);
+const comptes = new ApiComptes(postes, journal, usage);
 const fichiers = new ApiFichiers(postes, journal);
 const artefacts = new ApiArtefacts(registre, postes, journal);
 const modifications = new ApiModifications(registre, postes, journal);

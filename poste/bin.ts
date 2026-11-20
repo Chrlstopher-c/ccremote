@@ -194,7 +194,8 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);
   if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
   if (c.kind === 'comptes_relever') return comptes.relever().then(() => ({ ok: true, donnees: comptes.lister() }));
-  if (c.kind === 'compte_detail') return comptes.detail(c.nom);
+  if (c.kind === 'compte_releve') return comptes.releverUsageCompte(c.nom);
+  if (c.kind === 'compte_detail') return comptes.detail(c.nom, c.fourni);
   if (c.kind === 'compte_distant') {
     const r = sessions.basculerDistant(c.nom, c.actif);
     envoyer({ kind: 'comptes', comptes: comptes.lister() });

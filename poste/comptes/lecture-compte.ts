@@ -17,10 +17,15 @@ const CACHE_PROFIL_MS = 10 * 60_000;
 const DELAI_LECTURE_MS = 20_000;
 const DELAI_REINITIALISATION_MS = 25_000;
 const OFFRE_VALIDE = /^[a-z0-9_-]{1,40}$/;
-const CHEMIN_CEDAR = '/api/oauth/usage?cedar_ember=1&skip_spend=1';
 const SANS_JETON = 'jeton OAuth absent ou expiré : il se renouvelle à la prochaine session ouverte avec ce compte';
 
 type Sdk = () => Promise<UsageSdk | null>;
+
+/** Usage et réinitialisations tels que le relais les a relevés (brut) ; absent = le relais n'en a pas transmis. */
+export interface Fourni {
+  readonly usage: unknown;
+  readonly cedar: unknown;
+}
 
 export interface DependancesLecture {
   readonly api?: string;
@@ -92,11 +97,17 @@ export class LecteurCompte {
     this.maintenant = d.maintenant ?? Date.now;
   }
 
-  /** La vue complète d'un compte. Au plus un relevé réseau par minute ; les appels concurrents partagent le relevé. */
-  detail(compte: string, configDir: string | null, machine: string, sdk: Sdk): Promise<DetailCompte> {
+  /** La vue complète d'un compte. Au plus un relevé réseau par minute ; l'usage vient du relais (`fourni`). */
+  detail(
+    compte: string,
+    configDir: string | null,
+    machine: string,
+    sdk: Sdk,
+    fourni?: Fourni | null,
+  ): Promise<DetailCompte> {
     const memo = this.details.get(compte);
     if (memo && this.maintenant() - memo.depuis < CACHE_DETAIL_MS) return memo.valeur;
-    const valeur = this.relever(compte, configDir, machine, sdk);
+    const valeur = this.relever(compte, configDir, machine, sdk, fourni);
     this.details.set(compte, { depuis: this.maintenant(), valeur });
     return valeur;
   }
@@ -117,19 +128,28 @@ export class LecteurCompte {
     }
   }
 
-  private async relever(compte: string, configDir: string | null, machine: string, sdk: Sdk): Promise<DetailCompte> {
+  private async relever(
+    compte: string,
+    configDir: string | null,
+    machine: string,
+    sdk: Sdk,
+    fourni: Fourni | null | undefined,
+  ): Promise<DetailCompte> {
     const problemes: string[] = [];
+    if (!fourni) problemes.push('utilisation pas encore relevée par le relais');
+    const usage = fourni?.usage ?? null;
+    const cedar = fourni?.cedar ?? null;
     const jeton = this.jetonDe(configDir);
     if (jeton === null) {
       problemes.push(SANS_JETON);
-      return this.assembler(compte, machine, { ...AUCUNE, sdk: await this.sdkDe(compte, sdk) }, problemes);
+      return this.assembler(
+        compte,
+        machine,
+        { ...AUCUNE, usage, cedar, sdk: await this.sdkDe(compte, sdk) },
+        problemes,
+      );
     }
-    const [profil, usage, cedar, sdkLu] = await Promise.all([
-      this.profilDe(compte, jeton, problemes),
-      this.lire(compte, jeton, 'usage', '/api/oauth/usage', problemes),
-      this.lire(compte, jeton, 'réinitialisations', CHEMIN_CEDAR, problemes),
-      this.sdkDe(compte, sdk),
-    ]);
+    const [profil, sdkLu] = await Promise.all([this.profilDe(compte, jeton, problemes), this.sdkDe(compte, sdk)]);
     const prepaye = await this.prepayeDe(compte, jeton, profil, problemes);
     const lues = { profil: profil?.brut ?? null, usage, cedar, prepaye, sdk: sdkLu };
     return this.assembler(compte, machine, lues, problemes);

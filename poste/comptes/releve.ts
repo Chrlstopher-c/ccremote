@@ -1,20 +1,22 @@
-// Responsabilité : relever un compte Claude Code de la machine — identité (`claude auth status`), puis usage (API
-// OAuth, avec le jeton que Claude Code tient à jour). Lecture seule : le jeton n'est jamais renouvelé ici, pour ne pas
-// entrer en concurrence avec les sessions qui l'utilisent.
+// Responsabilité : relever un compte Claude Code de la machine. Le relevé périodique ne lit que l'identité (`claude auth
+// status`, local). L'usage (API OAuth) n'est lu que sur commande du relais, qui en décide la cadence : un seul poste
+// relève un compte réel. Lecture seule : le jeton n'est jamais renouvelé ici.
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
-import type { EtatCompte } from '../../commun/comptes.ts';
+import type { DonneesReleve, EtatCompte } from '../../commun/comptes.ts';
 import { binaireClaude } from '../session/lanceur.ts';
+import { AGENT_CLI } from './lecture-compte.ts';
 import { lireUsage } from './usage.ts';
 
 const URL_USAGE = 'https://api.anthropic.com/api/oauth/usage';
+const URL_CEDAR = `${URL_USAGE}?cedar_ember=1&skip_spend=1`;
 const DELAI_MS = 20_000;
 
 type Objet = Record<string, unknown>;
 
-interface Identite {
+export interface Identite {
   readonly connecte: boolean;
   readonly email: string | null;
   readonly organisation: string | null;
@@ -22,6 +24,11 @@ interface Identite {
 }
 
 const texte = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+/** Clé d'un compte réel : son courriel. Sans identité (jeton longue durée seul) : null, donc aucun relevé. */
+export function cleDeCompte(qui: Pick<Identite, 'connecte' | 'email'>): string | null {
+  return qui.connecte && qui.email ? `courriel:${qui.email.toLowerCase()}` : null;
+}
 
 export function environnementCompte(configDir: string | null): Record<string, string> {
   const env: Record<string, string> = {};
@@ -49,41 +56,110 @@ export async function identite(configDir: string | null): Promise<Identite> {
   };
 }
 
-function jeton(configDir: string | null): { valeur: string; expireLe: number } | null {
+function jeton(configDir: string | null): string | null {
   const fichier = join(configDir ?? join(homedir(), '.claude'), '.credentials.json');
   if (!existsSync(fichier)) return null;
   const oauth = (JSON.parse(readFileSync(fichier, 'utf8')) as Objet)['claudeAiOauth'] as Objet | undefined;
   const valeur = texte(oauth?.['accessToken']);
-  return valeur ? { valeur, expireLe: Number(oauth?.['expiresAt'] ?? 0) } : null;
+  const expireLe = Number(oauth?.['expiresAt'] ?? 0);
+  if (!valeur || (expireLe > 0 && expireLe < Date.now())) return null;
+  return valeur;
 }
 
-type Releve = Pick<EtatCompte, 'session' | 'semaine' | 'autres' | 'probleme'>;
-
-async function usage(configDir: string | null): Promise<Releve> {
-  const vide = { session: null, semaine: null, autres: [] };
-  const j = jeton(configDir);
-  if (!j) return { ...vide, probleme: 'aucun jeton OAuth (compte connecté par clé d’API ?)' };
-  if (j.expireLe > 0 && j.expireLe < Date.now())
-    return { ...vide, probleme: 'jeton expiré : il se renouvelle à la prochaine session ouverte avec ce compte' };
-  const r = await fetch(URL_USAGE, {
-    headers: { authorization: `Bearer ${j.valeur}`, 'anthropic-beta': 'oauth-2025-04-20' },
-    signal: AbortSignal.timeout(DELAI_MS),
-  });
-  if (!r.ok) return { ...vide, probleme: `usage illisible : HTTP ${r.status}` };
-  return { ...lireUsage(await r.json()), probleme: null };
+/** Retry-After en millisecondes : secondes, ou date HTTP. Absent ou illisible : null. */
+export function retryApresMs(valeur: string | null, maintenant: number = Date.now()): number | null {
+  if (valeur === null) return null;
+  const secondes = Number(valeur);
+  if (Number.isFinite(secondes) && secondes >= 0) return secondes * 1000;
+  const date = Date.parse(valeur);
+  return Number.isNaN(date) ? null : Math.max(0, date - maintenant);
 }
 
+/** Un appel de l'endpoint d'usage : corps lu si 2xx, sinon statut et Retry-After. Jamais de jeton dans un message. */
+interface LectureEndpoint {
+  readonly corps: unknown | null;
+  readonly statut: number | null;
+  readonly retryApresMs: number | null;
+  readonly erreur: string | null;
+}
+
+async function lireEndpoint(jetonValeur: string, url: string): Promise<LectureEndpoint> {
+  try {
+    const r = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${jetonValeur}`,
+        'user-agent': AGENT_CLI,
+        'anthropic-beta': 'oauth-2025-04-20',
+      },
+      signal: AbortSignal.timeout(DELAI_MS),
+    });
+    if (!r.ok) {
+      return {
+        corps: null,
+        statut: r.status,
+        retryApresMs: retryApresMs(r.headers.get('retry-after')),
+        erreur: `HTTP ${r.status}`,
+      };
+    }
+    return { corps: await r.json(), statut: null, retryApresMs: null, erreur: null };
+  } catch (erreur) {
+    return { corps: null, statut: null, retryApresMs: null, erreur: erreur instanceof Error ? erreur.name : 'erreur' };
+  }
+}
+
+/** Relevé d'usage commandé par le relais : les deux endpoints, un appel chacun. Sans jeton : erreur sans appel. */
+export async function releverUsage(configDir: string | null): Promise<DonneesReleve> {
+  const valeur = jeton(configDir);
+  if (valeur === null) {
+    return {
+      fenetres: null,
+      usage: null,
+      cedar: null,
+      statut: null,
+      retryApresMs: null,
+      erreur: 'aucun jeton OAuth valide',
+    };
+  }
+  const usage = await lireEndpoint(valeur, URL_USAGE);
+  const cedar = await lireEndpoint(valeur, URL_CEDAR);
+  const pires = [usage, cedar].find((l) => l.statut === 429) ?? [usage, cedar].find((l) => l.statut !== null) ?? null;
+  const erreurs = [usage, cedar].flatMap((l) => (l.erreur ? [`usage ${l.erreur}`] : []));
+  return {
+    fenetres: usage.corps === null ? null : lireUsage(usage.corps),
+    usage: usage.corps,
+    cedar: cedar.corps,
+    statut: pires?.statut ?? null,
+    retryApresMs: pires?.retryApresMs ?? null,
+    erreur: erreurs.length > 0 ? erreurs.join(' ; ') : null,
+  };
+}
+
+/** Relevé périodique : identité seule (local), jamais d'appel réseau à l'usage. */
 export async function releverCompte(id: string, configDir: string | null, journal: Logger): Promise<EtatCompte> {
-  const base = { id, defaut: configDir === null, releveLe: new Date().toISOString(), connexion: null, distant: false };
+  const base = {
+    id,
+    defaut: configDir === null,
+    releveLe: new Date().toISOString(),
+    connexion: null,
+    distant: false,
+    session: null,
+    semaine: null,
+    autres: [],
+    usageLe: null,
+    prochainReleve: null,
+  };
   try {
     const qui = await identite(configDir);
-    if (!qui.connecte)
-      return { ...base, ...qui, session: null, semaine: null, autres: [], probleme: 'compte déconnecté' };
-    return { ...base, ...qui, ...(await usage(configDir)) };
+    const cle = cleDeCompte(qui);
+    const probleme = !qui.connecte
+      ? 'compte déconnecté'
+      : cle === null
+        ? 'identité inconnue (jeton sans courriel) : pas de relevé d’utilisation'
+        : null;
+    return { ...base, ...qui, cle, probleme };
   } catch (erreur) {
     journal.warn({ compte: id, err: erreur }, 'relevé du compte en échec');
     const vide = { connecte: false, email: null, organisation: null, abonnement: null };
-    const probleme = `relevé impossible : ${String(erreur)}`;
-    return { ...base, ...vide, session: null, semaine: null, autres: [], probleme };
+    return { ...base, ...vide, cle: null, probleme: `relevé impossible : ${String(erreur)}` };
   }
 }

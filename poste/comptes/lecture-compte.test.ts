@@ -14,6 +14,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SDK_NUL = async (): Promise<UsageSdk | null> => null;
 
 const lire = (nom: string): unknown => JSON.parse(readFileSync(new URL(`./fixtures/${nom}`, import.meta.url), 'utf8'));
+// L'usage est relevé par le relais : le détail reçoit la dernière valeur bonne, il ne l'interroge pas.
+const FOURNI = { usage: lire('usage.json'), cedar: lire('usage_cedar.json') };
 
 interface Recue {
   readonly methode: string;
@@ -86,14 +88,14 @@ function lecteur(jeton: (dossier: string | null) => string | null = () => JETON)
 const compteur = (chemin: string): number => recues.filter((r) => r.chemin === chemin).length;
 
 describe('lecture du détail d’un compte', () => {
-  test('quatre lectures avec les bons chemins et en-têtes ; le résultat passe le contrat', async () => {
-    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL);
+  test('deux lectures réseau (profil, crédits) avec les bons en-têtes ; l’usage vient du relais ; contrat passé', async () => {
+    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL, FOURNI);
     expect(() => DetailCompte.parse(d)).not.toThrow();
     expect(d.profil?.nom).toBe('Chris');
     expect(d.creditsPrepayes?.solde?.mineur).toBe(54);
     expect(d.probleme).toBeNull();
     const chemins = recues.map((r) => r.chemin).sort();
-    expect(chemins).toEqual(['/api/oauth/profile', '/api/oauth/usage', CHEMIN_CEDAR, CHEMIN_PREPAYE].sort());
+    expect(chemins).toEqual(['/api/oauth/profile', CHEMIN_PREPAYE].sort());
     const entetes = recues[0]?.entetes;
     expect(entetes?.get('authorization')).toBe(`Bearer ${JETON}`);
     expect(entetes?.get('anthropic-beta')).toBe('oauth-2025-04-20');
@@ -101,39 +103,29 @@ describe('lecture du détail d’un compte', () => {
   });
 
   test('chaque requête se présente comme le CLI (le serveur en déduit la surface)', async () => {
-    await lecteur().detail('principal', null, 'tour', SDK_NUL);
+    await lecteur().detail('principal', null, 'tour', SDK_NUL, FOURNI);
     await lecteur().reinitialiser('principal', null, 'full-reset-2611');
-    expect(recues.length).toBeGreaterThan(4);
+    expect(recues.length).toBeGreaterThan(3);
     for (const r of recues) expect(r.entetes.get('user-agent')).toBe(AGENT_CLI);
   });
 
   test('ni le jeton ni l’uuid d’organisation ne sortent dans le résultat', async () => {
-    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL);
+    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL, FOURNI);
     const texte = JSON.stringify(d);
     expect(texte).not.toContain(JETON);
     expect(texte).not.toContain(ORG);
   });
 
-  test('cache de 60 s par compte : un seul relevé réseau dans la minute ; le profil est gardé 10 min', async () => {
+  test('cache de 60 s par compte : un seul relevé des crédits dans la minute ; le profil est gardé 10 min', async () => {
     const l = lecteur();
-    await l.detail('principal', null, 'tour', SDK_NUL);
+    await l.detail('principal', null, 'tour', SDK_NUL, FOURNI);
     t += 59_000;
-    await l.detail('principal', null, 'tour', SDK_NUL);
-    expect(compteur('/api/oauth/usage')).toBe(1);
+    await l.detail('principal', null, 'tour', SDK_NUL, FOURNI);
+    expect(compteur(CHEMIN_PREPAYE)).toBe(1);
     t += 2_000;
-    await l.detail('principal', null, 'tour', SDK_NUL);
-    expect(compteur('/api/oauth/usage')).toBe(2);
+    await l.detail('principal', null, 'tour', SDK_NUL, FOURNI);
+    expect(compteur(CHEMIN_PREPAYE)).toBe(2);
     expect(compteur('/api/oauth/profile')).toBe(1);
-  });
-
-  test('un 429 après une lecture réussie garde la réponse précédente et le signale', async () => {
-    const l = lecteur();
-    const premier = await l.detail('principal', null, 'tour', SDK_NUL);
-    t += 61_000;
-    statuts.set(CHEMIN_CEDAR, 429);
-    const second = await l.detail('principal', null, 'tour', SDK_NUL);
-    expect(second.reinitialisations).toEqual(premier.reinitialisations);
-    expect(second.probleme).toContain('relevé précédent (HTTP 429)');
   });
 
   test('deux appels concurrents partagent une seule série de requêtes', async () => {
@@ -143,22 +135,20 @@ describe('lecture du détail d’un compte', () => {
       l.detail('principal', null, 'tour', SDK_NUL),
     ]);
     expect(a).toEqual(b);
-    expect(compteur('/api/oauth/usage')).toBe(1);
     expect(compteur(CHEMIN_PREPAYE)).toBe(1);
   });
 
-  test('un GET en échec : sa partie reste vide, la phrase le dit, le reste est lu', async () => {
-    statuts.set('/api/oauth/usage', 500);
-    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL);
+  test('le relais n’a encore rien relevé : la partie usage reste vide, la phrase le dit, le reste est lu', async () => {
+    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL, null);
     expect(d.fenetres).toEqual([]);
-    expect(d.probleme).toContain('HTTP 500');
+    expect(d.probleme).toContain('relevée par le relais');
     expect(d.creditsPrepayes?.solde?.mineur).toBe(54);
-    expect(d.reinitialisations?.disponibles).toBe(1);
+    expect(compteur('/api/oauth/usage')).toBe(0);
   });
 
   test('profil en échec : pas de lecture des crédits prépayés (il faut l’organisation)', async () => {
     statuts.set('/api/oauth/profile', 401);
-    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL);
+    const d = await lecteur().detail('principal', null, 'tour', SDK_NUL, FOURNI);
     expect(d.profil).toBeNull();
     expect(d.creditsPrepayes).toBeNull();
     expect(compteur(CHEMIN_PREPAYE)).toBe(0);
@@ -166,7 +156,7 @@ describe('lecture du détail d’un compte', () => {
   });
 
   test('pas de jeton utilisable : aucune requête, un problème dit pourquoi', async () => {
-    const d = await lecteur(() => null).detail('principal', null, 'tour', SDK_NUL);
+    const d = await lecteur(() => null).detail('principal', null, 'tour', SDK_NUL, null);
     expect(recues).toHaveLength(0);
     expect(d.probleme).toContain('jeton');
     expect(d.fenetres).toEqual([]);
@@ -175,7 +165,7 @@ describe('lecture du détail d’un compte', () => {
   test('un jeton illisible (exception) se traite comme absent', async () => {
     const d = await lecteur(() => {
       throw new Error('fichier corrompu');
-    }).detail('principal', null, 'tour', SDK_NUL);
+    }).detail('principal', null, 'tour', SDK_NUL, FOURNI);
     expect(recues).toHaveLength(0);
     expect(d.probleme).toContain('jeton');
   });
@@ -189,9 +179,8 @@ describe('lecture du détail d’un compte', () => {
   });
 
   test('le journal ne contient ni le jeton ni l’uuid, même quand une lecture échoue', async () => {
-    statuts.set('/api/oauth/usage', 500);
     statuts.set('/api/oauth/profile', 401);
-    await lecteur().detail('principal', null, 'tour', SDK_NUL);
+    await lecteur().detail('principal', null, 'tour', SDK_NUL, FOURNI);
     const journal = lignes.join('\n');
     expect(journal).toContain('principal');
     expect(journal).not.toContain(JETON);
@@ -215,10 +204,10 @@ describe('réinitialisation d’une limite', () => {
 
   test('après une réinitialisation, le détail est relu (cache du compte invalidé)', async () => {
     const l = lecteur();
-    await l.detail('principal', null, 'tour', SDK_NUL);
+    await l.detail('principal', null, 'tour', SDK_NUL, FOURNI);
     await l.reinitialiser('principal', null, 'full-reset-2611');
-    await l.detail('principal', null, 'tour', SDK_NUL);
-    expect(compteur('/api/oauth/usage')).toBe(2);
+    await l.detail('principal', null, 'tour', SDK_NUL, FOURNI);
+    expect(compteur(CHEMIN_PREPAYE)).toBe(2);
   });
 
   test('429 : rate_limited ; 401 : auth_error ; autre échec : error', async () => {
