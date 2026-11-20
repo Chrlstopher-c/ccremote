@@ -122,6 +122,7 @@ bureau/vite.config.ts                                Vite + React + Tailwind
 commun/api-clients.ts                                le contrat de l'API des clients (app de bureau, iPhone, web) — ce que…
 commun/appareil.ts                                   le vocabulaire de l'accès à un appareil du parc — fichiers et terminaux
 commun/categories.ts                                 le vocabulaire des catégories de la barre latérale — forme validée et normalisation (une session = une catégorie)
+commun/compte-detail.ts                              le contrat de la vue complète d'un compte (profil, fenêtres, limites, crédits, réinitialisations, usage SDK)
 commun/comptes.ts                                    le vocabulaire des comptes Claude Code d'une machine — identité, usag…
 commun/configuration.ts                             contrat de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
 commun/echo.ts                                       ce que Quart relaie d'Echo — copie des seuls champs affichés
@@ -283,11 +284,24 @@ mcp/mcp.test.ts                                      tests du MCP (résolution d
 mcp/outils.ts                                        les outils MCP « quart_* » — ouvrir et piloter des sessions Claude Code sur n'importe quelle machine
 package.json                                         paquet racine : relais, poste, commun
 poste/bin.ts                                         point d'entrée du poste — assemble config, sessions tmux, socket loca…
+poste/comptes/comptes.test.ts                        tests de comptes.ts : compte inconnu, dossier par compte
 poste/comptes/comptes.ts                             les comptes Claude Code du poste — relevé périodique (identité, usage…
 poste/comptes/connexion.ts                           connecter un compte Claude Code sur cette machine par OAuth, en deux…
+poste/comptes/detail-facturation.ts                  traduire profil, usage supplémentaire, dépenses, crédits prépayés, répartition, parts par modèle (pur)
+poste/comptes/detail-reinitialisations.ts            traduire le bloc cedar_ember : offres de réinitialisation et leur disponibilité (pur)
+poste/comptes/detail.test.ts                         tests de detail.ts sur les fixtures réelles et sur des valeurs mal formées
+poste/comptes/detail.ts                              assembler la vue complète d'un compte à partir des réponses de l'API (pur) — fenêtres, limites, « autres »
+poste/comptes/lecture-compte.test.ts                 tests de lecture-compte.ts sur un faux serveur : en-têtes, cache, réinitialisation, journal sans secret
+poste/comptes/lecture-compte.ts                      lire la vue d'un compte sur l'API OAuth (cache 60 s) et envoyer une réinitialisation de limite
+poste/comptes/reinitialisation.ts                    traduire la réponse de réinitialisation et les refus HTTP 429 / 401 / 403 (pur)
 poste/comptes/releve.ts                              relever un compte Claude Code de la machine — identité (`claude auth…
 poste/comptes/usage.test.ts                          tests de usage.ts
 poste/comptes/usage.ts                               lire la réponse de l'API d'usage OAuth (`/api/oauth/usage`) en fenêtr…
+poste/comptes/valeurs.ts                             lire sans exception les valeurs d'une réponse JSON : objet, texte, nombre, tableau (pur)
+poste/comptes/fixtures/prepaid.json                  réponse réelle anonymisée des crédits prépayés (tests)
+poste/comptes/fixtures/profile.json                  réponse réelle anonymisée de /api/oauth/profile (tests)
+poste/comptes/fixtures/usage.json                    réponse réelle anonymisée de /api/oauth/usage (tests)
+poste/comptes/fixtures/usage_cedar.json              réponse réelle anonymisée de /api/oauth/usage avec cedar_ember (tests)
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
 poste/configuration/commande.test.ts                tests de l'aiguillage des commandes de configuration
 poste/configuration/commande.ts                     commandes de configuration reçues du relais, exécutées sur le poste (hors session)
@@ -380,6 +394,8 @@ poste/session/traduction-sdk.ts                      message du SDK → événem
 poste/session/traduction.test.ts                     tests de traduction.ts
 poste/session/traduction.ts                          traduire une ligne du transcript JSONL de Claude Code en événements d…
 poste/session/transcript.ts                          lire un transcript JSONL de Claude Code au fil de l'eau, et retrouver…
+poste/session/usage-compte.test.ts                   tests de usage-compte.ts
+poste/session/usage-compte.ts                        usage d'un compte lu sur la première session SDK vivante du compte (cache 5 min)
 poste/terminal/terminaux.test.ts                     tests de terminaux.ts
 poste/terminal/terminaux.ts                          terminaux à distance : un PTY par terminal, sortie vers le relais
 relais/acces/acces.test.ts                           tests de acces.ts (échecs par IP et global, plafond persistant)
@@ -392,6 +408,7 @@ relais/appareils/terminaux.ts                        terminaux à distance côt�
 relais/bin.ts                                        point d'entrée du relais — deux serveurs : clients (web, iPhone) et p…
 relais/clients/api-categories.test.ts                tests des routes des catégories (GET, PUT, refus, doublons)
 relais/clients/api-categories.ts                     les routes des catégories de la barre latérale — lire le document, le remplacer
+relais/clients/api-comptes.test.ts                   tests des routes détail et réinitialisation des comptes
 relais/clients/api-comptes.ts                        les routes des comptes Claude Code d'une machine — connexion OAuth en…
 relais/clients/api-configuration.test.ts            tests des routes de configuration de machine
 relais/clients/api-configuration.ts                 routes de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)

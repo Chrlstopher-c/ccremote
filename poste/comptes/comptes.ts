@@ -5,12 +5,14 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import { type EtatCompte, NOM_COMPTE } from '../../commun/comptes.ts';
+import type { UsageSdk } from '../../commun/compte-detail.ts';
 import { type ConfigPoste, enregistrerComptes } from '../config.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
 import { abandonnerConnexion, demarrerConnexion, validerConnexion } from './connexion.ts';
 import { binaireClaude } from '../session/lanceur.ts';
 import { marquerAccueilFait } from '../session/confiance.ts';
 import { environnementCompte, releverCompte } from './releve.ts';
+import { LecteurCompte } from './lecture-compte.ts';
 
 const PERIODE_RELEVE_MS = 5 * 60_000;
 const DOSSIER_COMPTES = join(homedir(), '.claude-comptes');
@@ -21,6 +23,10 @@ export interface DependancesComptes {
   readonly publier: (comptes: EtatCompte[]) => void;
   /** Vrai si une session ouverte utilise ce compte : on ne le retire pas sous ses pieds. */
   readonly enUsage: (compte: string) => boolean;
+  /** Vue détaillée et réinitialisations : lectures sur l'API OAuth, cache de 60 s par compte. */
+  readonly lecteur: LecteurCompte;
+  /** Usage SDK du compte, lu sur une session vivante (null sans session). */
+  readonly usageSdk: (compte: string) => Promise<UsageSdk | null>;
 }
 
 export class Comptes {
@@ -74,6 +80,25 @@ export class Comptes {
     this.d.journal.info({ compte: nom }, 'compte connecté');
     await this.relever();
     return { ok: true, donnees: this.etats.get(nom) };
+  }
+
+  /** La vue complète d'un compte connecté sur cette machine. */
+  async detail(nom: string): Promise<Reponse> {
+    if (!Object.hasOwn(this.d.config.comptes, nom)) return this.inconnu(nom);
+    const dossier = this.d.config.comptes[nom] ?? null;
+    const detail = await this.d.lecteur.detail(nom, dossier, this.d.config.machine, () => this.d.usageSdk(nom));
+    return { ok: true, donnees: detail };
+  }
+
+  /** Utilise une réinitialisation de limite. Le résultat du serveur est rendu tel quel (`resultat`). */
+  async reinitialiser(nom: string, offre: string): Promise<Reponse> {
+    if (!Object.hasOwn(this.d.config.comptes, nom)) return this.inconnu(nom);
+    const dossier = this.d.config.comptes[nom] ?? null;
+    return { ok: true, donnees: await this.d.lecteur.reinitialiser(nom, dossier, offre) };
+  }
+
+  private inconnu(nom: string): Reponse {
+    return { ok: false, erreur: `compte ${nom} inconnu sur ${this.d.config.machine}` };
   }
 
   async retirer(nom: string): Promise<Reponse> {

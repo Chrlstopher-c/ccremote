@@ -178,6 +178,14 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('compte_code'), id: z.string(), nom: z.string(), code: z.string().min(1).max(2000) }),
   z.object({ kind: z.literal('compte_retirer'), id: z.string(), nom: z.string() }),
   z.object({ kind: z.literal('comptes_relever'), id: z.string() }),
+  // Vue complète d'un compte (profil, usage, crédits, réinitialisations, usage SDK) . Réinitialiser une limite :
+  z.object({ kind: z.literal('compte_detail'), id: z.string(), nom: z.string().regex(NOM_COMPTE) }),
+  z.object({
+    kind: z.literal('compte_reinitialiser'),
+    id: z.string(),
+    nom: z.string().regex(NOM_COMPTE),
+    offre: z.string().regex(/^[a-z0-9_-]{1,40}$/),
+  }),
   ...commandesAppareil,
   ...commandesConfiguration,
 ]);

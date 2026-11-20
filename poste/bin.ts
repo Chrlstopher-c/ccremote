@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { type CommandeRelais, type MessagePoste, TAILLE_LOT_HISTORIQUE } from '../commun/protocole-poste.ts';
 import { Comptes } from './comptes/comptes.ts';
+import { LecteurCompte } from './comptes/lecture-compte.ts';
 import { chargerConfig } from './config.ts';
 import { eteindreMachine } from './parc/alimentation.ts';
 import { type CommandeAppareil, estAppareil } from './fichiers/appareil.ts';
@@ -65,6 +66,8 @@ const comptes = new Comptes({
   journal,
   publier: (etats) => envoyer({ kind: 'comptes', comptes: etats }),
   enUsage: (compte) => sessions.enUsage(compte),
+  lecteur: new LecteurCompte({ journal }),
+  usageSdk: (compte) => sessions.usageCompte(compte),
 });
 
 function bonjour(): MessagePoste {
@@ -126,6 +129,8 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);
   if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
   if (c.kind === 'comptes_relever') return comptes.relever().then(() => ({ ok: true, donnees: comptes.lister() }));
+  if (c.kind === 'compte_detail') return comptes.detail(c.nom);
+  if (c.kind === 'compte_reinitialiser') return comptes.reinitialiser(c.nom, c.offre);
   if (estCommandeConfiguration(c)) return executerConfiguration(c, configuration);
   return sessions.executer(c);
 }

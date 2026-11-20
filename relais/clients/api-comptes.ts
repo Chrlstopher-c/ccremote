@@ -15,6 +15,9 @@ const CorpsConnexion = z.object({
   email: z.string().email().optional(),
 });
 const CorpsCode = z.object({ code: z.string().trim().min(1).max(2000) });
+const CorpsReinitialisation = z.object({
+  offre: z.string().regex(/^[a-z0-9_-]{1,40}$/, 'identifiant d’offre invalide'),
+});
 
 export class ApiComptes {
   constructor(
@@ -37,6 +40,18 @@ export class ApiComptes {
 
   retirer(req: RequeteCompte): Promise<Response> {
     return this.commander(req.params.id, { kind: 'compte_retirer', nom: req.params.nom ?? '' });
+  }
+
+  detail(req: RequeteCompte): Promise<Response> {
+    if (!NOM_COMPTE.test(req.params.nom ?? '')) return Promise.resolve(erreur('nom de compte invalide', 400));
+    return this.commander(req.params.id, { kind: 'compte_detail', nom: req.params.nom ?? '' });
+  }
+
+  async reinitialiser(req: RequeteCompte): Promise<Response> {
+    if (!NOM_COMPTE.test(req.params.nom ?? '')) return erreur('nom de compte invalide', 400);
+    const c = await lireCorps(req, CorpsReinitialisation);
+    if (c instanceof Response) return c;
+    return this.commander(req.params.id, { kind: 'compte_reinitialiser', nom: req.params.nom ?? '', offre: c.offre });
   }
 
   relever(req: RequeteCompte): Promise<Response> {

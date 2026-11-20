@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
+import type { UsageSdk } from '../../commun/compte-detail.ts';
 import type { DemandeSession, Moteur, ResumeSession } from '../../commun/session.ts';
 import { type ConfigPoste, developper } from '../config.ts';
 import { composerConsignes } from './consignes.ts';
@@ -44,6 +45,7 @@ import { estFichiersSession, executerFichiersSession, type CommandeFichiersSessi
 import { Stockage } from '../presentation/stockage.ts';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { modeleDuTranscript } from './modele-transcript.ts';
+import { UsageComptes } from './usage-compte.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -78,6 +80,7 @@ export class GestionnaireSessions {
   private sauvegardePrevue: ReturnType<typeof setTimeout> | null = null;
   private readonly controles = new ControlesDifferes();
   private readonly decouvertes: IndexDecouvertes;
+  private readonly usages: UsageComptes;
 
   constructor(
     readonly config: ConfigPoste,
@@ -95,6 +98,7 @@ export class GestionnaireSessions {
       journal,
       surChangement: () => this.sortie.decouvertes?.(this.listeDecouvertes()),
     });
+    this.usages = new UsageComptes(() => this.sessions.values(), journal);
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
       machine: config.machine,
@@ -162,6 +166,11 @@ export class GestionnaireSessions {
   // Un compte ne se retire pas sous une session vivante : pane tmux ou requête SDK ouverte.
   enUsage(compte: string): boolean {
     return [...this.sessions.values()].some((s) => s.resume.compte === compte && s.vivante);
+  }
+
+  /** Usage SDK d'un compte (abonnement, contributeurs) : lu sur une session vivante du compte, gardé 5 min. */
+  usageCompte(compte: string): Promise<UsageSdk | null> {
+    return this.usages.lire(compte);
   }
 
   async ouvrir(d: DemandeSession): Promise<Reponse> {

@@ -2,6 +2,7 @@
 import type {
   Options,
   SDKControlGetContextUsageResponse,
+  SDKControlGetUsageResponse,
   SDKMessage,
   SDKUserMessage,
 } from '@anthropic-ai/claude-agent-sdk';
@@ -57,6 +58,14 @@ export const CONTEXTE_FAUX = {
   ],
   mcpTools: [{ name: 'mcp__claude_ai_Flix__my_library', serverName: 'claude_ai_Flix', tokens: 100, isLoaded: false }],
   memoryFiles: [{ path: '/projets/app/CLAUDE.md', type: 'Project', tokens: 800 }],
+};
+
+export const USAGE_FAUX = {
+  session: { total_cost_usd: 0.42, total_api_duration_ms: 1000, total_duration_ms: 2000 },
+  subscription_type: 'max',
+  rate_limits_available: true,
+  rate_limits: null,
+  behaviors: null,
 };
 
 export const traduction: TraductionSdk = { nouvelEtat: nouvelEtatTraduction, traduire: traduireFaux };
@@ -153,6 +162,11 @@ export class RequeteFausse implements RequeteSdk {
   async getContextUsage(): Promise<SDKControlGetContextUsageResponse> {
     this.contexteAppels += 1;
     return CONTEXTE_FAUX as unknown as SDKControlGetContextUsageResponse; // forme partielle, voir ci-dessus
+  }
+
+  // Forme partielle : seuls les champs que usage-compte.ts lit existent.
+  async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(): Promise<SDKControlGetUsageResponse> {
+    return USAGE_FAUX as unknown as SDKControlGetUsageResponse; // forme partielle, voir ci-dessus
   }
 
   private async jouer(prompt: AsyncIterable<SDKUserMessage>): Promise<void> {

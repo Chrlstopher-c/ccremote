@@ -1,5 +1,6 @@
 // Responsabilité : le contrat qu'une session du poste offre au gestionnaire et au socket local, quel que soit son
 // moteur — `tmux` (TUI dans un serveur tmux) ou `sdk` (Claude Agent SDK). Le gestionnaire ne parle qu'à cette forme.
+import type { SDKControlGetUsageResponse } from '@anthropic-ai/claude-agent-sdk';
 import type { Decouverte } from '../../commun/decouverte.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
@@ -33,6 +34,8 @@ export interface SessionPoste {
   readonly transcriptConnu: boolean;
   readonly identifiants: readonly string[]; // identifiants SDK anciens et courant (voir identifiants-fiche.ts)
   readonly vivante: boolean; // un processus Claude tourne pour cette session (tmux ou requête SDK ouverte)
+  /** Usage du compte, lu sur la requête SDK ouverte (absent hors SDK). */
+  usageSdk?(): Promise<SDKControlGetUsageResponse | null>;
 
   // Découverte : ce que la machine voit de la session.
   rattacher(pane: PaneTmux | null): void;

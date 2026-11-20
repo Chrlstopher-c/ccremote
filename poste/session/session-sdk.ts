@@ -9,6 +9,7 @@ import {
   type Options,
   type PermissionResult,
   type SDKControlGetContextUsageResponse,
+  type SDKControlGetUsageResponse,
   type SDKMessage,
   type SDKUserMessage,
   type SessionMessage,
@@ -59,6 +60,9 @@ export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   close(): void;
   mcpServerStatus(): Promise<readonly { readonly name: string; readonly status: string }[]>;
   getContextUsage(opts: { readonly detail: 'summary' }): Promise<SDKControlGetContextUsageResponse>;
+  usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(opts?: {
+    readonly skipBehaviors?: boolean;
+  }): Promise<SDKControlGetUsageResponse>;
   toggleMcpServer(nom: string, actif: boolean): Promise<void>;
   initializationResult(): Promise<{
     readonly output_style: string;
@@ -399,6 +403,18 @@ export class SessionSdk implements SessionPoste {
       if (nom !== (this.etat.modeleNom ?? null)) this.maj({ modeleNom: nom });
     } catch (erreur) {
       this.env.journal.warn({ err: erreur, session: this.etat.id }, 'nom du modèle non lu dans la requête');
+    }
+  }
+
+  // Usage du compte (abonnement, contributeurs) : lecture seule, comme `contexte()` ; sans requête ouverte, null.
+  async usageSdk(): Promise<SDKControlGetUsageResponse | null> {
+    const requete = this.requete;
+    if (!requete) return null;
+    try {
+      return await requete.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET();
+    } catch (erreur) {
+      this.env.journal.warn({ err: erreur, session: this.etat.id }, 'usage du compte non lu dans la requête');
+      return null;
     }
   }
 
