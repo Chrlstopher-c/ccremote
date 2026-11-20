@@ -47,7 +47,7 @@ export interface SessionPoste {
   rattacher(pane: PaneTmux | null): void;
   /** Nom donné par `cc` (tmux seulement ; une session SDK porte son titre). */
   nommer?(nom: string | null): void;
-  rattacherTerminal(vivant: boolean, enTour?: boolean): void;
+  rattacherTerminal(vivant: boolean, enTour?: boolean, modeleLu?: string | null): void;
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void;
   lire(): void;
   releverEcran(): Promise<void>;

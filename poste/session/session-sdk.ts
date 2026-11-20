@@ -263,11 +263,13 @@ export class SessionSdk implements SessionPoste {
   // Conversation tenue par un processus Claude hors Lanterne (Desktop, terminal) : « en cours » ou « en attente », sans
   // reprise possible ; fermée quand ce processus s'arrête. Une requête Lanterne vivante l'emporte. L'activité (majLe)
   // reste celle du transcript.
-  rattacherTerminal(vivant: boolean, enTour = false): void {
+  rattacherTerminal(vivant: boolean, enTour = false, modeleLu: string | null = null): void {
     if (this.vivante) return;
     const statut = statutExterne(this.etat.statut, vivant, enTour);
-    if (statut === this.etat.statut && (this.etat.terminal === true) === vivant) return;
-    this.etat = { ...this.etat, statut, terminal: vivant };
+    const modele = modeleLu ?? this.etat.modele;
+    const inchangee = statut === this.etat.statut && (this.etat.terminal === true) === vivant;
+    if (inchangee && modele === this.etat.modele) return;
+    this.etat = { ...this.etat, statut, terminal: vivant, modele };
     this.env.sortie.resume(this.etat);
   }
   async releverEcran(): Promise<void> {}

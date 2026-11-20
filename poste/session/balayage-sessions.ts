@@ -102,11 +102,15 @@ export class BalayageSessions {
       if (!s.resume.terminal) continue;
       const vivant = vivants.has(s.resume.claudeSessionId ?? s.resume.id) || vivants.has(s.resume.id);
       const enTour = vivant && this.tourEnCours(s.resume.cwd, s.resume.claudeSessionId, s.persistee.configDir);
-      s.rattacherTerminal(vivant, enTour);
+      const modele = vivant ? this.modeleLu(s.resume.cwd, s.resume.claudeSessionId, s.persistee.configDir) : null;
+      s.rattacherTerminal(vivant, enTour, modele);
     }
     for (const p of procs) {
       const connue = this.d.fichePour(p.sessionId);
-      if (connue) connue.rattacherTerminal(true, this.tourEnCours(p.cwd, p.sessionId, p.configDir));
+      if (connue) {
+        const modele = this.modeleLu(p.cwd, p.sessionId, p.configDir);
+        connue.rattacherTerminal(true, this.tourEnCours(p.cwd, p.sessionId, p.configDir), modele);
+      }
       else if (!this.d.fichePour(p.sessionId)) {
         this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
       }
@@ -116,15 +120,24 @@ export class BalayageSessions {
   // Un tour en cours dans une session tenue ailleurs (Desktop, terminal) : lu dans son transcript, relu seulement quand
   // le fichier change.
   private tourEnCours(cwd: string, conversation: string | null, configDir: string | null): boolean {
-    if (!conversation) return false;
+    const etat = this.etatLu(cwd, conversation, configDir);
+    return etat ? tourEnCoursEtat(etat, Date.now()) : false;
+  }
+
+  // Modèle du dernier message de la conversation : un changement de modèle fait ailleurs se voit sur la fiche.
+  private modeleLu(cwd: string, conversation: string | null, configDir: string | null): string | null {
+    return this.etatLu(cwd, conversation, configDir)?.modele ?? null;
+  }
+
+  private etatLu(cwd: string, conversation: string | null, configDir: string | null): EtatTranscript | null {
+    if (!conversation) return null;
     const chemin = cheminTranscript(cwd, conversation, configDir);
     const ecritLe = mtimeDe(chemin);
     const memoire = this.etats.get(chemin);
-    if (memoire && memoire.ecritLe === ecritLe) return tourEnCoursEtat(memoire, Date.now());
+    if (memoire && memoire.ecritLe === ecritLe) return memoire;
     const etat = etatDuTranscript(chemin, this.d.journal);
-    if (!etat) return false;
-    this.etats.set(chemin, etat);
-    return tourEnCoursEtat(etat, Date.now());
+    if (etat) this.etats.set(chemin, etat);
+    return etat;
   }
 
   // Sessions cc sans processus ni pane : listées fermées, reprenables par `cc reprendre` (via Quart).
