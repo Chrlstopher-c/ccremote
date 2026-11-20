@@ -367,6 +367,7 @@ export class Postes {
     }
     const fusion = this.registre.fusionnerHistorique(sessionId, ajout, { complet: false, premier: false });
     if (etat.fusion && !fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
+    if (fusion.reecrit || (!etat.fusion && fusion.ajoutes.length > 0)) this.signalerFilModifie(sessionId);
     this.diffuserSession(sessionId);
     this.journal.info(
       { sessionId, ajoutes: fusion.ajoutes.length, reecrit: fusion.reecrit, fusion: etat.fusion },
@@ -383,6 +384,7 @@ export class Postes {
     this.relectures.set(sessionId, { replay, ancre: null, fusion: true, complet: true });
     const fusion = this.registre.fusionnerHistorique(sessionId, lot, { complet: true, premier });
     if (!fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
+    if (fusion.reecrit || fusion.remplace) this.signalerFilModifie(sessionId);
     this.diffuserSession(sessionId);
     this.journal.info(
       {
@@ -409,11 +411,17 @@ export class Postes {
     this.relecturesCompletesDemandees.add(sessionId);
     this.completesAttendues.add(sessionId);
     this.journal.info({ sessionId, retires, archiver }, 'recalage : fil nettoyé, relecture complète attendue');
+    if (retires > 0) this.signalerFilModifie(sessionId);
     this.diffuserSession(sessionId);
   }
 
   private diffuserFil(evenement: EvenementDate): void {
     this.diffusion.diffuser({ type: 'evenement', evenement });
+  }
+
+  // Le fil a changé sans qu'un événement en queue le montre : le client qui l'affiche le relit (une fois par rafale).
+  private signalerFilModifie(sessionId: string): void {
+    this.diffusion.diffuser({ type: 'fil_modifie', sessionId });
   }
 
   // Session Remote Control (claude.ai) qui est la même conversation qu'une session de poste (Desktop sur la tour) :

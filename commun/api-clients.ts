@@ -72,7 +72,10 @@ export type MessageClient =
   | { readonly type: 'notification'; readonly notification: Notification }
   | { readonly type: 'echo'; readonly echo: MessageEcho } // WebSocket seulement : n'avance pas le long-poll
   | { readonly type: 'reunion'; readonly reunion: Reunion } // WebSocket seulement : la salle de réunion (HQ)
-  | { readonly type: 'confirmation'; readonly confirmation: ConfirmationDemandee }; // une question de Claude à Chris
+  | { readonly type: 'confirmation'; readonly confirmation: ConfirmationDemandee } // une question de Claude à Chris
+  // Le fil d'une session a changé sans qu'un événement en queue le montre (comblement, réécriture, remplacement) : le
+  // client qui l'affiche le relit. Un ajout en queue est diffusé ligne à ligne et n'émet pas ce signal.
+  | { readonly type: 'fil_modifie'; readonly sessionId: string };
 
 /** Forme publique d'une confirmation demandée par un outil (voir relais/machines/confirmations.ts). */
 export interface ConfirmationDemandee {
