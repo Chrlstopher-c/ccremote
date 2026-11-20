@@ -1,6 +1,7 @@
-// Responsabilité : l'historique complet d'un transcript Claude Code, traduit en événements du fil avec leur horodatage
-// d'origine. Sert à l'ouverture d'une session découverte ou adoptée : le relais n'a encore rien reçu de sa conversation.
-// Les images des blocs sont stockées par le poste (`stockerImage`) ; sans lui, elles sont ignorées. Pur hors lecture.
+// Responsabilité : l'historique d'un transcript Claude Code, traduit en événements du fil avec leur horodatage d'origine.
+// Sert à l'ouverture d'une session découverte ou adoptée (relecture complète) et à la suite de ses écritures (le
+// traducteur garde son horodatage courant entre deux passages). Les images des blocs sont stockées par le poste
+// (`stockerImage`) ; sans lui, elles sont ignorées. Pur hors lecture.
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { Logger } from 'pino';
@@ -30,6 +31,14 @@ function ligneDe(texte: string): Ligne | null {
   }
 }
 
+/** Lignes d'un texte de transcript, sans les lignes invalides. */
+export function lignesDe(texte: string): Ligne[] {
+  return texte
+    .split('\n')
+    .map(ligneDe)
+    .filter((l): l is Ligne => l !== null);
+}
+
 function resultatDOutil(l: Ligne): boolean {
   const contenu = l.message?.content;
   return Array.isArray(contenu) && contenu.some((b: unknown) => typeof b === 'object' && b !== null && (b as { type?: unknown }).type === 'tool_result');
@@ -39,37 +48,38 @@ function horodatage(l: Ligne, dernier: string): string {
   return typeof l.timestamp === 'string' && !Number.isNaN(Date.parse(l.timestamp)) ? l.timestamp : dernier;
 }
 
-/** Tous les événements de la branche active d'un transcript, dans l'ordre, sans les sous-agents (leur fil est à part). */
-export function evenementsDuTranscript(contenu: string, stockerImage?: StockerImage): EvenementHorodate[] {
-  const lignes = contenu
-    .split('\n')
-    .map(ligneDe)
-    .filter((l): l is Ligne => l !== null);
-  const sortie: EvenementHorodate[] = [];
-  let dernier = EPOQUE;
-  for (const l of brancheActive(lignes)) {
-    const ts = horodatage(l, dernier);
-    dernier = ts;
-    for (const evt of traduire(l)) sortie.push({ ts, evt });
+/** Traduit les lignes d'une branche, une à une et dans l'ordre : sans horodatage, une ligne reprend la précédente. */
+export class TraducteurHistorique {
+  private dernier = EPOQUE;
+
+  constructor(private readonly stockerImage?: StockerImage) {}
+
+  evenements(l: Ligne): EvenementHorodate[] {
+    const ts = horodatage(l, this.dernier);
+    this.dernier = ts;
+    const sortie: EvenementHorodate[] = traduire(l).map((evt) => ({ ts, evt }));
+    const stocker = this.stockerImage;
     const enFile = l.type === 'attachment' && messageEnFile(l);
-    if (stockerImage && (l.type === 'user' || enFile) && l.isSidechain !== true) {
+    if (stocker && (l.type === 'user' || enFile) && l.isSidechain !== true) {
       const origine = !enFile && resultatDOutil(l) ? 'outil' : 'utilisateur';
       const contenu = enFile ? l.attachment?.prompt : l.message?.content;
       imagesDeContenu(contenu).forEach((image, rang) => {
-        const evt = stockerImage(image, rang, origine);
+        const evt = stocker(image, rang, origine);
         if (evt) sortie.push({ ts, evt });
       });
     }
+    return sortie;
   }
-  return sortie;
+}
+
+/** Tous les événements de la branche active d'un transcript, dans l'ordre, sans les sous-agents (leur fil est à part). */
+export function evenementsDuTranscript(contenu: string, stockerImage?: StockerImage): EvenementHorodate[] {
+  const traducteur = new TraducteurHistorique(stockerImage);
+  return brancheActive(lignesDe(contenu)).flatMap((l) => traducteur.evenements(l));
 }
 
 /** Lit le transcript entier ; un fichier illisible rend une liste vide (journalisé, la session reste ouvrable). */
-export function lireHistorique(
-  chemin: string,
-  journal: Logger,
-  stockerImage?: StockerImage,
-): EvenementHorodate[] {
+export function lireHistorique(chemin: string, journal: Logger, stockerImage?: StockerImage): EvenementHorodate[] {
   try {
     return evenementsDuTranscript(readFileSync(chemin, 'utf8'), stockerImage);
   } catch (erreur) {

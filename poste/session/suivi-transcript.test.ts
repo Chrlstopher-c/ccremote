@@ -10,7 +10,7 @@ import { type EnvironnementSdk, SessionSdk } from './session-sdk.ts';
 import { cheminTranscript } from './transcript.ts';
 import { persistee } from './faux-sdk.ts';
 import { Stockage } from '../presentation/stockage.ts';
-import { PERIODE_RELECTURE_MS } from './suivi-transcript.ts';
+import { CHEVAUCHEMENT_DIRECT } from './suivi-transcript.ts';
 
 const DEBUT = Date.parse('2026-11-01T10:00:00.000Z');
 
@@ -46,10 +46,17 @@ function montage(): {
     },
     executable: null,
     socket: '/run/poste.sock',
-    periodeRelectureMs: 0,
   };
   const session = new SessionSdk(persistee(racine, null, { statut: 'fermee' }), env);
-  return { session, chemin, appels, nettoyer: () => rmSync(racine, { recursive: true, force: true }) };
+  return {
+    session,
+    chemin,
+    appels,
+    nettoyer: () => {
+      session.liberer();
+      rmSync(racine, { recursive: true, force: true });
+    },
+  };
 }
 
 describe('suivi d’un transcript non piloté par le poste', () => {
@@ -95,23 +102,8 @@ describe('suivi d’un transcript non piloté par le poste', () => {
     }
   });
 
-  test('des écritures rapprochées ne relancent pas une relecture avant la fin de la période', () => {
-    const racine = mkdtempSync(join(tmpdir(), 'quart-suivi-'));
-    const chemin = cheminTranscript('/projets/app', 'claude-abc', racine);
-    mkdirSync(dirname(chemin), { recursive: true });
-    const appels: Evenement[][] = [];
-    const env: EnvironnementSdk = {
-      journal: pino({ enabled: false }),
-      sortie: {
-        evenement: () => undefined,
-        resume: () => undefined,
-        historique: (_id, e) => void appels.push(e.map((x) => x.evt)),
-      },
-      executable: null,
-      socket: '/run/poste.sock',
-      periodeRelectureMs: 60_000,
-    };
-    const session = new SessionSdk(persistee(racine, null, { statut: 'fermee' }), env);
+  test('des écritures rapprochées sont toutes envoyées, sans attendre de période', () => {
+    const { session, chemin, appels, nettoyer } = montage();
     try {
       writeFileSync(chemin, ligne('u1', null, 'user', 'un', 0));
       session.lire();
@@ -119,10 +111,10 @@ describe('suivi d’un transcript non piloté par le poste', () => {
       session.lire();
       appendFileSync(chemin, ligne('u2', 'a1', 'user', 'trois', 2));
       session.lire();
-      expect(appels).toHaveLength(1);
-      expect(textes(appels[0] ?? [])).toEqual(['un', 'deux']);
+      expect(appels).toHaveLength(2);
+      expect(textes(appels[1] ?? [])).toEqual(['un', 'deux', 'trois']);
     } finally {
-      rmSync(racine, { recursive: true, force: true });
+      nettoyer();
     }
   });
 
@@ -161,7 +153,6 @@ function environnement(appels: Evenement[][], presentation?: EnvironnementSdk['p
     },
     executable: null,
     socket: '/run/poste.sock',
-    periodeRelectureMs: 0,
     presentation,
   };
 }
@@ -248,8 +239,167 @@ describe('relectures : images stables, queue seulement', () => {
   });
 });
 
-describe('période de relecture', () => {
-  test('la période minimale par défaut est de 10 s', () => {
-    expect(PERIODE_RELECTURE_MS).toBe(10_000);
+const ATTENTE_MS = 500;
+
+async function attendre(condition: () => boolean, delaiMs = ATTENTE_MS): Promise<void> {
+  const fin = performance.now() + delaiMs;
+  while (!condition() && performance.now() < fin) await new Promise((r) => setTimeout(r, 5));
+}
+
+function lignesBrutes(...objets: unknown[]): string {
+  return objets.map((o) => `${JSON.stringify(o)}\n`).join('');
+}
+
+function suite(de: number, a: number): string {
+  return Array.from({ length: a - de }, (_, k) => {
+    const rang = de + k;
+    return ligne(`u${rang}`, rang ? `u${rang - 1}` : null, 'user', `l${rang}`, rang);
+  }).join('');
+}
+
+describe('au fil de l’eau : surveillance du transcript', () => {
+  test('une écriture arrive en moins de 500 ms, sans attendre le balayage', async () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      writeFileSync(chemin, ligne('u1', null, 'user', 'un', 0) + ligne('a1', 'u1', 'assistant', 'deux', 1));
+      session.lire();
+      const debut = performance.now();
+      appendFileSync(chemin, ligne('u2', 'a1', 'user', 'trois', 2));
+      await attendre(() => appels.length > 0);
+      expect(appels).toHaveLength(1);
+      expect(performance.now() - debut).toBeLessThan(ATTENTE_MS);
+      expect(textes(appels[0] ?? [])).toEqual(['un', 'deux', 'trois']);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('seule la suite part, avec les derniers événements déjà envoyés en chevauchement', () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      writeFileSync(chemin, suite(0, 150));
+      session.definirTranscript(chemin);
+      appendFileSync(chemin, suite(150, 152));
+      session.lire();
+      expect(appels).toHaveLength(2);
+      expect(appels[1]).toHaveLength(CHEVAUCHEMENT_DIRECT + 2);
+      expect(textes(appels[1] ?? [])[0]).toBe('l145');
+      expect(textes(appels[1] ?? []).at(-1)).toBe('l151');
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('une ligne en cours d’écriture attend sa fin de ligne', () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      writeFileSync(chemin, ligne('u1', null, 'user', 'un', 0));
+      session.definirTranscript(chemin);
+      const complete = ligne('a1', 'u1', 'assistant', 'deux', 1);
+      appendFileSync(chemin, complete.slice(0, 40));
+      session.lire();
+      expect(appels).toHaveLength(1);
+      appendFileSync(chemin, complete.slice(40));
+      session.lire();
+      expect(appels).toHaveLength(2);
+      expect(textes(appels[1] ?? [])).toEqual(['un', 'deux']);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('un fichier tronqué repart d’une relecture complète', () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      writeFileSync(chemin, suite(0, 3));
+      session.definirTranscript(chemin);
+      writeFileSync(chemin, suite(0, 1));
+      session.lire();
+      expect(appels).toHaveLength(2);
+      expect(textes(appels[1] ?? [])).toEqual(['l0']);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('un rembobinage qui casse la branche repart d’une relecture complète', () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      writeFileSync(
+        chemin,
+        ligne('u1', null, 'user', 'un', 0) +
+          ligne('a1', 'u1', 'assistant', 'deux', 1) +
+          ligne('u2', 'a1', 'user', 'trois', 2),
+      );
+      session.definirTranscript(chemin);
+      appendFileSync(chemin, ligne('u3', 'a1', 'user', 'nouveau', 3));
+      session.lire();
+      expect(appels).toHaveLength(2);
+      expect(textes(appels[1] ?? [])).toEqual(['un', 'deux', 'nouveau']);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('un résultat d’outil parallèle s’ajoute sans relecture complète', () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      const outil = (uuid: string, parent: string, id: string): string =>
+        lignesBrutes({
+          type: 'assistant',
+          uuid,
+          parentUuid: parent,
+          timestamp: new Date(DEBUT).toISOString(),
+          message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Bash', input: {} }] },
+        });
+      const reponse = (uuid: string, parent: string, id: string): string =>
+        lignesBrutes({
+          type: 'user',
+          uuid,
+          parentUuid: parent,
+          timestamp: new Date(DEBUT).toISOString(),
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+        });
+      writeFileSync(
+        chemin,
+        suite(0, 20) + outil('p20', 'u19', 'T1') + outil('p21', 'p20', 'T2') + reponse('p22', 'p21', 'T1'),
+      );
+      session.definirTranscript(chemin);
+      const total = appels[0]?.length ?? 0;
+      appendFileSync(chemin, reponse('p23', 'p21', 'T2'));
+      session.lire();
+      expect(appels).toHaveLength(2);
+      expect(appels[1]?.length ?? 0).toBeLessThanOrEqual(CHEVAUCHEMENT_DIRECT + 1);
+      expect(total).toBeGreaterThan(CHEVAUCHEMENT_DIRECT + 1);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('un transcript créé après l’ouverture est vu dès sa première écriture', async () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      session.lire();
+      writeFileSync(chemin, ligne('u1', null, 'user', 'un', 0) + ligne('a1', 'u1', 'assistant', 'deux', 1));
+      await attendre(() => appels.length > 0);
+      expect(textes(appels[0] ?? [])).toEqual(['un', 'deux']);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('après l’arrêt de la surveillance, plus rien n’est envoyé', async () => {
+    const { session, chemin, appels, nettoyer } = montage();
+    try {
+      writeFileSync(chemin, ligne('u1', null, 'user', 'un', 0));
+      session.definirTranscript(chemin);
+      session.lire();
+      session.liberer();
+      appendFileSync(chemin, ligne('a1', 'u1', 'assistant', 'deux', 1));
+      await new Promise((r) => setTimeout(r, 300));
+      expect(appels).toHaveLength(1);
+    } finally {
+      nettoyer();
+    }
   });
 });

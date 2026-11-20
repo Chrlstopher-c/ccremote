@@ -322,6 +322,7 @@ export class GestionnaireSessions {
       this.journal.error({ err: erreur, session: id }, 'suppression impossible');
       return { ok: false, erreur: `suppression impossible : ${String(erreur)}` };
     }
+    if (s instanceof SessionSdk) s.liberer();
     this.sessions.delete(id);
     this.modifications.oublier(id);
     this.supprimerFichiers(id);

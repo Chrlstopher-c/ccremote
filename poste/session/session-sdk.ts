@@ -41,9 +41,9 @@ import { optionsSdk } from './options-sdk.ts';
 import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
-import { lireHistorique, stockeurImages } from './historique.ts';
+import { stockeurImages } from './historique.ts';
 import { cheminTranscript } from './transcript.ts';
-import { PERIODE_RELECTURE_MS, SuiviTranscript } from './suivi-transcript.ts';
+import { SuiviTranscript } from './suivi-transcript.ts';
 import {
   appliquerReglage,
   basculerMode,
@@ -105,7 +105,6 @@ export interface EnvironnementSdk {
   readonly env?: Record<string, string | undefined>;
   readonly delaiMcpMs?: number;
   readonly periodeMcpMs?: number;
-  readonly periodeRelectureMs?: number; // délai mini entre deux relectures d'un transcript qui grossit
 }
 
 const DELAI_MCP_MS = 15_000;
@@ -160,7 +159,12 @@ export class SessionSdk implements SessionPoste {
     this.traduction = env.traduction ?? TRADUCTION_PAR_DEFAUT;
     this.delaiMcp = env.delaiMcpMs ?? DELAI_MCP_MS;
     this.periodeMcp = env.periodeMcpMs ?? PERIODE_MCP_MS;
-    this.suivi = new SuiviTranscript(env.periodeRelectureMs ?? PERIODE_RELECTURE_MS);
+    const stockage = env.presentation?.stockage;
+    this.suivi = new SuiviTranscript({
+      journal: env.journal,
+      emettre: (evenements) => this.env.sortie.historique?.(this.etat.id, evenements),
+      ...(stockage ? { stockerImage: stockeurImages(stockage, p.resume.id, env.journal) } : {}),
+    });
     const pres = env.presentation;
     this.presentation = pres
       ? new PresentationSession({
@@ -225,24 +229,22 @@ export class SessionSdk implements SessionPoste {
   // `complet` (fil vide au relais), seule la queue part, avec un chevauchement (voir suivi-transcript.ts).
   rejouerHistorique(chemin: string, complet = false): number {
     this.historiqueEmis = true;
-    this.suivi.marquerLu(chemin);
-    const stockage = this.env.presentation?.stockage;
-    const images = stockage ? stockeurImages(stockage, this.etat.id, this.env.journal) : undefined;
-    const evenements = lireHistorique(chemin, this.env.journal, images);
-    this.env.sortie.historique?.(this.etat.id, this.suivi.queue(evenements, complet));
-    return evenements.length;
+    return this.suivi.relecture(chemin, complet);
   }
-  // Session non pilotée ici (découverte, ou fermée au démarrage du poste) : son transcript est relu dès qu'il grossit,
-  // pour qu'un échange fait hors de Lanterne arrive dans le fil. Pilotée par le poste, son fil vient du direct.
+  // Session non pilotée ici (découverte, ou fermée au démarrage du poste) : son transcript est surveillé, et ce qui s'y
+  // ajoute part au fil dans la seconde (le balayage n'est qu'un filet). Pilotée par le poste, son fil vient du direct.
   lire(): void {
-    if (this.vivante) {
+    const conversation = this.etat.claudeSessionId;
+    if (this.vivante || !conversation) {
       this.suivi.reinitialiser();
       return;
     }
-    const conversation = this.etat.claudeSessionId;
-    if (!conversation) return;
-    const chemin = cheminTranscript(this.etat.cwd, conversation, this.p.configDir);
-    if (this.suivi.aRelire(chemin, Date.now())) this.rejouerHistorique(chemin);
+    this.suivi.verifier(cheminTranscript(this.etat.cwd, conversation, this.p.configDir));
+  }
+
+  // Fiche supprimée : son transcript n'est plus surveillé.
+  liberer(): void {
+    this.suivi.reinitialiser();
   }
 
   // Pas de pane tmux ni de terminal : le fil vient du SDK, la veille est celle du poste.

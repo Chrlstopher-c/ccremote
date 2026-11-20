@@ -1,46 +1,101 @@
-// Responsabilité : le suivi du transcript d'une session SDK non pilotée ici (découverte, ou fermée au démarrage) — relu
-// quand il grossit, au plus une fois par période, et envoyé en queue seulement (le relais retrouve son ancre dans le
-// chevauchement). Une session pilotée par le poste ne relit rien : son fil vient du direct.
-import { signatureTranscript } from './transcript.ts';
+// Responsabilité : le suivi d'un transcript Claude Code d'une session non pilotée ici (découverte, adoptée, ou fermée au
+// démarrage). Chaque écriture part au fil dans la seconde : le fichier est surveillé, et le balayage périodique n'est
+// qu'un filet. Seule la suite part, avec quelques événements déjà envoyés en chevauchement pour que le relais retrouve
+// son ancre. Une réécriture ou une branche cassée repart d'une relecture complète (voir lecture-incrementale.ts).
+import type { Logger } from 'pino';
+import type { EvenementHorodate, StockerImage } from './historique.ts';
+import { LectureIncrementale } from './lecture-incrementale.ts';
+import { SurveillanceFichier } from './surveillance-fichier.ts';
 
-export const PERIODE_RELECTURE_MS = 10_000;
-export const CHEVAUCHEMENT = 100; // événements repris avant la queue, pour que le relais retrouve son dernier événement
+export const ANTI_REBOND_MS = 150;
+export const CHEVAUCHEMENT = 100; // relecture complète : événements repris avant la queue, pour retrouver l'ancre
+export const CHEVAUCHEMENT_DIRECT = 5; // suite au fil : derniers événements déjà envoyés, repris devant les nouveaux
+
+export interface DependancesSuivi {
+  readonly journal: Logger;
+  readonly emettre: (evenements: readonly EvenementHorodate[]) => void;
+  readonly stockerImage?: StockerImage;
+  readonly antiRebondMs?: number;
+}
 
 export class SuiviTranscript {
-  private signature: string | null = null; // transcript vu au dernier passage (taille, date)
-  private prochaine = 0; // une écriture externe ne relance pas la relecture avant ce moment
-  private envoyes: number | null = null; // nombre d'événements de la dernière émission (null : jamais émis)
+  private lecture: LectureIncrementale | null = null;
+  private surveillance: SurveillanceFichier | null = null;
+  private envoyes: number | null = null; // événements de la branche déjà envoyés ; null : le relais n'a rien, tout part
+  private recents: EvenementHorodate[] = []; // derniers envoyés : le chevauchement de la suite
 
-  constructor(private readonly periodeMs: number = PERIODE_RELECTURE_MS) {}
+  constructor(private readonly d: DependancesSuivi) {}
 
-  /** Le transcript vient d'être lu : son état sert de base aux passages suivants. */
-  marquerLu(chemin: string): void {
-    this.signature = signatureTranscript(chemin);
+  /** Relecture complète : la queue part (voir CHEVAUCHEMENT), ou tout si `complet`. Rend le nombre d'événements. */
+  relecture(chemin: string, complet = false): number {
+    const evenements = this.lecturePour(chemin).relireTout();
+    this.envoyerQueue(evenements, complet);
+    return evenements.length;
   }
 
-  /** Faut-il relire maintenant ? Une première vue ne fait que fixer la base ; sans transcript, rien. */
-  aRelire(chemin: string, maintenant: number): boolean {
-    const signature = signatureTranscript(chemin);
-    if (signature === null) return false;
-    if (this.signature === null) {
-      this.signature = signature;
-      return false;
+  /** Appelé à chaque écriture (surveillance) et par le balayage (filet) : n'envoie que ce qui s'est ajouté. */
+  verifier(chemin: string): void {
+    this.surveillancePour(chemin).armer();
+    const lecture = this.lecturePour(chemin);
+    if (!lecture.etablie) {
+      this.etablir(lecture);
+      return;
     }
-    if (signature === this.signature || maintenant < this.prochaine) return false;
-    this.prochaine = maintenant + this.periodeMs;
-    return true;
+    const ajout = lecture.ajout();
+    if (ajout === null || (ajout.length > 0 && this.envoyes === null)) {
+      this.relecture(chemin);
+      return;
+    }
+    if (ajout.length > 0) this.envoyerSuite(ajout);
   }
 
-  /** Session pilotée par le poste : la base est oubliée, la première vue après sa fermeture ne relit rien. */
+  /** Arrête la surveillance et oublie la base : la prochaine vue repart d'une première vue (session pilotée ici, ou fin). */
   reinitialiser(): void {
-    this.signature = null;
+    this.surveillance?.arreter();
+    this.surveillance = null;
+    this.lecture = null;
+    this.envoyes = null;
+    this.recents = [];
   }
 
-  /** Ce qui part au relais : tout (première émission, réécriture plus courte, demande complète), sinon la queue. */
-  queue<T>(evenements: readonly T[], complet: boolean): readonly T[] {
+  // Première vue : ce qui existe déjà n'est pas relu ; la première écriture qui suit relit tout (le relais peut
+  // n'avoir rien de ce transcript).
+  private etablir(lecture: LectureIncrementale): void {
+    lecture.etablirALaFin();
+    this.envoyes = null;
+    this.recents = [];
+  }
+
+  private lecturePour(chemin: string): LectureIncrementale {
+    if (this.lecture?.chemin !== chemin) {
+      this.lecture = new LectureIncrementale(chemin, this.d.journal, this.d.stockerImage);
+      this.envoyes = null;
+      this.recents = [];
+    }
+    return this.lecture;
+  }
+
+  private surveillancePour(chemin: string): SurveillanceFichier {
+    if (this.surveillance?.chemin !== chemin) {
+      this.surveillance?.arreter();
+      const antiRebondMs = this.d.antiRebondMs ?? ANTI_REBOND_MS;
+      this.surveillance = new SurveillanceFichier(chemin, () => this.verifier(chemin), this.d.journal, antiRebondMs);
+    }
+    return this.surveillance;
+  }
+
+  private envoyerQueue(evenements: readonly EvenementHorodate[], complet: boolean): void {
     const retrecie = this.envoyes !== null && evenements.length < this.envoyes;
     const debut = complet || this.envoyes === null || retrecie ? 0 : Math.max(0, this.envoyes - CHEVAUCHEMENT);
     this.envoyes = evenements.length;
-    return evenements.slice(debut);
+    this.recents = evenements.slice(-CHEVAUCHEMENT_DIRECT);
+    this.d.emettre(evenements.slice(debut));
+  }
+
+  private envoyerSuite(ajout: readonly EvenementHorodate[]): void {
+    const envoi = [...this.recents, ...ajout];
+    this.envoyes = (this.envoyes ?? 0) + ajout.length;
+    this.recents = envoi.slice(-CHEVAUCHEMENT_DIRECT);
+    this.d.emettre(envoi);
   }
 }

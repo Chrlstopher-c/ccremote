@@ -84,3 +84,39 @@ function blocs(contenu: unknown): Record<string, unknown>[] {
     ? contenu.filter((b): b is Record<string, unknown> => typeof b === 'object' && b !== null && 'type' in b)
     : [];
 }
+
+/** Entrée précédente de la ligne dans la conversation (à travers une compaction : la liaison logique). */
+const parentDe = (l: Ligne): string | null => texte(l.parentUuid) ?? texte(l.logicalParentUuid);
+
+/** Fin connue d'un transcript : dernière ligne chaînée écrite. Suffit à prolonger la branche sans la relire. */
+export interface EtatChaine {
+  tip: string | null;
+}
+
+export function etatDeBranche(lignes: readonly Ligne[]): EtatChaine {
+  const dernier = indiceDerniere(lignes);
+  return { tip: dernier === undefined ? null : texte(lignes[dernier]?.uuid) };
+}
+
+/**
+ * Ajoute en queue des lignes écrites après la branche connue, sans relire le reste. Une ligne chaînée se rattache à la
+ * fin, ou est une réponse d'outil : les appels parallèles écrivent leurs réponses vers un bloc antérieur, sans effacer
+ * la suite (le relais ne retire jamais un événement). Une ligne d'utilisateur ou d'assistant qui se rattache ailleurs
+ * est un rembobinage : false, rien n'est modifié — il faut relire le transcript entier.
+ */
+export function prolongerBranche(etat: EtatChaine, lignes: readonly Ligne[]): boolean {
+  let tip = etat.tip;
+  for (const l of lignes) {
+    const uuid = texte(l.uuid);
+    if (!chainee(l) || uuid === null) continue;
+    if (parentDe(l) !== tip && !reponseOutil(l)) return false;
+    tip = uuid;
+  }
+  etat.tip = tip;
+  return true;
+}
+
+/** Réponse d'un outil : une ligne utilisateur qui porte un `tool_result`. */
+function reponseOutil(l: Ligne): boolean {
+  return l.type === 'user' && blocs(l.message?.content).some((b) => b.type === 'tool_result');
+}
