@@ -19,8 +19,13 @@ import { titreDuTranscript, titreGenereDuTranscript, titreProvisoire } from './t
 import { cheminTranscript } from './transcript.ts';
 
 /** Version des règles de recalage : la monter refait le recalage de toutes les sessions une fois. */
-export const VERSION_RECALAGE = 1;
+export const VERSION_RECALAGE = 2;
 const PAUSE_ENTRE_FILS_MS = 250;
+
+/** Clé de la marque « fiche recalée sur ce transcript » (distincte de la marque du fil relu vers le relais). */
+export function cleRecalageFiche(id: string): string {
+  return `fiche:${id}`;
+}
 
 /** Marque d'un transcript pour le recalage ; null s'il n'existe pas. */
 export function marqueRecalage(chemin: string): string | null {
@@ -204,6 +209,8 @@ export interface DependancesRecalageFils {
   /** Les fiches du poste (persistées) et si leur requête Lanterne est vivante. */
   readonly fiches: () => readonly { readonly persistee: SessionPersistee; readonly vivante: boolean }[];
   readonly stockeur: (sessionId: string) => StockerImage | undefined;
+  /** La fiche recalée, appliquée à la session du poste (persistée, annoncée). */
+  readonly appliquer: (sessionId: string, recalee: ResumeSession) => void;
   /** Annonce au relais : fil à recaler (nettoyage, archivage Desktop), puis la relecture complète. */
   readonly recalage: (sessionId: string, archiver: boolean, lignes: LignesRelues | null) => void;
   readonly historique: (sessionId: string, evenements: readonly EvenementHorodate[]) => void;
@@ -257,6 +264,7 @@ export class RecalageFils {
     const chemin = transcriptDe(p);
     try {
       const recalee = recalerResume(p, this.d);
+      if (recalee) this.d.appliquer(id, recalee.resume);
       const ecrit = ecritLe(chemin);
       const evenements = lireHistorique(chemin, this.d.journal, this.d.stockeur(id));
       this.d.recalage(id, recalee?.archiveeDesktop === true, lignesRelues(p, evenements, ecrit));

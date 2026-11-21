@@ -20,6 +20,12 @@ import { statSync } from 'node:fs';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
 import { type SourcesFiche, modeleDeSources, recalerFiche, sourcesDe } from './recalage-fiche.ts';
+import {
+  MarquesRecalage,
+  cleRecalageFiche,
+  marqueRecalage,
+  recalerResume,
+} from './recalage-demarrage.ts';
 import { type FicheDesktop, RACINE_DESKTOP_DEFAUT, fichesDesktop } from './fiche-desktop.ts';
 import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { ModelesChoisis } from './modeles-choisis.ts';
@@ -41,6 +47,8 @@ export interface DependancesBalayage {
   readonly creer: (p: SessionPersistee) => SessionPoste;
   /** Modèles choisis par Remote Control, gardés par le poste (relus à chaque passage). */
   readonly modeles: ModelesChoisis;
+  /** Marques « fiche recalée » par transcript (voir cleRecalageFiche). */
+  readonly marques: MarquesRecalage;
   /** Dossier de la fiche Claude Desktop (par défaut : celui de la machine). */
   readonly racineDesktop?: string;
 }
@@ -90,6 +98,7 @@ export class BalayageSessions {
     this.cederTenues(procs);
     this.suivreTerminaux(terminaux ? procs.filter((p) => !p.enTmux) : [], entrees);
     this.suivreFermees(entrees, panes, procs);
+    this.recalerFermees();
   }
 
   // Un pane sans identifiant réel n'est pas une session adoptable : on le signale, on n'invente pas d'id.
@@ -200,6 +209,26 @@ export class BalayageSessions {
     }
   }
 
+  /** Fiche fermée recalée sur son transcript quand il apparaît ou change : une fois par changement du fichier. */
+  recalerFermees(): void {
+    for (const s of this.d.sessions.values()) {
+      const { statut, cwd, claudeSessionId, id } = s.resume;
+      if (statut !== 'fermee' || s.vivante || s.persistee.aReprendre) continue;
+      const chemin = cheminTranscript(cwd, claudeSessionId ?? id, s.persistee.configDir);
+      this.recalerSiChange(s, chemin);
+    }
+  }
+
+  // Marque du transcript posée après le recalage : un transcript absent ou inchangé ne refait rien.
+  private recalerSiChange(s: SessionPoste, chemin: string): void {
+    const marque = marqueRecalage(chemin);
+    const cle = cleRecalageFiche(s.resume.id);
+    if (marque === null || marque === this.d.marques.lire(cle)) return;
+    const recalee = recalerResume(s.persistee, { journal: this.d.journal, racineDesktop: this.racine() });
+    if (recalee) s.recalerFiche?.(recalee.resume);
+    this.d.marques.ecrire(cle, marque);
+  }
+
   // Fiche fermée d'une entrée du registre Claude Code : titre et modèle relus dans son transcript.
   ajouterFermee(e: EntreeCc): void {
     const chemin = cheminTranscript(e.cwd, e.id, null);
@@ -215,6 +244,8 @@ export class BalayageSessions {
       aReprendre: false,
     });
     this.d.sessions.set(e.id, session);
+    const marque = marqueRecalage(chemin);
+    if (marque !== null) this.d.marques.ecrire(cleRecalageFiche(e.id), marque);
   }
 
   // Une session lancée hors ccremote (bureau, Atrium, terminal) : suivie en lecture ; dans tmux, pilotable par tmux.

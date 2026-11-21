@@ -50,6 +50,8 @@ export interface SessionPoste {
   /** Nom donné par `cc` (tmux seulement ; une session SDK porte son titre). */
   nommer?(nom: string | null): void;
   rattacherTerminal(vivant: boolean, enTour?: boolean, modeleLu?: ModeleDate | null): void;
+  /** Fiche recalée sur son transcript (modèle, mode, activité) : appliquée aux sessions fermées seulement. */
+  recalerFiche?(recalee: ResumeSession): void;
   /** Conversation tenue (ou non) par un processus Claude interactif hors Lanterne : une session SDK rend la main. */
   cederSiTenue?(tenue: boolean): void;
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void;

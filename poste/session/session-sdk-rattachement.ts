@@ -2,6 +2,7 @@
 // Desktop ou un terminal (statut « en cours » ou « en attente », cession quand ce processus reprend la main),
 // transcript suivi quand la session n'est pas pilotée ici, historique relu vers le relais.
 import type { ModeleDate } from '../../commun/modele-date.ts';
+import type { ResumeSession } from '../../commun/session.ts';
 import { decisionCession } from './cession-sdk.ts';
 import { statutExterne } from './recalage-demarrage.ts';
 import { cheminTranscript } from './transcript.ts';
@@ -23,6 +24,14 @@ export function rattacherTerminal(
   const inchangee = statut === n.etat.statut && (n.etat.terminal === true) === vivant;
   if (inchangee && modele.modele === n.etat.modele && modele.le === (n.etat.modeleLe ?? null)) return;
   n.etat = { ...n.etat, statut, terminal: vivant, modele: modele.modele, modeleLe: modele.le };
+  n.env.sortie.resume(n.etat);
+}
+
+// Fiche fermée recalée sur son transcript (modèle, mode, activité) : persistée et annoncée au relais. Une session
+// vivante ou qui n'est pas fermée reste à sa place (son statut vient du rattachement).
+export function recalerFermee(n: NoyauSdk, recalee: ResumeSession): void {
+  if (n.requete !== null || n.etat.statut !== 'fermee') return;
+  n.etat = recalee;
   n.env.sortie.resume(n.etat);
 }
 

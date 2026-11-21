@@ -146,6 +146,10 @@ export class SessionSdk implements SessionPoste {
     rattachement.rattacherTerminal(this.n, vivant, enTour, modeleLu);
   }
 
+  recalerFiche(recalee: ResumeSession): void {
+    rattachement.recalerFermee(this.n, recalee);
+  }
+
   async releverEcran(): Promise<void> {}
 
   veillerNuit(maintenant?: number): Promise<void> {

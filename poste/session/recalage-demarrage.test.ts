@@ -250,6 +250,7 @@ describe('RecalageFils', () => {
     file: RecalageFils;
     marques: MarquesRecalage;
     trace: string[];
+    applications: ResumeSession[];
     recalages: [string, boolean][];
     historiques: [string, readonly EvenementHorodate[]][];
     env: Environnement;
@@ -261,6 +262,7 @@ describe('RecalageFils', () => {
     const trace: string[] = [];
     const recalages: [string, boolean][] = [];
     const historiques: [string, readonly EvenementHorodate[]][] = [];
+    const applications: ResumeSession[] = [];
     const file = new RecalageFils({
       journal,
       racineDesktop: env.racine,
@@ -269,6 +271,10 @@ describe('RecalageFils', () => {
         { persistee: persistance, vivante: false },
       ],
       stockeur: () => undefined,
+      appliquer: (_id, recalee) => {
+        trace.push('appliquer');
+        applications.push(recalee);
+      },
       recalage: (id, archiver) => {
         trace.push('recalage');
         recalages.push([id, archiver]);
@@ -281,7 +287,7 @@ describe('RecalageFils', () => {
       relaisOuvert: () => true,
       pauseMs: 0,
     });
-    return { file, marques, trace, recalages, historiques, env };
+    return { file, marques, trace, recalages, historiques, applications, env };
   }
 
   test('un pas ne traite que la fiche non vivante, recalage (archivé) avant historique, puis marque posée', () => {
@@ -289,7 +295,8 @@ describe('RecalageFils', () => {
     try {
       expect(m.file.pas()).toBe(true);
       expect(m.recalages).toEqual([[CONV, true]]);
-      expect(m.trace).toEqual(['recalage', 'historique']);
+      expect(m.trace).toEqual(['appliquer', 'recalage', 'historique']);
+      expect(m.applications[0]?.modele).toBe('claude-opus-5-5');
       expect(m.historiques[0]?.[0]).toBe(CONV);
       expect(m.historiques[0]?.[1].length).toBeGreaterThan(0);
       expect(m.marques.lire(CONV)).toBe(marqueRecalage(m.env.chemin) ?? '');

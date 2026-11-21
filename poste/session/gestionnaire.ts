@@ -115,8 +115,8 @@ export class GestionnaireSessions {
       sortie,
     });
     this.importation = this.creerImportation();
-    this.balayage = this.creerBalayage();
     this.marques = new MarquesRecalage(join(config.donnees, 'recalage.json'), journal);
+    this.balayage = this.creerBalayage();
     this.recalage = this.creerRecalage();
   }
 
@@ -165,6 +165,7 @@ export class GestionnaireSessions {
       fichePour: (id) => this.fichePour(id),
       creer: (p) => this.creer(p),
       modeles: this.modelesChoisis,
+      marques: this.marques,
     });
   }
 
@@ -173,6 +174,7 @@ export class GestionnaireSessions {
       ...{ journal: this.journal, marques: this.marques, relaisOuvert: () => this.relaisOuvert() },
       fiches: () => [...this.sessions.values()].map((s) => ({ persistee: s.persistee, vivante: s.vivante })),
       stockeur: (id) => stockeurImages(this.stockage, id, this.journal),
+      appliquer: (id, recalee) => this.sessions.get(id)?.recalerFiche?.(recalee),
       recalage: (id, archiver, lignes) => this.sortie.recalage?.(id, archiver, lignes),
       historique: (id, evenements) => this.sortieFil.historique?.(id, evenements),
     });

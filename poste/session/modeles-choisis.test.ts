@@ -11,6 +11,7 @@ import { BalayageSessions } from './balayage-sessions.ts';
 import type { EtatTranscript } from './etat-transcript.ts';
 import { journal, nouvelleSession } from './faux-sdk.ts';
 import { ModelesChoisis } from './modeles-choisis.ts';
+import { MarquesRecalage } from './recalage-demarrage.ts';
 import { recalerFiche } from './recalage-fiche.ts';
 import { SessionsSupprimees } from './suppression.ts';
 
@@ -118,6 +119,7 @@ describe('le balayage rend le choix à la fiche de poste de la conversation', ()
         throw new Error('creer non attendu dans ce test');
       },
       modeles: choisis,
+      marques: new MarquesRecalage(null, journal),
       racineDesktop: dossier,
     });
     choisis.ecrire(CONV, { modele: 'claude-opus-5-5', le: RECENT });
