@@ -3,6 +3,9 @@
 // délègue.
 import type { Logger } from 'pino';
 import type { PieceJointe } from '../../commun/presentation.ts';
+import { executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
+import { lireFichierSession } from '../presentation/lecture.ts';
+import type { Stockage } from '../presentation/stockage.ts';
 import { SessionDistante } from '../distant/session-distante.ts';
 import { enBascule, type GestionBascule, rembobinerTui } from './bascule-controle.ts';
 import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
@@ -11,9 +14,11 @@ import { tenueAilleurs } from './processus.ts';
 import type { SessionPoste } from './session-poste.ts';
 import { SessionSdk } from './session-sdk.ts';
 import { SessionTmux } from './session-tmux.ts';
+import { cheminTranscript } from './transcript.ts';
 
 export interface ContexteCommandes {
   readonly gestion: GestionBascule;
+  readonly stockage: Stockage;
   readonly journal: Logger;
   readonly refusDistant: (c: CommandeSession) => string | null;
   readonly configDirs: () => (string | null)[];
@@ -79,4 +84,36 @@ async function rembobiner(ctx: ContexteCommandes, s: SessionPoste, messageId: st
   }
   if (s instanceof SessionTmux && s.resume.pilotee) return rembobinerTui(ctx.gestion, s, messageId);
   return { ok: false, erreur: 'rembobinage impossible : session ouverte hors de l’appli (tmux de Chris)' };
+}
+
+// Historique d'une session dont le fil est vide au relais (fiche migrée, ou adoptée avant la relecture) : son
+// transcript repasse au relais. Une session en cours n'est pas relue : son fil vient du direct.
+export function historiqueRejoue(ctx: ContexteCommandes, id: string): Reponse {
+  const s = ctx.gestion.sessions.get(id);
+  if (!s) return { ok: false, erreur: `session inconnue sur ${ctx.gestion.config.machine}` };
+  if (!(s instanceof SessionSdk)) return { ok: false, erreur: 'historique relu seulement pour une session SDK' };
+  if (s.vivante) return { ok: false, erreur: 'session en cours : historique non relu' };
+  const conversation = s.resume.claudeSessionId;
+  if (!conversation) return { ok: true, donnees: { evenements: 0 } };
+  const chemin = cheminTranscript(s.resume.cwd, conversation, s.persistee.configDir);
+  return { ok: true, donnees: { evenements: s.rejouerHistorique(chemin, true) } };
+}
+
+export function reponseAdoption(ctx: ContexteCommandes, id: string): Reponse {
+  const s = ctx.gestion.sessions.get(id);
+  if (!s) return { ok: false, erreur: `session inconnue sur ${ctx.gestion.config.machine}` };
+  return { ok: true, donnees: s.resume };
+}
+
+// Fichier présenté, lu pour la route du relais : la session peut être fermée, le fichier reste sur le poste.
+export function fichierPresente(ctx: ContexteCommandes, sessionId: string, fichier: string): Reponse {
+  const lu = lireFichierSession(ctx.stockage, sessionId, fichier, ctx.journal);
+  return lu ? { ok: true, donnees: lu } : { ok: false, erreur: 'fichier introuvable' };
+}
+
+// Panneau Fichiers d'une session : le dossier de la session borne tous les chemins.
+export function fichiersDeSession(ctx: ContexteCommandes, c: CommandeFichiersSession): Promise<Reponse> {
+  const s = ctx.gestion.sessions.get(c.sessionId);
+  if (!s) return Promise.resolve({ ok: false, erreur: `session inconnue sur ${ctx.gestion.config.machine}` });
+  return executerFichiersSession(c, s.resume.cwd, ctx.journal);
 }

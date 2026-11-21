@@ -8,7 +8,14 @@ import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
 import type { ConfigPoste } from '../config.ts';
 import { basculerControle, sortirTui } from './bascule-controle.ts';
 import type { CommandeSession } from './lecture-panneau.ts';
-import { type ContexteCommandes, executerSurSession } from './commandes-session.ts';
+import {
+  type ContexteCommandes,
+  executerSurSession,
+  fichierPresente,
+  fichiersDeSession,
+  historiqueRejoue,
+  reponseAdoption,
+} from './commandes-session.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import {
   type ReprisePrevue,
@@ -27,7 +34,6 @@ import { MarquesRecalage, RecalageFils, recalerAuChargement } from './recalage-d
 import { stockeurImages } from './historique.ts';
 import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
-import { cheminTranscript } from './transcript.ts';
 import { IndexDecouvertes, type TranscriptDecouvert, identifiantsTranscripts } from './decouverte.ts';
 import { ImportationSessions } from './importation-sessions.ts';
 import { ouvrirSession } from './ouverture-session.ts';
@@ -39,10 +45,9 @@ import {
   supprimerTranscript,
   transcriptsDeLaSession,
 } from './suppression.ts';
-import { lireFichierSession } from '../presentation/lecture.ts';
 import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
 import { estCommandeModifications, ModificationsSessions } from '../modifications/commande-modifications.ts';
-import { estFichiersSession, executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
+import { estFichiersSession } from '../fichiers/session.ts';
 import { Stockage } from '../presentation/stockage.ts';
 import type { RequeteRelais } from '../presentation/outils.ts';
 import { UsageComptes } from './usage-compte.ts';
@@ -230,24 +235,6 @@ export class GestionnaireSessions {
     return this.sessions.get(id);
   }
 
-  // Historique d'une session dont le fil est vide au relais (fiche migrée, ou adoptée avant la relecture) : son
-  // transcript repasse au relais. Une session en cours n'est pas relue : son fil vient du direct.
-  private rejouerHistorique(id: string): Reponse {
-    const s = this.sessions.get(id);
-    if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
-    if (!(s instanceof SessionSdk)) return { ok: false, erreur: 'historique relu seulement pour une session SDK' };
-    if (s.vivante) return { ok: false, erreur: 'session en cours : historique non relu' };
-    const conversation = s.resume.claudeSessionId;
-    if (!conversation) return { ok: true, donnees: { evenements: 0 } };
-    const chemin = cheminTranscript(s.resume.cwd, conversation, s.persistee.configDir);
-    return { ok: true, donnees: { evenements: s.rejouerHistorique(chemin, true) } };
-  }
-
-  private reponseAdoption(id: string): Reponse {
-    const s = this.sessions.get(id);
-    return s ? { ok: true, donnees: s.resume } : { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
-  }
-
   // Un compte ne se retire pas sous une session vivante : pane tmux ou requête SDK ouverte.
   enUsage(compte: string): boolean {
     return [...this.sessions.values()].some((s) => s.resume.compte === compte && s.vivante);
@@ -266,26 +253,19 @@ export class GestionnaireSessions {
     return ouvrirSession({ config: this.config, sessions: this.sessions, creer: (p) => this.creer(p), controle }, d);
   }
 
-  /** Panneau Fichiers d'une session : le dossier de la session borne tous les chemins. */
-  private fichiersSession(c: CommandeFichiersSession): Promise<Reponse> {
-    const s = this.sessions.get(c.sessionId);
-    if (!s) return Promise.resolve({ ok: false, erreur: `session inconnue sur ${this.config.machine}` });
-    return executerFichiersSession(c, s.resume.cwd, this.journal);
-  }
-
   async executer(c: CommandeSession): Promise<Reponse> {
     await this.hydrater(c.sessionId);
-    if (c.kind === 'adopter') return this.reponseAdoption(c.sessionId);
+    if (c.kind === 'adopter') return reponseAdoption(this.contexteCommandes(), c.sessionId);
     if (c.kind === 'historique' && this.distantes.session(c.sessionId)) return this.distantes.rejouer(c.sessionId);
     if (c.kind === 'tracer_relais') return this.tracer(c);
-    if (c.kind === 'historique') return this.rejouerHistorique(c.sessionId);
+    if (c.kind === 'historique') return historiqueRejoue(this.contexteCommandes(), c.sessionId);
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
     if (c.kind === 'annexer') return annexer(this, c.sessionId);
     if (c.kind === 'styles') return stylesDeSessionId(this.sessions, c.sessionId, this.config.machine, this.journal);
-    if (c.kind === 'fichier_session') return this.fichier(c.sessionId, c.fichier);
+    if (c.kind === 'fichier_session') return fichierPresente(this.contexteCommandes(), c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
-    if (estFichiersSession(c)) return this.fichiersSession(c);
+    if (estFichiersSession(c)) return fichiersDeSession(this.contexteCommandes(), c);
     if (estCommandeModifications(c)) return this.modifications.executer(c, this.sessions.get(c.sessionId));
     if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
     const s = this.sessions.get(c.sessionId) ?? this.distantes.session(c.sessionId);
@@ -296,6 +276,7 @@ export class GestionnaireSessions {
   private contexteCommandes(): ContexteCommandes {
     return {
       gestion: this,
+      stockage: this.stockage,
       journal: this.journal,
       refusDistant: (c) => this.distantes.refusPour(c.sessionId, c),
       configDirs: () => this.configDirs(),
@@ -357,12 +338,6 @@ export class GestionnaireSessions {
     } catch (erreur) {
       this.journal.error({ err: erreur, session: id }, 'fichiers présentés non supprimés');
     }
-  }
-
-  // Fichier présenté, lu pour la route du relais : la session peut être fermée, le fichier reste sur le poste.
-  private fichier(sessionId: string, fichier: string): Reponse {
-    const lu = lireFichierSession(this.stockage, sessionId, fichier, this.journal);
-    return lu ? { ok: true, donnees: lu } : { ok: false, erreur: 'fichier introuvable' };
   }
 
   // Sessions Claude Code du poste que Quart ne connaît pas encore (ni supprimées par Chris).
