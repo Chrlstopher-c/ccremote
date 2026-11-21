@@ -45,8 +45,8 @@ export async function recevoirEcriture(c: Contexte, nom: string, m: LigneEcrire)
   const refus = refusEcriture(c, m.session);
   if (refus) return conclure(c, requete, { ok: false, raison: refus });
   if (sansPermissions(c, m.session) && c.droits.lire().ecrireSansPermissions === 'demander') {
-    const accord = await c.demandes.demander('message', nom, extrait(m.texte));
-    if (!accord) {
+    const reponse = await c.demandes.demander('message', nom, extrait(m.texte));
+    if (!reponse.accord) {
       return conclure(c, requete, {
         ok: false,
         raison: `refusé par ${c.nomLocal()}`,
@@ -56,7 +56,16 @@ export async function recevoirEcriture(c: Contexte, nom: string, m: LigneEcrire)
   }
   const r = await bilan(await c.sessions.envoyer(m.session, m.texte, m.pieces ?? [], nom));
   if (!r.ok) return conclure(c, requete, { ok: false, raison: r.raison });
+  if (m.relayeDe) await tracerRelayage(c, nom, m);
   conclure(c, requete, { ok: true, detail: 'envoyé' });
+}
+
+// Message venu d'une session de l'expéditeur : la session reçue garde la trace « relayé depuis <titre> de <nom> ».
+async function tracerRelayage(c: Contexte, nom: string, m: LigneEcrire): Promise<void> {
+  if (!m.relayeDe) return;
+  const autre = { session: m.relayeDe.session, titre: m.relayeDe.titre, compte: nom };
+  const r = await bilan(await c.sessions.tracer(m.session, { sens: 'entrant', autre, texte: m.texte }));
+  if (!r.ok) c.log.warn({ raison: r.raison, session: m.session }, 'trace du message relayé non écrite');
 }
 
 export async function recevoirInterruption(c: Contexte, nom: string, m: LigneInterrompre): Promise<void> {
@@ -72,9 +81,18 @@ export async function ecrireAPair(
   session: string,
   texte: string,
   pieces: readonly PieceJointe[],
+  relayeDe?: { readonly session: string; readonly titre: string },
 ): Promise<Resultat<string | null>> {
   const delai = c.delaiDemandeMs + DELAI_REPONSE_PAIR_MS;
-  const r = await requeteAuPair(c, (ref) => ({ type: 'ecrire', ref, session, texte, pieces: [...pieces] }), delai);
+  const construire = (ref: string): MessageLien => ({
+    type: 'ecrire',
+    ref,
+    session,
+    texte,
+    pieces: [...pieces],
+    ...(relayeDe ? { relayeDe } : {}),
+  });
+  const r = await requeteAuPair(c, construire, delai);
   return verdictDuPair(r);
 }
 

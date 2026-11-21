@@ -4,6 +4,7 @@ import type { MessageLien } from '../../commun/duo.ts';
 import { recevoirDossiers } from './sessions-pair.ts';
 import { recevoirOuverture } from './sessions-pair.ts';
 import { recevoirEcriture, recevoirInterruption } from './ecriture.ts';
+import { recevoirMain } from './main.ts';
 import { recevoirUsage } from './usage.ts';
 import type { Contexte } from './contexte.ts';
 
@@ -16,6 +17,8 @@ export function traiterEchange(c: Contexte, nom: string, m: MessageLien): boolea
       return lancer(c, () => recevoirInterruption(c, nom, m));
     case 'ouvrir_session':
       return lancer(c, () => recevoirOuverture(c, nom, m));
+    case 'passer_main':
+      return lancer(c, () => recevoirMain(c, nom, m));
     case 'dossiers':
       recevoirDossiers(c, m.ref);
       return true;
@@ -25,6 +28,7 @@ export function traiterEchange(c: Contexte, nom: string, m: MessageLien): boolea
     case 'reponse':
     case 'dossiers_reponse':
     case 'usage_reponse':
+    case 'serveur_reponse':
       c.attentes.recevoir(m.ref, m);
       return true;
     default:

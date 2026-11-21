@@ -20,6 +20,7 @@ function droits(surcharge: Partial<Droits>): Droits {
   return { ...DROITS_PAR_DEFAUT, ...surcharge };
 }
 
+const MAJ = '2026-11-21T10:00:00.000Z';
 const dossier = (chemin: string): DossierOuvert => ({ machine: 'tour', chemin });
 const ouvertures = (a: Banc): Record<string, unknown>[] => a.commandes.filter((c) => c['kind'] === 'ouvrir');
 
@@ -75,6 +76,21 @@ describe('session sur le compte de l’autre', () => {
     await attendre(() => a.duo.listerDemandes().length === 1);
     a.duo.decider(a.duo.listerDemandes()[0]?.id ?? '', false);
     expect(await attente).toMatchObject({ ok: false, raison: 'refusé par alice' });
+  });
+
+  test('nom de machine vu du pair : « Cet ordinateur » devient « Ordinateur de <nom> »', async () => {
+    const { a, b } = await duo();
+    const base = { racines: [], projets: [], comptes: [], version: 'test', derniereVue: MAJ };
+    a.registre.enregistrerMachine({ id: 'tour', description: 'Cet ordinateur', ...base });
+    a.registre.enregistrerMachine({ id: 'portable', description: 'Portable', ...base });
+    a.duo.majDroits(droits({ dossiersOuverts: [dossier('/p1'), { machine: 'portable', chemin: '/p2' }] }));
+    expect(await b.duo.dossiersDuPair()).toEqual({
+      ok: true,
+      valeur: [
+        { machine: 'tour', chemin: '/p1', nomMachine: 'Ordinateur de alice' },
+        { machine: 'portable', chemin: '/p2', nomMachine: 'Portable' },
+      ],
+    });
   });
 
   test('dossiers offerts : seulement ceux que alice a ouverts', async () => {

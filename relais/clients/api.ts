@@ -191,7 +191,11 @@ export function construireRoutes(d: DependancesApi) {
     '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
     '/api/modules': { GET: protege(() => lireModules(d.registre, d.postes)) },
     '/api/modules/:id/serveur': {
-      POST: protege((req) => requeteServeurModule(d.registre, d.postes, req.params['id'] ?? '', req)),
+      POST: protege((req) =>
+        requeteServeurModule(d.registre, d.postes, req.params['id'] ?? '', req, (id, demande) =>
+          d.duo.avances.serveurDuPair(id, demande),
+        ),
+      ),
     },
     '/api/modules/*': { GET: protege((req) => servirFichierModule(d.registre, req)) },
     '/api/modules-outils': { GET: protege(() => lireCapacites(d.appels)) },

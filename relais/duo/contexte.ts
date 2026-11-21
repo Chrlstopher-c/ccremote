@@ -3,6 +3,7 @@
 import type { Logger } from 'pino';
 import { DELAI_MARGE_REPONSE_MS, type MessageLien } from '../../commun/duo.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { Evenement } from '../../commun/session.ts';
 import type { Attentes } from './attentes.ts';
 import type { Demandes } from './demandes.ts';
 import type { DroitsDuo } from './droits.ts';
@@ -28,6 +29,8 @@ export interface Contexte {
   connecte(): boolean;
   nomPair(): string;
   partagerOuverte(session: string): void;
+  /** Ajoute un événement au fil d'une session locale, diffusé aux clients (passer la main). */
+  fil(session: string, evt: Evenement): void;
 }
 
 export interface Requete {

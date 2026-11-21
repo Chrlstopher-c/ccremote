@@ -2,7 +2,7 @@
 // Ce sont les fonctions des routes de Chris, jamais un chemin parallèle ; le bilan HTTP est relu en résultat.
 import { z } from 'zod';
 import type { PieceJointe } from '../../commun/presentation.ts';
-import type { ModeSession, Projet } from '../../commun/session.ts';
+import type { AutreSession, ModeSession, Projet, SensRelais } from '../../commun/session.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 
 export interface OuvertureChezProprietaire {
@@ -18,6 +18,7 @@ export interface PontSessions {
   ouvrir(demande: OuvertureChezProprietaire): Promise<Response>;
   envoyer(session: string, texte: string, pieces: readonly PieceJointe[], auteur: string): Promise<Response>;
   interrompre(session: string): Promise<Response>;
+  tracer(session: string, trace: { sens: SensRelais; autre: AutreSession; texte: string }): Promise<Response>;
 }
 
 const CorpsErreur = z.object({ erreur: z.string() });

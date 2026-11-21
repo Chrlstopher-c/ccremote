@@ -299,6 +299,8 @@ export const Evenement = z.discriminatedUnion('type', [
   z.object({ type: z.literal('erreur'), message: z.string() }),
   // Message relayé vers / depuis une autre session (`autre` : la session à l'autre bout). Gardé par le poste, daté.
   z.object({ type: z.literal('relais'), sens: SensRelais, ...AutreSession.shape, texte: z.string() }),
+  // Session passée à un pair du mode duo (passer la main) : la session d'origine garde cette ligne.
+  z.object({ type: z.literal('duo_main'), vers: z.string().min(1).max(120) }),
 ]);
 export type Evenement = z.infer<typeof Evenement>;
 

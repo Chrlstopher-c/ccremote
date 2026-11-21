@@ -4,6 +4,15 @@ import { z } from 'zod';
 import { FenetreUsage } from './comptes.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
+import {
+  EtatServeur,
+  FICHIERS_MAX_MODULE,
+  FichierModule,
+  IdModule,
+  ManifesteModule,
+  ReponseServeur,
+  RequeteServeur,
+} from './modules.ts';
 import { Evenement, ResumeSession } from './session.ts';
 
 export const ALPHABET_CODE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I/L : lisible à la voix
@@ -13,6 +22,10 @@ export const ESSAIS_CODE_MAX = 5; // au-delà, le code est brûlé
 export const TAILLE_HISTORIQUE_DUO = 200; // événements renvoyés par la relecture d'une session partagée
 export const DUREE_DEMANDE_MS = 10 * 60 * 1000; // une demande du pair sans réponse de Chris est refusée
 export const DELAI_MARGE_REPONSE_MS = 30_000; // marge du demandeur au-delà du délai de la demande
+export const DUREE_CONFLIT_MS = 30 * 60 * 1000; // une alerte de fichier n'est redite qu'après ce délai
+export const PREFIXE_MODULE_DUO = 'duo:'; // machine d'un module reçu du pair : `duo:<utilisateur>`
+export const NOMBRE_MAX_MESSAGES_PAQUET = 3;
+export const TAILLE_MAX_BILAN_PAQUET = 1500; // caractères du dernier texte de Claude repris dans le paquet
 
 export const NiveauPartage = z.enum(['lecture', 'ecriture']);
 export type NiveauPartage = z.infer<typeof NiveauPartage>;
@@ -109,7 +122,23 @@ export const EntreeJournal = z.object({
 export type EntreeJournal = z.infer<typeof EntreeJournal>;
 
 export const CorpsDroits = Droits;
-export const CorpsDecision = z.object({ accord: z.boolean() });
+export const CorpsDecision = z.object({
+  accord: z.boolean(),
+  machine: z.string().min(1).max(120).optional(), // passer la main : machine et dossier où s'ouvre la session neuve
+  chemin: z.string().min(1).max(1000).optional(),
+});
+export type CorpsDecision = z.infer<typeof CorpsDecision>;
+export interface ChoixDossier {
+  readonly machine: string;
+  readonly chemin: string;
+}
+export const CorpsMain = z.object({
+  session: z.string().min(1).max(200),
+  note: z.string().trim().max(2000).optional(),
+});
+export type CorpsMain = z.infer<typeof CorpsMain>;
+export const CorpsAccordModule = z.object({ accepte: z.boolean() });
+export type CorpsAccordModule = z.infer<typeof CorpsAccordModule>;
 export const CorpsOuvertureDuo = z.object({
   machine: z.string().min(1).max(120),
   chemin: z.string().min(1).max(1000),
@@ -117,6 +146,68 @@ export const CorpsOuvertureDuo = z.object({
   modele: z.string().min(1).max(120).optional(),
 });
 export type CorpsOuvertureDuo = z.infer<typeof CorpsOuvertureDuo>;
+
+// Passer la main : ce que le donneur remet au receveur, construit sans appel à un modèle.
+export const PaquetMain = z.object({
+  titre: z.string().max(200),
+  dossier: z.string().max(1000),
+  messages: z.array(z.string().max(TAILLE_MAX_TEXTE_SESSION)).max(NOMBRE_MAX_MESSAGES_PAQUET),
+  bilan: z.string().max(TAILLE_MAX_BILAN_PAQUET),
+  fichiers: z.array(z.string().max(1000)).max(200),
+  note: z.string().max(2000).optional(),
+});
+export type PaquetMain = z.infer<typeof PaquetMain>;
+
+// Modules en commun : ce que le propriétaire propose (`modulesPartages`), et ce que le pair en fait.
+export const OffreModule = z.object({
+  id: IdModule,
+  nom: z.string().max(80),
+  version: z.string().max(40),
+  description: z.string().max(400),
+  empreinte: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type OffreModule = z.infer<typeof OffreModule>;
+// Une proposition telle que le pair la voit : l'offre, son accord, et l'erreur (conflit avec un module local).
+export interface ModuleDuo {
+  readonly id: string;
+  readonly nom: string;
+  readonly version: string;
+  readonly description: string;
+  readonly accepte: boolean;
+  readonly erreur: string | null;
+}
+
+// Fil d'activité : sessions partagées des deux côtés, avec qui elles tournent et à quel niveau.
+export interface EntreeActivite {
+  readonly id: string;
+  readonly titre: string;
+  readonly qui: string;
+  readonly statut: string;
+  readonly majLe: string;
+  readonly partagee: NiveauPartage;
+}
+export interface ActiviteDuo {
+  readonly sessions: EntreeActivite[];
+  readonly demandes: DemandeDuo[];
+  readonly journal: EntreeJournal[];
+}
+export interface ConflitDuo {
+  readonly projet: string;
+  readonly fichier: string;
+  readonly qui: string;
+  readonly session: string;
+  readonly sessionPair: string;
+  readonly le: string;
+}
+
+/** Machine d'un module reçu du pair : `duo:<utilisateur>`. */
+export function machineDuo(utilisateur: string): string {
+  return `${PREFIXE_MODULE_DUO}${utilisateur}`;
+}
+
+export function estModuleDuo(machine: string): boolean {
+  return machine.startsWith(PREFIXE_MODULE_DUO);
+}
 
 /** Le texte remis à Claude pour un message du pair : son nom en tête. La bulle du fil garde le texte d'origine. */
 export function texteRemisAClaude(auteur: string, texte: string): string {
@@ -157,6 +248,8 @@ export const MessageLien = z.discriminatedUnion('type', [
     session: Session,
     texte: z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION),
     pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
+    // Message relayé depuis une session de l'expéditeur : la trace du receveur la nomme.
+    relayeDe: z.object({ session: Session, titre: z.string().max(200) }).optional(),
   }),
   z.object({ type: z.literal('interrompre'), ref: Ref, session: Session }),
   z.object({
@@ -178,5 +271,31 @@ export const MessageLien = z.discriminatedUnion('type', [
   z.object({ type: z.literal('dossiers_reponse'), ref: Ref, dossiers: z.array(DossierPair).max(200) }),
   z.object({ type: z.literal('usage'), ref: Ref }),
   z.object({ type: z.literal('usage_reponse'), ref: Ref, usage: UsagePartage.nullable() }),
+  // Passer la main : le donneur envoie le paquet ; le receveur répond `reponse` (session neuve ou refus).
+  z.object({ type: z.literal('passer_main'), ref: Ref, paquet: PaquetMain }),
+  // Modules en commun : offre du propriétaire, accord du pair, contenu, retrait, état du serveur.
+  z.object({ type: z.literal('modules_offre'), modules: z.array(OffreModule).max(200) }),
+  z.object({ type: z.literal('module_accord'), id: IdModule, accepte: z.boolean() }),
+  z.object({
+    type: z.literal('module_contenu'),
+    manifeste: ManifesteModule,
+    empreinte: z.string().regex(/^[0-9a-f]{64}$/),
+    fichiers: z.array(FichierModule).max(FICHIERS_MAX_MODULE),
+  }),
+  z.object({ type: z.literal('module_retire'), id: IdModule }),
+  z.object({
+    type: z.literal('module_serveur'),
+    id: IdModule,
+    etat: EtatServeur,
+    erreur: z.string().max(2000).nullable(),
+  }),
+  // Serveur d'un module reçu du pair : la requête part chez le propriétaire, la réponse revient par `ref`.
+  z.object({ type: z.literal('serveur_requete'), ref: Ref, id: IdModule, requete: RequeteServeur }),
+  z.object({
+    type: z.literal('serveur_reponse'),
+    ref: Ref,
+    reponse: ReponseServeur.nullable(),
+    raison: z.string().max(2000).optional(),
+  }),
 ]);
 export type MessageLien = z.infer<typeof MessageLien>;

@@ -37,7 +37,7 @@ async function accordeOuverture(c: Contexte, nom: string, m: LigneOuvrir): Promi
   const droits = c.droits.lire();
   if (droits.ouvrirSession === 'jamais') return false;
   if (droits.ouvrirSession === 'toujours' && dossierAutorise(droits.dossiersOuverts, m.machine, m.chemin)) return true;
-  return c.demandes.demander('ouvrir_session', nom, `${m.machine} · ${m.chemin}`);
+  return (await c.demandes.demander('ouvrir_session', nom, `${m.machine} · ${m.chemin}`)).accord;
 }
 
 // Session ouverte chez nous comme une session locale, en mode « par défaut » : Claude y redemande les permissions.
@@ -56,12 +56,26 @@ function nomDossier(chemin: string): string {
   return chemin.split('/').filter(Boolean).pop() ?? chemin;
 }
 
+// Description par défaut de la machine locale (voir integre/donnees.ts).
+const DESCRIPTION_LOCALE_PAR_DEFAUT = 'Cet ordinateur';
+
+// Nom d'une machine du propriétaire tel que le pair le voit : « Cet ordinateur » devient « Ordinateur de <nom
+// affiché du propriétaire> », vu de chez le pair ; sinon la description, à défaut l'identifiant.
+export function nomMachinePourPair(description: string | undefined, identifiant: string, nomLocal: string): string {
+  if (description === DESCRIPTION_LOCALE_PAR_DEFAUT) return `Ordinateur de ${nomLocal}`;
+  return description || identifiant;
+}
+
 export function dossiersOfferts(c: Contexte): DossierPair[] {
   const machines = c.registre.machines();
   return c.droits.lire().dossiersOuverts.map((d) => ({
     machine: d.machine,
     chemin: d.chemin,
-    nomMachine: machines.find((f) => f.id === d.machine)?.description || d.machine,
+    nomMachine: nomMachinePourPair(
+      machines.find((f) => f.id === d.machine)?.description,
+      d.machine,
+      c.nomLocal(),
+    ),
   }));
 }
 

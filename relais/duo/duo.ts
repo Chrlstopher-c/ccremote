@@ -4,6 +4,7 @@ import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
 import type { MessageClient } from '../../commun/api-clients.ts';
 import {
+  type ChoixDossier,
   type CorpsOuvertureDuo,
   type CorpsPartage,
   DUREE_DEMANDE_MS,
@@ -15,6 +16,8 @@ import {
   type MessageLien,
   type UsagePartage,
 } from '../../commun/duo.ts';
+import type { Postes } from '../parc/postes.ts';
+import { EchangesAvances } from './echanges-avances.ts';
 import { Attentes } from './attentes.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { Contexte } from './contexte.ts';
@@ -56,6 +59,7 @@ export interface OptionsDuo {
   readonly delaiReconnexionMs?: number;
   readonly delaiDemandeMs?: number;
   readonly sessions: PontSessions;
+  readonly postes: Pick<Postes, 'commander'>;
 }
 
 const DELAI_APPAIRAGE_MS = 10_000;
@@ -90,6 +94,8 @@ export class Duo {
   private readonly demandes: Demandes;
   private readonly attentes = new Attentes();
   private readonly contexte: Contexte;
+  /** Étape 3 : passer la main, modules en commun, alertes de conflit, fil d'activité. */
+  readonly avances: EchangesAvances;
 
   constructor(options: OptionsDuo) {
     this.utilisateur = options.utilisateur;
@@ -114,6 +120,7 @@ export class Duo {
       delaiMs: options.delaiDemandeMs ?? DUREE_DEMANDE_MS,
     });
     this.contexte = this.construireContexte(options);
+    this.avances = this.creerAvances(options);
   }
 
   /** Ouvre le port d'écoute du lien et reprend le lien sortant si une paire existe. */
@@ -222,6 +229,7 @@ export class Duo {
 
   majDroits(droits: Droits): Droits {
     const enregistres = this.stockDroits.ecrire(droits);
+    this.avances.synchroniser();
     this.notifier();
     return enregistres;
   }
@@ -230,8 +238,8 @@ export class Duo {
     return this.demandes.lister();
   }
 
-  decider(id: string, accord: boolean): boolean {
-    return this.demandes.decider(id, accord);
+  decider(id: string, accord: boolean, choix?: ChoixDossier): boolean {
+    return this.demandes.decider(id, accord, choix);
   }
 
   majNom(nom: string): EtatDuo {
@@ -245,8 +253,13 @@ export class Duo {
     return this.historique.lister();
   }
 
-  ecrireAPair(session: string, texte: string, pieces: readonly PieceJointe[]): Promise<Resultat<string | null>> {
-    return envoyerAuPair(this.contexte, session, texte, pieces);
+  ecrireAPair(
+    session: string,
+    texte: string,
+    pieces: readonly PieceJointe[],
+    relayeDe?: { readonly session: string; readonly titre: string },
+  ): Promise<Resultat<string | null>> {
+    return envoyerAuPair(this.contexte, session, texte, pieces, relayeDe);
   }
 
   interrompreAPair(session: string): Promise<Resultat<string | null>> {
@@ -289,6 +302,7 @@ export class Duo {
     this.refuse = false;
     canal.envoyer(this.messageIdentite());
     canal.envoyer(this.synchro.instantane());
+    this.avances.liaison();
     this.notifier();
   }
 
@@ -297,6 +311,7 @@ export class Duo {
     this.canal = null;
     this.attentes.annuler();
     this.presences.clear();
+    this.avances.fermee();
     this.notifier();
   }
 
@@ -346,7 +361,7 @@ export class Duo {
         return;
       }
       default:
-        traiterEchange(this.contexte, this.identite.nomPair() ?? nom, m);
+        if (!traiterEchange(this.contexte, this.identite.nomPair() ?? nom, m)) this.avances.traiter(nom, m);
         return;
     }
   }
@@ -372,7 +387,10 @@ export class Duo {
     this.attentes.annuler();
     this.presences.clear();
     this.refuse = false;
-    if (paire) this.synchro.retirerPair(paire.utilisateur);
+    if (paire) {
+      this.synchro.retirerPair(paire.utilisateur);
+      this.avances.dissoudre(paire.utilisateur);
+    }
     return canal;
   }
 
@@ -387,9 +405,32 @@ export class Duo {
   }
 
   private surDiffusion(m: MessageClient): void {
+    if (m.type === 'modules_modifies') this.avances.synchroniser();
+    if (m.type === 'evenement') this.avances.observer(m.evenement.sessionId, m.evenement.evt);
     if (!this.canal) return;
     const sortant = this.synchro.versLien(m);
     if (sortant) this.canal.envoyer(sortant);
+  }
+
+  private creerAvances(options: OptionsDuo): EchangesAvances {
+    return new EchangesAvances({
+      base: options.base,
+      registre: options.registre,
+      postes: options.postes,
+      diffusion: options.diffusion,
+      partages: this.partages,
+      demandes: this.demandes,
+      historique: this.historique,
+      droits: this.stockDroits,
+      attentes: this.attentes,
+      contexte: this.contexte,
+      horloge: this.horloge,
+      envoyer: (m) => this.envoyerLien(m),
+      maintenant: () => this.maintenant(),
+      nomLocal: () => this.identite.nomLocal(),
+      nomPair: () => this.identite.nomPair() ?? 'le pair',
+      log: options.journal,
+    });
   }
 
   private construireContexte(options: OptionsDuo): Contexte {
@@ -409,6 +450,10 @@ export class Duo {
       connecte: () => this.canal !== null,
       nomPair: () => this.identite.nomPair() ?? 'le pair',
       partagerOuverte: (session) => this.partagerOuverte(session),
+      fil: (session, evt) => {
+        const evenement = this.registre.ajouterEvenement(session, this.maintenant(), evt);
+        this.diffusion.diffuser({ type: 'evenement', evenement });
+      },
     };
   }
 

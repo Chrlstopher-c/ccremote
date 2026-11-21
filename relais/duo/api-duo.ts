@@ -1,7 +1,9 @@
 // Responsabilité : les routes du mode duo, protégées comme les autres routes clients (jeton habituel).
 import {
+  CorpsAccordModule,
   CorpsDecision,
   CorpsDroits,
+  CorpsMain,
   CorpsNom,
   CorpsOuvertureDuo,
   CorpsPartage,
@@ -20,7 +22,7 @@ function rendre<T>(r: Resultat<T>): Response {
 }
 
 export function routesDuo(duo: Duo, protege: Protection) {
-  return { ...routesLien(duo, protege), ...routesEchanges(duo, protege) };
+  return { ...routesLien(duo, protege), ...routesEchanges(duo, protege), ...routesAvances(duo, protege) };
 }
 
 // Appairage, lien, partages, présence, droits et nom affiché.
@@ -76,7 +78,8 @@ function routesEchanges(duo: Duo, protege: Protection) {
       POST: protege(async (req) => {
         const c = await lireCorps(req, CorpsDecision);
         if (c instanceof Response) return c;
-        return duo.decider(req.params['id'] ?? '', c.accord) ? json({}) : erreur('demande introuvable', 404);
+        const choix = c.machine && c.chemin ? { machine: c.machine, chemin: c.chemin } : undefined;
+        return duo.decider(req.params['id'] ?? '', c.accord, choix) ? json({}) : erreur('demande introuvable', 404);
       }),
     },
     '/api/duo/sessions': {
@@ -95,5 +98,29 @@ function routesEchanges(duo: Duo, protege: Protection) {
     },
     '/api/duo/usage': { GET: protege(async () => rendre(await duo.usageDuPair())) },
     '/api/duo/journal': { GET: protege(() => json(duo.journalDuo())) },
+  };
+}
+
+// Étape 3 : passer la main, modules en commun, alertes de conflit, fil d'activité.
+function routesAvances(duo: Duo, protege: Protection) {
+  return {
+    '/api/duo/mains': {
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsMain);
+        if (c instanceof Response) return c;
+        const r = await duo.avances.passerLaMain(c.session, c.note);
+        return r.ok ? json({ sessionPair: r.valeur }) : erreur(r.raison, r.statut);
+      }),
+    },
+    '/api/duo/modules': { GET: protege(() => json(duo.avances.listerModules())) },
+    '/api/duo/modules/:id': {
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsAccordModule);
+        if (c instanceof Response) return c;
+        return rendre(duo.avances.accorderModule(req.params['id'] ?? '', c.accepte));
+      }),
+    },
+    '/api/duo/conflits': { GET: protege(() => json(duo.avances.conflitsDuo())) },
+    '/api/duo/activite': { GET: protege(() => json(duo.avances.activite())) },
   };
 }

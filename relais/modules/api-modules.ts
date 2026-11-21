@@ -1,6 +1,7 @@
 // Responsabilité : l'API des modules pour les clients — liste des modules du parc et service de leurs fichiers.
 // Un fichier se sert sous l'origine de l'appli, à `modules/<id>/<chemin>` ; un chemin qui sort du module est refusé.
 import { cheminModuleValide, type EtatServeur } from '../../commun/modules.ts';
+import { estModuleDuo } from '../../commun/duo.ts';
 import { erreur, json } from '../clients/http.ts';
 import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
@@ -40,7 +41,10 @@ export function vueServeur(m: ModuleRelais, enLigne?: (machine: string) => boole
   const declare = m.manifeste?.serveur;
   if (declare === undefined) return null;
   const machine = declare.machine ?? m.machine;
-  if (enLigne && !enLigne(machine)) return { machine, etat: 'arrete', erreur: `${machine} est hors ligne` };
+  // Un module reçu du pair tourne chez le propriétaire : son état nous vient par le lien, pas d'un poste local.
+  if (enLigne && !estModuleDuo(m.machine) && !enLigne(machine)) {
+    return { machine, etat: 'arrete', erreur: `${machine} est hors ligne` };
+  }
   return { machine, etat: m.serveur?.etat ?? 'arrete', erreur: m.serveur?.erreur ?? null };
 }
 

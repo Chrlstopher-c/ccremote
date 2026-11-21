@@ -36,6 +36,12 @@ interface Relais {
 const relais: Relais[] = [];
 const pontSansSessions = (): Promise<Response> =>
   Promise.resolve(Response.json({ erreur: 'sans sessions' }, { status: 409 }));
+const pontSimule = {
+  ouvrir: pontSansSessions,
+  envoyer: pontSansSessions,
+  interrompre: pontSansSessions,
+  tracer: pontSansSessions,
+};
 let maintenant = Date.parse(MAJ);
 const horloge = { lire: (): number => maintenant, avancer: (ms: number): void => void (maintenant += ms) };
 
@@ -58,7 +64,8 @@ function creerRelais(utilisateur: string): Relais {
     journal,
     maintenant: horloge.lire,
     delaiReconnexionMs: 20,
-    sessions: { ouvrir: pontSansSessions, envoyer: pontSansSessions, interrompre: pontSansSessions },
+    postes,
+    sessions: pontSimule,
   });
   duo.demarrer();
   const poste = {

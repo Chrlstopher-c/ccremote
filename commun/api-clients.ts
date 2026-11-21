@@ -85,6 +85,15 @@ export type MessageClient =
   | { readonly type: 'duo_demande'; readonly demande: DemandeDuo }
   // Le pair a ouvert (present) ou fermé une session partagée avec Chris.
   | { readonly type: 'duo_presence'; readonly session: string; readonly present: boolean }
+  // Un fichier touché des deux côtés (Chris et le pair) dans un projet partagé : une alerte par fichier et par 30 min.
+  | {
+      readonly type: 'duo_conflit';
+      readonly projet: string;
+      readonly fichier: string;
+      readonly qui: string;
+      readonly session: string;
+      readonly sessionPair: string;
+    }
   // Un agent appelle un outil d'un module : la première appli où il est actif répond (POST /api/modules-reponses).
   // WebSocket seulement : n'avance pas le long-poll.
   | {

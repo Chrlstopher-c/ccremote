@@ -4,6 +4,7 @@ import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
 import type { EtatServeur, FichierModule, ManifesteModule } from '../../commun/modules.ts';
 import type { MessagePoste } from '../../commun/protocole-poste.ts';
+import { estModuleDuo, machineDuo } from '../../commun/duo.ts';
 
 export type MessageModuleRecu = Extract<MessagePoste, { kind: 'module' | 'module_erreur' }>;
 
@@ -24,6 +25,8 @@ export interface ModuleRelais {
   /** Dernier état du serveur signalé par le poste qui le fait tourner ; null tant qu'aucun n'a été signalé. */
   readonly serveur: EtatServeurModule | null;
 }
+
+export const CONFLIT_LOCAL = 'conflit : un module local porte le même identifiant';
 
 type LigneModule = {
   id: string;
@@ -47,6 +50,10 @@ export class RegistreModules {
     const erreur = m.kind === 'module_erreur' ? m.erreur : null;
     const empreinte = m.kind === 'module' ? m.empreinte : null;
     const actuel = this.ligne(m.id);
+    if (actuel !== null && estModuleDuo(actuel.machine) && !estModuleDuo(machine)) {
+      return this.conflitLocal(m.id);
+    }
+    if (actuel !== null && !estModuleDuo(actuel.machine) && estModuleDuo(machine)) return false;
     const inchange =
       actuel !== null && actuel.machine === machine && actuel.erreur === erreur && actuel.empreinte === empreinte;
     if (inchange) return false;
@@ -67,6 +74,18 @@ export class RegistreModules {
       throw e;
     }
     return true;
+  }
+
+  // Une publication locale d'un identifiant déjà reçu du pair : le reçu n'est pas écrasé, son `erreur` le dit.
+  private conflitLocal(id: string): boolean {
+    this.db.query('UPDATE modules SET erreur = $e WHERE id = $id').run({ id, e: CONFLIT_LOCAL });
+    return true;
+  }
+
+  /** Retire les modules reçus du pair `utilisateur` (révocation, retrait du partage) ; rend le nombre retiré. */
+  retirerDuPair(utilisateur: string): number {
+    const machine = machineDuo(utilisateur);
+    return this.db.query('DELETE FROM modules WHERE machine = $machine').run({ machine }).changes;
   }
 
   /** Retire le module s'il appartient à `machine` ; rend vrai s'il a été retiré. */

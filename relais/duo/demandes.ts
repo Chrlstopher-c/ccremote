@@ -1,6 +1,7 @@
 // Responsabilité : les demandes du pair qui attendent l'accord du propriétaire. Une demande se tranche par la route
-// ou par son expiration (refusée sans réponse) ; chaque changement est diffusé aux clients.
-import type { DemandeDuo, GenreDemande } from '../../commun/duo.ts';
+// ou par son expiration (refusée sans réponse) ; chaque changement est diffusé aux clients. Un accord peut porter le
+// dossier choisi (passer la main : où s'ouvre la session neuve).
+import type { ChoixDossier, DemandeDuo, GenreDemande } from '../../commun/duo.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import { nonce } from './preuve.ts';
 
@@ -10,9 +11,16 @@ export interface OptionsDemandes {
   readonly delaiMs: number;
 }
 
+export interface Reponse {
+  readonly accord: boolean;
+  readonly choix?: ChoixDossier;
+}
+
+const REFUS: Reponse = { accord: false };
+
 interface Attente {
   readonly demande: DemandeDuo;
-  readonly rendre: (accord: boolean) => void;
+  readonly rendre: (r: Reponse) => void;
   readonly minuterie: ReturnType<typeof setTimeout>;
 }
 
@@ -21,12 +29,12 @@ export class Demandes {
 
   constructor(private readonly options: OptionsDemandes) {}
 
-  /** Rend `true` si Chris accorde, `false` s'il refuse ou si le délai passe sans réponse. */
-  demander(genre: GenreDemande, de: string, detail: string): Promise<boolean> {
+  /** Rend la décision de Chris ; un refus, ou un délai sans réponse, rend `accord: false`. */
+  demander(genre: GenreDemande, de: string, detail: string): Promise<Reponse> {
     return new Promise((rendre) => {
       const id = nonce();
       const demande: DemandeDuo = { id, genre, de, le: new Date(this.options.horloge()).toISOString(), detail };
-      const minuterie = setTimeout(() => this.trancher(id, false), this.options.delaiMs);
+      const minuterie = setTimeout(() => this.trancher(id, REFUS), this.options.delaiMs);
       this.en.set(id, { demande, rendre, minuterie });
       this.options.diffusion.diffuser({ type: 'duo_demande', demande });
     });
@@ -37,20 +45,20 @@ export class Demandes {
   }
 
   /** Faux si la demande n'existe pas (déjà tranchée ou expirée). */
-  decider(id: string, accord: boolean): boolean {
-    return this.trancher(id, accord);
+  decider(id: string, accord: boolean, choix?: ChoixDossier): boolean {
+    return this.trancher(id, accord ? { accord, ...(choix ? { choix } : {}) } : REFUS);
   }
 
   arreter(): void {
-    for (const id of [...this.en.keys()]) this.trancher(id, false);
+    for (const id of [...this.en.keys()]) this.trancher(id, REFUS);
   }
 
-  private trancher(id: string, accord: boolean): boolean {
+  private trancher(id: string, reponse: Reponse): boolean {
     const attente = this.en.get(id);
     if (!attente) return false;
     clearTimeout(attente.minuterie);
     this.en.delete(id);
-    attente.rendre(accord);
+    attente.rendre(reponse);
     this.options.diffusion.diffuser({ type: 'duo_modifie' });
     return true;
   }

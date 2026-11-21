@@ -76,12 +76,14 @@ export function creerBanc(nom: string, options: OptionsBanc = {}): Banc {
     port: 0,
     journal,
     maintenant: () => Date.parse(MAJ),
+    postes,
     delaiReconnexionMs: 20,
     ...(options.delaiDemandeMs !== undefined ? { delaiDemandeMs: options.delaiDemandeMs } : {}),
     sessions: {
       ouvrir: (d) => sessions.ouvrirAvec(d),
       envoyer: (s, t, p, a) => sessions.envoyerDuPair(s, t, p, a),
       interrompre: (s) => sessions.interrompreDuPair(s),
+      tracer: (s, t) => sessions.tracerDuPair(s, t),
     },
   });
   const sessions: ApiSessions = new ApiSessions(registre, postes, diffusion, new Set(), journal, duo);

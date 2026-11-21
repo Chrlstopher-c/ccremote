@@ -177,10 +177,12 @@ const duo: Duo = new Duo({
   ecoute: config.duo.ecoute,
   port: config.duo.port,
   journal: journal.child({ domaine: 'duo' }),
+  postes,
   sessions: {
     ouvrir: (demande) => sessions.ouvrirAvec(demande),
     envoyer: (session, texte, pieces, auteur) => sessions.envoyerDuPair(session, texte, pieces, auteur),
     interrompre: (session) => sessions.interrompreDuPair(session),
+    tracer: (session, trace) => sessions.tracerDuPair(session, trace),
   },
 });
 const sessions: ApiSessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal, duo);
