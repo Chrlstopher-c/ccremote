@@ -144,7 +144,7 @@ export const ResumeSession = z.object({
   lanceur: LanceurSession.optional(), // qui a lancé la session (registre `cc`) : kitty, quart ou echo
   dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
   // Session reçue d'un pair (mode duo) : machine virtuelle = nom du pair, lecture seule côté registre.
-  duo: z.object({ pair: z.string(), niveau: z.enum(['lecture', 'ecriture']) }).optional(),
+  duo: z.object({ pair: z.string(), nom: z.string().optional(), niveau: z.enum(['lecture', 'ecriture']) }).optional(),
   nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
   // Remote Control (`/remote-control` du TUI) : session connectée à claude.ai, `url` à ouvrir sur le téléphone.
   remoteControl: RemoteControl.nullable().optional(),

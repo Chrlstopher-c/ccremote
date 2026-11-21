@@ -19,6 +19,7 @@ export class Synchro {
     private readonly diffusion: Diffusion,
     private readonly partages: PartagesDuo,
     private readonly journal: Logger,
+    private readonly nomPair: () => string | null,
   ) {}
 
   // ---- Émission -----------------------------------------------------------------------------------------------
@@ -92,6 +93,16 @@ export class Synchro {
     return s !== null && !s.duo && niveauPour(s, this.partages.lister()) !== null;
   }
 
+  /** Le nom affiché du pair a changé : ses sessions reçues le portent aussitôt. */
+  rafraichirNom(pair: string): void {
+    for (const s of this.registre.sessions(true)) {
+      if (s.duo?.pair !== pair) continue;
+      const vue: ResumeSession = { ...s, duo: { ...s.duo, nom: this.nomPair() ?? pair } };
+      this.registre.enregistrerSession(vue);
+      this.diffusion.diffuser({ type: 'session', session: this.registre.session(s.id) ?? vue });
+    }
+  }
+
   // ---- Privé -------------------------------------------------------------------------------------------------
 
   private partagees(): FicheDuo[] {
@@ -129,7 +140,7 @@ export class Synchro {
       ...fiche,
       machine: nom,
       projet: { ...fiche.projet, machine: nom },
-      duo: { pair: nom, niveau },
+      duo: { pair: nom, nom: this.nomPair() ?? nom, niveau },
     };
     this.registre.enregistrerSession(vue);
     this.diffusion.diffuser({ type: 'session', session: this.registre.session(fiche.id) ?? vue });

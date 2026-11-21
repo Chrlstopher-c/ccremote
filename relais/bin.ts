@@ -166,7 +166,24 @@ const resteLot2 = {
   taches: new ApiTaches({ postes, journal: journal.child({ domaine: 'taches' }) }),
 };
 const parite = new ApiParite({ registre, postes, journal: journal.child({ domaine: 'parite' }) });
-const sessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal);
+// Mode duo : deux relais reliés par le lien (appairage, partages, présence, échanges). Écoute à part, jamais sur les
+// clients. Les sessions du pair passent par ApiSessions (même chemin qu'une commande de Chris).
+const duo: Duo = new Duo({
+  registre,
+  diffusion,
+  base,
+  utilisateur: nomUtilisateur(process.env, userInfo().username),
+  dossierSecrets,
+  ecoute: config.duo.ecoute,
+  port: config.duo.port,
+  journal: journal.child({ domaine: 'duo' }),
+  sessions: {
+    ouvrir: (demande) => sessions.ouvrirAvec(demande),
+    envoyer: (session, texte, pieces, auteur) => sessions.envoyerDuPair(session, texte, pieces, auteur),
+    interrompre: (session) => sessions.interrompreDuPair(session),
+  },
+});
+const sessions: ApiSessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal, duo);
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
 // Un seul relevé d'usage par compte réel du parc : le relais choisit le poste, cadence et garde la dernière valeur.
@@ -198,17 +215,6 @@ const echo = config.echo
   : null;
 echo?.demarrer();
 type DonneesClient = { readonly type: 'flux' } | DonneesTerminal;
-// Mode duo : deux relais reliés par le lien (appairage, partages, présence). Écoute à part, jamais sur les clients.
-const duo = new Duo({
-  registre,
-  diffusion,
-  base,
-  utilisateur: nomUtilisateur(process.env, userInfo().username),
-  dossierSecrets,
-  ecoute: config.duo.ecoute,
-  port: config.duo.port,
-  journal: journal.child({ domaine: 'duo' }),
-});
 const routes = avecCors(
   construireRoutes({
     acces,

@@ -1,6 +1,9 @@
 // Responsabilité : les contrats du mode duo (deux relais reliés) — appairage, partage, messages du lien entre relais et
 // état vu par les clients. Aucune logique : les décisions sont dans relais/duo/.
 import { z } from 'zod';
+import { FenetreUsage } from './comptes.ts';
+import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
+import { NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 import { Evenement, ResumeSession } from './session.ts';
 
 export const ALPHABET_CODE = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans 0/O/1/I/L : lisible à la voix
@@ -8,6 +11,8 @@ export const LONGUEUR_CODE = 8;
 export const DUREE_CODE_MS = 10 * 60 * 1000;
 export const ESSAIS_CODE_MAX = 5; // au-delà, le code est brûlé
 export const TAILLE_HISTORIQUE_DUO = 200; // événements renvoyés par la relecture d'une session partagée
+export const DUREE_DEMANDE_MS = 10 * 60 * 1000; // une demande du pair sans réponse de Chris est refusée
+export const DELAI_MARGE_REPONSE_MS = 30_000; // marge du demandeur au-delà du délai de la demande
 
 export const NiveauPartage = z.enum(['lecture', 'ecriture']);
 export type NiveauPartage = z.infer<typeof NiveauPartage>;
@@ -36,9 +41,14 @@ export const PartageDuo = z.object({
 });
 export type PartageDuo = z.infer<typeof PartageDuo>;
 
+export const CorpsNom = z.object({ nom: z.string().trim().max(40) }); // vide : retour au nom d'utilisateur
+export type CorpsNom = z.infer<typeof CorpsNom>;
+
 export const EtatDuo = z.object({
-  utilisateur: z.string(), // nom de ce relais, annoncé au pair
-  pair: z.object({ utilisateur: z.string(), adresse: z.string().nullable() }).nullable(),
+  utilisateur: z.string(), // nom d'utilisateur de ce relais (machine)
+  nom: z.string(), // nom affiché de ce relais, annoncé au pair
+  ecoute: z.string(), // hôte:port où le pair peut se relier à ce relais
+  pair: z.object({ utilisateur: z.string(), nom: z.string(), adresse: z.string().nullable() }).nullable(),
   // absent : non appairé · connecte : lien authentifié · hors_ligne : appairé, lien coupé · refuse : clé rejetée
   etat: z.enum(['absent', 'connecte', 'hors_ligne', 'refuse']),
   partages: z.array(PartageDuo),
@@ -46,8 +56,77 @@ export const EtatDuo = z.object({
 });
 export type EtatDuo = z.infer<typeof EtatDuo>;
 
+export const GenreDemande = z.enum(['message', 'ouvrir_session', 'passer_la_main']);
+export type GenreDemande = z.infer<typeof GenreDemande>;
+export const DemandeDuo = z.object({
+  id: z.string(),
+  genre: GenreDemande,
+  de: z.string(), // nom du pair
+  le: z.string(),
+  detail: z.string(), // début du message, ou dossier demandé
+});
+export type DemandeDuo = z.infer<typeof DemandeDuo>;
+
+export const DossierOuvert = z.object({ machine: z.string().min(1).max(120), chemin: z.string().min(1).max(1000) });
+export type DossierOuvert = z.infer<typeof DossierOuvert>;
+export const DossierPair = DossierOuvert.extend({ nomMachine: z.string() });
+export type DossierPair = z.infer<typeof DossierPair>;
+
+// Droits accordés au pair, réglés par le propriétaire (voir relais/duo/droits.ts).
+export const Droits = z.object({
+  ecrireSansPermissions: z.enum(['demander', 'accepter']),
+  ouvrirSession: z.enum(['jamais', 'demander', 'toujours']),
+  dossiersOuverts: z.array(DossierOuvert).max(200),
+  usagePartage: z.boolean(),
+  modulesPartages: z.array(z.string().min(1).max(200)).max(200),
+});
+export type Droits = z.infer<typeof Droits>;
+export const DROITS_PAR_DEFAUT: Droits = {
+  ecrireSansPermissions: 'demander',
+  ouvrirSession: 'demander',
+  dossiersOuverts: [],
+  usagePartage: false,
+  modulesPartages: [],
+};
+
+export const LimiteUsage = z.object({ genre: z.enum(['session', 'semaine', 'autre']), fenetre: FenetreUsage });
+export const UsagePartage = z.object({
+  compte: z.string(),
+  utilisateur: z.string(), // machine du propriétaire (le pair voit son compte, sous son nom)
+  limites: z.array(LimiteUsage),
+  releveLe: z.string(),
+});
+export type UsagePartage = z.infer<typeof UsagePartage>;
+
+export const EntreeJournal = z.object({
+  id: z.number(),
+  le: z.string(),
+  qui: z.string(),
+  action: z.string(),
+  cible: z.string(),
+  detail: z.string(),
+});
+export type EntreeJournal = z.infer<typeof EntreeJournal>;
+
+export const CorpsDroits = Droits;
+export const CorpsDecision = z.object({ accord: z.boolean() });
+export const CorpsOuvertureDuo = z.object({
+  machine: z.string().min(1).max(120),
+  chemin: z.string().min(1).max(1000),
+  message: z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION),
+  modele: z.string().min(1).max(120).optional(),
+});
+export type CorpsOuvertureDuo = z.infer<typeof CorpsOuvertureDuo>;
+
+/** Le texte remis à Claude pour un message du pair : son nom en tête. La bulle du fil garde le texte d'origine. */
+export function texteRemisAClaude(auteur: string, texte: string): string {
+  return `[Message de ${auteur}]\n${texte}`;
+}
+
 const FicheDuo = z.object({ fiche: ResumeSession, niveau: NiveauPartage });
 const Horodate = z.object({ ts: z.string(), evt: Evenement });
+const Ref = z.string().min(1).max(64);
+const Session = z.string().min(1).max(200);
 
 // Messages du lien entre relais. Un seul discriminant (`type`) ; le lien ne porte jamais la clé de la paire en clair
 // hors de l'appairage (une fois, sous le code à usage unique).
@@ -70,5 +149,34 @@ export const MessageLien = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('duo_presence'), session: z.string(), present: z.boolean() }),
   z.object({ type: z.literal('revocation') }),
+  z.object({ type: z.literal('identite'), utilisateur: z.string(), nom: z.string().max(40) }),
+  // Échanges à deux (étape 2) : une requête porte `ref` ; son destinataire répond par `reponse` (ou la liste).
+  z.object({
+    type: z.literal('ecrire'),
+    ref: Ref,
+    session: Session,
+    texte: z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION),
+    pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
+  }),
+  z.object({ type: z.literal('interrompre'), ref: Ref, session: Session }),
+  z.object({
+    type: z.literal('ouvrir_session'),
+    ref: Ref,
+    machine: z.string().min(1).max(120),
+    chemin: z.string().min(1).max(1000),
+    message: z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION),
+    modele: z.string().min(1).max(120).optional(),
+  }),
+  z.object({
+    type: z.literal('reponse'),
+    ref: Ref,
+    ok: z.boolean(),
+    raison: z.string().optional(),
+    session: z.string().optional(),
+  }),
+  z.object({ type: z.literal('dossiers'), ref: Ref }),
+  z.object({ type: z.literal('dossiers_reponse'), ref: Ref, dossiers: z.array(DossierPair).max(200) }),
+  z.object({ type: z.literal('usage'), ref: Ref }),
+  z.object({ type: z.literal('usage_reponse'), ref: Ref, usage: UsagePartage.nullable() }),
 ]);
 export type MessageLien = z.infer<typeof MessageLien>;

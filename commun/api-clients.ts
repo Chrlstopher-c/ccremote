@@ -2,6 +2,7 @@
 import type { EtatCompte } from './comptes.ts';
 import type { MessageEcho } from './echo.ts';
 import type { Reunion } from './reunion.ts';
+import type { DemandeDuo } from './duo.ts';
 import type { EtatMachine } from './protocole-poste.ts';
 import type { Evenement, Projet, ResumeSession } from './session.ts';
 
@@ -80,6 +81,8 @@ export type MessageClient =
   | { readonly type: 'modules_modifies' }
   // Mode duo : l'état du lien ou des partages a changé (l'interface relit GET /api/duo).
   | { readonly type: 'duo_modifie' }
+  // Mode duo : le pair demande un accord (écrire sans permissions, ouvrir une session) ; Chris tranche.
+  | { readonly type: 'duo_demande'; readonly demande: DemandeDuo }
   // Le pair a ouvert (present) ou fermé une session partagée avec Chris.
   | { readonly type: 'duo_presence'; readonly session: string; readonly present: boolean }
   // Un agent appelle un outil d'un module : la première appli où il est actif répond (POST /api/modules-reponses).

@@ -1,7 +1,16 @@
 // Responsabilité : les routes du mode duo, protégées comme les autres routes clients (jeton habituel).
-import { CorpsPartage, CorpsPresence, CorpsRejoindre } from '../../commun/duo.ts';
+import {
+  CorpsDecision,
+  CorpsDroits,
+  CorpsNom,
+  CorpsOuvertureDuo,
+  CorpsPartage,
+  CorpsPresence,
+  CorpsRejoindre,
+} from '../../commun/duo.ts';
 import { erreur, json, lireCorps } from '../clients/http.ts';
-import type { Duo, Resultat } from './duo.ts';
+import type { Duo } from './duo.ts';
+import type { Resultat } from './resultat.ts';
 
 type Requete = Request & { params: Record<string, string> };
 type Protection = (g: (req: Requete) => Response | Promise<Response>) => (req: Requete) => Response | Promise<Response>;
@@ -11,6 +20,11 @@ function rendre<T>(r: Resultat<T>): Response {
 }
 
 export function routesDuo(duo: Duo, protege: Protection) {
+  return { ...routesLien(duo, protege), ...routesEchanges(duo, protege) };
+}
+
+// Appairage, lien, partages, présence, droits et nom affiché.
+function routesLien(duo: Duo, protege: Protection) {
   return {
     '/api/duo': { GET: protege(() => json(duo.etat())) },
     '/api/duo/code': { POST: protege(() => rendre(duo.codeAppairage())) },
@@ -21,6 +35,12 @@ export function routesDuo(duo: Duo, protege: Protection) {
       }),
     },
     '/api/duo/revoquer': { POST: protege(() => json(duo.revoquer())) },
+    '/api/duo/nom': {
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsNom);
+        return c instanceof Response ? c : json(duo.majNom(c.nom));
+      }),
+    },
     '/api/duo/partages': {
       POST: protege(async (req) => {
         const c = await lireCorps(req, CorpsPartage);
@@ -38,5 +58,42 @@ export function routesDuo(duo: Duo, protege: Protection) {
         return r.ok ? json({}) : erreur(r.raison, r.statut);
       }),
     },
+    '/api/duo/droits': {
+      GET: protege(() => json(duo.droitsAccordes())),
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsDroits);
+        return c instanceof Response ? c : json(duo.majDroits(c));
+      }),
+    },
+  };
+}
+
+// Échanges à deux : demandes d'accord, sessions du pair, dossiers, usage, journal.
+function routesEchanges(duo: Duo, protege: Protection) {
+  return {
+    '/api/duo/demandes': { GET: protege(() => json(duo.listerDemandes())) },
+    '/api/duo/demandes/:id': {
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsDecision);
+        if (c instanceof Response) return c;
+        return duo.decider(req.params['id'] ?? '', c.accord) ? json({}) : erreur('demande introuvable', 404);
+      }),
+    },
+    '/api/duo/sessions': {
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsOuvertureDuo);
+        if (c instanceof Response) return c;
+        const r = await duo.ouvrirChezPair(c);
+        return r.ok ? json({ session: r.valeur }, 201) : erreur(r.raison, r.statut);
+      }),
+    },
+    '/api/duo/dossiers': {
+      GET: protege(async () => {
+        const r = await duo.dossiersDuPair();
+        return r.ok ? json({ dossiersOuverts: r.valeur }) : erreur(r.raison, r.statut);
+      }),
+    },
+    '/api/duo/usage': { GET: protege(async () => rendre(await duo.usageDuPair())) },
+    '/api/duo/journal': { GET: protege(() => json(duo.journalDuo())) },
   };
 }

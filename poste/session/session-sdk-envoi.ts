@@ -1,6 +1,7 @@
 // Responsabilité : l'envoi des messages de Chris à une session SDK — premier message avec ses pièces, messages suivants
 // poussés dans la requête vivante, reprise d'une conversation fermée, compaction demandée, réveil du mode nuit.
 import { randomUUID } from 'node:crypto';
+import { texteRemisAClaude } from '../../commun/duo.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
 import { demarrer } from './session-sdk-processus.ts';
@@ -30,7 +31,14 @@ export async function lancer(
 }
 
 // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
-export async function envoyer(n: NoyauSdk, texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
+// `auteur` : message d'un pair (mode duo). La bulle garde le texte d'origine ; Claude reçoit son nom en tête.
+export async function envoyer(
+  n: NoyauSdk,
+  texte: string,
+  pieces: readonly PieceJointe[] = [],
+  auteur?: string,
+): Promise<string | null> {
+  if (auteur && !n.fil) return 'session fermée : la reprendre avant d’écrire à deux';
   if (!n.fil && !n.etat.claudeSessionId && n.identifiantNeuf) return lancer(n, texte, null, pieces);
   if (!n.fil) {
     return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : reprendre(n, texte);
@@ -41,10 +49,11 @@ export async function envoyer(n: NoyauSdk, texte: string, pieces: readonly Piece
       : null;
   if (typeof jointes === 'string') return jointes;
   const uuid = randomUUID();
-  emettre(n, { type: 'message', texte, uuid });
+  emettre(n, { type: 'message', texte, uuid, ...(auteur ? { auteur } : {}) });
   jointes?.evenements.forEach((evt) => emettre(n, evt));
   n.bilan.messageDeChris();
-  pousser(n, texte + (jointes?.complement ?? ''), jointes?.blocs, uuid);
+  const remis = auteur ? texteRemisAClaude(auteur, texte) : texte;
+  pousser(n, remis + (jointes?.complement ?? ''), jointes?.blocs, uuid);
   if (n.etat.statut !== 'compaction') maj(n, { statut: 'travail' });
   return null;
 }

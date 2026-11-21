@@ -160,8 +160,8 @@ export class SessionSdk implements SessionPoste {
     return envoi.lancer(this.n, message, _modele, pieces);
   }
 
-  async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
-    return envoi.envoyer(this.n, texte, pieces);
+  async envoyer(texte: string, pieces: readonly PieceJointe[] = [], auteur?: string): Promise<string | null> {
+    return envoi.envoyer(this.n, texte, pieces, auteur);
   }
 
   async reprendre(message?: string): Promise<string | null> {

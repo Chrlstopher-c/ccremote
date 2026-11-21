@@ -34,6 +34,8 @@ interface Relais {
 }
 
 const relais: Relais[] = [];
+const pontSansSessions = (): Promise<Response> =>
+  Promise.resolve(Response.json({ erreur: 'sans sessions' }, { status: 409 }));
 let maintenant = Date.parse(MAJ);
 const horloge = { lire: (): number => maintenant, avancer: (ms: number): void => void (maintenant += ms) };
 
@@ -56,6 +58,7 @@ function creerRelais(utilisateur: string): Relais {
     journal,
     maintenant: horloge.lire,
     delaiReconnexionMs: 20,
+    sessions: { ouvrir: pontSansSessions, envoyer: pontSansSessions, interrompre: pontSansSessions },
   });
   duo.demarrer();
   const poste = {
@@ -152,8 +155,8 @@ describe('mode duo — appairage', () => {
     const code = ok(a.duo.codeAppairage());
     ok(await b.duo.rejoindre(adresse(a), code.code));
     await attendre(() => b.duo.etat().etat === 'connecte' && a.duo.etat().etat === 'connecte');
-    expect(b.duo.etat().pair).toEqual({ utilisateur: 'alice', adresse: adresse(a) });
-    expect(a.duo.etat().pair).toEqual({ utilisateur: 'bob', adresse: null });
+    expect(b.duo.etat().pair).toEqual({ utilisateur: 'alice', nom: 'alice', adresse: adresse(a) });
+    expect(a.duo.etat().pair).toEqual({ utilisateur: 'bob', nom: 'bob', adresse: null });
   });
 
   test('un second appairage est refusé tant que la paire existe', async () => {
@@ -185,7 +188,7 @@ describe('mode duo — partage et synchro', () => {
     await attendre(() => b.registre.session('s2') !== null);
     const vue = b.registre.session('s2');
     expect(vue?.machine).toBe('alice');
-    expect(vue?.duo).toEqual({ pair: 'alice', niveau: 'lecture' });
+    expect(vue?.duo).toEqual({ pair: 'alice', nom: 'alice', niveau: 'lecture' });
     envoyerPoste(a, { kind: 'evenement', sessionId: 's2', ts: MAJ, evt: { type: 'message', texte: 'bonjour' } });
     await attendre(() => texte(b, 's2').includes('bonjour'));
     envoyerPoste(a, { kind: 'evenement', sessionId: 's1', ts: MAJ, evt: { type: 'message', texte: 'secret' } });
@@ -200,7 +203,7 @@ describe('mode duo — partage et synchro', () => {
     envoyerPoste(a, { kind: 'session', session: fiche('s1', '/p1') });
     partager(a, { cible: 'tour:/p1', genre: 'projet', niveau: 'ecriture' });
     await attendre(() => b.registre.session('s1') !== null);
-    expect(b.registre.session('s1')?.duo).toEqual({ pair: 'alice', niveau: 'ecriture' });
+    expect(b.registre.session('s1')?.duo).toEqual({ pair: 'alice', nom: 'alice', niveau: 'ecriture' });
   });
 
   test('retrait du partage et révocation font disparaître les sessions chez le pair', async () => {

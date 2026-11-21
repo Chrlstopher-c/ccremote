@@ -16,6 +16,7 @@ import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../c
 import { reponseFichier } from './fichiers-session.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from '../../commun/fichiers-session.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { Resultat } from '../duo/resultat.ts';
 import { aiguillage, TEXTE_REFUS_SANS_JUMELLE } from '../parc/aiguillage.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
@@ -40,6 +41,7 @@ const CorpsOuverture = z.object({
   controle_distant: z.boolean().optional(),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
 });
+export type CorpsOuverture = z.infer<typeof CorpsOuverture>;
 const CorpsMessage = z.object({
   texte: z.string().min(1),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
@@ -81,11 +83,17 @@ export class ApiSessions {
     private readonly diffusion: Diffusion,
     private readonly isolees: ReadonlySet<string>,
     private readonly journal: Logger,
+    private readonly pair: PontPair | null = null,
   ) {}
 
   async ouvrir(req: Request): Promise<Response> {
     const c = await lireCorps(req, CorpsOuverture);
     if (c instanceof Response) return c;
+    return this.ouvrirAvec(c);
+  }
+
+  /** Ouverture à partir d'un corps déjà lu : route de Chris, et ouverture demandée par le pair (mode duo). */
+  async ouvrirAvec(c: CorpsOuverture): Promise<Response> {
     const refus = verifierOuverture(c.machine, c.projet, this.isolees);
     if (refus) return erreur(refus, 403);
     const demande = {
@@ -144,6 +152,9 @@ export class ApiSessions {
   async envoyer(req: RequeteSession): Promise<Response> {
     const c = await lireCorps(req, CorpsMessage);
     if (c instanceof Response) return c;
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
+    if (session.duo) return this.ecrireAuPair(session, c.texte, c.pieces ?? []);
     return this.commander(req.params.id, {
       kind: 'envoyer',
       texte: c.texte,
@@ -344,6 +355,11 @@ export class ApiSessions {
       return this.marquerNonLue(req.params.id, action === 'marquer_non_lue');
     }
     if (!estAction(action)) return erreur('action inconnue', 404);
+    const session = await this.sessionDe(req.params.id);
+    if (session instanceof Response) return session;
+    if (session.duo) {
+      return action === 'interrompre' ? this.interrompreAuPair(session) : erreur(TEXTE_REFUS_DUO, REFUS_POSTE);
+    }
     return this.commander(req.params.id, { kind: action });
   }
 
@@ -496,10 +512,33 @@ export class ApiSessions {
     return json(r.donnees ?? null);
   }
 
+  /** Un message du pair (mode duo), chez le propriétaire : même chemin qu'un message local, signé de son nom. */
+  envoyerDuPair(sessionId: string, texte: string, pieces: readonly PieceJointe[], auteur: string): Promise<Response> {
+    return this.commander(sessionId, { kind: 'envoyer', texte, pieces: [...pieces], auteur });
+  }
+
+  interrompreDuPair(sessionId: string): Promise<Response> {
+    return this.commander(sessionId, { kind: 'interrompre' });
+  }
+
+  // Session du pair (mode duo) : elle tourne chez lui. Écrire ou interrompre passe le lien si elle est partagée en
+  // écriture ; le reste reste refusé.
+  private async ecrireAuPair(session: ResumeSession, texte: string, pieces: readonly PieceJointe[]): Promise<Response> {
+    if (session.duo?.niveau !== 'ecriture') return erreur(TEXTE_LECTURE_SEULE, REFUS_POSTE);
+    if (!this.pair) return erreur(TEXTE_REFUS_DUO, REFUS_POSTE);
+    return reponseDuo(await this.pair.ecrireAPair(session.id, texte, pieces));
+  }
+
+  private async interrompreAuPair(session: ResumeSession): Promise<Response> {
+    if (session.duo?.niveau !== 'ecriture') return erreur(TEXTE_LECTURE_SEULE, REFUS_POSTE);
+    if (!this.pair) return erreur(TEXTE_REFUS_DUO, REFUS_POSTE);
+    return reponseDuo(await this.pair.interrompreAPair(session.id));
+  }
+
   private async commander(
     sessionId: string,
     c:
-      | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[] }
+      | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[]; auteur?: string }
       | { kind: 'autonomie'; active: boolean }
       | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
       | { kind: 'remote_control'; actif: boolean }
@@ -531,6 +570,17 @@ export class ApiSessions {
 }
 
 const TEXTE_REFUS_DUO = 'session partagée par le pair : elle tourne chez lui, la commande se passe là-bas';
+const TEXTE_LECTURE_SEULE = 'session partagée par le pair en lecture seule : écriture non permise';
+
+// Ce que le mode duo offre pour les sessions du pair (écrire, interrompre chez le propriétaire).
+export interface PontPair {
+  ecrireAPair(session: string, texte: string, pieces: readonly PieceJointe[]): Promise<Resultat<unknown>>;
+  interrompreAPair(session: string): Promise<Resultat<unknown>>;
+}
+
+function reponseDuo(r: Resultat<unknown>): Response {
+  return r.ok ? json({}) : erreur(r.raison, r.statut);
+}
 
 function estAction(valeur: string): valeur is Action {
   return ACTIONS.has(valeur);

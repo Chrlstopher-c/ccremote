@@ -3,7 +3,33 @@
 import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
 import type { MessageClient } from '../../commun/api-clients.ts';
-import type { CorpsPartage, EtatDuo, MessageLien } from '../../commun/duo.ts';
+import {
+  type CorpsOuvertureDuo,
+  type CorpsPartage,
+  DUREE_DEMANDE_MS,
+  type DemandeDuo,
+  type Droits,
+  type DossierPair,
+  type EntreeJournal,
+  type EtatDuo,
+  type MessageLien,
+  type UsagePartage,
+} from '../../commun/duo.ts';
+import { Attentes } from './attentes.ts';
+import type { PieceJointe } from '../../commun/presentation.ts';
+import type { Contexte } from './contexte.ts';
+import { Demandes } from './demandes.ts';
+import { DroitsDuo } from './droits.ts';
+import { ecrireAPair as envoyerAuPair, interrompreAPair as interrompreAuPair } from './ecriture.ts';
+import { traiterEchange } from './echanges.ts';
+import { JournalDuo } from './journal.ts';
+import { choisirEcoute, type InterfacesReseau } from './ecoute.ts';
+import { IdentiteDuo } from './identite.ts';
+import { networkInterfaces } from 'node:os';
+import type { PontSessions } from './pont-sessions.ts';
+import { dossiersDuPair, ouvrirChezPair } from './sessions-pair.ts';
+import { echec, ok, type Resultat } from './resultat.ts';
+import { usageDuPair } from './usage.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import { CodesAppairage, type VerdictCode } from './codes.ts';
@@ -15,7 +41,7 @@ import { PartagesDuo } from './partages.ts';
 import { cleNeuve, nonce } from './preuve.ts';
 import { Synchro } from './synchro.ts';
 
-export type Resultat<T> = { ok: true; valeur: T } | { ok: false; statut: number; raison: string };
+export type { Resultat } from './resultat.ts';
 
 export interface OptionsDuo {
   readonly registre: Registre;
@@ -23,11 +49,13 @@ export interface OptionsDuo {
   readonly base: Database;
   readonly utilisateur: string;
   readonly dossierSecrets: string;
-  readonly ecoute: string;
+  readonly ecoute: string | null;
   readonly port: number;
   readonly journal: Logger;
   readonly maintenant?: () => number;
   readonly delaiReconnexionMs?: number;
+  readonly delaiDemandeMs?: number;
+  readonly sessions: PontSessions;
 }
 
 const DELAI_APPAIRAGE_MS = 10_000;
@@ -56,6 +84,12 @@ export class Duo {
   private appelant: LienAppelant | null = null;
   private refuse = false;
   private desabonner: (() => void) | null = null;
+  private readonly identite: IdentiteDuo;
+  private readonly stockDroits: DroitsDuo;
+  private readonly historique: JournalDuo;
+  private readonly demandes: Demandes;
+  private readonly attentes = new Attentes();
+  private readonly contexte: Contexte;
 
   constructor(options: OptionsDuo) {
     this.utilisateur = options.utilisateur;
@@ -66,9 +100,20 @@ export class Duo {
     this.codes = new CodesAppairage(this.horloge);
     this.paires = new PaireStockee(options.dossierSecrets, options.journal);
     this.partages = new PartagesDuo(options.base);
-    this.synchro = new Synchro(options.registre, options.diffusion, this.partages, options.journal);
-    this.ecoute = { hote: options.ecoute, port: options.port };
+    this.identite = new IdentiteDuo(options.base, options.utilisateur);
+    this.synchro = new Synchro(options.registre, options.diffusion, this.partages, options.journal, () =>
+      this.identite.nomPair(),
+    );
+    this.ecoute = { hote: options.ecoute ?? choisirEcoute(networkInterfaces()), port: options.port };
     this.journal = options.journal;
+    this.stockDroits = new DroitsDuo(options.base, options.journal);
+    this.historique = new JournalDuo(options.base, options.journal);
+    this.demandes = new Demandes({
+      diffusion: options.diffusion,
+      horloge: this.horloge,
+      delaiMs: options.delaiDemandeMs ?? DUREE_DEMANDE_MS,
+    });
+    this.contexte = this.construireContexte(options);
   }
 
   /** Ouvre le port d'écoute du lien et reprend le lien sortant si une paire existe. */
@@ -85,6 +130,8 @@ export class Duo {
   }
 
   arreter(): void {
+    this.demandes.arreter();
+    this.attentes.annuler();
     this.desabonner?.();
     this.desabonner = null;
     this.appelant?.arreter();
@@ -103,7 +150,11 @@ export class Duo {
     const paire = this.paires.lire();
     return {
       utilisateur: this.utilisateur,
-      pair: paire ? { utilisateur: paire.utilisateur, adresse: paire.adresse } : null,
+      nom: this.identite.nomLocal(),
+      ecoute: this.adresseEcoute(),
+      pair: paire
+        ? { utilisateur: paire.utilisateur, nom: this.identite.nomPair() ?? paire.utilisateur, adresse: paire.adresse }
+        : null,
       etat: !paire ? 'absent' : this.canal ? 'connecte' : this.refuse ? 'refuse' : 'hors_ligne',
       partages: this.partages.lister(),
       presences: [...this.presences],
@@ -112,7 +163,7 @@ export class Duo {
 
   codeAppairage(): Resultat<{ code: string; expireLe: string; port: number }> {
     if (this.paires.lire()) return echec(409, 'déjà appairé : révoquez la paire avant');
-    return ok({ ...this.codes.creer(), port: this.portEcoute });
+    return ok({ ...this.codes.creer(), port: this.portEcoute, adresse: this.adresseEcoute() });
   }
 
   async rejoindre(adresse: string, code: string): Promise<Resultat<EtatDuo>> {
@@ -163,6 +214,57 @@ export class Duo {
     this.canal?.fermer();
   }
 
+  // ---- Étape 2 : droits, demandes, journal, échanges à deux ----------------------------------------------------
+
+  droitsAccordes(): Droits {
+    return this.stockDroits.lire();
+  }
+
+  majDroits(droits: Droits): Droits {
+    const enregistres = this.stockDroits.ecrire(droits);
+    this.notifier();
+    return enregistres;
+  }
+
+  listerDemandes(): DemandeDuo[] {
+    return this.demandes.lister();
+  }
+
+  decider(id: string, accord: boolean): boolean {
+    return this.demandes.decider(id, accord);
+  }
+
+  majNom(nom: string): EtatDuo {
+    this.identite.ecrireNomLocal(nom);
+    this.envoyerIdentite();
+    this.notifier();
+    return this.etat();
+  }
+
+  journalDuo(): EntreeJournal[] {
+    return this.historique.lister();
+  }
+
+  ecrireAPair(session: string, texte: string, pieces: readonly PieceJointe[]): Promise<Resultat<string | null>> {
+    return envoyerAuPair(this.contexte, session, texte, pieces);
+  }
+
+  interrompreAPair(session: string): Promise<Resultat<string | null>> {
+    return interrompreAuPair(this.contexte, session);
+  }
+
+  ouvrirChezPair(demande: CorpsOuvertureDuo): Promise<Resultat<string | null>> {
+    return ouvrirChezPair(this.contexte, demande);
+  }
+
+  dossiersDuPair(): Promise<Resultat<DossierPair[]>> {
+    return dossiersDuPair(this.contexte);
+  }
+
+  usageDuPair(): Promise<Resultat<UsagePartage | null>> {
+    return usageDuPair(this.contexte);
+  }
+
   // ---- Pont vers le lien entrant et sortant -----------------------------------------------------------------
 
   appairer(code: string, utilisateurDistant: string): ResultatAppairage {
@@ -185,6 +287,7 @@ export class Duo {
     if (this.canal && this.canal !== canal) this.canal.fermer();
     this.canal = canal;
     this.refuse = false;
+    canal.envoyer(this.messageIdentite());
     canal.envoyer(this.synchro.instantane());
     this.notifier();
   }
@@ -192,6 +295,7 @@ export class Duo {
   fermee(canal: Canal): void {
     if (this.canal !== canal) return;
     this.canal = null;
+    this.attentes.annuler();
     this.presences.clear();
     this.notifier();
   }
@@ -230,6 +334,11 @@ export class Duo {
         return this.synchro.appliquerRelecture(nom, m.sessionId, m.evenements);
       case 'duo_presence':
         return this.presenceRecue(m.session, m.present);
+      case 'identite':
+        this.identite.ecrireNomPair(m.nom);
+        this.synchro.rafraichirNom(nom);
+        this.notifier();
+        return;
       case 'revocation': {
         const canal = this.dissoudre();
         canal?.fermer();
@@ -237,6 +346,7 @@ export class Duo {
         return;
       }
       default:
+        traiterEchange(this.contexte, this.identite.nomPair() ?? nom, m);
         return;
     }
   }
@@ -258,6 +368,8 @@ export class Duo {
     this.canal = null;
     this.paires.effacer();
     this.partages.vider();
+    this.identite.ecrireNomPair(null);
+    this.attentes.annuler();
     this.presences.clear();
     this.refuse = false;
     if (paire) this.synchro.retirerPair(paire.utilisateur);
@@ -280,6 +392,50 @@ export class Duo {
     if (sortant) this.canal.envoyer(sortant);
   }
 
+  private construireContexte(options: OptionsDuo): Contexte {
+    return {
+      nomLocal: () => this.identite.nomLocal(),
+      registre: this.registre,
+      partages: this.partages,
+      droits: this.stockDroits,
+      demandes: this.demandes,
+      historique: this.historique,
+      sessions: options.sessions,
+      attentes: this.attentes,
+      log: options.journal,
+      delaiDemandeMs: options.delaiDemandeMs ?? DUREE_DEMANDE_MS,
+      maintenant: () => this.maintenant(),
+      envoyer: (m) => this.envoyerLien(m),
+      connecte: () => this.canal !== null,
+      nomPair: () => this.identite.nomPair() ?? 'le pair',
+      partagerOuverte: (session) => this.partagerOuverte(session),
+    };
+  }
+
+  private messageIdentite(): MessageLien {
+    return { type: 'identite', utilisateur: this.utilisateur, nom: this.identite.nomLocal() };
+  }
+
+  private envoyerIdentite(): void {
+    this.canal?.envoyer(this.messageIdentite());
+  }
+
+  private adresseEcoute(): string {
+    return `${this.ecoute.hote}:${this.portEcoute}`;
+  }
+
+  private envoyerLien(m: MessageLien): boolean {
+    if (!this.canal) return false;
+    this.canal.envoyer(m);
+    return true;
+  }
+
+  // Une session ouverte pour le pair : partagée en écriture avec lui, et envoyée tout de suite.
+  private partagerOuverte(session: string): void {
+    this.partages.ajouter(session, 'session', 'ecriture', this.maintenant());
+    this.envoyerInstantane();
+  }
+
   private envoyerInstantane(): void {
     this.canal?.envoyer(this.synchro.instantane());
     this.notifier();
@@ -294,10 +450,3 @@ export class Duo {
   }
 }
 
-function ok<T>(valeur: T): Resultat<T> {
-  return { ok: true, valeur };
-}
-
-function echec<T = never>(statut: number, raison: string): Resultat<T> {
-  return { ok: false, statut, raison };
-}
