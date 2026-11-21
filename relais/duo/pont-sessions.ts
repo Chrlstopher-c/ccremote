@@ -9,6 +9,7 @@ export interface OuvertureChezProprietaire {
   readonly machine: string;
   readonly projet: Projet;
   readonly message: string;
+  readonly titre?: string;
   readonly modele?: string;
   readonly autonomie: boolean;
   readonly mode: ModeSession;

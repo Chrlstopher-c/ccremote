@@ -98,7 +98,7 @@ export async function recevoirMain(c: Contexte, nom: string, m: LigneMain): Prom
     return conclure(c, requete, {
       ok: false,
       raison: `refusé par ${c.nomLocal()}`,
-      detail: 'refusé : pas d’accord de Chris (refus ou délai)',
+      detail: 'refusée (refus ou délai dépassé)',
     });
   }
   if (!reponse.choix) return conclure(c, requete, { ok: false, raison: 'aucun dossier choisi' });
@@ -108,6 +108,7 @@ export async function recevoirMain(c: Contexte, nom: string, m: LigneMain): Prom
       machine,
       projet: { machine, chemin, nom: nomDossier(chemin) },
       message: textePaquet(m.paquet, nom),
+      titre: `${m.paquet.titre} · reprise de ${nom}`.slice(0, 120),
       autonomie: false,
       mode: 'default',
     }),
@@ -115,7 +116,7 @@ export async function recevoirMain(c: Contexte, nom: string, m: LigneMain): Prom
   if (!r.ok) return conclure(c, requete, { ok: false, raison: r.raison });
   const id = identifiantSession(r.valeur);
   if (!id) return conclure(c, requete, { ok: false, raison: 'session ouverte sans identifiant' });
-  conclure(c, requete, { ok: true, detail: `session neuve : ${id}`, session: id });
+  conclure(c, requete, { ok: true, detail: 'acceptée', session: id });
 }
 
 function nomDossier(chemin: string): string {
