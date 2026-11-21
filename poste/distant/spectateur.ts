@@ -4,6 +4,7 @@
 // gestionnaire du poste n'est pas doublée.
 import type { Logger } from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
+import type { ModeleDate } from '../../commun/modele-date.ts';
 import { type CommandeSession, estLecture } from '../session/lecture-panneau.ts';
 import { type ConfigPoste, enregistrerDistants } from '../config.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
@@ -25,6 +26,8 @@ export interface DependancesSpectateur {
   readonly periodeMs?: number;
   /** Stockage des pièces du fil (images, documents des messages). */
   readonly stockage?: Stockage;
+  /** Modèle réglé sur une session suivie et accepté par claude.ai (voir SessionDistante). */
+  readonly surModele?: (conversation: string, modele: ModeleDate) => void;
 }
 
 // Commandes que claude.ai sait recevoir ; les autres (compacter, fermer, autonomie…) restent refusées.
@@ -172,6 +175,7 @@ export class Spectateur {
       sortie: this.d.sortie,
       publier: () => this.publier(s),
       ...(this.d.stockage ? { stockage: this.d.stockage } : {}),
+      ...(this.d.surModele ? { surModele: this.d.surModele } : {}),
     };
     const s = new SessionDistante(deps, brute);
     this.sessions.set(brute.id, s);

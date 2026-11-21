@@ -19,9 +19,10 @@ import { type EtatTranscript, etatDuTranscript, tourEnCours as tourEnCoursEtat }
 import { statSync } from 'node:fs';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
-import { modeleDeSources, recalerFiche, sourcesDe } from './recalage-fiche.ts';
+import { type SourcesFiche, modeleDeSources, recalerFiche, sourcesDe } from './recalage-fiche.ts';
 import { type FicheDesktop, RACINE_DESKTOP_DEFAUT, fichesDesktop } from './fiche-desktop.ts';
 import type { ModeleDate } from '../../commun/modele-date.ts';
+import type { ModelesChoisis } from './modeles-choisis.ts';
 import { type EntreeCc, dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { SessionPoste } from './session-poste.ts';
@@ -38,6 +39,10 @@ export interface DependancesBalayage {
   readonly supprimees: SessionsSupprimees;
   readonly fichePour: (id: string) => SessionPoste | undefined;
   readonly creer: (p: SessionPersistee) => SessionPoste;
+  /** Modèles choisis par Remote Control, gardés par le poste (relus à chaque passage). */
+  readonly modeles: ModelesChoisis;
+  /** Dossier de la fiche Claude Desktop (par défaut : celui de la machine). */
+  readonly racineDesktop?: string;
 }
 
 export function origineDe(config: ConfigPoste): Origine {
@@ -63,6 +68,7 @@ export class BalayageSessions {
 
   /** Un passage : panes, terminaux et registre sont relus, les sessions nouvelles adoptées, les disparues marquées. */
   async rafraichir(): Promise<void> {
+    this.d.modeles.lire();
     const panes = await tmux.lister();
     const procs = processusClaude([null, ...Object.values(this.d.config.comptes)], this.d.journal);
     const parPid = new Map(procs.map((p) => [p.pid, p]));
@@ -102,7 +108,7 @@ export class BalayageSessions {
   // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.
   private suivreTerminaux(procs: readonly ProcessusClaude[], entrees: readonly EntreeCc[]): void {
     const vivants = new Set(procs.map((p) => p.sessionId));
-    const cartes = fichesDesktop(RACINE_DESKTOP_DEFAUT, this.d.journal);
+    const cartes = fichesDesktop(this.racine(), this.d.journal);
     for (const s of this.d.sessions.values()) {
       if (!s.resume.terminal) continue;
       const vivant = vivants.has(s.resume.claudeSessionId ?? s.resume.id) || vivants.has(s.resume.id);
@@ -138,8 +144,23 @@ export class BalayageSessions {
     return etat ? tourEnCoursEtat(etat, Date.now()) : false;
   }
 
-  // Modèle réel de la conversation : le plus récent du transcript et de la fiche Claude Desktop. Un changement fait
-  // dans Desktop se voit sur la fiche sans attendre le message suivant.
+  /** Un modèle choisi sur une conversation tenue ailleurs : ses fiches de poste le rendent tout de suite. */
+  recalerConversation(conversation: string): void {
+    const cartes = fichesDesktop(this.racine(), this.d.journal);
+    for (const s of this.d.sessions.values()) {
+      const { cwd, claudeSessionId, statut, terminal } = s.resume;
+      if (terminal !== true || statut === 'fermee' || (claudeSessionId ?? s.resume.id) !== conversation) continue;
+      const modele = this.modeleLu(cwd, claudeSessionId, s.persistee.configDir, cartes);
+      s.rattacherTerminal(true, this.tourEnCours(cwd, claudeSessionId, s.persistee.configDir), modele);
+    }
+  }
+
+  private racine(): string {
+    return this.d.racineDesktop ?? RACINE_DESKTOP_DEFAUT;
+  }
+
+  // Modèle réel de la conversation : le plus récent du transcript, de la fiche Claude Desktop et du choix fait par
+  // Remote Control. Un changement fait dans Desktop se voit sur la fiche sans attendre le message suivant.
   private modeleLu(
     cwd: string,
     conversation: string | null,
@@ -148,7 +169,8 @@ export class BalayageSessions {
   ): ModeleDate | null {
     const etat = this.etatLu(cwd, conversation, configDir);
     const desktop = conversation ? (cartes.get(conversation) ?? null) : null;
-    return modeleDeSources({ etat, desktop });
+    const choisi = conversation ? this.d.modeles.pour(conversation) : null;
+    return modeleDeSources({ etat, desktop, choisi });
   }
 
   private etatLu(cwd: string, conversation: string | null, configDir: string | null): EtatTranscript | null {
@@ -183,7 +205,7 @@ export class BalayageSessions {
     const chemin = cheminTranscript(e.cwd, e.id, null);
     const titre = titreDuTranscript(chemin, e.cwd, this.d.journal) ?? titreDe(e.nom, null, e.cwd);
     const fiche = ficheFermee(origineDe(this.d.config), e, titre);
-    const resume = recalerFiche(fiche, sourcesDe(chemin, e.id, this.d.journal));
+    const resume = recalerFiche(fiche, this.sourcesPour(chemin, e.id));
     const session = this.d.creer({
       resume,
       consignes: null,
@@ -204,7 +226,7 @@ export class BalayageSessions {
       (a.transcript ? titreDuTranscript(a.transcript.chemin, dossier, this.d.journal) : null) ??
       titreDe(a.nom, pane?.titre ?? null, dossier);
     const fiche = ficheAdoptee(origineDe(this.d.config), a, dossier, titre, pane);
-    const resume = a.transcript ? recalerFiche(fiche, sourcesDe(a.transcript.chemin, a.id, this.d.journal)) : fiche;
+    const resume = a.transcript ? recalerFiche(fiche, this.sourcesPour(a.transcript.chemin, a.id)) : fiche;
     const session = this.d.creer({
       resume,
       consignes: null,
@@ -217,6 +239,10 @@ export class BalayageSessions {
     if (a.transcript) session.definirTranscript(a.transcript.chemin, HISTORIQUE_ADOPTION, a.transcript.id);
     else if (pane) session.rattacher(pane);
     this.d.journal.info({ tmux: pane?.nom ?? null, id: a.id, terminal: pane === null }, 'session adoptée');
+  }
+
+  private sourcesPour(chemin: string, conversation: string): SourcesFiche {
+    return sourcesDe(chemin, conversation, this.d.journal, this.racine(), this.d.modeles.pour(conversation));
   }
 
   // Le transcript d'une session tout juste lancée n'existe qu'après son premier échange : on le cherche à chaque

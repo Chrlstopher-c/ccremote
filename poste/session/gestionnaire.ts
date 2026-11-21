@@ -3,6 +3,7 @@
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
+import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
 import type { ConfigPoste } from '../config.ts';
@@ -53,6 +54,7 @@ import type { RequeteRelais } from '../presentation/outils.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
 import { BalayageSessions } from './balayage-sessions.ts';
+import { ModelesChoisis } from './modeles-choisis.ts';
 import { TraceRelais, avecTraceRelais } from '../relais-sessions/trace.ts';
 
 export interface Reponse {
@@ -81,6 +83,7 @@ export class GestionnaireSessions {
   private readonly trace: TraceRelais;
   private readonly balayage: BalayageSessions;
   private readonly marques: MarquesRecalage;
+  private readonly modelesChoisis: ModelesChoisis;
   private readonly recalage: RecalageFils;
   /** Lien au relais ouvert : posé par le poste (bin.ts) ; le recalage des fils n'avance que lien ouvert. */
   relaisOuvert: () => boolean = () => false;
@@ -104,6 +107,7 @@ export class GestionnaireSessions {
     this.trace = new TraceRelais(config.donnees, journal);
     this.sortieFil = avecTraceRelais(sortie, this.trace);
     this.distantes = this.creerDistantes();
+    this.modelesChoisis = new ModelesChoisis(join(config.donnees, 'modeles-choisis.json'), journal);
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
       machine: config.machine,
@@ -133,6 +137,7 @@ export class GestionnaireSessions {
       sortie: this.sortieFil,
       locales: () => [...this.sessions.values()].map((s) => s.resume),
       stockage: this.stockage,
+      surModele: (conversation, modele) => this.enregistrerModeleChoisi(conversation, modele),
     });
   }
 
@@ -159,6 +164,7 @@ export class GestionnaireSessions {
       supprimees: this.supprimees,
       fichePour: (id) => this.fichePour(id),
       creer: (p) => this.creer(p),
+      modeles: this.modelesChoisis,
     });
   }
 
@@ -170,6 +176,12 @@ export class GestionnaireSessions {
       recalage: (id, archiver, lignes) => this.sortie.recalage?.(id, archiver, lignes),
       historique: (id, evenements) => this.sortieFil.historique?.(id, evenements),
     });
+  }
+
+  // Modèle réglé par Remote Control : gardé par le poste, puis rendu tout de suite aux fiches de la conversation.
+  private enregistrerModeleChoisi(conversation: string, modele: ModeleDate): void {
+    this.modelesChoisis.ecrire(conversation, modele);
+    this.balayage.recalerConversation(conversation);
   }
 
   /** Lien au relais (r)ouvert : les fils des sessions dont le transcript a changé depuis leur recalage sont relus. */

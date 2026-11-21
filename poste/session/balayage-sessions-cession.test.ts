@@ -7,6 +7,7 @@ import { BalayageSessions } from './balayage-sessions.ts';
 import { journal, nouvelleSession } from './faux-sdk.ts';
 import type { ProcessusClaude } from './processus.ts';
 import type { SessionPoste } from './session-poste.ts';
+import { ModelesChoisis } from './modeles-choisis.ts';
 import { SessionsSupprimees } from './suppression.ts';
 
 const CONFIG: ConfigPoste = {
@@ -41,6 +42,7 @@ function balayageAvec(session: SessionPoste): BalayageSessions {
     creer: () => {
       throw new Error('creer non attendu dans ce test');
     },
+    modeles: new ModelesChoisis('donnees-test-inexistantes/modeles-choisis.json', journal),
   });
 }
 

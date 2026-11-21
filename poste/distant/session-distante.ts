@@ -58,6 +58,8 @@ export interface DependancesDistante {
   readonly publier: () => void;
   /** Stockage des pièces du fil (images, documents) ; sans lui, elles deviennent des pastilles. */
   readonly stockage?: Stockage;
+  /** Modèle réglé par Remote Control et accepté par claude.ai : le poste le garde pour la conversation. */
+  readonly surModele?: (conversation: string, modele: ModeleDate) => void;
 }
 
 type EchecEnvoi = Extract<ResultatApi<null>, { ok: false }>;
@@ -393,8 +395,17 @@ export class SessionDistante implements SessionPoste {
   async reglerSession(r: Reglage): Promise<string | null> {
     const requete = requeteReglage(r);
     if (!requete) return REGLAGE_REFUSE;
-    const miseAJour = r.kind === 'modele' ? { modele: r.modele, modeleLe: new Date().toISOString() } : champsReglage(r);
-    return this.controle(requete, miseAJour);
+    const le = new Date().toISOString();
+    const miseAJour = r.kind === 'modele' ? { modele: r.modele, modeleLe: le } : champsReglage(r);
+    const erreur = await this.controle(requete, miseAJour);
+    if (!erreur && r.kind === 'modele') this.annoncerModele({ modele: r.modele, le });
+    return erreur;
+  }
+
+  // Le choix accepté est gardé pour la conversation qu'il tient (inconnue : rien à garder).
+  private annoncerModele(choix: ModeleDate): void {
+    if (this.conversationVue !== null) this.d.surModele?.(this.conversationVue, choix);
+    else this.d.journal.warn({ session: this.resume.id }, 'modèle réglé sans conversation connue : non gardé');
   }
 
   async repondre(r: ReponseDialogue): Promise<string | null> {

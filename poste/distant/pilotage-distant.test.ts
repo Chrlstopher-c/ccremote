@@ -6,6 +6,7 @@ import pino from 'pino';
 import type { Logger } from 'pino';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { EvenementHorodate } from '../session/historique.ts';
+import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { SortieSession } from '../session/session-poste.ts';
 import { demarrerFauxApi, type FauxApi, evenementApi, sessionApi, tourApi } from './faux-claude-ai.ts';
 import { type SessionBrute, lireSession } from './donnees.ts';
@@ -345,5 +346,44 @@ describe('modèle réel d’une session claude.ai', () => {
     expect(await s.reglerSession({ kind: 'modele', modele: 'claude-opus-x' })).not.toBeNull();
     api.reponsePost = null;
     expect(s.resume.modele).toBe(avant);
+  });
+});
+
+describe('modèle réglé sur une jumelle Remote Control', () => {
+  const CONV_JUMELLE = 'c0000000-0000-4000-8000-0000000000bb';
+
+  test('la jumelle transmet le choix avec sa conversation, et seulement s’il est accepté', async () => {
+    const choix: { conversation: string; modele: ModeleDate }[] = [];
+    const contexte = { machine: 'tour', compte: 'principal', fenetreContexte: 1_000_000 };
+    const sortie: SortieSession = {
+      evenement: () => undefined,
+      historique: () => undefined,
+      resume: () => undefined,
+    };
+    const s = new SessionDistante(
+      {
+        contexte,
+        configDir: dossier,
+        journal,
+        sortie,
+        publier: () => (publications += 1),
+        surModele: (conversation, modele) => void choix.push({ conversation, modele }),
+      },
+      bruteDe(),
+    );
+    await fil(s, [
+      evenementApi(
+        'ev-init',
+        { type: 'system', subtype: 'init', session_id: CONV_JUMELLE, model: 'claude-fable-5-2' },
+        '2026-11-20T11:05:00.000Z',
+      ),
+    ]);
+    expect(await s.reglerSession({ kind: 'modele', modele: 'claude-opus-5-5' })).toBeNull();
+    const modele = { modele: 'claude-opus-5-5', le: expect.any(String) };
+    expect(choix).toEqual([{ conversation: CONV_JUMELLE, modele }]);
+    api.reponsePost = { statut: 500, corps: '{"erreur":"panne"}' };
+    expect(await s.reglerSession({ kind: 'modele', modele: 'claude-sonnet-5-5' })).not.toBeNull();
+    api.reponsePost = null;
+    expect(choix).toHaveLength(1);
   });
 });

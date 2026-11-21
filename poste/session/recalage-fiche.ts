@@ -13,14 +13,16 @@ import { type FicheDesktop, RACINE_DESKTOP_DEFAUT, fichesDesktop } from './fiche
 export interface SourcesFiche {
   readonly etat: EtatTranscript | null;
   readonly desktop: FicheDesktop | null;
+  /** Modèle choisi par Remote Control sur cette conversation (gardé par le poste), s'il y en a un. */
+  readonly choisi?: ModeleDate | null;
 }
 
-/** Le modèle réel d'une conversation : le plus récent du transcript et de la fiche Desktop (ou null si aucun). */
+/** Le modèle réel d'une conversation : le plus récent du transcript, de la fiche Desktop et du choix (ou null). */
 export function modeleDeSources(sources: SourcesFiche): ModeleDate | null {
-  const { etat, desktop } = sources;
+  const { etat, desktop, choisi } = sources;
   const depuisEtat = etat?.modele ? { modele: etat.modele, le: etat.modeleLe } : null;
   const depuisDesktop = desktop?.modele ? { modele: desktop.modele, le: desktop.modeleLe } : null;
-  return plusRecentOpt(depuisEtat, depuisDesktop);
+  return plusRecentOpt(plusRecentOpt(depuisEtat, depuisDesktop), choisi ?? null);
 }
 
 /** La fiche avec la vérité du transcript (activité, modèle, mode, contexte) et l'archivage Desktop lu. */
@@ -57,9 +59,11 @@ export function sourcesDe(
   conversation: string,
   journal: Logger,
   racineDesktop: string = RACINE_DESKTOP_DEFAUT,
+  choisi: ModeleDate | null = null,
 ): SourcesFiche {
   return {
     etat: etatDuTranscript(chemin, journal),
     desktop: fichesDesktop(racineDesktop, journal).get(conversation) ?? null,
+    choisi,
   };
 }

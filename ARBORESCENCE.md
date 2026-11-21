@@ -376,6 +376,8 @@ poste/session/gestionnaire.ts                        les sessions Claude du post
 poste/session/lanceur.test.ts                        tests de lanceur.ts
 poste/session/lanceur.ts                             la ligne de commande `claude` d'une session pilotée par ccremote (lan…
 poste/session/mcp-rythme.ts                          serveur MCP stdio des trois outils de rythme d'une session pilotée (é…
+poste/session/modeles-choisis.ts                        modèle choisi par Remote Control sur une conversation tenue ailleurs, gardé dans modeles-choisis.json
+poste/session/modeles-choisis.test.ts                   tests de modeles-choisis.ts (persistance, source datée, fiche recalculée)
 poste/session/nuit.test.ts                           politique de réveil du mode nuit, lecture de l'état, fin réussie
 poste/session/nuit.ts                                mode nuit vu du poste : état écrit par la config Claude, politique de réveil, bascule
 poste/session/options-sdk.test.ts                    tests de options-sdk.ts
