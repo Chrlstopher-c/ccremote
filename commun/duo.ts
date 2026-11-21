@@ -77,6 +77,7 @@ export const DemandeDuo = z.object({
   de: z.string(), // nom du pair
   le: z.string(),
   detail: z.string(), // début du message, ou dossier demandé
+  session: z.string().optional(), // session visée, pour une demande d'écriture : l'appli y affiche la carte
 });
 export type DemandeDuo = z.infer<typeof DemandeDuo>;
 

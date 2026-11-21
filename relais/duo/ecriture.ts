@@ -45,7 +45,7 @@ export async function recevoirEcriture(c: Contexte, nom: string, m: LigneEcrire)
   const refus = refusEcriture(c, m.session);
   if (refus) return conclure(c, requete, { ok: false, raison: refus });
   if (sansPermissions(c, m.session) && c.droits.lire().ecrireSansPermissions === 'demander') {
-    const reponse = await c.demandes.demander('message', nom, extrait(m.texte));
+    const reponse = await c.demandes.demander('message', nom, extrait(m.texte), m.session);
     if (!reponse.accord) {
       return conclure(c, requete, {
         ok: false,
