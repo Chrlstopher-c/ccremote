@@ -28,6 +28,8 @@ export interface ConfigPoste {
   readonly distants: string[]; // mutée en place à chaque bascule (écrite dans le fichier par enregistrerDistants)
   readonly donnees: string;
   readonly fenetreContexte: number;
+  // Moteur de session factice (bancs d'essai), lu une fois au démarrage : voir sdkFacticeDemande.
+  readonly sdkFactice?: boolean;
   // API du relais pour les outils de machines (session SDK) : URL et jeton claude-code (environnement).
   readonly api?: { readonly url: string; readonly jeton: string };
 }
@@ -52,7 +54,13 @@ export function chargerConfig(): ConfigPoste {
     comptes: Object.fromEntries(Object.entries(brut.comptes).map(([k, v]) => [k, v === null ? null : developper(v)])),
     donnees: developper(brut.donnees ?? '~/.local/share/ccremote/poste'),
     api: apiDepuisEnvironnement(),
+    sdkFactice: sdkFacticeDemande(process.env),
   };
+}
+
+/** Vrai seulement si le poste a été lancé avec LANTERNE_SDK_FACTICE=1 : aucune requête à Claude. */
+export function sdkFacticeDemande(env: Readonly<Record<string, string | undefined>>): boolean {
+  return env['LANTERNE_SDK_FACTICE'] === '1';
 }
 
 function apiDepuisEnvironnement(): { url: string; jeton: string } | undefined {

@@ -28,7 +28,8 @@ import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSessionId } from './styles-session.ts';
-import { SessionSdk, trouverClaude } from './session-sdk.ts';
+import { SessionSdk, trouverClaude, type EnvironnementSdk } from './session-sdk.ts';
+import { requeteFactice } from './requete-factice.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
 import { titreRelu } from './recalage-fiche.ts';
 import { MarquesRecalage, RecalageFils, recalerAuChargement } from './recalage-demarrage.ts';
@@ -85,6 +86,7 @@ export class GestionnaireSessions {
   private readonly marques: MarquesRecalage;
   private readonly modelesChoisis: ModelesChoisis;
   private readonly recalage: RecalageFils;
+  private readonly moteurFactice: Pick<EnvironnementSdk, 'requete'>; // bancs d'essai : LANTERNE_SDK_FACTICE=1 seulement
   /** Lien au relais ouvert : posé par le poste (bin.ts) ; le recalage des fils n'avance que lien ouvert. */
   relaisOuvert: () => boolean = () => false;
   /** Lien au relais pour les outils de modules des sessions SDK : posé par bin.ts. */
@@ -118,6 +120,7 @@ export class GestionnaireSessions {
     this.marques = new MarquesRecalage(join(config.donnees, 'recalage.json'), journal);
     this.balayage = this.creerBalayage();
     this.recalage = this.creerRecalage();
+    this.moteurFactice = requeteFactice(config.sdkFactice === true, journal);
   }
 
   private creerDecouvertes(): IndexDecouvertes {
@@ -467,7 +470,7 @@ export class GestionnaireSessions {
         if (p.resume.compte !== null) this.surLimite?.(p.resume.compte, l);
       };
       const env = { journal: this.journal, sortie, executable: trouverClaude(), socket: this.socket, limite };
-      return new SessionSdk(p, { ...env, presentation, tours });
+      return new SessionSdk(p, { ...env, presentation, tours, ...this.moteurFactice });
     }
     return new SessionTmux(p, { socket: this.socket, journal: this.journal, sortie });
   }
