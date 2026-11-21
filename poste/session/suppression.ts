@@ -37,6 +37,21 @@ export function supprimerTranscript(chemin: string, sessionId: string, journal: 
   return retires;
 }
 
+/** Une fiche que le poste ne suit plus (fermée depuis longtemps, fantôme du relais) est tout de même supprimable :
+ * Chris l'a demandée explicitement. Refusé si un processus Claude vivant tient encore cette conversation. */
+export function supprimerNonSuivie(
+  id: string,
+  configDirs: readonly (string | null)[],
+  tenues: ReadonlySet<string>,
+  journal: Logger,
+): { readonly ok: true } | { readonly ok: false; readonly erreur: string } {
+  if (tenues.has(id)) return { ok: false, erreur: 'conversation ouverte ailleurs : la fermer avant de la supprimer' };
+  const transcripts = transcriptsDeLaSession(id, configDirs);
+  for (const chemin of transcripts) supprimerTranscript(chemin, id, journal);
+  journal.info({ session: id, transcripts: transcripts.length }, 'fiche non suivie supprimée à la demande');
+  return { ok: true };
+}
+
 // Identifiants de sessions supprimées par Chris, gardés sur le poste (fichier propre au poste, écriture atomique).
 export class SessionsSupprimees {
   private readonly fichier: string;

@@ -3,7 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
-import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
+import {
+  SessionsSupprimees,
+  supprimerNonSuivie,
+  supprimerTranscript,
+  transcriptsDeLaSession,
+} from './suppression.ts';
 
 const journal = pino({ enabled: false });
 const ID = 'a1b2c3d4-0000-4000-8000-000000000001';
@@ -83,5 +88,24 @@ describe('sessions supprimées retenues', () => {
     mkdirSync(dossier, { recursive: true });
     writeFileSync(join(dossier, 'supprimees.json'), '{pas du json');
     expect(new SessionsSupprimees(dossier).has(ID)).toBe(false);
+  });
+});
+
+describe('suppression d’une fiche que le poste ne suit plus', () => {
+  test('retire le transcript et rend ok', () => {
+    const projets = join(racine, 'projects', '-essai');
+    mkdirSync(projets, { recursive: true });
+    const id = 'aaaaaaaa-1111-2222-3333-444444444444';
+    writeFileSync(join(projets, `${id}.jsonl`), '{}\n');
+    expect(supprimerNonSuivie(id, [racine], new Set(), journal)).toEqual({ ok: true });
+    expect(existsSync(join(projets, `${id}.jsonl`))).toBe(false);
+  });
+
+  test('refuse quand un processus tient encore la conversation', () => {
+    const id = 'bbbbbbbb-1111-2222-3333-444444444444';
+    expect(supprimerNonSuivie(id, [racine], new Set([id]), journal)).toEqual({
+      ok: false,
+      erreur: 'conversation ouverte ailleurs : la fermer avant de la supprimer',
+    });
   });
 });

@@ -35,7 +35,12 @@ import { ImportationSessions } from './importation-sessions.ts';
 import { ouvrirSession } from './ouverture-session.ts';
 import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import { RACINE_DESKTOP_DEFAUT, fichesDesktopAnnoncees } from './fiche-desktop.ts';
-import { SessionsSupprimees, supprimerTranscript, transcriptsDeLaSession } from './suppression.ts';
+import {
+  SessionsSupprimees,
+  supprimerNonSuivie,
+  supprimerTranscript,
+  transcriptsDeLaSession,
+} from './suppression.ts';
 import { lireFichierSession } from '../presentation/lecture.ts';
 import { estCommandeArtefact, executerArtefacts } from '../presentation/commande-artefacts.ts';
 import { estCommandeModifications, ModificationsSessions } from '../modifications/commande-modifications.ts';
@@ -311,7 +316,7 @@ export class GestionnaireSessions {
   async supprimer(id: string): Promise<Reponse> {
     if (this.distantes.session(id)) return { ok: false, erreur: 'session claude.ai : elle se gère depuis claude.ai' };
     const s = this.sessions.get(id);
-    if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
+    if (!s) return this.supprimerNonSuivie(id);
     if (s instanceof SessionSdk && s.vivante) {
       const erreur = await s.fermer();
       if (erreur) return { ok: false, erreur };
@@ -339,6 +344,22 @@ export class GestionnaireSessions {
   }
 
   // Les fichiers présentés par la session partent avec elle ; un échec est journalisé, la suppression tient.
+  // Fiche que le poste ne suit plus (fantôme du relais) : supprimable aussi, sauf si un processus la tient encore.
+  private supprimerNonSuivie(id: string): Reponse {
+    const tenues = conversationsTenuesAilleurs(Object.values(this.config.comptes), this.journal);
+    try {
+      const r = supprimerNonSuivie(id, this.configDirs(), tenues, this.journal);
+      if (!r.ok) return r;
+    } catch (erreur) {
+      this.journal.error({ err: erreur, session: id }, 'suppression impossible');
+      return { ok: false, erreur: `suppression impossible : ${String(erreur)}` };
+    }
+    this.supprimees.ajouter(id);
+    this.modifications.oublier(id);
+    this.supprimerFichiers(id);
+    return { ok: true, donnees: null };
+  }
+
   private supprimerFichiers(id: string): void {
     try {
       this.stockage.supprimer(id);
