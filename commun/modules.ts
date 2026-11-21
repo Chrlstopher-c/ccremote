@@ -78,6 +78,16 @@ export function cheminModuleValide(chemin: string): boolean {
   return chemin.split('/').every((segment) => segment !== '' && segment !== '.' && segment !== '..');
 }
 
+// Outils d'agent (v1.1) : ce que le relais rend au poste pour un outil de module, comme la route HTTP correspondante.
+export const QuoiRelais = z.enum(['modules_lister', 'module_appeler']);
+export type QuoiRelais = z.infer<typeof QuoiRelais>;
+export const ReponseRelais = z.object({
+  ok: z.boolean(),
+  donnees: z.unknown().optional(),
+  erreur: z.string().max(2000).optional(),
+});
+export type ReponseRelais = z.infer<typeof ReponseRelais>;
+
 export const messagesModules = [
   z.object({
     kind: z.literal('module'),
@@ -93,6 +103,13 @@ export const messagesModules = [
     id: IdModule,
     etat: EtatServeur,
     erreur: z.string().min(1).max(2000).optional(),
+  }),
+  // Outils d'agent (v1.1) côté poste : le poste demande au relais ce que fait la route HTTP correspondante.
+  z.object({
+    kind: z.literal('requete_relais'),
+    id: z.string().min(1).max(64),
+    quoi: QuoiRelais,
+    args: z.unknown().optional(),
   }),
 ] as const;
 
@@ -130,7 +147,10 @@ export function depasseCorpsServeur(corps: string | undefined, encodage: Encodag
 // Relais → poste : la requête part au serveur du module ; la réponse revient en `donnees` (ReponseServeur).
 export const commandesModules = [
   z.object({ kind: z.literal('module_requete'), id: z.string(), module: IdModule, requete: RequeteServeur }),
+  // Réponse du relais à une `requete_relais` du même id : `donnees` si ok, sinon `erreur`.
+  ReponseRelais.extend({ kind: z.literal('reponse_relais'), id: z.string().min(1).max(64) }),
 ];
+
 
 // Appels d'outils (v1.1) : un agent (poste) demande au relais, le relais relaie à une appli, l'appli répond.
 export const DemandeAppelModule = z.object({

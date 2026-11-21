@@ -10,6 +10,7 @@ import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { AccesVue, EvenementDate, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
+import { RequetesPostes } from './requetes-postes.ts';
 import { decouverteParIdentifiant } from './decouvertes-postes.ts';
 import { fantomesARetirer } from './fantomes.ts';
 import { DesktopDesPostes } from './desktop-postes.ts';
@@ -47,6 +48,7 @@ const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30
 
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
+  readonly requetes = new RequetesPostes(); // requêtes d'outils de modules, traitement posé par bin.ts
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
   private surLimiteCompte: ((machine: string, cle: string, limite: LimiteSdk) => void) | null = null;
 
@@ -195,6 +197,7 @@ export class Postes {
 
   private traiter(machine: string, m: MessagePoste): void {
     if (m.kind === 'reponse') return this.enAttente.get(m.id)?.(m);
+    if (m.kind === 'requete_relais') return void this.requetes.recevoir(this.connectes.get(machine), m, this.journal);
     if (m.kind === 'terminal_sortie' || m.kind === 'terminal_fin') return this.terminaux?.duPoste(machine, m);
     if (m.kind === 'flux') return this.flux(machine, m);
     if (m.kind === 'bonjour') return this.bonjour(machine, m);

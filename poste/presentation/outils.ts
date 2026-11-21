@@ -1,8 +1,12 @@
 // Responsabilité : le contexte commun des outils de présentation (session, dossier, racines, stockage, émission) et leur
 // garde : une erreur devient un refus lisible par l'agent et par Chris dans le fil, jamais une exception qui tombe.
 import type { Logger } from 'pino';
+import type { QuoiRelais, ReponseRelais } from '../../commun/modules.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Stockage } from './stockage.ts';
+
+/** Lien au relais pour les outils de modules (sans URL ni jeton) : la réponse revient à l'id de la requête. */
+export type RequeteRelais = (quoi: QuoiRelais, args: unknown) => Promise<ReponseRelais>;
 
 export interface ContexteOutils {
   readonly sessionId: string;
@@ -13,6 +17,8 @@ export interface ContexteOutils {
   readonly journal: Logger;
   // Relais pour les outils de machines (absent : pas d'outils `machines`).
   readonly api?: { readonly url: string; readonly jeton: string };
+  // Lien au relais pour les outils `modules` (absent : refus lisible).
+  readonly relais?: RequeteRelais;
 }
 
 export interface Resultat {

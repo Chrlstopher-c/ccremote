@@ -13,6 +13,7 @@ import { type CommandeAppareil, estAppareil } from './fichiers/appareil.ts';
 import { executerFichiers } from './fichiers/explorateur.ts';
 import { SondeMachine } from './parc/etat-machine.ts';
 import { LienRelais } from './parc/lien-relais.ts';
+import { RequetesRelais } from './parc/requetes-relais.ts';
 import { decouvrirProjets } from './projets/decouverte.ts';
 import { GestionnaireSessions, type Reponse } from './session/gestionnaire.ts';
 import { servirLocal } from './session/serveur-local.ts';
@@ -228,7 +229,7 @@ const contexteParite: ContextePariteposte = {
   journal: journal.child({ domaine: 'parite' }),
 };
 
-async function executer(c: CommandeRelais): Promise<Reponse> {
+async function executer(c: Exclude<CommandeRelais, { kind: 'reponse_relais' }>): Promise<Reponse> {
   if (estAppareil(c)) return executerAppareil(c);
   if (estEntretien(c)) return executerEntretien(c, contexteEntretien);
   if (estReste(c)) return executerReste(c, contexteReste);
@@ -257,6 +258,10 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
 }
 
 async function surCommande(c: CommandeRelais): Promise<MessagePoste | null> {
+  if (c.kind === 'reponse_relais') {
+    requetes.recevoir(c);
+    return null;
+  }
   try {
     const r = await executer(c);
     if (SANS_REPONSE.has(c.kind)) return null;
@@ -272,6 +277,7 @@ sessions.demarrer();
 minuterieTaches.demarrer();
 dicteeService.demarrerSurveillance();
 comptes.demarrer();
+const requetes = new RequetesRelais({ envoyer, estOuvert: () => lien?.estOuvert === true });
 lien = new LienRelais({
   url: config.relais,
   machine: config.machine,
@@ -285,6 +291,7 @@ lien = new LienRelais({
   },
 });
 sessions.relaisOuvert = () => lien?.estOuvert === true;
+sessions.requeteRelais = (quoi, args) => requetes.requete(quoi, args);
 lien.demarrer();
 new SurveillanceModules({ dossier: DOSSIER_MODULES_SOURCE, envoyer, journal, serveurs }).demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);

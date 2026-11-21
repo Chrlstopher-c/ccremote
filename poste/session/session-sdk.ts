@@ -19,6 +19,7 @@ import type { ConnecteurSession, ContexteSession, DetailTacheSession, TacheSessi
 import type { Evenement, ReponseDialogue, ResumeSession, StatutSession } from '../../commun/session.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import type { PiecesPreparees } from '../presentation/pieces.ts';
+import type { RequeteRelais } from '../presentation/outils.ts';
 import { PresentationSession } from '../presentation/session-presentation.ts';
 import { crochetEdition } from '../modifications/crochet-edition.ts';
 import type { ToursSession } from '../modifications/tours.ts';
@@ -109,6 +110,7 @@ export interface EnvironnementSdk {
     readonly stockage: Stockage;
     readonly racines: readonly string[];
     readonly api?: { readonly url: string; readonly jeton: string };
+    readonly relais?: RequeteRelais; // outils de modules : le lien au relais
   }; // sans lui, pas d'outils `lanterne`
   readonly traduction?: TraductionSdk;
   readonly env?: Record<string, string | undefined>;
@@ -193,6 +195,7 @@ export class SessionSdk implements SessionPoste {
           emettre: (evt) => this.emettre(evt),
           journal: env.journal,
           ...(pres.api ? { api: pres.api } : {}),
+          ...(pres.relais ? { relais: pres.relais } : {}),
         })
       : null;
     this.suiviNuit = new SuiviNuit({

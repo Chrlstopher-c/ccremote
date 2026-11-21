@@ -24,6 +24,7 @@ import { indexSpa, servirStatique } from './clients/statique.ts';
 import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
 import { AppelsModules } from './modules/appels.ts';
+import { traiterRequeteRelais } from './modules/api-appels.ts';
 import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
@@ -134,6 +135,7 @@ if (tunnels) {
 // Entretien : le dernier réseau de chaque machine (réveil), les gestes de l'entretien et le réveil délégué.
 const reseaux = new ReseauxConnus(join(dirname(config.base), 'reveil.json'), journal.child({ domaine: 'reveil' }));
 postes.reseauRecu = (id, reseau) => reseaux.retenir(id, reseau);
+postes.requetes.surRequete = (quoi, args) => traiterRequeteRelais(appelsModules, quoi, args);
 const reveil = new Reveil({
   wol: config.wol,
   diffusionWol: config.diffusionWol,

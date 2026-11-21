@@ -41,6 +41,7 @@ import { estCommandeArtefact, executerArtefacts } from '../presentation/commande
 import { estCommandeModifications, ModificationsSessions } from '../modifications/commande-modifications.ts';
 import { estFichiersSession, executerFichiersSession, type CommandeFichiersSession } from '../fichiers/session.ts';
 import { Stockage } from '../presentation/stockage.ts';
+import type { RequeteRelais } from '../presentation/outils.ts';
 import { UsageComptes } from './usage-compte.ts';
 import { Spectateur } from '../distant/spectateur.ts';
 import { BalayageSessions } from './balayage-sessions.ts';
@@ -75,6 +76,8 @@ export class GestionnaireSessions {
   private readonly recalage: RecalageFils;
   /** Lien au relais ouvert : posé par le poste (bin.ts) ; le recalage des fils n'avance que lien ouvert. */
   relaisOuvert: () => boolean = () => false;
+  /** Lien au relais pour les outils de modules des sessions SDK : posé par bin.ts. */
+  requeteRelais: RequeteRelais = () => Promise.resolve({ ok: false, erreur: 'lien au relais non branché' });
   private readonly sortieFil: SortieSession; // la sortie, dont l'historique repasse par la trace de relais
   // Parent d'une copie dupliquée avant que son transcript soit découvert : posé à sa création (voir creer).
   private readonly parentsAttendus = new Map<string, string>();
@@ -462,7 +465,8 @@ export class GestionnaireSessions {
     };
     // Une session fermée se reprend par le SDK, qu'elle ait été ouverte par le TUI ou non.
     if (p.resume.moteur === 'sdk' || p.resume.statut === 'fermee') {
-      const presentation = { stockage: this.stockage, racines: this.config.racines, api: this.config.api };
+      const relais: RequeteRelais = (quoi, args) => this.requeteRelais(quoi, args);
+      const presentation = { stockage: this.stockage, racines: this.config.racines, api: this.config.api, relais };
       const tours = this.modifications.toursDe(p.resume.id, p.resume.cwd);
       const limite = (l: LimiteSdk): void => {
         if (p.resume.compte !== null) this.surLimite?.(p.resume.compte, l);

@@ -51,8 +51,8 @@ function enResultat(r: Resultat): ResultatOutil {
   return { content: [{ type: 'text', text: r.texte }], ...(r.erreur ? { isError: true } : {}) };
 }
 
-/** Les outils `modules` : l’intégration se fait toujours ; lister et appeler passent par le relais (API et jeton). */
-function outilsModules(c: ContexteOutils) {
+/** Les outils `modules` : toujours exposés ; lister et appeler passent par le lien au relais, afficher reste local. */
+export function outilsModules(c: ContexteOutils) {
   const afficher = tool(
     'module_afficher',
     DESCRIPTION_MODULE_AFFICHER,
@@ -64,12 +64,8 @@ function outilsModules(c: ContexteOutils) {
     },
     async (a) => enResultat(modules.afficherModule(c, a)),
   );
-  if (!c.api) return [afficher];
-  const api = c.api;
   return [
-    tool('modules_lister', DESCRIPTION_MODULES_LISTER, {}, async () =>
-      enResultat(await modules.listerModules(api, c.journal)),
-    ),
+    tool('modules_lister', DESCRIPTION_MODULES_LISTER, {}, async () => enResultat(await modules.listerModules(c))),
     tool(
       'module_appeler',
       DESCRIPTION_MODULE_APPELER,
@@ -78,7 +74,7 @@ function outilsModules(c: ContexteOutils) {
         outil: z.string().regex(REGEX_NOM_OUTIL),
         arguments: DonneesModule.optional(),
       },
-      async (a) => enResultat(await modules.appelerModule(api, c.journal, c.sessionId, a)),
+      async (a) => enResultat(await modules.appelerModule(c, a)),
     ),
     afficher,
   ];

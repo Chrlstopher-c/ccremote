@@ -1,49 +1,20 @@
-// Responsabilité : tests des outils `modules` côté poste — lister et appeler passent par un relais factice (HTTP),
-// afficher n'émet qu'un événement `integration` exact et refuse les données de plus de 64 Ko.
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+// Responsabilité : tests des outils `modules` côté poste — lister et appeler passent par le lien au relais (requête
+// relayée, pas HTTP), restent exposés même sans API configurée, afficher n'émet qu'un événement `integration` exact.
+import { describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
 import type { Evenement } from '../../commun/session.ts';
+import type { ReponseRelais } from '../../commun/modules.ts';
 import { afficherModule, appelerModule, listerModules } from './modules-outils.ts';
-import type { ContexteOutils } from './outils.ts';
+import type { ContexteOutils, RequeteRelais } from './outils.ts';
+import { outilsModules } from './serveur.ts';
 import { Stockage } from './stockage.ts';
 
 const journal = pino({ level: 'silent' });
-const requetes: { methode: string; chemin: string; corps: unknown }[] = [];
-let serveur: ReturnType<typeof Bun.serve>;
-let api: { url: string; jeton: string };
 
-beforeAll(() => {
-  serveur = Bun.serve({
-    port: 0,
-    async fetch(req) {
-      const u = new URL(req.url);
-      const corps: unknown = req.method === 'POST' ? await req.json() : null;
-      requetes.push({ methode: req.method, chemin: u.pathname, corps });
-      if (req.headers.get('authorization') !== 'Bearer jeton-test') {
-        return Response.json({ erreur: 'refusé' }, { status: 401 });
-      }
-      if (u.pathname === '/api/modules-outils') {
-        return Response.json([{ module: 'carte', nom: 'Carte', outils: [{ nom: 'centrer' }], integrations: [] }]);
-      }
-      if (u.pathname === '/api/modules-appels') {
-        const d = corps as { module: string };
-        if (d.module === 'absent') return Response.json({ erreur: 'aucune appli' }, { status: 409 });
-        return Response.json({ resultat: { centre: 'ok', recu: corps } });
-      }
-      return Response.json({ erreur: 'route inconnue' }, { status: 404 });
-    },
-  });
-  api = { url: `http://127.0.0.1:${serveur.port}`, jeton: 'jeton-test' };
-});
-
-afterAll(() => {
-  serveur.stop(true);
-});
-
-function banc(): { c: ContexteOutils; evenements: Evenement[] } {
+function banc(relais?: RequeteRelais): { c: ContexteOutils; evenements: Evenement[] } {
   const racine = mkdtempSync(join(tmpdir(), 'modules-outils-'));
   const evenements: Evenement[] = [];
   const c: ContexteOutils = {
@@ -53,37 +24,81 @@ function banc(): { c: ContexteOutils; evenements: Evenement[] } {
     stockage: new Stockage(join(racine, 'donnees')),
     emettre: (evt) => evenements.push(evt),
     journal,
+    ...(relais ? { relais } : {}),
   };
   return { c, evenements };
 }
 
+/** Un lien au relais factice : rend `reponse` et range ce qui a été demandé dans `demandes`. */
+function lien(reponse: ReponseRelais, demandes: { quoi: string; args: unknown }[] = []): RequeteRelais {
+  return async (quoi, args) => {
+    demandes.push({ quoi, args });
+    return reponse;
+  };
+}
+
+describe('outils modules sans API configurée', () => {
+  test('modules_lister, module_appeler et module_afficher sont toujours exposés', () => {
+    const { c } = banc();
+    expect(outilsModules(c).map((t) => t.name)).toEqual(['modules_lister', 'module_appeler', 'module_afficher']);
+  });
+});
+
 describe('modules_lister', () => {
-  test('rend les modules du relais, avec leurs outils', async () => {
-    const r = await listerModules(api, journal);
+  test('rend les modules reçus du relais par le lien, avec leurs outils', async () => {
+    const demandes: { quoi: string; args: unknown }[] = [];
+    const modules = [{ module: 'carte', nom: 'Carte', outils: [{ nom: 'centrer' }], integrations: [] }];
+    const r = await listerModules(banc(lien({ ok: true, donnees: modules }, demandes)).c);
     expect(r.erreur).toBe(false);
-    expect(JSON.parse(r.texte)).toEqual({
-      modules: [{ module: 'carte', nom: 'Carte', outils: [{ nom: 'centrer' }], integrations: [] }],
-    });
+    expect(JSON.parse(r.texte)).toEqual({ modules });
+    expect(demandes).toEqual([{ quoi: 'modules_lister', args: {} }]);
   });
 
-  test('relais injoignable : refus lisible, pas d’exception', async () => {
-    const r = await listerModules({ url: 'http://127.0.0.1:1', jeton: 'jeton-test' }, journal);
-    expect(r).toMatchObject({ erreur: true, texte: expect.stringContaining('relais injoignable') });
+  test('erreur du relais : rendue à l’agent', async () => {
+    const r = await listerModules(banc(lien({ ok: false, erreur: 'panne' })).c);
+    expect(r).toEqual({ texte: 'Échec : panne', erreur: true });
+  });
+
+  test('pas de lien au relais : refus lisible, pas d’exception', async () => {
+    const r = await listerModules(banc().c);
+    expect(r).toMatchObject({ erreur: true, texte: expect.stringContaining('lien au relais') });
+  });
+
+  test('lien qui lève : refus lisible, pas d’exception', async () => {
+    const relais: RequeteRelais = () => Promise.reject(new Error('boum'));
+    const r = await listerModules(banc(relais).c);
+    expect(r).toMatchObject({ erreur: true, texte: expect.stringContaining('requête au relais en échec') });
   });
 });
 
 describe('module_appeler', () => {
   test('transmet le module, l’outil, les arguments et la session ; rend le résultat', async () => {
-    const r = await appelerModule(api, journal, 'sess-1', { module: 'carte', outil: 'centrer', arguments: { lat: 1 } });
+    const demandes: { quoi: string; args: unknown }[] = [];
+    const reponse: ReponseRelais = { ok: true, donnees: { resultat: { centre: 'ok' } } };
+    const r = await appelerModule(banc(lien(reponse, demandes)).c, {
+      module: 'carte',
+      outil: 'centrer',
+      arguments: { lat: 1 },
+    });
     expect(r.erreur).toBe(false);
-    expect(JSON.parse(r.texte)).toMatchObject({ centre: 'ok' });
-    const envoi = requetes.filter((q) => q.chemin === '/api/modules-appels').pop();
-    expect(envoi?.corps).toEqual({ module: 'carte', outil: 'centrer', arguments: { lat: 1 }, session: 'sess-1' });
+    expect(JSON.parse(r.texte)).toEqual({ centre: 'ok' });
+    expect(demandes).toEqual([
+      {
+        quoi: 'module_appeler',
+        args: { module: 'carte', outil: 'centrer', arguments: { lat: 1 }, session: 'sess-1' },
+      },
+    ]);
   });
 
-  test('erreur du relais : l’erreur est rendue à l’agent', async () => {
-    const r = await appelerModule(api, journal, 'sess-1', { module: 'absent', outil: 'centrer' });
-    expect(r).toMatchObject({ erreur: true, texte: 'Échec : aucune appli' });
+  test('aucune appli ouverte : l’erreur du relais est rendue à l’agent', async () => {
+    const aucune = "Lanterne n'est ouverte sur aucun appareil";
+    const r = await appelerModule(banc(lien({ ok: false, erreur: aucune })).c, { module: 'carte', outil: 'centrer' });
+    expect(r).toEqual({ texte: `Échec : ${aucune}`, erreur: true });
+  });
+
+  test('pas de lien au relais : refus lisible', async () => {
+    const r = await appelerModule(banc().c, { module: 'carte', outil: 'centrer' });
+    expect(r).toMatchObject({ erreur: true, texte: expect.stringContaining('lien au relais') });
   });
 });
 
