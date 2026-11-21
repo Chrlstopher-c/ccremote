@@ -24,11 +24,13 @@ import { RelecturesFil } from './relectures-fil.ts';
 export interface DonneesPoste {
   readonly machine: string;
 }
+type EvenementPoste = Extract<MessagePoste, { kind: 'evenement' }>['evt'];
 /** Ce qu'un poste annonce au bonjour, gardé le temps de sa connexion (versions, empreinte). */
 export interface InfosPoste {
   readonly commit: string | null;
   readonly empreinte: string | null;
   readonly claudeCode: VersionsClaude | null;
+  readonly utilisateur?: string | null; // compte Unix annoncé par le poste (mode duo) ; absent d'un poste d'avant
 }
 export interface ReponsePoste {
   readonly ok: boolean;
@@ -243,7 +245,7 @@ export class Postes {
           : undefined;
       return this.relectures.recaler(sessionId, m.archiver, transcript);
     }
-    this.evenement(sessionId, m.ts, m.evt);
+    this.evenement(machine, sessionId, m.ts, m.evt);
   }
 
   // Modules (Quart) : seul un changement visible est diffusé ; un module déjà connu, renvoyé, ne l'est pas.
@@ -273,6 +275,7 @@ export class Postes {
       commit: m.commit ?? null,
       empreinte: m.empreinte ?? null,
       claudeCode: m.claudeCode ?? null,
+      utilisateur: m.utilisateur ?? null,
     });
     for (const s of m.sessions) {
       if (s.machine !== machine || !this.appartient(s.id, machine)) continue;
@@ -333,7 +336,7 @@ export class Postes {
   // Une fiche fermée dont la conversation n'existe sur aucun poste en ligne est masquée (archivée), jamais supprimée.
   private retirerFantomes(): void {
     if (this.transcriptsDuPoste.size === 0) return; // aucun poste n'a encore annoncé ses transcripts
-    const fiches = this.registre.sessions(false).map((s) => ({
+    const fiches = this.registre.sessions(false).filter((s) => !s.duo).map((s) => ({
       id: s.id,
       machine: s.machine,
       conversation: s.claudeSessionId ?? null,
@@ -386,8 +389,8 @@ export class Postes {
     return decouverteParIdentifiant(candidates).find((d) => d.ponts?.includes(id)) ?? null;
   }
 
-  private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {
-    const e = this.registre.ajouterEvenement(sessionId, ts, evt);
+  private evenement(machine: string, sessionId: string, ts: string, evt: EvenementPoste): void {
+    const e = this.registre.ajouterEvenement(sessionId, ts, this.avecAuteur(machine, evt));
     this.diffusion.diffuser({ type: 'evenement', evenement: e });
     this.reunions?.observer(sessionId, evt);
     const fiche = this.registre.session(sessionId);
@@ -397,6 +400,12 @@ export class Postes {
     if (!brouillon) return;
     const notification = this.registre.ajouterNotification({ ...brouillon, sessionId, ts });
     this.diffusion.diffuser({ type: 'notification', notification });
+  }
+
+  // Un message envoyé depuis un poste porte le compte de sa machine (mode duo) ; un auteur déjà posé est gardé.
+  private avecAuteur(machine: string, evt: EvenementPoste): EvenementPoste {
+    const auteur = this.infos.get(machine)?.utilisateur;
+    return evt.type === 'message' && !evt.auteur && auteur ? { ...evt, auteur } : evt;
   }
 
   // Une session inconnue est acceptée (le compte rendu peut précéder l'enregistrement) ; celle d'une autre machine,

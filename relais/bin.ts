@@ -1,4 +1,5 @@
 // Responsabilité : point d'entrée du relais — deux serveurs : clients (web, iPhone) et postes (machines de travail).
+import { userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { COMMIT, VERSION } from '../commun/version.ts';
@@ -55,6 +56,8 @@ import { lancerRetention } from './registre/retention.ts';
 import { lancerRecalculInactivite } from './sessions/recalcul-inactivite.ts';
 import { RegistreReunions } from './reunion/registre-reunions.ts';
 import { SalleDeReunion } from './reunion/salle.ts';
+import { Duo } from './duo/duo.ts';
+import { nomUtilisateur } from '../commun/identite.ts';
 
 const journal = creerJournal('relais');
 const config = chargerConfig();
@@ -195,6 +198,17 @@ const echo = config.echo
   : null;
 echo?.demarrer();
 type DonneesClient = { readonly type: 'flux' } | DonneesTerminal;
+// Mode duo : deux relais reliés par le lien (appairage, partages, présence). Écoute à part, jamais sur les clients.
+const duo = new Duo({
+  registre,
+  diffusion,
+  base,
+  utilisateur: nomUtilisateur(process.env, userInfo().username),
+  dossierSecrets,
+  ecoute: config.duo.ecoute,
+  port: config.duo.port,
+  journal: journal.child({ domaine: 'duo' }),
+});
 const routes = avecCors(
   construireRoutes({
     acces,
@@ -218,6 +232,7 @@ const routes = avecCors(
     parite,
     confirmations,
     appels: appelsModules,
+    duo,
   }),
   config.origines,
 );
@@ -300,6 +315,7 @@ Bun.serve({
   },
 });
 
+duo.demarrer();
 lancerRetention(registre, journal);
 lancerRecalculInactivite(registre, diffusion, journal.child({ domaine: 'sessions' }));
 

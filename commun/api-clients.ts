@@ -78,6 +78,10 @@ export type MessageClient =
   | { readonly type: 'fil_modifie'; readonly sessionId: string }
   // Un module du parc a été ajouté, changé ou retiré : l'interface recharge la liste (voir relais/modules/).
   | { readonly type: 'modules_modifies' }
+  // Mode duo : l'état du lien ou des partages a changé (l'interface relit GET /api/duo).
+  | { readonly type: 'duo_modifie' }
+  // Le pair a ouvert (present) ou fermé une session partagée avec Chris.
+  | { readonly type: 'duo_presence'; readonly session: string; readonly present: boolean }
   // Un agent appelle un outil d'un module : la première appli où il est actif répond (POST /api/modules-reponses).
   // WebSocket seulement : n'avance pas le long-poll.
   | {

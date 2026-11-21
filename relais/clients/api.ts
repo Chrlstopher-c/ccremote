@@ -32,6 +32,8 @@ import { lireModules, servirFichierModule } from '../modules/api-modules.ts';
 import { appelerModule, lireCapacites, repondreModule } from '../modules/api-appels.ts';
 import { requeteServeurModule } from '../modules/api-serveur.ts';
 import type { AppelsModules } from '../modules/appels.ts';
+import type { Duo } from '../duo/duo.ts';
+import { routesDuo } from '../duo/api-duo.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -55,6 +57,7 @@ export interface DependancesApi {
   readonly parite: ApiParite;
   readonly confirmations: ApiConfirmations;
   readonly appels: AppelsModules;
+  readonly duo: Duo;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -217,6 +220,7 @@ export function construireRoutes(d: DependancesApi) {
     ...routesFichiers(d.fichiers, protege),
     ...routesEcho(d.echo, protege),
     ...routesEntretien(d.entretien, protege),
+    ...routesDuo(d.duo, protege),
     ...routesReste(d.reste, protege),
     ...routesResteLot2(d.resteLot2, protege),
     ...routesParite(d.parite, protege),

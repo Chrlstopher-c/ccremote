@@ -1,9 +1,10 @@
 // Responsabilité : point d'entrée du poste — assemble config, sessions tmux, socket local, sonde et lien au relais.
 import { randomUUID } from 'node:crypto';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { COMMIT, VERSION } from '../commun/version.ts';
+import { nomUtilisateur } from '../commun/identite.ts';
 import { type CommandeRelais, type MessagePoste, TAILLE_LOT_HISTORIQUE } from '../commun/protocole-poste.ts';
 import { Comptes } from './comptes/comptes.ts';
 import { LecteurCompte } from './comptes/lecture-compte.ts';
@@ -126,6 +127,7 @@ function bonjour(): MessagePoste {
     empreinte: process.env['CCREMOTE_EMPREINTE_CODE'] || undefined, // code installé par le relais (mise à jour)
     commit: COMMIT,
     claudeCode: versionsClaude,
+    utilisateur: nomUtilisateur(process.env, userInfo().username),
   };
 }
 

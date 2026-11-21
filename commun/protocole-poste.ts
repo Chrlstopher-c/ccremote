@@ -56,6 +56,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     empreinte: z.string().optional(), // empreinte du code installé (install par SSH) ; absente pour un poste d'avant
     commit: z.string().nullable().optional(), // commit du code (absent pour un poste d'avant)
     claudeCode: VersionsClaude.optional(), // versions de Claude Code (CLI, SDK) relevées au démarrage du poste
+    utilisateur: z.string().min(1).max(64).optional(), // compte Unix du poste (mode duo) ; absent pour un poste d'avant
   }),
   z.object({
     kind: z.literal('decouvertes'),

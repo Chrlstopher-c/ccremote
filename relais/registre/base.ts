@@ -50,6 +50,10 @@ export const MIGRATIONS: readonly string[] = [
      empreinte TEXT, maj_le TEXT NOT NULL, erreur TEXT);`,
   // État du serveur d'un module (v1.2) : JSON `{ etat, erreur }`, posé par le poste qui le fait tourner.
   `ALTER TABLE modules ADD COLUMN serveur TEXT;`,
+  // Mode duo : sessions partagées avec le pair (session ou projet, niveau). Une ligne par cible et genre.
+  `CREATE TABLE duo_partages (
+     cible TEXT NOT NULL, genre TEXT NOT NULL, niveau TEXT NOT NULL, cree_le TEXT NOT NULL,
+     PRIMARY KEY (cible, genre));`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 

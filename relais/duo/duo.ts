@@ -1,0 +1,303 @@
+// Responsabilité : le mode duo d'un relais — appairage, lien permanent avec le pair, partages, présence. Ce module
+// orchestre le lien, la synchro et la paire stockée ; le registre et la diffusion restent ceux du relais.
+import type { Database } from 'bun:sqlite';
+import type { Logger } from 'pino';
+import type { MessageClient } from '../../commun/api-clients.ts';
+import type { CorpsPartage, EtatDuo, MessageLien } from '../../commun/duo.ts';
+import type { Diffusion } from '../clients/diffusion.ts';
+import type { Registre } from '../registre/registre.ts';
+import { CodesAppairage, type VerdictCode } from './codes.ts';
+import { appairerAupres, LienAppelant, RAISON_INJOIGNABLE } from './lien-appelant.ts';
+import type { Canal } from './lien-commun.ts';
+import { ouvrirEcouteDuo, type ResultatAppairage, type ServeurDuo } from './lien-serveur.ts';
+import { type Paire, PaireStockee } from './paire-stockee.ts';
+import { PartagesDuo } from './partages.ts';
+import { cleNeuve, nonce } from './preuve.ts';
+import { Synchro } from './synchro.ts';
+
+export type Resultat<T> = { ok: true; valeur: T } | { ok: false; statut: number; raison: string };
+
+export interface OptionsDuo {
+  readonly registre: Registre;
+  readonly diffusion: Diffusion;
+  readonly base: Database;
+  readonly utilisateur: string;
+  readonly dossierSecrets: string;
+  readonly ecoute: string;
+  readonly port: number;
+  readonly journal: Logger;
+  readonly maintenant?: () => number;
+  readonly delaiReconnexionMs?: number;
+}
+
+const DELAI_APPAIRAGE_MS = 10_000;
+const DELAI_RECONNEXION_MAX_MS = 30_000;
+const RAISON_CODE: Record<Exclude<VerdictCode, 'ok'>, string> = {
+  faux: 'code faux',
+  expire: 'code expiré',
+  utilise: 'code déjà utilisé',
+};
+
+export class Duo {
+  readonly utilisateur: string;
+  private readonly registre: Registre;
+  private readonly diffusion: Diffusion;
+  private readonly horloge: () => number;
+  private readonly codes: CodesAppairage;
+  private readonly paires: PaireStockee;
+  private readonly partages: PartagesDuo;
+  private readonly synchro: Synchro;
+  private readonly presences = new Set<string>();
+  private readonly delaiMin: number;
+  private readonly ecoute: { readonly hote: string; readonly port: number };
+  private readonly journal: Logger;
+  private serveur: ServeurDuo | null = null;
+  private canal: Canal | null = null;
+  private appelant: LienAppelant | null = null;
+  private refuse = false;
+  private desabonner: (() => void) | null = null;
+
+  constructor(options: OptionsDuo) {
+    this.utilisateur = options.utilisateur;
+    this.registre = options.registre;
+    this.diffusion = options.diffusion;
+    this.horloge = options.maintenant ?? Date.now;
+    this.delaiMin = options.delaiReconnexionMs ?? 1_000;
+    this.codes = new CodesAppairage(this.horloge);
+    this.paires = new PaireStockee(options.dossierSecrets, options.journal);
+    this.partages = new PartagesDuo(options.base);
+    this.synchro = new Synchro(options.registre, options.diffusion, this.partages, options.journal);
+    this.ecoute = { hote: options.ecoute, port: options.port };
+    this.journal = options.journal;
+  }
+
+  /** Ouvre le port d'écoute du lien et reprend le lien sortant si une paire existe. */
+  demarrer(): void {
+    this.desabonner = this.diffusion.ecouter((m) => this.surDiffusion(m));
+    try {
+      this.serveur = ouvrirEcouteDuo(this.ecoute.hote, this.ecoute.port, this);
+    } catch (erreur) {
+      // Port pris ou adresse absente : le relais tourne sans le mode duo plutôt que de tomber.
+      this.journal.error({ err: erreur, port: this.ecoute.port }, 'lien duo non ouvert');
+    }
+    const paire = this.paires.lire();
+    if (paire) this.lancerAppelant(paire);
+  }
+
+  arreter(): void {
+    this.desabonner?.();
+    this.desabonner = null;
+    this.appelant?.arreter();
+    this.appelant = null;
+    this.canal?.fermer();
+    this.canal = null;
+    this.serveur?.stop(true);
+    this.serveur = null;
+  }
+
+  get portEcoute(): number {
+    return this.serveur?.port ?? this.ecoute.port;
+  }
+
+  etat(): EtatDuo {
+    const paire = this.paires.lire();
+    return {
+      utilisateur: this.utilisateur,
+      pair: paire ? { utilisateur: paire.utilisateur, adresse: paire.adresse } : null,
+      etat: !paire ? 'absent' : this.canal ? 'connecte' : this.refuse ? 'refuse' : 'hors_ligne',
+      partages: this.partages.lister(),
+      presences: [...this.presences],
+    };
+  }
+
+  codeAppairage(): Resultat<{ code: string; expireLe: string; port: number }> {
+    if (this.paires.lire()) return echec(409, 'déjà appairé : révoquez la paire avant');
+    return ok({ ...this.codes.creer(), port: this.portEcoute });
+  }
+
+  async rejoindre(adresse: string, code: string): Promise<Resultat<EtatDuo>> {
+    if (this.paires.lire()) return echec(409, 'déjà appairé : révoquez la paire avant');
+    const r = await appairerAupres(adresse, code, this.utilisateur, DELAI_APPAIRAGE_MS);
+    if (!r.ok) return echec(r.raison === RAISON_INJOIGNABLE ? 502 : 403, r.raison);
+    const paire: Paire = { id: r.paire, cle: r.cle, utilisateur: r.utilisateur, adresse, creeLe: this.maintenant() };
+    this.paires.ecrire(paire);
+    this.refuse = false;
+    this.lancerAppelant(paire);
+    this.notifier();
+    return ok(this.etat());
+  }
+
+  /** Révocation des deux côtés : le pair l'apprend par le lien, ses sessions reçues disparaissent. */
+  revoquer(): EtatDuo {
+    const canal = this.dissoudre();
+    canal?.envoyer({ type: 'revocation' });
+    canal?.fermer();
+    this.notifier();
+    return this.etat();
+  }
+
+  partager(corps: CorpsPartage): Resultat<EtatDuo> {
+    if (!this.paires.lire()) return echec(409, 'aucun pair appairé');
+    this.partages.ajouter(corps.cible, corps.genre, corps.niveau, this.maintenant());
+    this.envoyerInstantane();
+    return ok(this.etat());
+  }
+
+  retirerPartage(cible: string): Resultat<EtatDuo> {
+    if (this.partages.retirer(cible) === 0) return echec(404, 'partage introuvable');
+    this.envoyerInstantane();
+    return ok(this.etat());
+  }
+
+  /** « Je regarde cette session » : signalé au pair si la session est une des siennes, partagée avec moi. */
+  signalerPresence(session: string, present: boolean): Resultat<null> {
+    if (!this.canal) return echec(409, 'pair non connecté');
+    if (!this.registre.session(session)?.duo) return echec(404, 'session du pair introuvable');
+    this.canal.envoyer({ type: 'duo_presence', session, present });
+    return ok(null);
+  }
+
+  /** Coupure réseau simulée : le lien tombe et se rétablit par son recul. */
+  couperLien(): void {
+    this.appelant?.couper();
+    this.canal?.fermer();
+  }
+
+  // ---- Pont vers le lien entrant et sortant -----------------------------------------------------------------
+
+  appairer(code: string, utilisateurDistant: string): ResultatAppairage {
+    if (this.paires.lire()) return { ok: false, raison: 'déjà appairé' };
+    const verdict = this.codes.consommer(code);
+    if (verdict !== 'ok') return { ok: false, raison: RAISON_CODE[verdict] };
+    const id = nonce();
+    const cle = cleNeuve();
+    this.paires.ecrire({ id, cle, utilisateur: utilisateurDistant, adresse: null, creeLe: this.maintenant() });
+    this.notifier();
+    return { ok: true, paire: id, cle };
+  }
+
+  cleDe(paire: string): string | null {
+    const p = this.paires.lire();
+    return p?.id === paire ? p.cle : null;
+  }
+
+  liaison(canal: Canal): void {
+    if (this.canal && this.canal !== canal) this.canal.fermer();
+    this.canal = canal;
+    this.refuse = false;
+    canal.envoyer(this.synchro.instantane());
+    this.notifier();
+  }
+
+  fermee(canal: Canal): void {
+    if (this.canal !== canal) return;
+    this.canal = null;
+    this.presences.clear();
+    this.notifier();
+  }
+
+  refus(raison: string): void {
+    this.journal.warn({ raison }, 'lien du pair refusé');
+    this.refuse = true;
+    this.notifier();
+  }
+
+  recevoir(paire: string, m: MessageLien): void {
+    const p = this.paires.lire();
+    if (!p || p.id !== paire) return;
+    this.traiter(p.utilisateur, m);
+  }
+
+  // ---- Privé ------------------------------------------------------------------------------------------------
+
+  private traiter(nom: string, m: MessageLien): void {
+    switch (m.type) {
+      case 'partage':
+        for (const id of this.synchro.appliquerInstantane(nom, m.sessions)) {
+          this.canal?.envoyer({ type: 'historique_demande', sessionId: id });
+        }
+        return;
+      case 'fiche':
+        return this.synchro.appliquerFiche(nom, m);
+      case 'evenement':
+        return this.synchro.appliquerEvenement(nom, m.sessionId, m.ts, m.evt);
+      case 'historique_demande': {
+        const relecture = this.synchro.relecture(m.sessionId);
+        if (relecture) this.canal?.envoyer(relecture);
+        return;
+      }
+      case 'historique':
+        return this.synchro.appliquerRelecture(nom, m.sessionId, m.evenements);
+      case 'duo_presence':
+        return this.presenceRecue(m.session, m.present);
+      case 'revocation': {
+        const canal = this.dissoudre();
+        canal?.fermer();
+        this.notifier();
+        return;
+      }
+      default:
+        return;
+    }
+  }
+
+  private presenceRecue(session: string, present: boolean): void {
+    if (!this.synchro.partagee(session)) return;
+    if (present) this.presences.add(session);
+    else this.presences.delete(session);
+    this.diffusion.diffuser({ type: 'duo_presence', session, present });
+    this.notifier();
+  }
+
+  // Efface la paire et ses partages ; rend le lien courant (à fermer par l'appelant), sans rien envoyer.
+  private dissoudre(): Canal | null {
+    const paire = this.paires.lire();
+    this.appelant?.arreter();
+    this.appelant = null;
+    const canal = this.canal;
+    this.canal = null;
+    this.paires.effacer();
+    this.partages.vider();
+    this.presences.clear();
+    this.refuse = false;
+    if (paire) this.synchro.retirerPair(paire.utilisateur);
+    return canal;
+  }
+
+  private lancerAppelant(paire: Paire): void {
+    if (!paire.adresse) return;
+    this.appelant?.arreter();
+    this.appelant = new LienAppelant(paire.adresse, paire.id, this, {
+      min: this.delaiMin,
+      max: DELAI_RECONNEXION_MAX_MS,
+    });
+    this.appelant.demarrer();
+  }
+
+  private surDiffusion(m: MessageClient): void {
+    if (!this.canal) return;
+    const sortant = this.synchro.versLien(m);
+    if (sortant) this.canal.envoyer(sortant);
+  }
+
+  private envoyerInstantane(): void {
+    this.canal?.envoyer(this.synchro.instantane());
+    this.notifier();
+  }
+
+  private notifier(): void {
+    this.diffusion.diffuser({ type: 'duo_modifie' });
+  }
+
+  private maintenant(): string {
+    return new Date(this.horloge()).toISOString();
+  }
+}
+
+function ok<T>(valeur: T): Resultat<T> {
+  return { ok: true, valeur };
+}
+
+function echec<T = never>(statut: number, raison: string): Resultat<T> {
+  return { ok: false, statut, raison };
+}

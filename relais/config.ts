@@ -30,6 +30,7 @@ export interface ConfigRelais {
   readonly relaisPostes: string | null; // adresse WebSocket du relais vue des machines SSH (CCREMOTE_RELAIS_POSTES)
   readonly urlApiPostes: string | null; // URL HTTP de l'API vue des postes distants (CCREMOTE_URL_API_POUR_POSTES)
   readonly integre: ConfigIntegre | null; // présent seulement si LANTERNE_MOTEUR_PORT_POSTES est défini
+  readonly duo: { readonly ecoute: string; readonly port: number }; // lien du mode duo (LANTERNE_DUO_ECOUTE / _PORT)
 }
 
 // « a=x,b=y » → Map ; « a,b » → Set
@@ -65,6 +66,10 @@ export function chargerConfig(): ConfigRelais {
   const racine = join(import.meta.dir, '..');
   const base = process.env['CCREMOTE_BASE'] ?? join(racine, '.donnees/relais.db');
   return {
+    duo: {
+      ecoute: process.env['LANTERNE_DUO_ECOUTE'] || '127.0.0.1',
+      port: entierPositif(process.env['LANTERNE_DUO_PORT'], 8722),
+    },
     empreinteMotDePasse: requis('CCREMOTE_EMPREINTE_MOT_DE_PASSE'),
     secretsPostes: paires(requis('CCREMOTE_SECRETS_POSTES')),
     isolees: new Set(liste(process.env['CCREMOTE_MACHINES_ISOLEES'])),

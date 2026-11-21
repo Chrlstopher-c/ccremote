@@ -143,6 +143,8 @@ export const ResumeSession = z.object({
   terminal: z.boolean().optional(), // vivante dans un terminal ordinaire, hors tmux : suivie en lecture seule
   lanceur: LanceurSession.optional(), // qui a lancé la session (registre `cc`) : kitty, quart ou echo
   dialogue: Dialogue.nullable().optional(), // dialogue du TUI en attente d'une réponse
+  // Session reçue d'un pair (mode duo) : machine virtuelle = nom du pair, lecture seule côté registre.
+  duo: z.object({ pair: z.string(), niveau: z.enum(['lecture', 'ecriture']) }).optional(),
   nuit: Nuit.nullable().optional(), // mode nuit actif sur cette session
   // Remote Control (`/remote-control` du TUI) : session connectée à claude.ai, `url` à ouvrir sur le téléphone.
   remoteControl: RemoteControl.nullable().optional(),
@@ -184,7 +186,13 @@ const deAgent = { agent: z.string().optional() };
 
 export const Evenement = z.discriminatedUnion('type', [
   // `uuid` : identifiant de l'entrée du transcript (SDK), stable : sert à rembobiner, dupliquer et épingler.
-  z.object({ type: z.literal('message'), texte: z.string(), uuid: z.string().optional() }),
+  // `auteur` : nom d'utilisateur de la machine qui a envoyé le message (absent : fil antérieur au mode duo).
+  z.object({
+    type: z.literal('message'),
+    texte: z.string(),
+    uuid: z.string().optional(),
+    auteur: z.string().optional(),
+  }),
   z.object({ type: z.literal('texte'), texte: z.string(), uuid: z.string().optional(), ...deAgent }),
   // Chapitre épinglé sur un message de l'utilisateur ou une réponse (uuid de `tour_fini`) ; `epingle` false le retire.
   z.object({ type: z.literal('chapitre'), uuid: z.string(), epingle: z.boolean() }),
