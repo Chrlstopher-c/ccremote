@@ -20,6 +20,7 @@ import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSessionId } from './styles-session.ts';
+import { SessionDistante } from '../distant/session-distante.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
 import { tenueAilleurs } from './processus.ts';
@@ -349,9 +350,9 @@ export class GestionnaireSessions {
     return lu ? { ok: true, donnees: lu } : { ok: false, erreur: 'fichier introuvable' };
   }
 
-  // Les pièces jointes ne partent qu'avec une session SDK : le moteur tmux n'a pas de message structuré.
+  // Les pièces jointes partent avec une session SDK ou Remote Control (message structuré) ; le moteur tmux n'en a pas.
   private envoyerMessage(s: SessionPoste, texte: string, pieces: readonly PieceJointe[]): Promise<string | null> {
-    if (pieces.length > 0 && !(s instanceof SessionSdk))
+    if (pieces.length > 0 && !(s instanceof SessionSdk) && !(s instanceof SessionDistante))
       return Promise.resolve('pièces jointes : moteur SDK seulement');
     return s.envoyer(texte, pieces);
   }

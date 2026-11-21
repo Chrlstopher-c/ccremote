@@ -69,7 +69,13 @@ Pour lui donner un fichier, utilise les outils du serveur \`lanterne\` (toujours
   (téléchargement) ou \`afficher\` (aperçu, défaut). Ne réponds jamais « je ne peux pas joindre de fichier » sans
   avoir essayé cet outil.
 - \`publier_artefact\` : une page HTML autonome (tableau de bord, mini-application) que Chris ouvre dans le lecteur.
-- \`afficher_widget\` : un petit SVG ou fragment HTML en place dans une réponse.`;
+- \`afficher_widget\` : un petit SVG ou fragment HTML en place dans une réponse.
+
+## Modules de Lanterne
+Chris travaille dans Lanterne. Pour ajouter ou modifier une fonction de l'appli (panneau de droite, carte, page de
+réglages, intégration dans le fil, outil pilotable), charge d'abord le skill \`lanterne-modules\` : il dit où écrire,
+quoi lire et comment vérifier. Les outils \`modules_lister\`, \`module_appeler\` et \`module_afficher\` pilotent les
+modules déjà installés.`;
 
 const REGLES_TRAVAIL = `## Règles de travail
 - Demande en plusieurs étapes : tiens une liste de tâches (TaskCreate une fois par étape, TaskUpdate pour passer
