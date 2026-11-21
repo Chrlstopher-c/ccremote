@@ -44,6 +44,7 @@ const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30
 
 export class Postes {
   private readonly connectes = new Map<string, ServerWebSocket<DonneesPoste>>();
+  private readonly auteursAttendus = new Map<string, string>(); // session → auteur de son premier message
   readonly requetes = new RequetesPostes(); // requêtes d'outils de modules, traitement posé par bin.ts
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
   private surLimiteCompte: ((machine: string, cle: string, limite: LimiteSdk) => void) | null = null;
@@ -390,7 +391,7 @@ export class Postes {
   }
 
   private evenement(machine: string, sessionId: string, ts: string, evt: EvenementPoste): void {
-    const e = this.registre.ajouterEvenement(sessionId, ts, this.avecAuteur(machine, evt));
+    const e = this.registre.ajouterEvenement(sessionId, ts, this.avecAuteur(machine, evt, sessionId));
     this.diffusion.diffuser({ type: 'evenement', evenement: e });
     this.reunions?.observer(sessionId, evt);
     const fiche = this.registre.session(sessionId);
@@ -403,9 +404,17 @@ export class Postes {
   }
 
   // Un message envoyé depuis un poste porte le compte de sa machine (mode duo) ; un auteur déjà posé est gardé.
-  private avecAuteur(machine: string, evt: EvenementPoste): EvenementPoste {
-    const auteur = this.infos.get(machine)?.utilisateur;
-    return evt.type === 'message' && !evt.auteur && auteur ? { ...evt, auteur } : evt;
+  private avecAuteur(machine: string, evt: EvenementPoste, sessionId: string): EvenementPoste {
+    if (evt.type !== 'message' || evt.auteur) return evt;
+    const attendu = this.auteursAttendus.get(sessionId);
+    this.auteursAttendus.delete(sessionId);
+    const auteur = attendu ?? this.infos.get(machine)?.utilisateur;
+    return auteur ? { ...evt, auteur } : evt;
+  }
+
+  /** Le premier message de cette session (son ouverture) vient de `auteur`, pas de l'utilisateur de la machine. */
+  attendreAuteur(sessionId: string, auteur: string): void {
+    this.auteursAttendus.set(sessionId, auteur);
   }
 
   // Une session inconnue est acceptée (le compte rendu peut précéder l'enregistrement) ; celle d'une autre machine,

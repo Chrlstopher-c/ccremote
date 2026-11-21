@@ -20,6 +20,7 @@ import { aiguillage, TEXTE_REFUS_SANS_JUMELLE } from '../parc/aiguillage.ts';
 import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
+import type { Postes } from '../parc/postes.ts';
 import { type SessionAdoptable, sessionAdoptee } from './session-adoptee.ts';
 import {
   ecrireAuPair,
@@ -45,6 +46,7 @@ const CorpsOuverture = z.object({
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
+  auteur: z.string().min(1).max(64).optional(), // ouverture demandée par le pair (mode duo) : son nom
 });
 export type CorpsOuverture = z.infer<typeof CorpsOuverture>;
 const CorpsMessage = z.object({
@@ -86,7 +88,7 @@ type Lecture = { kind: 'contexte' } | { kind: 'connecteurs' } | { kind: 'taches'
 export class ApiSessions {
   constructor(
     private readonly registre: Registre,
-    private readonly postes: SessionAdoptable,
+    private readonly postes: SessionAdoptable & Partial<Pick<Postes, 'attendreAuteur'>>,
     private readonly diffusion: Diffusion,
     private readonly isolees: ReadonlySet<string>,
     private readonly journal: Logger,
@@ -122,6 +124,7 @@ export class ApiSessions {
       controle_distant: c.controle_distant ?? false,
       ...(c.pieces ? { pieces: c.pieces } : {}),
     };
+    if (c.auteur) this.postes.attendreAuteur?.(demande.sessionId, c.auteur);
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });
     if (!r.ok) this.journal.warn({ machine: c.machine, erreur: r.erreur }, 'ouverture de session refusée');
     return r.ok ? json(r.donnees, 201) : erreur(r.erreur ?? 'ouverture refusée', REFUS_POSTE);

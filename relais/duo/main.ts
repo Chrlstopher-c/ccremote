@@ -108,6 +108,7 @@ export async function recevoirMain(c: Contexte, nom: string, m: LigneMain): Prom
       machine,
       projet: { machine, chemin, nom: nomDossier(chemin) },
       message: textePaquet(m.paquet, nom),
+      auteur: nom,
       titre: `${m.paquet.titre} · reprise de ${nom}`.slice(0, 120),
       autonomie: false,
       mode: 'default',

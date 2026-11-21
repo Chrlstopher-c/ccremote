@@ -10,6 +10,7 @@ export interface OuvertureChezProprietaire {
   readonly projet: Projet;
   readonly message: string;
   readonly titre?: string;
+  readonly auteur?: string; // qui écrit le premier message (le pair)
   readonly modele?: string;
   readonly autonomie: boolean;
   readonly mode: ModeSession;

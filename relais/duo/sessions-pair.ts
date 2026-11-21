@@ -24,7 +24,7 @@ export async function recevoirOuverture(c: Contexte, nom: string, m: LigneOuvrir
       detail: 'refusé : ouverture non permise (droits ou pas d’accord de Chris)',
     });
   }
-  const r = await bilan(await c.sessions.ouvrir(demandeOuverture(m)));
+  const r = await bilan(await c.sessions.ouvrir(demandeOuverture(m, nom)));
   if (!r.ok) return conclure(c, requete, { ok: false, raison: r.raison });
   const id = identifiantSession(r.valeur);
   if (!id) return conclure(c, requete, { ok: false, raison: 'session ouverte sans identifiant' });
@@ -41,8 +41,9 @@ async function accordeOuverture(c: Contexte, nom: string, m: LigneOuvrir): Promi
 }
 
 // Session ouverte chez nous comme une session locale, en mode « par défaut » : Claude y redemande les permissions.
-function demandeOuverture(m: LigneOuvrir): OuvertureChezProprietaire {
+function demandeOuverture(m: LigneOuvrir, auteur: string): OuvertureChezProprietaire {
   return {
+    auteur,
     machine: m.machine,
     projet: { machine: m.machine, chemin: m.chemin, nom: nomDossier(m.chemin) },
     message: m.message,
