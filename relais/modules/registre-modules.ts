@@ -14,6 +14,8 @@ export interface ModuleRelais {
   readonly machine: string;
   readonly maj_le: string;
   readonly erreur: string | null;
+  /** Chemins des fichiers du module (vide pour un module en erreur) : le client sait quoi télécharger. */
+  readonly fichiers: readonly string[];
 }
 
 type LigneModule = {
@@ -72,6 +74,7 @@ export class RegistreModules {
       machine: l.machine,
       maj_le: l.maj_le,
       erreur: l.erreur,
+      fichiers: l.erreur === null ? (JSON.parse(l.fichiers) as FichierModule[]).map((f) => f.chemin) : [],
     }));
   }
 
