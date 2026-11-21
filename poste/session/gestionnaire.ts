@@ -2,13 +2,13 @@
 // persistance.
 import { join } from 'node:path';
 import type { Logger } from 'pino';
-import type { PieceJointe } from '../../commun/presentation.ts';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
 import type { ConfigPoste } from '../config.ts';
-import { basculerControle, enBascule, rembobinerTui, sortirTui } from './bascule-controle.ts';
-import { type CommandeSession, estLecture, lecturePanneau } from './lecture-panneau.ts';
+import { basculerControle, sortirTui } from './bascule-controle.ts';
+import type { CommandeSession } from './lecture-panneau.ts';
+import { type ContexteCommandes, executerSurSession } from './commandes-session.ts';
 import { PersistanceSessions, type SessionPersistee } from './persistance.ts';
 import {
   type ReprisePrevue,
@@ -20,10 +20,8 @@ import { SessionTmux } from './session-tmux.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSessionId } from './styles-session.ts';
-import { SessionDistante } from '../distant/session-distante.ts';
 import { SessionSdk, trouverClaude } from './session-sdk.ts';
 import type { SessionPoste, SortieSession } from './session-poste.ts';
-import { tenueAilleurs } from './processus.ts';
 import { titreRelu } from './recalage-fiche.ts';
 import { MarquesRecalage, RecalageFils, recalerAuChargement } from './recalage-demarrage.ts';
 import { stockeurImages } from './historique.ts';
@@ -96,32 +94,47 @@ export class GestionnaireSessions {
     this.persistance = new PersistanceSessions(config.donnees);
     this.supprimees = new SessionsSupprimees(config.donnees);
     this.stockage = new Stockage(config.donnees);
-    this.decouvertes = new IndexDecouvertes({
-      machine: config.machine,
-      configDirs: () => this.configDirs(),
-      fichierCache: join(config.donnees, 'decouvertes.json'),
-      journal,
-      surChangement: () => this.annoncer(),
-    });
+    this.decouvertes = this.creerDecouvertes();
     this.usages = new UsageComptes(() => this.sessions.values(), journal);
     this.trace = new TraceRelais(config.donnees, journal);
     this.sortieFil = avecTraceRelais(sortie, this.trace);
-    this.distantes = new Spectateur({
-      config,
-      journal,
-      sortie: this.sortieFil,
-      locales: () => [...this.sessions.values()].map((s) => s.resume),
-      stockage: this.stockage,
-    });
+    this.distantes = this.creerDistantes();
     this.modifications = new ModificationsSessions({
       donnees: config.donnees,
       machine: config.machine,
       journal,
       sortie,
     });
-    this.importation = new ImportationSessions({
-      config,
-      journal,
+    this.importation = this.creerImportation();
+    this.balayage = this.creerBalayage();
+    this.marques = new MarquesRecalage(join(config.donnees, 'recalage.json'), journal);
+    this.recalage = this.creerRecalage();
+  }
+
+  private creerDecouvertes(): IndexDecouvertes {
+    return new IndexDecouvertes({
+      machine: this.config.machine,
+      configDirs: () => this.configDirs(),
+      fichierCache: join(this.config.donnees, 'decouvertes.json'),
+      journal: this.journal,
+      surChangement: () => this.annoncer(),
+    });
+  }
+
+  private creerDistantes(): Spectateur {
+    return new Spectateur({
+      config: this.config,
+      journal: this.journal,
+      sortie: this.sortieFil,
+      locales: () => [...this.sessions.values()].map((s) => s.resume),
+      stockage: this.stockage,
+    });
+  }
+
+  private creerImportation(): ImportationSessions {
+    return new ImportationSessions({
+      config: this.config,
+      journal: this.journal,
       decouvertes: this.decouvertes,
       sessions: this.sessions,
       supprimees: this.supprimees,
@@ -131,19 +144,24 @@ export class GestionnaireSessions {
       sauvegarder: () => this.sauvegarder(),
       publier: (r) => this.sortie.resume(r),
     });
-    this.balayage = new BalayageSessions({
-      config,
-      journal,
+  }
+
+  private creerBalayage(): BalayageSessions {
+    return new BalayageSessions({
+      config: this.config,
+      journal: this.journal,
       sessions: this.sessions,
       supprimees: this.supprimees,
       fichePour: (id) => this.fichePour(id),
       creer: (p) => this.creer(p),
     });
-    this.marques = new MarquesRecalage(join(config.donnees, 'recalage.json'), journal);
-    this.recalage = new RecalageFils({
-      ...{ journal, marques: this.marques, relaisOuvert: () => this.relaisOuvert() },
+  }
+
+  private creerRecalage(): RecalageFils {
+    return new RecalageFils({
+      ...{ journal: this.journal, marques: this.marques, relaisOuvert: () => this.relaisOuvert() },
       fiches: () => [...this.sessions.values()].map((s) => ({ persistee: s.persistee, vivante: s.vivante })),
-      stockeur: (id) => stockeurImages(this.stockage, id, journal),
+      stockeur: (id) => stockeurImages(this.stockage, id, this.journal),
       recalage: (id, archiver, lignes) => this.sortie.recalage?.(id, archiver, lignes),
       historique: (id, evenements) => this.sortieFil.historique?.(id, evenements),
     });
@@ -189,8 +207,8 @@ export class GestionnaireSessions {
     return this.sessions.get(id);
   }
 
-  // Session à agir : sa fiche si elle est tenue ici, sinon une session découverte ou fermée du poste, adoptée
-  // (fiche fermée, reprenable par le SDK). Un identifiant inconnu partout rend `undefined`.
+  // Session à agir : sa fiche si elle est tenue ici, sinon une session découverte ou fermée du poste, adoptée (fiche
+  // fermée, reprenable par le SDK). Un identifiant inconnu partout rend `undefined`.
   async hydrater(id: string): Promise<SessionPoste | undefined> {
     const connue = this.sessions.get(id);
     if (connue) return connue;
@@ -272,47 +290,20 @@ export class GestionnaireSessions {
     if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
     const s = this.sessions.get(c.sessionId) ?? this.distantes.session(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
-    const refus = this.distantes.refusPour(c.sessionId, c);
-    if (refus) return { ok: false, erreur: refus };
-    if (enBascule(c.sessionId)) return { ok: false, erreur: 'bascule Remote Control en cours : réessayer' };
-    if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
-    let erreur: string | null = null;
-    if (c.kind === 'envoyer') erreur = await this.envoyerMessage(s, c.texte, c.pieces ?? []);
-    else if (c.kind === 'interrompre') erreur = await s.interrompre();
-    else if (c.kind === 'rembobiner') return this.rembobiner(s, c.messageId);
-    else if (c.kind === 'compacter') erreur = await s.compacter();
-    else if (c.kind === 'fermer') erreur = await s.fermer();
-    else if (c.kind === 'reprendre') {
-      const tenue = tenueAilleurs(s.resume.claudeSessionId, this.configDirs(), this.journal);
-      erreur = tenue ?? (await s.reprendre());
-    }
-    else if (c.kind === 'autonomie') s.basculerAutonomie(c.active);
-    else if (c.kind === 'nuit') erreur = await s.basculerNuit(c.active, c.objectif);
-    else if (c.kind === 'repondre') erreur = await s.repondre(c.reponse);
-    else if (c.kind === 'arreter_tache')
-      erreur = s instanceof SessionSdk ? await s.arreterTache(c.tache) : 'non pris en charge hors SDK';
-    else if (c.kind === 'mode' || c.kind === 'modele' || c.kind === 'effort' || c.kind === 'renommer')
-      erreur = await s.reglerSession(c);
-    else if (c.kind === 'style') erreur = await s.reglerSession({ kind: 'style', style: c.style });
-    else if (c.kind === 'rapide' || c.kind === 'ultracode') erreur = await s.reglerSession(c);
-    else if (c.kind === 'connecteur')
-      erreur = s instanceof SessionSdk ? await s.basculerConnecteur(c.nom, c.actif) : 'non pris en charge hors SDK';
-    return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
+    return executerSurSession(this.contexteCommandes(), s, c);
+  }
+
+  private contexteCommandes(): ContexteCommandes {
+    return {
+      gestion: this,
+      journal: this.journal,
+      refusDistant: (c) => this.distantes.refusPour(c.sessionId, c),
+      configDirs: () => this.configDirs(),
+    };
   }
 
   // Suppression sur demande explicite de Chris : la session s'arrête (SDK), son transcript part, son identifiant est
   // retenu pour qu'aucune découverte ne la fasse réapparaître. Une session ouverte dans un terminal reste intacte.
-  // Rembobinage : une session SDK rembobine sur place ; une session du TUI repasse d'abord au SDK (voir bascule-controle).
-  // Une session tmux qui n'a pas été lancée par le poste (adoptée d'un terminal de Chris) n'est pas touchée.
-  private async rembobiner(s: SessionPoste, messageId: string): Promise<Reponse> {
-    if (s instanceof SessionSdk) {
-      const erreur = await s.rembobiner(messageId);
-      return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
-    }
-    if (s instanceof SessionTmux && s.resume.pilotee) return rembobinerTui(this, s, messageId);
-    return { ok: false, erreur: 'rembobinage impossible : session ouverte hors de l’appli (tmux de Chris)' };
-  }
-
   async supprimer(id: string): Promise<Reponse> {
     if (this.distantes.session(id)) return { ok: false, erreur: 'session claude.ai : elle se gère depuis claude.ai' };
     const s = this.sessions.get(id);
@@ -374,13 +365,6 @@ export class GestionnaireSessions {
     return lu ? { ok: true, donnees: lu } : { ok: false, erreur: 'fichier introuvable' };
   }
 
-  // Les pièces jointes partent avec une session SDK ou Remote Control (message structuré) ; le moteur tmux n'en a pas.
-  private envoyerMessage(s: SessionPoste, texte: string, pieces: readonly PieceJointe[]): Promise<string | null> {
-    if (pieces.length > 0 && !(s instanceof SessionSdk) && !(s instanceof SessionDistante))
-      return Promise.resolve('pièces jointes : moteur SDK seulement');
-    return s.envoyer(texte, pieces);
-  }
-
   // Sessions Claude Code du poste que Quart ne connaît pas encore (ni supprimées par Chris).
   importables(): Reponse {
     return { ok: true, donnees: this.listeDecouvertes() };
@@ -415,7 +399,8 @@ export class GestionnaireSessions {
     return identifiantsTranscripts(this.configDirs());
   }
 
-  // La fiche d'un identifiant : sa clé, son identifiant courant ou un identifiant SDK passé (rembobinage). Jamais une nouvelle fiche.
+  // La fiche d'un identifiant : sa clé, son identifiant courant ou un identifiant SDK passé (rembobinage). Jamais une
+  // nouvelle fiche.
   private fichePour(id: string): SessionPoste | undefined {
     return fichePourIdentifiant(this.sessions.values(), id);
   }
