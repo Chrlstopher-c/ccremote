@@ -114,6 +114,7 @@ function presentationDe(env: EnvironnementSdk, p: SessionPersistee, n: () => Noy
     racines: pres.racines,
     stockage: pres.stockage,
     emettre: (evt) => emettre(n(), evt),
+    renommer: (titre) => maj(n(), { titre }),
     journal: env.journal,
     ...(pres.api ? { api: pres.api } : {}),
     ...(pres.relais ? { relais: pres.relais } : {}),

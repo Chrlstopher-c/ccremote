@@ -1,3 +1,4 @@
+import { titreNettoye } from './serveur.ts';
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -222,5 +223,14 @@ describe('lecture pour la route du relais', () => {
     expect(lireFichierSession(stockage, 'sess-1', 'aaaaaaaaaaaaaaaa', pino({ level: 'silent' }))).toBeNull();
     expect(lireFichierSession(stockage, 'sess-1', '../../../etc', pino({ level: 'silent' }))).toBeNull();
     expect(readFileSync(join(stockage.dossier('sess-1'), `${evt.fichier}.json`), 'utf8')).toContain('x.txt');
+  });
+});
+
+describe('renommer_conversation', () => {
+  test('le titre est nettoyé : espaces, guillemets, ponctuation finale, 60 caractères', () => {
+    expect(titreNettoye('  « Refonte   du site » ')).toBe('Refonte du site');
+    expect(titreNettoye('"Plan de la page tarifs."')).toBe('Plan de la page tarifs');
+    expect(Array.from(titreNettoye('a'.repeat(200))).length).toBe(60);
+    expect(titreNettoye('  "" ')).toBe('');
   });
 });

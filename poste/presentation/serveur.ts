@@ -51,6 +51,37 @@ function enResultat(r: Resultat): ResultatOutil {
   return { content: [{ type: 'text', text: r.texte }], ...(r.erreur ? { isError: true } : {}) };
 }
 
+const DESCRIPTION_RENOMMER =
+  'Renommer cette conversation dans Lanterne. À utiliser UNIQUEMENT quand l’utilisateur le demande explicitement ' +
+  '(« renomme la conversation », « appelle cette session… ») : jamais de ta propre initiative, jamais pour résumer ' +
+  'ton travail. Le titre est court (60 caractères au plus), sans guillemets ni ponctuation finale.';
+
+/** Titre demandé, nettoyé : espaces réduits, guillemets et ponctuation finale retirés, 60 caractères au plus. */
+export function titreNettoye(brut: string): string {
+  const net = brut.replace(/\s+/g, ' ').trim().replace(/^["«»“”']+|["«»“”'.!?…]+$/g, '').trim();
+  return Array.from(net).slice(0, 60).join('');
+}
+
+/** L'outil `renommer_conversation` : exposé seulement quand la session sait se renommer. */
+export function outilRenommer(c: ContexteOutils) {
+  const renommer = c.renommer;
+  if (!renommer) return [];
+  return [
+    tool(
+      'renommer_conversation',
+      DESCRIPTION_RENOMMER,
+      { titre: z.string().min(1).max(200) },
+      async (args) => {
+        const titre = titreNettoye(args.titre);
+        if (titre === '') return enResultat({ texte: 'titre vide : rien n’a été changé', erreur: true });
+        renommer(titre);
+        return enResultat({ texte: `Conversation renommée : « ${titre} ».`, erreur: false });
+      },
+      { searchHint: 'renommer conversation session titre nom' },
+    ),
+  ];
+}
+
 /** Les outils `modules` : toujours exposés ; lister et appeler passent par le lien au relais, afficher reste local. */
 export function outilsModules(c: ContexteOutils) {
   const afficher = tool(
@@ -158,6 +189,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
       ),
       ...outilsMachines(c),
       ...outilsModules(c),
+      ...outilRenommer(c),
     ],
   });
 }

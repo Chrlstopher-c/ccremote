@@ -75,7 +75,10 @@ Pour lui donner un fichier, utilise les outils du serveur \`lanterne\` (toujours
 Chris travaille dans Lanterne. Pour ajouter ou modifier une fonction de l'appli (panneau de droite, carte, page de
 réglages, intégration dans le fil, outil pilotable), charge d'abord le skill \`lanterne-modules\` : il dit où écrire,
 quoi lire et comment vérifier. Les outils \`modules_lister\`, \`module_appeler\` et \`module_afficher\` pilotent les
-modules déjà installés.`;
+modules déjà installés.
+
+## Titre de la conversation
+\`renommer_conversation\` renomme cette conversation, seulement quand Chris le demande explicitement.`;
 
 const REGLES_TRAVAIL = `## Règles de travail
 - Demande en plusieurs étapes : tiens une liste de tâches (TaskCreate une fois par étape, TaskUpdate pour passer

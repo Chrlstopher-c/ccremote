@@ -14,6 +14,8 @@ export interface ContexteOutils {
   readonly racines: readonly string[];
   readonly stockage: Stockage;
   readonly emettre: (evt: Evenement) => void;
+  // Renomme la conversation (absent : outil non exposé).
+  readonly renommer?: (titre: string) => void;
   readonly journal: Logger;
   // Relais pour les outils de machines (absent : pas d'outils `machines`).
   readonly api?: { readonly url: string; readonly jeton: string };
