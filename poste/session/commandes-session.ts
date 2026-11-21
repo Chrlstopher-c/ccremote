@@ -39,7 +39,7 @@ export async function executerSurSession(
 }
 
 async function appliquerCommande(ctx: ContexteCommandes, s: SessionPoste, c: CommandeSession): Promise<string | null> {
-  if (c.kind === 'envoyer') return envoyerMessage(s, c.texte, c.pieces ?? [], c.auteur);
+  if (c.kind === 'envoyer') return envoyerMessage(s, c.texte, c.pieces ?? [], c.auteur, c.maintenant === true);
   if (c.kind === 'interrompre') return s.interrompre();
   if (c.kind === 'compacter') return s.compacter();
   if (c.kind === 'fermer') return s.fermer();
@@ -69,16 +69,19 @@ async function appliquerCommande(ctx: ContexteCommandes, s: SessionPoste, c: Com
 
 // Les pièces jointes partent avec une session SDK ou Remote Control (message structuré) ; le moteur tmux n'en a pas.
 // Un message du pair (mode duo, `auteur`) n'entre que dans une session SDK : sa bulle porte le nom de l'auteur.
+// « Envoyer maintenant » (interrompt le tour en cours) : moteur SDK seulement, pour l'instant.
 function envoyerMessage(
   s: SessionPoste,
   texte: string,
   pieces: readonly PieceJointe[],
   auteur?: string,
+  maintenant = false,
 ): Promise<string | null> {
   if (pieces.length > 0 && !(s instanceof SessionSdk) && !(s instanceof SessionDistante))
     return Promise.resolve('pièces jointes : moteur SDK seulement');
   if (auteur && !(s instanceof SessionSdk)) return Promise.resolve('écriture à deux : moteur SDK seulement');
-  return s.envoyer(texte, pieces, auteur);
+  if (maintenant && !(s instanceof SessionSdk)) return Promise.resolve('envoi maintenant : moteur SDK seulement');
+  return s.envoyer(texte, pieces, auteur, maintenant);
 }
 
 // Rembobinage : une session SDK rembobine sur place ; une session du TUI repasse d'abord au SDK (voir

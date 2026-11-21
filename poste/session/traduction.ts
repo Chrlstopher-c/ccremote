@@ -33,6 +33,7 @@ export interface Ligne {
     prompt?: unknown;
     humanTurn?: unknown;
     origin?: { kind?: unknown };
+    source_uuid?: unknown; // identifiant de l'envoi (message SDK) : la bulle déjà au fil porte le même
   };
   readonly isApiErrorMessage?: unknown;
   readonly origin?: { kind?: unknown; from?: unknown };
@@ -47,9 +48,15 @@ export function estErreurApi(l: Ligne): boolean {
 // L'identifiant de la ligne (uuid du transcript) rejoint les messages et textes du fil principal.
 export function traduire(l: Ligne, agent?: string): Evenement[] {
   const evenements = traduireLigne(l, agent);
-  const uuid = texte(l.uuid);
+  const uuid = identifiantDeLigne(l);
   if (!uuid || agent !== undefined) return evenements;
   return evenements.map((evt) => (evt.type === 'message' || evt.type === 'texte' ? { ...evt, uuid } : evt));
+}
+
+// Un message mis en file pendant un tour a son uuid de ligne ; le fil connaît son envoi (source_uuid).
+function identifiantDeLigne(l: Ligne): string {
+  const envoi = l.attachment?.type === 'queued_command' ? texte(l.attachment.source_uuid) : '';
+  return envoi || texte(l.uuid);
 }
 
 function traduireLigne(l: Ligne, agent?: string): Evenement[] {

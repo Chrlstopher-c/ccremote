@@ -216,6 +216,7 @@ export class RequeteFausse implements RequeteSdk {
 }
 
 interface Reglages {
+  readonly messagesRecus?: SDKUserMessage[]; // copie du flux d'entrée, lue dès l'écriture (voir espionner)
   readonly resume?: Partial<ResumeSession>; // champs de la fiche posés avant le démarrage (style, annexe, sandbox…)
   readonly objectif?: string;
   readonly env?: Record<string, string | undefined>;
@@ -279,11 +280,26 @@ export function persistee(
   };
 }
 
+// Copie du flux d'entrée, lue dès l'écriture : un message poussé pendant un tour y apparaît tout de suite,
+// sans attendre la fin du tour en cours (le faux SDK consomme la file en série).
+function espionner(source: AsyncIterable<SDKUserMessage>, recus: SDKUserMessage[]): AsyncIterable<SDKUserMessage> {
+  const copie = new FileAsynchrone<SDKUserMessage>();
+  void (async () => {
+    for await (const message of source) {
+      recus.push(message);
+      copie.push(message);
+    }
+    copie.clore();
+  })();
+  return copie;
+}
+
 export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
   const requetes: RequeteFausse[] = [];
   const evenements: Evenement[] = [];
   const fabrique: FabriqueRequete = (p) => {
-    const requete = new RequeteFausse(p.prompt, p.options, scenario, reglages.mcp ?? []);
+    const flux = reglages.messagesRecus ? espionner(p.prompt, reglages.messagesRecus) : p.prompt;
+    const requete = new RequeteFausse(flux, p.options, scenario, reglages.mcp ?? []);
     if (reglages.modeles) requete.modelesInitiaux = reglages.modeles;
     if (reglages.initRapide) requete.initRapide = reglages.initRapide;
     requete.echecReglages = reglages.echecReglages === true;

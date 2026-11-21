@@ -15,6 +15,7 @@ export function messageUtilisateur(
   idSession: string,
   contenu: string | readonly unknown[],
   uuid: string,
+  priorite?: 'next' | 'later',
 ): Record<string, unknown> {
   return {
     uuid,
@@ -22,6 +23,7 @@ export function messageUtilisateur(
     type: 'user',
     parent_tool_use_id: null,
     message: { role: 'user', content: contenu },
+    ...(priorite ? { priority: priorite } : {}),
   };
 }
 

@@ -52,9 +52,21 @@ export async function* messagesAvecConnecteurs(
 }
 
 // Pièces de Chris (images, PDF) : le texte d'abord, puis les blocs, dans le même message.
-export function messageUtilisateur(texte: string, blocs: readonly BlocPiece[] = [], uuid?: SDKUserMessage['uuid']): SDKUserMessage {
+// `priorite` : quand le CLI le remet (« next » : à la prochaine frontière d'outil ; « now » interrompt le tour).
+export function messageUtilisateur(
+  texte: string,
+  blocs: readonly BlocPiece[] = [],
+  uuid?: SDKUserMessage['uuid'],
+  priorite?: SDKUserMessage['priority'],
+): SDKUserMessage {
   const contenu = blocs.length > 0 ? [{ type: 'text' as const, text: texte }, ...blocs] : texte;
-  return { type: 'user', message: { role: 'user', content: contenu }, parent_tool_use_id: null, ...(uuid ? { uuid } : {}) };
+  return {
+    type: 'user',
+    message: { role: 'user', content: contenu },
+    parent_tool_use_id: null,
+    ...(uuid ? { uuid } : {}),
+    ...(priorite ? { priority: priorite } : {}),
+  };
 }
 
 export function pause(ms: number): Promise<void> {

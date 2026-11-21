@@ -4,9 +4,18 @@ import { randomUUID } from 'node:crypto';
 import { texteRemisAClaude } from '../../commun/duo.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import { basculerNuitClaude, lireNuit, TEXTE_ACTIVATION, TEXTE_RETOUR } from './nuit.ts';
-import { demarrer } from './session-sdk-processus.ts';
+import { demarrer, interrompre } from './session-sdk-processus.ts';
 import { emettre, maj, pousser, type NoyauSdk } from './session-sdk-noyau.ts';
 import { lancerCompaction } from './session-sdk-bilan.ts';
+import { pause } from './file-messages-sdk.ts';
+
+// Un message envoyé pendant un tour part à la prochaine frontière d'outil (« next »).
+// « now » interromprait le tour en cours ; sans priorité, le CLI traite déjà le message comme « next ».
+const PRIORITE_ENVOI = 'next';
+
+export const LIGNE_INTERRUPTION = "[Action en cours interrompue par un nouveau message de l'utilisateur]";
+const DELAI_FIN_TOUR_MS = 15_000;
+const PAUSE_FIN_TOUR_MS = 20;
 
 const TENUE_AILLEURS =
   'conversation ouverte dans Claude Desktop ou un terminal : écrivez-y par Remote Control, ou fermez-la là-bas d’abord';
@@ -53,9 +62,42 @@ export async function envoyer(
   jointes?.evenements.forEach((evt) => emettre(n, evt));
   n.bilan.messageDeChris();
   const remis = auteur ? texteRemisAClaude(auteur, texte) : texte;
-  pousser(n, remis + (jointes?.complement ?? ''), jointes?.blocs, uuid);
+  pousser(n, remis + (jointes?.complement ?? ''), jointes?.blocs, uuid, PRIORITE_ENVOI);
   if (n.etat.statut !== 'compaction') maj(n, { statut: 'travail' });
   return null;
+}
+
+// Envoi maintenant (Lanterne, « Envoyer maintenant ») : la bulle part tout de suite, le tour en cours est interrompu
+// comme par Échap, puis le message part après la fin de ce tour, précédé pour Claude seulement de LIGNE_INTERRUPTION.
+// Sans tour en cours, c'est un envoi ordinaire. Si l'interruption est refusée, le message part quand même.
+export async function envoyerMaintenant(
+  n: NoyauSdk,
+  texte: string,
+  pieces: readonly PieceJointe[] = [],
+): Promise<string | null> {
+  if (pieces.length > 0) return 'envoi maintenant : sans pièces jointes';
+  if (!n.fil || n.etat.statut !== 'travail') return envoyer(n, texte, pieces);
+  const uuid = randomUUID();
+  emettre(n, { type: 'message', texte, uuid });
+  n.bilan.messageDeChris();
+  const erreur = await interrompre(n);
+  if (erreur) n.env.journal.warn({ session: n.etat.id, erreur }, 'envoi maintenant : interruption refusée');
+  await attendreFinDuTour(n);
+  const remis = `${LIGNE_INTERRUPTION}\n${texte}`;
+  if (!n.fil) return demarrer(n, true, remis, uuid);
+  pousser(n, remis, undefined, uuid, PRIORITE_ENVOI);
+  maj(n, { statut: 'travail' });
+  return null;
+}
+
+// Le statut quitte « travail » quand le tour interrompu se termine (résultat reçu ou flux fermé). Borné : au-delà,
+// le message part quand même, en fil normal.
+async function attendreFinDuTour(n: NoyauSdk): Promise<void> {
+  const fin = Date.now() + DELAI_FIN_TOUR_MS;
+  while (n.etat.statut === 'travail' && n.fil && Date.now() < fin) await pause(PAUSE_FIN_TOUR_MS);
+  if (n.etat.statut === 'travail' && n.fil) {
+    n.env.journal.warn({ session: n.etat.id }, 'fin du tour interrompu non vue');
+  }
 }
 
 export async function reprendre(n: NoyauSdk, message?: string): Promise<string | null> {

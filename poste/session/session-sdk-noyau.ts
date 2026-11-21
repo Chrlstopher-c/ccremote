@@ -154,10 +154,11 @@ export function pousser(
   texte: string,
   blocs?: PiecesPreparees['blocs'],
   uuid?: SDKUserMessage['uuid'],
+  priorite?: SDKUserMessage['priority'],
 ): void {
   n.interrompuParChris = false;
   if (!n.fil) return;
-  n.fil.push(messageUtilisateur(texte, blocs, uuid));
+  n.fil.push(messageUtilisateur(texte, blocs, uuid, priorite));
   n.bilan.envoye();
 }
 

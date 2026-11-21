@@ -54,6 +54,7 @@ const CorpsMessage = z.object({
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
   // Message relayé depuis une autre session (« Envoyer à une autre session ») : le receveur en trace l'origine.
   relayeDe: z.object({ session: z.string().min(1).max(200), titre: z.string().max(200) }).optional(),
+  maintenant: z.boolean().optional(), // « Envoyer maintenant » : le poste interrompt le tour, puis remet le message
 });
 const CorpsRelais = z.object({
   sens: SensRelais,
@@ -164,11 +165,13 @@ export class ApiSessions {
     if (c instanceof Response) return c;
     const session = await this.sessionDe(req.params.id);
     if (session instanceof Response) return session;
+    if (session.duo && c.maintenant) return erreur('envoi maintenant indisponible en mode duo', REFUS_POSTE);
     if (session.duo) return ecrireAuPair(this.pair, session, c.texte, c.pieces ?? [], c.relayeDe);
     return this.commander(req.params.id, {
       kind: 'envoyer',
       texte: c.texte,
       ...(c.pieces ? { pieces: c.pieces } : {}),
+      ...(c.maintenant ? { maintenant: true } : {}),
     });
   }
 
@@ -544,7 +547,7 @@ export class ApiSessions {
   private async commander(
     sessionId: string,
     c:
-      | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[]; auteur?: string }
+      | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[]; auteur?: string; maintenant?: boolean }
       | { kind: 'autonomie'; active: boolean }
       | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
       | { kind: 'remote_control'; actif: boolean }

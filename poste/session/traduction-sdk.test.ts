@@ -470,3 +470,16 @@ describe('quota vu dans le flux SDK (rate_limit_event)', () => {
     }
   });
 });
+
+test('message de Chris rejoué par le SDK à sa prise (isReplay) : aucune bulle en plus de celle de l’envoi', () => {
+  const etat = nouvelEtatTraduction();
+  const rejeu = sdk({
+    type: 'user',
+    uuid: 'envoi-1',
+    isReplay: true,
+    session_id: 's1',
+    parent_tool_use_id: null,
+    message: { role: 'user', content: 'vas plus vite' },
+  });
+  expect(traduireSdk(rejeu, etat).evenements).toEqual([]);
+});

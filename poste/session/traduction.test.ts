@@ -162,3 +162,18 @@ test('message relayé par Remote Control (ligne meta d’une autre session sans 
   const autre = { ...ligne, origin: { kind: 'peer', from: 'session-b' }, message: { content: contenu } };
   expect(traduire(autre)).toEqual([]);
 });
+
+test('message mis en file par Chris : bulle à l’identifiant de son envoi (source_uuid)', () => {
+  const l = {
+    type: 'attachment',
+    uuid: 'ligne-1',
+    attachment: {
+      type: 'queued_command',
+      humanTurn: true,
+      origin: { kind: 'human' },
+      prompt: 'vas plus vite',
+      source_uuid: 'envoi-1',
+    },
+  };
+  expect(traduire(l)).toEqual([{ type: 'message', texte: 'vas plus vite', uuid: 'envoi-1' }]);
+});

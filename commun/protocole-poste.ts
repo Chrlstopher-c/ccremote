@@ -121,6 +121,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
     texte: z.string().min(1),
     pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(), // images, PDF, fichiers joints par Chris
     auteur: z.string().min(1).max(64).optional(), // message d'un pair (mode duo) : son nom, en tête de ce qui part
+    maintenant: z.boolean().optional(), // « Envoyer maintenant » : interrompt le tour en cours, puis part
   }),
   // Lecture d'un fichier présenté (sortie d'outil, image du fil) stocké par la session sur le poste.
   z.object({ kind: z.literal('fichier_session'), ...avecSession, fichier: z.string() }),

@@ -61,7 +61,12 @@ export interface SessionPoste {
 
   // Commandes de Chris, relayées par le gestionnaire.
   lancer(message: string, modele: string | null, pieces?: readonly PieceJointe[]): Promise<string | null>;
-  envoyer(texte: string, pieces?: readonly PieceJointe[], auteur?: string): Promise<string | null>;
+  envoyer(
+    texte: string,
+    pieces?: readonly PieceJointe[],
+    auteur?: string,
+    maintenant?: boolean,
+  ): Promise<string | null>;
   interrompre(): Promise<string | null>;
   compacter(): Promise<string | null>;
   fermer(): Promise<string | null>;

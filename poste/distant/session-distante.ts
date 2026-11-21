@@ -385,7 +385,8 @@ export class SessionDistante implements SessionPoste {
   async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
     if (pieces.some((p) => !p.mime.startsWith('image/'))) return PIECES_REFUSEES;
     const contenu = pieces.length > 0 ? contenuAvecImages(texte, pieces) : texte;
-    return this.poster(messageUtilisateur(this.resume.id, contenu, randomUUID()));
+    // « next » : remis à la prochaine frontière d'outil, comme le chemin SDK (le bridge lit ce champ).
+    return this.poster(messageUtilisateur(this.resume.id, contenu, randomUUID(), 'next'));
   }
 
   async interrompre(): Promise<string | null> {
