@@ -7,7 +7,7 @@ import { type CommandeRelais, ENTETE_MACHINE, MessagePoste } from '../../commun/
 import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
-import type { AccesVue, EvenementDate, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
+import type { AccesVue, VueInstallation, VueMachine } from '../../commun/api-clients.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import { notificationPour } from '../notifications/regles.ts';
 import { RequetesPostes } from './requetes-postes.ts';
@@ -18,15 +18,8 @@ import { ArchivagesEnMemoire } from '../registre/archivages-desktop.ts';
 import { RechercheJumelle } from './recherche-jumelle.ts';
 import { StatutsPaires } from './statut-paire.ts';
 import type { Registre } from '../registre/registre.ts';
-import type { LignesTranscript } from '../registre/nettoyage-fil.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
-import {
-  avancerRelecture,
-  cleEvenement,
-  queueSansAncre,
-  type EtatRelecture,
-  type EvenementHorodate,
-} from './fusion-historique.ts';
+import { RelecturesFil } from './relectures-fil.ts';
 
 export interface DonneesPoste {
   readonly machine: string;
@@ -43,6 +36,7 @@ export interface ReponsePoste {
   readonly donnees?: unknown;
 }
 type SansId<T> = T extends unknown ? Omit<T, 'id'> : never;
+type MessageDeSession = Extract<MessagePoste, { kind: 'session' | 'historique' | 'recalage' | 'evenement' }>;
 
 const DELAI_REPONSE_MS = 60_000; // une connexion de compte attend jusqu’à 30 s la confirmation du CLI
 
@@ -52,25 +46,21 @@ export class Postes {
   private readonly enAttente = new Map<string, (r: ReponsePoste) => void>();
   private surLimiteCompte: ((machine: string, cle: string, limite: LimiteSdk) => void) | null = null;
 
-  /** Fenêtre de quota vue dans le flux SDK d'un poste : posée sur le relevé du compte (sans appel à l'API). */
+  /** Fenêtre de quota vue dans le flux SDK d'un poste : posée sur le relevé du compte, sans appel. */
   surCompteLimite(fn: (machine: string, cle: string, limite: LimiteSdk) => void): void {
     this.surLimiteCompte = fn;
   }
   // Sessions trouvées sur chaque poste connecté, pas encore ouvertes dans Lanterne : jamais persistées.
   private readonly decouvertesDuPoste = new Map<string, readonly Decouverte[]>();
-  // Identifiants de tous les transcripts de chaque poste : une fiche dont la conversation n'existe nulle part est fantôme.
+  // Identifiants de tous les transcripts de chaque poste : une fiche dont la conversation n'existe nulle part est
+  // fantôme.
   private readonly transcriptsDuPoste = new Map<string, ReadonlySet<string>>();
   private readonly infos = new Map<string, InfosPoste>();
   /** Fiches Claude Desktop des postes : Remote Control et archivage (base : ArchivagesDesktop, posé par bin.ts). */
   desktop = new DesktopDesPostes(new ArchivagesEnMemoire());
-  // Session → où en est la relecture de son transcript (voir fusion-historique.ts).
-  private readonly relectures = new Map<string, EtatRelecture>();
+  private readonly relectures: RelecturesFil;
   private readonly paires: StatutsPaires;
   private readonly jumelles: RechercheJumelle;
-  // Sessions dont une relecture complète a été demandée au poste (queue sans l'ancre du fil) : une fois par session.
-  private readonly relecturesCompletesDemandees = new Set<string>();
-  // Relecture complète demandée et pas encore reçue : son premier lot la consomme (fusion chronologique).
-  private readonly completesAttendues = new Set<string>();
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -97,6 +87,14 @@ export class Postes {
   ) {
     this.paires = new StatutsPaires(registre);
     this.jumelles = new RechercheJumelle(registre, (id) => this.decouverteDuPont(id));
+    this.relectures = new RelecturesFil({
+      registre,
+      diffusion,
+      journal,
+      desktop: () => this.desktop,
+      envoyerHistorique: (machine, sessionId) => this.envoyer(machine, { kind: 'historique', sessionId }),
+      diffuserSession: (sessionId) => this.diffuserSession(sessionId),
+    });
   }
 
   authentifier(req: Request): string | null {
@@ -220,6 +218,11 @@ export class Postes {
     ) {
       return this.modulesRecus(machine, m);
     }
+    this.traiterDeSession(machine, m);
+  }
+
+  // Compte rendu d'une session : seulement si elle appartient à ce poste (une session inconnue est acceptée).
+  private traiterDeSession(machine: string, m: MessageDeSession): void {
     const sessionId = m.kind === 'session' ? m.session.id : m.sessionId;
     if (!this.appartient(sessionId, machine) || (m.kind === 'session' && m.session.machine !== machine)) {
       this.journal.warn({ machine, sessionId }, 'compte rendu refusé : session d’une autre machine');
@@ -230,7 +233,7 @@ export class Postes {
       return this.diffuserSession(m.session.id);
     }
     if (m.kind === 'historique') {
-      this.historique(machine, sessionId, m.replay, m.evenements);
+      this.relectures.historique(machine, sessionId, m.replay, m.evenements);
       return;
     }
     if (m.kind === 'recalage') {
@@ -238,7 +241,7 @@ export class Postes {
         m.lignes && m.jusqua
           ? { cles: new Set(m.lignes), messages: new Set(m.messages ?? []), jusqua: m.jusqua }
           : undefined;
-      return this.recaler(sessionId, m.archiver, transcript);
+      return this.relectures.recaler(sessionId, m.archiver, transcript);
     }
     this.evenement(sessionId, m.ts, m.evt);
   }
@@ -368,87 +371,6 @@ export class Postes {
     });
   }
 
-  // Relecture du transcript d'une session découverte, adoptée ou suivie hors de Lanterne : un lot ne s'ajoute au fil
-  // que s'il contient sa suite (voir fusion-historique.ts), sans doublon. Une relecture complète demandée par le relais
-  // (queue sans l'ancre) comble les trous, chaque événement à sa place chronologique. Ce sont des événements anciens :
-  // aucune notification.
-  private historique(machine: string, sessionId: string, replay: string, lot: readonly EvenementHorodate[]): void {
-    const precedent = this.relectures.get(sessionId);
-    const premier = precedent?.replay !== replay;
-    const complet = premier ? this.completesAttendues.delete(sessionId) : precedent?.complet === true;
-    if (complet) return this.historiqueComplet(sessionId, replay, lot, premier);
-    const { etat, ajout } = avancerRelecture(precedent, replay, () => this.ancreDuFil(sessionId), lot);
-    this.relectures.set(sessionId, etat);
-    if (ajout.length === 0) {
-      this.journal.debug({ sessionId, lot: lot.length }, 'relecture : rien à ajouter au fil');
-      const desaccorde = queueSansAncre(etat.ancre, lot) || !this.registre.lotRaccorde(sessionId, lot);
-      if (desaccorde && !this.relecturesCompletesDemandees.has(sessionId)) {
-        this.relecturesCompletesDemandees.add(sessionId);
-        this.completesAttendues.add(sessionId);
-        this.journal.info({ sessionId }, 'relecture : ancre du fil absente de la queue, relecture complète demandée');
-        this.envoyer(machine, { kind: 'historique', sessionId });
-      }
-      return;
-    }
-    const fusion = this.registre.fusionnerHistorique(sessionId, ajout, { complet: false, premier: false });
-    if (etat.fusion && !fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
-    if (fusion.reecrit || (!etat.fusion && fusion.ajoutes.length > 0)) this.signalerFilModifie(sessionId);
-    this.diffuserSession(sessionId);
-    this.journal.info(
-      { sessionId, ajoutes: fusion.ajoutes.length, reecrit: fusion.reecrit, fusion: etat.fusion },
-      'historique relu : suite ajoutée au fil',
-    );
-  }
-
-  private historiqueComplet(
-    sessionId: string,
-    replay: string,
-    lot: readonly EvenementHorodate[],
-    premier: boolean,
-  ): void {
-    this.relectures.set(sessionId, { replay, ancre: null, fusion: true, complet: true });
-    const fusion = this.registre.fusionnerHistorique(sessionId, lot, { complet: true, premier });
-    if (!fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
-    if (fusion.reecrit || fusion.remplace) this.signalerFilModifie(sessionId);
-    this.diffuserSession(sessionId);
-    this.journal.info(
-      {
-        sessionId,
-        lot: lot.length,
-        ajoutes: fusion.ajoutes.length,
-        reecrit: fusion.reecrit,
-        remplace: fusion.remplace,
-      },
-      'relecture complète : fil comblé',
-    );
-  }
-
-  // Recalage d'une session par son poste : fil nettoyé, archivage Desktop appliqué (une fois) ; la relecture qui suit
-  // est complète.
-  private recaler(sessionId: string, archiver: boolean, transcript?: LignesTranscript): void {
-    const conversation = this.registre.session(sessionId)?.claudeSessionId ?? sessionId;
-    if (archiver && !this.desktop.dejaArchivee(conversation)) {
-      this.desktop.archivee(conversation);
-      this.registre.definirArchivee(sessionId, true);
-    }
-    const retires = this.registre.nettoyerFil(sessionId, transcript);
-    this.relectures.delete(sessionId);
-    this.relecturesCompletesDemandees.add(sessionId);
-    this.completesAttendues.add(sessionId);
-    this.journal.info({ sessionId, retires, archiver }, 'recalage : fil nettoyé, relecture complète attendue');
-    if (retires > 0) this.signalerFilModifie(sessionId);
-    this.diffuserSession(sessionId);
-  }
-
-  private diffuserFil(evenement: EvenementDate): void {
-    this.diffusion.diffuser({ type: 'evenement', evenement });
-  }
-
-  // Le fil a changé sans qu'un événement en queue le montre : le client qui l'affiche le relit (une fois par rafale).
-  private signalerFilModifie(sessionId: string): void {
-    this.diffusion.diffuser({ type: 'fil_modifie', sessionId });
-  }
-
   // Fiche rapportée par son poste : le statut affiché tient compte de la jumelle Remote Control (voir statut-paire).
   private enregistrerRapportee(s: ResumeSession): void {
     const jumelle = this.paires.enregistrer(this.desktop.avecDesktop(this.jumelles.avecJumelle(s)));
@@ -462,11 +384,6 @@ export class Postes {
       .filter(([machine]) => this.enLigne(machine))
       .flatMap(([machine, liste]) => liste.map((decouverte) => ({ machine, decouverte })));
     return decouverteParIdentifiant(candidates).find((d) => d.ponts?.includes(id)) ?? null;
-  }
-
-  private ancreDuFil(sessionId: string): string | null {
-    const dernier = this.registre.derniersEvenements(sessionId, 1)[0];
-    return dernier ? cleEvenement(dernier) : null;
   }
 
   private evenement(sessionId: string, ts: string, evt: Extract<MessagePoste, { kind: 'evenement' }>['evt']): void {
