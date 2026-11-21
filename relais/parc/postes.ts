@@ -233,7 +233,7 @@ export class Postes {
       return this.diffuserSession(m.session.id);
     }
     if (m.kind === 'historique') {
-      this.relectures.historique(machine, sessionId, m.replay, m.evenements);
+      this.relectures.historique(machine, sessionId, m.replay, m.evenements, m.direct === true);
       return;
     }
     if (m.kind === 'recalage') {

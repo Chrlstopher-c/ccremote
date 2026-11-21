@@ -438,7 +438,7 @@ export class GestionnaireSessions {
     const p = this.avecParentAttendu(recue);
     const sortie: SortieSession = {
       evenement: (id, evt) => this.sortie.evenement(id, evt),
-      historique: (id, evts) => this.sortieFil.historique?.(id, evts),
+      historique: (id, evts, direct) => this.sortieFil.historique?.(id, evts, direct),
       resume: (r) => {
         this.sortie.resume(r);
         this.planifierSauvegarde();

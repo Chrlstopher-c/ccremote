@@ -44,6 +44,14 @@ export class ToursSession {
     this.dossier = dossierTours(p.donnees, p.sessionId);
   }
 
+  /** Chemins absolus des fichiers de tous les tours non annulés de la session. */
+  chemins(): string[] {
+    const fichiers = listerTours(this.dossier)
+      .filter((t) => !t.annule)
+      .flatMap((t) => t.fichiers.map((f) => f.absolu));
+    return [...new Set(fichiers)];
+  }
+
   /** Garde le contenu « avant » d'un fichier à sa première édition du tour. */
   noterAvant(absolu: string): void {
     if (this.avant.has(absolu)) return;

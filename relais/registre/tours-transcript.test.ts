@@ -69,4 +69,17 @@ describe('jetons d’une session suivie hors de Lanterne', () => {
     r.fusionnerHistorique('a', SUITE, { complet: true, premier: false });
     expect(r.jetonsSession('a')).toEqual({ entree: 507 + 3, sortie: 90 + 2, tours: 2 });
   });
+
+  test('le coût cumulé n’est donné que si la dernière fin de tour le porte ; sinon absent (jamais zéro inventé)', () => {
+    const r = new Registre(ouvrirBase(':memory:'));
+    r.enregistrerSession(session('a'));
+    const avecCout: EvenementHorodate = {
+      ts: T2,
+      evt: { type: 'tour_fini', dureeMs: 1000, contexte: 10, entree: 1, sortie: 1, uuid: 'b1', coutUsd: 0.42 },
+    };
+    r.fusionnerHistorique('a', [tour(T1, 277, 50, 'a3'), avecCout], { complet: true, premier: true });
+    expect(r.jetonsSession('a')).toEqual({ entree: 278, sortie: 51, tours: 2, cout: 0.42 });
+    r.fusionnerHistorique('a', [tour(T2, 230, 40, 'a4')], { complet: false, premier: false });
+    expect(r.jetonsSession('a')).toEqual({ entree: 508, sortie: 91, tours: 3 });
+  });
 });

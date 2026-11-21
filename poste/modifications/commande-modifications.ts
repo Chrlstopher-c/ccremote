@@ -10,6 +10,7 @@ import { RefusDepot } from './refus-depot.ts';
 import { transcriptDeSession } from '../parite/transcript-session.ts';
 import { DepotGit } from './git.ts';
 import { ToursSession } from './tours.ts';
+import { cheminsDuTranscript } from './chemins-session.ts';
 
 export type CommandeModifications = Extract<
   CommandeRelais,
@@ -137,6 +138,9 @@ export class ModificationsSessions {
     const r = await executerModifications(c, { cwd, tours, journal: this.p.journal });
     if (c.kind.startsWith('git_')) this.refus.noter(c.sessionId, cwd, r.ok ? null : (r.erreur ?? null));
     if (r.evenement) this.p.sortie.evenement(c.sessionId, r.evenement);
-    return r;
+    if (c.kind !== 'git_modifications' || !r.ok) return r;
+    const chemins = tours ? tours.chemins() : transcript ? cheminsDuTranscript(transcript, this.p.journal) : [];
+    const donnees = r.donnees !== null && typeof r.donnees === 'object' ? r.donnees : {};
+    return { ...r, donnees: { ...donnees, chemins } };
   }
 }

@@ -160,3 +160,20 @@ describe('chemin d’un fichier de tour', () => {
     expect(cheminEdite('pas un objet', racine)).toBeNull();
   });
 });
+
+describe('chemins de toute la session', () => {
+  test('les fichiers des tours non annulés, sans doublon ; un tour annulé ne compte plus', () => {
+    const t = nouvelle();
+    const a = ecrire('a.txt', 'un\n');
+    t.noterAvant(a);
+    writeFileSync(a, 'deux\n');
+    t.finirTour();
+    const b = ecrire('b.txt', 'x\n');
+    t.noterAvant(b);
+    writeFileSync(b, 'y\n');
+    const tour = t.finirTour();
+    expect(t.chemins().sort()).toEqual([a, b].sort());
+    t.annuler(tour?.tour ?? 'dernier');
+    expect(t.chemins()).toEqual([a]);
+  });
+});

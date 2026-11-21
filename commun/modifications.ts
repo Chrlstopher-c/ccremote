@@ -22,6 +22,8 @@ export const Modifications = z.object({
   racine: z.string(),
   branche: z.string().nullable(),
   fichiers: z.array(FichierModifie),
+  // Chemins absolus modifiés par tous les tours de la session (git ou non), pour les totaux du panneau.
+  chemins: z.array(z.string()).optional(),
 });
 export type Modifications = z.infer<typeof Modifications>;
 

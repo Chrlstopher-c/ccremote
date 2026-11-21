@@ -14,6 +14,9 @@ import {
   queueSansAncre,
 } from './fusion-historique.ts';
 
+// Événements qui changent l'état d'une session quand ils arrivent en direct (voir `diffuserLot`).
+const ETATS_RELUS: ReadonlySet<string> = new Set(['tour_fini', 'erreur']);
+
 export interface DependancesRelectures {
   readonly registre: Registre;
   readonly diffusion: Diffusion;
@@ -35,13 +38,20 @@ export class RelecturesFil {
 
   // Relecture du transcript d'une session découverte, adoptée ou suivie hors de Lanterne : un lot ne s'ajoute au fil
   // que s'il contient sa suite (voir fusion-historique.ts), sans doublon. Une relecture complète demandée par le relais
-  // (queue sans l'ancre) comble les trous, chaque événement à sa place chronologique. Ce sont des événements anciens :
-  // aucune notification.
-  historique(machine: string, sessionId: string, replay: string, lot: readonly EvenementHorodate[]): void {
+  // (queue sans l'ancre) comble les trous, chaque événement à sa place chronologique. Une relecture n'est pas une fin de
+  // tour observée : une fin de tour ou une erreur relue ne passe pas la session en « terminée » ni non lue (voir
+  // `diffuserLot`). Une suite écrite en direct (`direct`) garde son effet.
+  historique(
+    machine: string,
+    sessionId: string,
+    replay: string,
+    lot: readonly EvenementHorodate[],
+    direct: boolean,
+  ): void {
     const precedent = this.relectures.get(sessionId);
     const premier = precedent?.replay !== replay;
     const complet = premier ? this.completesAttendues.delete(sessionId) : precedent?.complet === true;
-    if (complet) return this.historiqueComplet(sessionId, replay, lot, premier);
+    if (complet) return this.historiqueComplet(sessionId, replay, lot, premier, direct);
     const { etat, ajout } = avancerRelecture(precedent, replay, () => this.ancreDuFil(sessionId), lot);
     this.relectures.set(sessionId, etat);
     if (ajout.length === 0) {
@@ -56,8 +66,9 @@ export class RelecturesFil {
       return;
     }
     const fusion = this.d.registre.fusionnerHistorique(sessionId, ajout, { complet: false, premier: false });
-    if (etat.fusion && !fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
-    if (fusion.reecrit || (!etat.fusion && fusion.ajoutes.length > 0)) this.signalerFilModifie(sessionId);
+    if (etat.fusion && !fusion.reecrit) {
+      if (this.diffuserLot(fusion.ajoutes, direct)) this.signalerFilModifie(sessionId);
+    } else if (fusion.reecrit || fusion.ajoutes.length > 0) this.signalerFilModifie(sessionId);
     this.d.diffuserSession(sessionId);
     this.d.journal.info(
       { sessionId, ajoutes: fusion.ajoutes.length, reecrit: fusion.reecrit, fusion: etat.fusion },
@@ -70,11 +81,12 @@ export class RelecturesFil {
     replay: string,
     lot: readonly EvenementHorodate[],
     premier: boolean,
+    direct: boolean,
   ): void {
     this.relectures.set(sessionId, { replay, ancre: null, fusion: true, complet: true });
     const fusion = this.d.registre.fusionnerHistorique(sessionId, lot, { complet: true, premier });
-    if (!fusion.reecrit) for (const evenement of fusion.ajoutes) this.diffuserFil(evenement);
-    if (fusion.reecrit || fusion.remplace) this.signalerFilModifie(sessionId);
+    const relu = !fusion.reecrit && this.diffuserLot(fusion.ajoutes, direct);
+    if (fusion.reecrit || fusion.remplace || relu) this.signalerFilModifie(sessionId);
     this.d.diffuserSession(sessionId);
     this.d.journal.info(
       {
@@ -112,6 +124,20 @@ export class RelecturesFil {
 
   private diffuserFil(evenement: EvenementDate): void {
     this.d.diffusion.diffuser({ type: 'evenement', evenement });
+  }
+
+  // Événements relus diffusés un à un, sauf ceux qui changent l'état d'une session (fin de tour, erreur) quand ils ne
+  // sont pas une suite en direct : ceux-là ne sont pas diffusés, et rendent `true` pour qu'un signal fasse relire le fil.
+  private diffuserLot(lot: readonly EvenementDate[], direct: boolean): boolean {
+    let relu = false;
+    for (const evenement of lot) {
+      if (!direct && ETATS_RELUS.has(evenement.evt.type)) {
+        relu = true;
+        continue;
+      }
+      this.diffuserFil(evenement);
+    }
+    return relu;
   }
 
   // Le fil a changé sans qu'un événement en queue le montre : le client qui l'affiche le relit (une fois par rafale).

@@ -98,6 +98,6 @@ export function fusionnerParDate(
 export function avecTraceRelais(sortie: SortieSession, trace: TraceRelais): SortieSession {
   return {
     ...sortie,
-    historique: (id, evenements) => sortie.historique?.(id, trace.fusionner(id, evenements)),
+    historique: (id, evenements, direct) => sortie.historique?.(id, trace.fusionner(id, evenements), direct),
   };
 }

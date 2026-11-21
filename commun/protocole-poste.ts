@@ -86,6 +86,7 @@ export const MessagePoste = z.discriminatedUnion('kind', [
     kind: z.literal('historique'),
     sessionId: z.string(),
     replay: z.string().min(1).max(64),
+    direct: z.boolean().optional(), // suite écrite en direct (fin de tour observée) ; absent pour une relecture
     evenements: z.array(z.object({ ts: z.string(), evt: Evenement })).max(TAILLE_LOT_HISTORIQUE),
   }),
   // Delta de texte ou de réflexion : relayé en direct, jamais persisté dans le fil.

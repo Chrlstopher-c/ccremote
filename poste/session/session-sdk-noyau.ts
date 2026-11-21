@@ -99,7 +99,7 @@ function suiviDe(env: EnvironnementSdk, p: SessionPersistee, n: () => NoyauSdk):
   const stockage = env.presentation?.stockage;
   return new SuiviTranscript({
     journal: env.journal,
-    emettre: (evenements) => env.sortie.historique?.(n().etat.id, evenements),
+    emettre: (evenements, direct) => env.sortie.historique?.(n().etat.id, evenements, direct),
     ...(env.relectureRecenteMs !== undefined ? { recentMs: env.relectureRecenteMs } : {}),
     ...(stockage ? { stockerImage: stockeurImages(stockage, p.resume.id, env.journal) } : {}),
   });

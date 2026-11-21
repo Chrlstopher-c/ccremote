@@ -15,7 +15,7 @@ export const CHEVAUCHEMENT_DIRECT = 5; // suite au fil : derniers événements d
 
 export interface DependancesSuivi {
   readonly journal: Logger;
-  readonly emettre: (evenements: readonly EvenementHorodate[]) => void;
+  readonly emettre: (evenements: readonly EvenementHorodate[], direct: boolean) => void; // direct : suite écrite en direct
   readonly stockerImage?: StockerImage;
   readonly antiRebondMs?: number;
   readonly recentMs?: number;
@@ -95,14 +95,14 @@ export class SuiviTranscript {
     const debut = complet || this.envoyes === null || retrecie ? 0 : Math.max(0, this.envoyes - CHEVAUCHEMENT);
     this.envoyes = evenements.length;
     this.recents = evenements.slice(-CHEVAUCHEMENT_DIRECT);
-    this.d.emettre(evenements.slice(debut));
+    this.d.emettre(evenements.slice(debut), false);
   }
 
   private envoyerSuite(ajout: readonly EvenementHorodate[]): void {
     const envoi = [...this.recents, ...ajout];
     this.envoyes = (this.envoyes ?? 0) + ajout.length;
     this.recents = envoi.slice(-CHEVAUCHEMENT_DIRECT);
-    this.d.emettre(envoi);
+    this.d.emettre(envoi, true);
   }
 }
 

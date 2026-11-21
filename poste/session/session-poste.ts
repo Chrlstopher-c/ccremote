@@ -23,8 +23,9 @@ export type Reglage =
 
 export interface SortieSession {
   evenement(sessionId: string, evt: Evenement): void;
-  /** Historique complet d'une session (transcript relu à l'ouverture) : un lot, sans notifications. */
-  historique?(sessionId: string, evenements: readonly EvenementHorodate[]): void;
+  /** Historique d'une session (transcript relu, ou suite écrite en direct si `direct`) : un lot, sans notifications
+   *  sauf pour une suite en direct, qui fait foi d'une fin de tour observée. */
+  historique?(sessionId: string, evenements: readonly EvenementHorodate[], direct?: boolean): void;
   resume(r: ResumeSession): void;
   /** Fil d'une session à recaler au relais (nettoyage, archivage Desktop) : la relecture complète suit. */
   recalage?(sessionId: string, archiver: boolean, lignes: LignesRelues | null): void;

@@ -20,6 +20,8 @@ export interface Ligne {
   readonly message?: { id?: unknown; content?: unknown; usage?: Objet; stop_reason?: unknown; model?: unknown };
   readonly compactMetadata?: Objet;
   readonly durationMs?: unknown; // `system` `turn_duration` : durée du tour, ms
+  readonly toolUseResult?: unknown; // résultat d'outil relevé par Claude Code (diff d'une écriture)
+  readonly totalCostUSD?: unknown; // `cost-state` : coût cumulé de la session, USD
   readonly customTitle?: unknown;
   readonly aiTitle?: unknown;
   readonly uuid?: unknown;

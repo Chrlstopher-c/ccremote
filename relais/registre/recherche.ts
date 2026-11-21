@@ -102,5 +102,12 @@ export function jetonsSessionBase(db: Database, sessionId: string): JetonsSessio
             AND json_extract(evt, '$.uuid') IS NOT NULL GROUP BY json_extract(evt, '$.uuid')))`,
     )
     .get({ s: sessionId }) as { entree: number; sortie: number; tours: number } | null;
-  return { entree: l?.entree ?? 0, sortie: l?.sortie ?? 0, tours: l?.tours ?? 0 };
+  const dernier = db
+    .query(
+      `SELECT json_extract(evt, '$.coutUsd') AS cout FROM evenements WHERE session_id = $s
+        AND json_extract(evt, '$.type') = 'tour_fini' ORDER BY seq DESC LIMIT 1`,
+    )
+    .get({ s: sessionId }) as { cout: number | null } | null;
+  const cout = dernier?.cout ?? null;
+  return { entree: l?.entree ?? 0, sortie: l?.sortie ?? 0, tours: l?.tours ?? 0, ...(cout === null ? {} : { cout }) };
 }

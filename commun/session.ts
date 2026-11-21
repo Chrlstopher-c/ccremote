@@ -244,6 +244,7 @@ export const Evenement = z.discriminatedUnion('type', [
     entree: z.number().optional(), // jetons lus pendant le tour (SDK) ; absent pour une session tmux
     sortie: z.number().optional(), // jetons générés pendant le tour
     uuid: z.string().optional(), // dernière entrée assistant du tour (SDK) : désigne la réponse (dupliquer, épingler)
+    coutUsd: z.number().nonnegative().optional(), // coût cumulé de la session, lu du transcript (session suivie) : absent sinon
   }),
   // Présentation (outils `lanterne` et pièces de Chris) : `fichier` désigne un fichier stocké sur le poste, servi par
   // la route du relais ; `artefact` est une version d'une page HTML ; `widget` un SVG ou une page HTML rendus en place.

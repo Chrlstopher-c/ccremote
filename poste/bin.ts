@@ -70,10 +70,11 @@ const sessions = new GestionnaireSessions(
       evt.type === 'flux'
         ? envoyer({ kind: 'flux', sessionId, bloc: evt.bloc, delta: evt.delta, genre: evt.genre, agent: evt.agent })
         : envoyer({ kind: 'evenement', sessionId, ts: new Date().toISOString(), evt }),
-    historique: (sessionId, evenements) => {
+    historique: (sessionId, evenements, direct) => {
       const replay = randomUUID();
       for (let i = 0; i < evenements.length; i += TAILLE_LOT_HISTORIQUE) {
-        envoyer({ kind: 'historique', sessionId, replay, evenements: evenements.slice(i, i + TAILLE_LOT_HISTORIQUE) });
+        const lot = evenements.slice(i, i + TAILLE_LOT_HISTORIQUE);
+        envoyer({ kind: 'historique', sessionId, replay, direct: direct === true, evenements: lot });
       }
     },
     resume: (session) => envoyer({ kind: 'session', session }),

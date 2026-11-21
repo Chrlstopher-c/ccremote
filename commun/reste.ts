@@ -65,6 +65,7 @@ export interface JetonsSession {
   readonly entree: number;
   readonly sortie: number;
   readonly tours: number;
+  readonly cout?: number; // coût cumulé, si la dernière fin de tour le porte (session suivie hors de Lanterne)
 }
 
 export const CommandeMachine = z.object({
