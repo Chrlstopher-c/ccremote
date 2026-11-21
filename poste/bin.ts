@@ -40,6 +40,7 @@ import { cheminTranscript } from './session/transcript.ts';
 import { dossiersProjets } from './session/decouverte.ts';
 import { SOCKET } from './session/tmux.ts';
 import { DOSSIER_MODULES_SOURCE, SurveillanceModules } from './modules/surveillance.ts';
+import { DOSSIER_DONNEES_MODULES, DOSSIER_JOURNAUX_MODULES, ServeursModules } from './modules/serveur/serveurs.ts';
 
 const PERIODE_ETAT_MS = 15_000;
 
@@ -52,6 +53,14 @@ const socket = join(config.donnees, 'poste.sock');
 
 let lien: LienRelais | null = null;
 const envoyer = (m: MessagePoste): void => lien?.envoyer(m);
+// Les serveurs des modules de ce poste (v1.2) : lancés hors de l'appli, arrêtés à l'arrêt du poste.
+const serveurs = new ServeursModules({
+  machine: config.machine,
+  dossierDonnees: DOSSIER_DONNEES_MODULES,
+  dossierJournaux: DOSSIER_JOURNAUX_MODULES,
+  envoyer,
+  journal: journal.child({ domaine: 'modules' }),
+});
 
 const sessions = new GestionnaireSessions(
   config,
@@ -230,6 +239,7 @@ async function executer(c: CommandeRelais): Promise<Reponse> {
   if (c.kind === 'importables') return sessions.importables();
   if (c.kind === 'importer') return sessions.importer(c.ids);
   if (c.kind === 'eteindre') return eteindreMachine(journal);
+  if (c.kind === 'module_requete') return serveurs.requete(c.module, c.requete);
   if (c.kind === 'compte_connecter') return comptes.connecter(c.nom, c.email);
   if (c.kind === 'compte_code') return comptes.valider(c.nom, c.code);
   if (c.kind === 'compte_retirer') return comptes.retirer(c.nom);
@@ -269,22 +279,26 @@ lien = new LienRelais({
   journal,
   bonjour,
   surCommande,
-  surOuverture: () => sessions.recalerFils(),
+  surOuverture: () => {
+    sessions.recalerFils();
+    serveurs.republier();
+  },
 });
 sessions.relaisOuvert = () => lien?.estOuvert === true;
 lien.demarrer();
-new SurveillanceModules({ dossier: DOSSIER_MODULES_SOURCE, envoyer, journal }).demarrer();
+new SurveillanceModules({ dossier: DOSSIER_MODULES_SOURCE, envoyer, journal, serveurs }).demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);
 journal.info({ machine: config.machine, relais: config.relais }, 'poste démarré');
 
 // Les Claude tmux ne sont pas au poste : arrêter le poste ne les coupe pas. Les processus SDK s'arrêtent avec lui.
-function arreter(): void {
+async function arreter(): Promise<void> {
   journal.info('arrêt du poste (les sessions tmux continuent, les processus SDK s’arrêtent)');
   sessions.sauvegarder();
   sessions.arreterProcessus();
   minuterieTaches.arreter();
   dicteeService.arreterSurveillance();
   terminaux.fermerTout();
+  await serveurs.arreterTout();
   lien?.arreter();
   process.exit(0);
 }

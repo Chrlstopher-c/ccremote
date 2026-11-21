@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import type { MessagePoste } from '../../commun/protocole-poste.ts';
+import type { ServeursModules } from './serveur/serveurs.ts';
 import { SourceModules } from './source.ts';
 
 export const DOSSIER_MODULES_SOURCE = join(homedir(), '.local', 'share', 'lanterne', 'modules-source');
@@ -17,6 +18,7 @@ export interface ParametresSurveillance {
   readonly journal: Logger;
   readonly delaiMs?: number;
   readonly periodeMs?: number;
+  readonly serveurs?: ServeursModules;
 }
 
 export class SurveillanceModules {
@@ -28,7 +30,12 @@ export class SurveillanceModules {
   private balayage: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly p: ParametresSurveillance) {
-    this.source = new SourceModules({ dossier: p.dossier, envoyer: p.envoyer, journal: p.journal });
+    this.source = new SourceModules({
+      dossier: p.dossier,
+      envoyer: p.envoyer,
+      journal: p.journal,
+      serveurs: p.serveurs,
+    });
     this.delaiMs = p.delaiMs ?? DELAI_STABLE_MS;
     this.periodeMs = p.periodeMs ?? PERIODE_BALAYAGE_MS;
   }

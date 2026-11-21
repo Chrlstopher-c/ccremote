@@ -5,7 +5,7 @@ import { commandesAppareil, messagesAppareil } from './appareil.ts';
 import { commandesConfiguration } from './configuration.ts';
 import { commandesEntretien, EchangePoste, ReseauPoste, VersionsClaude } from './entretien.ts';
 import { commandesParite } from './parite.ts';
-import { messagesModules } from './modules.ts';
+import { commandesModules, messagesModules } from './modules.ts';
 import { commandesReste } from './reste.ts';
 import { commandesResteLot2 } from './reste-lot2.ts';
 import { Decouverte, FicheDesktopAnnoncee } from './decouverte.ts';
@@ -251,6 +251,7 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   ...commandesReste,
   ...commandesResteLot2,
   ...commandesParite,
+  ...commandesModules,
 ]);
 export type CommandeRelais = z.infer<typeof CommandeRelais>;
 

@@ -1,8 +1,10 @@
 // Responsabilité : l'API des modules pour les clients — liste des modules du parc et service de leurs fichiers.
 // Un fichier se sert sous l'origine de l'appli, à `modules/<id>/<chemin>` ; un chemin qui sort du module est refusé.
-import { cheminModuleValide } from '../../commun/modules.ts';
+import { cheminModuleValide, type EtatServeur } from '../../commun/modules.ts';
 import { erreur, json } from '../clients/http.ts';
+import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { ModuleRelais } from './registre-modules.ts';
 
 const TYPES: Record<string, string> = {
   js: 'text/javascript; charset=utf-8',
@@ -27,8 +29,24 @@ export function typeMime(chemin: string): string {
   return TYPES[extension] ?? 'application/octet-stream';
 }
 
-export function lireModules(registre: Registre): Response {
-  return json(registre.modules.lister());
+export interface VueServeur {
+  readonly machine: string;
+  readonly etat: EtatServeur;
+  readonly erreur: string | null;
+}
+
+/** Le serveur d'un module tel que les clients le voient ; un poste hors ligne n'en fait plus tourner aucun. */
+export function vueServeur(m: ModuleRelais, enLigne?: (machine: string) => boolean): VueServeur | null {
+  const declare = m.manifeste?.serveur;
+  if (declare === undefined) return null;
+  const machine = declare.machine ?? m.machine;
+  if (enLigne && !enLigne(machine)) return { machine, etat: 'arrete', erreur: `${machine} est hors ligne` };
+  return { machine, etat: m.serveur?.etat ?? 'arrete', erreur: m.serveur?.erreur ?? null };
+}
+
+export function lireModules(registre: Registre, postes?: Pick<Postes, 'enLigne'>): Response {
+  const enLigne = postes ? (machine: string) => postes.enLigne(machine) : undefined;
+  return json(registre.modules.lister().map((m) => ({ ...m, serveur: vueServeur(m, enLigne) })));
 }
 
 /** `GET /api/modules/<id>/<chemin>` : le fichier du module, avec son type MIME. */

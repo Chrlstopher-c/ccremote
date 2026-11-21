@@ -209,7 +209,12 @@ export class Postes {
       this.registre.majComptes(machine, m.comptes);
       return this.diffuserMachine(machine);
     }
-    if (m.kind === 'module' || m.kind === 'module_erreur' || m.kind === 'module_retire') {
+    if (
+      m.kind === 'module' ||
+      m.kind === 'module_erreur' ||
+      m.kind === 'module_retire' ||
+      m.kind === 'module_serveur'
+    ) {
       return this.modulesRecus(machine, m);
     }
     const sessionId = m.kind === 'session' ? m.session.id : m.sessionId;
@@ -236,11 +241,13 @@ export class Postes {
   }
 
   // Modules (Quart) : seul un changement visible est diffusé ; un module déjà connu, renvoyé, ne l'est pas.
-  private modulesRecus(machine: string, m: Extract<MessagePoste, { kind: 'module' | 'module_erreur' | 'module_retire' }>): void {
+  private modulesRecus(machine: string, m: Extract<MessagePoste, { kind: `module${string}` }>): void {
     const change =
       m.kind === 'module_retire'
         ? this.registre.modules.retirer(m.id, machine)
-        : this.registre.modules.enregistrer(machine, m);
+        : m.kind === 'module_serveur'
+          ? this.registre.modules.serveurMaj(m.id, { etat: m.etat, erreur: m.erreur ?? null })
+          : this.registre.modules.enregistrer(machine, m);
     if (change) this.diffusion.diffuser({ type: 'modules_modifies' });
   }
 

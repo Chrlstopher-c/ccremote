@@ -6,11 +6,13 @@ import type { Logger } from 'pino';
 import type { MessagePoste } from '../../commun/protocole-poste.ts';
 import { REGEX_ID_MODULE } from '../../commun/modules.ts';
 import { validerModule } from './validation.ts';
+import type { ServeursModules } from './serveur/serveurs.ts';
 
 export interface ParametresSource {
   readonly dossier: string;
   readonly envoyer: (m: MessagePoste) => void;
   readonly journal: Logger;
+  readonly serveurs?: ServeursModules; // les serveurs de ce poste, alignés sur chaque passage
 }
 
 export class SourceModules {
@@ -28,6 +30,7 @@ export class SourceModules {
     for (const id of [...this.envoye.keys()]) {
       if (ids.includes(id)) continue;
       this.envoye.delete(id);
+      void this.p.serveurs?.arreter(id);
       this.p.envoyer({ kind: 'module_retire', id });
       envois += 1;
     }
@@ -35,19 +38,24 @@ export class SourceModules {
   }
 
   private examiner(id: string): boolean {
-    const r = validerModule(join(this.p.dossier, id), id);
-    if (r.ok) {
-      if (this.envoye.get(id) === r.module.empreinte) return false;
-      this.envoye.set(id, r.module.empreinte);
-      const fichiers = r.module.fichiers.map((f) => ({ chemin: f.chemin, base64: f.octets.toString('base64') }));
-      this.p.envoyer({ kind: 'module', id, manifeste: r.module.manifeste, fichiers, empreinte: r.module.empreinte });
-      return true;
-    }
-    const cle = `erreur:${r.erreur}`;
+    const dossier = join(this.p.dossier, id);
+    const r = validerModule(dossier, id);
+    if (!r.ok) return this.annoncerErreur(id, r.erreur);
+    this.p.serveurs?.synchroniser(id, dossier, r.module);
+    if (this.envoye.get(id) === r.module.empreinte) return false;
+    this.envoye.set(id, r.module.empreinte);
+    const fichiers = r.module.fichiers.map((f) => ({ chemin: f.chemin, base64: f.octets.toString('base64') }));
+    this.p.envoyer({ kind: 'module', id, manifeste: r.module.manifeste, fichiers, empreinte: r.module.empreinte });
+    return true;
+  }
+
+  private annoncerErreur(id: string, erreur: string): boolean {
+    const cle = `erreur:${erreur}`;
+    void this.p.serveurs?.arreter(id);
     if (this.envoye.get(id) === cle) return false;
     this.envoye.set(id, cle);
-    this.p.journal.warn({ module: id, erreur: r.erreur }, 'module invalide, rien n’est envoyé au relais');
-    this.p.envoyer({ kind: 'module_erreur', id, erreur: r.erreur });
+    this.p.journal.warn({ module: id, erreur }, 'module invalide, rien n’est envoyé au relais');
+    this.p.envoyer({ kind: 'module_erreur', id, erreur });
     return true;
   }
 

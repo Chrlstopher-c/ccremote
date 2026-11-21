@@ -294,7 +294,7 @@ Bun.serve({
     message: (ws, m) => postes.recu(ws, String(m)),
     idleTimeout: 120,
     sendPings: true,
-    maxPayloadLength: 16 * 1024 * 1024, // un morceau de fichier : 4 Mo bruts, ~5,4 Mo en base64
+    maxPayloadLength: 64 * 1024 * 1024, // un module de 20 Mo part en base64 (~27 Mo) dans un seul message (v1.2)
   },
 });
 

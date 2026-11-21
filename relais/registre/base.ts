@@ -48,6 +48,8 @@ export const MIGRATIONS: readonly string[] = [
   `CREATE TABLE modules (
      id TEXT PRIMARY KEY, machine TEXT NOT NULL, manifeste TEXT, fichiers TEXT NOT NULL DEFAULT '[]',
      empreinte TEXT, maj_le TEXT NOT NULL, erreur TEXT);`,
+  // État du serveur d'un module (v1.2) : JSON `{ etat, erreur }`, posé par le poste qui le fait tourner.
+  `ALTER TABLE modules ADD COLUMN serveur TEXT;`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 

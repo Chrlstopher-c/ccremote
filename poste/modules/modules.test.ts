@@ -109,6 +109,39 @@ describe('validation d’un module', () => {
   });
 });
 
+describe('limites v1.2 et partie serveur à la validation', () => {
+  test('un module de 15 Mo est accepté, un module de 25 Mo est refusé', () => {
+    const juste = ecrireModule(racine, 'juste', 'x'.repeat(15 * 1024 * 1024));
+    expect(validerModule(juste, 'juste').ok).toBe(true);
+    const trop = ecrireModule(racine, 'trop', 'x'.repeat(25 * 1024 * 1024));
+    const r = validerModule(trop, 'trop');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erreur).toContain('20 Mo');
+  });
+
+  test('serveur/node_modules n’entre ni dans les fichiers ni dans l’empreinte', () => {
+    const dossier = ecrireModule(racine, 'carte');
+    writeFileSync(join(dossier, 'module.json'), manifeste('carte', { serveur: { point: 'serveur/index.ts' } }));
+    mkdirSync(join(dossier, 'serveur', 'node_modules', 'paquet'), { recursive: true });
+    writeFileSync(join(dossier, 'serveur', 'index.ts'), 'export {};');
+    const avant = validerModule(dossier, 'carte');
+    writeFileSync(join(dossier, 'serveur', 'node_modules', 'paquet', 'index.js'), 'x'.repeat(1000));
+    const apres = validerModule(dossier, 'carte');
+    expect(apres.ok).toBe(true);
+    if (!apres.ok || !avant.ok) return;
+    expect(apres.module.fichiers.some((f) => f.chemin.includes('node_modules'))).toBe(false);
+    expect(apres.module.empreinte).toBe(avant.module.empreinte);
+  });
+
+  test('un serveur dont le point est absent est refusé', () => {
+    const dossier = ecrireModule(racine, 'carte');
+    writeFileSync(join(dossier, 'module.json'), manifeste('carte', { serveur: { point: 'serveur/index.ts' } }));
+    const r = validerModule(dossier, 'carte');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erreur).toContain('serveur introuvable');
+  });
+});
+
 describe('synchronisation vers le relais', () => {
   const envois: MessagePoste[] = [];
   let surveillance: SurveillanceModules | null = null;

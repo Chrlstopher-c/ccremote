@@ -2,10 +2,15 @@
 // en erreur a `erreur` renseigné et ni manifeste ni fichiers ; un retrait ne touche que la machine qui le possède.
 import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
-import type { FichierModule, ManifesteModule } from '../../commun/modules.ts';
+import type { EtatServeur, FichierModule, ManifesteModule } from '../../commun/modules.ts';
 import type { MessagePoste } from '../../commun/protocole-poste.ts';
 
 export type MessageModuleRecu = Extract<MessagePoste, { kind: 'module' | 'module_erreur' }>;
+
+export interface EtatServeurModule {
+  readonly etat: EtatServeur;
+  readonly erreur: string | null;
+}
 
 export interface ModuleRelais {
   readonly id: string;
@@ -16,6 +21,8 @@ export interface ModuleRelais {
   readonly erreur: string | null;
   /** Chemins des fichiers du module (vide pour un module en erreur) : le client sait quoi télécharger. */
   readonly fichiers: readonly string[];
+  /** Dernier état du serveur signalé par le poste qui le fait tourner ; null tant qu'aucun n'a été signalé. */
+  readonly serveur: EtatServeurModule | null;
 }
 
 type LigneModule = {
@@ -26,6 +33,7 @@ type LigneModule = {
   empreinte: string | null;
   maj_le: string;
   erreur: string | null;
+  serveur: string | null;
 };
 
 export class RegistreModules {
@@ -50,7 +58,8 @@ export class RegistreModules {
           `INSERT INTO modules (id, machine, manifeste, fichiers, empreinte, maj_le, erreur)
            VALUES ($id, $machine, $manifeste, $fichiers, $empreinte, $maj, $erreur)
            ON CONFLICT(id) DO UPDATE SET machine = $machine, manifeste = $manifeste, fichiers = $fichiers,
-             empreinte = $empreinte, maj_le = $maj, erreur = $erreur`,
+             empreinte = $empreinte, maj_le = $maj, erreur = $erreur,
+             serveur = CASE WHEN modules.machine = $machine THEN modules.serveur ELSE NULL END`,
         )
         .run({ id: m.id, machine, manifeste, fichiers, empreinte, maj: new Date().toISOString(), erreur });
     } catch (e) {
@@ -67,15 +76,22 @@ export class RegistreModules {
 
   lister(): ModuleRelais[] {
     const lignes = this.db.query('SELECT * FROM modules ORDER BY id').all() as LigneModule[];
-    return lignes.map((l) => ({
-      id: l.id,
-      manifeste: l.manifeste === null ? null : (JSON.parse(l.manifeste) as ManifesteModule),
-      empreinte: l.empreinte,
-      machine: l.machine,
-      maj_le: l.maj_le,
-      erreur: l.erreur,
-      fichiers: l.erreur === null ? (JSON.parse(l.fichiers) as FichierModule[]).map((f) => f.chemin) : [],
-    }));
+    return lignes.map((l) => versModule(l));
+  }
+
+  obtenir(id: string): ModuleRelais | null {
+    const l = this.ligne(id);
+    return l === null ? null : versModule(l);
+  }
+
+  /** Enregistre l'état du serveur d'un module ; rend vrai si l'état visible a changé. */
+  serveurMaj(id: string, etat: EtatServeurModule): boolean {
+    const actuel = this.ligne(id);
+    if (actuel === null) return false;
+    const nouveau = JSON.stringify(etat);
+    if (actuel.serveur === nouveau) return false;
+    this.db.query('UPDATE modules SET serveur = $serveur WHERE id = $id').run({ id, serveur: nouveau });
+    return true;
   }
 
   /** Contenu d'un fichier d'un module sain ; `null` si le module est absent, en erreur, ou sans ce fichier. */
@@ -89,4 +105,17 @@ export class RegistreModules {
   private ligne(id: string): LigneModule | null {
     return (this.db.query('SELECT * FROM modules WHERE id = $id').get({ id }) as LigneModule | null) ?? null;
   }
+}
+
+function versModule(l: LigneModule): ModuleRelais {
+  return {
+    id: l.id,
+    manifeste: l.manifeste === null ? null : (JSON.parse(l.manifeste) as ManifesteModule),
+    empreinte: l.empreinte,
+    machine: l.machine,
+    maj_le: l.maj_le,
+    erreur: l.erreur,
+    fichiers: l.erreur === null ? (JSON.parse(l.fichiers) as FichierModule[]).map((f) => f.chemin) : [],
+    serveur: l.serveur === null ? null : (JSON.parse(l.serveur) as EtatServeurModule),
+  };
 }

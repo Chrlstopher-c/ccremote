@@ -30,6 +30,7 @@ import { type DependancesReunions, routesReunions } from '../reunion/api-reunion
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 import { lireModules, servirFichierModule } from '../modules/api-modules.ts';
 import { appelerModule, lireCapacites, repondreModule } from '../modules/api-appels.ts';
+import { requeteServeurModule } from '../modules/api-serveur.ts';
 import type { AppelsModules } from '../modules/appels.ts';
 
 export interface DependancesApi {
@@ -185,7 +186,10 @@ export function construireRoutes(d: DependancesApi) {
     '/api/machines/:id/comptes/:nom/reinitialiser': { POST: protege((req) => d.comptes.reinitialiser(req as never)) },
     '/api/machines/:id/comptes/:nom/distant': { POST: protege((req) => d.comptes.distant(req as never)) },
     '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
-    '/api/modules': { GET: protege(() => lireModules(d.registre)) },
+    '/api/modules': { GET: protege(() => lireModules(d.registre, d.postes)) },
+    '/api/modules/:id/serveur': {
+      POST: protege((req) => requeteServeurModule(d.registre, d.postes, req.params['id'] ?? '', req)),
+    },
     '/api/modules/*': { GET: protege((req) => servirFichierModule(d.registre, req)) },
     '/api/modules-outils': { GET: protege(() => lireCapacites(d.appels)) },
     '/api/modules-appels': { POST: protege((req) => appelerModule(d.appels, req)) },

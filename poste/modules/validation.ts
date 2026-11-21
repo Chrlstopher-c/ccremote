@@ -5,6 +5,7 @@ import { lstatSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   cheminModuleValide,
+  DOSSIER_DEPENDANCES_SERVEUR,
   FICHIERS_MAX_MODULE,
   ManifesteModule,
   REGEX_ID_MODULE,
@@ -37,6 +38,9 @@ export function validerModule(dossier: string, id: string): ResultatValidation {
     if (!fichiers.some((f) => f.chemin === manifeste.point)) {
       throw new ErreurModule(`point introuvable : ${manifeste.point}`);
     }
+    if (manifeste.serveur && !fichiers.some((f) => f.chemin === manifeste.serveur?.point)) {
+      throw new ErreurModule(`serveur introuvable : ${manifeste.serveur.point}`);
+    }
     return { ok: true, module: { manifeste, fichiers, empreinte: empreinteDe(fichiers) } };
   } catch (erreur) {
     return { ok: false, erreur: erreur instanceof Error ? erreur.message : String(erreur) };
@@ -47,13 +51,14 @@ function lireFichiers(dossier: string): FichierLu[] {
   const chemins: string[] = [];
   parcourir(dossier, '', chemins);
   const tailleTotale = chemins.reduce((somme, c) => somme + lstatSync(join(dossier, c)).size, 0);
-  if (tailleTotale > TAILLE_MAX_MODULE) throw new ErreurModule('module trop lourd (2 Mo au plus)');
+  if (tailleTotale > TAILLE_MAX_MODULE) throw new ErreurModule('module trop lourd (20 Mo au plus)');
   return chemins.map((chemin) => ({ chemin, octets: readFileSync(join(dossier, chemin)) }));
 }
 
 function parcourir(dossier: string, relatif: string, sortie: string[]): void {
   for (const entree of readdirSync(join(dossier, relatif), { withFileTypes: true })) {
     const chemin = relatif === '' ? entree.name : `${relatif}/${entree.name}`;
+    if (chemin === DOSSIER_DEPENDANCES_SERVEUR) continue; // installées sur le poste, jamais envoyées
     if (entree.isSymbolicLink()) throw new ErreurModule(`lien symbolique refusé : ${chemin}`);
     if (!cheminModuleValide(chemin)) throw new ErreurModule(`chemin refusé : ${chemin}`);
     if (entree.isDirectory()) parcourir(dossier, chemin, sortie);
