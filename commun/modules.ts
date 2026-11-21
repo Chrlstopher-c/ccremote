@@ -5,7 +5,7 @@ import { z } from 'zod';
 
 export const TAILLE_MAX_MODULE = 20 * 1024 * 1024; // octets, tous fichiers réunis (serveur/node_modules exclu)
 export const FICHIERS_MAX_MODULE = 2000;
-export const EMPLACEMENTS_MODULE = ['panneau', 'reglages', 'saisie', 'commande'] as const;
+export const EMPLACEMENTS_MODULE = ['panneau', 'section', 'reglages', 'saisie', 'commande'] as const;
 export const REGEX_ID_MODULE = /^[a-z0-9-]{2,40}$/;
 
 export const IdModule = z.string().regex(REGEX_ID_MODULE);
