@@ -54,14 +54,21 @@ function fichiersDe(evts: readonly Evenement[]): string[] {
   return [...chemins].slice(-FICHIERS_MAX_PAQUET);
 }
 
-/** Le texte du premier message de la session neuve : ce que le paquet dit, lisible par Claude. */
+/** Le texte du premier message de la session neuve : ce que le paquet dit, en rubriques séparées (Markdown), lisible
+ * par Claude comme par celui qui reprend. */
 export function textePaquet(p: PaquetMain, de: string): string {
-  const lignes = [`Session passée par ${de} : ${p.titre}`, `Dossier : ${p.dossier}`];
-  if (p.messages.length > 0) lignes.push(`Derniers messages de ${de} :`, ...p.messages.map((m) => `- ${m}`));
-  if (p.bilan !== '') lignes.push('Dernier bilan de Claude :', p.bilan);
-  if (p.fichiers.length > 0) lignes.push('Fichiers modifiés :', ...p.fichiers.map((f) => `- ${f}`));
-  if (p.note) lignes.push('Note :', p.note);
-  return lignes.join('\n');
+  const blocs = [`**Session passée par ${de} : ${p.titre}**`, `Dossier d'origine : \`${p.dossier}\``];
+  if (p.note) blocs.push(`**Note de ${de}**\n\n${p.note}`);
+  if (p.messages.length > 0) blocs.push(`**Derniers messages**\n\n${p.messages.map((m) => `- ${uneLigne(m)}`).join('\n')}`);
+  if (p.bilan !== '') blocs.push(`**Dernier bilan de Claude**\n\n${p.bilan}`);
+  if (p.fichiers.length > 0) blocs.push(`**Fichiers modifiés**\n\n${p.fichiers.map((f) => `- \`${f}\``).join('\n')}`);
+  blocs.push('Reprends ce travail là où il en est.');
+  return blocs.join('\n\n');
+}
+
+// Un message tient sur une ligne de liste : ses retours à la ligne deviennent des espaces.
+function uneLigne(texte: string): string {
+  return texte.replace(/\s*\n\s*/g, ' ').trim();
 }
 
 /** Donneur : envoie la session au pair. Rend l'identifiant de la session neuve chez lui. */

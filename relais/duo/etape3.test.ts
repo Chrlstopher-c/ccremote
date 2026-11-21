@@ -69,7 +69,7 @@ describe('passer la main', () => {
     expect(ouverte?.message).toContain('- second');
     expect(ouverte?.message).toContain('bilan de Claude');
     expect(ouverte?.message).toContain('/pb/proj/a.ts');
-    expect(ouverte?.message).toContain('Note :\nà reprendre');
+    expect(ouverte?.message).toContain('**Note de bob**\n\nà reprendre');
     const fil = b.registre.derniersEvenements('p1', 50).map((e) => e.evt);
     expect(fil).toContainEqual({ type: 'duo_main', vers: 'alice' });
     expect(a.duo.journalDuo()[0]).toMatchObject({ qui: 'bob', action: 'passer_la_main' });
