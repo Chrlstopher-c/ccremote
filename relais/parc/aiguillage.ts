@@ -6,7 +6,8 @@ import type { ResumeSession } from '../../commun/session.ts';
 export const TEXTE_REFUS_SANS_JUMELLE =
   "Ouverte dans Claude Desktop sans Remote Control : activez-le là-bas, ou fermez-la pour l'ouvrir ici";
 
-const COMMANDES_AIGUILLEES: ReadonlySet<string> = new Set(['envoyer', 'interrompre']);
+// Commandes qui n'ont d'effet que dans le moteur qui tient la conversation : la jumelle les fait, pas le poste.
+const COMMANDES_AIGUILLEES: ReadonlySet<string> = new Set(['envoyer', 'interrompre', 'modele']);
 
 export type Aiguillage = { kind: 'directe' } | { kind: 'jumelle'; session: ResumeSession } | { kind: 'refus' };
 

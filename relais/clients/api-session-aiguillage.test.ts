@@ -131,3 +131,22 @@ describe('aiguillage des commandes vers la jumelle Remote Control', () => {
     expect(recues).toEqual([{ machine: 'tour', commande: { kind: 'autonomie', active: true, sessionId: 's1' } }]);
   });
 });
+
+describe('réglage de modèle suit l’aiguillage', () => {
+  test('(c) modèle sur une session tenue ailleurs : le set_model part vers la cse_', async () => {
+    const { postes, recues } = postesSimules({ ok: true, donnees: {} });
+    const r = await sessions(postes, [TENUE, JUMELLE]).modele(requete('s1', { modele: 'claude-opus-5-5' }));
+    expect(r.status).toBe(200);
+    expect(recues).toEqual([
+      { machine: 'portable', commande: { kind: 'modele', modele: 'claude-opus-5-5', sessionId: 'cse_a' } },
+    ]);
+  });
+
+  test('(d) modèle sur une session tenue ailleurs sans jumelle : 409, rien envoyé', async () => {
+    const { postes, recues } = postesSimules({ ok: true, donnees: {} });
+    const r = await sessions(postes, [TENUE]).modele(requete('s1', { modele: 'claude-opus-5-5' }));
+    expect(r.status).toBe(409);
+    expect(await r.json()).toEqual({ erreur: TEXTE_REFUS_SANS_JUMELLE });
+    expect(recues).toHaveLength(0);
+  });
+});

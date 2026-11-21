@@ -3,12 +3,22 @@
 // (`machine`) ne change pas : seul le relais décide de ce qui est affiché.
 import type { Decouverte } from '../../commun/decouverte.ts';
 import type { ResumeSession, StatutSession } from '../../commun/session.ts';
+import { type ModeleDate, plusRecent } from '../../commun/modele-date.ts';
 
-/** `s` avec la conversation, la machine et le dossier réels de sa jumelle de poste (`fiche`), s'il y en a une. */
+/** Le modèle daté d'une fiche (instant inconnu : null). */
+export function modeleDatee(f: ResumeSession): ModeleDate {
+  return { modele: f.modele, le: f.modeleLe ?? null };
+}
+
+/** `s` avec la conversation, la machine, le dossier et le modèle réels de sa jumelle de poste (`fiche`).
+ * Le modèle de la fiche de poste l'emporte quand il est plus récent que celui de la session Remote Control. */
 export function avecJumelleReelle(s: ResumeSession, fiche: ResumeSession | null): ResumeSession {
   if (!s.distant || !fiche) return s;
+  const modele = plusRecent(modeleDatee(s), modeleDatee(fiche));
   return {
     ...s,
+    modele: modele.modele,
+    modeleLe: modele.le,
     distant: {
       ...s.distant,
       conversation: fiche.claudeSessionId ?? fiche.id,

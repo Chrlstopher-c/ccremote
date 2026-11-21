@@ -123,6 +123,8 @@ export const ResumeSession = z.object({
   objectif: z.string().nullable(),
   modele: z.string(),
   modeleNom: z.string().nullable().optional(), // nom affiché par le SDK pour ce modèle (absent : Lanterne le dérive)
+  // instant (ISO) où ce modèle a été vu ; le plus récent gagne entre les fiches d'une conversation
+  modeleLe: z.string().nullable().optional(),
   compte: z.string(),
   autonomie: z.boolean(),
   statut: StatutSession,

@@ -45,3 +45,13 @@ describe('modeDeInit', () => {
     expect(modeDeInit(null)).toBeNull();
   });
 });
+
+describe('modèle daté d’un terminal (transcript ou fiche Desktop)', () => {
+  test('la fiche suit le modèle daté qu’on lui donne, sans attendre un message du transcript', () => {
+    const { session } = nouvelleSession(async () => [{ type: 'result' }]);
+    session.rattacherTerminal(true, false, { modele: 'claude-fable-5-2', le: '2026-11-20T23:00:00.000Z' });
+    expect(session.resume.modele).toBe('claude-fable-5-2');
+    session.rattacherTerminal(true, false, { modele: 'claude-opus-5-5', le: '2026-11-21T10:00:00.000Z' });
+    expect(session.resume).toMatchObject({ modele: 'claude-opus-5-5', modeleLe: '2026-11-21T10:00:00.000Z' });
+  });
+});

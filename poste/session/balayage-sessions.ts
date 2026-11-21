@@ -19,7 +19,9 @@ import { type EtatTranscript, etatDuTranscript, tourEnCours as tourEnCoursEtat }
 import { statSync } from 'node:fs';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
-import { recalerFiche, sourcesDe } from './recalage-fiche.ts';
+import { modeleDeSources, recalerFiche, sourcesDe } from './recalage-fiche.ts';
+import { type FicheDesktop, RACINE_DESKTOP_DEFAUT, fichesDesktop } from './fiche-desktop.ts';
+import type { ModeleDate } from '../../commun/modele-date.ts';
 import { type EntreeCc, dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { SessionPoste } from './session-poste.ts';
@@ -100,17 +102,19 @@ export class BalayageSessions {
   // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.
   private suivreTerminaux(procs: readonly ProcessusClaude[], entrees: readonly EntreeCc[]): void {
     const vivants = new Set(procs.map((p) => p.sessionId));
+    const cartes = fichesDesktop(RACINE_DESKTOP_DEFAUT, this.d.journal);
     for (const s of this.d.sessions.values()) {
       if (!s.resume.terminal) continue;
       const vivant = vivants.has(s.resume.claudeSessionId ?? s.resume.id) || vivants.has(s.resume.id);
       const enTour = vivant && this.tourEnCours(s.resume.cwd, s.resume.claudeSessionId, s.persistee.configDir);
-      const modele = vivant ? this.modeleLu(s.resume.cwd, s.resume.claudeSessionId, s.persistee.configDir) : null;
+      const { cwd, claudeSessionId } = s.resume;
+      const modele = vivant ? this.modeleLu(cwd, claudeSessionId, s.persistee.configDir, cartes) : null;
       s.rattacherTerminal(vivant, enTour, modele);
     }
     for (const p of procs) {
       const connue = this.d.fichePour(p.sessionId);
       if (connue) {
-        const modele = this.modeleLu(p.cwd, p.sessionId, p.configDir);
+        const modele = this.modeleLu(p.cwd, p.sessionId, p.configDir, cartes);
         connue.rattacherTerminal(true, this.tourEnCours(p.cwd, p.sessionId, p.configDir), modele);
       }
       else if (!this.d.fichePour(p.sessionId)) {
@@ -134,9 +138,17 @@ export class BalayageSessions {
     return etat ? tourEnCoursEtat(etat, Date.now()) : false;
   }
 
-  // Modèle du dernier message de la conversation : un changement de modèle fait ailleurs se voit sur la fiche.
-  private modeleLu(cwd: string, conversation: string | null, configDir: string | null): string | null {
-    return this.etatLu(cwd, conversation, configDir)?.modele ?? null;
+  // Modèle réel de la conversation : le plus récent du transcript et de la fiche Claude Desktop. Un changement fait
+  // dans Desktop se voit sur la fiche sans attendre le message suivant.
+  private modeleLu(
+    cwd: string,
+    conversation: string | null,
+    configDir: string | null,
+    cartes: ReadonlyMap<string, FicheDesktop>,
+  ): ModeleDate | null {
+    const etat = this.etatLu(cwd, conversation, configDir);
+    const desktop = conversation ? (cartes.get(conversation) ?? null) : null;
+    return modeleDeSources({ etat, desktop });
   }
 
   private etatLu(cwd: string, conversation: string | null, configDir: string | null): EtatTranscript | null {

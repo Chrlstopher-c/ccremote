@@ -3,6 +3,7 @@
 // date de son import à la place de l'activité réelle.
 import type { Logger } from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
+import { type ModeleDate, plusRecentOpt } from '../../commun/modele-date.ts';
 import { type EtatTranscript, etatDuTranscript, tourEnCours } from './etat-transcript.ts';
 import type { SessionPersistee } from './persistance.ts';
 import { cheminTranscript } from './transcript.ts';
@@ -14,9 +15,18 @@ export interface SourcesFiche {
   readonly desktop: FicheDesktop | null;
 }
 
+/** Le modèle réel d'une conversation : le plus récent du transcript et de la fiche Desktop (ou null si aucun). */
+export function modeleDeSources(sources: SourcesFiche): ModeleDate | null {
+  const { etat, desktop } = sources;
+  const depuisEtat = etat?.modele ? { modele: etat.modele, le: etat.modeleLe } : null;
+  const depuisDesktop = desktop?.modele ? { modele: desktop.modele, le: desktop.modeleLe } : null;
+  return plusRecentOpt(depuisEtat, depuisDesktop);
+}
+
 /** La fiche avec la vérité du transcript (activité, modèle, mode, contexte) et l'archivage Desktop lu. */
 export function recalerFiche(fiche: ResumeSession, sources: SourcesFiche): ResumeSession {
   const { etat, desktop } = sources;
+  const modele = modeleDeSources(sources);
   // Desktop tient le réglage courant (changé après le dernier message, le transcript ne le dit pas encore).
   const mode = desktop?.mode ?? etat?.mode ?? fiche.mode;
   const contexte = etat?.contexte != null ? { ...fiche.contexte, tokens: etat.contexte } : fiche.contexte;
@@ -25,7 +35,8 @@ export function recalerFiche(fiche: ResumeSession, sources: SourcesFiche): Resum
     ...fiche,
     ...(statut ? { statut } : {}),
     majLe: etat?.majLe ?? fiche.majLe,
-    modele: etat?.modele ?? desktop?.modele ?? fiche.modele,
+    modele: modele?.modele ?? fiche.modele,
+    ...(modele ? { modeleLe: modele.le } : {}),
     contexte,
     ...(mode ? { mode } : {}),
     ...(desktop?.archivee ? { archivee: true } : {}),

@@ -1,7 +1,7 @@
 // Responsabilité : les fiches de sessions de Claude Desktop (`~/.config/Claude/claude-code-sessions/<org>/<compte>/
 // local_<id>.json`), lues en lecture seule : archivage, mode, modèle, identifiant de la conversation CLI, jumelles
 // Remote Control. Rien n'y est écrit.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
@@ -25,6 +25,7 @@ export interface FicheDesktop {
   readonly conversation: string;
   readonly cwd: string | null;
   readonly modele: string | null;
+  readonly modeleLe: string | null; // date d'écriture de la fiche : celle du modèle qu'elle porte
   readonly mode: ModeSession | null;
   readonly archivee: boolean;
   readonly titre: string | null;
@@ -50,7 +51,27 @@ function fichiers(dossier: string, profondeur: number): string[] {
   });
 }
 
+// Une fiche n'est relue que quand son fichier change (date de modification différente).
+const memoire = new Map<string, { mtime: number; fiche: FicheDesktop | null }>();
+
 function lireUne(chemin: string, journal: Logger): FicheDesktop | null {
+  const mtime = mtimeDe(chemin);
+  const garde = memoire.get(chemin);
+  if (garde && garde.mtime === mtime) return garde.fiche;
+  const fiche = lireFiche(chemin, mtime, journal);
+  memoire.set(chemin, { mtime, fiche });
+  return fiche;
+}
+
+function mtimeDe(chemin: string): number {
+  try {
+    return statSync(chemin).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function lireFiche(chemin: string, mtime: number, journal: Logger): FicheDesktop | null {
   try {
     const r = FicheBrute.safeParse(JSON.parse(readFileSync(chemin, 'utf8')));
     if (!r.success || !r.data.cliSessionId) return null;
@@ -59,6 +80,7 @@ function lireUne(chemin: string, journal: Logger): FicheDesktop | null {
       conversation: f.cliSessionId ?? '',
       cwd: f.cwd ?? null,
       modele: f.model ?? null,
+      modeleLe: f.model ? new Date(mtime).toISOString() : null,
       mode: f.permissionMode && MODES.has(f.permissionMode) ? (f.permissionMode as ModeSession) : null,
       archivee: f.isArchived === true,
       titre: f.title ?? null,

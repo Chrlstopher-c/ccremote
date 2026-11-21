@@ -93,3 +93,14 @@ describe('aiguillage des commandes', () => {
     );
   });
 });
+
+describe('réglage de modèle d’une session tenue ailleurs', () => {
+  test('modèle vers une fiche tenue avec jumelle : vers la cse_', () => {
+    const jumelle = rc('cse_a', 'conv-1');
+    expect(aiguillage(TENUE, 'modele', [TENUE, jumelle])).toEqual({ kind: 'jumelle', session: jumelle });
+  });
+
+  test('modèle sans jumelle : refus clair', () => {
+    expect(aiguillage(TENUE, 'modele', [TENUE])).toEqual({ kind: 'refus' });
+  });
+});

@@ -4,6 +4,7 @@ import type { SDKControlGetUsageResponse } from '@anthropic-ai/claude-agent-sdk'
 import type { LignesRelues } from './recalage-demarrage.ts';
 import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
+import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { EffortSession, Evenement, ModeSession, ReponseDialogue, ResumeSession } from '../../commun/session.ts';
 import type { DecisionCrochet } from './garde-sous-agents.ts';
 import type { EvenementHorodate } from './historique.ts';
@@ -47,7 +48,7 @@ export interface SessionPoste {
   rattacher(pane: PaneTmux | null): void;
   /** Nom donné par `cc` (tmux seulement ; une session SDK porte son titre). */
   nommer?(nom: string | null): void;
-  rattacherTerminal(vivant: boolean, enTour?: boolean, modeleLu?: string | null): void;
+  rattacherTerminal(vivant: boolean, enTour?: boolean, modeleLu?: ModeleDate | null): void;
   /** Conversation tenue (ou non) par un processus Claude interactif hors Lanterne : une session SDK rend la main. */
   cederSiTenue?(tenue: boolean): void;
   definirTranscript(chemin: string, historique: number, claudeSessionId: string): void;

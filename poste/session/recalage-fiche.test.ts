@@ -1,7 +1,7 @@
 // Responsabilité : tests du recalage d'une fiche sur son transcript et sa fiche Claude Desktop (écarts #7, #10, #11,
 // #15, #17) : activité réelle, modèle, mode `auto`, contexte, archivage Desktop.
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
@@ -68,6 +68,7 @@ describe('etatDuTranscript', () => {
       expect(etatDuTranscript(chemin, journal)).toEqual({
         majLe: '2026-11-19T10:00:06.000Z',
         modele: 'claude-opus-5-5',
+        modeleLe: '2026-11-19T10:00:05.000Z',
         mode: 'auto',
         contexte: 102_004,
         travailDernier: true,
@@ -104,7 +105,8 @@ describe('recalerFiche', () => {
   });
 
   test('un tour en cours rend la session travaillante ; une session fermée reste fermée', () => {
-    const etat = { majLe: null, modele: null, mode: null, contexte: null, travailDernier: true, ecritLe: 0 };
+    const base = { majLe: null, modele: null, modeleLe: null, mode: null, contexte: null };
+    const etat = { ...base, travailDernier: true, ecritLe: 0 };
     expect(recalerFiche({ ...fiche(), statut: 'attente' }, { etat, desktop: null }).statut).toBe('travail');
     expect(recalerFiche(fiche(), { etat, desktop: null }).statut).toBe('fermee');
   });
@@ -116,6 +118,7 @@ describe('recalerFiche', () => {
         conversation: CONV,
         cwd: '/p',
         modele: null,
+        modeleLe: null,
         mode: null,
         archivee: true,
         titre: null,
@@ -155,7 +158,7 @@ describe('fichesDesktop', () => {
 });
 
 describe('tourEnCours (#6)', () => {
-  const base = { majLe: null, modele: null, mode: null, contexte: null };
+  const base = { majLe: null, modele: null, modeleLe: null, mode: null, contexte: null };
   test('un signal « en cours » l emporte ; une fin de tour rend la session inactive, même écrite à l instant', () => {
     expect(tourEnCours({ ...base, travailDernier: true, ecritLe: 0 }, 10)).toBe(true);
     expect(tourEnCours({ ...base, travailDernier: false, ecritLe: 9 }, 10)).toBe(false);
@@ -163,5 +166,69 @@ describe('tourEnCours (#6)', () => {
   test('sans signal : en cours seulement si le transcript a bougé il y a peu', () => {
     expect(tourEnCours({ ...base, travailDernier: null, ecritLe: 1_000 }, 60_000)).toBe(true);
     expect(tourEnCours({ ...base, travailDernier: null, ecritLe: 1_000 }, 600_000)).toBe(false);
+  });
+});
+
+describe('modèle réel : le plus récent du transcript et de la fiche Desktop', () => {
+  const carte = (modele: string, modeleLe: string) => ({
+    conversation: CONV,
+    cwd: '/p',
+    modele,
+    modeleLe,
+    mode: null,
+    archivee: false,
+    titre: null,
+    remoteControl: false,
+    ponts: [],
+    hote: null,
+  });
+
+  test('une fiche Desktop plus récente que le transcript donne le modèle, sans nouveau message', () => {
+    const { chemin, nettoyer } = transcript(transcriptReel);
+    try {
+      const r = recalerFiche(fiche(), {
+        etat: etatDuTranscript(chemin, journal),
+        desktop: carte('claude-sonnet-5-5', '2026-11-19T12:00:00.000Z'),
+      });
+      expect(r).toMatchObject({ modele: 'claude-sonnet-5-5', modeleLe: '2026-11-19T12:00:00.000Z' });
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('une fiche Desktop plus ancienne que le transcript ne l emporte pas', () => {
+    const { chemin, nettoyer } = transcript(transcriptReel);
+    try {
+      const r = recalerFiche(fiche(), {
+        etat: etatDuTranscript(chemin, journal),
+        desktop: carte('claude-sonnet-5-5', '2026-11-19T09:00:00.000Z'),
+      });
+      expect(r).toMatchObject({ modele: 'claude-opus-5-5', modeleLe: '2026-11-19T10:00:05.000Z' });
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('la fiche Desktop est relue quand son fichier change, et sa date est celle de l écriture', () => {
+    const racine = mkdtempSync(join(tmpdir(), 'desktop-maj-'));
+    try {
+      const dossier = join(racine, 'org', 'compte');
+      mkdirSync(dossier, { recursive: true });
+      const chemin = join(dossier, 'local_2.json');
+      writeFileSync(chemin, JSON.stringify({ cliSessionId: CONV, model: 'claude-opus-5-5' }));
+      utimesSync(chemin, new Date('2026-11-20T08:00:00.000Z'), new Date('2026-11-20T08:00:00.000Z'));
+      expect(fichesDesktop(racine, journal).get(CONV)).toMatchObject({
+        modele: 'claude-opus-5-5',
+        modeleLe: '2026-11-20T08:00:00.000Z',
+      });
+      writeFileSync(chemin, JSON.stringify({ cliSessionId: CONV, model: 'claude-sonnet-5-5' }));
+      utimesSync(chemin, new Date('2026-11-21T08:00:00.000Z'), new Date('2026-11-21T08:00:00.000Z'));
+      expect(fichesDesktop(racine, journal).get(CONV)).toMatchObject({
+        modele: 'claude-sonnet-5-5',
+        modeleLe: '2026-11-21T08:00:00.000Z',
+      });
+    } finally {
+      rmSync(racine, { recursive: true, force: true });
+    }
   });
 });

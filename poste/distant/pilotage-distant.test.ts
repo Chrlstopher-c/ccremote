@@ -305,3 +305,45 @@ describe('erreurs de pilotage', () => {
     expect(trace).toContain('403');
   });
 });
+
+describe('modèle réel d’une session claude.ai', () => {
+  const assistant = (modele: string, creeLe: string, id: string): Record<string, unknown> =>
+    evenementApi(id, { type: 'assistant', message: { model: modele } }, creeLe);
+
+  test('le modèle du fil l’emporte sur la liste claude.ai (elle ne suit pas un /model fait dans Desktop)', async () => {
+    const s = creer();
+    await fil(s, [assistant('claude-opus-5-5', '2026-11-20T11:10:00.000Z', 'ev-modele')]);
+    expect(s.resume).toMatchObject({ modele: 'claude-opus-5-5', modeleLe: '2026-11-20T11:10:00.000Z' });
+    await s.synchroniser(bruteDe({ config: { model: 'claude-fable-5-2' } }));
+    expect(s.resume.modele).toBe('claude-opus-5-5');
+  });
+
+  test('le message system/init annonce le modèle de la session', async () => {
+    const s = creer();
+    await fil(s, [
+      evenementApi(
+        'ev-init',
+        { type: 'system', subtype: 'init', model: 'claude-sonnet-5-5' },
+        '2026-11-20T11:05:00.000Z',
+      ),
+    ]);
+    expect(s.resume.modele).toBe('claude-sonnet-5-5');
+  });
+
+  test('un réglage accepté par claude.ai s’affiche tout de suite et tient quand la liste reste périmée', async () => {
+    const s = creer();
+    expect(await s.reglerSession({ kind: 'modele', modele: 'claude-opus-x' })).toBeNull();
+    expect(s.resume.modele).toBe('claude-opus-x');
+    await s.synchroniser(bruteDe({ config: { model: 'claude-fable-5-2' } }));
+    expect(s.resume.modele).toBe('claude-opus-x');
+  });
+
+  test('un réglage refusé par claude.ai ne change pas le modèle affiché', async () => {
+    const s = creer();
+    const avant = s.resume.modele;
+    api.reponsePost = { statut: 500, corps: '{"erreur":"panne"}' };
+    expect(await s.reglerSession({ kind: 'modele', modele: 'claude-opus-x' })).not.toBeNull();
+    api.reponsePost = null;
+    expect(s.resume.modele).toBe(avant);
+  });
+});

@@ -11,6 +11,8 @@ import type { Reglage, ReponseCrochet, SessionPoste, SortieSession } from '../se
 import { type EtatTraduction, nouvelEtatTraduction } from '../session/traduction-sdk.ts';
 import { type ResultatApi, envoyerEvenement, lireEvenements } from './client-claude-ai.ts';
 import { type EvenementBrut, type SessionBrute, lireEvenement } from './donnees.ts';
+import { objet, texte } from '../comptes/valeurs.ts';
+import { type ModeleDate, plusRecent } from '../../commun/modele-date.ts';
 import { FluxDistant, type TrameSse } from './flux-distant.ts';
 import {
   demandeCloseePar,
@@ -28,6 +30,15 @@ import { stockeurPieces } from './pieces-distantes.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 
 export const PAS_ENCORE_CLAUDE_AI = 'pilotage claude.ai : pas encore pris en charge';
+
+// Modèle qu'un événement du fil annonce : `system/init`, ou un message assistant (jamais un modèle « <…> »).
+export function modeleDuFil(payload: unknown): string | null {
+  const p = objet(payload);
+  if (texte(p['type']) === 'system' && texte(p['subtype']) === 'init') return texte(p['model']);
+  if (texte(p['type']) !== 'assistant') return null;
+  const modele = texte(objet(p['message'])['model']);
+  return modele !== null && !modele.startsWith('<') ? modele : null;
+}
 const PIECES_REFUSEES = 'à distance, seules les images peuvent être jointes';
 const REGLAGE_REFUSE = 'réglage non pris en charge à distance';
 const APPAREIL_REFUSE = 'Ce compte exige un appareil de confiance pour piloter cette session';
@@ -74,6 +85,9 @@ export class SessionDistante implements SessionPoste {
   private problemePilotage: string | null = null; // erreur du dernier envoi (levée par le prochain succès)
   private publie = ''; // dernier résumé publié, pour ne publier que les changements
   private modeVu: ModeSession | null = null; // dernier mode de permission annoncé par la session (system)
+  // Modèle réel vu dans le fil ou réglé par Remote Control : il l'emporte sur celui de la liste claude.ai, qui ne suit
+  // pas un /model fait dans Claude Desktop.
+  private modeleVu: ModeleDate | null = null;
   private cwdVu: string | null = null; // dossier de travail annoncé par la session (system/init)
   // conversation Claude Code (session_id du fil) : rapproche la jumelle du poste
   private conversationVue: string | null = null;
@@ -293,13 +307,23 @@ export class SessionDistante implements SessionPoste {
 
   private maj(): void {
     const etat = this.avecEtat(this.base);
-    const avecCwd = this.cwdVu !== null && etat.distant ? { ...etat, distant: { ...etat.distant, cwd: this.cwdVu } } : etat;
+    const avecModele = this.modeleVu ? { ...etat, modele: this.modeleVu.modele, modeleLe: this.modeleVu.le } : etat;
+    const avecCwd =
+      this.cwdVu !== null && avecModele.distant
+        ? { ...avecModele, distant: { ...avecModele.distant, cwd: this.cwdVu } }
+        : avecModele;
     const conversation = this.conversationVue;
     const avecConv =
       conversation !== null && avecCwd.distant
         ? { ...avecCwd, distant: { ...avecCwd.distant, conversation } }
         : avecCwd;
     this.resume = this.modeVu === null ? avecConv : { ...avecConv, mode: this.modeVu };
+  }
+
+  // Le modèle le plus récent l'emporte ; à égalité, ou quand le nouveau n'a pas de date, le modèle déjà vu reste.
+  private rendreModele(nouveau: ModeleDate): void {
+    if (this.modeleVu && plusRecent(this.modeleVu, nouveau) === this.modeleVu) return;
+    this.modeleVu = nouveau;
   }
 
   /**
@@ -320,6 +344,8 @@ export class SessionDistante implements SessionPoste {
       if (p?.type === 'system' && mode.success) this.modeVu = mode.data;
       if (p?.type === 'system' && p.subtype === 'init' && typeof p.cwd === 'string' && p.cwd) this.cwdVu = p.cwd;
       if (typeof p?.session_id === 'string' && p.session_id !== '') this.conversationVue = p.session_id;
+      const modele = modeleDuFil(e.payload);
+      if (modele !== null) this.rendreModele({ modele, le: e.creeLe });
     }
     this.maj();
   }
@@ -367,7 +393,8 @@ export class SessionDistante implements SessionPoste {
   async reglerSession(r: Reglage): Promise<string | null> {
     const requete = requeteReglage(r);
     if (!requete) return REGLAGE_REFUSE;
-    return this.controle(requete, champsReglage(r));
+    const miseAJour = r.kind === 'modele' ? { modele: r.modele, modeleLe: new Date().toISOString() } : champsReglage(r);
+    return this.controle(requete, miseAJour);
   }
 
   async repondre(r: ReponseDialogue): Promise<string | null> {
@@ -408,6 +435,7 @@ export class SessionDistante implements SessionPoste {
     }
     this.problemePilotage = null;
     if (miseAJour) this.base = { ...this.base, ...miseAJour };
+    if (miseAJour?.modele) this.rendreModele({ modele: miseAJour.modele, le: miseAJour.modeleLe ?? null });
     this.publier();
     return null;
   }

@@ -27,6 +27,7 @@ import type { Stockage } from '../presentation/stockage.ts';
 import { BilanTour } from './bilan-tour.ts';
 import { decisionCession } from './cession-sdk.ts';
 import { nomAffiche, nomLisibleModele } from './modele-affiche.ts';
+import type { ModeleDate } from '../../commun/modele-date.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
 import { contexteDe } from './contexte-sdk.ts';
 import { AvisSdk } from './avis-sdk.ts';
@@ -273,13 +274,13 @@ export class SessionSdk implements SessionPoste {
   // Conversation tenue par un processus Claude hors Lanterne (Desktop, terminal) : « en cours » ou « en attente », sans
   // reprise possible ; fermée quand ce processus s'arrête. Une requête Lanterne vivante l'emporte. L'activité (majLe)
   // reste celle du transcript.
-  rattacherTerminal(vivant: boolean, enTour = false, modeleLu: string | null = null): void {
+  rattacherTerminal(vivant: boolean, enTour = false, modeleLu: ModeleDate | null = null): void {
     if (this.vivante) return;
     const statut = statutExterne(this.etat.statut, vivant, enTour);
-    const modele = modeleLu ?? this.etat.modele;
+    const modele = modeleLu ?? { modele: this.etat.modele, le: this.etat.modeleLe ?? null };
     const inchangee = statut === this.etat.statut && (this.etat.terminal === true) === vivant;
-    if (inchangee && modele === this.etat.modele) return;
-    this.etat = { ...this.etat, statut, terminal: vivant, modele };
+    if (inchangee && modele.modele === this.etat.modele && modele.le === (this.etat.modeleLe ?? null)) return;
+    this.etat = { ...this.etat, statut, terminal: vivant, modele: modele.modele, modeleLe: modele.le };
     this.env.sortie.resume(this.etat);
   }
   async releverEcran(): Promise<void> {}
@@ -496,7 +497,7 @@ export class SessionSdk implements SessionPoste {
         return `réglage impossible : ${String(erreur)}`;
       }
     }
-    this.maj(champsReglage(r));
+    this.maj(r.kind === 'modele' ? { ...champsReglage(r), modeleLe: new Date().toISOString() } : champsReglage(r));
     if (requete && r.kind === 'modele') {
       void this.nommerModele(requete);
       void this.relever(requete);
