@@ -29,6 +29,8 @@ import type { ApiConfirmations } from '../machines/api-confirmations.ts';
 import { type DependancesReunions, routesReunions } from '../reunion/api-reunions.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 import { lireModules, servirFichierModule } from '../modules/api-modules.ts';
+import { appelerModule, lireCapacites, repondreModule } from '../modules/api-appels.ts';
+import type { AppelsModules } from '../modules/appels.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -51,6 +53,7 @@ export interface DependancesApi {
   readonly resteLot2: ApisResteLot2;
   readonly parite: ApiParite;
   readonly confirmations: ApiConfirmations;
+  readonly appels: AppelsModules;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -184,6 +187,9 @@ export function construireRoutes(d: DependancesApi) {
     '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
     '/api/modules': { GET: protege(() => lireModules(d.registre)) },
     '/api/modules/*': { GET: protege((req) => servirFichierModule(d.registre, req)) },
+    '/api/modules-outils': { GET: protege(() => lireCapacites(d.appels)) },
+    '/api/modules-appels': { POST: protege((req) => appelerModule(d.appels, req)) },
+    '/api/modules-reponses': { POST: protege((req) => repondreModule(d.appels, req)) },
     '/api/sessions/:id/dossier': { GET: protege((req) => d.fichiersSession.arbre(req as never)) },
     '/api/sessions/:id/competences': { GET: protege((req) => d.fichiersSession.competences(req as never)) },
     '/api/sessions/:id/fichiers': { GET: protege((req) => d.fichiersSession.fichiers(req as never)) },

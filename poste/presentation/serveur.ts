@@ -3,10 +3,12 @@
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { ModeFichier } from '../../commun/presentation.ts';
+import { DonneesModule, REGEX_ID_MODULE, REGEX_NOM_OUTIL } from '../../commun/modules.ts';
 import { afficherWidget } from './widget.ts';
 import { envoyerFichier, publierArtefact } from './envoi.ts';
 import type { ContexteOutils, Resultat } from './outils.ts';
 import * as machines from './machines-outils.ts';
+import * as modules from './modules-outils.ts';
 
 export const NOM_SERVEUR = 'lanterne';
 
@@ -27,6 +29,18 @@ const DESCRIPTION_WIDGET =
   '(carte, tableau stylé) pour illustrer une réponse. 300 Ko au plus. Pour une page complète réutilisable, préférer ' +
   'publier_artefact.';
 
+const DESCRIPTION_MODULES_LISTER =
+  'Lister les outils et les intégrations des modules Lanterne (extensions de l’appli de Chris : carte, etc.). ' +
+  'À lire avant d’appeler un outil de module ou d’afficher une intégration.';
+
+const DESCRIPTION_MODULE_APPELER =
+  'Appeler un outil d’un module Lanterne, tel que listé par modules_lister. Le résultat revient en texte. ' +
+  'Échoue si aucune appli Lanterne n’est ouverte ou si le module n’y est pas actif.';
+
+const DESCRIPTION_MODULE_AFFICHER =
+  'Afficher une intégration de module dans le fil (ex. des lieux sur une carte), telle que listée par ' +
+  'modules_lister, avec ses données (objet JSON, 64 Ko au plus).';
+
 interface ResultatOutil {
   [cle: string]: unknown;
   readonly content: { readonly type: 'text'; readonly text: string }[];
@@ -35,6 +49,39 @@ interface ResultatOutil {
 
 function enResultat(r: Resultat): ResultatOutil {
   return { content: [{ type: 'text', text: r.texte }], ...(r.erreur ? { isError: true } : {}) };
+}
+
+/** Les outils `modules` : l’intégration se fait toujours ; lister et appeler passent par le relais (API et jeton). */
+function outilsModules(c: ContexteOutils) {
+  const afficher = tool(
+    'module_afficher',
+    DESCRIPTION_MODULE_AFFICHER,
+    {
+      module: z.string().regex(REGEX_ID_MODULE),
+      integration: z.string().regex(REGEX_ID_MODULE),
+      donnees: DonneesModule,
+      titre: z.string().min(1).max(120).optional(),
+    },
+    async (a) => enResultat(modules.afficherModule(c, a)),
+  );
+  if (!c.api) return [afficher];
+  const api = c.api;
+  return [
+    tool('modules_lister', DESCRIPTION_MODULES_LISTER, {}, async () =>
+      enResultat(await modules.listerModules(api, c.journal)),
+    ),
+    tool(
+      'module_appeler',
+      DESCRIPTION_MODULE_APPELER,
+      {
+        module: z.string().regex(REGEX_ID_MODULE),
+        outil: z.string().regex(REGEX_NOM_OUTIL),
+        arguments: DonneesModule.optional(),
+      },
+      async (a) => enResultat(await modules.appelerModule(api, c.journal, c.sessionId, a)),
+    ),
+    afficher,
+  ];
 }
 
 /** Les outils `machines` n’existent que si le relais est joignable (API et jeton configurés). */
@@ -114,6 +161,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
         async (args) => enResultat(afficherWidget(c, args)),
       ),
       ...outilsMachines(c),
+      ...outilsModules(c),
     ],
   });
 }

@@ -11,13 +11,18 @@ export interface ApiMachinesOutils {
 export const DELAI_CONFIRMATION_MS = 5 * 60_000;
 const PAS_ATTENTE_S = 25;
 
-interface Reponse {
+export interface Reponse {
   readonly ok: boolean;
   readonly statut: number;
   readonly corps: unknown;
 }
 
-async function appeler(api: ApiMachinesOutils, methode: string, chemin: string, corps?: unknown): Promise<Reponse> {
+export async function appeler(
+  api: ApiMachinesOutils,
+  methode: string,
+  chemin: string,
+  corps?: unknown,
+): Promise<Reponse> {
   const r = await fetch(`${api.url}${chemin}`, {
     method: methode,
     headers: { authorization: `Bearer ${api.jeton}`, ...(corps ? { 'content-type': 'application/json' } : {}) },
@@ -33,7 +38,7 @@ async function appeler(api: ApiMachinesOutils, methode: string, chemin: string, 
   return { ok: r.ok, statut: r.status, corps: donnees };
 }
 
-function messageErreur(r: Reponse): Resultat {
+export function messageErreur(r: Reponse): Resultat {
   const erreur = (r.corps as { erreur?: string } | null)?.erreur ?? `HTTP ${r.statut}`;
   return { texte: `Échec : ${erreur}`, erreur: true };
 }

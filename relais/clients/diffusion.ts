@@ -14,6 +14,11 @@ export class Diffusion {
     return this.versionCourante;
   }
 
+  /** Nombre d'applis connectées en WebSocket (un appel de module n'a de sens que s'il y en a une). */
+  get nombreApplis(): number {
+    return this.clients.size;
+  }
+
   ajouter(ws: ServerWebSocket<unknown>): void {
     this.clients.add(ws);
   }
@@ -27,7 +32,7 @@ export class Diffusion {
     for (const ws of this.clients) ws.send(texte);
     // L'iPhone ne se réveille ni pour chaque fragment d'Echo ni pour la salle de réunion (HQ, WebSocket seulement),
     // ni pour chaque delta de texte (le bloc final réveille le long-poll).
-    if (m.type === 'machine' || m.type === 'echo' || m.type === 'reunion' || m.type === 'flux') return;
+    if (['machine', 'echo', 'reunion', 'flux', 'module_appel'].includes(m.type)) return;
     this.versionCourante += 1;
     const reveils = this.attentes;
     this.attentes = new Set();

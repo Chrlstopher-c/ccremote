@@ -23,6 +23,7 @@ import { routesHq } from './clients/hq.ts';
 import { indexSpa, servirStatique } from './clients/statique.ts';
 import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
+import { AppelsModules } from './modules/appels.ts';
 import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
@@ -64,6 +65,7 @@ const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
 const dossierSecrets = dossierSecretsPostes();
 const secretsPostes = new Map<string, string>([...config.secretsPostes, ...chargerSecretsPostes(dossierSecrets)]);
 const postes = new Postes(registre, diffusion, secretsPostes, journal);
+const appelsModules = new AppelsModules({ registre, diffusion });
 postes.desktop = new DesktopDesPostes(new ArchivagesDesktop(base));
 const confirmations = new ApiConfirmations(new Confirmations((m) => diffusion.diffuser(m)));
 // Relais intégré (appli) : les postes Lanterne sont joints par des tunnels SSH inverses lancés d'ici.
@@ -213,6 +215,7 @@ const routes = avecCors(
     resteLot2,
     parite,
     confirmations,
+    appels: appelsModules,
   }),
   config.origines,
 );

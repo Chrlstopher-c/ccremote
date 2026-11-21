@@ -77,7 +77,17 @@ export type MessageClient =
   // client qui l'affiche le relit. Un ajout en queue est diffusé ligne à ligne et n'émet pas ce signal.
   | { readonly type: 'fil_modifie'; readonly sessionId: string }
   // Un module du parc a été ajouté, changé ou retiré : l'interface recharge la liste (voir relais/modules/).
-  | { readonly type: 'modules_modifies' };
+  | { readonly type: 'modules_modifies' }
+  // Un agent appelle un outil d'un module : la première appli où il est actif répond (POST /api/modules-reponses).
+  // WebSocket seulement : n'avance pas le long-poll.
+  | {
+      readonly type: 'module_appel';
+      readonly appel: string;
+      readonly module: string;
+      readonly outil: string;
+      readonly arguments: Readonly<Record<string, unknown>>;
+      readonly session: string | null;
+    };
 
 /** Forme publique d'une confirmation demandée par un outil (voir relais/machines/confirmations.ts). */
 export interface ConfirmationDemandee {

@@ -264,6 +264,14 @@ export const Evenement = z.discriminatedUnion('type', [
     taille: z.number(),
   }),
   z.object({ type: z.literal('widget'), fichier: z.string(), titre: z.string(), mime: z.string(), taille: z.number() }),
+  // Intégration d'un module (outil `module_afficher`) : rendue par l'interface, à la volée et à la relecture.
+  z.object({
+    type: z.literal('integration'),
+    module: z.string(),
+    integration: z.string(),
+    donnees: z.record(z.string(), z.unknown()),
+    titre: z.string().optional(),
+  }),
   z.object({
     type: z.literal('image'),
     fichier: z.string(),
