@@ -30,11 +30,15 @@ export class Demandes {
   constructor(private readonly options: OptionsDemandes) {}
 
   /** Rend la décision de Chris ; un refus, ou un délai sans réponse, rend `accord: false`. */
-  demander(genre: GenreDemande, de: string, detail: string, session?: string): Promise<Reponse> {
+  demander(genre: GenreDemande, de: string, detail: string, session?: string, resume?: string): Promise<Reponse> {
     return new Promise((rendre) => {
       const id = nonce();
       const le = new Date(this.options.horloge()).toISOString();
-      const demande: DemandeDuo = { id, genre, de, le, detail, ...(session ? { session } : {}) };
+      const demande: DemandeDuo = {
+        ...{ id, genre, de, le, detail },
+        ...(session ? { session } : {}),
+        ...(resume ? { resume } : {}),
+      };
       const minuterie = setTimeout(() => this.trancher(id, REFUS), this.options.delaiMs);
       this.en.set(id, { demande, rendre, minuterie });
       this.options.diffusion.diffuser({ type: 'duo_demande', demande });

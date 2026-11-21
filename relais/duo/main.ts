@@ -92,7 +92,8 @@ export async function passerLaMain(
 /** Receveur : demande l'accord de Chris, puis ouvre la session neuve dans le dossier qu'il a choisi. */
 export async function recevoirMain(c: Contexte, nom: string, m: LigneMain): Promise<void> {
   const requete: Requete = { nom, ref: m.ref, action: 'passer_la_main', cible: m.paquet.titre };
-  const reponse = await c.demandes.demander('passer_la_main', nom, m.paquet.titre);
+  const resume = textePaquet(m.paquet, nom).slice(0, 8000);
+  const reponse = await c.demandes.demander('passer_la_main', nom, m.paquet.titre, undefined, resume);
   if (!reponse.accord) {
     return conclure(c, requete, {
       ok: false,

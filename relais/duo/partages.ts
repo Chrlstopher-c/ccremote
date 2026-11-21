@@ -20,7 +20,9 @@ export function niveauPour(session: ResumeSession, partages: readonly PartageDuo
   const projet = cibleProjet(session.projet.machine, session.projet.chemin);
   let niveau: NiveauPartage | null = null;
   for (const p of partages) {
-    const vise = p.genre === 'session' ? p.cible === session.id : p.cible === projet;
+    // Un projet se désigne par `machine:chemin` ou par son chemin seul (le même dossier, quelle que soit la machine).
+    const vise =
+      p.genre === 'session' ? p.cible === session.id : p.cible === projet || p.cible === session.projet.chemin;
     if (!vise) continue;
     if (p.niveau === 'ecriture') return 'ecriture';
     niveau = 'lecture';
