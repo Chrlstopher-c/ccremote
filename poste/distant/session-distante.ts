@@ -23,6 +23,7 @@ import {
   reponseControle,
   requeteControle,
   requeteReglage,
+  traduireCommande,
 } from './controle-distant.ts';
 import { AttenteDistante, type Resolution, titreDe } from './attente-distante.ts';
 import { type ContexteDistant, resumeDistant } from './resume-distant.ts';
@@ -385,6 +386,8 @@ export class SessionDistante implements SessionPoste {
   // Pilotage : chaque envoi est un événement POSTé à la session ; la réponse de claude.ai dit si elle est acceptée.
   async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
     if (pieces.some((p) => !p.mime.startsWith('image/'))) return PIECES_REFUSEES;
+    const commande = pieces.length === 0 ? traduireCommande(texte) : null;
+    if (commande) return 'refus' in commande ? commande.refus : this.reglerSession(commande.reglage);
     const marque = avecEnteteChris(texte);
     const contenu = pieces.length > 0 ? contenuAvecImages(marque, pieces) : marque;
     // « next » : remis à la prochaine frontière d'outil, comme le chemin SDK (le bridge lit ce champ).

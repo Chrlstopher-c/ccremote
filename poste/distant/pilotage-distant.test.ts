@@ -168,11 +168,53 @@ describe('réglages de session', () => {
     expect(s.resume.modele).toBe('claude-opus-x');
   });
 
-  test('effort et style : erreur claire, aucun POST', async () => {
+  test('effort : apply_flag_settings (noms du SDK) ; style : erreur claire, aucun POST', async () => {
     const s = creer();
-    expect(await s.reglerSession({ kind: 'effort', effort: 'high' })).toMatch(/non pris en charge à distance/);
+    expect(await s.reglerSession({ kind: 'effort', effort: 'high' })).toBeNull();
+    expect(corpsPost().events[0]?.['request']).toEqual({
+      subtype: 'apply_flag_settings',
+      settings: { effortLevel: 'high' },
+    });
+    expect(s.resume.effort).toBe('high');
     expect(await s.reglerSession({ kind: 'style', style: 'x' })).toMatch(/non pris en charge à distance/);
+    expect(api.posts).toHaveLength(1);
+  });
+
+  test('commandes « / » tapées : traduites en requêtes de contrôle, jamais envoyées comme texte', async () => {
+    const s = creer();
+    expect(await s.envoyer('/model opus')).toBeNull();
+    expect(corpsPost().events[0]?.['request']).toEqual({ subtype: 'set_model', model: 'opus' });
+    expect(await s.envoyer('/model default')).toBeNull();
+    expect(corpsPost().events[0]?.['request']).toEqual({ subtype: 'set_model', model: 'default' });
+    expect(await s.envoyer('/effort max')).toBeNull();
+    expect(corpsPost().events[0]?.['request']).toEqual({
+      subtype: 'apply_flag_settings',
+      settings: { effortLevel: 'max' },
+    });
+    expect(await s.envoyer('/effort auto')).toBeNull();
+    expect(corpsPost().events[0]?.['request']).toEqual({
+      subtype: 'apply_flag_settings',
+      settings: { effortLevel: null },
+    });
+    expect(api.posts).toHaveLength(4);
+    for (let i = 0; i < 4; i++) expect(corpsPost(i).events[0]?.['type']).toBe('control_request');
+  });
+
+  test('/compact, /clear, /effort inconnu, /model sans nom : refus clair, aucun POST', async () => {
+    const s = creer();
+    expect(await s.envoyer('/compact')).toMatch(/commande non disponible pour une session tenue par Claude Desktop/);
+    expect(await s.envoyer('/clear')).toMatch(/migrer la session vers Lanterne/);
+    expect(await s.envoyer('/effort turbo')).toMatch(/niveau inconnu/);
+    expect(await s.envoyer('/model')).toMatch(/indiquer le modèle/);
     expect(api.posts).toHaveLength(0);
+  });
+
+  test('un message ordinaire, même commençant par un chemin, part toujours comme message utilisateur', async () => {
+    const s = creer();
+    expect(await s.envoyer('/home/trinity/projet ouvre-le')).toBeNull();
+    expect(corpsPost().events[0]?.['type']).toBe('user');
+    expect(await s.envoyer('regarde /compact')).toBeNull();
+    expect(corpsPost().events[0]?.['type']).toBe('user');
   });
 
   test('les autres commandes restent refusées', async () => {
