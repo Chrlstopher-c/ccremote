@@ -5,6 +5,7 @@ import type { ClientTerminal, DonneesTerminal } from '../appareils/terminaux.ts'
 import type { CanalNoeud } from './canal.ts';
 import type { MessageChiffre } from '../../commun/federation.ts';
 import type { TerminauxLocaux } from './terminal-federe.ts';
+import type { RequeteDroit } from '../../commun/charte.ts';
 
 type Ouverture = Extract<MessageChiffre, { t: 'terminal_poste' }>;
 
@@ -17,10 +18,16 @@ interface Ouvert {
 export class TerminalAppareil {
   private readonly ouverts = new Map<string, Ouvert>();
 
-  constructor(private readonly locaux: () => TerminauxLocaux | null) {}
+  constructor(
+    private readonly locaux: () => TerminauxLocaux | null,
+    private readonly autorise: (membre: string, requete: RequeteDroit) => boolean,
+  ) {}
 
   /** Ouvre le terminal sur le poste ; la réponse `reponse` dit si le PTY est là, et sa raison sinon. */
   async ouvrir(canal: CanalNoeud, m: Ouverture): Promise<void> {
+    if (!this.autorise(canal.membre, { genre: 'terminal' })) {
+      return this.repondre(canal, m.ref, false, 'droit refusé : piloter');
+    }
     const locaux = this.locaux();
     if (!locaux) return this.repondre(canal, m.ref, false, 'terminaux non disponibles ici');
     const entree: Ouvert = { canal, ws: this.adaptateur(canal, m), erreur: null };

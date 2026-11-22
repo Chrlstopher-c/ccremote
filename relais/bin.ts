@@ -3,7 +3,6 @@ import { hostname, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { COMMIT, VERSION } from '../commun/version.ts';
-import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
 import { avecGardeInvites, construireRoutes, type DependancesApi } from './clients/api.ts';
@@ -37,7 +36,8 @@ import { type DependancesOutilsParc, estOperationParc, traiterRequeteParc } from
 import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
-import { type DonneesPoste, Postes } from './parc/postes.ts';
+import { Postes } from './parc/postes.ts';
+import { demarrerEcoutePostes } from './ecoute-postes.ts';
 import { DesktopDesPostes } from './parc/desktop-postes.ts';
 import { ArchivagesDesktop } from './registre/archivages-desktop.ts';
 import { ApiMachines } from './machines/api-machines.ts';
@@ -463,31 +463,7 @@ for (const { hote, port } of config.ecouteWeb) {
   });
 }
 
-for (const { hote, port } of config.ecoutePostes)
-  Bun.serve({
-    hostname: hote,
-    port,
-    fetch(req, serveur) {
-      if (new URL(req.url).pathname !== CHEMIN_POSTE) return new Response('introuvable', { status: 404 });
-      const machine = postes.authentifier(req);
-      if (!machine) {
-        journal.warn({ machine: req.headers.get('x-ccremote-machine') }, 'poste refusé : secret invalide');
-        return new Response('refusé', { status: 401 });
-      }
-      return serveur.upgrade(req, { data: { machine } })
-        ? undefined
-        : new Response('WebSocket attendu', { status: 426 });
-    },
-    websocket: {
-      data: {} as DonneesPoste,
-      open: (ws) => postes.ouvert(ws),
-      close: (ws) => postes.ferme(ws),
-      message: (ws, m) => postes.recu(ws, String(m)),
-      idleTimeout: 120,
-      sendPings: true,
-      maxPayloadLength: 64 * 1024 * 1024, // un module de 20 Mo part en base64 (~27 Mo) dans un seul message (v1.2)
-    },
-  });
+demarrerEcoutePostes({ ecoute: config.ecoutePostes, postes, journal });
 
 duo.demarrer();
 lancerRetention(registre, journal);

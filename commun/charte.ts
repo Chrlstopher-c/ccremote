@@ -206,14 +206,18 @@ export type RequeteDroit =
   | { genre: 'ecrire' }
   | { genre: 'interrompre' }
   | { genre: 'ouvrir' }
+  | { genre: 'terminal' }
   | { genre: 'instantane' };
 
 const CHEMIN_REMOTE_CONTROL = /^\/api\/sessions\/[^/]+\/remote-control$/;
+/** Un terminal prend le contrôle du poste : droit d'écriture, quelle que soit la méthode (GET du WebSocket). */
+const CHEMIN_TERMINAL = /^\/api\/(terminal|sessions\/[^/]+\/terminal)$/;
 
 /** Le contrôle à distance est testé avant la méthode : une lecture de ce chemin exige déjà `remoteControl`. */
 function droitApi(methode: string, chemin: string): Droit {
   const seul = chemin.split('?')[0] ?? chemin;
   if (CHEMIN_REMOTE_CONTROL.test(seul)) return 'remoteControl';
+  if (CHEMIN_TERMINAL.test(seul)) return 'piloter';
   const verbe = methode.toUpperCase();
   if (verbe === 'GET') return 'voir';
   if (verbe === 'POST' && seul === '/api/sessions') return 'lancer';
@@ -236,6 +240,7 @@ export function droitRequis(requete: RequeteDroit): Droit {
       return 'voir';
     case 'ecrire':
     case 'interrompre':
+    case 'terminal':
       return 'piloter';
     case 'ouvrir':
       return 'lancer';

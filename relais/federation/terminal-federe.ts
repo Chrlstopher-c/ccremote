@@ -10,6 +10,7 @@ import type { CanalNoeud } from './canal.ts';
 import type { Canaux } from './canaux.ts';
 import type { Echanges } from './echanges.ts';
 import type { Registre } from '../registre/registre.ts';
+import type { RequeteDroit } from '../../commun/charte.ts';
 
 /** Délai d'une ouverture de terminal chez le pair (le poste doit lancer son shell). */
 const DELAI_OUVERTURE_MS = 20_000;
@@ -37,6 +38,8 @@ export interface OptionsTerminalFedere {
   readonly canaux: Pick<Canaux, 'liaisonOuverteAvec'>;
   readonly registre: Pick<Registre, 'session'>;
   readonly journal: Logger;
+  /** Droits de la charte, appliqués sur ce nœud à l'identité du canal qui demande un terminal. */
+  readonly autorise: (membre: string, requete: RequeteDroit) => boolean;
 }
 
 interface Demandeur {
@@ -153,6 +156,10 @@ export class TerminalFedere {
     canal: CanalNoeud,
     m: Extract<MessageChiffre, { t: 'terminal_ouvrir' }>,
   ): Promise<void> {
+    if (!this.o.autorise(canal.membre, { genre: 'terminal' })) {
+      this.o.journal.warn({ membre: canal.membre, droit: 'piloter' }, 'terminal refusé : droit manquant');
+      return this.o.echanges.reponse(canal, m.ref, false, 'droit refusé : piloter');
+    }
     // Une session du duo n'est pas un terminal de ce nœud : seules les sessions propres s'ouvrent à un pair.
     if (!this.locaux) return this.o.echanges.reponse(canal, m.ref, false, 'terminaux non disponibles ici');
     const fiche = this.o.registre.session(m.session);
