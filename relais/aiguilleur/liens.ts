@@ -103,7 +103,12 @@ export class Liens {
       change = true;
     }
     // Un révoqué hors ligne doit aussi disparaître de la présence des autres : on compare les révoqués.
-    const revoques = this.annuaire.membres().filter((m) => m.revoqueLe).map((m) => m.id).sort().join(',');
+    const revoques = this.annuaire
+      .membres()
+      .filter((m) => m.revoqueLe)
+      .map((m) => m.id)
+      .sort()
+      .join(',');
     if (change || revoques !== this.revoques) {
       this.revoques = revoques;
       this.diffuserPresence();
