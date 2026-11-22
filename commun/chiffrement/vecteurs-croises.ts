@@ -8,6 +8,8 @@ import { exporterIdentitePublique, type Identite } from './identite.ts';
 import { depuisBase64url, type Octets, versBase64url } from './octets.ts';
 import { initierPoignee, repondrePoignee, terminerPoignee } from './poignee.ts';
 import type { Canal } from './messages.ts';
+import { analyserDeAiguilleur, analyserVersAiguilleur } from '../aiguilleur.ts';
+import { lireMessageChiffre, lireMessageEnClair } from '../federation.ts';
 
 const PKCS8_X25519 = '302e020100300506032b656e04220420';
 const PKCS8_ED25519 = '302e020100300506032b657004220420';
@@ -84,6 +86,35 @@ async function trames(
   return sortie;
 }
 
+/** Exemples de messages du protocole (aiguilleur et nœud) : chacun doit passer le schéma de Quart. */
+function exemplesProtocole(identiteI: string, identiteR: string): Record<string, unknown> {
+  const enClair = {
+    presentation: { t: 'presentation', identite: identiteI, nom: 'iphone', genre: 'appareil' },
+    accord: { t: 'accord' },
+    refus: { t: 'refus', raison: 'refusé par le nœud visé' },
+  };
+  const chiffre = {
+    api: { t: 'api', ref: 'r1', methode: 'GET', chemin: '/api/etat' },
+    apiReponse: { t: 'api_reponse', ref: 'r1', statut: 200, corps: '{"machine":"tour"}' },
+    revocation: { t: 'revocation' },
+  };
+  const aiguilleur = {
+    ouvrir: { t: 'ouvrir', canal: 'ap-1', vers: 'a1b2c3d4e5f6' },
+    donnees: { t: 'donnees', canal: 'ap-1', charge: '{"t":"accord"}' },
+    presence: { t: 'presence', membres: [{ id: 'a1b2c3d4e5f6', enLigne: true }] },
+    erreur: { t: 'erreur', canal: 'ap-1', motif: 'hors-ligne' },
+  };
+  for (const m of Object.values(enClair)) if (!lireMessageEnClair(m)) throw new Error('schéma en clair refusé');
+  for (const m of Object.values(chiffre)) if (!lireMessageChiffre(m)) throw new Error('schéma chiffré refusé');
+  if (!analyserVersAiguilleur(aiguilleur.ouvrir) || !analyserVersAiguilleur(aiguilleur.donnees)) {
+    throw new Error('schéma membre → aiguilleur refusé');
+  }
+  if (!analyserDeAiguilleur(aiguilleur.presence) || !analyserDeAiguilleur(aiguilleur.erreur)) {
+    throw new Error('schéma aiguilleur → membre refusé');
+  }
+  return { enClair, chiffre, aiguilleur };
+}
+
 /** Produit l'ensemble des vecteurs ; chaque sortie est validée par un aller-retour avant d'être rendue. */
 export async function produireVecteurs(): Promise<Record<string, unknown>> {
   const I = await identiteDeGraines(GRAINES.identiteI);
@@ -97,8 +128,10 @@ export async function produireVecteurs(): Promise<Record<string, unknown>> {
   const canalI = await terminerPoignee(attente, reponse);
   const trameIR = await trames(canalI, canalR, 'i>r', CLAIRS_I_R);
   const trameRI = await trames(canalR, canalI, 'r>i', CLAIRS_R_I);
+  const protocole = exemplesProtocole(exporterIdentitePublique(I.publique), exporterIdentitePublique(R.publique));
   return {
     version: 1,
+    protocole,
     identites: {
       I: { graineDh: GRAINES.identiteI.dh, graineSignature: GRAINES.identiteI.signature, publique: cleI },
       R: {

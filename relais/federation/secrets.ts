@@ -5,6 +5,7 @@ import type { Logger } from 'pino';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import { GENRES_MEMBRE } from '../../commun/aiguilleur.ts';
 import { IdentitePubliqueTexte } from '../../commun/federation.ts';
 
 const IDENTIFIANT = /^[a-f0-9]{12}$/;
@@ -24,6 +25,8 @@ export const PairFederee = z.object({
   nom: z.string().min(1).max(80),
   identite: IdentitePubliqueTexte,
   creeLe: z.string(),
+  /** Un nœud (fédération) ou un appareil client (canal d'API, sans fédération). */
+  genre: z.enum(GENRES_MEMBRE).default('noeud'),
 });
 export type PairFederee = z.infer<typeof PairFederee>;
 

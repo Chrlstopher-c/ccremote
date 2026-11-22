@@ -30,7 +30,9 @@ describe('secrets du nœud', () => {
     const s = new SecretsNoeud(dossier, journal);
     s.ecrireIdentitePrivee('{"version":1}');
     expect(s.lireIdentitePrivee()).toBe('{"version":1}');
-    s.ecrirePairs([{ id: 'a1b2c3d4e5f6', nom: 'portable', identite: 'a'.repeat(86), creeLe: '2026-11-22T00:00:00Z' }]);
+    s.ecrirePairs([
+      { id: 'a1b2c3d4e5f6', nom: 'portable', identite: 'a'.repeat(86), creeLe: '2026-11-22T00:00:00Z', genre: 'noeud' },
+    ]);
     expect(s.lirePairs()).toHaveLength(1);
     expect(statSync(join(dossier, 'federation', 'pairs.json')).mode & 0o777).toBe(0o600);
   });

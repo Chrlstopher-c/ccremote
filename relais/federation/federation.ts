@@ -24,6 +24,7 @@ import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
+import type { ServirAppareil } from './appareils.ts';
 import { type MembreVu, Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import {
@@ -58,6 +59,8 @@ export interface OptionsFederation {
   readonly notifier?: (titre: string, texte: string) => void;
   /** Observe chaque charge échangée avec l'aiguilleur (essais : prouver qu'il ne voit que du chiffré). */
   readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
+  /** Sert l'API clients à un appareil appairé, dans son canal (absent : 503). */
+  readonly servirAppareil?: ServirAppareil;
 }
 
 export interface EtatFederation {
@@ -227,7 +230,11 @@ export class Federation {
   async etat(): Promise<EtatFederation> {
     const identite = await this.identite();
     const lien = (id: string): boolean => this.canaux.liaisonOuverteAvec(id) !== null;
-    const noeuds = await Promise.all(this.pairs.map((p) => noeudAppaire(p, this.voisins.enLigne(p.id), lien(p.id))));
+    const noeuds = await Promise.all(
+      this.pairs
+        .filter((p) => p.genre === 'noeud')
+        .map((p) => noeudAppaire(p, this.voisins.enLigne(p.id), lien(p.id))),
+    );
     const config = this.config;
     return {
       aiguilleur: config
@@ -322,6 +329,7 @@ export class Federation {
     if (!moi || !this.lien?.connecte()) return;
     const proprio = this.proprietaireLocal();
     for (const p of this.pairs) {
+      if (p.genre === 'appareil') continue;
       if (p.id <= moi || this.refus.has(p.id) || !this.voisins.joignable(p.id, proprio)) continue;
       if (!this.canaux.avec(p.id)) this.canaux.ouvrir(p.id, 'lien');
     }
@@ -351,6 +359,7 @@ export class Federation {
       delaiAppairageMs: (this.options.delaiDemandeMs ?? DELAI_DEMANDE_MS) + MARGE_APPAIRAGE_MS,
       identiteLocale: () => this.identite(),
       nomLocal: () => this.config?.nom ?? this.options.machine,
+      genreLocal: () => 'noeud',
       pairDe: (membre) => this.pairs.find((p) => p.id === membre) ?? null,
       envoyerAiguilleur: (m) => this.emettre(m),
       presentationRecue: (canal, p) => void this.presentationRecue(canal, p),
@@ -368,7 +377,10 @@ export class Federation {
 
   // Côté visé : la demande part avec les deux empreintes ; Chris accepte ou refuse, l'expiration vaut refus.
   private async presentationRecue(canal: CanalNoeud, presentation: PresentationDistante): Promise<void> {
-    const refus = this.voisins.refusPour(canal.membre, this.proprietaireLocal());
+    const refus =
+      presentation.genre === 'appareil'
+        ? this.voisins.refusAppareil(canal.membre, this.proprietaireLocal())
+        : this.voisins.refusPour(canal.membre, this.proprietaireLocal());
     if (refus) {
       this.options.journal.warn({ membre: canal.membre, raison: refus }, 'présentation refusée : pas un de nos nœuds');
       return canal.decider(false);
@@ -379,7 +391,13 @@ export class Federation {
       if (!canal.actif) return;
       if (this.demandes.lister().length >= NOMBRE_MAX_DEMANDES) return canal.decider(false);
       this.demandes.ajouter(
-        { membre: canal.membre, nom: presentation.nom, empreinte, empreinteLocale: locale },
+        {
+          membre: canal.membre,
+          nom: presentation.nom,
+          empreinte,
+          empreinteLocale: locale,
+          genre: presentation.genre ?? 'noeud',
+        },
         (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler()),
       );
       this.options.notifier?.(
@@ -404,6 +422,7 @@ export class Federation {
 
   private liaisonOuverte(canal: CanalNoeud): void {
     this.refus.delete(canal.membre);
+    if (this.estAppareil(canal.membre)) return;
     this.distant.enLigne(canal.membre, true);
     canal.envoyer(this.echanges.instantane());
   }
@@ -414,6 +433,8 @@ export class Federation {
   }
 
   private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
+    if (this.estAppareil(canal.membre)) return this.messageAppareil(canal, message);
+    if (message.t === 'api' || message.t === 'api_reponse') return canal.fermer();
     if (message.t === 'revocation') {
       this.oublierPair(canal.membre);
       // Un lien rouvert entre-temps (planification) vers ce pair ne doit pas survivre à la révocation.
@@ -422,6 +443,19 @@ export class Federation {
     }
     if (message.t === 'synchro') return this.recepteurSynchro?.(canal.membre, message.m);
     await this.echanges.traiter(canal, message);
+  }
+
+  /** Un appareil n'échange que l'API clients ; tout autre message ferme son canal. */
+  private async messageAppareil(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
+    if (message.t !== 'api') return canal.fermer();
+    const reponse = this.options.servirAppareil
+      ? await this.options.servirAppareil({ methode: message.methode, chemin: message.chemin, corps: message.corps })
+      : { statut: 503, corps: JSON.stringify({ erreur: 'API appareil non branchée' }) };
+    canal.envoyer({ t: 'api_reponse', ref: message.ref, statut: reponse.statut, corps: reponse.corps });
+  }
+
+  private estAppareil(membre: string): boolean {
+    return this.pairs.some((p) => p.id === membre && p.genre === 'appareil');
   }
 
   private canalFerme(canal: CanalNoeud): void {
@@ -440,6 +474,7 @@ export class Federation {
       nom: presentation.nom,
       identite: presentation.identite,
       creeLe: new Date().toISOString(),
+      genre: presentation.genre ?? 'noeud',
     };
     this.pairs = [...this.pairs.filter((p) => p.id !== membre), pair];
     this.refus.delete(membre);

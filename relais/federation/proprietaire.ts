@@ -30,6 +30,14 @@ export function estDeMesMachines(membre: Attributs, moi: string | null): boolean
   return membre.genre === 'noeud' && membre.proprietaire !== null && moi !== null && membre.proprietaire === moi;
 }
 
+/** Un appareil client de même propriétaire : il peut présenter une demande (Chris l'accepte sur le nœud). */
+export function raisonRefusAppareil(membre: InfoMembre | undefined, moi: string | null): string | null {
+  if (!membre || membre.genre !== 'appareil' || membre.proprietaire === null || moi === null) {
+    return RAISON_PROPRIETAIRE_INCONNU;
+  }
+  return membre.proprietaire === moi ? null : RAISON_PAS_A_TOI;
+}
+
 /** Pourquoi on ne traite pas ce membre comme l'un des nôtres ; null s'il l'est. */
 export function raisonRefus(membre: InfoMembre | undefined, moi: string | null): string | null {
   if (!membre || membre.genre === null || membre.proprietaire === null || moi === null) {
@@ -76,6 +84,10 @@ export class Voisinage {
 
   refusPour(id: string, moi: string | null): string | null {
     return raisonRefus(this.infos.get(id), moi);
+  }
+
+  refusAppareil(id: string, moi: string | null): string | null {
+    return raisonRefusAppareil(this.infos.get(id), moi);
   }
 
   /** Un de nos nœuds, en ligne : le seul pair qu'on appaire ou qu'on relie. */

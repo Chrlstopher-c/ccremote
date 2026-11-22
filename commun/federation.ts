@@ -1,6 +1,7 @@
 // Responsabilité : le protocole de la fédération « mes machines » (contrat v2, étape 3) — messages en clair de
 // l'appairage entre nœuds, puis messages chiffrés de bout en bout une fois le canal établi. Aucune logique ici.
 import { z } from 'zod';
+import { GENRES_MEMBRE } from './aiguilleur.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { Evenement, Projet, ResumeSession } from './session.ts';
 
@@ -20,12 +21,19 @@ const NOM = z.string().trim().min(1).max(80);
 const SESSION = z.string().min(1).max(200);
 const REF = z.string().min(1).max(64);
 const TEXTE = z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION);
+const METHODE_API = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const CHEMIN_API = z.string().min(5).max(4096).regex(/^\/api\//);
 
 export const IdentitePubliqueTexte = z.string().regex(IDENTITE);
 
 /** En clair : l'appairage (présentation, décision) et l'enveloppe du chiffrement (poignée, trame). */
 export const MessageEnClair = z.discriminatedUnion('t', [
-  z.strictObject({ t: z.literal('presentation'), identite: IdentitePubliqueTexte, nom: NOM }),
+  z.strictObject({
+    t: z.literal('presentation'),
+    identite: IdentitePubliqueTexte,
+    nom: NOM,
+    genre: z.enum(GENRES_MEMBRE).optional(),
+  }),
   z.strictObject({ t: z.literal('accord') }),
   z.strictObject({ t: z.literal('refus'), raison: z.string().max(200) }),
   z.strictObject({ t: z.literal('poignee'), m: z.unknown() }),
@@ -128,6 +136,20 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   }),
   z.strictObject({
     t: z.literal('geste_reponse'),
+    ref: REF,
+    statut: z.number().int().min(100).max(599),
+    corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
+  }),
+  // Appareil (client) : une requête de l'API clients, rejouée par le nœud sur ses routes locales.
+  z.strictObject({
+    t: z.literal('api'),
+    ref: REF,
+    methode: METHODE_API,
+    chemin: CHEMIN_API,
+    corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS).optional(),
+  }),
+  z.strictObject({
+    t: z.literal('api_reponse'),
     ref: REF,
     statut: z.number().int().min(100).max(599),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),

@@ -2,7 +2,13 @@
 import { describe, expect, test } from 'bun:test';
 import { DemandesAppairage } from './demandes.ts';
 
-const DONNEES = { membre: 'a1b2c3d4e5f6', nom: 'portable', empreinte: 'E1', empreinteLocale: 'L1' };
+const DONNEES = {
+  membre: 'a1b2c3d4e5f6',
+  nom: 'portable',
+  empreinte: 'E1',
+  empreinteLocale: 'L1',
+  genre: 'noeud' as const,
+};
 const attendre = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 describe('demandes d’appairage', () => {

@@ -3,7 +3,7 @@
 // puis le lien chiffré (poignée d'identités connues, puis trames). Le canal ne décide jamais seul : il rend chaque
 // décision à l'hôte.
 import type { Logger } from 'pino';
-import type { MessageVersAiguilleur } from '../../commun/aiguilleur.ts';
+import type { GenreMembre, MessageVersAiguilleur } from '../../commun/aiguilleur.ts';
 import { ErreurChiffrement } from '../../commun/chiffrement/erreur.ts';
 import {
   exporterIdentitePublique,
@@ -29,6 +29,7 @@ export type Phase =
 export interface PresentationDistante {
   readonly identite: string;
   readonly nom: string;
+  readonly genre?: GenreMembre;
 }
 
 /** Ce que le canal attend de son hôte (le Federation du nœud) : identités, décisions, transport. */
@@ -37,6 +38,7 @@ export interface HoteCanal {
   readonly delaiAppairageMs: number;
   identiteLocale(): Promise<Identite>;
   nomLocal(): string;
+  genreLocal(): GenreMembre;
   pairDe(membre: string): PairFederee | null;
   envoyerAiguilleur(message: MessageVersAiguilleur): boolean;
   presentationRecue(canal: CanalNoeud, presentation: PresentationDistante): void;
@@ -173,6 +175,7 @@ export class CanalNoeud {
       t: 'presentation',
       identite: exporterIdentitePublique(moi.publique),
       nom: this.hote.nomLocal(),
+      genre: this.hote.genreLocal(),
     });
     this.phase = 'attente-accord';
     this.armer();
@@ -181,11 +184,12 @@ export class CanalNoeud {
   // Côté visé : la présentation d'un inconnu. Il répond avec la sienne, pour que chacun lise l'autre empreinte.
   private async presentationVisee(message: Extract<MessageEnClair, { t: 'presentation' }>): Promise<void> {
     const moi = await this.hote.identiteLocale();
-    this.presentation = { identite: message.identite, nom: message.nom };
+    this.presentation = { identite: message.identite, nom: message.nom, genre: message.genre };
     this.envoyerClair({
       t: 'presentation',
       identite: exporterIdentitePublique(moi.publique),
       nom: this.hote.nomLocal(),
+      genre: this.hote.genreLocal(),
     });
     this.phase = 'decision';
     this.armer();
@@ -193,7 +197,7 @@ export class CanalNoeud {
   }
 
   private presentationOuvrante(message: Extract<MessageEnClair, { t: 'presentation' }>): void {
-    this.presentation = { identite: message.identite, nom: message.nom };
+    this.presentation = { identite: message.identite, nom: message.nom, genre: message.genre };
   }
 
   private accordRecu(): Promise<void> {

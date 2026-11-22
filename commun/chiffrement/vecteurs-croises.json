@@ -1,5 +1,65 @@
 {
   "version": 1,
+  "protocole": {
+    "enClair": {
+      "presentation": {
+        "t": "presentation",
+        "identite": "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ognQSrIydCu0qzoTaL1GFeTm0CJKtxoBa6-FIKMyyXeHNw",
+        "nom": "iphone",
+        "genre": "appareil"
+      },
+      "accord": {
+        "t": "accord"
+      },
+      "refus": {
+        "t": "refus",
+        "raison": "refusé par le nœud visé"
+      }
+    },
+    "chiffre": {
+      "api": {
+        "t": "api",
+        "ref": "r1",
+        "methode": "GET",
+        "chemin": "/api/etat"
+      },
+      "apiReponse": {
+        "t": "api_reponse",
+        "ref": "r1",
+        "statut": 200,
+        "corps": "{\"machine\":\"tour\"}"
+      },
+      "revocation": {
+        "t": "revocation"
+      }
+    },
+    "aiguilleur": {
+      "ouvrir": {
+        "t": "ouvrir",
+        "canal": "ap-1",
+        "vers": "a1b2c3d4e5f6"
+      },
+      "donnees": {
+        "t": "donnees",
+        "canal": "ap-1",
+        "charge": "{\"t\":\"accord\"}"
+      },
+      "presence": {
+        "t": "presence",
+        "membres": [
+          {
+            "id": "a1b2c3d4e5f6",
+            "enLigne": true
+          }
+        ]
+      },
+      "erreur": {
+        "t": "erreur",
+        "canal": "ap-1",
+        "motif": "hors-ligne"
+      }
+    }
+  },
   "identites": {
     "I": {
       "graineDh": "0101010101010101010101010101010101010101010101010101010101010101",

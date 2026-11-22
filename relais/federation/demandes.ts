@@ -8,6 +8,8 @@ export interface DemandeAppairage {
   readonly nom: string;
   readonly empreinte: string;
   readonly empreinteLocale: string;
+  /** Nœud ou appareil client : Chris le voit avant d'accorder. */
+  readonly genre: 'noeud' | 'appareil';
   readonly le: string;
 }
 

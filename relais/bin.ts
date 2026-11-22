@@ -8,6 +8,7 @@ import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
 import { construireRoutes, type DependancesApi } from './clients/api.ts';
 import { executerGeste, type TableInterne } from './federation/executeur.ts';
+import { servirAppareil } from './federation/appareils.ts';
 import { routesAcces } from './acces/api-acces.ts';
 import type { PosteRelais } from './acces/api-appairage.ts';
 import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
@@ -205,6 +206,7 @@ const federation = new Federation({
   registre,
   diffusion,
   dossierSecrets,
+  servirAppareil: (demande) => servirPourAppareil(demande),
   machine: process.env['CCREMOTE_MACHINE_LOCALE'] || hostname(),
   pont: {
     ouvrir: (demande) => sessions.ouvrirAvec(demande),
@@ -309,6 +311,8 @@ const routes = avecCors(construireRoutes(dependancesApi), config.origines);
 // Table interne (sans jeton) : seuls les gestes relayés par un nœud apparié, sur le lien chiffré, y passent.
 // Les valeurs de la table sont les gestionnaires par méthode de Bun.serve : même forme que TableInterne.
 const routesInternes = construireRoutes(dependancesApi, (g) => g) as unknown as TableInterne;
+// Un appareil appairé (identité acceptée au nœud) : son API passe par la table interne, sur son canal chiffré.
+const servirPourAppareil = servirAppareil(routesInternes, journal.child({ domaine: 'appareil' }));
 federation.distantes.brancherMachines(() => postes.vues());
 
 // Une demande qui attend la décision de Chris sur ce nœud (appairage, synchronisation) : notification dans l'appli.
