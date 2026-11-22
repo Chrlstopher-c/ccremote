@@ -1,6 +1,6 @@
 // Responsabilité : « session sur le compte de l'autre ». Le pair demande l'ouverture d'une session chez nous, dans un
 // dossier que nous lui ouvrons ; elle tourne chez nous, partagée en écriture avec lui. Et la liste de ces dossiers.
-import type { DossierPair, MessageLien } from '../../commun/duo.ts';
+import { type DossierPair, droitsSurMachine, type MessageLien } from '../../commun/duo.ts';
 import {
   annoncerAttente,
   conclure,
@@ -39,9 +39,11 @@ export async function recevoirOuverture(c: Contexte, nom: string, m: LigneOuvrir
   conclure(c, requete, { ok: true, detail: `ouverte : ${id}`, session: id });
 }
 
-// `jamais` refuse ; `toujours` ouvre sans demande dans un dossier autorisé ; dans tous les autres cas, Chris tranche.
+// Machine sans « lancer » : refus avant tout. `jamais` refuse ; `toujours` ouvre sans demande dans un dossier
+// autorisé ; dans tous les autres cas, Chris tranche.
 async function accordeOuverture(c: Contexte, nom: string, m: LigneOuvrir): Promise<Reponse> {
   const droits = c.droits.lire();
+  if (!droitsSurMachine(droits, m.machine).lancer) return { accord: false };
   if (droits.ouvrirSession === 'jamais') return { accord: false };
   if (droits.ouvrirSession === 'toujours' && dossierAutorise(droits.dossiersOuverts, m.machine, m.chemin)) {
     return { accord: true };
@@ -80,15 +82,14 @@ export function nomMachinePourPair(description: string | undefined, identifiant:
 
 export function dossiersOfferts(c: Contexte): DossierPair[] {
   const machines = c.registre.machines();
-  return c.droits.lire().dossiersOuverts.map((d) => ({
-    machine: d.machine,
-    chemin: d.chemin,
-    nomMachine: nomMachinePourPair(
-      machines.find((f) => f.id === d.machine)?.description,
-      d.machine,
-      c.nomLocal(),
-    ),
-  }));
+  const droits = c.droits.lire();
+  return droits.dossiersOuverts
+    .filter((d) => droitsSurMachine(droits, d.machine).lancer)
+    .map((d) => ({
+      machine: d.machine,
+      chemin: d.chemin,
+      nomMachine: nomMachinePourPair(machines.find((f) => f.id === d.machine)?.description, d.machine, c.nomLocal()),
+    }));
 }
 
 export function recevoirDossiers(c: Contexte, ref: string): void {

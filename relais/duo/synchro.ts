@@ -2,7 +2,14 @@
 // relecture) et ce qu'on applique de ce qu'il envoie (sessions de sa machine virtuelle, dans le registre).
 import type { Logger } from 'pino';
 import type { MessageClient } from '../../commun/api-clients.ts';
-import { TAILLE_HISTORIQUE_DUO, type MessageLien, type NiveauPartage } from '../../commun/duo.ts';
+import {
+  DROITS_PAR_DEFAUT,
+  type Droits,
+  droitsSurMachine,
+  TAILLE_HISTORIQUE_DUO,
+  type MessageLien,
+  type NiveauPartage,
+} from '../../commun/duo.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
@@ -20,6 +27,8 @@ export class Synchro {
     private readonly partages: PartagesDuo,
     private readonly journal: Logger,
     private readonly nomPair: () => string | null,
+    // Droits par machine : une session d'une machine sans « voir » ne part pas vers le pair. Absent = tout permis.
+    private readonly droits: () => Droits = () => DROITS_PAR_DEFAUT,
   ) {}
 
   // ---- Émission -----------------------------------------------------------------------------------------------
@@ -90,7 +99,7 @@ export class Synchro {
   /** Vrai si la session est partagée avec ce pair et que le relais ne l'a pas reçue d'un pair. */
   partagee(sessionId: string): boolean {
     const s = this.registre.session(sessionId);
-    return s !== null && !s.duo && niveauPour(s, this.partages.lister()) !== null;
+    return s !== null && !s.duo && this.voit(s) && niveauPour(s, this.partages.lister()) !== null;
   }
 
   /** Le nom affiché du pair a changé : ses sessions reçues le portent aussitôt. */
@@ -107,9 +116,10 @@ export class Synchro {
 
   private partagees(): FicheDuo[] {
     const partages = this.partages.lister();
+    const droits = this.droits();
     const liste: FicheDuo[] = [];
     for (const fiche of this.registre.sessions(false)) {
-      if (fiche.duo) continue;
+      if (fiche.duo || !this.voit(fiche, droits)) continue;
       const niveau = niveauPour(fiche, partages);
       if (niveau) liste.push({ fiche, niveau });
     }
@@ -118,10 +128,14 @@ export class Synchro {
 
   private versLienFiche(fiche: ResumeSession): MessageLien | null {
     if (fiche.duo) return null;
-    if (fiche.archivee) return this.annoncees.has(fiche.id) ? this.instantane() : null;
-    const niveau = niveauPour(fiche, this.partages.lister());
+    const niveau = fiche.archivee || !this.voit(fiche) ? null : niveauPour(fiche, this.partages.lister());
     if (!niveau) return this.annoncees.has(fiche.id) ? this.instantane() : null;
     return { type: 'fiche', fiche, niveau };
+  }
+
+  // Vrai si la machine de la session est visible par le pair (droit « voir » sur cette machine).
+  private voit(fiche: ResumeSession, droits: Droits = this.droits()): boolean {
+    return droitsSurMachine(droits, fiche.machine).voir;
   }
 
   private versLienEvenement(e: { sessionId: string; ts: string; evt: Evenement }): MessageLien | null {

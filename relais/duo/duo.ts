@@ -88,7 +88,7 @@ export class Duo {
     this.partages = new PartagesDuo(options.base);
     this.identite = new IdentiteDuo(options.base, options.utilisateur);
     this.synchro = new Synchro(options.registre, options.diffusion, this.partages, options.journal, () =>
-      this.identite.nomPair(),
+      this.identite.nomPair(), () => this.stockDroits.lire(),
     );
     this.ecoute = { hote: options.ecoute ?? choisirEcoute(networkInterfaces()), port: options.port };
     this.journal = options.journal;
