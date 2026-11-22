@@ -6,6 +6,7 @@ import type { AppairageEnCours } from './appairages.ts';
 import type { DemandeAppairage } from './demandes.ts';
 import type { MotifArret } from './lien-aiguilleur.ts';
 import type { MembreVu } from './proprietaire.ts';
+import type { EtatLiaisonDirecte } from './direct-noeud.ts';
 import type { NoeudAppaire } from './appairages.ts';
 import type { Logger } from 'pino';
 import type { Diffusion } from '../clients/diffusion.ts';
@@ -33,6 +34,14 @@ export interface EtatFederation {
   readonly noeuds: readonly NoeudAppaire[];
   readonly demandes: readonly DemandeAppairage[];
   readonly appairages: readonly AppairageEnCours[];
+  /** Liaisons directes (sans aiguilleur) : écoute, propriétaire, et chaque pair avec son adresse connue. */
+  readonly directe?: {
+    readonly ecoute: string | null;
+    readonly ecouteReelle: number | null;
+    readonly proprietaire: string | null;
+    readonly tunnels: readonly { readonly adresse: string; readonly actif: boolean }[];
+  };
+  readonly liaisons?: readonly EtatLiaisonDirecte[];
 }
 
 /** Une machine du réseau (`GET /api/reseau/machines`) : soi, ou un nœud apparié, avec son dernier état connu. */
@@ -70,6 +79,8 @@ export interface OptionsFederation {
   readonly journal: Logger;
   readonly delaiDemandeMs?: number;
   readonly intervallePlanificationMs?: number;
+  /** Commande ssh des tunnels (absent : `ssh`). Essais : un faux processus. */
+  readonly commandeSsh?: string;
   /** Notification à Chris (une demande attend sa décision sur ce nœud). */
   readonly notifier?: (titre: string, texte: string) => void;
   /** Observe chaque charge échangée avec l'aiguilleur (essais : prouver qu'il ne voit que du chiffré). */

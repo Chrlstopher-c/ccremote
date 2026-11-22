@@ -34,6 +34,28 @@ export const PairFederee = z.object({
 export type PairFederee = z.infer<typeof PairFederee>;
 
 const PAIRS = z.array(PairFederee);
+
+/** Liaisons directes (sans aiguilleur) : écoute locale, propriétaire du réseau, adresse de chaque pair connu. */
+export const ConfigDirecte = z.object({
+  ecoute: z.string().max(120).nullable().default(null),
+  proprietaire: z.string().min(1).max(40).nullable().default(null),
+  adresses: z.record(z.string().regex(IDENTIFIANT), z.string().min(3).max(120)).default({}),
+  /** Tunnels `ssh -L` que ce nœud monte et tient vers des machines distantes (voir tunnel-ssh.ts). */
+  tunnels: z
+    .array(
+      z.object({
+        hote: z.string().min(1).max(253),
+        port: z.number().int(),
+        utilisateur: z.string().min(1).max(32),
+        cle: z.string().min(2).max(400),
+        portLocal: z.number().int(),
+        portDistant: z.number().int(),
+      }),
+    )
+    .max(16)
+    .default([]),
+});
+export type ConfigDirecte = z.infer<typeof ConfigDirecte>;
 /** Charte signée gardée par le nœud (texte JSON exact et signature) : relue et vérifiée au démarrage. */
 export const CharteStockee = z.object({
   texte: z.string().min(2).max(TAILLE_MAX_CHARTE_CARACTERES),
@@ -69,6 +91,14 @@ export class SecretsNoeud {
 
   effacerAiguilleur(): void {
     this.effacer('aiguilleur.json');
+  }
+
+  lireDirecte(): ConfigDirecte {
+    return this.lireJson('directe.json', ConfigDirecte) ?? ConfigDirecte.parse({});
+  }
+
+  ecrireDirecte(config: ConfigDirecte): void {
+    this.ecrireJson('directe.json', config);
   }
 
   lirePairs(): PairFederee[] {

@@ -49,6 +49,11 @@ import { creerMachinesNoeud, type MachinesNoeud } from './machines-noeud.ts';
 import { MOTIF_PAUSE } from './pause-noeud.ts';
 import { TerminalFedere } from './terminal-federe.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
+import { type Locale, identifiantDerive } from './direct-poignee.ts';
+import { adresseDirecteValide, NoeudDirect } from './direct-noeud.ts';
+import { LienDirect } from './direct-lien.ts';
+import { Tuyaux } from './tuyaux.ts';
+import type { TunnelSshConfig } from './tunnel-ssh.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
 import type { DemandeAppareil as DemandeAppareilFedere, ReponseAppareil as ReponseAppareilFedere, ServirAppareil } from './appareils.ts';
 import { envoyerReponseFlux } from './reponse-flux-appareil.ts';
@@ -90,6 +95,11 @@ export class Federation {
   private config: ConfigAiguilleur | null;
   private duo: HandlerDuoAiguilleur | null = null;
   private lien: LienAiguilleur | null = null;
+  private readonly directs: NoeudDirect;
+  private readonly tuyaux: Tuyaux;
+  private readonly adressesEnAttente = new Map<string, string>();
+  private identiteChargee: Identite | null = null;
+  private idDirect: string | null = null;
   private motifArret: MotifArret | null = null;
   private identiteEnCours: Promise<Identite> | null = null;
   private desabonner: (() => void) | null = null;
@@ -139,6 +149,9 @@ export class Federation {
       terminaux: { traiter: (c, m) => this.terminaux.traiter(c, m) },
       autoriser: (membre, requete) => this.charte.autorise(membre, requete),
     });
+    const transports = this.creerTransports();
+    this.tuyaux = transports.tuyaux;
+    this.directs = transports.directs;
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
     const { registre, journal } = options;
@@ -171,10 +184,19 @@ export class Federation {
     void this.charte.demarrer();
     this.machines.etats.demarrer(() => this.canaux.ouverts().filter((c) => this.estNoeud(c.membre)));
     if (this.config) this.demarrerLien();
+    void this.demarrerDirect();
+  }
+
+  private async demarrerDirect(): Promise<void> {
+    this.identiteChargee = await this.identite();
+    this.idDirect = await identifiantDerive(this.identiteChargee.publique);
+    this.directs.demarrer();
+    this.demarrerPlanificateur();
   }
 
   arreter(): void {
     this.invites.arreter();
+    this.directs.arreter();
     this.desabonner?.();
     this.desabonner = null;
     if (this.planificateur) clearInterval(this.planificateur);
@@ -243,7 +265,7 @@ export class Federation {
 
   /** Premier contact avec un nœud en ligne : une demande part, Chris la tranche chez lui. */
   appairer(membre: string): Resultat<{ canal: string }> {
-    if (!this.lien?.connecte()) return echec(409, 'aiguilleur non relié');
+    if (!this.lien?.connecte() && !this.directs.joignable(membre)) return echec(409, 'aiguilleur non relié');
     if (this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud déjà apparié');
     const refus = this.voisins.refusPour(membre, this.proprietaireLocal());
     if (refus) return echec(409, refus);
@@ -251,7 +273,61 @@ export class Federation {
     if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
     const canal = this.canaux.ouvrir(membre, 'appairage');
     this.signaler();
-    return canal ? ok({ canal: canal.id }) : echec(503, 'aiguilleur indisponible');
+    return canal ? ok({ canal: canal.id }) : echec(503, 'aucun chemin vers ce nœud');
+  }
+
+  /**
+   * Premier contact sans aiguilleur : une liaison directe vers `adresse` (réseau local, VPN, tunnel), puis la demande
+   * d'appairage, que Chris tranche chez le visé avec les deux empreintes. L'adresse n'est retenue qu'à l'accord.
+   */
+  async appairerDirect(adresse: string): Promise<Resultat<{ membre: string; canal: string }>> {
+    if (!this.identifiantProtocole()) return echec(409, 'identité du nœud pas prête');
+    if (!adresseDirecteValide(adresse)) return echec(400, 'adresse invalide');
+    const lien = await this.directs.composerSortant(adresse, null);
+    if (!lien?.pair) return echec(503, 'nœud injoignable à cette adresse');
+    const membre = lien.pair.id;
+    const refus = this.voisins.refusPour(membre, this.proprietaireLocal());
+    if (refus) {
+      lien.fermer('hors de nos machines');
+      return echec(409, refus);
+    }
+    if (this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud déjà apparié');
+    if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
+    const canal = this.canaux.ouvrir(membre, 'appairage');
+    if (!canal) return echec(503, 'aucun chemin vers ce nœud');
+    this.adressesEnAttente.set(membre, adresse.trim());
+    this.signaler();
+    return ok({ membre, canal: canal.id });
+  }
+
+  /** Le transport d'un pair apparié : une adresse directe (joignable sans aiguilleur), ou aucune (aiguilleur seul). */
+  transportPair(membre: string, adresse: string | null): Resultat<null> {
+    if (!this.pairs.some((p) => p.id === membre && p.genre === 'noeud')) return echec(404, 'nœud non apparié');
+    if (adresse !== null && !adresseDirecteValide(adresse)) return echec(400, 'adresse invalide');
+    if (adresse === null) this.directs.oublier(membre);
+    else this.directs.retenirAdresse(membre, adresse.trim());
+    this.directs.relancer();
+    this.signaler();
+    return ok(null);
+  }
+
+  /** Réglages de la liaison directe : écoute locale (`hôte:port`, vide pour aucune) et propriétaire du réseau. */
+  configurerDirecte(corps: {
+    ecoute?: string | null;
+    proprietaire?: string | null;
+    tunnels?: TunnelSshConfig[];
+  }): Resultat<null> {
+    if (corps.ecoute && !adresseDirecteValide(corps.ecoute)) return echec(400, 'adresse d’écoute invalide');
+    if (corps.proprietaire && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(corps.proprietaire)) {
+      return echec(400, 'propriétaire : minuscules, chiffres, tirets');
+    }
+    this.directs.configurer({
+      ...(corps.ecoute !== undefined ? { ecoute: corps.ecoute || null } : {}),
+      ...(corps.proprietaire !== undefined ? { proprietaire: corps.proprietaire || null } : {}),
+      ...(corps.tunnels !== undefined ? { tunnels: corps.tunnels } : {}),
+    });
+    this.signaler();
+    return ok(null);
   }
 
   /**
@@ -284,7 +360,19 @@ export class Federation {
   }
 
   identifiantLocal(): string | null {
-    return this.config?.id ?? null;
+    return this.identifiantProtocole();
+  }
+
+  /** L'identifiant du nœud dans le protocole : celui de l'aiguilleur s'il est relié, sinon celui de son identité. */
+  private identifiantProtocole(): string | null {
+    return this.config?.id ?? this.idDirect;
+  }
+
+  private localeDirecte(): Locale | null {
+    const identite = this.identiteChargee;
+    const id = this.identifiantProtocole();
+    if (!identite || !id) return null;
+    return { id, identite, nom: this.config?.nom ?? this.options.machine, proprietaire: this.proprietaireLocal() };
   }
 
   /** Un message synchro vers un pair apparié dont le lien est ouvert ; rien ne part sinon. */
@@ -320,6 +408,8 @@ export class Federation {
       noeuds,
       demandes: this.demandes.lister(),
       appairages: await appairagesEnCours(this.canaux.actifs()),
+      directe: this.directs.etat(),
+      liaisons: this.directs.liaisons(),
     };
   }
 
@@ -346,20 +436,66 @@ export class Federation {
     );
     this.lien.demarrer();
     void this.charte.essayerReprise();
+    this.demarrerPlanificateur();
+  }
+
+  private demarrerPlanificateur(): void {
     this.planificateur ??= setInterval(
       () => this.planifier(),
       this.options.intervallePlanificationMs ?? INTERVALLE_PLANIFICATION_MS,
     );
   }
 
+  private proprietaireDirecte(): string | null {
+    return this.directs.config.proprietaire;
+  }
+
+  // Liaison directe ouverte : le pair est joignable (le voisinage le sait), et on le retient comme en ligne.
+  private liaisonDirecteOuverte(lien: LienDirect): void {
+    const pair = lien.pair;
+    if (!pair) return;
+    this.voisins.memoriserDirect({
+      id: pair.id,
+      enLigne: true,
+      nom: pair.nom,
+      genre: 'noeud',
+      proprietaire: pair.proprietaire ?? null,
+    });
+    this.options.journal.info({ membre: pair.id }, 'liaison directe : pair joint');
+    this.signaler();
+  }
+
+  private liaisonDirecteFermee(lien: LienDirect): void {
+    const id = lien.pair?.id;
+    if (!id) return;
+    this.voisins.retirerDirect(id);
+    for (const canal of this.canaux.actifs()) if (canal.membre === id) canal.surFermetureDistante();
+    this.signaler();
+  }
+
   private emettre(message: MessageVersAiguilleur): boolean {
     if (message.t === 'donnees') this.options.observer?.('envoi', message.charge);
-    return this.lien?.envoyer(message) ?? false;
+    return this.tuyaux.envoyer(message);
+  }
+
+  private messageDirect(lien: LienDirect, message: MessageDeAiguilleur): void {
+    const membre = lien.pair?.id;
+    if (!membre || concerneDuo(message)) {
+      return this.options.journal.warn({ membre }, 'liaison directe : message refusé');
+    }
+    if (message.t === 'ouvrir') this.tuyaux.ouvertParPair(message.canal, membre);
+    this.surMessageRelaye(message);
   }
 
   private surMessage(message: MessageDeAiguilleur): void {
     if (message.t === 'presence') return this.surPresence(message);
     if (message.t === 'ouvrir' && message.proprietaire) this.voisins.memoriserOuvrant(message.de, message.proprietaire);
+    this.surMessageRelaye(message);
+  }
+
+  // Ce que l'aiguilleur et une liaison directe ont en commun : canaux, données, duo.
+  private surMessageRelaye(message: MessageDeAiguilleur): void {
+    if (message.t === 'fermer') this.tuyaux.oublier(message.canal);
     if (message.t === 'donnees') this.options.observer?.('reception', message.charge);
     if (concerneDuo(message)) return this.duo?.surMessage(message);
     this.canaux.surMessage(message);
@@ -388,14 +524,15 @@ export class Federation {
   }
 
   private proprietaireLocal(): string | null {
-    return this.config?.proprietaire ?? null;
+    return this.config?.proprietaire ?? this.proprietaireDirecte();
   }
 
   // Le lien part du nœud au plus petit identifiant : un seul canal par paire, sans collision à l'ouverture.
   // Seuls nos nœuds, en ligne, sont reliés : un pair qui n'est plus des nôtres ne reçoit plus de lien.
   private planifier(): void {
-    const moi = this.config?.id;
-    if (!moi || !this.lien?.connecte()) return;
+    const moi = this.identifiantProtocole();
+    if (!moi) return;
+    this.directs.relancer();
     const proprio = this.proprietaireLocal();
     for (const p of this.pairs) {
       if (p.genre === 'appareil') continue;
@@ -428,7 +565,7 @@ export class Federation {
       journal: journal.child({ domaine: 'charte' }),
       secrets: this.secrets,
       peutReprendre: peutReprendre ?? false,
-      moi: () => this.config?.id ?? null,
+      moi: () => this.identifiantProtocole(),
       nomLocal: () => this.config?.nom ?? machine,
       identite: () => this.identite(),
       pairs: () => this.pairs,
@@ -437,6 +574,27 @@ export class Federation {
       signaler: () => this.signaler(),
       invitePrevue: (membre) => this.invites.intentions.prendre(membre),
     });
+  }
+
+  // Les deux tuyaux du protocole : l'aiguilleur (son lien) et les liaisons directes (sans aiguilleur).
+  private creerTransports(): { tuyaux: Tuyaux; directs: NoeudDirect } {
+    const directs = new NoeudDirect({
+      journal: this.options.journal.child({ domaine: 'directe' }),
+      config: this.secrets.lireDirecte(),
+      sauver: (c) => this.secrets.ecrireDirecte(c),
+      locale: () => this.localeDirecte(),
+      pairs: () => this.pairs,
+      ouvert: (lien) => this.liaisonDirecteOuverte(lien),
+      ferme: (lien) => this.liaisonDirecteFermee(lien),
+      message: (lien, m) => this.messageDirect(lien, m),
+      commandeSsh: this.options.commandeSsh ?? 'ssh',
+      knownHosts: join(this.options.dossierSecrets, 'federation', 'known_hosts'),
+    });
+    const tuyaux = new Tuyaux({
+      envoyerAiguilleur: (m) => this.lien?.envoyer(m) ?? false,
+      envoyerDirect: (membre, m) => this.directs.envoyer(membre, m),
+    });
+    return { tuyaux, directs };
   }
 
   private creerHote(): HoteCanal {
@@ -522,7 +680,12 @@ export class Federation {
   // entre comme pair. Un nœud ajouté par SSH demande lui-même, et entre comme serveur (decisionAppairage).
   private appairageAccepte(membre: string, presentation: PresentationDistante): void {
     this.enregistrerPair(membre, presentation);
-    if (this.charte.estChef(this.config?.id ?? '')) void this.charte.admettre(membre, presentation, 'pair');
+    const adresse = this.adressesEnAttente.get(membre);
+    if (adresse !== undefined) {
+      this.adressesEnAttente.delete(membre);
+      this.directs.retenirAdresse(membre, adresse);
+    }
+    if (this.charte.estChef(this.identifiantProtocole() ?? '')) void this.charte.admettre(membre, presentation, 'pair');
   }
 
   private liaisonOuverte(canal: CanalNoeud): void {
@@ -650,7 +813,7 @@ export class Federation {
 
   /** La photo des admissions part à un nœud pair relié, jamais à un appareil. */
   private envoyerAdmissionsA(canal: CanalNoeud): void {
-    const moi = this.config?.id;
+    const moi = this.identifiantProtocole();
     if (!moi || !this.estNoeud(canal.membre)) return;
     canal.envoyer({ t: 'admissions', ...photoAdmissions(this.pairs, [...this.appareilsRevoques], moi) });
   }
@@ -662,7 +825,7 @@ export class Federation {
 
   // Un nœud pair de mêmes propriétaire range les admissions reçues ; s'il change quelque chose, il relaie.
   private messageAdmissions(canal: CanalNoeud, message: Extract<MessageChiffre, { t: 'admissions' }>): void {
-    const moi = this.config?.id;
+    const moi = this.identifiantProtocole();
     const refus = this.voisins.refusPour(canal.membre, this.proprietaireLocal());
     const verdict = verdictSource(this.pairs, canal.membre, refus);
     if (verdict === 'non-appaire' || !moi) return canal.fermer();
@@ -782,6 +945,9 @@ export class Federation {
     this.demandes.retirerPour(membre);
     this.echanges.oublier(membre);
     this.refus.delete(membre);
+    this.directs.oublier(membre);
+    this.directs.fermer(membre);
+    this.voisins.retirerDirect(membre);
   }
 
   /** Ce nœud est en pause : aucune nouvelle session (les sessions en cours continuent). */
@@ -812,7 +978,9 @@ export class Federation {
 
   /** Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action de chef relayée à un pair relié. */
   async agirSurMachine(membre: string, action: ActionMachine): Promise<Resultat<null>> {
-    if (membre === MEMBRE_MOI || membre === this.config?.id) return this.machines.actions.executerLocale(action);
+    if (membre === MEMBRE_MOI || membre === this.identifiantProtocole()) {
+      return this.machines.actions.executerLocale(action);
+    }
     if (!this.estNoeud(membre)) return echec(404, 'nœud inconnu');
     if (action === 'reveiller') return this.machines.actions.reveiller(membre);
     const canal = this.canaux.liaisonOuverteAvec(membre);
@@ -821,7 +989,7 @@ export class Federation {
   }
 
   private identifiantMoi(): string {
-    return this.config?.id ?? MEMBRE_MOI;
+    return this.identifiantProtocole() ?? MEMBRE_MOI;
   }
 
   /** L'identifiant de machine d'un nœud apparié (celui de son instantané), ou null tant qu'il n'est pas connu. */

@@ -10,6 +10,7 @@ import type { ContexteOutils, Resultat } from './outils.ts';
 import * as machines from './machines-outils.ts';
 import * as reseau from './reseau-outils.ts';
 import * as invites from './reseau-invites-outils.ts';
+import * as directe from './reseau-directe-outils.ts';
 import * as modules from './modules-outils.ts';
 import {
   DESCRIPTION_MODULE_APPELER,
@@ -175,6 +176,34 @@ function outilsReseau(c: ContexteOutils) {
   ];
 }
 
+/** Les outils de liaison directe (sans aiguilleur) : même condition que `reseau_*`. */
+function outilsReseauDirecte(c: ContexteOutils) {
+  if (!c.api) return [];
+  const api = c.api;
+  return [
+    tool('reseau_aide', directe.DESCRIPTION_AIDE, {}, async () => enResultat(await directe.aideReseau(c.journal))),
+    tool('reseau_ajouter_direct', directe.DESCRIPTION_AJOUTER_DIRECT, { adresse: directe.ADRESSE }, async (a) =>
+      enResultat(await directe.ajouterDirect(api, a.adresse, c.journal)),
+    ),
+    tool(
+      'reseau_transport_pair',
+      directe.DESCRIPTION_TRANSPORT,
+      { membre: directe.MEMBRE, adresse: directe.ADRESSE.nullable() },
+      async (a) => enResultat(await directe.transportPair(api, a.membre, a.adresse, c.journal)),
+    ),
+    tool(
+      'reseau_directe_configurer',
+      directe.DESCRIPTION_DIRECTE,
+      {
+        ecoute: directe.ADRESSE.nullable().optional(),
+        proprietaire: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).nullable().optional(),
+        tunnels: z.array(directe.TUNNEL).max(16).optional(),
+      },
+      async (a) => enResultat(await directe.configurerDirecte(api, a, c.journal)),
+    ),
+  ];
+}
+
 /** Les outils `reseau_invite_*` : mêmes conditions que `reseau_*` (relais joignable). */
 function outilsInvites(c: ContexteOutils) {
   if (!c.api) return [];
@@ -233,6 +262,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
       ),
       ...outilsMachines(c),
       ...outilsReseau(c),
+      ...outilsReseauDirecte(c),
       ...outilsInvites(c),
       ...outilsModules(c),
       ...outilRenommer(c),
