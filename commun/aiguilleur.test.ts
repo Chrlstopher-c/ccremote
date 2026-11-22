@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { MessageDeAiguilleur } from './aiguilleur.ts';
 import {
   analyserDeAiguilleur,
   analyserVersAiguilleur,
@@ -52,10 +53,34 @@ describe('messages de l’aiguilleur vers un membre', () => {
     expect(analyserDeAiguilleur({ t: 'fermer', canal: 'c1' })?.t).toBe('fermer');
   });
 
-  test('la présence ne porte que des identifiants et un état', () => {
-    const m = analyserDeAiguilleur({ t: 'presence', membres: [{ id: ID, enLigne: true }] });
-    expect(m).toEqual({ t: 'presence', membres: [{ id: ID, enLigne: true }] });
-    expect(analyserDeAiguilleur({ t: 'presence', membres: [{ id: ID, enLigne: true, nom: 'x' }] })).toBeNull();
+  test('la présence porte l’état et, en plus, nom, genre et propriétaire ; ces champs sont optionnels', () => {
+    const complete: MessageDeAiguilleur = {
+      t: 'presence',
+      proprietaire: 'chris',
+      membres: [{ id: ID, enLigne: true, nom: 'tour', genre: 'noeud', proprietaire: 'chris' }],
+    };
+    expect(analyserDeAiguilleur(complete)).toEqual(complete);
+    expect(analyserDeAiguilleur({ t: 'presence', membres: [{ id: ID, enLigne: true }] })).not.toBeNull();
+  });
+
+  test('un champ inconnu reste refusé, y compris à côté des nouveaux champs', () => {
+    expect(analyserDeAiguilleur({ t: 'presence', membres: [{ id: ID, enLigne: true, couleur: 'x' }] })).toBeNull();
+    expect(analyserDeAiguilleur({ t: 'presence', membres: [], couleur: 'x' })).toBeNull();
+    expect(analyserDeAiguilleur({ t: 'ouvrir', canal: 'c1', de: ID, proprietaire: 'chris', couleur: 'x' })).toBeNull();
+  });
+
+  test('un genre hors liste est refusé', () => {
+    expect(analyserDeAiguilleur({ t: 'presence', membres: [{ id: ID, enLigne: true, genre: 'robot' }] })).toBeNull();
+  });
+
+  test('ouvrir porte le propriétaire de l’ouvrant, optionnel pour un aiguilleur ancien', () => {
+    expect(analyserDeAiguilleur({ t: 'ouvrir', canal: 'c1', de: ID, proprietaire: 'chris' })).toEqual({
+      t: 'ouvrir',
+      canal: 'c1',
+      de: ID,
+      proprietaire: 'chris',
+    });
+    expect(analyserDeAiguilleur({ t: 'ouvrir', canal: 'c1', de: ID })?.t).toBe('ouvrir');
   });
 
   test('une erreur porte un motif de la liste fermée', () => {

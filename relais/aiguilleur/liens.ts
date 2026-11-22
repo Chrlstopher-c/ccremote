@@ -110,7 +110,7 @@ export class Liens {
     }
   }
 
-  /** Envoie à chaque membre connecté la liste des membres qu'il voit, avec leur état. */
+  /** Envoie à chaque membre connecté la liste des membres qu'il voit (état, nom, genre, propriétaire). */
   diffuserPresence(): void {
     const tous = this.annuaire.membres();
     for (const [id, ws] of this.connectes) {
@@ -119,8 +119,14 @@ export class Liens {
       const ouverts = this.canaux.correspondantsOuverts(moi.id);
       const membres = tous
         .filter((x) => this.voit(moi, x, ouverts))
-        .map((x) => ({ id: x.id, enLigne: this.connectes.has(x.id) }));
-      this.envoyerA(ws, { t: 'presence', membres });
+        .map((x) => ({
+          id: x.id,
+          enLigne: this.connectes.has(x.id),
+          nom: x.nom,
+          genre: x.genre,
+          proprietaire: x.proprietaire,
+        }));
+      this.envoyerA(ws, { t: 'presence', membres, proprietaire: moi.proprietaire });
     }
   }
 
@@ -155,7 +161,7 @@ export class Liens {
     }
     const motif = this.canaux.ouvrir(de.id, cible.id, canal);
     if (motif) return this.erreur(ws, motif, canal);
-    this.envoyerA(destinataire, { t: 'ouvrir', canal, de: de.id });
+    this.envoyerA(destinataire, { t: 'ouvrir', canal, de: de.id, proprietaire: de.proprietaire });
     this.journal.info({ de: de.id, vers: cible.id, canal }, 'canal demandé');
   }
 

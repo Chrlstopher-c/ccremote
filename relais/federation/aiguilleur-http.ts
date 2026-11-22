@@ -1,6 +1,6 @@
 // Responsabilité : l'appairage d'un nœud auprès de l'aiguilleur (POST /api/membres/appairer) — le code à usage unique,
-// le nom du nœud et sa clé publique partent ; l'identifiant et le jeton reviennent. Le code et le jeton ne sont jamais
-// journalisés : seul le statut d'échec l'est.
+// le nom du nœud et sa clé publique partent ; l'identifiant, le jeton et le propriétaire reviennent.
+// Le code et le jeton ne sont jamais journalisés : seul le statut d'échec l'est.
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import { CHEMIN_APPAIRAGE_MEMBRE } from '../../commun/aiguilleur.ts';
@@ -8,10 +8,14 @@ import { ConfigAiguilleur } from './secrets.ts';
 
 const DELAI_MS = 10_000;
 
-const Reponse = z.object({ id: ConfigAiguilleur.shape.id, jeton: ConfigAiguilleur.shape.jeton });
+const Reponse = z.object({
+  id: ConfigAiguilleur.shape.id,
+  jeton: ConfigAiguilleur.shape.jeton,
+  proprietaire: ConfigAiguilleur.shape.proprietaire,
+});
 
 export type ResultatAppairageNoeud =
-  | { readonly ok: true; readonly id: string; readonly jeton: string }
+  | { readonly ok: true; readonly id: string; readonly jeton: string; readonly proprietaire?: string }
   | { readonly ok: false; readonly statut: number; readonly raison: string };
 
 const RAISON_PAR_STATUT: Record<number, string> = {
@@ -53,7 +57,7 @@ export async function appairerNoeud(
     if (!rep.ok) return echecStatut(rep.status);
     const r = Reponse.safeParse(await rep.json());
     if (!r.success) return { ok: false, statut: 502, raison: 'réponse de l’aiguilleur non conforme' };
-    return { ok: true, id: r.data.id, jeton: r.data.jeton };
+    return { ok: true, id: r.data.id, jeton: r.data.jeton, proprietaire: r.data.proprietaire };
   } catch (erreur) {
     journal.warn({ err: erreur }, 'appairage au nœud aiguilleur : aiguilleur injoignable');
     return { ok: false, statut: 502, raison: RAISON_INJOIGNABLE };

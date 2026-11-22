@@ -26,6 +26,7 @@ import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
+import { type MembreVu, Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 
 const DELAI_DEMANDE_MS = 10 * 60 * 1000;
@@ -63,11 +64,13 @@ export interface EtatFederation {
     readonly url: string;
     readonly id: string;
     readonly nom: string;
+    readonly proprietaire: string | null;
     readonly relie: boolean;
     readonly motif: MotifArret | null;
   } | null;
   readonly empreinteLocale: string;
-  readonly membres: readonly { readonly id: string; readonly enLigne: boolean }[];
+  /** Les membres de la présence de l'aiguilleur ; `mien` : un nœud de notre propriétaire. */
+  readonly membres: readonly MembreVu[];
   readonly noeuds: readonly NoeudAppaire[];
   readonly demandes: readonly DemandeAppairage[];
   readonly appairages: readonly { readonly membre: string; readonly phase: string }[];
@@ -82,7 +85,7 @@ export class Federation {
   private readonly hote: HoteCanal;
   private pairs: PairFederee[];
   private readonly refus = new Set<string>();
-  private readonly presence = new Map<string, boolean>();
+  private readonly voisins = new Voisinage();
   private config: ConfigAiguilleur | null;
   private duo: HandlerDuoAiguilleur | null = null;
   private lien: LienAiguilleur | null = null;
@@ -127,7 +130,7 @@ export class Federation {
     this.demandes.arreter();
     this.lien?.arreter();
     this.lien = null;
-    this.presence.clear();
+    this.voisins.effacer();
   }
 
   /** Rejoint un aiguilleur avec un code d'appairage (une seule fois par nœud). */
@@ -140,7 +143,7 @@ export class Federation {
     const r = await appairerNoeud(adresse, { code: corps.code, nom: corps.nom, cle }, this.options.journal);
     if (!r.ok) return echec(r.statut, r.raison);
     try {
-      this.config = { url: adresse, jeton: r.jeton, id: r.id, nom: corps.nom };
+      this.config = { url: adresse, jeton: r.jeton, id: r.id, nom: corps.nom, proprietaire: r.proprietaire };
       this.secrets.ecrireAiguilleur(this.config);
     } catch {
       this.config = null;
@@ -169,7 +172,9 @@ export class Federation {
   appairer(membre: string): Resultat<{ canal: string }> {
     if (!this.lien?.connecte()) return echec(409, 'aiguilleur non relié');
     if (this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud déjà apparié');
-    if (this.presence.get(membre) !== true) return echec(409, 'nœud hors ligne');
+    const refus = this.voisins.refusPour(membre, this.proprietaireLocal());
+    if (refus) return echec(409, refus);
+    if (!this.voisins.enLigne(membre)) return echec(409, 'nœud hors ligne');
     if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
     const canal = this.canaux.ouvrir(membre, 'appairage');
     return canal ? ok({ canal: canal.id }) : echec(503, 'aiguilleur indisponible');
@@ -255,12 +260,13 @@ export class Federation {
             url: config.url,
             id: config.id,
             nom: config.nom,
+            proprietaire: config.proprietaire ?? null,
             relie: this.lien?.connecte() ?? false,
             motif: this.motifArret,
           }
         : null,
       empreinteLocale: await empreinteIdentite(identite.publique),
-      membres: [...this.presence].map(([id, enLigne]) => ({ id, enLigne })),
+      membres: this.voisins.liste(this.proprietaireLocal()),
       noeuds,
       demandes: this.demandes.lister(),
       appairages: this.canaux
@@ -304,24 +310,46 @@ export class Federation {
   }
 
   private surMessage(message: MessageDeAiguilleur): void {
-    if (message.t === 'presence') return this.surPresence(message.membres);
+    if (message.t === 'presence') return this.surPresence(message);
+    if (message.t === 'ouvrir' && message.proprietaire) this.voisins.memoriserOuvrant(message.de, message.proprietaire);
     if (message.t === 'donnees') this.options.observer?.('reception', message.charge);
     if (concerneDuo(message)) return this.duo?.surMessage(message);
     this.canaux.surMessage(message);
   }
 
-  private surPresence(membres: readonly { readonly id: string; readonly enLigne: boolean }[]): void {
-    this.presence.clear();
-    for (const m of membres) this.presence.set(m.id, m.enLigne);
+  private surPresence(message: Extract<MessageDeAiguilleur, { t: 'presence' }>): void {
+    this.voisins.remplacer(message.membres);
+    this.apprendreProprietaire(message.proprietaire);
     this.planifier();
   }
 
+  /** Le propriétaire du nœud vient de l'appairage ; à défaut, de la présence, et il est alors gardé. */
+  private apprendreProprietaire(proprietaire: string | undefined): void {
+    const config = this.config;
+    if (!config || !proprietaire || config.proprietaire === proprietaire) return;
+    if (config.proprietaire) {
+      return this.options.journal.error('propriétaire différent de celui de la présence : ignoré');
+    }
+    this.config = { ...config, proprietaire };
+    try {
+      this.secrets.ecrireAiguilleur(this.config);
+    } catch {
+      this.options.journal.error('propriétaire du nœud non sauvegardé');
+    }
+  }
+
+  private proprietaireLocal(): string | null {
+    return this.config?.proprietaire ?? null;
+  }
+
   // Le lien part du nœud au plus petit identifiant : un seul canal par paire, sans collision à l'ouverture.
+  // Seuls nos nœuds, en ligne, sont reliés : un pair qui n'est plus des nôtres ne reçoit plus de lien.
   private planifier(): void {
     const moi = this.config?.id;
     if (!moi || !this.lien?.connecte()) return;
+    const proprio = this.proprietaireLocal();
     for (const p of this.pairs) {
-      if (p.id <= moi || this.refus.has(p.id) || this.presence.get(p.id) !== true) continue;
+      if (p.id <= moi || this.refus.has(p.id) || !this.voisins.joignable(p.id, proprio)) continue;
       if (!this.canaux.avec(p.id)) this.canaux.ouvrir(p.id, 'lien');
     }
   }
@@ -331,7 +359,7 @@ export class Federation {
     this.duo?.surConnexion(connecte);
     if (connecte) return;
     for (const canal of this.canaux.actifs()) canal.surFermetureDistante();
-    this.presence.clear();
+    this.voisins.effacer();
     for (const p of this.pairs) this.distant.enLigne(p.id, false);
   }
 
@@ -363,6 +391,11 @@ export class Federation {
 
   // Côté visé : la demande part avec les deux empreintes ; Chris accepte ou refuse, l'expiration vaut refus.
   private async presentationRecue(canal: CanalNoeud, presentation: PresentationDistante): Promise<void> {
+    const refus = this.voisins.refusPour(canal.membre, this.proprietaireLocal());
+    if (refus) {
+      this.options.journal.warn({ membre: canal.membre, raison: refus }, 'présentation refusée : pas un de nos nœuds');
+      return canal.decider(false);
+    }
     try {
       const empreinte = await empreinteIdentite(await importerIdentitePublique(presentation.identite));
       const locale = await empreinteIdentite((await this.identite()).publique);
@@ -452,7 +485,7 @@ export class Federation {
       id: p.id,
       nom: p.nom,
       empreinte: await empreinteIdentite(await importerIdentitePublique(p.identite)).catch(() => ''),
-      enLigne: this.presence.get(p.id) === true,
+      enLigne: this.voisins.enLigne(p.id),
       liaisonOuverte: this.canaux.liaisonOuverteAvec(p.id) !== null,
     };
   }

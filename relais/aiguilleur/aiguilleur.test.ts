@@ -180,6 +180,21 @@ describe('appairage', () => {
     expect(contenu).toContain(sha256(jeton));
   });
 
+  test('la réponse d’appairage porte le propriétaire du code consommé', async () => {
+    const c = ici();
+    const code = executerCommande(['appairer', 'matheo'], c.annuaire).split('\n')[0] ?? '';
+    const rep = await fetch(`http://127.0.0.1:${c.port}/api/membres/appairer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code, nom: 'portable', genre: 'appareil', cle: genererCle() }),
+    });
+    expect(await rep.json()).toEqual({
+      id: expect.any(String),
+      jeton: expect.any(String),
+      proprietaire: 'matheo',
+    });
+  });
+
   test('code faux 401, clé mal formée 400, aucun membre créé', async () => {
     const c = ici();
     executerCommande(['appairer', 'chris'], c.annuaire);
@@ -240,7 +255,12 @@ describe('canaux entre membres', () => {
     const la = await lien(a);
     const lb = await lien(b);
     la.envoyer({ t: 'ouvrir', canal: 'c1', vers: b.id });
-    expect(await lb.attendre((m) => m['t'] === 'ouvrir')).toEqual({ t: 'ouvrir', canal: 'c1', de: a.id });
+    expect(await lb.attendre((m) => m['t'] === 'ouvrir')).toEqual({
+      t: 'ouvrir',
+      canal: 'c1',
+      de: a.id,
+      proprietaire: 'chris',
+    });
     lb.envoyer({ t: 'accepter', canal: 'c1' });
     await la.attendre((m) => m['t'] === 'accepter');
     la.envoyer({ t: 'donnees', canal: 'c1', charge: 'bonjour-A' });
@@ -329,7 +349,7 @@ describe('autorisation : propriétaires et lien duo', () => {
     const la = await lien(a);
     const ld = await lien(d);
     ld.envoyer({ t: 'ouvrir', canal: 'duo', vers: a.id });
-    await la.attendre((m) => m['t'] === 'ouvrir');
+    expect(await la.attendre((m) => m['t'] === 'ouvrir')).toMatchObject({ de: d.id, proprietaire: 'matheo' });
     la.envoyer({ t: 'accepter', canal: 'duo' });
     await ld.attendre((m) => m['t'] === 'accepter');
     la.envoyer({ t: 'donnees', canal: 'duo', charge: 'par-le-duo' });
@@ -366,7 +386,31 @@ describe('révocation, présence, charge, journal', () => {
     await lien(b);
     await lien(etranger);
     await la.attendre((m) => m['t'] === 'presence' && JSON.stringify(m['membres']).includes('"enLigne":true'));
-    expect(la.de('presence').at(-1)?.['membres']).toEqual([{ id: b.id, enLigne: true }]);
+    expect(la.de('presence').at(-1)?.['membres']).toEqual([
+      { id: b.id, enLigne: true, nom: 'chris-noeud', genre: 'noeud', proprietaire: 'chris' },
+    ]);
+    expect(la.de('presence').at(-1)?.['proprietaire']).toBe('chris');
+  });
+
+  test('présence : chaque membre porte son nom, son genre et son propriétaire (appareil compris)', async () => {
+    executerCommande(['lier-duo', 'matheo', 'chris'], ici().annuaire);
+    const a = await membre('chris');
+    const telephone = await membre('chris', 'appareil');
+    const d = await membre('matheo');
+    const la = await lien(a);
+    await lien(telephone);
+    await lien(d);
+    await la.attendre(
+      (m) => m['t'] === 'presence' && JSON.stringify(m['membres']).includes(`"${d.id}","enLigne":true`),
+    );
+    const vus = la.de('presence').at(-1)?.['membres'];
+    expect(vus).toHaveLength(2);
+    expect(vus).toEqual(
+      expect.arrayContaining([
+        { id: telephone.id, enLigne: true, nom: 'chris-appareil', genre: 'appareil', proprietaire: 'chris' },
+        { id: d.id, enLigne: true, nom: 'matheo-noeud', genre: 'noeud', proprietaire: 'matheo' },
+      ]),
+    );
   });
 
   test('une charge au-delà de 1 Mio est refusée, rien n’est livré', async () => {

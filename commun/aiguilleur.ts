@@ -55,15 +55,25 @@ const VersAiguilleur = z.discriminatedUnion('t', [
   SurCanal('refuser'),
 ]);
 
-const Membre = z.strictObject({ id: Identifiant, enLigne: z.boolean() });
+/** Propriétaire d'un membre : le nom donné à l'appairage. Optionnel : un aiguilleur ancien ne le transmet pas. */
+const Proprietaire = z.string().min(1).max(40);
+
+/** Un membre de la présence : état, et (optionnels) nom, genre et propriétaire. */
+const Membre = z.strictObject({
+  id: Identifiant,
+  enLigne: z.boolean(),
+  nom: z.string().max(80).optional(),
+  genre: z.enum(GENRES_MEMBRE).optional(),
+  proprietaire: Proprietaire.optional(),
+});
 
 const DeAiguilleur = z.discriminatedUnion('t', [
-  z.strictObject({ t: z.literal('ouvrir'), canal: Canal, de: Identifiant }),
+  z.strictObject({ t: z.literal('ouvrir'), canal: Canal, de: Identifiant, proprietaire: Proprietaire.optional() }),
   Donnees,
   SurCanal('fermer'),
   SurCanal('accepter'),
   SurCanal('refuser'),
-  z.strictObject({ t: z.literal('presence'), membres: z.array(Membre) }),
+  z.strictObject({ t: z.literal('presence'), membres: z.array(Membre), proprietaire: Proprietaire.optional() }),
   z.strictObject({ t: z.literal('erreur'), canal: Canal.optional(), motif: z.enum(MOTIFS_ERREUR) }),
 ]);
 

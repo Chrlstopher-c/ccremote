@@ -1,6 +1,6 @@
 // Responsabilité : l'appairage d'un membre (nœud ou appareil) — il présente le code d'une commande locale, sa clé
-// publique et son genre ; il reçoit un identifiant et un jeton. Même limite de tentatives que la connexion : par
-// adresse (5 échecs en 15 min) et globale (plafond partagé du relais).
+// publique et son genre ; il reçoit un identifiant, un jeton et le propriétaire du code. Même limite de tentatives
+// que la connexion : par adresse (5 échecs en 15 min) et globale (plafond partagé du relais).
 import { randomBytes } from 'node:crypto';
 import type { Logger } from 'pino';
 import { z } from 'zod';
@@ -97,7 +97,7 @@ function enregistrer(
   corps: z.infer<typeof CorpsAppairage>,
   proprietaire: string,
   journal: Logger,
-): { id: string; jeton: string } {
+): { id: string; jeton: string; proprietaire: string } {
   const id = randomBytes(6).toString('hex');
   const jeton = randomBytes(32).toString('base64url');
   annuaire.creerMembre({
@@ -109,5 +109,5 @@ function enregistrer(
     jetonEmpreinte: empreinteSha256(jeton),
   });
   journal.info({ membre: id, genre: corps.genre, proprietaire }, 'membre appairé');
-  return { id, jeton };
+  return { id, jeton, proprietaire };
 }

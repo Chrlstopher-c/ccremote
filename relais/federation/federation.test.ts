@@ -1,7 +1,10 @@
 // Fédération « mes machines » sur un aiguilleur réel (127.0.0.1) : appairage avec décision, sessions listées, fil en
 // direct, écriture relayée, hors ligne, révocation, et ce que l'aiguilleur peut voir. Données de test seulement.
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { CHEMIN_APPAIRAGE_MEMBRE } from '../../commun/aiguilleur.ts';
+import { exporterIdentitePublique, genererIdentite } from '../../commun/chiffrement/identite.ts';
 import type { EvenementFedere } from '../../commun/federation.ts';
+import { executerCommande } from '../aiguilleur/commande.ts';
 import {
   attendre,
   creerNoeud,
@@ -210,6 +213,74 @@ describe('présence, révocation et ce que voient les autres', () => {
     expect(b.registre.session(SESSION_A)).toBeNull();
     expect(b.registre.sessions(true)).toEqual([]);
     expect(b.registre.derniersEvenements(SESSION_A, 10)).toEqual([]);
+  });
+});
+
+/** Un membre factice du propriétaire donné, appairé comme un vrai nœud : il parle au lien, sans nœud derrière. */
+async function fauxMembre(proprietaire: string): Promise<string> {
+  const code = executerCommande(['appairer', proprietaire], monte.annuaire).split('\n')[0] ?? '';
+  const cle = exporterIdentitePublique((await genererIdentite()).publique);
+  const rep = await fetch(new URL(CHEMIN_APPAIRAGE_MEMBRE, monte.url), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code, nom: 'intrus', genre: 'noeud', cle }),
+  });
+  return ((await rep.json()) as { jeton: string }).jeton;
+}
+
+async function lienFaux(jeton: string): Promise<{ ws: WebSocket; recus: Record<string, unknown>[] }> {
+  const recus: Record<string, unknown>[] = [];
+  return new Promise((resoudre, rejeter) => {
+    const ws = new WebSocket(`${monte.url.replace('http', 'ws')}/aiguilleur`, {
+      headers: { authorization: `Bearer ${jeton}` },
+    });
+    ws.onmessage = (e) => void recus.push(JSON.parse(String(e.data)) as Record<string, unknown>);
+    ws.onopen = () => resoudre({ ws, recus });
+    ws.onerror = () => rejeter(new Error('lien refusé'));
+  });
+}
+
+describe('mes machines : propriétaire', () => {
+  test('même propriétaire : le nœud connaît le sien, voit nom et genre de ses pairs, et peut appairer', async () => {
+    const a = await nouveau('tour', 'alice');
+    const b = await nouveau('portable', 'alice');
+    const idB = await idDe(b);
+    await enLignePour(a, idB);
+    const etat = await a.federation.etat();
+    expect(etat.aiguilleur?.proprietaire).toBe('alice');
+    expect(etat.membres).toEqual([
+      { id: idB, enLigne: true, nom: 'portable', genre: 'noeud', proprietaire: 'alice', mien: true },
+    ]);
+    expect(a.federation.appairer(idB).ok).toBe(true);
+  });
+
+  test('un nœud d’un autre propriétaire, même relié par un duo, ne s’appaire pas', async () => {
+    executerCommande(['lier-duo', 'alice', 'bob'], monte.annuaire);
+    const a = await nouveau('tour', 'alice');
+    const b = await nouveau('portable', 'bob');
+    const idB = await idDe(b);
+    await enLignePour(a, idB);
+    expect(a.federation.appairer(idB)).toEqual({ ok: false, statut: 409, raison: 'ce nœud n’est pas à toi' });
+    expect((await a.federation.etat()).membres).toEqual([
+      { id: idB, enLigne: true, nom: 'portable', genre: 'noeud', proprietaire: 'bob', mien: false },
+    ]);
+    expect((await b.federation.etat()).demandes).toEqual([]);
+  });
+
+  test('côté visé : la présentation d’un membre qui n’est pas des nôtres est refusée sans demande', async () => {
+    executerCommande(['lier-duo', 'alice', 'bob'], monte.annuaire);
+    const b = await nouveau('portable', 'alice');
+    const idB = await idDe(b);
+    const { ws, recus } = await lienFaux(await fauxMembre('bob'));
+    await attendre(async () => (await b.federation.etat()).membres.some((m) => m.proprietaire === 'bob'));
+    ws.send(JSON.stringify({ t: 'ouvrir', canal: 'intrus1', vers: idB }));
+    await attendre(() => recus.some((m) => m['t'] === 'accepter'));
+    const identite = exporterIdentitePublique((await genererIdentite()).publique);
+    const presentation = { t: 'presentation', identite, nom: 'intrus' };
+    ws.send(JSON.stringify({ t: 'donnees', canal: 'intrus1', charge: JSON.stringify(presentation) }));
+    await attendre(() => recus.some((m) => m['t'] === 'donnees' && String(m['charge']).includes('"t":"refus"')));
+    expect((await b.federation.etat()).demandes).toEqual([]);
+    ws.close();
   });
 });
 

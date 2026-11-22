@@ -14,6 +14,8 @@ export const ConfigAiguilleur = z.object({
   jeton: z.string().min(16),
   id: z.string().regex(IDENTIFIANT),
   nom: z.string().min(1).max(80),
+  /** Propriétaire du nœud : donné à l'appairage, ou appris de la présence (absent sur un aiguilleur ancien). */
+  proprietaire: z.string().min(1).max(40).optional(),
 });
 export type ConfigAiguilleur = z.infer<typeof ConfigAiguilleur>;
 
