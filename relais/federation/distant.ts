@@ -1,7 +1,12 @@
 // Responsabilité : ce que le nœud sait des autres nœuds, en mémoire seulement — leurs sessions (fiches reçues), leur
 // présence et le fil récemment lu. Rien de cela n'entre dans la base du relais : quitter le nœud efface tout.
 import type { ResumeSession } from '../../commun/session.ts';
-import { TAILLE_FIL_FEDERE, type EvenementFedere, type MachineAnnoncee } from '../../commun/federation.ts';
+import {
+  TAILLE_FIL_FEDERE,
+  type EvenementFedere,
+  type MachineAnnoncee,
+  type MessageChiffre,
+} from '../../commun/federation.ts';
 
 /** Ce qu'on sait d'un nœud apparié : sa machine, son nom, sa présence, ses sessions et sa machine annoncée. */
 export interface NoeudDistant {
@@ -17,7 +22,12 @@ export interface NoeudDistant {
 export interface ObservateurDistant {
   changement(): void;
   evenement(membre: string, session: string, evenement: EvenementFedere): void;
+  /** Un delta de texte en cours d'écriture chez un pair (non cache : relayé en direct). */
+  flux(membre: string, message: FluxDistant): void;
 }
+
+/** Le delta d'un bloc tel qu'un pair l'envoie (la session est celle du message). */
+export type FluxDistant = Extract<MessageChiffre, { t: 'flux' }>;
 
 export interface SessionDistante {
   readonly membre: string;
@@ -120,6 +130,11 @@ export class CacheDistant {
 
   remplacerFil(membre: string, session: string, evenements: readonly EvenementFedere[]): void {
     this.fils.set(cleFil(membre, session), evenements.slice(-TAILLE_FIL_FEDERE));
+  }
+
+  /** Un delta reçu d'un pair : rien n'est gardé, il part vers l'interface si la session est bien la sienne. */
+  recevoirFlux(membre: string, message: FluxDistant): void {
+    this.observateur?.flux(membre, message);
   }
 
   ajouterEvenement(membre: string, session: string, evenement: EvenementFedere): void {

@@ -16,6 +16,14 @@ export interface DonneesTerminal {
   readonly lignes: number;
 }
 
+/** Ce qu'un terminal attend d'une connexion : ses données, l'envoi et la fermeture. Un WebSocket de client, ou un
+ * terminal relayé pour un nœud pair (sans WebSocket). */
+export interface ClientTerminal<D = DonneesTerminal> {
+  readonly data: D;
+  send(donnees: string | Uint8Array): unknown;
+  close(code?: number, raison?: string): void;
+}
+
 export type ServeurTerminal = ServerWebSocket<DonneesTerminal>;
 
 export function estTerminal(ws: ServerWebSocket<{ readonly type: string }>): ws is ServeurTerminal {
@@ -36,24 +44,30 @@ export function donneesTerminal(
 }
 
 export class TerminauxRelais {
-  private readonly clients = new Map<string, ServeurTerminal>();
+  private readonly clients = new Map<string, ClientTerminal>();
 
   constructor(
     private readonly postes: Postes,
     private readonly journal: Logger,
   ) {}
 
-  async ouvert(ws: ServeurTerminal): Promise<void> {
+  /** Ouvre le terminal sur son poste ; rend false (et ferme) si le poste le refuse. */
+  async ouvert(ws: ClientTerminal): Promise<boolean> {
     const { terminal, machine, cible, colonnes, lignes } = ws.data;
     this.clients.set(terminal, ws);
     const r = await this.postes.commander(machine, { kind: 'terminal_ouvrir', terminal, cible, colonnes, lignes });
-    if (r.ok) return this.journal.info({ machine, cible }, 'terminal à distance ouvert');
+    if (r.ok) {
+      this.journal.info({ machine, cible }, 'terminal à distance ouvert');
+      return true;
+    }
+    this.clients.delete(terminal);
     this.journal.warn({ machine, erreur: r.erreur }, 'terminal à distance refusé');
     ws.send(JSON.stringify({ type: 'erreur', message: r.erreur ?? 'refusé' }));
     ws.close(4409, 'terminal refusé');
+    return false;
   }
 
-  recu(ws: ServeurTerminal, message: string | Buffer): void {
+  recu(ws: ClientTerminal, message: string | Buffer): void {
     const { terminal, machine } = ws.data;
     if (typeof message !== 'string') {
       this.postes.envoyer(machine, { kind: 'terminal_entree', terminal, base64: message.toString('base64') });
@@ -73,7 +87,7 @@ export class TerminauxRelais {
     });
   }
 
-  ferme(ws: ServeurTerminal): void {
+  ferme(ws: ClientTerminal): void {
     const { terminal, machine } = ws.data;
     if (this.clients.get(terminal) !== ws) return;
     this.clients.delete(terminal);

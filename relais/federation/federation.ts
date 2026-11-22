@@ -22,6 +22,7 @@ import { CacheDistant } from './distant.ts';
 import { Distantes } from './distantes.ts';
 import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
+import { TerminalFedere } from './terminal-federe.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
 import type { ServirAppareil } from './appareils.ts';
@@ -39,7 +40,6 @@ export type { NoeudAppaire };
 
 const DELAI_DEMANDE_MS = 10 * 60 * 1000;
 const MARGE_APPAIRAGE_MS = 30_000;
-const DELAI_INSTANTANE_MS = 300;
 const DELAI_LIEN_MIN_MS = 1_000;
 const DELAI_LIEN_MAX_MS = 30_000;
 const INTERVALLE_PLANIFICATION_MS = 5_000;
@@ -99,8 +99,8 @@ export class Federation {
   private identiteEnCours: Promise<Identite> | null = null;
   private desabonner: (() => void) | null = null;
   private planificateur: ReturnType<typeof setInterval> | null = null;
-  private instantaneEnAttente: ReturnType<typeof setTimeout> | null = null;
   private recepteurSynchro: ((membre: string, brut: unknown) => void) | null = null;
+  readonly terminaux: TerminalFedere;
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
@@ -114,9 +114,11 @@ export class Federation {
       nom: () => this.config?.nom ?? options.machine,
       distant: this.distant,
       journal: options.journal,
+      terminaux: { traiter: (c, m) => this.terminaux.traiter(c, m) },
     });
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
+    this.terminaux = new TerminalFedere({ echanges: this.echanges, canaux: this.canaux, registre: options.registre, journal: options.journal });
     this.distantes = new Distantes({
       registre: options.registre,
       diffusion: options.diffusion,
@@ -139,8 +141,7 @@ export class Federation {
     this.desabonner = null;
     if (this.planificateur) clearInterval(this.planificateur);
     this.planificateur = null;
-    if (this.instantaneEnAttente) clearTimeout(this.instantaneEnAttente);
-    this.instantaneEnAttente = null;
+    this.echanges.arreter();
     this.canaux.fermerTout();
     this.demandes.arreter();
     this.lien?.arreter();
@@ -459,6 +460,7 @@ export class Federation {
   }
 
   private canalFerme(canal: CanalNoeud): void {
+    this.terminaux.fermerPour(canal.membre);
     this.canaux.retirer(canal);
     this.demandes.retirerPour(canal.membre);
     if (this.canaux.liaisonOuverteAvec(canal.membre)) return;
@@ -483,6 +485,7 @@ export class Federation {
   }
 
   private oublierPair(membre: string): void {
+    this.terminaux.fermerPour(membre);
     this.pairs = this.pairs.filter((p) => p.id !== membre);
     this.sauverPairs();
     this.distant.retirer(membre);
@@ -511,21 +514,19 @@ export class Federation {
   }
 
   private surDiffusion(m: MessageClient): void {
+    if (m.type === 'flux') return this.surFlux(m);
     if (m.type === 'session' && this.distantes.estDistante(m.session.id)) return;
-    if (m.type === 'session' || m.type === 'supprimee') return this.programmerInstantane();
+    if (m.type === 'session' || m.type === 'supprimee') {
+      return this.echanges.programmerInstantane(() => this.canaux.ouverts());
+    }
     if (m.type === 'evenement') {
       const e = m.evenement;
       this.echanges.diffuserEvenement(e.sessionId, e.seq, e.ts, e.evt, this.canaux.ouverts());
     }
   }
 
-  // Les changements de sessions partent groupés : un instantané complet par rafale, aux liens ouverts.
-  private programmerInstantane(): void {
-    if (this.instantaneEnAttente) return;
-    this.instantaneEnAttente = setTimeout(() => {
-      this.instantaneEnAttente = null;
-      const instantane = this.echanges.instantane();
-      for (const canal of this.canaux.ouverts()) canal.envoyer(instantane);
-    }, DELAI_INSTANTANE_MS);
+  // Le delta d'une session locale part aux pairs qui suivent son fil ; celui d'une session d'un pair ne repart pas.
+  private surFlux(m: Extract<MessageClient, { type: 'flux' }>): void {
+    if (!this.distantes.estDistante(m.sessionId)) this.echanges.diffuserFlux(m, this.canaux.ouverts());
   }
 }

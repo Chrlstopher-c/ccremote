@@ -6,22 +6,27 @@ import type { Logger } from 'pino';
 import {
   NOMBRE_MAX_ABONNEMENTS,
   TAILLE_FIL_FEDERE,
+  TAILLE_FLUX_MAX_CARACTERES,
   TAILLE_MAX_CLAIR_OCTETS,
   DELAI_REPONSE_FEDEREE_MS,
   type EvenementFedere,
-  type GesteFedere,
   type MachineAnnoncee,
   type MessageChiffre,
 } from '../../commun/federation.ts';
+import { estGesteRelayable, type MethodeGeste, type PorteeGeste } from '../../commun/gestes-federes.ts';
 import { reponseGeste } from './gestes.ts';
-
-const DESCRIPTION_LOCALE = 'Cet ordinateur';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
 import { CacheDistant } from './distant.ts';
 import { nonceRef } from './identifiants.ts';
+
+const DESCRIPTION_LOCALE = 'Cet ordinateur';
+/** Un delta de texte attend au plus ce délai avant de partir, avec les suivants du même bloc. */
+export const DELAI_FLUX_MS = 60;
+/** Les changements de sessions partent groupés : un instantané par rafale, après ce délai. */
+const DELAI_INSTANTANE_MS = 300;
 
 /** Ce que le nœud fait pour un pair au nom de son propriétaire : mêmes chemins qu'un geste local. */
 export interface PontFederation {
@@ -33,11 +38,32 @@ export interface PontFederation {
 }
 
 export interface GesteLocal {
-  readonly geste: GesteFedere;
-  readonly methode: 'GET' | 'POST';
+  readonly geste: string;
+  readonly methode: MethodeGeste;
   readonly session?: string;
+  readonly machine?: string;
   readonly requete?: string;
   readonly corps?: string;
+}
+
+/** Le texte d'un bloc en cours d'écriture, tel que le nœud local le reçoit (`flux` local). */
+export interface FluxLocal {
+  readonly sessionId: string;
+  readonly bloc: string;
+  readonly delta: string;
+  readonly genre?: 'texte' | 'reflexion';
+  readonly agent?: string;
+}
+
+/** Ce que le nœud confie aux terminaux d'une session distante (ouverture, saisie, fermeture). */
+export interface RecepteurTerminal {
+  traiter(canal: CanalNoeud, message: MessageChiffre): void;
+}
+
+type MessageFlux = Extract<MessageChiffre, { t: 'flux' }>;
+interface TamponFlux {
+  readonly canal: CanalNoeud;
+  readonly message: MessageFlux;
 }
 
 export interface OptionsEchanges {
@@ -48,6 +74,8 @@ export interface OptionsEchanges {
   readonly distant: CacheDistant;
   readonly journal: Logger;
   readonly delaiReponseMs?: number;
+  /** Terminaux d'une session distante : les messages `terminal_*` leur sont remis. */
+  readonly terminaux?: RecepteurTerminal;
 }
 
 type Attente = (m: MessageChiffre) => void;
@@ -55,6 +83,9 @@ type Attente = (m: MessageChiffre) => void;
 export class Echanges {
   private readonly attentes = new Map<string, Attente>();
   private readonly abonnements = new Map<string, Set<string>>();
+  private readonly tampons = new Map<string, TamponFlux>();
+  private minuterieFlux: ReturnType<typeof setTimeout> | null = null;
+  private instantaneEnAttente: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: OptionsEchanges) {}
 
@@ -83,35 +114,91 @@ export class Echanges {
     };
   }
 
+  /** Un changement de sessions : un instantané complet part, groupé par rafale, aux liens ouverts (`canaux`). */
+  programmerInstantane(canaux: () => readonly CanalNoeud[]): void {
+    if (this.instantaneEnAttente) return;
+    this.instantaneEnAttente = setTimeout(() => {
+      this.instantaneEnAttente = null;
+      const instantane = this.instantane();
+      for (const canal of canaux()) canal.envoyer(instantane);
+    }, DELAI_INSTANTANE_MS);
+  }
+
+  /** Arrêt du nœud : les minuteries en attente tombent. */
+  arreter(): void {
+    if (this.instantaneEnAttente) clearTimeout(this.instantaneEnAttente);
+    this.instantaneEnAttente = null;
+    this.viderFlux();
+  }
+
   /** Un événement local d'une session : envoyé en direct aux canaux dont le pair suit le fil de cette session. */
   diffuserEvenement(session: string, seq: number, ts: string, evt: Evenement, canaux: readonly CanalNoeud[]): void {
+    this.viderFlux();
     for (const canal of canaux) {
       if (this.abonnements.get(canal.membre)?.has(session)) canal.envoyer({ t: 'evenement', session, seq, ts, evt });
     }
   }
 
-  /** Oublie les abonnements d'un pair (canal fermé ou révoqué). */
+  /**
+   * Un delta de texte local : regroupé par bloc pour chaque pair qui suit le fil, envoyé au plus tard après
+   * DELAI_FLUX_MS. Un tampon plein part tout de suite ; le fil final reste la référence (non persisté).
+   */
+  diffuserFlux(flux: FluxLocal, canaux: readonly CanalNoeud[]): void {
+    for (const canal of canaux) {
+      if (!this.abonnements.get(canal.membre)?.has(flux.sessionId)) continue;
+      const genre = flux.genre ?? '';
+      const agent = flux.agent ?? '';
+      const cle = `${canal.id}\u0000${flux.sessionId}\u0000${flux.bloc}\u0000${genre}\u0000${agent}`;
+      this.empiler(cle, canal, flux);
+    }
+    this.armerFlux();
+  }
+
+  private empiler(cle: string, canal: CanalNoeud, flux: FluxLocal): void {
+    const existant = this.tampons.get(cle);
+    const delta = (existant?.message.delta ?? '') + flux.delta;
+    const message: MessageFlux = {
+      t: 'flux',
+      session: flux.sessionId,
+      bloc: flux.bloc,
+      delta,
+      ...(flux.genre ? { genre: flux.genre } : {}),
+      ...(flux.agent ? { agent: flux.agent } : {}),
+    };
+    this.tampons.set(cle, { canal, message });
+    if (delta.length >= TAILLE_FLUX_MAX_CARACTERES) this.partir(cle);
+  }
+
+  private armerFlux(): void {
+    if (this.minuterieFlux || this.tampons.size === 0) return;
+    this.minuterieFlux = setTimeout(() => this.viderFlux(), DELAI_FLUX_MS);
+  }
+
+  /** Envoie tous les deltas en attente, dans l'ordre d'arrivée. */
+  viderFlux(): void {
+    if (this.minuterieFlux) clearTimeout(this.minuterieFlux);
+    this.minuterieFlux = null;
+    for (const cle of [...this.tampons.keys()]) this.partir(cle);
+  }
+
+  private partir(cle: string): void {
+    const tampon = this.tampons.get(cle);
+    this.tampons.delete(cle);
+    if (tampon && tampon.canal.ouvert) tampon.canal.envoyer(tampon.message);
+  }
+
+  /** Oublie les abonnements et les deltas en attente d'un pair (canal fermé ou révoqué). */
   oublier(membre: string): void {
     this.abonnements.delete(membre);
+    for (const [cle, tampon] of [...this.tampons]) if (tampon.canal.membre === membre) this.tampons.delete(cle);
   }
 
   /** Une requête entrante ou une réponse d'un pair, sur un lien ouvert. */
   async traiter(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     switch (message.t) {
       case 'instantane':
-        return this.options.distant.instantane(
-          canal.membre,
-          message.machine,
-          message.nom,
-          message.sessions,
-          message.vue ?? null,
-        );
       case 'evenement':
-        return this.options.distant.ajouterEvenement(canal.membre, message.session, {
-          ...(message.seq !== undefined ? { seq: message.seq } : {}),
-          ts: message.ts,
-          evt: message.evt,
-        });
+        return this.recevoirCache(canal.membre, message);
       case 'fil':
         return this.repondreFil(canal, message.ref, message.session);
       case 'ecrire':
@@ -127,9 +214,20 @@ export class Echanges {
       case 'reponse':
       case 'geste_reponse':
         return this.attentes.get(message.ref)?.(message);
+      case 'flux':
+        return this.options.distant.recevoirFlux(canal.membre, message);
       default:
-        return undefined;
+        return this.options.terminaux?.traiter(canal, message);
     }
+  }
+
+  // Instantané et événement d'un pair : le cache mémoire les garde.
+  private recevoirCache(membre: string, m: Extract<MessageChiffre, { t: 'instantane' | 'evenement' }>): void {
+    if (m.t === 'instantane') {
+      return this.options.distant.instantane(membre, m.machine, m.nom, m.sessions, m.vue ?? null);
+    }
+    const evenement = { ...(m.seq !== undefined ? { seq: m.seq } : {}), ts: m.ts, evt: m.evt };
+    return this.options.distant.ajouterEvenement(membre, m.session, evenement);
   }
 
   /** Envoie une requête à un pair et rend sa réponse (ou null : hors ligne, trame trop grande, délai dépassé). */
@@ -152,6 +250,34 @@ export class Echanges {
   }
 
   // ---- Côté qui tient la session ------------------------------------------------------------------------------
+
+  /** Relayés : une session (ou une machine) d'ici, par une route de la liste fermée. Lire le fil abonne au direct. */
+  private async repondreGeste(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'geste' }>): Promise<void> {
+    const refuser = (statut: number, texte: string): void =>
+      void canal.envoyer({ t: 'geste_reponse', ref: m.ref, statut, corps: JSON.stringify({ erreur: texte }) });
+    const pont = this.options.pont.geste;
+    if (!pont) return refuser(501, 'geste non pris en charge par ce nœud');
+    const refus = this.refusGeste(m);
+    if (refus) return refuser(404, refus);
+    if (m.geste === 'evenements' && m.session) this.abonner(canal.membre, m.session);
+    try {
+      const reponse = await pont({ ...m });
+      canal.envoyer({ t: 'geste_reponse', ref: m.ref, ...(await reponseGeste(reponse, m.geste)) });
+    } catch (erreur) {
+      this.options.journal.error({ err: erreur, geste: m.geste }, 'geste relayé en échec');
+      refuser(500, 'geste en échec sur le nœud');
+    }
+  }
+
+  // Un geste relayé ne vise qu'une route de la liste : une session partagée (pas du duo), notre machine, ou le nœud.
+  private refusGeste(m: Extract<MessageChiffre, { t: 'geste' }>): string | null {
+    if (m.geste === 'ouvrir') return null;
+    const portee: PorteeGeste = m.machine !== undefined ? 'machine' : m.session !== undefined ? 'session' : 'noeud';
+    if (!estGesteRelayable(portee, m.geste)) return 'geste non relayable';
+    if (portee === 'noeud') return null;
+    if (portee === 'machine') return m.machine === this.options.machine ? null : 'machine inconnue';
+    return m.session && this.sessionPartagee(m.session) ? null : 'session inconnue';
+  }
 
   private sessionPartagee(session: string): boolean {
     const fiche = this.options.registre.session(session);
@@ -214,27 +340,8 @@ export class Echanges {
     this.reponse(canal, ref, id !== undefined, id === undefined ? 'session ouverte sans identifiant' : undefined, id);
   }
 
-  // Un geste relayé par un pair : sa session doit être une des nôtres (pas reçue du duo) ; `ouvrir` vise une machine du
-  // parc de ce nœud. Lire le fil abonne le pair au direct, comme `fil`.
-  private async repondreGeste(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'geste' }>): Promise<void> {
-    const refuser = (statut: number, texte: string): void =>
-      void canal.envoyer({ t: 'geste_reponse', ref: m.ref, statut, corps: JSON.stringify({ erreur: texte }) });
-    const pont = this.options.pont.geste;
-    if (!pont) return refuser(501, 'geste non pris en charge par ce nœud');
-    if (m.geste !== 'ouvrir' && (!m.session || !this.sessionPartagee(m.session))) {
-      return refuser(404, 'session inconnue');
-    }
-    if (m.geste === 'evenements' && m.session) this.abonner(canal.membre, m.session);
-    try {
-      const reponse = await pont({ ...m });
-      canal.envoyer({ t: 'geste_reponse', ref: m.ref, ...(await reponseGeste(reponse, m.geste)) });
-    } catch (erreur) {
-      this.options.journal.error({ err: erreur, geste: m.geste }, 'geste relayé en échec');
-      refuser(500, 'geste en échec sur le nœud');
-    }
-  }
-
-  private reponse(canal: CanalNoeud, ref: string, ok: boolean, raison?: string, session?: string): void {
+  /** Réponse à une requête d'un pair (ok, motif, session créée). */
+  reponse(canal: CanalNoeud, ref: string, ok: boolean, raison?: string, session?: string): void {
     canal.envoyer({
       t: 'reponse',
       ref,

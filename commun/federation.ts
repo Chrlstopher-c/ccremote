@@ -2,6 +2,7 @@
 // l'appairage entre nœuds, puis messages chiffrés de bout en bout une fois le canal établi. Aucune logique ici.
 import { z } from 'zod';
 import { GENRES_MEMBRE } from './aiguilleur.ts';
+import { LONGUEUR_MAX_GESTE, METHODES_GESTE } from './gestes-federes.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { Evenement, Projet, ResumeSession } from './session.ts';
 
@@ -23,6 +24,8 @@ const REF = z.string().min(1).max(64);
 const TEXTE = z.string().min(1).max(TAILLE_MAX_TEXTE_SESSION);
 const METHODE_API = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const CHEMIN_API = z.string().min(5).max(4096).regex(/^\/api\//);
+/** Un delta de texte relayé : les deltas d'un même bloc se regroupent avant l'envoi, bornés ici. */
+export const TAILLE_FLUX_MAX_CARACTERES = 32_000;
 
 export const IdentitePubliqueTexte = z.string().regex(IDENTITE);
 
@@ -53,37 +56,6 @@ export const MachineAnnoncee = z.strictObject({
   comptes: z.array(z.string().max(200)).max(20),
 });
 export type MachineAnnoncee = z.infer<typeof MachineAnnoncee>;
-
-/**
- * Gestes relayés vers le nœud qui tient la session : le suffixe de route `/api/sessions/:id/<geste>` (ou `ouvrir`
- * pour `POST /api/sessions`), exécuté là-bas par sa propre route, comme un geste local. Liste fermée.
- */
-export const GESTES_FEDERES = [
-  'ouvrir',
-  'evenements',
-  'contexte',
-  'connecteurs',
-  'taches',
-  'chapitres',
-  'messages',
-  'repondre',
-  'mode',
-  'modele',
-  'effort',
-  'rapide',
-  'autonomie',
-  'renommer',
-  'interrompre',
-  'compacter',
-  'reprendre',
-  'archiver',
-  'desarchiver',
-  'epingler',
-  'desepingler',
-  'marquer_lue',
-  'marquer_non_lue',
-] as const;
-export type GesteFedere = (typeof GESTES_FEDERES)[number];
 
 /** Chiffré de bout en bout : tout ce qui concerne les sessions d'un nœud. */
 export const MessageChiffre = z.discriminatedUnion('t', [
@@ -125,20 +97,25 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     session: SESSION.optional(),
   }),
   z.strictObject({ t: z.literal('revocation') }),
+  // Route relayée : `geste` = suffixe validé par commun/gestes-federes.ts ; `session` ou `machine` selon la portée.
   z.strictObject({
     t: z.literal('geste'),
     ref: REF,
-    geste: z.enum(GESTES_FEDERES),
-    methode: z.enum(['GET', 'POST']),
+    geste: z.string().min(1).max(LONGUEUR_MAX_GESTE),
+    methode: z.enum(METHODES_GESTE),
     session: SESSION.optional(),
-    requete: z.string().max(2000).optional(),
+    machine: NOM.optional(),
+    requete: z.string().max(4000).optional(),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS).optional(),
   }),
+  // `codage: base64` : corps binaire (fichier téléchargé), `type` : son type MIME.
   z.strictObject({
     t: z.literal('geste_reponse'),
     ref: REF,
     statut: z.number().int().min(100).max(599),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
+    type: z.string().max(120).optional(),
+    codage: z.literal('base64').optional(),
   }),
   // Appareil (client) : une requête de l'API clients, rejouée par le nœud sur ses routes locales.
   z.strictObject({
@@ -154,6 +131,34 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     statut: z.number().int().min(100).max(599),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
   }),
+  // Texte en cours d'écriture (delta, non persisté) : relayé en direct à qui suit le fil de la session.
+  z.strictObject({
+    t: z.literal('flux'),
+    session: SESSION,
+    bloc: z.string().min(1).max(200),
+    delta: z.string().max(TAILLE_FLUX_MAX_CARACTERES),
+    genre: z.enum(['texte', 'reflexion']).optional(),
+    agent: z.string().max(200).optional(),
+  }),
+  // Terminal d'une session distante : l'ouverture est une requête (réponse `reponse`), le reste suit le lien.
+  z.strictObject({
+    t: z.literal('terminal_ouvrir'),
+    ref: REF,
+    terminal: REF,
+    session: SESSION,
+    colonnes: z.number().int().min(2).max(1000),
+    lignes: z.number().int().min(2).max(1000),
+  }),
+  z.strictObject({ t: z.literal('terminal_entree'), terminal: REF, base64: z.string().max(TAILLE_MAX_CLAIR_OCTETS) }),
+  z.strictObject({
+    t: z.literal('terminal_taille'),
+    terminal: REF,
+    colonnes: z.number().int().min(2).max(1000),
+    lignes: z.number().int().min(2).max(1000),
+  }),
+  z.strictObject({ t: z.literal('terminal_fermer'), terminal: REF }),
+  z.strictObject({ t: z.literal('terminal_sortie'), terminal: REF, base64: z.string().max(TAILLE_MAX_CLAIR_OCTETS) }),
+  z.strictObject({ t: z.literal('terminal_fin'), terminal: REF, code: z.number().int().nullable() }),
   // Synchronisation sur demande : le contenu est validé par le service synchro (commun/synchro.ts), pas ici.
   z.strictObject({ t: z.literal('synchro'), m: z.unknown() }),
 ]);

@@ -70,6 +70,8 @@ export type MessageClient =
   // Session supprimée par Chris : chaque client la retire de sa liste et de son fil.
   | { readonly type: 'supprimee'; readonly id: string }
   | { readonly type: 'machine'; readonly machine: VueMachine }
+  // Machine qui sort de la vue (nœud révoqué, plus relié) : chaque client la retire de sa liste.
+  | { readonly type: 'machine_retiree'; readonly id: string }
   | { readonly type: 'notification'; readonly notification: Notification }
   | { readonly type: 'echo'; readonly echo: MessageEcho } // WebSocket seulement : n'avance pas le long-poll
   | { readonly type: 'reunion'; readonly reunion: Reunion } // WebSocket seulement : la salle de réunion (HQ)

@@ -8,15 +8,17 @@ import { ResumeSession } from '../../commun/session.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
-import { CacheDistant, type SessionDistante } from './distant.ts';
-import type { Echanges } from './echanges.ts';
-import { estGeste, type GesteDemande, lireGeste } from './gestes.ts';
+import { CacheDistant, type FluxDistant, type SessionDistante } from './distant.ts';
+import { type Echanges, type GesteLocal } from './echanges.ts';
+import { lireRoute } from './gestes.ts';
+import { estGesteRelayable } from '../../commun/gestes-federes.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import { fusionnerVue, type VueFederee } from './vue-federee.ts';
 
 /** Délai d'un geste qui lance du travail chez le nœud (ouvrir, écrire) ; les lectures gardent le délai court. */
 const DELAI_GESTE_LONG_MS = 60_000;
 const DELAI_GESTE_MS = 20_000;
+const GESTES_LONGS: ReadonlySet<string> = new Set(['ouvrir', 'messages', 'git/commiter']);
 const TEXTE_HORS_LIGNE = 'machine hors ligne : la session est sur un autre nœud du réseau';
 const TEXTE_INDISPONIBLE = 'geste indisponible pour une session d’une autre machine : le faire depuis elle';
 
@@ -48,6 +50,7 @@ export class Distantes {
     o.cache.observateur = {
       changement: () => this.surChangement(),
       evenement: (membre, session, evt) => this.surEvenement(membre, session, evt),
+      flux: (membre, message) => this.surFlux(membre, message),
     };
   }
 
@@ -77,6 +80,11 @@ export class Distantes {
     return this.vueCourante().routage.has(session);
   }
 
+  /** Le nœud qui tient une session d'un autre nœud, ou null si elle est locale (ou inconnue). */
+  membreDe(session: string): string | null {
+    return this.vueCourante().routage.get(session) ?? null;
+  }
+
   /** Filtre du flux des clients : les copies SSH d'une machine tenue par un nœud en ligne ne passent pas. */
   laisserPasser(m: MessageClient): boolean {
     const v = this.derniere;
@@ -91,13 +99,30 @@ export class Distantes {
   async intercepter(req: Request): Promise<Response | null> {
     const url = new URL(req.url);
     if (url.pathname === '/api/sessions') return req.method === 'POST' ? this.intercepterOuverture(req) : null;
-    const g = lireGeste(url, req.method);
-    if (!g) return null;
-    const membre = this.vueCourante().routage.get(g.session);
+    const route = lireRoute(url, req.method);
+    if (!route || route.portee === 'noeud') return null;
+    const vue = this.vueCourante();
+    const membre = route.portee === 'session' ? vue.routage.get(route.id) : vue.machinesRoutees.get(route.id);
     if (!membre) return null;
-    if (!estGeste(g)) return reponseErreur(409, TEXTE_INDISPONIBLE);
-    const corps = req.method === 'POST' ? await req.text() : '';
-    return this.relayer(membre, g, corps);
+    if (!estGesteRelayable(route.portee, route.geste)) return reponseErreur(409, TEXTE_INDISPONIBLE);
+    const corps = req.method === 'GET' ? '' : await req.text();
+    const geste: GesteLocal = {
+      geste: route.geste,
+      methode: route.methode,
+      ...(route.portee === 'session' ? { session: route.id } : { machine: route.id }),
+      ...(route.requete ? { requete: route.requete } : {}),
+    };
+    return this.relayer(membre, geste, corps);
+  }
+
+  /** Les listes du nœud (artefacts) de chaque pair en ligne, lues par `local=1` : chacun ne rend que les siennes. */
+  async artefactsDesPairs(): Promise<unknown[]> {
+    const membres = this.o.cache.noeudsConnus().filter((n) => n.enLigne).map((n) => n.membre);
+    const reponses = await Promise.all(
+      membres.map((membre) => this.relayer(membre, { geste: 'artefacts', methode: 'GET', requete: 'local=1' }, '')),
+    );
+    const listes = await Promise.all(reponses.map((r) => (r.ok ? r.json().catch(() => null) : null)));
+    return listes.flatMap((liste: unknown) => (Array.isArray(liste) ? liste : []));
   }
 
   private async intercepterOuverture(req: Request): Promise<Response | null> {
@@ -105,13 +130,13 @@ export class Distantes {
     const machine = machineDe(corps);
     const membre = machine ? this.vueCourante().machinesRoutees.get(machine) : undefined;
     if (!membre) return null;
-    return this.relayer(membre, { geste: 'ouvrir', methode: 'POST', session: '' }, corps);
+    return this.relayer(membre, { geste: 'ouvrir', methode: 'POST' }, corps);
   }
 
-  private async relayer(membre: string, g: GesteDemande, corps: string): Promise<Response> {
+  private async relayer(membre: string, g: GesteLocal, corps: string): Promise<Response> {
     const canal = this.o.liaison(membre);
     if (!canal) return reponseErreur(409, TEXTE_HORS_LIGNE);
-    const long = g.geste === 'ouvrir' || g.geste === 'messages';
+    const long = GESTES_LONGS.has(g.geste);
     const reponse = await this.o.echanges.requeter(
       canal,
       (ref) => ({
@@ -120,6 +145,7 @@ export class Distantes {
         geste: g.geste,
         methode: g.methode,
         ...(g.session ? { session: g.session } : {}),
+        ...(g.machine !== undefined ? { machine: g.machine } : {}),
         ...(g.requete ? { requete: g.requete } : {}),
         ...(corps ? { corps } : {}),
       }),
@@ -127,7 +153,7 @@ export class Distantes {
     );
     if (!reponse || reponse.t !== 'geste_reponse') return reponseErreur(504, 'la machine n’a pas répondu à temps');
     if (g.geste === 'ouvrir' && reponse.statut < 300) this.connaitreOuverte(membre, reponse.corps);
-    return new Response(reponse.corps, { status: reponse.statut, headers: { 'content-type': 'application/json' } });
+    return reponseDuPair(reponse);
   }
 
   // L'appli règle la session neuve (effort, modèle…) dès la réponse : elle doit déjà être routée vers le nœud.
@@ -207,6 +233,19 @@ export class Distantes {
     }
   }
 
+  // Le delta d'une session d'un pair : relayé à l'interface comme celui d'une session locale.
+  private surFlux(membre: string, message: FluxDistant): void {
+    if (this.vueCourante().routage.get(message.session) !== membre) return;
+    this.o.diffusion.diffuser({
+      type: 'flux',
+      sessionId: message.session,
+      bloc: message.bloc,
+      delta: message.delta,
+      ...(message.genre ? { genre: message.genre } : {}),
+      ...(message.agent ? { agent: message.agent } : {}),
+    });
+  }
+
   private noterPresences(): void {
     for (const n of this.o.cache.noeudsConnus()) {
       if (this.enLigneMembre.get(n.membre) === n.enLigne) continue;
@@ -225,6 +264,10 @@ export class Distantes {
     for (const id of avant.fed.keys()) if (!visibles.has(id)) this.o.diffusion.diffuser({ type: 'supprimee', id });
     this.annoncerMasquage(avant.masquees, v);
     for (const [id, texte] of machines) if (avant.machines.get(id) !== texte) this.diffuserMachine(v, id);
+    // Une machine qui sort de la vue (nœud révoqué) : l'interface la retire, sinon elle reste listée.
+    for (const id of avant.machines.keys()) {
+      if (!machines.has(id)) this.o.diffusion.diffuser({ type: 'machine_retiree', id });
+    }
   }
 
   // Une machine qui passe par un nœud (ou qui en revient) : ses copies locales sortent (ou rentrent) de la liste.
@@ -272,6 +315,17 @@ function machineDe(corps: string): string | null {
     return null;
   }
   return null;
+}
+
+/** La réponse du pair rendue à l'appli : texte (JSON) tel quel, binaire (fichier) décodé de son base64. */
+function reponseDuPair(r: Extract<MessageChiffre, { t: 'geste_reponse' }>): Response {
+  if (r.codage === 'base64') {
+    return new Response(Buffer.from(r.corps, 'base64'), {
+      status: r.statut,
+      headers: { 'content-type': r.type ?? 'application/octet-stream' },
+    });
+  }
+  return new Response(r.corps, { status: r.statut, headers: { 'content-type': 'application/json' } });
 }
 
 function reponseErreur(statut: number, texte: string): Response {

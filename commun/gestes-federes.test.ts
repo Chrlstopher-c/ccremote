@@ -1,0 +1,33 @@
+// La liste fermée des routes relayées : ce qui traverse le lien, et ce qui reste local par nature.
+import { describe, expect, test } from 'bun:test';
+import { estGesteRelayable, estMethodeRelayable } from './gestes-federes.ts';
+
+describe('estGesteRelayable', () => {
+  test('fichiers, git, artefacts, contenu et dossiers de machine passent', () => {
+    expect(estGesteRelayable('session', 'git/commiter')).toBe(true);
+    expect(estGesteRelayable('session', 'fichiers/f-1')).toBe(true);
+    expect(estGesteRelayable('session', 'artefacts/a-1/supprimer')).toBe(true);
+    expect(estGesteRelayable('session', 'contenu')).toBe(true);
+    expect(estGesteRelayable('machine', 'dossiers')).toBe(true);
+    expect(estGesteRelayable('noeud', 'artefacts')).toBe(true);
+  });
+
+  test('ce qui reste local par nature, ou hors liste, est refusé', () => {
+    expect(estGesteRelayable('machine', 'comptes')).toBe(false);
+    expect(estGesteRelayable('session', 'supprimer')).toBe(false);
+    expect(estGesteRelayable('session', 'rembobiner')).toBe(false);
+    expect(estGesteRelayable('session', 'jetons')).toBe(false);
+    expect(estGesteRelayable('session', 'remote-control')).toBe(false);
+    expect(estGesteRelayable('machine', 'eteindre')).toBe(false);
+    expect(estGesteRelayable('machine', 'reveiller')).toBe(false);
+    expect(estGesteRelayable('session', 'ouvrir')).toBe(false);
+    expect(estGesteRelayable('session', 'git')).toBe(false);
+    expect(estGesteRelayable('noeud', 'artefacts/a-1/supprimer')).toBe(false);
+    expect(estGesteRelayable('session', '../etc')).toBe(false);
+  });
+
+  test('méthodes transportées : GET, POST, PUT', () => {
+    expect(['GET', 'POST', 'PUT'].every(estMethodeRelayable)).toBe(true);
+    expect(estMethodeRelayable('DELETE')).toBe(false);
+  });
+});

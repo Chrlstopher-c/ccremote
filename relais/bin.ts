@@ -18,6 +18,7 @@ import { ApiModifications } from './clients/api-modifications.ts';
 import { ouvrirTerminal, ouvrirTerminalSession } from './appareils/route-terminal.ts';
 import { ApiFichiersSession } from './clients/api-fichiers-session.ts';
 import { type DonneesTerminal, estTerminal, TerminauxRelais } from './appareils/terminaux.ts';
+import { type DonneesTerminalFedere, estTerminalFedere } from './federation/terminal-federe.ts';
 import { ApiComptes } from './clients/api-comptes.ts';
 import { ReleveUsage } from './usage/releves-usage.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
@@ -266,6 +267,7 @@ const artefacts = new ApiArtefacts(registre, postes, journal);
 const modifications = new ApiModifications(registre, postes, journal);
 const fichiersSession = new ApiFichiersSession(registre, postes, journal);
 const terminaux = new TerminauxRelais(postes, journal);
+federation.terminaux.brancher(terminaux);
 postes.terminaux = terminaux;
 const salleReunions = new SalleDeReunion({
   reunions: new RegistreReunions(base),
@@ -280,7 +282,7 @@ const echo = config.echo
   ? new LienEcho(config.echo.url, config.echo.jeton, diffusion, journal.child({ domaine: 'echo' }))
   : null;
 echo?.demarrer();
-type DonneesClient = { readonly type: 'flux' } | DonneesTerminal;
+type DonneesClient = { readonly type: 'flux' } | DonneesTerminal | DonneesTerminalFedere;
 const dependancesApi: DependancesApi = {
   acces,
   registre,
@@ -373,16 +375,26 @@ for (const { hote, port } of config.ecouteWeb) {
           postes,
           registre,
           (req as Request & { params: Record<string, string> }).params['id'] ?? '',
+          (session) => federation.distantes.membreDe(session),
         ),
       '/api/*': () => erreur('route inconnue', 404),
     },
     fetch: fichierBureau,
     websocket: {
       data: {} as DonneesClient,
-      open: (ws) => (estTerminal(ws) ? void terminaux.ouvert(ws) : diffusion.ajouter(ws)),
-      close: (ws) => (estTerminal(ws) ? terminaux.ferme(ws) : diffusion.retirer(ws)),
+      open: (ws) => {
+        if (estTerminalFedere(ws)) return void federation.terminaux.ouvrir(ws);
+        return estTerminal(ws) ? void terminaux.ouvert(ws) : diffusion.ajouter(ws);
+      },
+      close: (ws) => {
+        if (estTerminalFedere(ws)) return federation.terminaux.ferme(ws);
+        return estTerminal(ws) ? terminaux.ferme(ws) : diffusion.retirer(ws);
+      },
       // Le flux : les clients écoutent et agissent par l'API HTTP. Un terminal : la frappe et les redimensionnements.
-      message: (ws, m) => (estTerminal(ws) ? terminaux.recu(ws, m) : undefined),
+      message: (ws, m) => {
+        if (estTerminalFedere(ws)) return federation.terminaux.recu(ws, m);
+        return estTerminal(ws) ? terminaux.recu(ws, m) : undefined;
+      },
       idleTimeout: 120,
       sendPings: true,
     },

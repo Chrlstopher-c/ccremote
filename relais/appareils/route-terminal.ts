@@ -1,6 +1,7 @@
 // Responsabilité : l'ouverture d'un terminal à distance — authentifier, valider la cible, passer en WebSocket.
 // Deux entrées : une cible libre (`/api/terminal`), ou une session (`/api/sessions/:id/terminal`) dont le relais
 // tire la machine et le dossier : le client n'a pas à les connaître.
+import { randomUUID } from 'node:crypto';
 import type { Server } from 'bun';
 import { z } from 'zod';
 import { CibleTerminal } from '../../commun/appareil.ts';
@@ -9,6 +10,7 @@ import { erreur, REFUS_POSTE } from '../clients/http.ts';
 import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { donneesTerminal, type DonneesTerminal } from './terminaux.ts';
+import type { DonneesTerminalFedere } from '../federation/terminal-federe.ts';
 
 const Parametres = z.object({
   machine: z.string().min(1),
@@ -24,6 +26,18 @@ function cibleDe(p: URLSearchParams): unknown {
   return dossier ? { type: 'shell', dossier } : { type: 'shell' };
 }
 
+/** Passe la requête en WebSocket (terminal, local ou relayé), ou rend l'erreur HTTP qui la refuse. */
+function passerEnSocket(
+  req: Request,
+  serveur: Server<unknown>,
+  data: DonneesTerminal | DonneesTerminalFedere,
+): Response | undefined {
+  const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
+  // Bun refuse un objet d'en-têtes vide : le client natif (jeton en Authorization) n'en reçoit aucun.
+  const options = parProtocole ? { data, headers: { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } } : { data };
+  return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
+}
+
 /** Passe la requête en WebSocket de terminal, ou rend l'erreur HTTP qui la refuse. */
 function passerEnTerminal(
   req: Request,
@@ -32,10 +46,7 @@ function passerEnTerminal(
   data: DonneesTerminal,
 ): Response | undefined {
   if (!postes.enLigne(data.machine)) return erreur(`${data.machine} est hors ligne`, REFUS_POSTE);
-  const parProtocole = (req.headers.get('sec-websocket-protocol') ?? '').startsWith(PROTOCOLE_FLUX);
-  // Bun refuse un objet d'en-têtes vide : le client natif (jeton en Authorization) n'en reçoit aucun.
-  const options = parProtocole ? { data, headers: { 'Sec-WebSocket-Protocol': PROTOCOLE_FLUX } } : { data };
-  return serveur.upgrade(req, options) ? undefined : erreur('WebSocket attendu', 426);
+  return passerEnSocket(req, serveur, data);
 }
 
 export function ouvrirTerminal(
@@ -57,7 +68,10 @@ export function ouvrirTerminal(
   return passerEnTerminal(req, serveur, postes, data);
 }
 
-/** Terminal dans le dossier de la session, sur la machine de la session. */
+/**
+ * Terminal dans le dossier de la session, sur la machine de la session. Une session d'un autre nœud (`membreDe`
+ * la nomme) ouvre son terminal par le lien entre nœuds : le PTY reste chez le nœud qui la tient.
+ */
 export function ouvrirTerminalSession(
   req: Request,
   serveur: Server<unknown>,
@@ -65,10 +79,12 @@ export function ouvrirTerminalSession(
   postes: Postes,
   registre: Pick<Registre, 'session'>,
   id: string,
+  membreDe: (session: string) => string | null = () => null,
 ): Response | undefined {
   if (!acces.autorise(req)) return erreur('non connecté', 401);
   const session = registre.session(id);
-  if (!session) return erreur('session inconnue', 404);
+  const membre = session ? null : membreDe(id);
+  if (!session && !membre) return erreur('session inconnue', 404);
   const p = new URL(req.url).searchParams;
   const r = z
     .object({
@@ -77,6 +93,12 @@ export function ouvrirTerminalSession(
     })
     .safeParse({ colonnes: p.get('colonnes') ?? undefined, lignes: p.get('lignes') ?? undefined });
   if (!r.success) return erreur('terminal : paramètres invalides');
+  if (membre) {
+    const { colonnes, lignes } = r.data;
+    const data = { type: 'terminal-federe' as const, terminal: randomUUID(), membre, session: id, colonnes, lignes };
+    return passerEnSocket(req, serveur, data);
+  }
+  if (!session) return erreur('session inconnue', 404);
   const cible = { type: 'shell' as const, dossier: session.cwd };
   const data = donneesTerminal(session.machine, cible, r.data.colonnes, r.data.lignes);
   return passerEnTerminal(req, serveur, postes, data);

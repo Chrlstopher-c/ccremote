@@ -201,7 +201,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     '/api/machines/:id/comptes/:nom/detail': { GET: protege((req) => d.comptes.detail(req as never)) },
     '/api/machines/:id/comptes/:nom/reinitialiser': { POST: protege((req) => d.comptes.reinitialiser(req as never)) },
     '/api/machines/:id/comptes/:nom/distant': { POST: protege((req) => d.comptes.distant(req as never)) },
-    '/api/artefacts': { GET: protege(() => d.artefacts.lister()) },
+    '/api/artefacts': { GET: protege((req) => artefactsDuNoeud(d, req)) },
     '/api/modules': { GET: protege(() => lireModules(d.registre, d.postes)) },
     '/api/modules/:id/serveur': {
       POST: protege((req) =>
@@ -245,6 +245,15 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     ...routesParite(d.parite, protege),
     ...routesReunions(d.reunions, protege),
   };
+}
+
+/** Les artefacts de ce nœud, plus ceux des pairs en ligne (`local=1` : ceux de ce nœud seul, pour un pair). */
+async function artefactsDuNoeud(d: DependancesApi, req: Request): Promise<Response> {
+  const local = await d.artefacts.lister();
+  if (!local.ok || new URL(req.url).searchParams.get('local') === '1') return local;
+  const liste: unknown = await local.json().catch(() => null);
+  const pairs = await d.federation.distantes.artefactsDesPairs();
+  return json([...(Array.isArray(liste) ? liste : []), ...pairs]);
 }
 
 async function connexion(d: DependancesApi, req: Request, serveur: Serveur): Promise<Response> {
