@@ -45,6 +45,40 @@ export const NOMBRE_MAX_MORCEAUX_APPAREIL = TAILLE_MAX_TRANSFERT_CARACTERES / TA
 
 export const IdentitePubliqueTexte = z.string().regex(IDENTITE);
 
+/** Charte signée du réseau (texte JSON), au plus. */
+export const TAILLE_MAX_CHARTE_CARACTERES = 256 * 1024;
+/** Actions d'un chef sur la machine d'un nœud. `reveiller` n'en est pas : il part d'un nœud voisin en ligne. */
+export const ACTIONS_NOEUD = ['arreter', 'pause', 'reprendre', 'redemarrer'] as const;
+export type ActionNoeud = (typeof ACTIONS_NOEUD)[number];
+const ETAT_FONCTION = z.enum(['lancee', 'arretee', 'absente']);
+/** État d'une machine de nœud (`etat_noeud`) : objets ouverts, un champ inconnu d'une version plus récente passe. */
+export const EtatNoeud = z.object({
+  le: z.string().max(40),
+  cpu: z.number().min(0).max(100).nullable(),
+  charge: z.number().min(0).nullable(),
+  memoire: z.object({ utilisee: z.number().min(0), totale: z.number().min(0) }).nullable(),
+  gpu: z
+    .array(
+      z.object({
+        nom: z.string().max(120),
+        utilisation: z.number().min(0).max(100).nullable(),
+        memoireUtilisee: z.number().min(0).nullable(),
+        memoireTotale: z.number().min(0).nullable(),
+      }),
+    )
+    .max(8)
+    .nullable(),
+  reseau: z.object({ mac: z.string().max(40), diffusion: z.string().max(60) }).nullable(),
+  pause: z.boolean(),
+  fonctions: z.object({ voix: ETAT_FONCTION, dictee: ETAT_FONCTION }),
+  comptes: z.array(z.string().max(200)).max(20),
+  compte: z.string().max(200).nullable(),
+  peutArreter: z.boolean(),
+  peutRedemarrer: z.boolean(),
+  reveilPossible: z.boolean(),
+});
+export type EtatNoeud = z.infer<typeof EtatNoeud>;
+
 /** En clair : l'appairage (présentation, décision) et l'enveloppe du chiffrement (poignée, trame). */
 export const MessageEnClair = z.discriminatedUnion('t', [
   z.strictObject({
@@ -257,6 +291,18 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   }),
   // Synchronisation sur demande : le contenu est validé par le service synchro (commun/synchro.ts), pas ici.
   z.strictObject({ t: z.literal('synchro'), m: z.unknown() }),
+  // Réseau v3 (RESEAU-V3-ETAPE2.md). Charte signée par un chef : `texte` = JSON exact signé (commun/charte.ts le lit),
+  // `signature` = Ed25519 en base64url. Entre nœuds appariés seulement. Un nœud d'avant ignore ces genres.
+  z.strictObject({
+    t: z.literal('charte'),
+    texte: z.string().min(2).max(TAILLE_MAX_CHARTE_CARACTERES),
+    signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
+  }),
+  // Action d'un chef sur la machine d'un nœud : l'émetteur doit être chef dans la charte du nœud visé (identité du
+  // canal chiffré). Réponse : `reponse` (même `ref`).
+  z.strictObject({ t: z.literal('action_noeud'), ref: REF, action: z.enum(ACTIONS_NOEUD) }),
+  // État de la machine d'un nœud, envoyé à ses pairs à l'ouverture du lien puis périodiquement. Champs ouverts.
+  z.strictObject({ t: z.literal('etat_noeud'), etat: EtatNoeud }),
 ]);
 export type MessageChiffre = z.infer<typeof MessageChiffre>;
 export type EvenementFedere = z.infer<typeof EvenementFede>;
