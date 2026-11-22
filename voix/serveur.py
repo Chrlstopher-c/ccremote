@@ -11,6 +11,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
@@ -18,7 +19,9 @@ from loguru import logger
 
 sys.path.insert(0, os.environ.get("REFLET_RACINE", "/mnt/projects/reflet"))
 from serveur.ecoute.transcription import Transcription  # noqa: E402
-from serveur.parole.voix import Voix  # noqa: E402  (Reflet, chemin ajouté ci-dessus)
+from serveur import config  # noqa: E402
+from serveur.parole.voix import Phrase  # noqa: E402  (Reflet, chemin ajouté ci-dessus)
+from serveur.parole.voix import Voix  # noqa: E402
 
 TEXTE_MAX = 600
 DEBIT_MP3 = "48k"
@@ -30,8 +33,39 @@ garde_duree.MARGE_MULTIPLICATIVE = float(os.environ.get("LANTERNE_VOIX_MARGE", "
 garde_duree.MARGE_FIXE_S = 1.0
 garde_duree.DUREE_MIN_S = 3.0
 module_voix.TEMPERATURE = float(os.environ.get("LANTERNE_VOIX_TEMPERATURE", "0.65"))
+# Flux : pas de tampon « Voilà. » (il faudrait attendre la fin de la phrase pour le couper : la queue mesurée va jusqu'à
+# 2,2 s, la retenue annulerait le gain). Rien à retenir, donc RETENUE_S = 0 ; le mode entier garde sa coupe.
+module_voix.RETENUE_S = 0.0
+TYPE_PCM = "audio/L16;rate=24000;channels=1"  # PCM s16le mono 24 kHz, en morceaux HTTP chunked
+
+
+class VoixServeur(module_voix.Voix):
+    """Voix de Reflet, en deux modes : entier (tampon « Voilà. » coupé, comme Reflet) ou flux (sans tampon)."""
+
+    def __init__(self, stt: object) -> None:
+        super().__init__(stt=stt)
+        self._sans_tampon = False
+
+    def coupe(self, audio: np.ndarray, taux: int) -> int | None:
+        return None if self._sans_tampon else super().coupe(audio, taux)
+
+    def _flux(self, texte: str):
+        return self._tts.generate_voice_clone_streaming(
+            text=texte, language="french", ref_audio=str(config.VOIX_REF_WAV), ref_text=self._ref_texte,
+            max_new_tokens=garde_duree.pas_max(texte), temperature=module_voix.TEMPERATURE,
+            instruct=module_voix.CONSIGNE, chunk_size=module_voix.PAS_FLUX,
+        )
+
+    def dire_flux(self, texte: str, rendre: Callable[[np.ndarray], None]) -> Phrase:
+        self._sans_tampon = True
+        try:
+            return self.dire_en_flux(texte, rendre)
+        finally:
+            self._sans_tampon = False
+
+
 STT = Transcription()
-VOIX = Voix(stt=STT)
+VOIX = VoixServeur(stt=STT)
 
 
 def encoder_mp3(audio: np.ndarray, taux: int) -> bytes:
@@ -65,6 +99,8 @@ def liberer_gpu() -> None:
 
 
 class Gestion(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"  # requis pour la réponse chunked du flux
+
     def log_message(self, *_: object) -> None:
         return
 
@@ -87,6 +123,7 @@ class Gestion(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/synthese":
+            self.close_connection = True  # corps non lu : la connexion ne peut pas servir une autre requête
             return self._json(404, {"erreur": "route inconnue"})
         try:
             demande = json.loads(self.rfile.read(int(self.headers.get("content-length", "0"))) or b"{}")
@@ -95,6 +132,8 @@ class Gestion(BaseHTTPRequestHandler):
         texte = str(demande.get("texte", "")).strip()[:TEXTE_MAX]
         if not texte or not VOIX.prete:
             return self._json(400 if not texte else 503, {"erreur": "texte vide" if not texte else "voix pas prête"})
+        if demande.get("flux") is True:
+            return self._synthetiser_flux(texte)
         self._synthetiser(texte, demande.get("format") == "wav")
 
     def _synthetiser(self, texte: str, wav: bool) -> None:
@@ -111,6 +150,42 @@ class Gestion(BaseHTTPRequestHandler):
         logger.info(f"{calcul} ms → {duree} ms d'audio · {len(corps)} o · « {texte[:50]} »")
         extra = {"x-calcul-ms": str(calcul), "x-duree-ms": str(duree)}
         self._repondre(200, corps, "audio/wav" if wav else "audio/mpeg", extra)
+
+    def _entete_flux(self) -> None:
+        self.send_response(200)
+        self.send_header("content-type", TYPE_PCM)
+        self.send_header("transfer-encoding", "chunked")
+        self.end_headers()
+
+    def _synthetiser_flux(self, texte: str) -> None:
+        """Phrase → PCM par morceaux dès que la génération en livre un ; sans aucun son, une réponse d'erreur."""
+        debut = time.perf_counter()
+        ouverte, envoye, premier = False, 0, 0.0
+
+        def rendre(morceau: np.ndarray) -> None:
+            nonlocal ouverte, envoye, premier
+            if not ouverte:
+                self._entete_flux()
+                ouverte, premier = True, time.perf_counter() - debut
+            octets = (np.clip(morceau, -1.0, 1.0) * 32767).astype("<i2").tobytes()
+            envoye += len(morceau)
+            self.wfile.write(f"{len(octets):x}\r\n".encode() + octets + b"\r\n")
+
+        try:
+            VOIX.dire_flux(texte, rendre)
+        except (RuntimeError, OSError, subprocess.CalledProcessError) as err:
+            logger.error(f"synthèse en flux en échec « {texte[:40]} » : {err}")
+            if not ouverte:
+                return self._json(500, {"erreur": "synthèse en échec"})
+            self.close_connection = True  # réponse coupée : le nœud la voit incomplète
+            return
+        if not ouverte:
+            self._entete_flux()
+        self.wfile.write(b"0\r\n\r\n")
+        liberer_gpu()
+        fin = (time.perf_counter() - debut) * 1000
+        logger.info(f"flux : premier son à {premier * 1000:.0f} ms, fin à {fin:.0f} ms, "
+                    f"{envoye / 24000:.1f} s d'audio · « {texte[:50]} »")
 
 
 def main() -> None:
