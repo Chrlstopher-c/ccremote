@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ResumeSession } from '../../commun/session.ts';
-import { planDoublons } from './doublons-conversation.ts';
+import { cibleConversation, membresConversation, planDoublons } from './doublons-conversation.ts';
 
 const MAJ = '2026-11-22T10:00:00.000Z';
 
@@ -45,8 +45,8 @@ function rc(id: string, conversation: string | undefined, options: Options = {})
   });
 }
 
-// Fiche de poste (Desktop sur la tour, terminal) : elle n'entre jamais dans un groupe de jumelles.
-function poste(id: string, conversation: string): ResumeSession {
+// Fiche de poste (Desktop sur la tour, terminal) : elle est l'entrée principale de sa conversation.
+function poste(id: string, conversation: string, archivee = false): ResumeSession {
   return ResumeSession.parse({
     id,
     machine: 'tour',
@@ -66,6 +66,7 @@ function poste(id: string, conversation: string): ResumeSession {
     attachee: false,
     pilotee: false,
     terminal: true,
+    archivee,
     creeLe: MAJ,
     majLe: MAJ,
   });
@@ -133,8 +134,61 @@ describe('planDoublons : une conversation, une entrée', () => {
     expect(plan.masquees.size).toBe(0);
   });
 
-  test('une fiche de poste ne se masque jamais et ne masque aucune jumelle', () => {
+  test('la fiche de poste est principale : la jumelle vivante lui cède la place', () => {
     const plan = planDoublons([poste('s-poste', 'conv-1'), rc('cse_new', 'conv-1', { connectee: true })]);
+    expect([...plan.masquees]).toEqual([['cse_new', 's-poste']]);
+  });
+
+  test('une fiche de poste rangée laisse la jumelle vivante reprendre la place', () => {
+    const plan = planDoublons([
+      poste('s-poste', 'conv-1', true),
+      rc('cse_new', 'conv-1', { connectee: true }),
+    ]);
+    expect([...plan.masquees]).toEqual([['s-poste', 'cse_new']]);
+  });
+
+  test('une jumelle seule (pas de fiche de poste) reste l’entrée', () => {
+    const plan = planDoublons([rc('cse_a', 'conv-1', { connectee: false }), poste('s-autre', 'conv-2')]);
     expect(plan.masquees.size).toBe(0);
+  });
+
+  test('deux conversations, poste et jumelles : chacune garde sa principale, sans fusion croisée', () => {
+    const plan = planDoublons([
+      poste('s-1', 'conv-1'),
+      rc('cse_1', 'conv-1', { connectee: true }),
+      poste('s-2', 'conv-2'),
+      rc('cse_2', 'conv-2', { connectee: true }),
+    ]);
+    expect([...plan.masquees].sort()).toEqual([
+      ['cse_1', 's-1'],
+      ['cse_2', 's-2'],
+    ]);
+  });
+
+  test('une session sans conversation rattachée ne forme pas de groupe', () => {
+    const plan = planDoublons([rc('cse_a', undefined, { connectee: false }), rc('cse_b', undefined)]);
+    expect(plan.masquees.size).toBe(0);
+  });
+});
+
+describe('cibleConversation et membresConversation', () => {
+  const sessions = (): ResumeSession[] => [
+    poste('s-poste', 'conv-1'),
+    rc('cse_old', 'conv-1', { connectee: false }),
+    rc('cse_new', 'conv-1', { connectee: true }),
+    rc('cse_autre', 'conv-2', { connectee: true }),
+  ];
+
+  test('la cible d’une jumelle est la fiche de poste ; celle de la principale est elle-même', () => {
+    expect(cibleConversation(sessions(), 'cse_new')).toBe('s-poste');
+    expect(cibleConversation(sessions(), 's-poste')).toBe('s-poste');
+    expect(cibleConversation(sessions(), 'cse_autre')).toBe('cse_autre');
+  });
+
+  test('les membres d’une conversation incluent les jumelles, rangées comprises', () => {
+    const membres = membresConversation(sessions(), 'cse_old');
+    expect(membres.sort()).toEqual(['cse_new', 'cse_old', 's-poste']);
+    expect(membresConversation(sessions(), 'cse_autre')).toEqual(['cse_autre']);
+    expect(membresConversation(sessions(), 'inconnue')).toEqual(['inconnue']);
   });
 });

@@ -380,46 +380,66 @@ export class ApiSessions {
   }
 
   // Ranger est manuel : une session vivante est fermée d'abord (le fil reste lisible), et l'archivage n'est pas écrit
-  // si la fermeture échoue. Le poste n'est jamais appelé pour désarchiver.
+  // si la fermeture échoue. Le poste n'est jamais appelé pour désarchiver. Une conversation est rangée d'un bloc :
+  // la fiche de poste (ou la jumelle principale) est fermée, toutes ses jumelles reçoivent le même rangement.
   private async archiver(sessionId: string, archivee: boolean): Promise<Response> {
-    const session = await this.sessionDe(sessionId);
+    const doublons = this.doublons();
+    const cible = doublons.cibleDe(sessionId);
+    const session = await this.sessionDe(cible);
     if (session instanceof Response) return session;
     if (archivee && session.statut !== 'fermee') {
-      const r = await this.postes.commander(session.machine, { kind: 'fermer', sessionId });
+      const r = await this.postes.commander(session.machine, { kind: 'fermer', sessionId: cible });
       if (!r.ok) return erreur(r.erreur ?? 'fermeture refusée, archivage annulé', REFUS_POSTE);
     }
-    this.registre.definirArchivee(sessionId, archivee);
+    const membres = doublons.membresDe(sessionId);
+    for (const id of membres) this.registre.definirArchivee(id, archivee);
     this.rapprocherDoublons();
-    const vue = this.registre.session(sessionId);
-    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    this.diffuserVues(membres);
     return json({ ok: true, archivee });
   }
 
   // Une conversation, une entrée : l'épinglage, la non-lecture et l'archivage d'une jumelle Remote Control peuvent
   // changer la fiche principale.
   private rapprocherDoublons(): void {
-    new Doublons(this.registre, this.diffusion, this.journal).reconcilier();
+    this.doublons().reconcilier();
   }
 
-  // Épingler ne touche pas au poste : c'est un drapeau du relais, comme l'archivage sans fermeture.
+  private doublons(): Doublons {
+    return new Doublons(this.registre, this.diffusion, this.journal);
+  }
+
+  // Diffuse l'état actuel des fiches données (celles qui ont changé, rangées ou non).
+  private diffuserVues(ids: readonly string[]): void {
+    for (const id of ids) {
+      const vue = this.registre.session(id);
+      if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    }
+  }
+
+  // Épingler ne touche pas au poste : c'est un drapeau du relais, comme l'archivage sans fermeture. Il vise toujours
+  // l'entrée principale de la conversation ; les jumelles n'en gardent jamais.
   private async epingler(sessionId: string, epinglee: boolean): Promise<Response> {
     const session = await this.sessionDe(sessionId);
     if (session instanceof Response) return session;
-    this.registre.definirEpinglee(sessionId, epinglee);
+    const doublons = this.doublons();
+    const cible = doublons.cibleDe(sessionId);
+    const membres = doublons.membresDe(sessionId);
+    for (const id of membres) this.registre.definirEpinglee(id, id === cible && epinglee);
     this.rapprocherDoublons();
-    const vue = this.registre.session(sessionId);
-    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    this.diffuserVues(membres);
     return json({ ok: true, epinglee });
   }
 
-  // Non lue : un drapeau du relais, comme l'épinglage ; le poste n'est pas appelé.
+  // Non lue : un drapeau du relais, comme l'épinglage ; le poste n'est pas appelé. Même entrée principale.
   private async marquerNonLue(sessionId: string, nonLue: boolean): Promise<Response> {
     const session = await this.sessionDe(sessionId);
     if (session instanceof Response) return session;
-    this.registre.definirNonLue(sessionId, nonLue);
+    const doublons = this.doublons();
+    const cible = doublons.cibleDe(sessionId);
+    const membres = doublons.membresDe(sessionId);
+    for (const id of membres) this.registre.definirNonLue(id, id === cible && nonLue);
     this.rapprocherDoublons();
-    const vue = this.registre.session(sessionId);
-    if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
+    this.diffuserVues(membres);
     return json({ ok: true, nonLue });
   }
 

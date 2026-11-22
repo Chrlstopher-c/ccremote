@@ -5,7 +5,12 @@
 import type { Logger } from 'pino';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
-import { type PlanDoublons, planDoublons } from './doublons-conversation.ts';
+import {
+  cibleConversation,
+  membresConversation,
+  type PlanDoublons,
+  planDoublons,
+} from './doublons-conversation.ts';
 
 export class Doublons {
   constructor(
@@ -13,6 +18,16 @@ export class Doublons {
     private readonly diffusion: Diffusion,
     private readonly journal: Logger,
   ) {}
+
+  /** Entrée visible de la conversation de `id` : la fiche de poste de préférence ; `id` sans jumelle. */
+  cibleDe(id: string): string {
+    return cibleConversation(this.registre.sessionsBrutes(), id);
+  }
+
+  /** Toutes les fiches de la conversation de `id`, rangées comprises : une action d'entrée les touche toutes. */
+  membresDe(id: string): string[] {
+    return membresConversation(this.registre.sessionsBrutes(), id);
+  }
 
   reconcilier(): void {
     try {
