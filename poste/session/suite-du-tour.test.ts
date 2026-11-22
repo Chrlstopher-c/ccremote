@@ -15,6 +15,7 @@ const etat = (e: Partial<EtatFinDeTour> = {}): EtatFinDeTour => ({
   etapeTerminee: false,
   compactionDemandee: false,
   sousAgentsActifs: 0,
+  sousAgentsEnCours: 0,
   ...e,
 });
 
@@ -39,6 +40,24 @@ describe('suite du tour', () => {
   test('sortie de compaction → reprise de l’objectif, jamais une seconde compaction', () => {
     const s = deciderSuite(etat({ sortDeCompaction: true, contexte: 400_000 }));
     expect(s).toMatchObject({ action: 'relancer', raison: 'reprise après compaction' });
+  });
+
+  // Cause du défaut 2 (22/11) : après une compaction automatique, la suite ne relançait que si la session était
+  // autonome avec un objectif ; un sous-agent encore vivant (repris par SendMessage) n'était pas pris en compte.
+  test('compaction + sous-agent encore en cours → reprise, sans attendre sa fin ni un objectif', () => {
+    const s = deciderSuite(etat({ sortDeCompaction: true, sousAgentsEnCours: 1, autonomie: false }));
+    expect(s).toMatchObject({ action: 'relancer', raison: 'reprise après compaction' });
+    expect(s).toMatchObject({ texte: expect.stringContaining('sous-agent') });
+  });
+
+  test('compaction d’une session au repos (ni objectif, ni sous-agent) → reste au repos', () => {
+    const s = deciderSuite(etat({ sortDeCompaction: true, autonomie: false, aUnObjectif: false }));
+    expect(s).toEqual({ action: 'arreter', statut: 'attente' });
+  });
+
+  test('une reprise après compaction ne se répète pas au tour suivant', () => {
+    const s = deciderSuite(etat({ sortDeCompaction: false, autonomie: false, aUnObjectif: false }));
+    expect(s).toEqual({ action: 'arreter', statut: 'attente' });
   });
 
   test('sans autonomie : on attend Chris', () => {

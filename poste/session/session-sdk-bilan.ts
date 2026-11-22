@@ -26,6 +26,7 @@ export function finDeTour(n: NoyauSdk, fin: NonNullable<SortieTraduction['finDeT
     aUnObjectif: n.etat.objectif !== null,
     contexte: tokens,
     maxTokens: n.etat.contexte.max,
+    sousAgentsEnCours: n.registreTaches.sousAgentsEnCours(),
   });
   const panne = fin.erreur && !n.interrompuParChris;
   const statut: StatutSession = suite.action === 'laisser' ? 'travail' : panne ? 'erreur' : 'attente';

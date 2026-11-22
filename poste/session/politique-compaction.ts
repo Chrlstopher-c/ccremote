@@ -23,6 +23,13 @@ export function deciderCompaction(contexte: number, maxTokens: number, etapeTerm
   return { agir: false };
 }
 
+/** Début de la consigne interne : le CLI la réécrit dans le transcript sous forme de commande `/compact …`. */
+export const DEBUT_CONSIGNE_COMPACTION = '/compact Conserve :';
+
+export function estConsigneCompaction(texte: string): boolean {
+  return texte.startsWith(DEBUT_CONSIGNE_COMPACTION);
+}
+
 export const CONSIGNE_COMPACTION =
   '/compact Conserve : l’objectif, l’étape en cours et les suivantes, les décisions prises et pourquoi, ' +
   'les fichiers modifiés, les commandes de build/test qui marchent, l’état git, les pièges rencontrés. ' +

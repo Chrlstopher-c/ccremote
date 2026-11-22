@@ -9,6 +9,9 @@ const texte = (v: unknown): string | null => (typeof v === 'string' && v !== '' 
 const chainee = (l: Ligne | undefined): boolean =>
   l !== undefined && CHAINEES.has(String(l.type)) && l.isSidechain !== true;
 const frontiere = (l: Ligne): boolean => l.type === 'system' && l.subtype === 'compact_boundary';
+// Le résumé d'une compaction suit sa frontière : s'il n'a pas de parent résolvable, il se rattache à la frontière
+// écrite juste avant lui (sinon la chaîne s'arrête et tout ce qui précède la compaction disparaît du fil).
+const frontiereOuResume = (l: Ligne): boolean => frontiere(l) || l.isCompactSummary === true;
 
 function indiceDerniere(lignes: readonly Ligne[]): number | undefined {
   for (let i = lignes.length - 1; i >= 0; i -= 1) {
@@ -38,7 +41,7 @@ function suivant(
   const parent = texte(l.parentUuid) ?? texte(l.logicalParentUuid);
   const trouve = parent === null ? undefined : parUuid.get(parent);
   if (trouve !== undefined) return trouve;
-  return frontiere(l) ? precedentEcrit(lignes, i, actives) : undefined;
+  return frontiereOuResume(l) ? precedentEcrit(lignes, i, actives) : undefined;
 }
 
 // Les lignes hors de la conversation (titre, métadonnées) restent ; une entrée chaînée du fil principal n'est

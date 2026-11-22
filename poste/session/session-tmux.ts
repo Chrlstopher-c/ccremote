@@ -426,6 +426,7 @@ export class SessionTmux implements SessionPoste {
       maxTokens: this.etat.contexte.max,
       etapeTerminee: this.tour.etapeTerminee,
       sousAgentsActifs: this.sousAgents?.actifs() ?? 0,
+      sousAgentsEnCours: this.sousAgents?.actifs() ?? 0,
     });
   }
 

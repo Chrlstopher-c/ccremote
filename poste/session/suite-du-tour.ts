@@ -18,6 +18,8 @@ export interface EtatFinDeTour {
   readonly etapeTerminee: boolean;
   readonly compactionDemandee: boolean;
   readonly sousAgentsActifs: number;
+  /** Sous-agents encore vivants à la fin du tour. Ne sert qu'à la reprise après compaction. */
+  readonly sousAgentsEnCours: number;
 }
 
 export type Suite =
@@ -37,21 +39,29 @@ export function deciderSuite(e: EtatFinDeTour): Suite {
     if (compaction.agir)
       return { action: 'compacter', raison: compaction.raison === 'etape' ? 'fin d’étape' : 'seuil de contexte' };
   }
+  if (e.sortDeCompaction) return relanceApresCompaction(e);
   if (!e.autonomie || !e.aUnObjectif) return { action: 'arreter', statut: 'attente' };
-  if (e.sousAgentsActifs > 0 && !e.sortDeCompaction) return { action: 'patienter' };
+  if (e.sousAgentsActifs > 0) return { action: 'patienter' };
   return relanceAutonome(e);
 }
 
-function relanceAutonome(e: EtatFinDeTour): Suite {
-  if (e.sortDeCompaction) {
-    return {
-      action: 'relancer',
-      raison: 'reprise après compaction',
-      texte:
-        'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), ' +
+// Après une compaction, une seule relance : elle a lieu si du travail était en cours (sous-agent vivant, ou session
+// autonome avec un objectif). Une session au repos reste au repos.
+function relanceApresCompaction(e: EtatFinDeTour): Suite {
+  const sousAgentVivant = e.sousAgentsEnCours > 0;
+  if (!sousAgentVivant && !(e.autonomie && e.aUnObjectif)) return { action: 'arreter', statut: 'attente' };
+  return {
+    action: 'relancer',
+    raison: 'reprise après compaction',
+    texte: sousAgentVivant
+      ? 'Session compactée. Un sous-agent tourne encore : ne le relance pas, attends son résultat, ' +
+        'puis poursuis le travail en cours (STATE.md / TODO.md font foi), sans refaire le travail livré.'
+      : 'Session compactée. Reprends l’objectif là où tu en étais (STATE.md / TODO.md font foi), ' +
         'sans refaire le travail livré.',
-    };
-  }
+  };
+}
+
+function relanceAutonome(e: EtatFinDeTour): Suite {
   const sansProgres = e.outilsCeTour === 0 ? e.relancesSansProgres + 1 : 0;
   if (sansProgres > MAX_RELANCES_SANS_PROGRES) {
     return {

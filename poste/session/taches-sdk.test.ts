@@ -27,6 +27,18 @@ const demarrage = (extra: Record<string, unknown> = {}): SDKMessage =>
     ...extra,
   });
 
+describe('sous-agents encore en cours', () => {
+  test('compte les sous-agents vivants, ni les terminés ni les commandes de fond', () => {
+    const r = registre();
+    r.observer(demarrage());
+    const commande = { task_id: 'tache-2', tool_use_id: 'toolu_b', task_type: 'local_bash', subagent_type: undefined };
+    r.observer(demarrage(commande));
+    expect(r.sousAgentsEnCours()).toBe(1);
+    r.observer(message({ type: 'system', subtype: 'task_notification', task_id: 'tache-1', status: 'completed' }));
+    expect(r.sousAgentsEnCours()).toBe(0);
+  });
+});
+
 describe('RegistreTaches', () => {
   test('une tâche de fond : démarrage avec son modèle, activité, fin par notification', () => {
     const r = registre();

@@ -46,6 +46,11 @@ export class RegistreTaches {
     }
   }
 
+  /** Sous-agents (tâches de fond d'un outil Agent/Task) encore en cours : une commande de fond ne compte pas. */
+  sousAgentsEnCours(): number {
+    return [...this.taches.values()].filter((tache) => tache.sousAgent !== null && !TERMINEES.has(tache.statut)).length;
+  }
+
   liste(): TacheSession[] {
     return [...this.taches.values()].map(({ prompt: _prompt, ...tache }) => tache);
   }

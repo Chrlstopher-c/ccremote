@@ -2,6 +2,7 @@
 // Le transcript est la seule source de vérité : il contient aussi ce que Chris tape directement dans le terminal.
 // Fil principal : les lignes `isSidechain` sont ignorées. Un sous-agent a son propre transcript, traduit avec `agent`.
 import type { Evenement } from '../../commun/session.ts';
+import { estConsigneCompaction } from './politique-compaction.ts';
 
 const TAILLE_DETAIL = 8_000;
 const TAILLE_RESULTAT = 3_000;
@@ -167,6 +168,7 @@ function messageDeChris(brut: string): Evenement[] {
   const texteFinal = commande
     ? `${commande[1]} ${brut.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim()
     : brut.trim();
+  if (estConsigneCompaction(texteFinal)) return [];
   return texteFinal ? [{ type: 'message', texte: texteFinal }] : [];
 }
 

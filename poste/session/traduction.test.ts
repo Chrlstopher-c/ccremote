@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { contexteDe, type Ligne, traduire, travailEnCours } from './traduction.ts';
+import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 
 const assistant = (content: object[], extra: object = {}): Ligne => ({
   type: 'assistant',
@@ -49,6 +50,24 @@ describe('traduction transcript → événements', () => {
         assistant([{ type: 'tool_use', id: 't2', name: 'Agent', input: { description: 'explorer', model: 'sonnet' } }]),
       ),
     ).toEqual([{ type: 'sous_agent', id: 't2', description: 'explorer', modele: 'sonnet', genre: 'general-purpose' }]);
+  });
+
+  // Défaut 1 (22/11) : la consigne interne du moteur (/compact Conserve…), réécrite par le CLI dans le transcript,
+  // s'affichait comme une bulle de Chris, en retard. Elle n'est jamais un message ; une commande tapée, si.
+  test('la consigne interne de compaction n’est jamais une bulle, une commande tapée reste un message', () => {
+    const consigne = CONSIGNE_COMPACTION.replace('/compact ', '');
+    expect(
+      traduire({
+        type: 'user',
+        message: { content: `<command-name>/compact</command-name>\n<command-args>${consigne}</command-args>` },
+      }),
+    ).toEqual([]);
+    expect(
+      traduire({
+        type: 'user',
+        message: { content: '<command-name>/compact</command-name>\n<command-args>garde tout</command-args>' },
+      }),
+    ).toEqual([{ type: 'message', texte: '/compact garde tout' }]);
   });
 
   test('message tapé par Chris, commande, et bruit ignoré', () => {

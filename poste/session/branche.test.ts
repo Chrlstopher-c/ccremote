@@ -70,6 +70,24 @@ describe('branche active : compaction dont le message précédent manque', () =>
   });
 });
 
+describe('branche active : résumé de compaction sans parent', () => {
+  // Défaut 3 (22/11) : le fil ne montrait plus que ce qui suit la compaction. Topologie reproduite : le résumé
+  // n'a pas de parentUuid ; la chaîne s'arrêtait au résumé et tout l'historique d'avant disparaissait.
+  test('le résumé sans parent se rattache à sa frontière : l’historique d’avant reste', () => {
+    const lignes = [
+      l('user', 'u0', null),
+      l('assistant', 'a0', 'u0'),
+      l('user', 'u1', 'a0'),
+      l('assistant', 'a1', 'u1'),
+      l('system', 's1', null, { subtype: 'compact_boundary', logicalParentUuid: 'a1' }),
+      l('user', 'u3', null, { isCompactSummary: true }),
+      l('user', 'u4', 'u3'),
+      l('assistant', 'a4', 'u4'),
+    ];
+    expect(brancheActive(lignes).map((x) => String(x.uuid))).toEqual(['u0', 'a0', 'u1', 'a1', 's1', 'u3', 'u4', 'a4']);
+  });
+});
+
 describe('branche active : réponse d’un appel de la branche écrite sur un embranchement', () => {
   test('la réponse à un appel actif reste, la suite abandonnée non', () => {
     const appel: Partial<Ligne> = { message: { content: [{ type: 'tool_use', id: 'T1' }] } };
