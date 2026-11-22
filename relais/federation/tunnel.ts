@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import { ErreurChiffrement } from '../../commun/chiffrement/erreur.ts';
 import { type Canal } from '../../commun/chiffrement/messages.ts';
 import { depuisBase64url, enOctets, versBase64url } from '../../commun/chiffrement/octets.ts';
-import { lireMessageChiffre, type MessageChiffre, TAILLE_MAX_CLAIR_OCTETS } from '../../commun/federation.ts';
+import { lireMessageChiffre, MessageChiffre, TAILLE_MAX_CLAIR_OCTETS } from '../../commun/federation.ts';
 
 export class Tunnel {
   private envois: Promise<void> = Promise.resolve();
@@ -42,8 +42,10 @@ export class Tunnel {
       .then(async () => {
         const r = await dechiffree;
         if (!r.ok) return echec(raisonRefus(r.erreur));
-        const message = lireMessageChiffre(lireJson(new TextDecoder().decode(r.clair)));
+        const brut = lireJson(new TextDecoder().decode(r.clair));
+        const message = lireMessageChiffre(brut);
         if (message) traiter(message);
+        else if (typeInconnu(brut)) this.journal.debug({ t: (brut as { t: string }).t }, 'message d’une version plus récente ignoré');
         else echec('message chiffré hors protocole');
       })
       .catch((erreur: unknown) => this.journal.error({ err: erreur }, 'message chiffré : traitement en échec'));
@@ -56,6 +58,19 @@ export class Tunnel {
 
 function raisonRefus(erreur: unknown): string {
   return erreur instanceof ErreurChiffrement ? erreur.message : 'trame refusée';
+}
+
+// Compatibilité entre versions : un pair plus récent peut envoyer un genre de message que celui-ci ne connaît pas encore
+// (ex. `admissions`). Il est ignoré au lieu de fermer le canal, sinon deux nœuds de versions différentes se coupent en
+// boucle (22/11). Un genre CONNU mais mal formé reste une faute de protocole.
+const GENRES_CONNUS: ReadonlySet<string> = new Set(
+  MessageChiffre.options.map((o) => String((o.shape as { t: { value: unknown } }).t.value)),
+);
+
+function typeInconnu(brut: unknown): boolean {
+  if (typeof brut !== 'object' || brut === null) return false;
+  const t = (brut as { t?: unknown }).t;
+  return typeof t === 'string' && t.length > 0 && t.length <= 40 && !GENRES_CONNUS.has(t);
 }
 
 function lireJson(texte: string): unknown {
