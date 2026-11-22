@@ -10,6 +10,11 @@ export class ControlesDifferes {
     this.attente.add(id);
   }
 
+  /** La demande est annulée (Remote Control coupé avant d'avoir pu se brancher). */
+  retirer(id: string): void {
+    this.attente.delete(id);
+  }
+
   async traiter(g: GestionBascule): Promise<void> {
     for (const id of [...this.attente]) {
       const s = g.sessions.get(id);

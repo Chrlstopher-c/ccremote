@@ -270,6 +270,17 @@ export class GestionnaireSessions {
     return ouvrirSession({ config: this.config, sessions: this.sessions, creer: (p) => this.creer(p), controle }, d);
   }
 
+  /** Remote Control demandé en plein tour : retenu, branché tout seul dès que la session est au repos. */
+  private async demanderControle(id: string, actif: boolean): Promise<Reponse> {
+    if (!actif) this.controles.retirer(id);
+    const r = await basculerControle(this, id, actif);
+    if (actif && !r.ok && /^session occupée/.test(r.erreur ?? '')) {
+      this.controles.ajouter(id);
+      return { ok: false, erreur: 'Remote Control en attente : il se branchera à la fin du tour' };
+    }
+    return r;
+  }
+
   async executer(c: CommandeSession): Promise<Reponse> {
     await this.hydrater(c.sessionId);
     if (c.kind === 'adopter') return reponseAdoption(this.contexteCommandes(), c.sessionId);
@@ -284,7 +295,7 @@ export class GestionnaireSessions {
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);
     if (estFichiersSession(c)) return fichiersDeSession(this.contexteCommandes(), c);
     if (estCommandeModifications(c)) return this.modifications.executer(c, this.sessions.get(c.sessionId));
-    if (c.kind === 'remote_control') return basculerControle(this, c.sessionId, c.actif);
+    if (c.kind === 'remote_control') return this.demanderControle(c.sessionId, c.actif);
     const s = this.sessions.get(c.sessionId) ?? this.distantes.session(c.sessionId);
     if (!s) return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
     return executerSurSession(this.contexteCommandes(), s, c);
