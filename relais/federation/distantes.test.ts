@@ -158,3 +158,20 @@ describe('gestes relayés', () => {
     expect(v.machines.find((m) => m.id === 'tour')?.enLigne).toBe(false);
   });
 });
+
+describe('appairage vu de l’ouvrant', () => {
+  test('l’ouvrant voit le nom et l’empreinte du nœud visé, identiques à celles qu’affiche sa demande', async () => {
+    const a = await nouveau('tour');
+    const b = await nouveau('portable');
+    const idB = await idDe(b);
+    await attendre(async () => (await a.federation.etat()).membres.some((m) => m.id === idB && m.enLigne));
+    a.federation.appairer(idB);
+    await attendre(async () => (await b.federation.etat()).demandes.length === 1);
+    await attendre(async () => (await a.federation.etat()).appairages[0]?.empreinte != null);
+    const enCours = (await a.federation.etat()).appairages[0];
+    const demande = (await b.federation.etat()).demandes[0];
+    expect(enCours?.nom).toBe('portable');
+    expect(enCours?.empreinte).toBe(demande?.empreinteLocale);
+    expect((await a.federation.etat()).empreinteLocale).toBe(demande?.empreinte ?? 'absente');
+  });
+});

@@ -29,6 +29,7 @@ import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
 import { type MembreVu, Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
+import { type AppairageEnCours, appairagesEnCours } from './appairages.ts';
 
 const DELAI_DEMANDE_MS = 10 * 60 * 1000;
 const MARGE_APPAIRAGE_MS = 30_000;
@@ -76,7 +77,7 @@ export interface EtatFederation {
   readonly membres: readonly MembreVu[];
   readonly noeuds: readonly NoeudAppaire[];
   readonly demandes: readonly DemandeAppairage[];
-  readonly appairages: readonly { readonly membre: string; readonly phase: string }[];
+  readonly appairages: readonly AppairageEnCours[];
 }
 
 export class Federation {
@@ -245,10 +246,7 @@ export class Federation {
       membres: this.voisins.liste(this.proprietaireLocal()),
       noeuds,
       demandes: this.demandes.lister(),
-      appairages: this.canaux
-        .actifs()
-        .filter((c) => c.intention === 'appairage')
-        .map((c) => ({ membre: c.membre, phase: c.phase })),
+      appairages: await appairagesEnCours(this.canaux.actifs()),
     };
   }
 

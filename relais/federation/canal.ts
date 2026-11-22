@@ -70,6 +70,11 @@ export class CanalNoeud {
     this.armer();
   }
 
+  /** Ce que le pair a présenté (nom, clé publique), une fois reçu ; null avant. */
+  get presentationDuPair(): PresentationDistante | null {
+    return this.presentation;
+  }
+
   get ouvert(): boolean {
     return this.phase === 'ouvert';
   }
