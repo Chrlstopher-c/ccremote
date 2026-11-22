@@ -40,7 +40,10 @@ import {
 import { Echanges, type PontFederation } from './echanges.ts';
 import { CharteNoeud } from './charte-noeud.ts';
 import { surDiffusionFederee } from './diffusion-federee.ts';
-import type { EtatFederation, OptionsFederation } from './etat-federation.ts';
+import { type EtatFederation, MEMBRE_MOI, type MachineReseau, type OptionsFederation } from './etat-federation.ts';
+import type { ActionMachine } from './actions-noeud.ts';
+import { creerMachinesNoeud, type MachinesNoeud } from './machines-noeud.ts';
+import { MOTIF_PAUSE } from './pause-noeud.ts';
 import { TerminalFedere } from './terminal-federe.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
@@ -94,6 +97,7 @@ export class Federation {
   private readonly revoques: Set<string>;
   /** Appareils révoqués (définitif) : une admission reçue d'un pair pour l'un d'eux est ignorée. */
   private readonly appareilsRevoques: Set<string>;
+  private readonly machines: MachinesNoeud;
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
@@ -128,12 +132,23 @@ export class Federation {
       liaison: (membre) => this.canaux.liaisonOuverteAvec(membre),
       journal: options.journal.child({ domaine: 'distantes' }),
     });
+    const optionsMachines = {
+      ...options,
+      estChef: options.estChef ?? ((m: string) => this.charte.estChef(m)),
+      compteChoisi: options.compteChoisi ?? (() => this.compteChoisi()),
+    };
+    this.machines = creerMachinesNoeud({
+      options: optionsMachines,
+      echanges: this.echanges,
+      machineDe: (m) => this.machineDe(m),
+    });
   }
 
   /** Écoute les changements locaux ; démarre le lien si ce nœud est déjà relié à un aiguilleur. */
   demarrer(): void {
     this.desabonner = this.options.diffusion.ecouter((m) => this.surDiffusion(m));
     void this.charte.demarrer();
+    this.machines.etats.demarrer(() => this.canaux.ouverts().filter((c) => this.estNoeud(c.membre)));
     if (this.config) this.demarrerLien();
   }
 
@@ -143,6 +158,8 @@ export class Federation {
     if (this.planificateur) clearInterval(this.planificateur);
     this.planificateur = null;
     this.echanges.arreter();
+    this.machines.etats.arreter();
+    this.machines.actions.arreter();
     this.canaux.fermerTout();
     this.diffusionAppareil.fermerTout();
     this.demandes.arreter();
@@ -491,6 +508,7 @@ export class Federation {
     }
     this.envoyerAdmissionsA(canal);
     this.charte.envoyerA(canal);
+    void this.machines.etats.envoyerA(canal);
   }
 
   private liaisonRefusee(canal: CanalNoeud, raison: string): void {
@@ -510,6 +528,11 @@ export class Federation {
       return;
     }
     if (message.t === 'synchro') return this.recepteurSynchro?.(canal.membre, message.m);
+    if (message.t === 'etat_noeud') return this.machines.etats.recevoir(canal.membre, message.etat);
+    if (message.t === 'action_noeud') return this.machines.actions.recevoir(canal, message);
+    if (message.t === 'ouvrir' && this.machines.pause.enPause()) {
+      return this.echanges.reponse(canal, message.ref, false, MOTIF_PAUSE);
+    }
     await this.echanges.traiter(canal, message);
   }
 
@@ -723,9 +746,55 @@ export class Federation {
     this.pairs = this.pairs.filter((p) => p.id !== membre);
     this.sauverPairs();
     this.distant.retirer(membre);
+    this.machines.etats.oublier(membre);
     this.demandes.retirerPour(membre);
     this.echanges.oublier(membre);
     this.refus.delete(membre);
+  }
+
+  /** Ce nœud est en pause : aucune nouvelle session (les sessions en cours continuent). */
+  enPause(): boolean {
+    return this.machines.pause.enPause();
+  }
+
+  /** Soi, puis chaque nœud apparié : son dernier état connu (null s'il n'en a jamais envoyé) et s'il est relié. */
+  async machinesReseau(): Promise<MachineReseau[]> {
+    const moi: MachineReseau = {
+      membre: this.identifiantMoi(),
+      nom: this.config?.nom ?? this.options.machine,
+      moi: true,
+      enLigne: true,
+      etat: await this.machines.mesurer(),
+    };
+    const pairs = this.pairs
+      .filter((p) => p.genre === 'noeud')
+      .map((p): MachineReseau => ({
+        membre: p.id,
+        nom: p.nom,
+        moi: false,
+        enLigne: this.canaux.liaisonOuverteAvec(p.id) !== null,
+        etat: this.machines.etats.de(p.id),
+      }));
+    return [moi, ...pairs];
+  }
+
+  /** Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action de chef relayée à un pair relié. */
+  async agirSurMachine(membre: string, action: ActionMachine): Promise<Resultat<null>> {
+    if (membre === MEMBRE_MOI || membre === this.config?.id) return this.machines.actions.executerLocale(action);
+    if (!this.estNoeud(membre)) return echec(404, 'nœud inconnu');
+    if (action === 'reveiller') return this.machines.actions.reveiller(membre);
+    const canal = this.canaux.liaisonOuverteAvec(membre);
+    if (!canal) return echec(409, 'nœud hors ligne');
+    return this.machines.actions.demander(canal, action);
+  }
+
+  private identifiantMoi(): string {
+    return this.config?.id ?? MEMBRE_MOI;
+  }
+
+  /** L'identifiant de machine d'un nœud apparié (celui de son instantané), ou null tant qu'il n'est pas connu. */
+  private machineDe(membre: string): string | null {
+    return this.distant.noeudsConnus().find((n) => n.membre === membre)?.machine ?? null;
   }
 
   /** L'état de la fédération a changé : l'appli relit `GET /api/federation`. */
