@@ -17,11 +17,21 @@ import numpy as np
 from loguru import logger
 
 sys.path.insert(0, os.environ.get("REFLET_RACINE", "/mnt/projects/reflet"))
+from serveur.ecoute.transcription import Transcription  # noqa: E402
 from serveur.parole.voix import Voix  # noqa: E402  (Reflet, chemin ajouté ci-dessus)
 
 TEXTE_MAX = 600
 DEBIT_MP3 = "48k"
-VOIX = Voix(stt=None)
+# La transcription situe le tampon « Voilà. » ajouté par Reflet pour le couper (sans elle il était dit).
+# Phrases courtes du mode vocal : une génération qui ne trouve pas sa fin est coupée plus tôt (plafond serré), et une
+# température plus basse la rend plus rare (mesuré 22/11 : 3 phrases sur 20 à 10-16 s de calcul au lieu de 1-2 s).
+from serveur.parole import garde_duree, voix as module_voix  # noqa: E402
+garde_duree.MARGE_MULTIPLICATIVE = float(os.environ.get("LANTERNE_VOIX_MARGE", "1.7"))
+garde_duree.MARGE_FIXE_S = 1.0
+garde_duree.DUREE_MIN_S = 3.0
+module_voix.TEMPERATURE = float(os.environ.get("LANTERNE_VOIX_TEMPERATURE", "0.65"))
+STT = Transcription()
+VOIX = Voix(stt=STT)
 
 
 def encoder_mp3(audio: np.ndarray, taux: int) -> bytes:
@@ -106,6 +116,7 @@ class Gestion(BaseHTTPRequestHandler):
 def main() -> None:
     port = int(os.environ["LANTERNE_VOIX_PORT"])
     debut = time.perf_counter()
+    STT.charger()
     VOIX.charger()
     liberer_gpu()
     logger.info(f"voix chargée en {time.perf_counter() - debut:.1f} s, écoute 127.0.0.1:{port}")
