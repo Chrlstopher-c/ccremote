@@ -9,6 +9,7 @@ export function routesParite(api: ApiParite, protege: Protection) {
   return {
     '/api/sessions/:id/parite': { GET: protege((req) => api.parite(req)) },
     '/api/sessions/:id/parite/taches/:tache': { GET: protege((req) => api.tache(req)) },
+    '/api/sessions/:id/parite/taches/:tache/fil': { GET: protege((req) => api.filTache(req)) },
     '/api/sessions/:id/parite/resultat': { GET: protege((req) => api.resultat(req)) },
   };
 }

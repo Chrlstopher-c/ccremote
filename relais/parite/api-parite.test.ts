@@ -105,6 +105,31 @@ describe('détail et résultats', () => {
     expect(sansSession.status).toBe(404);
   });
 
+  test('fil d’un sous-agent : relayé ; tâche inconnue du poste : 404 ; identifiant vide : 400', async () => {
+    const fil = {
+      agent: 'a1',
+      description: 'Relecture',
+      modele: 'haiku',
+      termine: true,
+      evenements: [{ ts: '2026-11-20T10:00:00.000Z', evt: { type: 'message', texte: 'consigne' } }],
+    };
+    const api = new ApiParite({
+      registre: registreAvec(SESSION),
+      postes: postesAvec((c) =>
+        c.kind === 'parite_fil_tache' && c.tache === 'connue'
+          ? { ok: true, donnees: { fil } }
+          : { ok: true, donnees: { fil: null } },
+      ),
+      journal: JOURNAL,
+    });
+    const ok = await api.filTache(requete('/api/sessions/s1/parite/taches/connue/fil', { id: 's1', tache: 'connue' }));
+    expect(await ok.json()).toEqual(fil);
+    const absente = await api.filTache(requete('/api/sessions/s1/parite/taches/x/fil', { id: 's1', tache: 'x' }));
+    expect(absente.status).toBe(404);
+    const vide = await api.filTache(requete('/api/sessions/s1/parite/taches//fil', { id: 's1', tache: '' }));
+    expect(vide.status).toBe(400);
+  });
+
   test('résultat : contenu relayé ; refus 413 relayé avec son statut ; chemin absent : 400', async () => {
     const api = new ApiParite({
       registre: registreAvec(SESSION),
@@ -130,6 +155,7 @@ describe('détail et résultats', () => {
       '/api/sessions/:id/parite',
       '/api/sessions/:id/parite/resultat',
       '/api/sessions/:id/parite/taches/:tache',
+      '/api/sessions/:id/parite/taches/:tache/fil',
     ]);
   });
 });

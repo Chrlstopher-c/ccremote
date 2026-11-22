@@ -15,8 +15,8 @@ describe('commandes de la parité', () => {
     expect(CommandeRelais.safeParse({ kind: 'parite_tache', ...CIBLE }).success).toBe(false);
   });
 
-  test('les genres couvrent les trois commandes', () => {
-    expect([...GENRES_PARITE]).toEqual(['parite', 'parite_tache', 'parite_resultat']);
+  test('les genres couvrent les quatre commandes', () => {
+    expect([...GENRES_PARITE]).toEqual(['parite', 'parite_tache', 'parite_resultat', 'parite_fil_tache']);
   });
 });
 

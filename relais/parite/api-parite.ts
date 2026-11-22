@@ -6,6 +6,7 @@ import {
   DELAI_PARITE_MS,
   PARITE_VIDE,
   PariteSession,
+  ReponseFilTacheParite,
   ReponseResultatParite,
   ReponseTacheParite,
 } from '../../commun/parite.ts';
@@ -65,6 +66,25 @@ export class ApiParite {
     const lue = ReponseTacheParite.safeParse(r.donnees);
     if (!lue.success) return erreur('réponse du poste illisible', REFUS_POSTE);
     return lue.data.tache === null ? erreur('tâche inconnue', 404) : json(lue.data.tache);
+  }
+
+  /** Le fil complet d'un sous-agent (tâche = id du tool_use) : 404 si la session ou la tâche est inconnue. */
+  async filTache(req: Requete): Promise<Response> {
+    const tache = req.params['tache'] ?? '';
+    if (tache === '' || tache.length > LONGUEUR_MAX_TACHE) return erreur('identifiant de tâche invalide', 400);
+    const s = this.d.registre.session(req.params['id'] ?? '');
+    if (!s) return erreur('session inconnue', 404);
+    const r = await this.interroger(s, {
+      kind: 'parite_fil_tache',
+      sessionId: s.id,
+      claudeSessionId: s.claudeSessionId,
+      cwd: s.cwd,
+      tache,
+    });
+    if (r === null || !r.ok) return erreur(r?.erreur ?? 'fil illisible : pas de réponse du poste', REFUS_POSTE);
+    const lue = ReponseFilTacheParite.safeParse(r.donnees);
+    if (!lue.success) return erreur('réponse du poste illisible', REFUS_POSTE);
+    return lue.data.fil === null ? erreur('tâche inconnue', 404) : json(lue.data.fil);
   }
 
   /** Le contenu d'un résultat de la session (`?chemin=`), seulement s'il en fait partie. */

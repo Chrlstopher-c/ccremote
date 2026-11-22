@@ -146,11 +146,11 @@ function enFin(texteFin: string | null): string | null {
   return texteFin.slice(-MAX_ACTIVITE);
 }
 
-function dossierSousAgents(transcript: string): string {
+export function dossierSousAgents(transcript: string): string {
   return `${transcript.replace(/\.jsonl$/, '')}/subagents`;
 }
 
-function lireMeta(chemin: string, journal: Logger): Objet | null {
+export function lireMeta(chemin: string, journal: Logger): Objet | null {
   try {
     const brut: unknown = JSON.parse(readFileSync(chemin, 'utf8'));
     return estObjet(brut) ? brut : null;
@@ -160,7 +160,7 @@ function lireMeta(chemin: string, journal: Logger): Objet | null {
   }
 }
 
-function mtimeDe(chemin: string, journal: Logger): number | null {
+export function mtimeDe(chemin: string, journal: Logger): number | null {
   try {
     return statSync(chemin).mtimeMs;
   } catch (erreur) {

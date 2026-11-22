@@ -3,6 +3,7 @@
 // résultats (fichiers envoyés ou créés), tâches en arrière-plan, dépôt de travail. Mêmes formes JSON que
 // app/ui/src/parite/contrat.ts (Lanterne).
 import { z } from 'zod';
+import { Evenement } from './session.ts';
 
 export const MAX_RESULTATS = 100;
 export const MAX_TACHES = 100;
@@ -108,9 +109,10 @@ export const commandesParite = [
   z.object({ kind: z.literal('parite'), ...CiblePariteCommun }),
   z.object({ kind: z.literal('parite_tache'), ...CiblePariteCommun, tache: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('parite_resultat'), ...CiblePariteCommun, chemin: z.string().min(1).max(4096) }),
+  z.object({ kind: z.literal('parite_fil_tache'), ...CiblePariteCommun, tache: z.string().min(1).max(200) }),
 ];
 
-export const GENRES_PARITE = ['parite', 'parite_tache', 'parite_resultat'] as const;
+export const GENRES_PARITE = ['parite', 'parite_tache', 'parite_resultat', 'parite_fil_tache'] as const;
 
 /** Réponse du poste à `parite_tache` : null si la tâche est inconnue de ce transcript (le relais rend 404). */
 export const ReponseTacheParite = z.object({ tache: DetailTacheParite.nullable() });
@@ -122,3 +124,17 @@ export const ReponseResultatParite = z.discriminatedUnion('etat', [
   z.object({ etat: z.literal('refus'), statut: z.union([z.literal(404), z.literal(413)]), raison: z.string() }),
 ]);
 export type ReponseResultatParite = z.infer<typeof ReponseResultatParite>;
+
+/** Le fil complet d'un sous-agent (son transcript traduit comme le fil principal), pour la vue de la tâche. */
+export const FilTacheParite = z.object({
+  agent: z.string(),
+  description: z.string().nullable(),
+  modele: z.string().nullable(),
+  termine: z.boolean(),
+  evenements: z.array(z.object({ ts: z.string(), evt: Evenement })),
+});
+export type FilTacheParite = z.infer<typeof FilTacheParite>;
+
+/** Réponse du poste à `parite_fil_tache` : null si la tâche est inconnue de ce transcript (le relais rend 404). */
+export const ReponseFilTacheParite = z.object({ fil: FilTacheParite.nullable() });
+export type ReponseFilTacheParite = z.infer<typeof ReponseFilTacheParite>;
