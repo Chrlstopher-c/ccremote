@@ -1,7 +1,7 @@
 // Responsabilité : les routes d'appairage d'un appareil — un appareil connecté crée un code, et qui présente un code
 // valable reçoit une clé d'appareil. L'échange est ouvert (comme la connexion), avec la même limite de tentatives.
-// Avec `machine` (relais central), l'échange remet aussi l'adresse du lien des postes et le jeton de cette machine :
-// son secret est renouvelé et sa connexion en cours coupée ; le poste doit se reconnecter avec le nouveau.
+// Avec `machine` (relais central), l'échange remet aussi l'adresse du lien des postes et le jeton de cette machine,
+// seulement si elle n'a pas encore de jeton (un poste déjà enregistré se renouvelle sur la machine du relais).
 import type { Logger } from 'pino';
 import { z } from 'zod';
 import type { Acces } from './acces.ts';
@@ -45,6 +45,11 @@ function refusPoste(poste: PosteRelais | null, machine: string | undefined): Res
   if (machine === undefined) return null;
   if (!poste) return erreur('lien des postes absent : relais central seulement', 409);
   if (!poste.urlPoste) return erreur('aucune adresse du lien des postes joignable par les clients', 409);
+  // Sécurité : un appareil ne peut pas prendre le jeton d'un poste déjà enregistré (il couperait la vraie machine et
+  // parlerait en son nom). Renouveler le jeton d'un poste connu se fait sur la machine du relais (`jeton-poste`).
+  if (poste.secrets.has(machine)) {
+    return erreur('poste déjà enregistré : son jeton se renouvelle sur la machine du relais (commande jeton-poste)', 409);
+  }
   return null;
 }
 

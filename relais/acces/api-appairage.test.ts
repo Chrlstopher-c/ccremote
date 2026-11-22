@@ -77,14 +77,15 @@ describe('appairage avec machine : la clé et le lien du poste', () => {
     expect(b.secrets.get('portable')).toBe(corps.jetonPoste);
   });
 
-  test('une machine déjà connue reçoit un secret neuf, et sa connexion en cours est coupée', async () => {
+  test('une machine déjà enregistrée : refusée, son secret ne change pas et le code reste valable', async () => {
     const b = banc();
     b.secrets.set('tour', 'ancien-secret');
-    const r = await appairer(b, b.poste, { code: codeNeuf(b), nom: 'tour', machine: 'tour' });
-    const corps = (await r.json()) as { jetonPoste: string };
-    expect(corps.jetonPoste).not.toBe('ancien-secret');
-    expect(b.secrets.get('tour')).toBe(corps.jetonPoste);
-    expect(b.coupees).toEqual(['tour']);
+    const code = codeNeuf(b);
+    const r = await appairer(b, b.poste, { code, nom: 'intrus', machine: 'tour' });
+    expect(r.status).toBe(409);
+    expect(b.secrets.get('tour')).toBe('ancien-secret');
+    expect(b.coupees).toEqual([]);
+    expect((await appairer(b, b.poste, { code, nom: 'portable', machine: 'portable' })).status).toBe(200);
   });
 
   test('code réutilisé : refusé, et le secret de la machine ne change pas', async () => {
@@ -93,9 +94,9 @@ describe('appairage avec machine : la clé et le lien du poste', () => {
     expect((await appairer(b, b.poste, { code, nom: 'a', machine: 'tour' })).status).toBe(200);
     const apres = b.secrets.get('tour');
     const rejoue = await appairer(b, b.poste, { code, nom: 'b', machine: 'tour' });
-    expect(rejoue.status).toBe(401);
+    expect(rejoue.status).toBe(409);
     expect(b.secrets.get('tour')).toBe(apres);
-    expect(b.coupees).toEqual(['tour']);
+    expect(b.coupees).toEqual(['tour']); // seulement au premier appairage
   });
 
   test('code expiré : refusé, aucun secret émis', async () => {

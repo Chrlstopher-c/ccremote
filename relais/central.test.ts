@@ -159,7 +159,7 @@ test('jeton de poste : la CLI rend la configuration du poste avec son secret (le
   expect(sortie).toContain('essai-poste');
 });
 
-test('appairage avec machine : le poste se connecte à chaud ; son renouvellement coupe l’ancienne connexion', async () => {
+test('appairage avec machine : le poste se connecte à chaud ; un second appairage de la même machine est refusé', async () => {
   const r = appele();
   const entetes = (secret: string): Record<string, string> => ({
     'x-ccremote-machine': 'chaud',
@@ -184,12 +184,13 @@ test('appairage avec machine : le poste se connecte à chaud ; son renouvellemen
     ws.onopen = () => ouvert();
     ws.onerror = () => echec(new Error('connexion du poste refusée'));
   });
-  const fermee = new Promise<number>((resoudre) => {
-    ws.onclose = (e) => resoudre(e.code);
+  const code = (await lancer(['appairer'], r.env)).split('\n')[0]?.trim() ?? '';
+  const refus = await fetch(`http://127.0.0.2:${r.web3}/api/appareils/appairer`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ code, nom: 'intrus', machine: 'chaud' }),
   });
-  const second = await appairer((await lancer(['appairer'], r.env)).split('\n')[0]?.trim() ?? '');
-  expect(second.jetonPoste).not.toBe(premier.jetonPoste);
-  expect((await fetch(lien, { headers: entetes(premier.jetonPoste) })).status).toBe(401);
-  expect((await fetch(lien, { headers: entetes(second.jetonPoste) })).status).toBe(426);
-  expect(await fermee).toBe(4001);
+  expect(refus.status).toBe(409);
+  expect((await fetch(lien, { headers: entetes(premier.jetonPoste) })).status).toBe(426);
+  ws.close();
 }, 20_000);
