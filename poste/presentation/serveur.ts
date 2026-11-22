@@ -3,12 +3,18 @@
 import { createSdkMcpServer, type McpSdkServerConfigWithInstance, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { ModeFichier } from '../../commun/presentation.ts';
-import { DonneesModule, REGEX_ID_MODULE, REGEX_NOM_OUTIL } from '../../commun/modules.ts';
+import { DonneesModule, REGEX_ID_MODULE } from '../../commun/modules.ts';
 import { afficherWidget } from './widget.ts';
 import { envoyerFichier, publierArtefact } from './envoi.ts';
 import type { ContexteOutils, Resultat } from './outils.ts';
 import * as machines from './machines-outils.ts';
 import * as modules from './modules-outils.ts';
+import {
+  DESCRIPTION_MODULE_APPELER,
+  DESCRIPTION_MODULES_LISTER,
+  SCHEMA_MODULE_APPELER,
+  SCHEMA_MODULES_LISTER,
+} from './modules-declaration.ts';
 
 export const NOM_SERVEUR = 'lanterne';
 
@@ -28,14 +34,6 @@ const DESCRIPTION_WIDGET =
   'Afficher un petit visuel en place dans le fil : un SVG (schéma, icône, graphique simple) ou un fragment HTML court ' +
   '(carte, tableau stylé) pour illustrer une réponse. 300 Ko au plus. Pour une page complète réutilisable, préférer ' +
   'publier_artefact.';
-
-const DESCRIPTION_MODULES_LISTER =
-  'Lister les outils et les intégrations des modules Lanterne (extensions de l’appli de Chris : carte, etc.). ' +
-  'À lire avant d’appeler un outil de module ou d’afficher une intégration.';
-
-const DESCRIPTION_MODULE_APPELER =
-  'Appeler un outil d’un module Lanterne, tel que listé par modules_lister. Le résultat revient en texte. ' +
-  'Échoue si aucune appli Lanterne n’est ouverte ou si le module n’y est pas actif.';
 
 const DESCRIPTION_MODULE_AFFICHER =
   'Afficher une intégration de module dans le fil (ex. des lieux sur une carte), telle que listée par ' +
@@ -96,16 +94,11 @@ export function outilsModules(c: ContexteOutils) {
     async (a) => enResultat(modules.afficherModule(c, a)),
   );
   return [
-    tool('modules_lister', DESCRIPTION_MODULES_LISTER, {}, async () => enResultat(await modules.listerModules(c))),
-    tool(
-      'module_appeler',
-      DESCRIPTION_MODULE_APPELER,
-      {
-        module: z.string().regex(REGEX_ID_MODULE),
-        outil: z.string().regex(REGEX_NOM_OUTIL),
-        arguments: DonneesModule.optional(),
-      },
-      async (a) => enResultat(await modules.appelerModule(c, a)),
+    tool('modules_lister', DESCRIPTION_MODULES_LISTER, SCHEMA_MODULES_LISTER, async () =>
+      enResultat(await modules.listerModules(c)),
+    ),
+    tool('module_appeler', DESCRIPTION_MODULE_APPELER, SCHEMA_MODULE_APPELER, async (a) =>
+      enResultat(await modules.appelerModule(c, a)),
     ),
     afficher,
   ];

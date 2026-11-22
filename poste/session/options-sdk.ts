@@ -9,6 +9,7 @@ import type {
   SandboxSettings,
 } from '@anthropic-ai/claude-agent-sdk';
 import type { BacASable, EffortSession, ModeSession } from '../../commun/session.ts';
+import { VAR_SESSION_PILOTEE } from '../presentation/socket-outils.ts';
 
 // Hérité d'une session Claude parente (messagerie, identité de session) : le CLI enfant le prendrait pour le sien.
 // Liste mesurée dans essais/sdk/RAPPORT.md. ANTHROPIC_API_KEY : abonnement uniquement.
@@ -83,7 +84,7 @@ export function optionsSdk(p: ParametresSdk): Options {
   const calque = reglagesDeCalque(p);
   return {
     cwd: p.cwd,
-    env: { ...envSdk(p.source, p.configDir), CLAUDE_CODE_ENABLE_TODO_TOOLS: '1' },
+    env: { ...envSdk(p.source, p.configDir), CLAUDE_CODE_ENABLE_TODO_TOOLS: '1', [VAR_SESSION_PILOTEE]: '1' },
     ...(p.reprise ? { resume: p.identifiant } : { sessionId: p.identifiant }),
     ...(p.reprise && p.reprisePoint ? { resumeSessionAt: p.reprisePoint } : {}),
     systemPrompt: { type: 'preset', preset: 'claude_code', ...(p.consignes ? { append: p.consignes } : {}) },

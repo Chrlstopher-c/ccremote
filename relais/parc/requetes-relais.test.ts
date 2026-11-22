@@ -122,4 +122,14 @@ describe('lien poste ↔ relais pour les outils de modules', () => {
     const r = await traiterRequeteRelais(appels, 'module_appeler', args);
     expect(r).toEqual({ ok: false, erreur: expect.stringContaining('n\'a pas répondu à temps') });
   });
+
+  test('appel venu d’une session hors Lanterne (session null) : accepté, pas rejeté comme invalide', async () => {
+    const registre = new Registre(ouvrirBase(':memory:'), journal);
+    const diffusion = new Diffusion();
+    diffusion.ajouter({ send: () => undefined } as unknown as ServerWebSocket<unknown>);
+    const appels = new AppelsModules({ registre, diffusion, delaiMs: 5 });
+    const args = { module: 'carte', outil: 'centrer', session: null };
+    const r = await traiterRequeteRelais(appels, 'module_appeler', args);
+    expect(r).toEqual({ ok: false, erreur: expect.stringContaining('n\'a pas répondu à temps') });
+  });
 });

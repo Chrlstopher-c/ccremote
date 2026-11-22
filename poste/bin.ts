@@ -17,6 +17,7 @@ import { LienRelais } from './parc/lien-relais.ts';
 import { RequetesRelais } from './parc/requetes-relais.ts';
 import { decouvrirProjets } from './projets/decouverte.ts';
 import { GestionnaireSessions, type Reponse } from './session/gestionnaire.ts';
+import { demarrerOutilsHorsLanterne, type EcouteOutils } from './presentation/ecoute-outils.ts';
 import { servirLocal } from './session/serveur-local.ts';
 import { Terminaux } from './terminal/terminaux.ts';
 import { SANS_REPONSE } from '../commun/appareil.ts';
@@ -295,6 +296,7 @@ lien = new LienRelais({
 });
 sessions.relaisOuvert = () => lien?.estOuvert === true;
 sessions.requeteRelais = (quoi, args) => requetes.requete(quoi, args);
+const ecouteOutils: EcouteOutils | null = demarrerOutilsHorsLanterne(config.donnees, sessions.requeteRelais, journal);
 lien.demarrer();
 new SurveillanceModules({ dossier: DOSSIER_MODULES_SOURCE, envoyer, journal, serveurs }).demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);
@@ -310,6 +312,7 @@ async function arreter(): Promise<void> {
   terminaux.fermerTout();
   await serveurs.arreterTout();
   lien?.arreter();
+  ecouteOutils?.arreter();
   process.exit(0);
 }
 process.on('SIGTERM', arreter);

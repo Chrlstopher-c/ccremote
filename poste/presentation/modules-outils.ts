@@ -21,8 +21,11 @@ export interface ArgsAfficherModule {
 const RELAIS_ABSENT = 'lien au relais indisponible : le module n’a pas pu être joint.';
 const RELAIS_EN_ECHEC = 'requête au relais en échec';
 
+/** Ce qu'il faut pour lister et appeler : le lien au relais et le journal (sans la session de présentation). */
+export type LienModules = Pick<ContexteOutils, 'journal' | 'relais'>;
+
 /** Requête au relais par le lien : absence ou exception deviennent un refus lisible, jamais une erreur qui tombe. */
-async function demander(c: ContexteOutils, quoi: QuoiRelais, args: unknown): Promise<ReponseRelais> {
+async function demander(c: LienModules, quoi: QuoiRelais, args: unknown): Promise<ReponseRelais> {
   if (!c.relais) return { ok: false, erreur: RELAIS_ABSENT };
   try {
     return await c.relais(quoi, args);
@@ -41,13 +44,22 @@ function resultatDe(donnees: unknown): unknown {
   return typeof donnees === 'object' && donnees !== null && 'resultat' in donnees ? (donnees.resultat ?? null) : null;
 }
 
-export async function listerModules(c: ContexteOutils): Promise<Resultat> {
+export async function listerModules(c: LienModules): Promise<Resultat> {
   const r = await demander(c, 'modules_lister', {});
   return r.ok ? ok(JSON.stringify({ modules: r.donnees })) : refus(r);
 }
 
-export async function appelerModule(c: ContexteOutils, a: ArgsAppelModule): Promise<Resultat> {
-  const args = { module: a.module, outil: a.outil, arguments: a.arguments ?? {}, session: c.sessionId };
+export function appelerModule(c: ContexteOutils, a: ArgsAppelModule): Promise<Resultat> {
+  return appelerPour(c, a, c.sessionId);
+}
+
+/** Appel depuis une session hors de Lanterne : aucune session n'est connue du poste, donc `session: null`. */
+export function appelerHorsSession(c: LienModules, a: ArgsAppelModule): Promise<Resultat> {
+  return appelerPour(c, a, null);
+}
+
+async function appelerPour(c: LienModules, a: ArgsAppelModule, session: string | null): Promise<Resultat> {
+  const args = { module: a.module, outil: a.outil, arguments: a.arguments ?? {}, session };
   const r = await demander(c, 'module_appeler', args);
   return r.ok ? ok(JSON.stringify(resultatDe(r.donnees))) : refus(r);
 }

@@ -53,6 +53,11 @@ describe('optionsSdk', () => {
     expect(env?.['HOME']).toBe('/h');
   });
 
+  test('marque la session comme pilotée par le poste : les outils hors Lanterne s’effacent chez elle', () => {
+    const env = optionsSdk(parametres()).env;
+    expect(env?.['LANTERNE_SESSION_PILOTEE']).toBe('1');
+  });
+
   test('nouvelle conversation : sessionId fixé, pas de resume', () => {
     const o = optionsSdk(parametres());
     expect(o.sessionId).toBe('conv-1');

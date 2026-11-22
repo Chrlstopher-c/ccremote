@@ -148,6 +148,7 @@ describe('SessionSdk', () => {
       CHEMIN: '/ok',
       CLAUDE_CONFIG_DIR: '/comptes/2',
       CLAUDE_CODE_ENABLE_TODO_TOOLS: '1',
+      LANTERNE_SESSION_PILOTEE: '1',
     });
   });
 

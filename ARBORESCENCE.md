@@ -346,6 +346,13 @@ poste/parc/etat-machine.ts                           mesurer l'état de la machi
 poste/parc/lien-relais.ts                            le lien sortant du poste vers le relais — connexion authentifiée, rec…
 poste/presentation/machines-outils.test.ts          tests des outils machines contre un faux relais
 poste/presentation/machines-outils.ts               les outils machines du serveur lanterne : lister, tester, ajouter, modifier, supprimer (confirmation)
+poste/presentation/modules-declaration.ts          descriptions et schémas des outils modules_lister / module_appeler, source unique des deux serveurs
+poste/presentation/ecoute-outils.ts                  socket 0600 du poste pour les sessions hors Lanterne : liste blanche, ligne bornée, relais au lien
+poste/presentation/ecoute-outils.test.ts             tests de l'écoute : relais, refus, session null, socket périmée, arrêt
+poste/presentation/socket-outils.ts                  protocole du socket (une ligne JSON par requête et réponse), chemin du socket, variables d'environnement
+poste/presentation/lien-outils-externe.ts            client du socket pour le serveur externe : refus lisibles, délais bornés
+poste/presentation/mcp-externe.ts                    serveur MCP stdio des sessions Claude Code hors Lanterne (modules_lister, module_appeler)
+poste/presentation/mcp-externe.test.ts               tests du serveur externe en sous-processus : protocole, socket absent, session pilotée
 poste/projets/decouverte.ts                          lister les projets présents sur la machine (sous-dossiers des racines…
 poste/session/balayage-sessions.ts              le balayage du poste : panes tmux, terminaux et registre cc → sessions adoptées ou fermées
 poste/session/adoption.ts                            la fiche d'une session adoptée — lancée hors ccremote, dans tmux ou d…
