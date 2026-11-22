@@ -65,4 +65,12 @@ describe('fusionnerVue', () => {
     expect(v.routage.has('s-2')).toBe(false);
     expect(v.sessions.every((s) => s.machine === 'tour')).toBe(true);
   });
+
+  test('une copie archivée ici cède à la version vivante du nœud qui la tient (une seule fiche, routée)', () => {
+    const archivee = { ...ficheDe('s-1', 'tour', 'rangée'), archivee: true };
+    const v = vue([noeud('m1', 'tour', true, ['s-1'])], [archivee]);
+    expect(v.sessions.filter((s) => s.id === 's-1')).toHaveLength(1);
+    expect(v.sessions.find((s) => s.id === 's-1')?.archivee).toBeUndefined();
+    expect(v.routage.get('s-1')).toBe('m1');
+  });
 });

@@ -7,13 +7,11 @@ import {
   NOMBRE_MAX_ABONNEMENTS,
   TAILLE_FIL_FEDERE,
   TAILLE_FLUX_MAX_CARACTERES,
-  TAILLE_MAX_CLAIR_OCTETS,
   TAILLE_MORCEAU_CARACTERES,
   DELAI_REPONSE_FEDEREE_MS,
   type EvenementFedere,
   type MachineAnnoncee,
   type MessageChiffre,
-  NOMBRE_MAX_SESSIONS_FEDEREES,
 } from '../../commun/federation.ts';
 import { estGesteRelayable, type MethodeGeste, type PorteeGeste } from '../../commun/gestes-federes.ts';
 import { type CorpsGeste, reponseGeste } from './gestes.ts';
@@ -23,8 +21,10 @@ import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
+import { AssemblageInstantane, messagesInstantane } from './instantane.ts';
 import { CacheDistant } from './distant.ts';
 import { nonceRef } from './identifiants.ts';
+import { tenirDansLaLimite } from './trames.ts';
 
 const DESCRIPTION_LOCALE = 'Cet ordinateur';
 /** Un delta de texte attend au plus ce délai avant de partir, avec les suivants du même bloc. */
@@ -92,6 +92,7 @@ interface Attendue {
 export class Echanges {
   private readonly attentes = new Map<string, Attendue>();
   private readonly transferts = new Reassemblage();
+  private readonly assemblage = new AssemblageInstantane();
   private readonly abonnements = new Map<string, Set<string>>();
   private readonly tampons = new Map<string, TamponFlux>();
   private minuterieFlux: ReturnType<typeof setTimeout> | null = null;
@@ -99,16 +100,17 @@ export class Echanges {
 
   constructor(private readonly options: OptionsEchanges) {}
 
-  /** L'instantané des sessions du nœud, ajusté pour tenir dans une trame. */
-  instantane(): MessageChiffre {
-    // Seules les sessions de cette machine (le registre garde aussi des copies d'autres machines, ex. la tour avant sa
-    // bascule), les plus récentes d'abord, dans la limite du protocole : au-delà, le pair ferme le canal en boucle.
+  /**
+   * L'instantané des sessions du nœud, en messages dans l'ordre d'envoi : d'abord les pages des sessions au-delà des
+   * 150 plus récentes, puis la tête (instantane.ts). Seules les sessions de cette machine : le registre garde aussi des
+   * copies d'autres machines (ex. la tour avant sa bascule).
+   */
+  instantanes(): MessageChiffre[] {
     const sessions = this.options.registre
       .sessions(false)
-      .filter((s) => !s.duo && s.machine === this.options.machine)
-      .slice(0, NOMBRE_MAX_SESSIONS_FEDEREES);
+      .filter((s) => !s.duo && s.machine === this.options.machine);
     const vue = this.machineAnnoncee();
-    return tenirDansLaLimite(sessions, (liste) => ({
+    return messagesInstantane(sessions, (liste) => ({
       t: 'instantane',
       machine: this.options.machine,
       nom: this.options.nom(),
@@ -134,8 +136,8 @@ export class Echanges {
     if (this.instantaneEnAttente) return;
     this.instantaneEnAttente = setTimeout(() => {
       this.instantaneEnAttente = null;
-      const instantane = this.instantane();
-      for (const canal of canaux()) canal.envoyer(instantane);
+      const messages = this.instantanes();
+      for (const canal of canaux()) for (const message of messages) canal.envoyer(message);
     }, DELAI_INSTANTANE_MS);
   }
 
@@ -214,6 +216,7 @@ export class Echanges {
   oublier(membre: string): void {
     this.abonnements.delete(membre);
     this.transferts.oublier(membre);
+    this.assemblage.oublier(membre);
     for (const [cle, tampon] of [...this.tampons]) if (tampon.canal.membre === membre) this.tampons.delete(cle);
     for (const [ref, attente] of [...this.attentes]) if (attente.membre === membre) this.resoudre(ref, null);
   }
@@ -224,6 +227,9 @@ export class Echanges {
       case 'instantane':
       case 'evenement':
         return this.recevoirCache(canal.membre, message);
+      case 'instantane_suite':
+        this.assemblage.recevoirSuite(canal.membre, message);
+        return undefined;
       case 'fil':
         return this.repondreFil(canal, message.ref, message.session);
       case 'ecrire':
@@ -255,7 +261,9 @@ export class Echanges {
   // Instantané et événement d'un pair : le cache mémoire les garde.
   private recevoirCache(membre: string, m: Extract<MessageChiffre, { t: 'instantane' | 'evenement' }>): void {
     if (m.t === 'instantane') {
-      return this.options.distant.instantane(membre, m.machine, m.nom, m.sessions, m.vue ?? null);
+      // Les pages reçues avant la tête remplacent la liste d'un coup (si elles sont toutes là, sinon la tête seule).
+      const suite = this.assemblage.terminer(membre);
+      return this.options.distant.instantane(membre, m.machine, m.nom, [...m.sessions, ...suite], m.vue ?? null);
     }
     const evenement = { ...(m.seq !== undefined ? { seq: m.seq } : {}), ts: m.ts, evt: m.evt };
     return this.options.distant.ajouterEvenement(membre, m.session, evenement);
@@ -426,24 +434,6 @@ export class Echanges {
     this.options.distant.remplacerFil(canal.membre, session, evenements);
     this.resoudre(ref, { t: 'fil_reponse', ref, session, evenements: [...evenements] });
   }
-}
-
-/** Réduit une liste (les plus anciens d'abord) jusqu'à ce que le message tienne dans la limite d'une trame. */
-export function tenirDansLaLimite<T>(
-  liste: readonly T[],
-  construire: (liste: readonly T[]) => MessageChiffre,
-): MessageChiffre {
-  let courante = liste;
-  let message = construire(courante);
-  while (taille(message) > TAILLE_MAX_CLAIR_OCTETS && courante.length > 0) {
-    courante = courante.slice(0, courante.length - Math.max(1, Math.ceil(courante.length / 10)));
-    message = construire(courante);
-  }
-  return message;
-}
-
-function taille(message: MessageChiffre): number {
-  return new TextEncoder().encode(JSON.stringify(message)).byteLength;
 }
 
 interface Bilan {

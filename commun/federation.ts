@@ -11,8 +11,10 @@ import { CibleTerminal } from './appareil.ts';
 export const TAILLE_MAX_CLAIR_OCTETS = 600_000;
 /** Événements du fil renvoyés pour une session distante (le plus récent en dernier). */
 export const TAILLE_FIL_FEDERE = 200;
-/** Sessions annoncées par un nœud dans un instantané. */
+/** Sessions par message d'instantané (la tête, comme chaque page de suite). */
 export const NOMBRE_MAX_SESSIONS_FEDEREES = 150;
+/** Pages de suite d'un instantané, au plus : au-delà, les sessions les plus anciennes ne sont pas annoncées. */
+export const NOMBRE_MAX_PAGES_INSTANTANE = 100;
 /** Abonnements au fil en direct qu'un pair peut tenir ouverts sur un nœud. */
 export const NOMBRE_MAX_ABONNEMENTS = 64;
 /** Délai d'une demande entre nœuds sans réponse : au-delà, le canal est coupé. */
@@ -93,6 +95,14 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     nom: NOM,
     sessions: z.array(ResumeSession).max(NOMBRE_MAX_SESSIONS_FEDEREES),
     vue: MachineAnnoncee.optional(),
+  }),
+  // Pages des sessions au-delà de la tête (les 150 plus récentes), numérotées `rang` sur `total`. Elles partent avant la
+  // tête : le pair remplace sa liste d'un coup, à la réception de la tête. Un nœud d'avant ignore ce genre de message.
+  z.strictObject({
+    t: z.literal('instantane_suite'),
+    rang: z.number().int().min(1).max(NOMBRE_MAX_PAGES_INSTANTANE),
+    total: z.number().int().min(1).max(NOMBRE_MAX_PAGES_INSTANTANE),
+    sessions: z.array(ResumeSession).max(NOMBRE_MAX_SESSIONS_FEDEREES),
   }),
   z.strictObject({
     t: z.literal('evenement'),

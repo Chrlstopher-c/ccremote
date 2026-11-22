@@ -271,3 +271,27 @@ describe('machine annoncée', () => {
     expect(tour?.projets).toEqual([{ machine: 'tour', chemin: '/projets/x', nom: 'x' }]);
   });
 });
+
+describe('instantané au-delà de 150 sessions', () => {
+  test('A tient 240 sessions : B les voit toutes, la tête et les pages réunies', async () => {
+    const a = await nouveau('tour');
+    const b = await nouveau('portable');
+    for (let i = 0; i < 240; i += 1) a.registre.enregistrerSession(ficheDe(`t-${i}`, 'tour', `Titre ${i}`));
+    await appairer(a, b);
+    await attendre(() => b.federation.distantes.sessions().length === 240, 8000);
+    const ids = new Set(b.federation.distantes.sessions().map((s) => s.session.id));
+    expect(ids.size).toBe(240);
+    expect(ids.has('t-0') && ids.has('t-239')).toBe(true);
+  });
+});
+
+describe('copie archivée ici et version vivante chez le nœud', () => {
+  test('la copie archivée ne passe pas sur le flux : la version vivante de A la remplace', async () => {
+    const { b } = await paire();
+    const archivee = { ...ficheDe(SESSION_A, 'tour', 'Copie rangée'), archivee: true };
+    b.registre.enregistrerSession(archivee);
+    const v = b.federation.distantes.vue(b.registre.sessions(true), []);
+    expect(v.routage.get(SESSION_A)).toBeDefined();
+    expect(b.federation.distantes.laisserPasser({ type: 'session', session: archivee })).toBe(false);
+  });
+});

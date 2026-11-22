@@ -431,7 +431,7 @@ export class Federation {
     this.refus.delete(canal.membre);
     if (this.estAppareil(canal.membre)) return;
     this.distant.enLigne(canal.membre, true);
-    canal.envoyer(this.echanges.instantane());
+    for (const message of this.echanges.instantanes()) canal.envoyer(message);
     this.envoyerAdmissionsA(canal);
   }
 

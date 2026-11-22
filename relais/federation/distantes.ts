@@ -101,13 +101,17 @@ export class Distantes {
 
   /**
    * Filtre du flux des clients : les copies locales d'une machine tenue par un nœud en ligne ne passent pas (même
-   * identifiant de session que la version fédérée : la copie périmée écraserait celle du nœud). Les archivées, elles,
-   * restent ici, comme dans la vue. Ce que ce nœud émet lui-même (version fédérée) passe toujours.
+   * identifiant de session que la version fédérée : la copie périmée écraserait celle du nœud). Une copie archivée
+   * ici reste ici, sauf si la vue montre la version vivante du nœud (même identifiant) : elle ne passe pas non plus.
+   * Ce que ce nœud émet lui-même (version fédérée) passe toujours.
    */
   laisserPasser(m: MessageClient): boolean {
     if (this.enEmission) return true;
     // Lu à l'instant (pas la vue mémorisée) : une copie arrivée entre deux calculs de la vue est filtrée aussi.
-    if (m.type === 'session') return m.session.archivee === true || !this.machinesTenues().has(m.session.machine);
+    if (m.type === 'session') {
+      if (this.vueCourante().routage.has(m.session.id)) return false;
+      return m.session.archivee === true || !this.machinesTenues().has(m.session.machine);
+    }
     if (m.type === 'evenement') return !this.sessionsTenues().has(m.evenement.sessionId);
     if (m.type === 'machine') return !this.derniere?.machinesRoutees.has(m.machine.id);
     return true;

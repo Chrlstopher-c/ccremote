@@ -1,7 +1,7 @@
-// Responsabilité : ce que l'appli voit du parc quand ce nœud est fédéré — ses sessions et machines, plus celles des
-// nœuds appariés, sans doublon. Règles : une machine tenue par un nœud en ligne passe par lui (ses copies vues par un
-// tunnel SSH sont masquées, sauf les archivées) ; hors ligne, la copie locale reprend la main si elle existe ; jamais
-// la machine de ce nœud reçue d'un autre. Fonction pure : aucune E/S, aucun état.
+// Responsabilité : ce que l'appli voit du parc quand ce nœud est fédéré — ses sessions et machines, plus celles
+// des nœuds appariés, sans doublon. Règles : une machine tenue par un nœud en ligne passe par lui (ses copies vues par un
+// tunnel SSH sont masquées, sauf les archivées, qui cèdent à la version vivante du nœud) ; hors ligne, la copie
+// locale reprend la main si elle existe ; jamais la machine de ce nœud reçue d'un autre. Fonction pure : aucune E/S.
 import type { VueMachine } from '../../commun/api-clients.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import type { NoeudDistant } from './distant.ts';
@@ -37,21 +37,31 @@ export function fusionnerVue(e: EntreeVue): VueFederee {
   const sessions = e.locales.filter((s) => !masquees.has(s.machine) || s.archivee === true);
   const routage = new Map<string, string>();
   const machinesRoutees = new Map<string, string>();
-  const vues = new Set(sessions.map((s) => s.id));
   const regle = { machineLocale: e.machineLocale, nativesEnLigne, connuesLocalement };
   for (const n of noeuds) {
     if (accepteMachine(regle, n, n.machine) && !machinesRoutees.has(n.machine)) {
       machinesRoutees.set(n.machine, n.membre);
     }
     for (const s of n.sessions) {
-      if (vues.has(s.id) || !accepteMachine(regle, n, s.machine)) continue;
-      vues.add(s.id);
-      sessions.push(s);
+      if (routage.has(s.id) || !accepteMachine(regle, n, s.machine) || !ajouterOuRemplacer(sessions, s)) continue;
       routage.set(s.id, n.membre);
       if (!machinesRoutees.has(s.machine)) machinesRoutees.set(s.machine, n.membre);
     }
   }
   return { sessions, machines: machinesFusionnees(e, noeuds, machinesRoutees), routage, machinesRoutees, masquees };
+}
+
+// La version vivante d'un nœud prend la place d'une copie archivée ici (le nœud n'annonce pas ses archivées, donc la
+// copie archivée ne doit pas la masquer). Une copie non archivée reste : rend faux si la fiche n'entre pas.
+function ajouterOuRemplacer(sessions: ResumeSession[], s: ResumeSession): boolean {
+  const place = sessions.findIndex((x) => x.id === s.id);
+  if (place < 0) {
+    sessions.push(s);
+    return true;
+  }
+  if (sessions[place]?.archivee !== true) return false;
+  sessions[place] = s;
+  return true;
 }
 
 interface Regle {
