@@ -102,7 +102,8 @@ function declarationValide(
 }
 
 // Entrypoints des processus non interactifs (`claude -p` : pas de session à reprendre ni à adopter).
-const ENTREES_NON_INTERACTIVES = new Set(['sdk-cli']);
+// `sdk-py` : programmes Python de l'Agent SDK (bancs d'essai, scripts), jamais des conversations à reprendre (22/11).
+const ENTREES_NON_INTERACTIVES = new Set(['sdk-cli', 'sdk-py']);
 
 /** Une déclaration est celle d'une session interactive : `kind` absent ou interactif, et pas un mode impression. */
 export function estInteractif(decl: { readonly kind?: string; readonly entrypoint?: string }): boolean {

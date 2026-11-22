@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pino from 'pino';
-import { processusClaude } from './processus.ts';
+import { estInteractif, processusClaude } from './processus.ts';
 
 const journal = pino({ enabled: false });
 
@@ -108,6 +108,11 @@ const lecteurClaude = (): { comm: string; exe: string; demarrage: string; enTmux
 });
 
 describe('processusClaude : processus non interactifs écartés', () => {
+  test('un programme Python de l Agent SDK (entrypoint sdk-py) n est pas adopté', () => {
+    expect(estInteractif({ kind: 'interactive', entrypoint: 'sdk-py' })).toBe(false);
+    expect(estInteractif({ kind: 'interactive', entrypoint: 'claude-desktop' })).toBe(true);
+  });
+
   test('un claude -p (entrypoint sdk-cli, sans kind) n est pas une session interactive', () => {
     const { dossier, nettoyer } = configAvec({ '3001.json': declNonInteractive(3001, { entrypoint: 'sdk-cli' }) });
     try {
