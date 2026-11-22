@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Logger } from 'pino';
 import { z } from 'zod';
+import { lecteurProcessusMac } from './processus-mac.ts';
 
 const Declaration = z.object({
   pid: z.number(),
@@ -53,6 +54,7 @@ function demarrageDe(stat: string): string | null {
 
 /** Lecture réelle de /proc. Un processus disparu rend null. */
 export const lecteurProc: LecteurProcessus = (pid) => {
+  if (process.platform === 'darwin') return lecteurProcessusMac(pid);
   if (!existsSync(`/proc/${pid}`)) return null;
   const comm = lire(`/proc/${pid}/comm`).trim();
   if (comm === '') return null;

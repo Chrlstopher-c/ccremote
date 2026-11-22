@@ -2,6 +2,7 @@
 // analyseurs sont purs ; seule `lireTableProc` touche /proc, et ne lit jamais par motif.
 import { readdirSync, readFileSync } from 'node:fs';
 import type { Logger } from 'pino';
+import { lireBootMac, lireProcessusMac, lireTableProcMac } from './proc-mac.ts';
 
 /** Les battements par seconde du noyau (`USER_HZ`), fixés à 100 sur Linux : l'heure de démarrage en découle. */
 export const CLK_TCK = 100;
@@ -72,6 +73,7 @@ function lire(chemin: string, journal: Logger): string | null {
 
 /** Un processus lu dans /proc, ou `null` s'il a disparu ou n'est pas lisible. */
 export function lireProcessus(pid: number, journal: Logger): EntreeProc | null {
+  if (process.platform === 'darwin') return lireProcessusMac(pid);
   const base = `/proc/${pid}`;
   const stat = lire(`${base}/stat`, journal);
   const parse = stat && !estTermine(stat) ? parserStat(stat) : null;
@@ -83,6 +85,7 @@ export function lireProcessus(pid: number, journal: Logger): EntreeProc | null {
 
 /** Tous les processus visibles, indexés par PID. Le PID 0 et les entrées non numériques de /proc sont ignorés. */
 export function lireTableProc(journal: Logger): Map<number, EntreeProc> {
+  if (process.platform === 'darwin') return lireTableProcMac(journal);
   const table = new Map<number, EntreeProc>();
   let entrees: string[];
   try {
@@ -102,6 +105,7 @@ export function lireTableProc(journal: Logger): Map<number, EntreeProc> {
 
 /** L'heure de démarrage du système, lue une fois : null si /proc/stat est illisible. */
 export function lireBtime(journal: Logger): number | null {
+  if (process.platform === 'darwin') return lireBootMac();
   const texte = lire('/proc/stat', journal);
   return texte === null ? null : parserBtime(texte);
 }

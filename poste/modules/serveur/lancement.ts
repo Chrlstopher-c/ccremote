@@ -7,8 +7,12 @@ import type { FichierLu } from '../validation.ts';
 
 const PERIODE_SONDE_MS = 100;
 
-/** La commande qui lance le serveur : Bun, borné en mémoire, en CPU et en priorité par systemd-run. */
-export function commandeSysteme(point: string): string[] {
+/**
+ * La commande qui lance le serveur : Bun, borné en mémoire, en CPU et en priorité par systemd-run sous Linux. Sous
+ * macOS, pas de systemd ni de limite de mémoire par processus : `nice` seul.
+ */
+export function commandeSysteme(point: string, plateforme: NodeJS.Platform = process.platform): string[] {
+  if (plateforme === 'darwin') return ['nice', '-n', '10', 'bun', 'run', point];
   return [
     'systemd-run',
     '--user',

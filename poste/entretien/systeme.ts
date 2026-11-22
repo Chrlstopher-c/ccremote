@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { type NetworkInterfaceInfo, networkInterfaces } from 'node:os';
 import type { Logger } from 'pino';
 import { type EchangePoste, IPV4, type ReseauPoste } from '../../commun/entretien.ts';
+import { echangeDeMac, executerMac, interfaceParDefautMac } from './systeme-mac.ts';
 
 const MAC_NULLE = '00:00:00:00:00:00';
 
@@ -31,7 +32,14 @@ export function interfaceParDefaut(route: string): string | null {
 
 /** MAC et diffusion de l'interface par défaut (IPv4, non boucle) ; null si la machine n'a pas de route ni de MAC. */
 export function reseauDe(route: string, interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>): ReseauPoste | null {
-  const nom = interfaceParDefaut(route);
+  return reseauDeInterface(interfaceParDefaut(route), interfaces);
+}
+
+/** MAC et diffusion d'une interface nommée (IPv4, non boucle) ; null si elle n'a ni MAC ni IPv4. */
+export function reseauDeInterface(
+  nom: string | null,
+  interfaces: NodeJS.Dict<NetworkInterfaceInfo[]>,
+): ReseauPoste | null {
   if (!nom) return null;
   const v4 = (interfaces[nom] ?? []).find((i) => i.family === 'IPv4' && !i.internal);
   if (!v4 || v4.mac === MAC_NULLE) return null;
@@ -61,11 +69,16 @@ function lireProc(chemin: string, journal: Logger): string | null {
 }
 
 export function lireReseau(journal: Logger): ReseauPoste | null {
+  if (process.platform === 'darwin') {
+    const nom = interfaceParDefautMac(executerMac(['route', '-n', 'get', 'default']) ?? '');
+    return reseauDeInterface(nom, networkInterfaces());
+  }
   const route = lireProc('/proc/net/route', journal);
   return route === null ? null : reseauDe(route, networkInterfaces());
 }
 
 export function lireEchange(journal: Logger): EchangePoste | null {
+  if (process.platform === 'darwin') return echangeDeMac(executerMac(['sysctl', '-n', 'vm.swapusage']) ?? '');
   const meminfo = lireProc('/proc/meminfo', journal);
   return meminfo === null ? null : echangeDe(meminfo);
 }
