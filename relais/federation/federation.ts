@@ -29,8 +29,16 @@ import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
 import { CacheDistant } from './distant.ts';
 import { Distantes } from './distantes.ts';
 import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
-import { fusionner, noeudsAnnonces, type NoeudAnnonce, photoAdmissions, verdictSource } from './admissions.ts';
+import {
+  fusionner,
+  noeudsAnnonces,
+  type NoeudAnnonce,
+  photoAdmissions,
+  type VerdictSource,
+  verdictSource,
+} from './admissions.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
+import { CharteNoeud } from './charte-noeud.ts';
 import { surDiffusionFederee } from './diffusion-federee.ts';
 import type { EtatFederation, OptionsFederation } from './etat-federation.ts';
 import { TerminalFedere } from './terminal-federe.ts';
@@ -63,6 +71,8 @@ export class Federation {
   readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
   private readonly echanges: Echanges;
+  /** La charte signée du réseau : droits, appairage, édition (routes `/api/reseau/charte`). */
+  readonly charte: CharteNoeud;
   private readonly canaux: Canaux;
   private readonly hote: HoteCanal;
   private pairs: PairFederee[];
@@ -93,6 +103,7 @@ export class Federation {
     this.diffusionAppareil = new DiffusionAppareil(options.diffusion);
     this.terminauxAppareil = new TerminalAppareil(() => this.terminaux.locauxBranches);
     this.config = this.secrets.lireAiguilleur();
+    this.charte = this.creerCharte();
     this.demandes = new DemandesAppairage(options.delaiDemandeMs ?? DELAI_DEMANDE_MS, () => Date.now());
     this.echanges = new Echanges({
       registre: options.registre,
@@ -102,6 +113,7 @@ export class Federation {
       distant: this.distant,
       journal: options.journal,
       terminaux: { traiter: (c, m) => this.terminaux.traiter(c, m) },
+      autoriser: (membre, requete) => this.charte.autorise(membre, requete),
     });
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
@@ -121,6 +133,7 @@ export class Federation {
   /** Écoute les changements locaux ; démarre le lien si ce nœud est déjà relié à un aiguilleur. */
   demarrer(): void {
     this.desabonner = this.options.diffusion.ecouter((m) => this.surDiffusion(m));
+    void this.charte.demarrer();
     if (this.config) this.demarrerLien();
   }
 
@@ -162,6 +175,16 @@ export class Federation {
     }
     this.demarrerLien();
     return ok({ id: r.id });
+  }
+
+  /** Ce nœud est-il chef du réseau, et ce membre l'est-il ? Sans charte : personne. */
+  estChef(membre: string): boolean {
+    return this.charte.estChef(membre);
+  }
+
+  /** Le compte choisi pour cette machine (charte) : compte par défaut des sessions ouvertes sans compte. */
+  compteChoisi(): string | null {
+    return this.charte.compteDeMoi();
   }
 
   /** Le duo par l'aiguilleur (étape 7) partage ce lien : ses canaux (préfixe `duo-`) lui sont remis. */
@@ -283,6 +306,7 @@ export class Federation {
       },
     );
     this.lien.demarrer();
+    void this.charte.essayerReprise();
     this.planificateur ??= setInterval(
       () => this.planifier(),
       this.options.intervallePlanificationMs ?? INTERVALLE_PLANIFICATION_MS,
@@ -359,6 +383,22 @@ export class Federation {
 
   // ---- Hôte des canaux ------------------------------------------------------------------------------------------
 
+  private creerCharte(): CharteNoeud {
+    const { journal, machine, peutReprendre } = this.options;
+    return new CharteNoeud({
+      journal: journal.child({ domaine: 'charte' }),
+      secrets: this.secrets,
+      peutReprendre: peutReprendre ?? false,
+      moi: () => this.config?.id ?? null,
+      nomLocal: () => this.config?.nom ?? machine,
+      identite: () => this.identite(),
+      pairs: () => this.pairs,
+      liensNoeuds: () => this.canaux.ouverts().filter((c) => this.estNoeud(c.membre)),
+      revoquer: (membre) => void this.revoquer(membre),
+      signaler: () => this.signaler(),
+    });
+  }
+
   private creerHote(): HoteCanal {
     return {
       journal: this.options.journal,
@@ -396,6 +436,12 @@ export class Federation {
       const empreinte = await empreinteIdentite(await importerIdentitePublique(presentation.identite));
       const locale = await empreinteIdentite((await this.identite()).publique);
       if (!canal.actif) return;
+      const suite = this.charte.suiteAppairage(presentation);
+      if (suite === 'accord') return this.decisionAppairage(canal, presentation, true);
+      if (suite === 'refus') {
+        this.options.journal.warn({ membre: canal.membre }, 'présentation refusée : demande à un chef du réseau');
+        return canal.decider(false);
+      }
       if (this.demandes.lister().length >= NOMBRE_MAX_DEMANDES) return canal.decider(false);
       this.demandes.ajouter(
         {
@@ -405,7 +451,10 @@ export class Federation {
           empreinteLocale: locale,
           genre: presentation.genre ?? 'noeud',
         },
-        (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler()),
+        (accord) => {
+          void this.decisionAppairage(canal, presentation, accord);
+          this.signaler();
+        },
       );
       this.options.notifier?.(
         'Demande d’appairage',
@@ -418,7 +467,13 @@ export class Federation {
     }
   }
 
-  private decisionAppairage(canal: CanalNoeud, presentation: PresentationDistante, accord: boolean): void {
+  // Sous une charte, un accord fait d'abord entrer le membre dans la charte : sinon, le pair n'est pas admis.
+  private async decisionAppairage(
+    canal: CanalNoeud,
+    presentation: PresentationDistante,
+    accord: boolean,
+  ): Promise<void> {
+    if (accord && !(await this.charte.admettre(canal.membre, presentation))) return canal.decider(false);
     if (accord) this.enregistrerPair(canal.membre, presentation);
     canal.decider(accord);
   }
@@ -431,8 +486,11 @@ export class Federation {
     this.refus.delete(canal.membre);
     if (this.estAppareil(canal.membre)) return;
     this.distant.enLigne(canal.membre, true);
-    for (const message of this.echanges.instantanes()) canal.envoyer(message);
+    if (this.echanges.peutVoir(canal.membre)) {
+      for (const message of this.echanges.instantanes()) canal.envoyer(message);
+    }
     this.envoyerAdmissionsA(canal);
+    this.charte.envoyerA(canal);
   }
 
   private liaisonRefusee(canal: CanalNoeud, raison: string): void {
@@ -441,6 +499,7 @@ export class Federation {
   }
 
   private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
+    if (message.t === 'charte') return this.charte.recevoir(canal.membre, message, this.sourceDe(canal.membre));
     if (this.estAppareil(canal.membre)) return this.messageAppareil(canal, message);
     if (message.t === 'api' || message.t === 'api_reponse') return canal.fermer();
     if (message.t === 'admissions') return this.messageAdmissions(canal, message);
@@ -489,7 +548,7 @@ export class Federation {
     const reponse =
       corps === null
         ? { statut: 400, corps: JSON.stringify({ erreur: 'transfert interrompu' }) }
-        : await this.servirAppareil({ methode: m.methode, chemin: m.chemin, corps, codage: m.codage, type: m.type });
+        : await this.reponseAppareil(canal.membre, m, corps);
     for (const message of messagesAvecCorps(m.ref, reponse.corps, (texte, morceaux) => ({
       t: 'api_reponse',
       ref: m.ref,
@@ -507,6 +566,18 @@ export class Federation {
   private corpsAppareil(membre: string, m: Extract<MessageChiffre, { t: 'api' }>): string | undefined | null {
     if (m.morceaux === undefined) return m.corps;
     return this.transfertsAppareil.assembler(membre, m.ref, m.morceaux);
+  }
+
+  // Un appareil sans le droit de la requête (charte) reçoit 403, sans que la route soit servie.
+  private async reponseAppareil(
+    membre: string,
+    m: Extract<MessageChiffre, { t: 'api' }>,
+    corps: string | undefined,
+  ): Promise<ReponseAppareilFedere> {
+    if (!this.charte.autorise(membre, { genre: 'api', methode: m.methode, chemin: m.chemin })) {
+      return { statut: 403, corps: JSON.stringify({ erreur: 'droit refusé' }) };
+    }
+    return this.servirAppareil({ methode: m.methode, chemin: m.chemin, corps, codage: m.codage, type: m.type });
   }
 
   private async servirAppareil(demande: DemandeAppareilFedere): Promise<ReponseAppareilFedere> {
@@ -543,7 +614,8 @@ export class Federation {
     if (verdict === 'autre-proprietaire') {
       return this.options.journal.warn({ membre: canal.membre }, 'admissions refusées : autre propriétaire');
     }
-    const fusion = fusionner(message, this.pairs, [...this.appareilsRevoques], moi);
+    const liste = this.charte.filtrerAdmissions(message.liste);
+    const fusion = fusionner({ ...message, liste }, this.pairs, [...this.appareilsRevoques], moi);
     for (const conflit of fusion.conflits) {
       this.options.journal.warn({ membre: canal.membre, appareil: conflit }, 'admission ignorée : clé différente');
     }
@@ -604,6 +676,11 @@ export class Federation {
     }
   }
 
+  /** Le verdict d'une source (nœud apparié de mêmes propriétaires ou non), pour la charte. */
+  private sourceDe(membre: string): VerdictSource {
+    return verdictSource(this.pairs, membre, this.voisins.refusPour(membre, this.proprietaireLocal()));
+  }
+
   private estAppareil(membre: string): boolean {
     return this.pairs.some((p) => p.id === membre && p.genre === 'appareil');
   }
@@ -633,6 +710,7 @@ export class Federation {
     };
     this.pairs = [...this.pairs.filter((p) => p.id !== membre), pair];
     this.refus.delete(membre);
+    void this.charte.essayerReprise();
     if (this.revoques.delete(membre)) this.sauverRevoques();
     if (this.appareilsRevoques.delete(membre)) this.sauverAppareilsRevoques();
     this.distant.connaitre(membre, pair.nom);

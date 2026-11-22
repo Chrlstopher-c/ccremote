@@ -95,6 +95,8 @@ export class ApiSessions {
     private readonly isolees: ReadonlySet<string>,
     private readonly journal: Logger,
     private readonly pair: PontPair | null = null,
+    /** Compte par défaut d'une session ouverte sans compte sur cette machine (la charte du réseau). */
+    private readonly compteDefaut: (machine: string) => string | null = () => null,
   ) {}
 
   async ouvrir(req: Request): Promise<Response> {
@@ -107,6 +109,7 @@ export class ApiSessions {
   async ouvrirAvec(c: CorpsOuverture): Promise<Response> {
     const refus = verifierOuverture(c.machine, c.projet, this.isolees);
     if (refus) return erreur(refus, 403);
+    const compte = c.compte ?? this.compteDefaut(c.machine) ?? undefined;
     const demande = {
       sessionId: randomUUID(),
       projet: c.projet,
@@ -116,7 +119,7 @@ export class ApiSessions {
       titre: c.titre?.trim() || titreDepuis(c.message),
       parc: parcPour(c.machine, this.registre.machines(), this.isolees),
       ...(c.modele ? { modele: c.modele } : {}),
-      ...(c.compte ? { compte: c.compte } : {}),
+      ...(compte ? { compte } : {}),
       ...(c.mode ? { mode: c.mode } : {}),
       ...(c.effort ? { effort: c.effort } : {}),
       ...(c.rapide ? { rapide: true } : {}),

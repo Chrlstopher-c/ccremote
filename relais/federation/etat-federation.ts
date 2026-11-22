@@ -43,4 +43,6 @@ export interface OptionsFederation {
   readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
   /** Sert l'API clients à un appareil appairé, dans son canal (absent : 503). */
   readonly servirAppareil?: ServirAppareil;
+  /** Nœud embarqué (non autonome) : il peut fonder le réseau du parc à la première liaison (migration). */
+  readonly peutReprendre?: boolean;
 }

@@ -14,6 +14,8 @@ import {
   type MessageChiffre,
 } from '../../commun/federation.ts';
 import { estGesteRelayable, type MethodeGeste, type PorteeGeste } from '../../commun/gestes-federes.ts';
+import { droitRequis, type RequeteDroit } from '../../commun/charte.ts';
+import { reponseRefusDroit, requeteDeMessage } from './droits-noeud-requete.ts';
 import { type CorpsGeste, reponseGeste } from './gestes.ts';
 import { decouper, nombreDeMorceaux, Reassemblage } from './transferts.ts';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
@@ -80,6 +82,8 @@ export interface OptionsEchanges {
   readonly delaiReponseMs?: number;
   /** Terminaux d'une session distante : les messages `terminal_*` leur sont remis. */
   readonly terminaux?: RecepteurTerminal;
+  /** Droits de la charte : un pair sans le droit d'une requête la voit refusée. Absent : tout est permis. */
+  readonly autoriser?: (membre: string, requete: RequeteDroit) => boolean;
 }
 
 type Attente = (m: MessageChiffre | null) => void;
@@ -137,7 +141,9 @@ export class Echanges {
     this.instantaneEnAttente = setTimeout(() => {
       this.instantaneEnAttente = null;
       const messages = this.instantanes();
-      for (const canal of canaux()) for (const message of messages) canal.envoyer(message);
+      for (const canal of canaux()) {
+        if (this.peutVoir(canal.membre)) for (const message of messages) canal.envoyer(message);
+      }
     }, DELAI_INSTANTANE_MS);
   }
 
@@ -152,7 +158,9 @@ export class Echanges {
   diffuserEvenement(session: string, seq: number, ts: string, evt: Evenement, canaux: readonly CanalNoeud[]): void {
     this.viderFlux();
     for (const canal of canaux) {
-      if (this.abonnements.get(canal.membre)?.has(session)) canal.envoyer({ t: 'evenement', session, seq, ts, evt });
+      if (this.abonnements.get(canal.membre)?.has(session) && this.peutVoir(canal.membre)) {
+        canal.envoyer({ t: 'evenement', session, seq, ts, evt });
+      }
     }
   }
 
@@ -162,7 +170,7 @@ export class Echanges {
    */
   diffuserFlux(flux: FluxLocal, canaux: readonly CanalNoeud[]): void {
     for (const canal of canaux) {
-      if (!this.abonnements.get(canal.membre)?.has(flux.sessionId)) continue;
+      if (!this.abonnements.get(canal.membre)?.has(flux.sessionId) || !this.peutVoir(canal.membre)) continue;
       const genre = flux.genre ?? '';
       const agent = flux.agent ?? '';
       const cle = `${canal.id}\u0000${flux.sessionId}\u0000${flux.bloc}\u0000${genre}\u0000${agent}`;
@@ -223,6 +231,11 @@ export class Echanges {
 
   /** Une requête entrante ou une réponse d'un pair, sur un lien ouvert. */
   async traiter(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
+    if (this.refuseSansDroit(canal, message)) return undefined;
+    return this.despacher(canal, message);
+  }
+
+  private async despacher(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     switch (message.t) {
       case 'instantane':
       case 'evenement':
@@ -256,6 +269,26 @@ export class Echanges {
       default:
         return this.options.terminaux?.traiter(canal, message);
     }
+  }
+
+  /** Un pair sans `voir` ne reçoit ni instantané, ni événement, ni flux de session. */
+  peutVoir(membre: string): boolean {
+    return this.permis(membre, { genre: 'fil' });
+  }
+
+  private permis(membre: string, requete: RequeteDroit): boolean {
+    return this.options.autoriser?.(membre, requete) ?? true;
+  }
+
+  /** Un message qui exige un droit que le pair n'a pas est refusé ici (rend vrai), journalisé sans contenu. */
+  private refuseSansDroit(canal: CanalNoeud, message: MessageChiffre): boolean {
+    const requete = requeteDeMessage(message);
+    if (!requete || this.permis(canal.membre, requete)) return false;
+    const droit = droitRequis(requete);
+    this.options.journal.warn({ membre: canal.membre, t: message.t, droit }, 'requête refusée : droit manquant');
+    const reponse = reponseRefusDroit(message, requete);
+    if (reponse) canal.envoyer(reponse);
+    return true;
   }
 
   // Instantané et événement d'un pair : le cache mémoire les garde.

@@ -6,7 +6,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, wri
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { GENRES_MEMBRE } from '../../commun/aiguilleur.ts';
-import { IdentitePubliqueTexte } from '../../commun/federation.ts';
+import type { CharteSignee } from '../../commun/charte.ts';
+import { IdentitePubliqueTexte, TAILLE_MAX_CHARTE_CARACTERES } from '../../commun/federation.ts';
 
 const IDENTIFIANT = /^[a-f0-9]{12}$/;
 
@@ -33,6 +34,11 @@ export const PairFederee = z.object({
 export type PairFederee = z.infer<typeof PairFederee>;
 
 const PAIRS = z.array(PairFederee);
+/** Charte signée gardée par le nœud (texte JSON exact et signature) : relue et vérifiée au démarrage. */
+export const CharteStockee = z.object({
+  texte: z.string().min(2).max(TAILLE_MAX_CHARTE_CARACTERES),
+  signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
+});
 const IDENTIFIANTS_REVOQUES = z.array(z.string().regex(IDENTIFIANT));
 
 export class SecretsNoeud {
@@ -71,6 +77,15 @@ export class SecretsNoeud {
 
   ecrirePairs(pairs: readonly PairFederee[]): void {
     this.ecrireJson('pairs.json', pairs);
+  }
+
+  /** La charte signée (`federation/charte.json`) : relue ici, vérifiée par CharteNoeud avant d'être crue. */
+  lireCharte(): CharteSignee | null {
+    return this.lireJson('charte.json', CharteStockee);
+  }
+
+  ecrireCharte(charte: CharteSignee): void {
+    this.ecrireJson('charte.json', { texte: charte.texte, signature: charte.signature });
   }
 
   /** Identifiants révoqués : un pair qui revient est refusé comme révoqué, pas comme inconnu. */

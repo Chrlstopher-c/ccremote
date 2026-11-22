@@ -211,14 +211,18 @@ const duo: Duo = new Duo({
     tracer: (session, trace) => sessions.tracerDuPair(session, trace),
   },
 });
-const sessions: ApiSessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal, duo);
+const machineLocale = process.env['CCREMOTE_MACHINE_LOCALE'] || hostname();
+const sessions: ApiSessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal, duo, (machine) =>
+  machine === machineLocale ? federation.compteChoisi() : null,
+);
 // Fédération « mes machines » : inerte tant que ce nœud n'est pas relié à un aiguilleur (le mode tunnel reste le défaut).
 const federation = new Federation({
   registre,
   diffusion,
   dossierSecrets,
   servirAppareil: (demande) => servirPourAppareil(demande),
-  machine: process.env['CCREMOTE_MACHINE_LOCALE'] || hostname(),
+  machine: machineLocale,
+  peutReprendre: process.env['LANTERNE_MOTEUR_AUTONOME'] !== '1',
   pont: {
     ouvrir: (demande) => sessions.ouvrirAvec(demande),
     envoyer: (session, texte) => sessions.envoyerDuPair(session, texte, []),
