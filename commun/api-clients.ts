@@ -81,6 +81,8 @@ export type MessageClient =
   | { readonly type: 'modules_modifies' }
   // Mode duo : l'état du lien ou des partages a changé (l'interface relit GET /api/duo).
   | { readonly type: 'duo_modifie' }
+  // Synchronisations sur demande : demandes reçues ou envoyées, décisions, journal (relire GET /api/synchro).
+  | { readonly type: 'synchro_modifie' }
   // Mode duo : le pair demande un accord (écrire sans permissions, ouvrir une session) ; Chris tranche.
   | { readonly type: 'duo_demande'; readonly demande: DemandeDuo }
   // L'issue d'une requête qui attendait l'accord du pair (ouvrir une session, passer la main) : accord ou refus.

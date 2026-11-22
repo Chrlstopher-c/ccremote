@@ -69,6 +69,8 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     session: SESSION.optional(),
   }),
   z.strictObject({ t: z.literal('revocation') }),
+  // Synchronisation sur demande : le contenu est validé par le service synchro (commun/synchro.ts), pas ici.
+  z.strictObject({ t: z.literal('synchro'), m: z.unknown() }),
 ]);
 export type MessageChiffre = z.infer<typeof MessageChiffre>;
 export type EvenementFedere = z.infer<typeof EvenementFede>;

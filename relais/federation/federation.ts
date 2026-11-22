@@ -14,6 +14,7 @@ import {
   importerIdentitePublique,
 } from '../../commun/chiffrement/identite.ts';
 import { type EvenementFedere, type MessageChiffre } from '../../commun/federation.ts';
+import type { MessageSynchro } from '../../commun/synchro.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import { type CanalNoeud, type HoteCanal, type PresentationDistante } from './canal.ts';
@@ -88,6 +89,7 @@ export class Federation {
   private desabonner: (() => void) | null = null;
   private planificateur: ReturnType<typeof setInterval> | null = null;
   private instantaneEnAttente: ReturnType<typeof setTimeout> | null = null;
+  private recepteurSynchro: ((membre: string, brut: unknown) => void) | null = null;
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
@@ -168,6 +170,23 @@ export class Federation {
     this.oublierPair(membre);
     canal?.fermerApresEnvois();
     return ok(null);
+  }
+
+  /** Branche le service de synchronisation : chaque message synchro reçu d'un pair lui est remis. */
+  brancherSynchro(recepteur: (membre: string, brut: unknown) => void): void {
+    this.recepteurSynchro = recepteur;
+  }
+
+  identifiantLocal(): string | null {
+    return this.config?.id ?? null;
+  }
+
+  /** Un message synchro vers un pair apparié dont le lien est ouvert ; rien ne part sinon. */
+  envoyerSynchro(membre: string, message: MessageSynchro): Resultat<null> {
+    if (!this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud non apparié');
+    const canal = this.canaux.liaisonOuverteAvec(membre);
+    if (!canal) return echec(409, 'nœud hors ligne ou non relié');
+    return canal.envoyer({ t: 'synchro', m: message }) ? ok(null) : echec(503, 'envoi impossible');
   }
 
   sessionsDistantes(): SessionDistante[] {
@@ -365,6 +384,7 @@ export class Federation {
       this.oublierPair(canal.membre);
       return canal.fermer();
     }
+    if (message.t === 'synchro') return this.recepteurSynchro?.(canal.membre, message.m);
     await this.echanges.traiter(canal, message);
   }
 

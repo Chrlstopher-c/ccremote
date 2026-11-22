@@ -59,6 +59,8 @@ import { RegistreReunions } from './reunion/registre-reunions.ts';
 import { SalleDeReunion } from './reunion/salle.ts';
 import { Duo } from './duo/duo.ts';
 import { Federation } from './federation/federation.ts';
+import { JournalSynchro } from './synchro/journal.ts';
+import { ServiceSynchro } from './synchro/service.ts';
 import { nomUtilisateur } from '../commun/identite.ts';
 import { demarrerAiguilleur } from './aiguilleur/demarrer.ts';
 
@@ -212,6 +214,19 @@ const federation = new Federation({
 });
 federation.demarrer();
 process.once('exit', () => federation.arreter());
+// Synchronisations sur demande (étape 6) : le journal reste dans le dossier du nœud, jamais de contenu de session.
+const synchro = new ServiceSynchro({
+  registre,
+  diffusion,
+  lien: {
+    identifiant: () => federation.identifiantLocal(),
+    envoyer: (membre, message) => federation.envoyerSynchro(membre, message),
+  },
+  journal: new JournalSynchro(join(dossierSecrets, 'synchro-journal.json'), journal.child({ domaine: 'synchro' })),
+  logger: journal.child({ domaine: 'synchro' }),
+});
+federation.brancherSynchro((membre, brut) => synchro.recevoir(membre, brut));
+process.once('exit', () => synchro.arreter());
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
 // Un seul relevé d'usage par compte réel du parc : le relais choisit le poste, cadence et garde la dernière valeur.
@@ -268,6 +283,7 @@ const routes = avecCors(
     appels: appelsModules,
     duo,
     federation,
+    synchro,
   }),
   config.origines,
 );

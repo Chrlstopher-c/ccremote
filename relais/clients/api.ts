@@ -36,6 +36,8 @@ import type { Duo } from '../duo/duo.ts';
 import { routesDuo } from '../duo/api-duo.ts';
 import type { Federation } from '../federation/federation.ts';
 import { routesFederation } from '../federation/api-federation.ts';
+import { routesSynchro } from '../synchro/api-synchro.ts';
+import type { ServiceSynchro } from '../synchro/service.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -61,6 +63,7 @@ export interface DependancesApi {
   readonly appels: AppelsModules;
   readonly duo: Duo;
   readonly federation: Federation;
+  readonly synchro: ServiceSynchro;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -229,6 +232,7 @@ export function construireRoutes(d: DependancesApi) {
     ...routesEntretien(d.entretien, protege),
     ...routesDuo(d.duo, protege),
     ...routesFederation(d.federation, protege),
+    ...routesSynchro(d.synchro, protege),
     ...routesReste(d.reste, protege),
     ...routesResteLot2(d.resteLot2, protege),
     ...routesParite(d.parite, protege),
