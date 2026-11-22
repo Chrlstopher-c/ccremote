@@ -39,6 +39,7 @@ import { fichePourIdentifiant } from './identifiants-fiche.ts';
 import { dossierRegistreCc, lireRegistreCc } from './registre-cc.ts';
 import { IndexDecouvertes, type TranscriptDecouvert, identifiantsTranscripts } from './decouverte.ts';
 import { ImportationSessions } from './importation-sessions.ts';
+import { refusCommandeInvite } from './cadre-invite.ts';
 import { ouvrirSession } from './ouverture-session.ts';
 import type { Decouverte, FicheDesktopAnnoncee } from '../../commun/decouverte.ts';
 import { RACINE_DESKTOP_DEFAUT, fichesDesktopAnnoncees } from './fiche-desktop.ts';
@@ -293,6 +294,8 @@ export class GestionnaireSessions {
 
   async executer(c: CommandeSession): Promise<Reponse> {
     await this.hydrater(c.sessionId);
+    const refusInvite = refusCommandeInvite(this.sessions.get(c.sessionId)?.persistee.invite, c.kind);
+    if (refusInvite) return { ok: false, erreur: refusInvite };
     if (c.kind === 'adopter') return reponseAdoption(this.contexteCommandes(), c.sessionId);
     if (c.kind === 'historique' && this.distantes.session(c.sessionId)) return this.distantes.rejouer(c.sessionId);
     if (c.kind === 'tracer_relais') return this.tracer(c);

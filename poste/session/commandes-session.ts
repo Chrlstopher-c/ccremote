@@ -60,6 +60,10 @@ async function appliquerCommande(ctx: ContexteCommandes, s: SessionPoste, c: Com
     return s.reglerSession(c);
   }
   if (c.kind === 'style') return s.reglerSession({ kind: 'style', style: c.style });
+  if (c.kind === 'prompt_systeme') {
+    const texte = c.texte.trim() === '' ? null : c.texte;
+    return s instanceof SessionSdk ? s.promptSysteme(texte) : 'non pris en charge hors SDK';
+  }
   if (c.kind === 'rapide' || c.kind === 'ultracode') return s.reglerSession(c);
   if (c.kind === 'connecteur') {
     return s instanceof SessionSdk ? s.basculerConnecteur(c.nom, c.actif) : 'non pris en charge hors SDK';

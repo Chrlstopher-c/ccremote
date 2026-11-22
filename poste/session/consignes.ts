@@ -93,3 +93,8 @@ const REGLES_TRAVAIL = `## Règles de travail
   (head, grep, --stat, tail), ne relis pas un fichier que tu viens d'écrire.
 - Sous-agents : rarement, seulement pour une exploration volumineuse dont tu ne veux que la conclusion.
   Jamais pour implémenter. Au plus 3 par étape, en Sonnet (imposé).`;
+
+/** Consignes d'une session ordinaire, suivies du prompt système de la conversation (après les consignes Lanterne). */
+export function avecPromptSysteme(consignes: string, prompt: string | null): string {
+  return [consignes, (prompt ?? '').trim()].filter((bloc) => bloc.length > 0).join('\n\n');
+}

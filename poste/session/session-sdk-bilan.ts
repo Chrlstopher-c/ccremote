@@ -8,6 +8,7 @@ import type { Suite } from './suite-du-tour.ts';
 import type { SortieTraduction } from './traduction-sdk.ts';
 import { emettre, maj, type NoyauSdk, pousser } from './session-sdk-noyau.ts';
 import { ceder } from './session-sdk-rattachement.ts';
+import { relancerAvecPrompt } from './session-sdk-processus.ts';
 
 export function basculerAutonomie(n: NoyauSdk, active: boolean): void {
   n.bilan.reinitialiserRelances();
@@ -33,6 +34,9 @@ export function finDeTour(n: NoyauSdk, fin: NonNullable<SortieTraduction['finDeT
   const statut: StatutSession = suite.action === 'laisser' ? 'travail' : panne ? 'erreur' : 'attente';
   maj(n, { statut, contexte: { ...n.etat.contexte, tokens } });
   if (n.cessionEnAttente) ceder(n);
+  else if (n.promptEnAttente && suite.action !== 'laisser' && suite.action !== 'patienter') {
+    relancerAvecPrompt(n, suite);
+  }
   else appliquerSuite(n, suite);
   void n.suiviNuit.tick();
 }
