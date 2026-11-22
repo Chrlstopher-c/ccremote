@@ -38,6 +38,8 @@ export interface OptionsSynchro {
   readonly journal: JournalSynchro;
   readonly logger: Logger;
   readonly delaiMs?: number;
+  /** Une demande reçue attend la décision de Chris : notification dans l'appli. */
+  readonly surDemandeRecue?: (demande: DemandeSynchro) => void;
 }
 
 export type EtatSynchro = 'en-attente' | 'accordee' | 'refusee' | 'expiree' | 'appliquee';
@@ -140,6 +142,7 @@ export class ServiceSynchro {
     }
     this.suivre(this.recues, demande, () => this.expirerRecue(demande.id));
     this.journaliser('recue', membre, demande.id, demande.quoi);
+    this.options.surDemandeRecue?.(demande);
   }
 
   private accorder(demande: DemandeSynchro): void {

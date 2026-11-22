@@ -15,7 +15,7 @@ import { type Aiguilleur, creerAiguilleur } from '../aiguilleur/aiguilleur.ts';
 import { executerCommande } from '../aiguilleur/commande.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import { Federation, type OptionsFederation } from './federation.ts';
-import type { PontFederation } from './echanges.ts';
+import type { GesteLocal, PontFederation } from './echanges.ts';
 
 const journal = pino({ enabled: false });
 export const MAJ = '2026-11-22T10:00:00.000Z';
@@ -31,6 +31,7 @@ export interface Appels {
   readonly ecrire: [string, string][];
   readonly interrompre: string[];
   readonly ouvrir: { chemin: string; message: string }[];
+  readonly gestes: GesteLocal[];
 }
 
 export interface Noeud {
@@ -77,6 +78,11 @@ function pontFactice(appels: Appels): PontFederation {
       appels.interrompre.push(s);
       return Response.json({});
     },
+    geste: async (g) => {
+      appels.gestes.push(g);
+      if (g.geste === 'ouvrir') return Response.json({ id: 'ouverte-par-geste' }, { status: 201 });
+      return Response.json({ geste: g.geste, session: g.session ?? null });
+    },
   };
 }
 
@@ -84,7 +90,7 @@ export function creerNoeud(nom: string, options: Partial<OptionsFederation> = {}
   const base = ouvrirBase(':memory:');
   const registre = new Registre(base, journal);
   const diffusion = new Diffusion();
-  const appels: Appels = { ecrire: [], interrompre: [], ouvrir: [] };
+  const appels: Appels = { ecrire: [], interrompre: [], ouvrir: [], gestes: [] };
   const charges: string[] = [];
   const pont = pontFactice(appels);
   const dossierSecrets = mkdtempSync(join(tmpdir(), `fede-${nom}-`));

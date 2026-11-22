@@ -35,6 +35,7 @@ import type { AppelsModules } from '../modules/appels.ts';
 import type { Duo } from '../duo/duo.ts';
 import { routesDuo } from '../duo/api-duo.ts';
 import type { Federation } from '../federation/federation.ts';
+import { relayerVersNoeuds } from '../federation/interception.ts';
 import { routesFederation } from '../federation/api-federation.ts';
 import { routesSynchro } from '../synchro/api-synchro.ts';
 import type { ServiceSynchro } from '../synchro/service.ts';
@@ -85,8 +86,14 @@ function protegerAvec(acces: Acces): (g: Gestionnaire) => Gestionnaire {
   return (g) => (req) => (acces.autorise(req) ? g(req) : erreur('non connecté', 401));
 }
 
-export function construireRoutes(d: DependancesApi) {
-  const protege = protegerAvec(d.acces);
+/** Routes des clients. `protection` : celle des routes (par défaut, le jeton) ; l'identité sert aux gestes relayés
+ * par un nœud apparié, exécutés en interne, jamais exposés. Une session d'un autre nœud passe par la fédération. */
+export function construireRoutes(d: DependancesApi, protection?: (g: Gestionnaire) => Gestionnaire) {
+  const protege = protection ?? protegerAvec(d.acces);
+  return relayerVersNoeuds(tableRoutes(d, protege), d.federation.distantes, (req) => d.acces.autorise(req));
+}
+
+function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnaire) {
   return {
     '/api/connexion': { POST: (req: Request, serveur: Serveur) => connexion(d, req, serveur) },
     '/api/deconnexion': {
@@ -262,12 +269,17 @@ function etat(d: DependancesApi, req: Request) {
   const notifications = d.registre.notifications(0, 50);
   return {
     version: d.diffusion.version,
-    machines: d.postes.vues(),
-    sessions: d.registre.sessions(avecArchivees(req)),
+    ...vueDuParc(d, req),
     decouvertes: decouvertes(d),
     notifications,
     reveilPossible: d.entretien.reveilPossibles(),
   };
+}
+
+// Sessions et machines du parc, avec celles des nœuds appariés (fédération) quand il y en a.
+function vueDuParc(d: DependancesApi, req: Request) {
+  const v = d.federation.distantes.vue(d.registre.sessions(avecArchivees(req)), d.postes.vues());
+  return { machines: v.machines, sessions: v.sessions };
 }
 
 // Sessions des postes que le relais ne connaît pas encore (transcripts seuls) ; une fiche, même archivée, les retire.
@@ -290,9 +302,8 @@ async function attente(d: DependancesApi, req: Request): Promise<Response> {
   return json({
     version: d.diffusion.version,
     notifications: d.registre.notifications(apres),
-    sessions: d.registre.sessions(avecArchivees(req)),
+    ...vueDuParc(d, req),
     decouvertes: decouvertes(d),
-    machines: d.postes.vues(),
   });
 }
 

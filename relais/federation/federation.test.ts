@@ -108,7 +108,7 @@ describe('appairage entre nœuds', () => {
     await attendre(async () => (await a.federation.etat()).appairages.length === 0);
     expect((await a.federation.etat()).noeuds).toEqual([]);
     expect((await b.federation.etat()).noeuds).toEqual([]);
-    expect(b.federation.sessionsDistantes()).toEqual([]);
+    expect(b.federation.distantes.sessions()).toEqual([]);
     expect(idA).not.toBe(idB);
   });
 
@@ -131,17 +131,17 @@ describe('sessions du pair', () => {
     const { idA, idB } = await appairer(a, b);
     poser(a, ficheDe(SESSION_A, 'tour', 'Titre A'));
     evenement(a, SESSION_A, TEXTE_SECRET);
-    await attendre(() => b.federation.sessionsDistantes().some((s) => s.session.id === SESSION_A));
-    const vue = b.federation.sessionsDistantes().find((s) => s.session.id === SESSION_A);
+    await attendre(() => b.federation.distantes.sessions().some((s) => s.session.id === SESSION_A));
+    const vue = b.federation.distantes.sessions().find((s) => s.session.id === SESSION_A);
     expect(vue?.machine).toBe('tour');
     expect(vue?.enLigne).toBe(true);
     expect(vue?.membre).toBe(idA);
     expect(idB).not.toBe(idA);
-    const fil = await b.federation.filDistant(idA, SESSION_A);
+    const fil = await b.federation.distantes.fil(idA, SESSION_A);
     expect(fil.ok).toBe(true);
     expect(fil.ok && fil.valeur.map((e) => e.evt)).toEqual([{ type: 'message', texte: TEXTE_SECRET }]);
     evenement(a, SESSION_A, 'suite en direct');
-    await attendre(() => b.federation.filEnMemoire(idA, SESSION_A).length === 2);
+    await attendre(() => b.federation.distantes.filEnMemoire(idA, SESSION_A).length === 2);
   });
 
   test('écriture, interruption et ouverture sont relayées au nœud qui tient la session', async () => {
@@ -149,17 +149,17 @@ describe('sessions du pair', () => {
     const b = await nouveau('portable');
     const { idA } = await appairer(a, b);
     poser(a, ficheDe(SESSION_A, 'tour', 'Titre A'));
-    await attendre(() => b.federation.sessionsDistantes().length === 1);
-    expect((await b.federation.ecrireDistant(idA, SESSION_A, 'bonjour de B')).ok).toBe(true);
-    expect((await b.federation.interrompreDistant(idA, SESSION_A)).ok).toBe(true);
+    await attendre(() => b.federation.distantes.sessions().length === 1);
+    expect((await b.federation.distantes.ecrire(idA, SESSION_A, 'bonjour de B')).ok).toBe(true);
+    expect((await b.federation.distantes.interrompre(idA, SESSION_A)).ok).toBe(true);
     expect(a.appels.ecrire).toEqual([[SESSION_A, 'bonjour de B']]);
     expect(a.appels.interrompre).toEqual([SESSION_A]);
-    const ouverture = await b.federation.ouvrirDistant(idA, 'tour', '/projets/neuf', 'prépare un plan');
+    const ouverture = await b.federation.distantes.ouvrir(idA, 'tour', '/projets/neuf', 'prépare un plan');
     expect(ouverture).toEqual({ ok: true, valeur: { session: 'ouverte-tour' } });
     expect(a.appels.ouvrir).toEqual([{ chemin: '/projets/neuf', message: 'prépare un plan' }]);
-    const refus = await b.federation.ouvrirDistant(idA, 'pi', '/projets/x', 'x');
+    const refus = await b.federation.distantes.ouvrir(idA, 'pi', '/projets/x', 'x');
     expect(refus.ok).toBe(false);
-    expect((await b.federation.ecrireDistant(idA, 'inconnue', 'x')).ok).toBe(false);
+    expect((await b.federation.distantes.ecrire(idA, 'inconnue', 'x')).ok).toBe(false);
   });
 });
 
@@ -169,14 +169,14 @@ describe('présence, révocation et ce que voient les autres', () => {
     const b = await nouveau('portable');
     const { idA } = await appairer(a, b);
     poser(a, ficheDe(SESSION_A, 'tour', 'Titre A'));
-    await attendre(() => b.federation.sessionsDistantes().length === 1);
+    await attendre(() => b.federation.distantes.sessions().length === 1);
     a.federation.arreter();
-    await attendre(() => b.federation.sessionsDistantes()[0]?.enLigne === false);
-    expect(b.federation.sessionsDistantes()).toHaveLength(1);
-    expect((await b.federation.ecrireDistant(idA, SESSION_A, 'x')).ok).toBe(false);
+    await attendre(() => b.federation.distantes.sessions()[0]?.enLigne === false);
+    expect(b.federation.distantes.sessions()).toHaveLength(1);
+    expect((await b.federation.distantes.ecrire(idA, SESSION_A, 'x')).ok).toBe(false);
     a.federation.demarrer();
-    await attendre(() => b.federation.sessionsDistantes()[0]?.enLigne === true, 6000);
-    expect((await b.federation.ecrireDistant(idA, SESSION_A, 'revenu')).ok).toBe(true);
+    await attendre(() => b.federation.distantes.sessions()[0]?.enLigne === true, 6000);
+    expect((await b.federation.distantes.ecrire(idA, SESSION_A, 'revenu')).ok).toBe(true);
   });
 
   test('révocation : plus rien chez l’autre, pairs effacés des deux côtés, sessions disparues', async () => {
@@ -184,10 +184,10 @@ describe('présence, révocation et ce que voient les autres', () => {
     const b = await nouveau('portable');
     const { idA, idB } = await appairer(a, b);
     poser(a, ficheDe(SESSION_A, 'tour', 'Titre A'));
-    await attendre(() => b.federation.sessionsDistantes().length === 1);
+    await attendre(() => b.federation.distantes.sessions().length === 1);
     expect(b.federation.revoquer(idA).ok).toBe(true);
     await attendre(async () => (await a.federation.etat()).noeuds.length === 0);
-    expect(b.federation.sessionsDistantes()).toEqual([]);
+    expect(b.federation.distantes.sessions()).toEqual([]);
     expect((await b.federation.etat()).noeuds).toEqual([]);
     expect(b.federation.revoquer(idA).ok).toBe(false);
     expect(a.federation.appairer(idB).ok).toBe(true);
@@ -199,8 +199,8 @@ describe('présence, révocation et ce que voient les autres', () => {
     const { idA } = await appairer(a, b);
     poser(a, ficheDe(SESSION_A, 'tour', 'Titre A'));
     evenement(a, SESSION_A, TEXTE_SECRET);
-    await attendre(() => b.federation.sessionsDistantes().length === 1);
-    await b.federation.filDistant(idA, SESSION_A);
+    await attendre(() => b.federation.distantes.sessions().length === 1);
+    await b.federation.distantes.fil(idA, SESSION_A);
     const charges = [...a.charges, ...b.charges];
     const clairs = charges.filter((c) => !c.includes('"t":"chiffre"'));
     expect(charges.length).toBeGreaterThan(0);
@@ -289,7 +289,7 @@ describe('gardes', () => {
     const seul = creerNoeud('seul');
     noeuds.push(seul);
     expect(seul.federation.appairer('000000000000').ok).toBe(false);
-    expect((await seul.federation.filDistant('000000000000', SESSION_A)).ok).toBe(false);
+    expect((await seul.federation.distantes.fil('000000000000', SESSION_A)).ok).toBe(false);
     const a = await nouveau('tour');
     expect(a.federation.appairer('ffffffffffff').ok).toBe(false);
     const evenement: EvenementFedere = { ts: MAJ, evt: { type: 'message', texte: 'x' } };

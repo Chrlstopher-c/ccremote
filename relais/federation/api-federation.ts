@@ -67,28 +67,28 @@ function routesLien(fede: Federation, protege: Protection) {
 function routesSessions(fede: Federation, protege: Protection) {
   return {
     '/api/federation/sessions': {
-      GET: protege(() => json(fede.sessionsDistantes())),
+      GET: protege(() => json(fede.distantes.sessions())),
       POST: protege(async (req) => {
         const c = await lireCorps(req, CorpsOuverture);
         if (c instanceof Response) return c;
-        return rendre(await fede.ouvrirDistant(c.membre, c.machine, c.chemin, c.message));
+        return rendre(await fede.distantes.ouvrir(c.membre, c.machine, c.chemin, c.message));
       }),
     },
     '/api/federation/sessions/:membre/:session/fil': {
       GET: protege(async (req) =>
-        rendre(await fede.filDistant(req.params['membre'] ?? '', req.params['session'] ?? '')),
+        rendre(await fede.distantes.fil(req.params['membre'] ?? '', req.params['session'] ?? '')),
       ),
     },
     '/api/federation/sessions/:membre/:session/messages': {
       POST: protege(async (req) => {
         const c = await lireCorps(req, CorpsTexte);
         if (c instanceof Response) return c;
-        return rendre(await fede.ecrireDistant(req.params['membre'] ?? '', req.params['session'] ?? '', c.texte));
+        return rendre(await fede.distantes.ecrire(req.params['membre'] ?? '', req.params['session'] ?? '', c.texte));
       }),
     },
     '/api/federation/sessions/:membre/:session/interrompre': {
       POST: protege(async (req) =>
-        rendre(await fede.interrompreDistant(req.params['membre'] ?? '', req.params['session'] ?? '')),
+        rendre(await fede.distantes.interrompre(req.params['membre'] ?? '', req.params['session'] ?? '')),
       ),
     },
   };

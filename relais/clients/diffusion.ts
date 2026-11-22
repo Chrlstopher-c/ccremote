@@ -11,6 +11,8 @@ export class Diffusion {
   private readonly ecouteurs = new Set<(m: MessageClient) => void>();
   // N'avance que sur un changement utile (session, fil, notification), pas sur l'état machine.
   private versionCourante = 0;
+  /** Filtre des messages vers les clients (fédération : copies SSH d'une machine tenue par un autre nœud). */
+  filtre: ((m: MessageClient) => boolean) | null = null;
 
   get version(): number {
     return this.versionCourante;
@@ -36,8 +38,10 @@ export class Diffusion {
   }
 
   diffuser(m: MessageClient): void {
-    const texte = JSON.stringify(m);
-    for (const ws of this.clients) ws.send(texte);
+    if (!this.filtre || this.filtre(m)) {
+      const texte = JSON.stringify(m);
+      for (const ws of this.clients) ws.send(texte);
+    }
     for (const ecouteur of this.ecouteurs) ecouteur(m);
     // L'iPhone ne se réveille ni pour chaque fragment d'Echo ni pour la salle de réunion (HQ, WebSocket seulement),
     // ni pour chaque delta de texte (le bloc final réveille le long-poll).

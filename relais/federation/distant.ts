@@ -1,7 +1,23 @@
 // Responsabilité : ce que le nœud sait des autres nœuds, en mémoire seulement — leurs sessions (fiches reçues), leur
 // présence et le fil récemment lu. Rien de cela n'entre dans la base du relais : quitter le nœud efface tout.
 import type { ResumeSession } from '../../commun/session.ts';
-import { TAILLE_FIL_FEDERE, type EvenementFedere } from '../../commun/federation.ts';
+import { TAILLE_FIL_FEDERE, type EvenementFedere, type MachineAnnoncee } from '../../commun/federation.ts';
+
+/** Ce qu'on sait d'un nœud apparié : sa machine, son nom, sa présence, ses sessions et sa machine annoncée. */
+export interface NoeudDistant {
+  readonly membre: string;
+  readonly nom: string;
+  readonly machine: string;
+  readonly enLigne: boolean;
+  readonly sessions: readonly ResumeSession[];
+  readonly vue: MachineAnnoncee | null;
+}
+
+/** Observe le cache : un nœud a changé (liste, présence), ou un événement en direct est arrivé. */
+export interface ObservateurDistant {
+  changement(): void;
+  evenement(membre: string, session: string, evenement: EvenementFedere): void;
+}
 
 export interface SessionDistante {
   readonly membre: string;
@@ -16,36 +32,62 @@ interface EtatNoeud {
   machine: string;
   enLigne: boolean;
   sessions: Map<string, ResumeSession>;
+  vue: MachineAnnoncee | null;
 }
 
 export class CacheDistant {
   private readonly noeuds = new Map<string, EtatNoeud>();
   private readonly fils = new Map<string, EvenementFedere[]>();
+  observateur: ObservateurDistant | null = null;
 
   /** Un nœud connu, en ligne ou non ; ses sessions restent visibles hors ligne jusqu'à sa révocation. */
   connaitre(membre: string, nom: string): void {
     const existant = this.noeuds.get(membre);
     if (existant) existant.nom = nom;
-    else this.noeuds.set(membre, { nom, machine: nom, enLigne: false, sessions: new Map() });
+    else this.noeuds.set(membre, { nom, machine: nom, enLigne: false, sessions: new Map(), vue: null });
+    this.observateur?.changement();
   }
 
-  instantane(membre: string, machine: string, nom: string, sessions: readonly ResumeSession[]): void {
+  instantane(
+    membre: string,
+    machine: string,
+    nom: string,
+    sessions: readonly ResumeSession[],
+    vue: MachineAnnoncee | null = null,
+  ): void {
     this.noeuds.set(membre, {
       nom,
       machine,
       enLigne: true,
       sessions: new Map(sessions.map((s) => [s.id, s])),
+      vue,
     });
+    this.observateur?.changement();
   }
 
   enLigne(membre: string, enLigne: boolean): void {
     const noeud = this.noeuds.get(membre);
-    if (noeud) noeud.enLigne = enLigne;
+    if (!noeud || noeud.enLigne === enLigne) return;
+    noeud.enLigne = enLigne;
+    this.observateur?.changement();
   }
 
   retirer(membre: string): void {
     this.noeuds.delete(membre);
     for (const cle of [...this.fils.keys()]) if (cle.startsWith(`${membre}/`)) this.fils.delete(cle);
+    this.observateur?.changement();
+  }
+
+  /** Les nœuds connus, avec leurs sessions (ordre d'arrivée). */
+  noeudsConnus(): NoeudDistant[] {
+    return [...this.noeuds].map(([membre, n]) => ({
+      membre,
+      nom: n.nom,
+      machine: n.machine,
+      enLigne: n.enLigne,
+      sessions: [...n.sessions.values()],
+      vue: n.vue,
+    }));
   }
 
   sessions(): SessionDistante[] {
@@ -76,6 +118,7 @@ export class CacheDistant {
     const cle = cleFil(membre, session);
     const actuel = this.fils.get(cle) ?? [];
     this.fils.set(cle, [...actuel, evenement].slice(-TAILLE_FIL_FEDERE));
+    this.observateur?.evenement(membre, session, evenement);
   }
 }
 

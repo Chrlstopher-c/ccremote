@@ -2,7 +2,7 @@
 // l'appairage entre nœuds, puis messages chiffrés de bout en bout une fois le canal établi. Aucune logique ici.
 import { z } from 'zod';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
-import { Evenement, ResumeSession } from './session.ts';
+import { Evenement, Projet, ResumeSession } from './session.ts';
 
 /** Taille maximale d'un message en clair (avant chiffrement) : la charge de l'aiguilleur est plafonnée à 1 Mio. */
 export const TAILLE_MAX_CLAIR_OCTETS = 600_000;
@@ -34,7 +34,48 @@ export const MessageEnClair = z.discriminatedUnion('t', [
 ]);
 export type MessageEnClair = z.infer<typeof MessageEnClair>;
 
-const EvenementFede = z.object({ ts: z.string(), evt: Evenement });
+// `seq` : numéro de l'événement chez le nœud qui tient la session (absent : nœud d'avant le relais des gestes).
+const EvenementFede = z.object({ seq: z.number().int().nonnegative().optional(), ts: z.string(), evt: Evenement });
+
+/** La machine du nœud telle qu'il l'annonce : de quoi la ranger et y créer une session chez ses pairs. */
+export const MachineAnnoncee = z.strictObject({
+  description: z.string().max(200),
+  racines: z.array(z.string().max(4096)).max(50),
+  projets: z.array(Projet).max(500),
+  comptes: z.array(z.string().max(200)).max(20),
+});
+export type MachineAnnoncee = z.infer<typeof MachineAnnoncee>;
+
+/**
+ * Gestes relayés vers le nœud qui tient la session : le suffixe de route `/api/sessions/:id/<geste>` (ou `ouvrir`
+ * pour `POST /api/sessions`), exécuté là-bas par sa propre route, comme un geste local. Liste fermée.
+ */
+export const GESTES_FEDERES = [
+  'ouvrir',
+  'evenements',
+  'contexte',
+  'connecteurs',
+  'taches',
+  'chapitres',
+  'messages',
+  'repondre',
+  'mode',
+  'modele',
+  'effort',
+  'rapide',
+  'autonomie',
+  'renommer',
+  'interrompre',
+  'compacter',
+  'reprendre',
+  'archiver',
+  'desarchiver',
+  'epingler',
+  'desepingler',
+  'marquer_lue',
+  'marquer_non_lue',
+] as const;
+export type GesteFedere = (typeof GESTES_FEDERES)[number];
 
 /** Chiffré de bout en bout : tout ce qui concerne les sessions d'un nœud. */
 export const MessageChiffre = z.discriminatedUnion('t', [
@@ -43,8 +84,15 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     machine: NOM,
     nom: NOM,
     sessions: z.array(ResumeSession).max(NOMBRE_MAX_SESSIONS_FEDEREES),
+    vue: MachineAnnoncee.optional(),
   }),
-  z.strictObject({ t: z.literal('evenement'), session: SESSION, ts: z.string(), evt: Evenement }),
+  z.strictObject({
+    t: z.literal('evenement'),
+    session: SESSION,
+    seq: z.number().int().nonnegative().optional(),
+    ts: z.string(),
+    evt: Evenement,
+  }),
   z.strictObject({ t: z.literal('fil'), ref: REF, session: SESSION }),
   z.strictObject({
     t: z.literal('fil_reponse'),
@@ -69,6 +117,21 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     session: SESSION.optional(),
   }),
   z.strictObject({ t: z.literal('revocation') }),
+  z.strictObject({
+    t: z.literal('geste'),
+    ref: REF,
+    geste: z.enum(GESTES_FEDERES),
+    methode: z.enum(['GET', 'POST']),
+    session: SESSION.optional(),
+    requete: z.string().max(2000).optional(),
+    corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS).optional(),
+  }),
+  z.strictObject({
+    t: z.literal('geste_reponse'),
+    ref: REF,
+    statut: z.number().int().min(100).max(599),
+    corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
+  }),
   // Synchronisation sur demande : le contenu est validé par le service synchro (commun/synchro.ts), pas ici.
   z.strictObject({ t: z.literal('synchro'), m: z.unknown() }),
 ]);

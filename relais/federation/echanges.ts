@@ -9,8 +9,11 @@ import {
   TAILLE_MAX_CLAIR_OCTETS,
   DELAI_REPONSE_FEDEREE_MS,
   type EvenementFedere,
+  type GesteFedere,
+  type MachineAnnoncee,
   type MessageChiffre,
 } from '../../commun/federation.ts';
+import { reponseGeste } from './gestes.ts';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
@@ -23,6 +26,16 @@ export interface PontFederation {
   ouvrir(demande: OuvertureChezProprietaire): Promise<Response>;
   envoyer(session: string, texte: string): Promise<Response>;
   interrompre(session: string): Promise<Response>;
+  /** Un geste relayé (liste fermée), exécuté par la route locale correspondante, sans autre contrôle d'accès. */
+  geste?(geste: GesteLocal): Promise<Response>;
+}
+
+export interface GesteLocal {
+  readonly geste: GesteFedere;
+  readonly methode: 'GET' | 'POST';
+  readonly session?: string;
+  readonly requete?: string;
+  readonly corps?: string;
 }
 
 export interface OptionsEchanges {
@@ -46,18 +59,31 @@ export class Echanges {
   /** L'instantané des sessions du nœud, ajusté pour tenir dans une trame. */
   instantane(): MessageChiffre {
     const sessions = this.options.registre.sessions(false).filter((s) => !s.duo);
+    const vue = this.machineAnnoncee();
     return tenirDansLaLimite(sessions, (liste) => ({
       t: 'instantane',
       machine: this.options.machine,
       nom: this.options.nom(),
       sessions: [...liste],
+      ...(vue ? { vue } : {}),
     }));
   }
 
+  private machineAnnoncee(): MachineAnnoncee | null {
+    const fiche = this.options.registre.machines().find((m) => m.id === this.options.machine);
+    if (!fiche) return null;
+    return {
+      description: fiche.description.slice(0, 200),
+      racines: fiche.racines.slice(0, 50),
+      projets: fiche.projets.slice(0, 500),
+      comptes: fiche.comptes.slice(0, 20),
+    };
+  }
+
   /** Un événement local d'une session : envoyé en direct aux canaux dont le pair suit le fil de cette session. */
-  diffuserEvenement(session: string, ts: string, evt: Evenement, canaux: readonly CanalNoeud[]): void {
+  diffuserEvenement(session: string, seq: number, ts: string, evt: Evenement, canaux: readonly CanalNoeud[]): void {
     for (const canal of canaux) {
-      if (this.abonnements.get(canal.membre)?.has(session)) canal.envoyer({ t: 'evenement', session, ts, evt });
+      if (this.abonnements.get(canal.membre)?.has(session)) canal.envoyer({ t: 'evenement', session, seq, ts, evt });
     }
   }
 
@@ -70,9 +96,16 @@ export class Echanges {
   async traiter(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     switch (message.t) {
       case 'instantane':
-        return this.options.distant.instantane(canal.membre, message.machine, message.nom, message.sessions);
+        return this.options.distant.instantane(
+          canal.membre,
+          message.machine,
+          message.nom,
+          message.sessions,
+          message.vue ?? null,
+        );
       case 'evenement':
         return this.options.distant.ajouterEvenement(canal.membre, message.session, {
+          ...(message.seq !== undefined ? { seq: message.seq } : {}),
           ts: message.ts,
           evt: message.evt,
         });
@@ -86,7 +119,10 @@ export class Echanges {
         return this.repondreOuverture(canal, message.ref, message.machine, message.chemin, message.message);
       case 'fil_reponse':
         return this.recevoirFil(canal, message.ref, message.session, message.evenements);
+      case 'geste':
+        return this.repondreGeste(canal, message);
       case 'reponse':
+      case 'geste_reponse':
         return this.attentes.get(message.ref)?.(message);
       default:
         return undefined;
@@ -94,7 +130,11 @@ export class Echanges {
   }
 
   /** Envoie une requête à un pair et rend sa réponse (ou null : hors ligne, trame trop grande, délai dépassé). */
-  requeter(canal: CanalNoeud, construire: (ref: string) => MessageChiffre): Promise<MessageChiffre | null> {
+  requeter(
+    canal: CanalNoeud,
+    construire: (ref: string) => MessageChiffre,
+    delaiMs?: number,
+  ): Promise<MessageChiffre | null> {
     const ref = nonceRef();
     return new Promise((resoudre) => {
       const fin = (m: MessageChiffre | null): void => {
@@ -102,7 +142,7 @@ export class Echanges {
         this.attentes.delete(ref);
         resoudre(m);
       };
-      const minuterie = setTimeout(() => fin(null), this.options.delaiReponseMs ?? DELAI_REPONSE_FEDEREE_MS);
+      const minuterie = setTimeout(() => fin(null), delaiMs ?? this.options.delaiReponseMs ?? DELAI_REPONSE_FEDEREE_MS);
       this.attentes.set(ref, fin);
       if (!canal.envoyer(construire(ref))) fin(null);
     });
@@ -120,7 +160,7 @@ export class Echanges {
     this.abonner(canal.membre, session);
     const evenements = this.options.registre
       .derniersEvenements(session, TAILLE_FIL_FEDERE)
-      .map((e) => ({ ts: e.ts, evt: e.evt }));
+      .map((e) => ({ seq: e.seq, ts: e.ts, evt: e.evt }));
     const message = tenirDansLaLimite(evenements, (liste) => ({
       t: 'fil_reponse',
       ref,
@@ -169,6 +209,26 @@ export class Echanges {
     if (!r.ok) return this.reponse(canal, ref, false, r.raison);
     const id = r.corps && typeof r.corps === 'object' && 'id' in r.corps ? String(r.corps.id) : undefined;
     this.reponse(canal, ref, id !== undefined, id === undefined ? 'session ouverte sans identifiant' : undefined, id);
+  }
+
+  // Un geste relayé par un pair : sa session doit être une des nôtres (pas reçue du duo) ; `ouvrir` vise une machine du
+  // parc de ce nœud. Lire le fil abonne le pair au direct, comme `fil`.
+  private async repondreGeste(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'geste' }>): Promise<void> {
+    const refuser = (statut: number, texte: string): void =>
+      void canal.envoyer({ t: 'geste_reponse', ref: m.ref, statut, corps: JSON.stringify({ erreur: texte }) });
+    const pont = this.options.pont.geste;
+    if (!pont) return refuser(501, 'geste non pris en charge par ce nœud');
+    if (m.geste !== 'ouvrir' && (!m.session || !this.sessionPartagee(m.session))) {
+      return refuser(404, 'session inconnue');
+    }
+    if (m.geste === 'evenements' && m.session) this.abonner(canal.membre, m.session);
+    try {
+      const reponse = await pont({ ...m });
+      canal.envoyer({ t: 'geste_reponse', ref: m.ref, ...(await reponseGeste(reponse, m.geste)) });
+    } catch (erreur) {
+      this.options.journal.error({ err: erreur, geste: m.geste }, 'geste relayé en échec');
+      refuser(500, 'geste en échec sur le nœud');
+    }
   }
 
   private reponse(canal: CanalNoeud, ref: string, ok: boolean, raison?: string, session?: string): void {

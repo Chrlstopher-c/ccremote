@@ -99,10 +99,10 @@ test('deux nœuds sur le vrai aiguilleur : appairage, sessions, fil, écriture, 
     a.registre.enregistrerSession(ficheDe('s-reelle', 'tour', 'Titre réel'));
     a.diffusion.diffuser({ type: 'session', session: ficheDe('s-reelle', 'tour', 'Titre réel') });
     a.registre.ajouterEvenement('s-reelle', MAJ, { type: 'message', texte: TEXTE_SECRET });
-    await attendre(() => b.federation.sessionsDistantes().some((s) => s.session.id === 's-reelle'), 8000);
-    const fil = await b.federation.filDistant(idA, 's-reelle');
+    await attendre(() => b.federation.distantes.sessions().some((s) => s.session.id === 's-reelle'), 8000);
+    const fil = await b.federation.distantes.fil(idA, 's-reelle');
     expect(fil.ok && fil.valeur.length).toBe(1);
-    expect((await b.federation.ecrireDistant(idA, 's-reelle', 'depuis le portable')).ok).toBe(true);
+    expect((await b.federation.distantes.ecrire(idA, 's-reelle', 'depuis le portable')).ok).toBe(true);
 
     await commande(['revoquer', idB]);
     await attendre(() => b.federation.etat().then((e) => e.aiguilleur?.motif === 'revoque'), 10_000);

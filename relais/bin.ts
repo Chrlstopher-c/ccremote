@@ -6,7 +6,8 @@ import { COMMIT, VERSION } from '../commun/version.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
-import { construireRoutes } from './clients/api.ts';
+import { construireRoutes, type DependancesApi } from './clients/api.ts';
+import { executerGeste, type TableInterne } from './federation/executeur.ts';
 import { routesAcces } from './acces/api-acces.ts';
 import type { PosteRelais } from './acces/api-appairage.ts';
 import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
@@ -209,11 +210,14 @@ const federation = new Federation({
     ouvrir: (demande) => sessions.ouvrirAvec(demande),
     envoyer: (session, texte) => sessions.envoyerDuPair(session, texte, []),
     interrompre: (session) => sessions.interrompreDuPair(session),
+    geste: (g) => executerGeste(routesInternes, g),
   },
+  notifier: (titre, texte) => notifierChris(titre, texte),
   journal: journal.child({ domaine: 'federation' }),
 });
 // Le duo passe par ce même lien (un seul par nœud) : ses canaux `duo-…` lui sont remis.
 federation.brancherDuo(duo.brancherAiguilleur(federation.portDuo()));
+diffusion.filtre = (m) => federation.distantes.laisserPasser(m);
 federation.demarrer();
 process.once('exit', () => federation.arreter());
 // Synchronisations sur demande (étape 6) : le journal reste dans le dossier du nœud, jamais de contenu de session.
@@ -226,6 +230,11 @@ const synchro = new ServiceSynchro({
   },
   journal: new JournalSynchro(join(dossierSecrets, 'synchro-journal.json'), journal.child({ domaine: 'synchro' })),
   logger: journal.child({ domaine: 'synchro' }),
+  surDemandeRecue: (d) =>
+    notifierChris(
+      'Demande de synchronisation',
+      `Une de tes machines demande : ${d.quoi.join(', ')}. Paramètres › Réseau.`,
+    ),
 });
 federation.brancherSynchro((membre, brut) => synchro.recevoir(membre, brut));
 process.once('exit', () => synchro.arreter());
@@ -260,35 +269,49 @@ const echo = config.echo
   : null;
 echo?.demarrer();
 type DonneesClient = { readonly type: 'flux' } | DonneesTerminal;
-const routes = avecCors(
-  construireRoutes({
-    acces,
-    registre,
-    postes,
-    diffusion,
-    sessions,
-    sessionConfig,
-    configuration,
-    comptes,
-    fichiers,
-    artefacts,
-    modifications,
-    fichiersSession,
-    echo,
-    reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
-    machines,
-    entretien,
-    reste,
-    resteLot2,
-    parite,
-    confirmations,
-    appels: appelsModules,
-    duo,
-    federation,
-    synchro,
-  }),
-  config.origines,
-);
+const dependancesApi: DependancesApi = {
+  acces,
+  registre,
+  postes,
+  diffusion,
+  sessions,
+  sessionConfig,
+  configuration,
+  comptes,
+  fichiers,
+  artefacts,
+  modifications,
+  fichiersSession,
+  echo,
+  reunions: { salle: salleReunions, journal: journal.child({ domaine: 'reunion' }) },
+  machines,
+  entretien,
+  reste,
+  resteLot2,
+  parite,
+  confirmations,
+  appels: appelsModules,
+  duo,
+  federation,
+  synchro,
+};
+const routes = avecCors(construireRoutes(dependancesApi), config.origines);
+// Table interne (sans jeton) : seuls les gestes relayés par un nœud apparié, sur le lien chiffré, y passent.
+// Les valeurs de la table sont les gestionnaires par méthode de Bun.serve : même forme que TableInterne.
+const routesInternes = construireRoutes(dependancesApi, (g) => g) as unknown as TableInterne;
+federation.distantes.brancherMachines(() => postes.vues());
+
+// Une demande qui attend la décision de Chris sur ce nœud (appairage, synchronisation) : notification dans l'appli.
+function notifierChris(titre: string, texte: string): void {
+  const notification = registre.ajouterNotification({
+    sessionId: null,
+    niveau: 'important',
+    titre,
+    texte,
+    ts: new Date().toISOString(),
+  });
+  diffusion.diffuser({ type: 'notification', notification });
+}
 // Appairage avec machine : le relais central remet le lien des postes et le jeton (table partagée avec les postes).
 const posteRelais: PosteRelais | null = config.central
   ? { dossier: dossierSecrets, secrets: secretsPostes, urlPoste: config.urlPoste, couper: (m) => postes.couper(m) }

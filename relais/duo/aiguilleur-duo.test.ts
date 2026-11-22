@@ -135,7 +135,7 @@ describe('duo par l’aiguilleur — séparation et échanges', () => {
     await attendre(() => textes(bob, 's2').includes('bonjour'));
     expect(textes(bob, 's1')).toEqual([]);
     expect((await bob.federation.etat()).noeuds).toEqual([]);
-    expect(bob.federation.sessionsDistantes()).toEqual([]);
+    expect(bob.federation.distantes.sessions()).toEqual([]);
   });
 
   test('l’aiguilleur ne voit que des trames chiffrées une fois le lien ouvert', async () => {

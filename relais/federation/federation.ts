@@ -21,7 +21,8 @@ import type { Registre } from '../registre/registre.ts';
 import { type CanalNoeud, type HoteCanal, type PresentationDistante } from './canal.ts';
 import { Canaux } from './canaux.ts';
 import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
-import { CacheDistant, type SessionDistante } from './distant.ts';
+import { CacheDistant } from './distant.ts';
+import { Distantes } from './distantes.ts';
 import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
@@ -47,6 +48,8 @@ export interface OptionsFederation {
   readonly journal: Logger;
   readonly delaiDemandeMs?: number;
   readonly intervallePlanificationMs?: number;
+  /** Notification à Chris (une demande attend sa décision sur ce nœud). */
+  readonly notifier?: (titre: string, texte: string) => void;
   /** Observe chaque charge échangée avec l'aiguilleur (essais : prouver qu'il ne voit que du chiffré). */
   readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
 }
@@ -79,6 +82,8 @@ export interface EtatFederation {
 export class Federation {
   private readonly secrets: SecretsNoeud;
   private readonly distant = new CacheDistant();
+  /** Sessions des autres nœuds : vue fusionnée pour l'appli, gestes relayés. */
+  readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
   private readonly echanges: Echanges;
   private readonly canaux: Canaux;
@@ -111,6 +116,15 @@ export class Federation {
     });
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
+    this.distantes = new Distantes({
+      registre: options.registre,
+      diffusion: options.diffusion,
+      machine: options.machine,
+      cache: this.distant,
+      echanges: this.echanges,
+      liaison: (membre) => this.canaux.liaisonOuverteAvec(membre),
+      journal: options.journal.child({ domaine: 'distantes' }),
+    });
   }
 
   /** Écoute les changements locaux ; démarre le lien si ce nœud est déjà relié à un aiguilleur. */
@@ -163,7 +177,7 @@ export class Federation {
       membreLocal: () => this.config?.id ?? null,
       identiteLocale: () => this.identite(),
       envoyer: (m) => this.emettre(m),
-      enLigne: (membre) => this.presence.get(membre) === true,
+      enLigne: (membre) => this.voisins.enLigne(membre),
       relie: () => this.lien?.connecte() ?? false,
     };
   }
@@ -177,6 +191,7 @@ export class Federation {
     if (!this.voisins.enLigne(membre)) return echec(409, 'nœud hors ligne');
     if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
     const canal = this.canaux.ouvrir(membre, 'appairage');
+    this.signaler();
     return canal ? ok({ canal: canal.id }) : echec(503, 'aiguilleur indisponible');
   }
 
@@ -209,45 +224,6 @@ export class Federation {
     const canal = this.canaux.liaisonOuverteAvec(membre);
     if (!canal) return echec(409, 'nœud hors ligne ou non relié');
     return canal.envoyer({ t: 'synchro', m: message }) ? ok(null) : echec(503, 'envoi impossible');
-  }
-
-  sessionsDistantes(): SessionDistante[] {
-    return this.distant.sessions();
-  }
-
-  filDistant(membre: string, session: string): Promise<Resultat<EvenementFedere[]>> {
-    return this.requete(membre, (ref) => ({ t: 'fil', ref, session })).then((r) => {
-      if (!r.ok) return r;
-      return r.valeur.t === 'fil_reponse' ? ok(r.valeur.evenements) : echec(502, 'réponse inattendue');
-    });
-  }
-
-  /** Le fil déjà reçu d'une session distante (mémoire seulement, mis à jour en direct). */
-  filEnMemoire(membre: string, session: string): EvenementFedere[] {
-    return this.distant.fil(membre, session);
-  }
-
-  async ecrireDistant(membre: string, session: string, texte: string): Promise<Resultat<null>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'ecrire', ref, session, texte }));
-    return r.ok ? ok(null) : r;
-  }
-
-  async interrompreDistant(membre: string, session: string): Promise<Resultat<null>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'interrompre', ref, session }));
-    return r.ok ? ok(null) : r;
-  }
-
-  /** Crée une session sur une machine du nœud visé, dans un dossier de cette machine. */
-  async ouvrirDistant(
-    membre: string,
-    machine: string,
-    chemin: string,
-    message: string,
-  ): Promise<Resultat<{ session: string }>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'ouvrir', ref, machine, chemin, message }));
-    if (!r.ok) return r;
-    if (r.valeur.t === 'reponse' && r.valeur.session) return ok({ session: r.valeur.session });
-    return echec(502, 'session ouverte sans identifiant');
   }
 
   async etat(): Promise<EtatFederation> {
@@ -321,6 +297,7 @@ export class Federation {
     this.voisins.remplacer(message.membres);
     this.apprendreProprietaire(message.proprietaire);
     this.planifier();
+    this.signaler();
   }
 
   /** Le propriétaire du nœud vient de l'appairage ; à défaut, de la présence, et il est alors gardé. */
@@ -357,6 +334,7 @@ export class Federation {
   private surConnexion(connecte: boolean): void {
     this.options.journal.info({ connecte }, 'lien vers l’aiguilleur');
     this.duo?.surConnexion(connecte);
+    this.signaler();
     if (connecte) return;
     for (const canal of this.canaux.actifs()) canal.surFermetureDistante();
     this.voisins.effacer();
@@ -365,6 +343,7 @@ export class Federation {
 
   private surArret(motif: MotifArret): void {
     this.motifArret = motif;
+    this.signaler();
     this.options.journal.warn({ motif }, 'lien vers l’aiguilleur arrêté : ce nœud n’est plus relié');
   }
 
@@ -380,12 +359,14 @@ export class Federation {
       envoyerAiguilleur: (m) => this.emettre(m),
       presentationRecue: (canal, p) => void this.presentationRecue(canal, p),
       appairageAccepte: (canal, p) => this.appairageAccepte(canal.membre, p),
-      appairageRefuse: (canal, raison) =>
-        this.options.journal.warn({ membre: canal.membre, raison }, 'appairage refusé'),
-      liaisonOuverte: (canal) => this.liaisonOuverte(canal),
+      appairageRefuse: (canal, raison) => {
+        this.options.journal.warn({ membre: canal.membre, raison }, 'appairage refusé');
+        this.signaler();
+      },
+      liaisonOuverte: (canal) => (this.liaisonOuverte(canal), this.signaler()),
       liaisonRefusee: (canal, raison) => this.liaisonRefusee(canal, raison),
       messageRecu: (canal, m) => void this.messageRecu(canal, m),
-      canalFerme: (canal) => this.canalFerme(canal),
+      canalFerme: (canal) => (this.canalFerme(canal), this.signaler()),
     };
   }
 
@@ -403,8 +384,13 @@ export class Federation {
       if (this.demandes.lister().length >= NOMBRE_MAX_DEMANDES) return canal.decider(false);
       this.demandes.ajouter(
         { membre: canal.membre, nom: presentation.nom, empreinte, empreinteLocale: locale },
-        (accord) => this.decisionAppairage(canal, presentation, accord),
+        (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler()),
       );
+      this.options.notifier?.(
+        'Demande d’appairage',
+        `${presentation.nom} demande à rejoindre tes machines : compare les empreintes dans Paramètres › Réseau.`,
+      );
+      this.signaler();
     } catch (erreur) {
       this.options.journal.error({ err: erreur, membre: canal.membre }, 'présentation d’un nœud illisible');
       canal.fermer();
@@ -472,7 +458,13 @@ export class Federation {
     this.refus.delete(membre);
   }
 
+  /** L'état de la fédération a changé : l'appli relit `GET /api/federation`. */
+  private signaler(): void {
+    this.options.diffusion.diffuser({ type: 'federation_modifiee' });
+  }
+
   private sauverPairs(): void {
+    this.signaler();
     try {
       this.secrets.ecrirePairs(this.pairs);
     } catch {
@@ -504,9 +496,11 @@ export class Federation {
   }
 
   private surDiffusion(m: MessageClient): void {
+    if (m.type === 'session' && this.distantes.estDistante(m.session.id)) return;
     if (m.type === 'session' || m.type === 'supprimee') return this.programmerInstantane();
     if (m.type === 'evenement') {
-      this.echanges.diffuserEvenement(m.evenement.sessionId, m.evenement.ts, m.evenement.evt, this.canaux.ouverts());
+      const e = m.evenement;
+      this.echanges.diffuserEvenement(e.sessionId, e.seq, e.ts, e.evt, this.canaux.ouverts());
     }
   }
 
@@ -518,17 +512,5 @@ export class Federation {
       const instantane = this.echanges.instantane();
       for (const canal of this.canaux.ouverts()) canal.envoyer(instantane);
     }, DELAI_INSTANTANE_MS);
-  }
-
-  private async requete(
-    membre: string,
-    construire: (ref: string) => MessageChiffre,
-  ): Promise<Resultat<MessageChiffre>> {
-    const canal = this.canaux.liaisonOuverteAvec(membre);
-    if (!canal) return echec(409, 'nœud hors ligne ou non relié');
-    const reponse = await this.echanges.requeter(canal, construire);
-    if (!reponse) return echec(504, 'le nœud n’a pas répondu');
-    if (reponse.t === 'reponse' && !reponse.ok) return echec(409, reponse.raison ?? 'refusé');
-    return ok(reponse);
   }
 }
