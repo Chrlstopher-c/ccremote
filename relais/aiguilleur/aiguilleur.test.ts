@@ -476,4 +476,13 @@ describe('présence entre propriétaires : seulement après canal accepté', () 
     m.lb1.envoyer({ t: 'ouvrir', canal: 'duo3', vers: horsLigne.id });
     expect((await m.lb1.attendre((x) => x.t === 'erreur')).motif).toBe('non-autorise');
   });
+
+  test('appairage duo possible avant tout canal accepté ; Mathéo ne voit toujours aucun nœud de Chris', async () => {
+    const m = await mondeDuo();
+    m.lb1.envoyer({ t: 'ouvrir', canal: 'duo4', vers: m.a1.id });
+    expect((await m.la1.attendre((x) => x.t === 'ouvrir' && x['canal'] === 'duo4'))['de']).toBe(m.b1.id);
+    await m.lb1.silence();
+    expect(visibles(m.lb1)).toEqual([]);
+    expect(visibles(m.la1)).toEqual([m.a2.id, m.a3.id].sort());
+  });
 });

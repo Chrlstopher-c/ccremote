@@ -202,7 +202,6 @@ export class LiaisonAiguilleur implements HandlerDuoAiguilleur {
   private refusDemande(membre: string): Resultat<null> | null {
     if (this.appairageEnCours()) return echec(409, 'un appairage est déjà en cours');
     if (!this.options.port.relie()) return echec(503, 'aiguilleur non relié');
-    if (!this.options.port.enLigne(membre)) return echec(409, 'nœud hors ligne');
     if (this.canalActifAvec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
     return null;
   }
@@ -213,7 +212,7 @@ export class LiaisonAiguilleur implements HandlerDuoAiguilleur {
     const paire = this.options.paires.lire();
     if (!moi || !paire || paire.transport !== 'aiguilleur' || !paire.membre) return;
     if (!this.options.port.relie() || paire.membre <= moi) return;
-    if (!this.options.port.enLigne(paire.membre) || this.canalActifAvec(paire.membre)) return;
+    if (this.canalActifAvec(paire.membre)) return;
     if ((this.reessai.get(paire.membre) ?? 0) > this.options.maintenant()) return;
     this.ouvrirLien(paire.membre);
   }
