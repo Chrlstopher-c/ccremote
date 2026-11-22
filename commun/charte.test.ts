@@ -336,6 +336,9 @@ describe('droits', () => {
       [{ genre: 'ecrire' }, 'piloter'],
       [{ genre: 'interrompre' }, 'piloter'],
       [{ genre: 'ouvrir' }, 'lancer'],
+      [{ genre: 'terminal' }, 'piloter'],
+      [{ genre: 'api', methode: 'GET', chemin: '/api/terminal?machine=tour' }, 'piloter'],
+      [{ genre: 'api', methode: 'GET', chemin: '/api/sessions/abc/terminal' }, 'piloter'],
     ];
     for (const [requete, droit] of cas) expect(droitRequis(requete)).toBe(droit);
   });

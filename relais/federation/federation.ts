@@ -129,7 +129,10 @@ export class Federation {
     this.revoques = new Set(this.secrets.lireRevoques());
     this.appareilsRevoques = new Set(this.secrets.lireAppareilsRevoques());
     this.diffusionAppareil = new DiffusionAppareil(options.diffusion);
-    this.terminauxAppareil = new TerminalAppareil(() => this.terminaux.locauxBranches);
+    this.terminauxAppareil = new TerminalAppareil(
+      () => this.terminaux.locauxBranches,
+      (membre, requete) => this.charte.autorise(membre, requete),
+    );
     this.config = this.secrets.lireAiguilleur();
     this.charte = this.creerCharte();
     this.demandes = new DemandesAppairage(options.delaiDemandeMs ?? DELAI_DEMANDE_MS, () => Date.now());
@@ -163,7 +166,13 @@ export class Federation {
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
     const { registre, journal } = options;
-    this.terminaux = new TerminalFedere({ echanges: this.echanges, canaux: this.canaux, registre, journal });
+    this.terminaux = new TerminalFedere({
+      echanges: this.echanges,
+      canaux: this.canaux,
+      registre,
+      journal,
+      autorise: (membre, requete) => this.charte.autorise(membre, requete),
+    });
     this.distantes = new Distantes({
       registre: options.registre,
       diffusion: options.diffusion,
