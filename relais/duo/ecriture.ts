@@ -1,7 +1,7 @@
 // Responsabilité : « écrire à deux ». Chez le propriétaire, un message ou une interruption du pair dans une session
 // partagée en écriture (droits, accord en « ignorer les permissions », envoi par le chemin d'un message local).
 // Chez le demandeur, l'envoi ou l'interruption d'une session du pair.
-import type { MessageLien } from '../../commun/duo.ts';
+import { droitsSurMachine, type MessageLien } from '../../commun/duo.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import {
   conclure,
@@ -19,14 +19,17 @@ type LigneEcrire = Extract<MessageLien, { type: 'ecrire' }>;
 type LigneInterrompre = Extract<MessageLien, { type: 'interrompre' }>;
 
 const SESSION_NON_PARTAGEE = 'session non partagée avec vous';
+const MACHINE_NON_PERMISE = 'machine non permise';
 const LONGUEUR_EXTRAIT = 300;
 
-// Ce qui bloque l'écriture du pair : session absente ou non partagée avec lui, ou partagée en lecture seule.
+// Ce qui bloque l'écriture du pair : session absente ou non partagée avec lui, machine sans « piloter », ou session
+// partagée en lecture seule.
 function refusEcriture(c: Contexte, session: string): string | null {
   const fiche = c.registre.session(session);
   if (!fiche || fiche.duo) return SESSION_NON_PARTAGEE;
   const niveau = niveauPour(fiche, c.partages.lister());
   if (niveau === null) return SESSION_NON_PARTAGEE;
+  if (!droitsSurMachine(c.droits.lire(), fiche.machine).piloter) return MACHINE_NON_PERMISE;
   return niveau === 'lecture' ? 'partagée en lecture seule' : null;
 }
 

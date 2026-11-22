@@ -101,6 +101,10 @@ export type DossierOuvert = z.infer<typeof DossierOuvert>;
 export const DossierPair = DossierOuvert.extend({ nomMachine: z.string() });
 export type DossierPair = z.infer<typeof DossierPair>;
 
+// Droits de l'ami sur une machine du propriétaire : voir ses sessions, y écrire (piloter), y ouvrir (lancer).
+export const DroitsMachineAmi = z.object({ voir: z.boolean(), piloter: z.boolean(), lancer: z.boolean() });
+export type DroitsMachineAmi = z.infer<typeof DroitsMachineAmi>;
+
 // Droits accordés au pair, réglés par le propriétaire (voir relais/duo/droits.ts).
 export const Droits = z.object({
   ecrireSansPermissions: z.enum(['demander', 'accepter']),
@@ -108,6 +112,8 @@ export const Droits = z.object({
   dossiersOuverts: z.array(DossierOuvert).max(200),
   usagePartage: z.boolean(),
   modulesPartages: z.array(z.string().min(1).max(200)).max(200),
+  // Absent ou null : toutes les machines permises (le duo d'avant). Sinon, seule la machine listée l'est.
+  machines: z.record(z.string().min(1).max(120), DroitsMachineAmi).nullable().optional(),
 });
 export type Droits = z.infer<typeof Droits>;
 export const DROITS_PAR_DEFAUT: Droits = {
@@ -117,6 +123,15 @@ export const DROITS_PAR_DEFAUT: Droits = {
   usagePartage: false,
   modulesPartages: [],
 };
+// Ami ajouté : aucune machine permise tant que le propriétaire n'en coche pas.
+export const DROITS_NOUVEL_AMI: Droits = { ...DROITS_PAR_DEFAUT, machines: {} };
+
+/** Droits de l'ami sur une machine : sans liste, tout est permis ; avec une liste, seule la machine listée l'est. */
+export function droitsSurMachine(droits: Droits, machine: string): DroitsMachineAmi {
+  if (droits.machines == null) return { voir: true, piloter: true, lancer: true };
+  const listee: DroitsMachineAmi | undefined = droits.machines[machine];
+  return listee ?? { voir: false, piloter: false, lancer: false };
+}
 
 export const LimiteUsage = z.object({ genre: z.enum(['session', 'semaine', 'autre']), fenetre: FenetreUsage });
 export const UsagePartage = z.object({
