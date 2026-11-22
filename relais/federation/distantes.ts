@@ -10,6 +10,7 @@ import {
 } from '../../commun/federation.ts';
 import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
 import { ResumeSession } from '../../commun/session.ts';
+import { ID_MEMBRE } from '../../commun/charte-droits.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
@@ -27,6 +28,7 @@ const DELAI_GESTE_MS = 20_000;
 const GESTES_LONGS: ReadonlySet<string> = new Set(['ouvrir', 'messages', 'git/commiter']);
 const TEXTE_HORS_LIGNE = 'machine hors ligne : la session est sur un autre nœud du réseau';
 const TEXTE_INDISPONIBLE = 'geste indisponible pour une session d’une autre machine : le faire depuis elle';
+const TEXTE_AMI_SANS_CHARTE = 'requête d’ami non relayée : son identifiant n’est pas celui de la charte';
 
 export interface OptionsDistantes {
   readonly registre: Registre;
@@ -196,9 +198,9 @@ export class Distantes {
     return corps.flatMap((c: unknown) => machinesDe(c));
   }
 
-  /** Ouverture relayée vers un pair (ce nœud est invité : le chef décide). */
-  ouvrirChez(membre: string, corps: string): Promise<Response> {
-    return this.relayer(membre, { geste: 'ouvrir', methode: 'POST' }, corps);
+  /** Ouverture relayée vers un pair (ce nœud est invité : le chef décide). `ami` : au nom d'un ami du duo. */
+  ouvrirChez(membre: string, corps: string, ami?: string): Promise<Response> {
+    return this.relayer(membre, { geste: 'ouvrir', methode: 'POST', ...etiquette(ami) }, corps);
   }
 
   private async intercepterOuverture(req: Request): Promise<Response | null> {
@@ -210,6 +212,7 @@ export class Distantes {
   }
 
   private async relayer(membre: string, g: GesteLocal, corps: string): Promise<Response> {
+    if (!etiquetteValide(g.ami)) return reponseErreur(403, TEXTE_AMI_SANS_CHARTE);
     const canal = this.o.liaison(membre);
     if (!canal) return reponseErreur(409, TEXTE_HORS_LIGNE);
     if (tropGrandPourTransfert(corps)) return reponseErreur(413, 'contenu trop grand pour le lien entre machines');
@@ -237,8 +240,8 @@ export class Distantes {
 
   // ---- Gestes nommés (routes /api/federation/sessions/*) ------------------------------------------------------
 
-  async fil(membre: string, session: string): Promise<Resultat<EvenementFedere[]>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'fil', ref, session }));
+  async fil(membre: string, session: string, ami?: string): Promise<Resultat<EvenementFedere[]>> {
+    const r = await this.requete(membre, (ref, e) => ({ t: 'fil', ref, session, ...e }), ami);
     if (!r.ok) return r;
     return r.valeur.t === 'fil_reponse' ? ok(r.valeur.evenements) : echec(502, 'réponse inattendue');
   }
@@ -247,13 +250,13 @@ export class Distantes {
     return this.o.cache.fil(membre, session);
   }
 
-  async ecrire(membre: string, session: string, texte: string): Promise<Resultat<null>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'ecrire', ref, session, texte }));
+  async ecrire(membre: string, session: string, texte: string, ami?: string): Promise<Resultat<null>> {
+    const r = await this.requete(membre, (ref, e) => ({ t: 'ecrire', ref, session, texte, ...e }), ami);
     return r.ok ? ok(null) : r;
   }
 
-  async interrompre(membre: string, session: string): Promise<Resultat<null>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'interrompre', ref, session }));
+  async interrompre(membre: string, session: string, ami?: string): Promise<Resultat<null>> {
+    const r = await this.requete(membre, (ref, e) => ({ t: 'interrompre', ref, session, ...e }), ami);
     return r.ok ? ok(null) : r;
   }
 
@@ -263,8 +266,9 @@ export class Distantes {
     machine: string,
     chemin: string,
     message: string,
+    ami?: string,
   ): Promise<Resultat<{ session: string }>> {
-    const r = await this.requete(membre, (ref) => ({ t: 'ouvrir', ref, machine, chemin, message }));
+    const r = await this.requete(membre, (ref, e) => ({ t: 'ouvrir', ref, machine, chemin, message, ...e }), ami);
     if (!r.ok) return r;
     if (r.valeur.t === 'reponse' && r.valeur.session) return ok({ session: r.valeur.session });
     return echec(502, 'session ouverte sans identifiant');
@@ -272,11 +276,13 @@ export class Distantes {
 
   private async requete(
     membre: string,
-    construire: (ref: string) => MessageChiffre,
+    construire: (ref: string, etiquette: { ami?: string }) => MessageChiffre,
+    ami?: string,
   ): Promise<Resultat<MessageChiffre>> {
+    if (!etiquetteValide(ami)) return echec(403, TEXTE_AMI_SANS_CHARTE);
     const canal = this.o.liaison(membre);
     if (!canal) return echec(409, 'nœud hors ligne ou non relié');
-    const reponse = await this.o.echanges.requeter(canal, construire);
+    const reponse = await this.o.echanges.requeter(canal, (ref) => construire(ref, etiquette(ami)));
     if (!reponse) return echec(504, 'le nœud n’a pas répondu');
     if (reponse.t === 'reponse' && !reponse.ok) return echec(409, reponse.raison ?? 'refusé');
     return ok(reponse);
@@ -386,6 +392,16 @@ export class Distantes {
   }
 }
 
+/** L'étiquette d'ami d'une requête relayée : rien sans ami, sinon son identifiant de charte (jamais un nom). */
+function etiquette(ami: string | undefined): { ami?: string } {
+  return ami === undefined ? {} : { ami };
+}
+
+/** Vrai si l'étiquette peut partir : absente, ou un identifiant de charte (12 hexadécimaux, pas `principal`). */
+function etiquetteValide(ami: string | undefined): boolean {
+  return ami === undefined || ID_MEMBRE.safeParse(ami).success;
+}
+
 function gesteDe(route: RouteDemandee): GesteLocal {
   const requete = route.requete ? { requete: route.requete } : {};
   if (route.portee === 'session') return { geste: route.geste, methode: route.methode, session: route.id, ...requete };
@@ -403,6 +419,7 @@ function messagesDuGeste(ref: string, g: GesteLocal, corps: string): MessageChif
     ...(g.session ? { session: g.session } : {}),
     ...(g.machine !== undefined ? { machine: g.machine } : {}),
     ...(g.requete ? { requete: g.requete } : {}),
+    ...etiquette(g.ami),
   };
   if (corps.length <= TAILLE_MORCEAU_CARACTERES) return corps ? { ...requete, corps } : requete;
   return [...decouper(ref, corps), { ...requete, morceaux: nombreDeMorceaux(corps) }];

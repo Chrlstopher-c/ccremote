@@ -52,6 +52,7 @@ export interface GesteLocal {
   readonly methode: MethodeGeste;
   readonly session?: string;
   readonly machine?: string;
+  readonly ami?: string; // au nom d'un ami du duo : son identifiant de charte, la machine visée le vérifie
   readonly requete?: string;
   readonly corps?: string;
   /** Ouverture d'un invité : cadre posé par le nœud (jamais par un corps reçu). */

@@ -1,7 +1,10 @@
 // Responsabilité : droits de la charte sur le banc à deux nœuds et un aiguilleur réel — reprise adoptée par le
 // pair autonome, non-chef bloqué (édition, charte falsifiée sur le lien), écriture refusée après retrait de
-// `piloter`, instantanés coupés sans `voir`, révocation d'un membre retiré.
+// `piloter`, instantanés coupés sans `voir`, révocation d'un membre retiré, requête d'un ami du duo relayée (la
+// machine visée applique les droits de l'ami sur elle-même).
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { regleDroitsAmi } from '../../commun/charte-amis.ts';
+import { type Droits } from '../../commun/charte-droits.ts';
 import { exporterIdentitePublique, genererIdentite } from '../../commun/chiffrement/identite.ts';
 import {
   type Charte,
@@ -161,3 +164,50 @@ describe('droits appliqués entre nœuds', () => {
   });
 });
 
+describe('requête d un ami du duo relayée vers cette machine', () => {
+  const AMI = 'eeeeeeeeeeee';
+  const VOIR = { voir: true, piloter: false, lancer: false, remoteControl: false };
+  const PILOTER = { voir: true, piloter: true, lancer: false, remoteControl: false };
+
+  /** Machine A tient la session, B la relaie ; la charte de A donne à l'ami `droits` sur A. */
+  async function parcAvecAmi(droits: Droits): Promise<{ a: Noeud; b: Noeud; idA: string }> {
+    const a = await nouveau('portable', { peutReprendre: true });
+    const b = await nouveau('tour');
+    const { idA } = await appairer(a, b);
+    await attendre(() => b.federation.charte.charte() !== null);
+    poser(a, SESSION_A);
+    await attendre(() => b.federation.distantes.sessions().some((s) => s.session.id === SESSION_A));
+    const r = await a.federation.charte.editer((c, moi, le) => regleDroitsAmi(c, moi, AMI, idA, droits, le));
+    expect(r.ok).toBe(true);
+    return { a, b, idA };
+  }
+
+  test('hors des droits de l ami sur la machine visée : refusée là-bas, rien n arrive à la session', async () => {
+    const { a, b, idA } = await parcAvecAmi(VOIR);
+    const r = await b.federation.distantes.ecrire(idA, SESSION_A, 'hors droits', AMI);
+    expect(r.ok).toBe(false);
+    expect(a.appels.ecrire).toEqual([]);
+  });
+
+  test('dans les droits de l ami sur la machine visée : servie', async () => {
+    const { a, b, idA } = await parcAvecAmi(PILOTER);
+    const r = await b.federation.distantes.ecrire(idA, SESSION_A, 'dans les droits', AMI);
+    expect(r.ok).toBe(true);
+    expect(a.appels.ecrire).toEqual([[SESSION_A, 'dans les droits']]);
+  });
+
+  test('sans étiquette d ami : comportement inchangé, la règle du pair seule', async () => {
+    const { a, b, idA } = await parcAvecAmi(VOIR);
+    const r = await b.federation.distantes.ecrire(idA, SESSION_A, 'sans ami');
+    expect(r.ok).toBe(true);
+    expect(a.appels.ecrire).toEqual([[SESSION_A, 'sans ami']]);
+  });
+
+  test('identifiant qui n est pas celui de la charte (ex. principal) : non relayée, refus local', async () => {
+    const { a, b, idA } = await parcAvecAmi(PILOTER);
+    const r = await b.federation.distantes.ecrire(idA, SESSION_A, 'principal', 'principal');
+    expect(r.ok).toBe(false);
+    expect(r.ok ? 0 : r.statut).toBe(403);
+    expect(a.appels.ecrire).toEqual([]);
+  });
+});
