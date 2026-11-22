@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import type { HandlerDuoAiguilleur, PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
 import { type AmiDuo, ID_AMI_PRINCIPAL } from '../../commun/duo-amis.ts';
-import { DROITS_PAR_DEFAUT, type Droits, type EtatDuo, PREFIXE_MODULE_DUO } from '../../commun/duo.ts';
+import { DROITS_NOUVEL_AMI, type EtatDuo, PREFIXE_MODULE_DUO } from '../../commun/duo.ts';
 import type { ReponseServeur, RequeteServeur } from '../../commun/modules.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
 import { MultiplexeurAiguilleur } from './amis-aiguilleur.ts';
@@ -17,12 +17,6 @@ import { Duo } from './duo.ts';
 import type { OptionsDuo } from './options-duo.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 
-/**
- * Droits d'un ami neuf : réglages les plus fermés, aucune machine. `machines` (droits par machine) n'est porté par
- * `Droits` qu'à partir de l'étape droits par machine ; avant, le schéma l'ignore et l'enregistrement le perd.
- */
-type DroitsAmi = Droits & { machines?: Record<string, { voir: boolean; piloter: boolean; lancer: boolean }> };
-const DROITS_AMI_NEUF: DroitsAmi = { ...DROITS_PAR_DEFAUT, machines: {} };
 
 interface Emplacement {
   readonly id: string;
@@ -74,7 +68,7 @@ export class AmisDuo {
   ajouter(): Resultat<string> {
     const libre = this.emplacementLibre();
     if (libre === null) return this.creerAmi();
-    libre.duo.majDroits(DROITS_AMI_NEUF);
+    libre.duo.majDroits(DROITS_NOUVEL_AMI);
     return ok(libre.id);
   }
 
@@ -199,7 +193,7 @@ export class AmisDuo {
     }
     duo.demarrer();
     this.brancher(id, duo);
-    duo.majDroits(DROITS_AMI_NEUF);
+    duo.majDroits(DROITS_NOUVEL_AMI);
     return ok(id);
   }
 
