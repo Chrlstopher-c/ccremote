@@ -13,6 +13,8 @@ export class Diffusion {
   private versionCourante = 0;
   /** Filtre des messages vers les clients (fédération : copies SSH d'une machine tenue par un autre nœud). */
   filtre: ((m: MessageClient) => boolean) | null = null;
+  /** Vue de chaque message pour les clients (sessions d'invité masquées) ; null = le message ne part pas. */
+  vueApplis: ((m: MessageClient) => MessageClient | null) | null = null;
 
   get version(): number {
     return this.versionCourante;
@@ -38,8 +40,9 @@ export class Diffusion {
   }
 
   diffuser(m: MessageClient): void {
-    if (!this.filtre || this.filtre(m)) {
-      const texte = JSON.stringify(m);
+    const vue = this.vueApplis ? this.vueApplis(m) : m;
+    if (vue !== null && (!this.filtre || this.filtre(vue))) {
+      const texte = JSON.stringify(vue);
       for (const ws of this.clients) ws.send(texte);
     }
     for (const ecouteur of this.ecouteurs) ecouteur(m);

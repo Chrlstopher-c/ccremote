@@ -60,6 +60,8 @@ export interface CommandesNoeud {
 }
 
 export interface OptionsFederation {
+  /** Dossier des espaces des invités (sinon LANTERNE_INVITES_DOSSIER, sinon ~/lanterne-invites). */
+  readonly invitesRacine?: string;
   readonly registre: Registre;
   readonly diffusion: Diffusion;
   readonly dossierSecrets: string;
