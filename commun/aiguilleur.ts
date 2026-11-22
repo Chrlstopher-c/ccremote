@@ -20,6 +20,13 @@ export const TAILLE_MAX_TRAME_OCTETS = 2 * LIMITE_CHARGE_OCTETS;
 export const CHEMIN_APPAIRAGE_MEMBRE = '/api/membres/appairer';
 export const CHEMIN_LIEN_AIGUILLEUR = '/aiguilleur';
 
+/** Création d'un code par un nœud (jeton de membre) : un appareil de son propriétaire, ou un invité en duo. */
+export const CHEMIN_CODES_MEMBRE = '/api/membres/codes';
+export const PORTEES_CODE = ['meme_proprietaire', 'invitation_duo'] as const;
+export type PorteeCode = (typeof PORTEES_CODE)[number];
+/** Codes actifs (non expirés, non consommés) par propriétaire : au-delà, la création est refusée (429). */
+export const CODES_ACTIFS_MAX_PAR_PROPRIETAIRE = 5;
+
 /** Identifiant d'un membre : 12 caractères hexadécimaux, attribués par l'aiguilleur à l'appairage. */
 export const VALIDE_IDENTIFIANT = /^[a-f0-9]{12}$/;
 
@@ -54,6 +61,17 @@ const VersAiguilleur = z.discriminatedUnion('t', [
   SurCanal('accepter'),
   SurCanal('refuser'),
 ]);
+
+/** Corps de `POST /api/membres/codes` : le nom de l'invité est exigé pour une invitation, interdit sinon. */
+export const CorpsCodeMembre = z.discriminatedUnion('genre', [
+  z.strictObject({ genre: z.literal('meme_proprietaire') }),
+  z.strictObject({ genre: z.literal('invitation_duo'), nomInvite: z.string().trim().min(1).max(80) }),
+]);
+export type CorpsCodeMembre = z.infer<typeof CorpsCodeMembre>;
+
+/** Réponse de `POST /api/membres/codes` : le code à usage unique (XXXX-XXXX) et son échéance (ISO 8601). */
+export const ReponseCodeMembre = z.strictObject({ code: z.string().min(1).max(40), expireLe: z.string() });
+export type ReponseCodeMembre = z.infer<typeof ReponseCodeMembre>;
 
 /** Propriétaire d'un membre : le nom donné à l'appairage. Optionnel : un aiguilleur ancien ne le transmet pas. */
 const Proprietaire = z.string().min(1).max(40);

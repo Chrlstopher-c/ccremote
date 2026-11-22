@@ -2,10 +2,11 @@
 // authentifié par jeton), la configuration du serveur WebSocket et le balayage périodique des révocations.
 import type { Logger } from 'pino';
 import type { Server, WebSocketHandler } from 'bun';
-import { TAILLE_MAX_TRAME_OCTETS } from '../../commun/aiguilleur.ts';
+import { CHEMIN_CODES_MEMBRE, TAILLE_MAX_TRAME_OCTETS } from '../../commun/aiguilleur.ts';
 import type { PlafondEchecs } from '../acces/plafond.ts';
 import { erreur } from '../clients/http.ts';
 import { type Annuaire, type Membre, empreinteSha256 } from './annuaire.ts';
+import { routeCodesMembre } from './api-codes.ts';
 import { CHEMIN_APPAIRAGE, routeAppairage } from './api-membres.ts';
 import { type DonneesLien, Liens } from './liens.ts';
 
@@ -31,6 +32,7 @@ export interface Aiguilleur {
 export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
   const liens = new Liens(options.annuaire, options.journal, options.maxCanaux);
   const appairage = routeAppairage(options.annuaire, options.plafond, options.journal);
+  const codes = routeCodesMembre(options.annuaire, options.journal);
   const minuteur = options.intervalleBalayageMs
     ? setInterval(() => liens.balayer(), options.intervalleBalayageMs)
     : null;
@@ -39,6 +41,7 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
       const chemin = new URL(req.url).pathname;
       if (chemin === CHEMIN_LIEN) return ouvrirLien(options.annuaire, options.journal, req, serveur);
       if (chemin === CHEMIN_APPAIRAGE && req.method === 'POST') return appairage(req, serveur);
+      if (chemin === CHEMIN_CODES_MEMBRE && req.method === 'POST') return codes(req);
       return erreur('introuvable', 404);
     },
     websocket: {

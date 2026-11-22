@@ -2,7 +2,7 @@
 // quels propriétaires sont liés par un duo. Seules les empreintes (SHA-256) des clés et des jetons sont gardées.
 import { createHash } from 'node:crypto';
 import type { Database } from 'bun:sqlite';
-import type { GenreMembre } from '../../commun/aiguilleur.ts';
+import type { GenreMembre, PorteeCode } from '../../commun/aiguilleur.ts';
 
 export interface Membre {
   readonly id: string;
@@ -21,6 +21,17 @@ export interface NouveauMembre {
   readonly proprietaire: string;
   readonly empreinteCle: string;
   readonly jetonEmpreinte: string;
+}
+
+/** Ce qu'un code consommé apporte : le propriétaire de l'émetteur, et, pour une invitation, le nom de l'invité. */
+export type CodeConsomme =
+  | { readonly portee: 'meme_proprietaire'; readonly proprietaire: string }
+  | { readonly portee: 'invitation_duo'; readonly proprietaire: string; readonly nomInvite: string };
+
+interface LigneCode {
+  proprietaire: string;
+  portee: PorteeCode;
+  nom_invite: string | null;
 }
 
 interface LigneMembre {
@@ -50,24 +61,56 @@ function versMembre(l: LigneMembre): Membre {
   };
 }
 
+function versCode(l: LigneCode): CodeConsomme {
+  if (l.portee === 'invitation_duo' && l.nom_invite !== null)
+    return { portee: 'invitation_duo', proprietaire: l.proprietaire, nomInvite: l.nom_invite };
+  return { portee: 'meme_proprietaire', proprietaire: l.proprietaire };
+}
+
 export class Annuaire {
   constructor(private readonly db: Database) {}
 
   /** Un code d'appairage (empreinte seulement) réservé à un propriétaire, valable jusqu'à `expireLe`. */
-  creerCodeAppairage(proprietaire: string, empreinte: string, expireLe: string): void {
+  creerCodeAppairage(
+    proprietaire: string,
+    empreinte: string,
+    expireLe: string,
+    portee: PorteeCode = 'meme_proprietaire',
+    nomInvite: string | null = null,
+  ): void {
     this.db
-      .query('INSERT INTO appairages (empreinte, proprietaire, cree_le, expire_le) VALUES (?, ?, ?, ?)')
-      .run(empreinte, proprietaire, new Date().toISOString(), expireLe);
+      .query(
+        `INSERT INTO appairages (empreinte, proprietaire, cree_le, expire_le, portee, nom_invite)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(empreinte, proprietaire, new Date().toISOString(), expireLe, portee, nomInvite);
   }
 
-  /** Consomme un code valable (usage unique) : rend son propriétaire, ou null si faux, expiré ou déjà pris. */
-  consommerCodeAppairage(empreinte: string): string | null {
+  /** Codes actifs (non expirés, non consommés) d'un propriétaire. */
+  compterCodesActifs(proprietaire: string): number {
+    const ligne = this.db
+      .query<{ n: number }, [string, string]>(
+        'SELECT COUNT(*) AS n FROM appairages WHERE proprietaire = ? AND expire_le > ?',
+      )
+      .get(proprietaire, new Date().toISOString());
+    return ligne?.n ?? 0;
+  }
+
+  /** Consomme un code valable (usage unique) : rend ce qu'il apporte, ou null si faux, expiré ou déjà pris. */
+  consommerCodeAppairage(empreinte: string): CodeConsomme | null {
     const maintenant = new Date().toISOString();
     this.db.query('DELETE FROM appairages WHERE expire_le <= ?').run(maintenant);
     const ligne = this.db
-      .query<{ proprietaire: string }, [string]>('DELETE FROM appairages WHERE empreinte = ? RETURNING proprietaire')
+      .query<LigneCode, [string]>(
+        'DELETE FROM appairages WHERE empreinte = ? RETURNING proprietaire, portee, nom_invite',
+      )
       .get(empreinte);
-    return ligne?.proprietaire ?? null;
+    return ligne ? versCode(ligne) : null;
+  }
+
+  /** Exécute `f` dans une transaction : si elle lève une erreur, tout ce qu'elle a écrit est annulé. */
+  enTransaction<T>(f: () => T): T {
+    return this.db.transaction(f)();
   }
 
   /** Enregistre un membre et son jeton (haché) d'un coup. */

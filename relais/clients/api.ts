@@ -37,6 +37,8 @@ import { routesDuo } from '../duo/api-duo.ts';
 import type { Federation } from '../federation/federation.ts';
 import { relayerVersNoeuds } from '../federation/interception.ts';
 import { routesFederation } from '../federation/api-federation.ts';
+import type { CodesReseau } from '../codes-reseau/codes-reseau.ts';
+import { routesCodesReseau } from '../codes-reseau/api-codes-reseau.ts';
 import { routesSynchro } from '../synchro/api-synchro.ts';
 import type { ServiceSynchro } from '../synchro/service.ts';
 
@@ -64,6 +66,7 @@ export interface DependancesApi {
   readonly appels: AppelsModules;
   readonly duo: Duo;
   readonly federation: Federation;
+  readonly codesReseau: CodesReseau;
   readonly synchro: ServiceSynchro;
 }
 
@@ -239,6 +242,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     ...routesEntretien(d.entretien, protege),
     ...routesDuo(d.duo, protege),
     ...routesFederation(d.federation, protege),
+    ...routesCodesReseau(d.codesReseau, protege),
     ...routesSynchro(d.synchro, protege),
     ...routesReste(d.reste, protege),
     ...routesResteLot2(d.resteLot2, protege),

@@ -63,6 +63,8 @@ import { RegistreReunions } from './reunion/registre-reunions.ts';
 import { SalleDeReunion } from './reunion/salle.ts';
 import { Duo } from './duo/duo.ts';
 import { Federation } from './federation/federation.ts';
+import { SecretsNoeud } from './federation/secrets.ts';
+import { CodesReseau } from './codes-reseau/codes-reseau.ts';
 import { JournalSynchro } from './synchro/journal.ts';
 import { ServiceSynchro } from './synchro/service.ts';
 import { nomUtilisateur } from '../commun/identite.ts';
@@ -218,6 +220,8 @@ const federation = new Federation({
   notifier: (titre, texte) => notifierChris(titre, texte),
   journal: journal.child({ domaine: 'federation' }),
 });
+// Codes d'appairage demandés par l'appli (même propriétaire, invitation en duo) : relayés à l'aiguilleur de ce nœud.
+const codesReseau = new CodesReseau(new SecretsNoeud(dossierSecrets, journal), journal.child({ domaine: 'codes' }));
 // Le duo passe par ce même lien (un seul par nœud) : ses canaux `duo-…` lui sont remis.
 federation.brancherDuo(duo.brancherAiguilleur(federation.portDuo()));
 diffusion.filtre = (m) => federation.distantes.laisserPasser(m);
@@ -307,6 +311,7 @@ const dependancesApi: DependancesApi = {
   appels: appelsModules,
   duo,
   federation,
+  codesReseau,
   synchro,
 };
 const routes = avecCors(construireRoutes(dependancesApi), config.origines);

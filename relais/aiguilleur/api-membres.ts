@@ -9,7 +9,8 @@ import { empreinteCode } from '../acces/appairage.ts';
 import type { PlafondEchecs } from '../acces/plafond.ts';
 import { ipDe } from '../clients/api.ts';
 import { erreur, json, lireCorps } from '../clients/http.ts';
-import { type Annuaire, empreinteSha256 } from './annuaire.ts';
+import { type Annuaire, type CodeConsomme, empreinteSha256 } from './annuaire.ts';
+import { proprietaireInvite } from './proprietaire-invite.ts';
 
 export const CHEMIN_APPAIRAGE = '/api/membres/appairer';
 
@@ -81,33 +82,42 @@ function echanger(
   journal: Logger,
 ): Response {
   if (plafond.atteint() || echecs.bloque(ip)) return erreur('trop de tentatives, réessaie plus tard', 429);
-  const proprietaire = annuaire.consommerCodeAppairage(empreinteCode(corps.code));
-  if (proprietaire === null) {
+  // Consommer le code et inscrire le membre forment un seul bloc : un échec ne laisse ni code brûlé ni membre à moitié.
+  const inscrit = annuaire.enTransaction(() => {
+    const code = annuaire.consommerCodeAppairage(empreinteCode(corps.code));
+    return code === null ? null : enregistrer(annuaire, corps, code, journal);
+  });
+  if (inscrit === null) {
     echecs.noter(ip);
     plafond.noter();
     journal.warn({ ip }, 'appairage refusé : code faux ou expiré');
     return erreur('code refusé ou expiré', 401);
   }
   echecs.effacer(ip);
-  return json(enregistrer(annuaire, corps, proprietaire, journal));
+  return json(inscrit);
 }
 
+// Un code « même propriétaire » inscrit le membre chez son émetteur. Une invitation crée un propriétaire neuf, dont le
+// membre porte le nom donné par Chris à l'invitation, et déclare le lien duo avec le propriétaire de Chris.
 function enregistrer(
   annuaire: Annuaire,
   corps: z.infer<typeof CorpsAppairage>,
-  proprietaire: string,
+  code: CodeConsomme,
   journal: Logger,
 ): { id: string; jeton: string; proprietaire: string } {
   const id = randomBytes(6).toString('hex');
   const jeton = randomBytes(32).toString('base64url');
+  const invitation = code.portee === 'invitation_duo';
+  const proprietaire = code.portee === 'invitation_duo' ? proprietaireInvite(code.nomInvite) : code.proprietaire;
   annuaire.creerMembre({
     id,
     genre: corps.genre,
-    nom: corps.nom,
+    nom: code.portee === 'invitation_duo' ? code.nomInvite : corps.nom,
     proprietaire,
     empreinteCle: empreinteSha256(corps.cle),
     jetonEmpreinte: empreinteSha256(jeton),
   });
-  journal.info({ membre: id, genre: corps.genre, proprietaire }, 'membre appairé');
+  if (invitation) annuaire.lierDuo(code.proprietaire, proprietaire);
+  journal.info({ membre: id, genre: corps.genre, proprietaire, portee: code.portee }, 'membre appairé');
   return { id, jeton, proprietaire };
 }
