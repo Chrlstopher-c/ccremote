@@ -1,6 +1,7 @@
 // Responsabilité : la synthèse vocale du mode vocal de l'iPhone — une phrase → son audio. Le nœud qui a le service
 // de voix (la tour : LANTERNE_VOIX_URL, boucle locale) l'appelle ; un autre nœud relaie la demande à ses pairs en
 // ligne (geste `voix` du nœud, `local=1` : jamais relayé plus loin). Le premier pair qui répond est retenu.
+// `?flux=1` : en local, l'audio part au fil de la génération (PCM 24 kHz, audio/L16) ; relayé : le MP3 entier.
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,7 @@ import { erreur, lireCorps } from '../clients/http.ts';
 
 const DELAI_SYNTHESE_MS = 20_000;
 const TEXTE_MAX = 600;
+const TYPE_PCM = 'audio/L16;rate=24000;channels=1';
 const CorpsVoix = z.object({ texte: z.string().min(1).max(4000) });
 
 /** Adresse du service de voix de cette machine : LANTERNE_VOIX_URL, sinon `~/.config/ccremote/voix.url`. */
@@ -44,21 +46,17 @@ export class ApiVoix {
     if (corps instanceof Response) return corps;
     const texte = corps.texte.trim();
     if (!texte) return erreur('texte vide', 400);
-    const demande = JSON.stringify({ texte: texte.slice(0, TEXTE_MAX) });
-    if (this.url) return this.locale(demande);
-    if (new URL(req.url).searchParams.get('local') === '1') return erreur('pas de voix sur ce nœud', 503);
-    const relayee = await this.pairs.voixDesPairs(demande);
+    const texteBref = texte.slice(0, TEXTE_MAX);
+    const params = new URL(req.url).searchParams;
+    if (this.url) return params.get('flux') === '1' ? this.localeFlux(texteBref) : this.locale(texteBref);
+    if (params.get('local') === '1') return erreur('pas de voix sur ce nœud', 503);
+    const relayee = await this.pairs.voixDesPairs(JSON.stringify({ texte: texteBref }));
     return relayee ?? erreur('aucune machine du réseau ne sait parler', 503);
   }
 
-  private async locale(demande: string): Promise<Response> {
+  private async locale(texte: string): Promise<Response> {
     try {
-      const reponse = await fetch(`${this.url}/synthese`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: demande,
-        signal: AbortSignal.timeout(DELAI_SYNTHESE_MS),
-      });
+      const reponse = await this.appeler(JSON.stringify({ texte }));
       const audio = await reponse.arrayBuffer();
       if (!reponse.ok) return erreur('synthèse en échec', 503);
       return new Response(audio, { status: 200, headers: { 'content-type': 'audio/mpeg' } });
@@ -66,5 +64,29 @@ export class ApiVoix {
       this.journal.error({ err }, 'voix : service de synthèse injoignable');
       return erreur('service de voix injoignable', 503);
     }
+  }
+
+  /** Le corps part tel que le service l'émet : chaque morceau est relayé dès qu'il arrive. */
+  private async localeFlux(texte: string): Promise<Response> {
+    try {
+      const reponse = await this.appeler(JSON.stringify({ texte, flux: true }));
+      if (!reponse.ok || !reponse.body) {
+        await reponse.body?.cancel();
+        return erreur('synthèse en échec', 503);
+      }
+      return new Response(reponse.body, { status: 200, headers: { 'content-type': TYPE_PCM } });
+    } catch (err) {
+      this.journal.error({ err }, 'voix : service de synthèse injoignable (flux)');
+      return erreur('service de voix injoignable', 503);
+    }
+  }
+
+  private appeler(corps: string): Promise<Response> {
+    return fetch(`${this.url}/synthese`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: corps,
+      signal: AbortSignal.timeout(DELAI_SYNTHESE_MS),
+    });
   }
 }
