@@ -119,6 +119,7 @@ bureau/src/shared/ui/elements.tsx                    petites primitives d'outil 
 bureau/src/shared/ui/useDemande.tsx                  nom ou confirmation dans un dialogue de l'app (remplace prompt/confirm)
 bureau/tsconfig.json                                 TypeScript de l'app
 bureau/vite.config.ts                                Vite + React + Tailwind
+commun/ajout-noeud.ts                                    vocabulaire de « Ajouter une machine au réseau » : corps, étapes, vue de l’avancement (sans secret)
 commun/api-clients.ts                                le contrat de l'API des clients (app de bureau, iPhone, web) — ce que…
 commun/appareil.ts                                   le vocabulaire de l'accès à un appareil du parc — fichiers et terminaux
 commun/categories.ts                                 le vocabulaire des catégories de la barre latérale — forme validée et normalisation (une session = une catégorie)
@@ -318,11 +319,26 @@ poste/distant/traduction-distante.ts                    payloads claude.ai → �
 poste/distant/attente-distante.ts                       demandes qui attendent Chris dans une session claude.ai (permission, question, plan) : file, décision à rendre (pur)
 poste/distant/controle-distant.ts                       événements de contrôle claude.ai : messages et réglages sortants, demandes entrantes (pur)
 poste/distant/pilotage-distant.test.ts                  tests du pilotage d’une session claude.ai : corps des POST, dialogues, erreurs
+poste/presentation/reseau-outils.test.ts                 tests des outils reseau_* contre une fausse API (confirmation, concordance)
+poste/presentation/reseau-outils.ts                      outils reseau_* du serveur lanterne : ajouter une machine, suivre, accepter, revenir en arrière
 poste/relais-sessions/trace.test.ts                     tests de trace.ts : persistance, ordre, réinsertion par date
 poste/relais-sessions/trace.ts                          trace des messages relayés entre sessions : persistée, datée, réinsérée dans l’historique
 poste/session/fixtures/tours-transcript.jsonl       transcript d'exemple anonyme pour les tests des tours (deux réponses, un sous-agent, une erreur d'API)
 poste/session/fixtures/tours-edition.jsonl                transcript anonyme : éditions par tour (Edit, Write), réponse sur plusieurs lignes, coût, tour non clos
 poste/session/gestionnaire-distant.test.ts              tests du gestionnaire face à une session suivie : trace, garde des commandes, historique
+relais/ajout-noeud/ajout-noeud.test.ts                   déroulé d’un ajout avec faux SSH et fausse fédération : concordance, accord exigé, refus, retour
+relais/ajout-noeud/ajout-noeud.ts                        ajouter une machine : dépôt du moteur par SSH, nœud installé, appairage, empreintes comparées, reprise
+relais/ajout-noeud/api-ajout-noeud.ts                    routes /api/reseau/ajouts (lister, lancer, accepter, retour arrière), protégées
+relais/ajout-noeud/binaire.ts                            binaire du moteur à installer (celui qui tourne ici) et archive du code des postes
+relais/ajout-noeud/brancher.ts                           assemblage de l’ajout de machine sur les services du relais
+relais/ajout-noeud/noeud-distant.sh                      script exécuté sur la machine par SSH : identité, unité, bascule du poste, aiguilleur, appairage
+relais/ajout-noeud/reprise.test.ts                       tests de la reprise d’attribution (épinglages reportés, archivées gardées)
+relais/ajout-noeud/reprise.ts                            reprise d’attribution : sessions retrouvées par identifiant, épinglages reportés au nœud
+relais/ajout-noeud/script-noeud.test.ts                  tests du script distant : paramètres validés et cités, syntaxe bash
+relais/ajout-noeud/script-noeud.ts                       commandes SSH de l’ajout : dépôt du binaire et du code, script distant avec en-tête cité
+relais/ajout-noeud/sortie-noeud.test.ts                  tests de la lecture de la sortie du script distant
+relais/ajout-noeud/sortie-noeud.ts                       lecture de la sortie du script distant (étapes, empreintes, membre) et message assaini
+relais/ajout-noeud/textes.d.ts                           type des fichiers texte importés (script distant embarqué)
 relais/clients/api-session-relais.test.ts               tests de la route POST /api/sessions/:id/relais
 poste/config.ts                                      la configuration d'un poste — fichier JSON local + secret en variable…
 poste/configuration/commande.test.ts                tests de l'aiguillage des commandes de configuration

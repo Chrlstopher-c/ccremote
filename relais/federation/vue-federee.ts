@@ -1,7 +1,7 @@
 // Responsabilité : ce que l'appli voit du parc quand ce nœud est fédéré — ses sessions et machines, plus celles des
 // nœuds appariés, sans doublon. Règles : une machine tenue par un nœud en ligne passe par lui (ses copies vues par un
-// tunnel SSH sont masquées) ; hors ligne, la copie locale reprend la main si elle existe ; jamais la machine de ce nœud
-// reçue d'un autre. Fonction pure : aucune E/S, aucun état.
+// tunnel SSH sont masquées, sauf les archivées) ; hors ligne, la copie locale reprend la main si elle existe ; jamais
+// la machine de ce nœud reçue d'un autre. Fonction pure : aucune E/S, aucun état.
 import type { VueMachine } from '../../commun/api-clients.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import type { NoeudDistant } from './distant.ts';
@@ -33,7 +33,8 @@ export function fusionnerVue(e: EntreeVue): VueFederee {
   );
   const connuesLocalement = new Set([...e.machinesLocales.map((m) => m.id), ...e.locales.map((s) => s.machine)]);
   const masquees = new Set([...nativesEnLigne].filter((m) => connuesLocalement.has(m)));
-  const sessions = e.locales.filter((s) => !masquees.has(s.machine));
+  // Une session archivée ici reste ici : le nœud n'annonce pas ses archivées, la masquer la ferait disparaître.
+  const sessions = e.locales.filter((s) => !masquees.has(s.machine) || s.archivee === true);
   const routage = new Map<string, string>();
   const machinesRoutees = new Map<string, string>();
   const vues = new Set(sessions.map((s) => s.id));

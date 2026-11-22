@@ -8,6 +8,7 @@ import { afficherWidget } from './widget.ts';
 import { envoyerFichier, publierArtefact } from './envoi.ts';
 import type { ContexteOutils, Resultat } from './outils.ts';
 import * as machines from './machines-outils.ts';
+import * as reseau from './reseau-outils.ts';
 import * as modules from './modules-outils.ts';
 import {
   DESCRIPTION_MODULE_APPELER,
@@ -144,6 +145,35 @@ function outilsMachines(c: ContexteOutils) {
   ];
 }
 
+/** Les outils `reseau_*` (ajouter une machine au réseau Lanterne) : mêmes conditions que les outils `machines`. */
+function outilsReseau(c: ContexteOutils) {
+  if (!c.api) return [];
+  const api = c.api;
+  const machine = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/);
+  return [
+    tool(
+      'reseau_ajouter_machine',
+      reseau.DESCRIPTION_AJOUTER,
+      {
+        machine,
+        nom: z.string().min(1).max(60),
+        hote: z.string().min(1).max(253).optional(),
+        port: z.number().int().min(1).max(65535).optional(),
+        utilisateur: z.string().min(1).max(32).optional(),
+        cle: z.string().min(1).max(1000).optional(),
+      },
+      async (a) => enResultat(await reseau.ajouterAuReseau(api, a, c.journal)),
+    ),
+    tool('reseau_suivre_ajout', reseau.DESCRIPTION_SUIVRE, {}, async () => enResultat(await reseau.suivreAjouts(api))),
+    tool('reseau_accepter_ajout', reseau.DESCRIPTION_ACCEPTER, { machine }, async (a) =>
+      enResultat(await reseau.accepterAjout(api, a.machine, c.journal)),
+    ),
+    tool('reseau_retour_arriere', reseau.DESCRIPTION_RETOUR, { machine }, async (a) =>
+      enResultat(await reseau.retourArriere(api, a.machine, c.journal)),
+    ),
+  ];
+}
+
 // `alwaysLoad` : les outils de présentation sont dans le prompt dès le premier tour, jamais différés derrière ToolSearch
 // (sinon l'agent répond sans les chercher). `searchHint` sert si la recherche d'outils reste active.
 export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithInstance {
@@ -181,6 +211,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
         async (args) => enResultat(afficherWidget(c, args)),
       ),
       ...outilsMachines(c),
+      ...outilsReseau(c),
       ...outilsModules(c),
       ...outilRenommer(c),
     ],

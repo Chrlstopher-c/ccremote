@@ -66,6 +66,7 @@ import { Duo } from './duo/duo.ts';
 import { Federation } from './federation/federation.ts';
 import { SecretsNoeud } from './federation/secrets.ts';
 import { CodesReseau } from './codes-reseau/codes-reseau.ts';
+import { creerAjoutNoeud } from './ajout-noeud/brancher.ts';
 import { JournalSynchro } from './synchro/journal.ts';
 import { ServiceSynchro } from './synchro/service.ts';
 import { nomUtilisateur } from '../commun/identite.ts';
@@ -223,6 +224,17 @@ const federation = new Federation({
 });
 // Codes d'appairage demandés par l'appli (même propriétaire, invitation en duo) : relayés à l'aiguilleur de ce nœud.
 const codesReseau = new CodesReseau(new SecretsNoeud(dossierSecrets, journal), journal.child({ domaine: 'codes' }));
+// Ajouter une machine au réseau (Paramètres › Réseau) : installation du nœud par SSH, appairage, reprise d'attribution.
+const ajoutNoeud = creerAjoutNoeud({
+  ssh,
+  machines: registreMachines,
+  federation,
+  codes: codesReseau,
+  registre,
+  diffusion,
+  codePoste: integre?.codePoste ?? null,
+  journal: journal.child({ domaine: 'ajout-noeud' }),
+});
 // Le duo passe par ce même lien (un seul par nœud) : ses canaux `duo-…` lui sont remis.
 federation.brancherDuo(duo.brancherAiguilleur(federation.portDuo()));
 diffusion.filtre = (m) => federation.distantes.laisserPasser(m);
@@ -313,6 +325,7 @@ const dependancesApi: DependancesApi = {
   duo,
   federation,
   codesReseau,
+  ajoutNoeud,
   synchro,
   voix: new ApiVoix(urlVoix(process.env), federation.distantes, journal.child({ domaine: 'voix' })),
 };

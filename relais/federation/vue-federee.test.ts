@@ -55,4 +55,14 @@ describe('fusionnerVue', () => {
     const v = vue([noeud('m1', 'tour', true, ['f-1']), noeud('m2', 'pi', true, ['f-1'], 'tour')], [], []);
     expect(v.sessions.filter((s) => s.id === 'f-1')).toHaveLength(1);
   });
+
+  test('machine passée sur son nœud : même identifiant, la fiche du nœud remplace la copie, l’archivée reste ici', () => {
+    const active = ficheDe('s-1', 'tour', 'active');
+    const archivee = { ...ficheDe('s-2', 'tour', 'rangée'), archivee: true };
+    const v = vue([noeud('m1', 'tour', true, ['s-1'])], [active, archivee]);
+    expect(v.sessions.map((s) => s.id).sort()).toEqual(['s-1', 's-2']);
+    expect(v.routage.get('s-1')).toBe('m1');
+    expect(v.routage.has('s-2')).toBe(false);
+    expect(v.sessions.every((s) => s.machine === 'tour')).toBe(true);
+  });
 });

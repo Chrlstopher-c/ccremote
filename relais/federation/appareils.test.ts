@@ -47,6 +47,8 @@ test('cheminRefuse couvre l’accès, la fédération, le duo et la synchro, san
   expect(cheminRefuse('/api/acces/jetons')).toBe(true);
   expect(cheminRefuse('/api/duo')).toBe(true);
   expect(cheminRefuse('/api/synchro/demandes')).toBe(true);
+  expect(cheminRefuse('/api/reseau/ajouts')).toBe(true);
+  expect(cheminRefuse('/api/reseau/ajouts/tour/accepter')).toBe(true);
   expect(cheminRefuse('/api/federationx')).toBe(false);
   expect(cheminRefuse('/api/etat')).toBe(false);
 });

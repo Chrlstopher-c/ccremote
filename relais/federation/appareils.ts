@@ -37,6 +37,7 @@ const CHEMINS_REFUSES = [
   '/api/federation',
   '/api/duo',
   '/api/synchro',
+  '/api/reseau', // ajouter une machine, accepter un appairage : jamais depuis un appareil
 ];
 
 export function cheminRefuse(chemin: string): boolean {
