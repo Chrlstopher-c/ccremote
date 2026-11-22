@@ -10,6 +10,7 @@ import {
 } from '../../commun/parite.ts';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { Reponse } from '../session/gestionnaire.ts';
+import { filTache } from './fil-tache.ts';
 import { detailTache } from './taches-resume.ts';
 import type { EtatTranscript } from './etat.ts';
 import { lireEtat } from './lecture.ts';
@@ -39,6 +40,8 @@ export async function executerParite(c: CommandeParite, x: ContextePariteposte):
       return { ok: true, donnees: { tache: tache(c.tache, transcript, etat, x) } };
     case 'parite_resultat':
       return { ok: true, donnees: resultat(c.chemin, etat, x) };
+    case 'parite_fil_tache':
+      return { ok: true, donnees: { fil: transcript === null ? null : filTache(transcript, c.tache, x.journal) } };
   }
 }
 
