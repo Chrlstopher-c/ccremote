@@ -493,6 +493,19 @@ export class Registre {
       .run({ e: empreinte, c: new Date().toISOString(), x: expireLe, a: appareil, g: genre });
   }
 
+  /** Un code d'appairage (empreinte seulement), valable jusqu'à expireLe, créé par l'appareil `par`. */
+  creerCodeAppairage(empreinte: string, expireLe: string, par: string): void {
+    this.db
+      .query('INSERT INTO appairages (empreinte, cree_le, expire_le, par) VALUES ($e, $c, $x, $p)')
+      .run({ e: empreinte, c: new Date().toISOString(), x: expireLe, p: par.slice(0, 120) });
+  }
+
+  /** Consomme un code d'appairage encore valable : vrai une seule fois. Les codes expirés partent au passage. */
+  consommerCodeAppairage(empreinte: string): boolean {
+    this.db.query('DELETE FROM appairages WHERE expire_le <= $m').run({ m: new Date().toISOString() });
+    return this.db.query('DELETE FROM appairages WHERE empreinte = $e').run({ e: empreinte }).changes > 0;
+  }
+
   /** Le genre d'un jeton encore valide, null s'il est inconnu ou expiré. */
   genreJeton(empreinte: string): GenreAcces | null {
     const l = this.db.query('SELECT expire_le, genre FROM jetons WHERE empreinte = $e').get({ e: empreinte }) as {

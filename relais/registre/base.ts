@@ -54,6 +54,9 @@ export const MIGRATIONS: readonly string[] = [
   `CREATE TABLE duo_partages (
      cible TEXT NOT NULL, genre TEXT NOT NULL, niveau TEXT NOT NULL, cree_le TEXT NOT NULL,
      PRIMARY KEY (cible, genre));`,
+  // Appairage d'un appareil : code à usage unique (empreinte seulement), valable jusqu'à expire_le.
+  `CREATE TABLE appairages (
+     empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, par TEXT NOT NULL);`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 

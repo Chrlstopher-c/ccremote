@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { DemandeAcces, GenreAcces, NouvelAcces, VueAcces } from '../../commun/api-clients.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { PlafondEchecs } from './plafond.ts';
+import { codeAppairageNeuf, empreinteCode } from './appairage.ts';
 
 const DUREE_JETON_MS = 90 * 24 * 3600 * 1000;
 const FENETRE_ECHECS_MS = 15 * 60 * 1000;
@@ -60,6 +61,27 @@ export class Acces {
       this.registre.noterUsageJeton(e, new Date().toISOString());
     }
     return genre;
+  }
+
+  /** Un code d'appairage neuf (10 min, usage unique), créé par l'appareil `par`. */
+  creerCodeAppairage(par: string): { readonly code: string; readonly expireLe: string } {
+    const { code, empreinte: e, expireLe } = codeAppairageNeuf();
+    this.registre.creerCodeAppairage(e, expireLe, par);
+    return { code, expireLe };
+  }
+
+  /** Échange un code d'appairage contre une clé d'appareil ; même limite de tentatives que la connexion. */
+  appairer(code: string, nom: string, ip: string): ResultatConnexion {
+    if (this.plafond.atteint() || this.bloque(ip)) return { ok: false, raison: 'trop_de_tentatives' };
+    if (!this.registre.consommerCodeAppairage(empreinteCode(code))) {
+      this.noterEchec(ip);
+      this.plafond.noter();
+      return { ok: false, raison: 'refuse' };
+    }
+    this.echecs.delete(ip);
+    const jeton = randomBytes(32).toString('base64url');
+    this.registre.creerJeton(empreinte(jeton), nom.slice(0, 120), new Date(Date.now() + DUREE_JETON_MS).toISOString());
+    return { ok: true, jeton };
   }
 
   emettre(d: DemandeAcces): NouvelAcces {
