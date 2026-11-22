@@ -47,13 +47,30 @@ function cheminConfig(): string {
   return process.env['CCREMOTE_CONFIG_POSTE'] ?? join(homedir(), '.config/ccremote/poste.json');
 }
 
+/**
+ * Comptes suivis en Remote Control au démarrage. Un fichier qui ne dit rien sur `distants` : le nœud autonome (sans
+ * appli pour régler l'interrupteur) suit tous ses comptes, comme le poste de l'appli une fois l'interrupteur réglé ;
+ * ailleurs, aucun (défaut). Un `distants` écrit dans le fichier fait toujours foi.
+ */
+export function distantsDeDepart(
+  brut: { readonly distants: readonly string[]; readonly comptes: Readonly<Record<string, unknown>> },
+  fichier: unknown,
+  env: Readonly<Record<string, string | undefined>>,
+): string[] {
+  const explicite = typeof fichier === 'object' && fichier !== null && 'distants' in fichier;
+  if (explicite || env['LANTERNE_MOTEUR_AUTONOME'] !== '1') return [...brut.distants];
+  return Object.keys(brut.comptes);
+}
+
 export function chargerConfig(): ConfigPoste {
   const chemin = cheminConfig();
-  const brut = FichierConfig.parse(JSON.parse(readFileSync(chemin, 'utf8')));
+  const fichier: unknown = JSON.parse(readFileSync(chemin, 'utf8'));
+  const brut = FichierConfig.parse(fichier);
   const secret = process.env['CCREMOTE_SECRET_POSTE'];
   if (!secret) throw new Error('CCREMOTE_SECRET_POSTE absent : le poste ne peut pas s’authentifier auprès du relais');
   return {
     ...brut,
+    distants: distantsDeDepart(brut, fichier, process.env),
     secret,
     racines: brut.racines.map(developper),
     comptes: Object.fromEntries(Object.entries(brut.comptes).map(([k, v]) => [k, v === null ? null : developper(v)])),

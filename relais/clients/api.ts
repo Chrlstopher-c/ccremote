@@ -107,18 +107,9 @@ export function avecGardeInvites(d: DependancesApi, g: Gestionnaire): Gestionnai
   return (req) => d.invites.gardeLocale(req.url) ?? g(req);
 }
 
-/**
- * `relaisAutorise` : qui peut être relayé vers le nœud qui tient la session. Par défaut le jeton HTTP ; pour un
- * appareil (requête interne, sans en-tête, déjà authentifiée par son canal chiffré) l'appelant passe `() => true` —
- * sans cela l'iPhone recevait la copie locale périmée d'une session tenue par un autre nœud (22/11).
- */
-export function construireRoutes(
-  d: DependancesApi,
-  protection?: (g: Gestionnaire) => Gestionnaire,
-  relaisAutorise: (req: Request) => boolean = (req) => d.acces.autorise(req),
-) {
+export function construireRoutes(d: DependancesApi, protection?: (g: Gestionnaire) => Gestionnaire) {
   const protege = protection ?? ((g: Gestionnaire) => protegerAvec(d.acces)(avecGardeInvites(d, g)));
-  return relayerVersNoeuds(tableRoutes(d, protege), d.federation.distantes, relaisAutorise);
+  return relayerVersNoeuds(tableRoutes(d, protege), d.federation.distantes, (req) => d.acces.autorise(req));
 }
 
 function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnaire) {
@@ -325,10 +316,17 @@ function etat(d: DependancesApi, req: Request) {
   };
 }
 
-// Sessions et machines du parc, avec celles des nœuds appariés (fédération) quand il y en a.
+// Sessions et machines du parc, avec celles des nœuds appariés (fédération) quand il y en a. `?local=1` : seulement
+// ce que ce nœud tient lui-même (l'iPhone interroge chaque nœud en ligne et range chaque session sous son nœud).
 function vueDuParc(d: DependancesApi, req: Request) {
   const locales = d.registre.sessions(avecArchivees(req));
   const v = d.federation.distantes.vue(d.invites.sessionsLocales(locales), d.postes.vues());
+  if (new URL(req.url).searchParams.get('local') === '1') {
+    return {
+      machines: v.machines.filter((m) => !v.machinesRoutees.has(m.id)),
+      sessions: v.sessions.filter((s) => !v.routage.has(s.id)),
+    };
+  }
   return { machines: v.machines, sessions: v.sessions };
 }
 

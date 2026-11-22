@@ -7,7 +7,7 @@ import type { Logger } from 'pino';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { EvenementHorodate } from '../session/historique.ts';
 import type { SortieSession } from '../session/session-poste.ts';
-import type { ConfigPoste } from '../config.ts';
+import { type ConfigPoste, distantsDeDepart } from '../config.ts';
 import { demarrerFauxApi, type FauxApi, sessionApi, tourApi } from './faux-claude-ai.ts';
 import { Spectateur } from './spectateur.ts';
 import { resumeDistant } from './resume-distant.ts';
@@ -103,6 +103,17 @@ afterEach(() => {
 });
 
 describe('sessions Remote Control d’un compte suivi', () => {
+  test('nœud autonome : le compte suivi dès le départ est relevé sans bascule', async () => {
+    api.sessions = [sessionApi('cse_auto')];
+    const distants = distantsDeDepart({ distants: [], comptes: { principal: dossier } }, {}, {
+      LANTERNE_MOTEUR_AUTONOME: '1',
+    });
+    const s = spectateurDe(distants);
+    s.demarrer();
+    await attendre(() => s.lister().length > 0);
+    expect(s.lister().map((r) => r.id)).toEqual(['cse_auto']);
+  });
+
   test('seules les sessions bridge et actives sont suivies', async () => {
     api.sessions = [
       sessionApi('cse_ok'),
