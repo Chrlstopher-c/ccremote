@@ -25,6 +25,7 @@ export const CODE_REMPLACE = 4409;
 export class Liens {
   private readonly connectes = new Map<string, Lien>();
   private readonly canaux: Canaux;
+  private revoques = '';
 
   constructor(
     private readonly annuaire: Annuaire,
@@ -101,24 +102,40 @@ export class Liens {
       ws.close(CODE_REVOQUE, 'révoqué');
       change = true;
     }
-    if (change) this.diffuserPresence();
+    // Un révoqué hors ligne doit aussi disparaître de la présence des autres : on compare les révoqués.
+    const revoques = this.annuaire.membres().filter((m) => m.revoqueLe).map((m) => m.id).sort().join(',');
+    if (change || revoques !== this.revoques) {
+      this.revoques = revoques;
+      this.diffuserPresence();
+    }
   }
 
-  /** Envoie à chaque membre connecté la liste des membres qu'il peut joindre, avec leur état. */
+  /** Envoie à chaque membre connecté la liste des membres qu'il voit, avec leur état. */
   diffuserPresence(): void {
     const tous = this.annuaire.membres();
     for (const [id, ws] of this.connectes) {
       const moi = tous.find((m) => m.id === id);
       if (!moi) continue;
+      const ouverts = this.canaux.correspondantsOuverts(moi.id);
       const membres = tous
-        .filter((x) => this.peutParler(moi, x))
+        .filter((x) => this.voit(moi, x, ouverts))
         .map((x) => ({ id: x.id, enLigne: this.connectes.has(x.id) }));
       this.envoyerA(ws, { t: 'presence', membres });
     }
   }
 
-  /** Même propriétaire, ou propriétaires liés par un duo déclaré ; jamais vers soi-même ni un membre révoqué. */
-  private peutParler(a: Membre, b: Membre): boolean {
+  /**
+   * Présence : tout le même propriétaire ; un autre propriétaire seulement si son lien duo existe ET qu'un canal
+   * avec ce membre a été accepté (ouvert). Jamais soi-même, jamais un membre révoqué.
+   */
+  private voit(moi: Membre, x: Membre, ouverts: ReadonlySet<string>): boolean {
+    if (moi.id === x.id || moi.revoqueLe || x.revoqueLe) return false;
+    if (moi.proprietaire === x.proprietaire) return true;
+    return ouverts.has(x.id) && this.annuaire.duoLie(moi.proprietaire, x.proprietaire);
+  }
+
+  /** Demande de canal : même propriétaire, ou propriétaires liés par un duo ; jamais vers soi-même. */
+  private peutDemander(a: Membre, b: Membre): boolean {
     if (a.id === b.id || a.revoqueLe || b.revoqueLe) return false;
     return a.proprietaire === b.proprietaire || this.annuaire.duoLie(a.proprietaire, b.proprietaire);
   }
@@ -126,12 +143,16 @@ export class Liens {
   private ouvrirCanal(ws: Lien, canal: string, vers: string): void {
     const de = this.annuaire.membre(ws.data.membre);
     const cible = this.annuaire.membre(vers);
-    if (!de || !cible || !this.peutParler(de, cible)) {
+    if (!de || !cible || !this.peutDemander(de, cible)) {
       this.journal.warn({ de: ws.data.membre, vers, canal }, 'ouverture refusée : non autorisée');
       return this.erreur(ws, 'non-autorise', canal);
     }
     const destinataire = this.connectes.get(cible.id);
-    if (!destinataire) return this.erreur(ws, 'hors-ligne', canal);
+    // Hors ligne : un autre propriétaire ne doit pas apprendre que ce nœud existe ni son état.
+    if (!destinataire) {
+      const motif = de.proprietaire === cible.proprietaire ? 'hors-ligne' : 'non-autorise';
+      return this.erreur(ws, motif, canal);
+    }
     const motif = this.canaux.ouvrir(de.id, cible.id, canal);
     if (motif) return this.erreur(ws, motif, canal);
     this.envoyerA(destinataire, { t: 'ouvrir', canal, de: de.id });
@@ -143,6 +164,7 @@ export class Liens {
     if (!r.ok) return this.erreur(ws, r.motif, canal);
     const ouvrant = this.connectes.get(r.valeur);
     if (ouvrant) this.envoyerA(ouvrant, { t: decision, canal });
+    if (decision === 'accepter') this.diffuserPresence();
     this.journal.info({ membre: ws.data.membre, canal, decision }, 'décision sur un canal');
   }
 
@@ -163,6 +185,7 @@ export class Liens {
     if (pair === null) return this.erreur(ws, 'canal-inconnu', canal);
     const correspondant = this.connectes.get(pair);
     if (correspondant) this.envoyerA(correspondant, { t: 'fermer', canal });
+    this.diffuserPresence();
     this.journal.info({ membre: ws.data.membre, canal }, 'canal fermé');
   }
 

@@ -46,6 +46,14 @@ export class Canaux {
     return { ok: true, valeur: c.ouvrant === membre ? c.cible : c.ouvrant };
   }
 
+  /** Membres avec lesquels `membre` a un canal accepté des deux côtés (visibles d’un autre propriétaire). */
+  correspondantsOuverts(membre: string): Set<string> {
+    const pairs = [...new Set(this.bouts.values())]
+      .filter((c) => c.etat === 'ouvert' && (c.ouvrant === membre || c.cible === membre))
+      .map((c) => (c.ouvrant === membre ? c.cible : c.ouvrant));
+    return new Set(pairs);
+  }
+
   /** Ferme un canal à la demande d'un de ses bouts. Rend le correspondant à prévenir, ou null si canal absent. */
   fermer(membre: string, canal: string): string | null {
     const c = this.bouts.get(cle(membre, canal));

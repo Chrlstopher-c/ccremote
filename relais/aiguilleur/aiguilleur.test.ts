@@ -403,3 +403,77 @@ describe('révocation, présence, charge, journal', () => {
     expect(journal).not.toContain(b.jeton);
   });
 });
+
+describe('présence entre propriétaires : seulement après canal accepté', () => {
+  type Identite = { readonly id: string; readonly jeton: string };
+  interface Monde {
+    readonly a1: Identite;
+    readonly a2: Identite;
+    readonly a3: Identite;
+    readonly b1: Identite;
+    readonly la1: Lien;
+    readonly la2: Lien;
+    readonly la3: Lien;
+    readonly lb1: Lien;
+  }
+
+  /** Chris : trois nœuds (A1, A2, A3) ; Mathéo : un nœud (B1) ; lien duo déclaré ; tous connectés. */
+  async function mondeDuo(): Promise<Monde> {
+    executerCommande(['lier-duo', 'matheo', 'chris'], ici().annuaire);
+    const a1 = await membre('chris');
+    const a2 = await membre('chris');
+    const a3 = await membre('chris');
+    const b1 = await membre('matheo');
+    const la1 = await lien(a1);
+    const la2 = await lien(a2);
+    const la3 = await lien(a3);
+    const lb1 = await lien(b1);
+    await lb1.silence();
+    return { a1, a2, a3, b1, la1, la2, la3, lb1 };
+  }
+
+  /** Identifiants de la dernière présence reçue, triés. */
+  function visibles(l: Lien): string[] {
+    const membres = (l.de('presence').at(-1)?.['membres'] ?? []) as { id: string }[];
+    return membres.map((x) => x.id).sort();
+  }
+
+  async function accepterCanal(m: Monde, canal: string): Promise<void> {
+    m.lb1.envoyer({ t: 'ouvrir', canal, vers: m.a1.id });
+    await m.la1.attendre((x) => x.t === 'ouvrir' && x['canal'] === canal);
+    m.la1.envoyer({ t: 'accepter', canal });
+    await m.lb1.attendre((x) => x.t === 'accepter' && x['canal'] === canal);
+    await m.lb1.silence();
+  }
+
+  test('avant tout canal accepté : Mathéo ne voit aucun nœud de Chris, Chris voit ses trois nœuds', async () => {
+    const m = await mondeDuo();
+    expect(visibles(m.lb1)).toEqual([]);
+    expect(visibles(m.la1)).toEqual([m.a2.id, m.a3.id].sort());
+  });
+
+  test('après acceptation avec A1 : Mathéo ne voit que A1, et Chris voit B1 chez A1 seulement', async () => {
+    const m = await mondeDuo();
+    await accepterCanal(m, 'duo1');
+    expect(visibles(m.lb1)).toEqual([m.a1.id]);
+    expect(visibles(m.la1)).toEqual([m.a2.id, m.a3.id, m.b1.id].sort());
+    expect(visibles(m.la2)).toEqual([m.a1.id, m.a3.id].sort());
+  });
+
+  test('révocation de A1 : il disparaît de la présence de Mathéo, sans nouvelle connexion', async () => {
+    const m = await mondeDuo();
+    await accepterCanal(m, 'duo2');
+    executerCommande(['revoquer', m.a1.id], ici().annuaire);
+    ici().aiguilleur.balayer();
+    await m.lb1.silence();
+    expect(visibles(m.lb1)).toEqual([]);
+    expect(visibles(m.la2)).toEqual([m.a3.id]);
+  });
+
+  test('un nœud de Chris hors ligne ne répond pas autrement qu’un inconnu à Mathéo', async () => {
+    const m = await mondeDuo();
+    const horsLigne = await membre('chris');
+    m.lb1.envoyer({ t: 'ouvrir', canal: 'duo3', vers: horsLigne.id });
+    expect((await m.lb1.attendre((x) => x.t === 'erreur')).motif).toBe('non-autorise');
+  });
+});
