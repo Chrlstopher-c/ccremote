@@ -17,6 +17,7 @@ import { DesktopDesPostes } from './desktop-postes.ts';
 import { ArchivagesEnMemoire } from '../registre/archivages-desktop.ts';
 import { RechercheJumelle } from './recherche-jumelle.ts';
 import { StatutsPaires } from './statut-paire.ts';
+import { Doublons } from './doublons.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
 import { RelecturesFil } from './relectures-fil.ts';
@@ -64,6 +65,7 @@ export class Postes {
   private readonly relectures: RelecturesFil;
   private readonly paires: StatutsPaires;
   private readonly jumelles: RechercheJumelle;
+  private readonly doublons: Doublons;
   /** Les terminaux à distance, branchés après coup (ils ont besoin des postes pour commander). */
   terminaux: {
     duPoste(machine: string, m: Extract<MessagePoste, { kind: `terminal_${string}` }>): void;
@@ -90,6 +92,7 @@ export class Postes {
   ) {
     this.paires = new StatutsPaires(registre);
     this.jumelles = new RechercheJumelle(registre, (id) => this.decouverteDuPont(id));
+    this.doublons = new Doublons(registre, diffusion, journal);
     this.relectures = new RelecturesFil({
       registre,
       diffusion,
@@ -384,6 +387,12 @@ export class Postes {
   private enregistrerRapportee(s: ResumeSession): void {
     const jumelle = this.paires.enregistrer(this.desktop.avecDesktop(this.jumelles.avecJumelle(s)));
     if (jumelle) this.diffuserSession(jumelle.id);
+    if (s.id.startsWith('cse_')) this.doublons.reconcilier();
+  }
+
+  /** Une conversation, une entrée : relancé à chaque changement d'une jumelle Remote Control, et au démarrage. */
+  reconcilierDoublons(): void {
+    this.doublons.reconcilier();
   }
 
   // Conversation pas encore ouverte (découverte d'un poste en ligne) dont le transcript ou la fiche Desktop nomme

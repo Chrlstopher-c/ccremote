@@ -21,6 +21,7 @@ import { parcPour, verifierOuverture } from '../sessions/composition-parc.ts';
 import type { Diffusion } from './diffusion.ts';
 import { entier, erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
 import type { Postes } from '../parc/postes.ts';
+import { Doublons } from '../parc/doublons.ts';
 import { type SessionAdoptable, sessionAdoptee } from './session-adoptee.ts';
 import {
   ecrireAuPair,
@@ -388,9 +389,16 @@ export class ApiSessions {
       if (!r.ok) return erreur(r.erreur ?? 'fermeture refusée, archivage annulé', REFUS_POSTE);
     }
     this.registre.definirArchivee(sessionId, archivee);
+    this.rapprocherDoublons();
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, archivee });
+  }
+
+  // Une conversation, une entrée : l'épinglage, la non-lecture et l'archivage d'une jumelle Remote Control peuvent
+  // changer la fiche principale.
+  private rapprocherDoublons(): void {
+    new Doublons(this.registre, this.diffusion, this.journal).reconcilier();
   }
 
   // Épingler ne touche pas au poste : c'est un drapeau du relais, comme l'archivage sans fermeture.
@@ -398,6 +406,7 @@ export class ApiSessions {
     const session = await this.sessionDe(sessionId);
     if (session instanceof Response) return session;
     this.registre.definirEpinglee(sessionId, epinglee);
+    this.rapprocherDoublons();
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, epinglee });
@@ -408,6 +417,7 @@ export class ApiSessions {
     const session = await this.sessionDe(sessionId);
     if (session instanceof Response) return session;
     this.registre.definirNonLue(sessionId, nonLue);
+    this.rapprocherDoublons();
     const vue = this.registre.session(sessionId);
     if (vue) this.diffusion.diffuser({ type: 'session', session: vue });
     return json({ ok: true, nonLue });

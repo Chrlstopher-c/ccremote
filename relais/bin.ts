@@ -72,6 +72,7 @@ const secretsPostes = new Map<string, string>([...config.secretsPostes, ...charg
 const postes = new Postes(registre, diffusion, secretsPostes, journal);
 const appelsModules = new AppelsModules({ registre, diffusion });
 postes.desktop = new DesktopDesPostes(new ArchivagesDesktop(base));
+postes.reconcilierDoublons();
 const confirmations = new ApiConfirmations(new Confirmations((m) => diffusion.diffuser(m)));
 // Relais intégré (appli) : les postes Lanterne sont joints par des tunnels SSH inverses lancés d'ici.
 const integre = config.integre;

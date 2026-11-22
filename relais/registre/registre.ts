@@ -18,7 +18,7 @@ import { RegistreModules } from '../modules/registre-modules.ts';
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
 export type { EvenementDate, Notification };
 
-type LigneSession = { resume: string; archivee: number; epinglee: number; non_lue: number };
+type LigneSession = { id: string; resume: string; archivee: number; epinglee: number; non_lue: number };
 type LigneMachine = {
   id: string;
   description: string;
@@ -42,6 +42,9 @@ type LigneNotif = {
 
 export class Registre {
   readonly modules: RegistreModules;
+
+  // Fiches masquées car une autre tient la même conversation (parc/doublons.ts) : vues comme rangées, en mémoire.
+  private sessionsMasquees: ReadonlySet<string> = new Set();
 
   constructor(
     private readonly db: Database,
@@ -112,17 +115,36 @@ export class Registre {
 
   session(id: string): ResumeSession | null {
     const l = this.db
-      .query('SELECT resume, archivee, epinglee, non_lue FROM sessions WHERE id = $id')
+      .query('SELECT id, resume, archivee, epinglee, non_lue FROM sessions WHERE id = $id')
       .get({ id }) as LigneSession | null;
     return l ? this.vue(l) : null;
   }
 
-  // Les archivées sont absentes par défaut ; `avecArchivees` les rend (filtre ?archivees=1, rétention du fil).
+  // Les archivées et les fiches masquées (doublons) sont absentes par défaut ; `avecArchivees` les rend (filtre
+  // ?archivees=1, rétention du fil).
   sessions(avecArchivees = false): ResumeSession[] {
     const lignes = this.db
-      .query('SELECT resume, archivee, epinglee, non_lue FROM sessions ORDER BY maj_le DESC')
+      .query('SELECT id, resume, archivee, epinglee, non_lue FROM sessions ORDER BY maj_le DESC')
       .all() as LigneSession[];
-    return lignes.filter((l) => avecArchivees || l.archivee === 0).flatMap((l) => this.vue(l) ?? []);
+    return lignes
+      .filter((l) => avecArchivees || (l.archivee === 0 && !this.sessionsMasquees.has(l.id)))
+      .flatMap((l) => this.vue(l) ?? []);
+  }
+
+  /** Toutes les fiches, sans les masquages des doublons : l'archivage du registre seul (base du rapprochement). */
+  sessionsBrutes(): ResumeSession[] {
+    const lignes = this.db
+      .query('SELECT id, resume, archivee, epinglee, non_lue FROM sessions ORDER BY maj_le DESC')
+      .all() as LigneSession[];
+    return lignes.flatMap((l) => this.vue(l, true) ?? []);
+  }
+
+  sessionsMasqueesCourantes(): ReadonlySet<string> {
+    return this.sessionsMasquees;
+  }
+
+  definirSessionsMasquees(ids: ReadonlySet<string>): void {
+    this.sessionsMasquees = new Set(ids);
   }
 
   definirArchivee(id: string, archivee: boolean): void {
@@ -233,12 +255,12 @@ export class Registre {
 
   // La vue rendue aux clients : la fiche du poste, le drapeau d'archivage (colonne, jamais écrasé par le poste) et
   // l'inactivité calculée à la lecture, pour qu'elle ne reste jamais périmée.
-  private vue(l: LigneSession): ResumeSession | null {
+  private vue(l: LigneSession, brute = false): ResumeSession | null {
     const fiche = this.lireFiche(l.resume);
     if (!fiche) return null;
     return {
       ...fiche,
-      archivee: l.archivee === 1,
+      archivee: l.archivee === 1 || (!brute && this.sessionsMasquees.has(l.id)),
       epinglee: l.epinglee === 1,
       nonLue: l.non_lue === 1,
       inactiveDepuis: inactiveDepuis(fiche.statut, fiche.majLe, new Date(), this.seuilInactiviteMs),
