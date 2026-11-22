@@ -35,8 +35,12 @@ export class AppairageNoeud {
     private readonly deps: DepsAppairage,
   ) {}
 
-  /** Un pair accepté est enregistré, sa révocation levée, et ses admissions diffusées si c'est un appareil. */
-  private enregistrerPair(membre: string, presentation: PresentationDistante): void {
+  /**
+   * Un pair accepté est enregistré, sa révocation levée, et ses admissions diffusées si c'est un appareil. Seul le
+   * nœud qui a demandé l'appairage peut fonder le réseau du parc (reprise) : le visé est la machine qu'on relie, et
+   * c'est la charte du demandeur qu'il doit adopter, jamais un réseau concurrent.
+   */
+  private enregistrerPair(membre: string, presentation: PresentationDistante, demandeur: boolean): void {
     const config = this.port.config();
     const pair: PairFederee = {
       id: membre,
@@ -48,7 +52,7 @@ export class AppairageNoeud {
     };
     this.port.definirPairs([...this.port.pairs().filter((p) => p.id !== membre), pair]);
     this.port.refus.delete(membre);
-    void this.port.charte.essayerReprise();
+    if (demandeur) void this.port.charte.essayerReprise();
     this.deps.admissions.readmettre(membre);
     this.port.distant.connaitre(membre, pair.nom);
     this.port.sauverPairs();
@@ -153,14 +157,14 @@ export class AppairageNoeud {
     accord: boolean,
   ): Promise<void> {
     if (accord && !(await this.port.charte.admettre(canal.membre, presentation))) return canal.decider(false);
-    if (accord) this.enregistrerPair(canal.membre, presentation);
+    if (accord) this.enregistrerPair(canal.membre, presentation, false);
     canal.decider(accord);
   }
 
   // Appairage demandé d'ici (« Appairer » : une machine avec Lanterne) : sous une charte dont ce nœud est chef,
   // elle y entre comme pair. Un nœud ajouté par SSH demande lui-même, et entre comme serveur (decisionAppairage).
   appairageAccepte(membre: string, presentation: PresentationDistante): void {
-    this.enregistrerPair(membre, presentation);
+    this.enregistrerPair(membre, presentation, true);
     const adresse = this.adressesEnAttente.get(membre);
     if (adresse !== undefined) {
       this.adressesEnAttente.delete(membre);

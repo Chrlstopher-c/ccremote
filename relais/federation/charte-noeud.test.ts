@@ -9,6 +9,7 @@ import {
   ajouterMembre,
   changerMembre,
   creerCharte,
+  inviterMembre,
   type CharteSignee,
   type MembreCharte,
   retirerMembre,
@@ -18,6 +19,7 @@ import {
 } from '../../commun/charte.ts';
 import { exporterIdentitePublique, genererIdentite, type Identite } from '../../commun/chiffrement/identite.ts';
 import type { MessageChiffre } from '../../commun/federation.ts';
+import { reglagesParDefaut } from '../../commun/invites.ts';
 import type { PresentationDistante } from './canal.ts';
 import { CharteNoeud, type LienCharte, type PortCharte } from './charte-noeud.ts';
 import { type PairFederee, SecretsNoeud } from './secrets.ts';
@@ -252,6 +254,56 @@ describe('reprise du parc', () => {
     const attendu = ra < rb ? ra : rb;
     expect(reseauDe(a)).toBe(attendu);
     expect(reseauDe(b)).toBe(attendu);
+  });
+});
+
+describe('machine fraîche reliée au réseau d’un chef', () => {
+  /** W, embarqué, s'est fondé seul une reprise v1 en s'appairant à A ; A, chef, l'a invité dans son réseau. */
+  async function fraiche(): Promise<{ a: Noeud; w: Noeud; reprise: string }> {
+    const a = await noeud(A);
+    const w = await noeud(D, true);
+    expect((await a.charte.creer('Maison')).ok).toBe(true);
+    const moiW = { id: D, nom: `nom-${D}`, identite: w.pub };
+    const r = await a.charte.editer((ch, moi, le) => inviterMembre(ch, moi, moiW, reglagesParDefaut(A), le));
+    expect(r.ok).toBe(true);
+    w.pairs.push(pairDe(a));
+    a.pairs.push(pairDe(w));
+    await w.charte.essayerReprise();
+    const reprise = reseauDe(w);
+    if (reprise === null) throw new Error('reprise absente');
+    return { a, w, reprise };
+  }
+
+  test('une reprise v1 fondée seule cède devant la charte du chef qui la compte : invité, sans révocation', async () => {
+    const { a, w } = await fraiche();
+    await w.charte.recevoir(A, signeeDe(a), 'accepte');
+    expect(reseauDe(w)).toBe(reseauDe(a));
+    expect(w.charte.charte()?.chefs).toEqual([A]);
+    expect(w.charte.charte()?.membres.find((m) => m.id === D)?.invite).toBeDefined();
+    expect(w.revoques).toEqual([]);
+  });
+
+  test('le chef garde son réseau devant la reprise de la machine fraîche', async () => {
+    const { a, w } = await fraiche();
+    const avant = reseauDe(a);
+    await a.charte.recevoir(D, signeeDe(w), 'accepte');
+    expect(reseauDe(a)).toBe(avant);
+  });
+
+  test('une reprise déjà éditée ne cède pas', async () => {
+    const { a, w, reprise } = await fraiche();
+    const b = await noeud(B);
+    expect((await w.charte.editer((ch, moi, le) => ajouterMembre(ch, moi, comme(b), le))).ok).toBe(true);
+    await w.charte.recevoir(A, signeeDe(a), 'accepte');
+    expect(reseauDe(w)).toBe(reprise);
+  });
+
+  test('une charte qui ne compte pas la machine ne remplace pas sa reprise', async () => {
+    const { w, reprise } = await fraiche();
+    const autre = await noeud(C);
+    expect((await autre.charte.creer('Ailleurs')).ok).toBe(true);
+    await w.charte.recevoir(C, signeeDe(autre), 'accepte');
+    expect(reseauDe(w)).toBe(reprise);
   });
 });
 

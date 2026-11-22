@@ -195,6 +195,19 @@ export function repriseLEmporte(actuelle: Charte, proposee: Charte): boolean {
   );
 }
 
+/**
+ * Une reprise v1 que ce nœud a fondée seul (machine fraîche appairée avant d'avoir reçu la charte) cède devant tout
+ * autre réseau qui n'est pas lui-même une reprise v1 : le nœud a rejoint ce réseau, il ne le concurrence pas.
+ */
+export function repriseCede(actuelle: Charte, proposee: Charte, moi: string): boolean {
+  const seule =
+    actuelle.origine === 'reprise' &&
+    actuelle.version === 1 &&
+    actuelle.chefs.length === 1 &&
+    actuelle.chefs[0] === moi;
+  return seule && !(proposee.origine === 'reprise' && proposee.version === 1);
+}
+
 /** Charte absente → tout (réseau non créé) ; chef → tout ; membre absent → rien ; sinon ses droits. */
 export function droitsDe(charte: Charte | null, membre: string): Droits {
   if (charte === null || estChef(charte, membre)) return { ...TOUS_DROITS };

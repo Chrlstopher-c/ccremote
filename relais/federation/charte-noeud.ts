@@ -17,6 +17,7 @@ import {
   type MembreSansDroits,
   membreDe,
   type RequeteDroit,
+  repriseCede,
   repriseDuParc,
   type Sorte,
   repriseLEmporte,
@@ -262,7 +263,10 @@ export class CharteNoeud {
     const verdict = await verifierCharte(actuelle, signee);
     if (verdict.ok || verdict.motif !== 'autre-reseau') return verdict;
     const proposee = lireCharte(signee.texte);
-    return proposee !== null && repriseLEmporte(actuelle, proposee) ? this.genese(signee) : verdict;
+    const moi = this.port.moi();
+    if (proposee === null || moi === null) return verdict;
+    const cede = repriseLEmporte(actuelle, proposee) || repriseCede(actuelle, proposee, moi);
+    return cede ? this.genese(signee) : verdict;
   }
 
   /** Première charte d'un nœud : signée par un chef de son propre contenu, et ce nœud y figure. */
@@ -286,7 +290,8 @@ export class CharteNoeud {
     this.signeeCourante = signee;
     this.port.signaler();
     for (const lien of this.port.liensNoeuds()) if (lien.membre !== depuis) lien.envoyer(messageDe(signee));
-    if (ancienne !== null) this.revoquerSortis(ancienne, charte);
+    // Changer de réseau (reprise qui cède) ne révoque personne : l'ancienne charte n'engageait que ce nœud.
+    if (ancienne !== null && ancienne.reseau === charte.reseau) this.revoquerSortis(ancienne, charte);
     this.port.journal.info({ version: charte.version, origine: charte.origine }, 'charte adoptée');
     return true;
   }

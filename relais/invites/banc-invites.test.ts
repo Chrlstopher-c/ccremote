@@ -186,6 +186,25 @@ async function ouvrirChezB(r: Reseau, corps: Record<string, unknown> = CORPS_HAI
   return r.g.federation.ouvrirChez(r.idB, JSON.stringify(corps));
 }
 
+describe('machine fraîche invitée (appli embarquée des deux côtés)', () => {
+  test('elle adopte la charte du chef, invitée, sans fonder de réseau concurrent', async () => {
+    const a = await nouveau('portable', { peutReprendre: true });
+    const g = await nouveau('elie', { peutReprendre: true });
+    expect((await a.federation.charte.creer('Maison')).ok).toBe(true);
+    const reseauA = a.federation.charte.charte()?.reseau;
+    const idG = await idDe(g);
+    a.federation.invites.intentions.pose(idG, reglagesG([await idDe(a)]), 60_000);
+    await appairer(a, g);
+    await attendre(() => g.federation.charte.charte() !== null);
+    await pause(200);
+    const charteG = g.federation.charte.charte();
+    expect(charteG?.reseau).toBe(reseauA);
+    expect(charteG?.chefs).toEqual([await idDe(a)]);
+    expect(membreDe(charteG, idG)?.invite?.modeles).toEqual({ haiku: ['low', 'medium'] });
+    expect(a.federation.charte.charte()?.reseau).toBe(reseauA);
+  });
+});
+
 describe('ouverture par l’invité', () => {
   test('haiku en low : ouverte sur B, corps réécrit, cadre sous la racine des espaces, mode default', async () => {
     const r = await reseau();
