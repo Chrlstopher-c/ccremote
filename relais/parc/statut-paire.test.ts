@@ -48,6 +48,39 @@ function paires(): { registre: Registre; statuts: StatutsPaires } {
   return { registre, statuts: new StatutsPaires(registre) };
 }
 
+describe('jumelle masquée derrière la fiche de poste', () => {
+  const RC_TRAVAIL = (id: string, connectee: boolean, statut: ResumeSession['statut']): ResumeSession =>
+    fiche(id, {
+      machine: 'portable',
+      claudeSessionId: null,
+      statut,
+      distant: {
+        compte: 'defaut',
+        idDistant: id,
+        connexion: connectee ? 'connectee' : 'deconnectee',
+        probleme: null,
+        conversation: 'conv-1',
+      },
+    });
+
+  test('le statut « travail » de la jumelle masquée reste celui de la paire', () => {
+    const { registre, statuts } = paires();
+    statuts.enregistrer(RC_TRAVAIL('cse_a', true, 'travail'));
+    registre.definirSessionsMasquees(new Set(['cse_a']));
+    statuts.enregistrer(POSTE);
+    expect(registre.session('s1')?.statut).toBe('travail');
+  });
+
+  test('la jumelle vivante l’emporte sur une jumelle déconnectée et plus ancienne', () => {
+    const { registre, statuts } = paires();
+    statuts.enregistrer(RC_TRAVAIL('cse_vieille', false, 'travail'));
+    statuts.enregistrer(RC_TRAVAIL('cse_a', true, 'attente'));
+    registre.definirSessionsMasquees(new Set(['cse_vieille', 'cse_a']));
+    statuts.enregistrer(POSTE);
+    expect(registre.session('s1')?.statut).toBe('attente');
+  });
+});
+
 describe('modèle de la jumelle Remote Control', () => {
   test('(a) la jumelle affiche le modèle de la fiche de poste plus récent que le sien', () => {
     const { registre, statuts } = paires();

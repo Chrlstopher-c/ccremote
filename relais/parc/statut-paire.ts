@@ -4,6 +4,7 @@
 // Recalculé à chaque changement de l'une des deux.
 import type { ResumeSession, StatutSession } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
+import { estVivante } from './doublons-conversation.ts';
 import { modeleDatee, statutDePaire } from './jumelle-distante.ts';
 import { plusRecent } from '../../commun/modele-date.ts';
 
@@ -51,7 +52,11 @@ export class StatutsPaires {
     const estRc = fiche.id.startsWith('cse_');
     const conversation = estRc ? (fiche.distant?.conversation ?? null) : (fiche.claudeSessionId ?? fiche.id);
     if (conversation === null) return null;
-    const autres = this.registre.sessions(false).filter((c) => c.id !== fiche.id && c.id.startsWith('cse_') !== estRc);
-    return autres.find((c) => (estRc ? (c.claudeSessionId ?? c.id) : c.distant?.conversation) === conversation) ?? null;
+    // Toutes les fiches, masquées comprises : une jumelle cachée derrière la fiche de poste compte encore.
+    const autres = this.registre.sessions(true).filter((c) => c.id !== fiche.id && c.id.startsWith('cse_') !== estRc);
+    const trouvees = autres.filter(
+      (c) => (estRc ? (c.claudeSessionId ?? c.id) : c.distant?.conversation) === conversation,
+    );
+    return trouvees.find(estVivante) ?? trouvees[0] ?? null;
   }
 }

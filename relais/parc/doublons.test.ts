@@ -214,6 +214,15 @@ describe('actions de Chris visant une jumelle : elles portent sur l’entrée pr
     expect(registre.session('cse_new')?.nonLue).toBe(false);
   });
 
+  test('interrompre depuis la fiche de poste part vers la jumelle vivante, même masquée derrière elle', async () => {
+    const { registre, diffusion } = monde();
+    new Doublons(registre, diffusion, journal).reconcilier();
+    const commandes: unknown[] = [];
+    const api = new ApiSessions(registre, postesAccepteurs(commandes), diffusion, new Set(), journal);
+    await api.action(requete('s-poste', 'interrompre'));
+    expect(commandes).toEqual([expect.objectContaining({ kind: 'interrompre', sessionId: 'cse_new' })]);
+  });
+
   test('archiver depuis la jumelle range toute la conversation, et la désarchiver la rend', async () => {
     const { registre, diffusion } = monde();
     const commandes: unknown[] = [];

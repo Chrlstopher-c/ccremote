@@ -601,7 +601,7 @@ export class ApiSessions {
     if (session instanceof Response) return session;
     // Session du pair (mode duo) : elle tourne chez lui, aucune commande locale ne part vers un poste.
     if (session.duo) return erreur(TEXTE_REFUS_DUO, REFUS_POSTE);
-    const aiguille = aiguillage(session, c.kind, this.registre.sessions(false));
+    const aiguille = aiguillage(session, c.kind, this.registre.sessions(true));
     if (aiguille.kind === 'refus') {
       this.journal.warn({ sessionId, commande: c.kind }, 'session tenue ailleurs sans Remote Control');
       return erreur(TEXTE_REFUS_SANS_JUMELLE, REFUS_POSTE);
