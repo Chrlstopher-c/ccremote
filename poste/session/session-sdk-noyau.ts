@@ -90,7 +90,15 @@ function etatInitial(p: SessionPersistee): ResumeSession {
     tmux: null,
     attachee: false,
     moteur: 'sdk',
+    remoteControl: controleInitial(p.resume),
   };
+}
+
+// Une session que le poste pilote par le SDK a un Remote Control connu : éteint tant qu'on ne l'a pas branché. Sans
+// cet état, l'appli le croit « pas encore connu » et grise l'interrupteur. Une session tenue ailleurs garde le sien.
+export function controleInitial(r: ResumeSession): ResumeSession['remoteControl'] {
+  if (r.remoteControl) return r.remoteControl;
+  return r.pilotee === false || r.terminal ? (r.remoteControl ?? null) : { actif: false, url: null };
 }
 
 // Les accesseurs `() => n` sont lus plus tard, au moment des événements : l'objet n'existe pas encore à la
