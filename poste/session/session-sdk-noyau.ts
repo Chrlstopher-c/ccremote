@@ -41,6 +41,7 @@ export interface NoyauSdk {
   fil: FileAsynchrone<SDKUserMessage> | null;
   bilan: BilanTour;
   aReprendre: boolean; // à reprendre au démarrage du poste (voir persistance.ts)
+  reveilLe: number; // dernier démarrage du processus : le délai de sommeil part de là ou du dernier tour
   historiqueEmis: boolean; // l'historique du transcript n'est envoyé qu'à l'ouverture de la fiche
   pointReprise: string | null; // rembobinage en attente : la prochaine reprise part de cette entrée
   identifiantNeuf: string | null; // conversation recommencée après le rembobinage du premier message
@@ -67,6 +68,7 @@ export function creerNoyau(
     fil: null,
     bilan: new BilanTour(),
     aReprendre: p.aReprendre,
+    reveilLe: 0,
     historiqueEmis: false,
     pointReprise: null,
     identifiantNeuf: null,

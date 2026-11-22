@@ -4,6 +4,8 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 
+export const SOMMEIL_MINUTES_DEFAUT = 5;
+
 const FichierConfig = z.object({
   machine: z.string().regex(/^[a-z0-9-]+$/),
   relais: z.string().regex(/^wss?:\/\//),
@@ -15,6 +17,8 @@ const FichierConfig = z.object({
   distants: z.array(z.string()).default([]),
   donnees: z.string().optional(),
   fenetreContexte: z.number().int().positive().default(1_000_000),
+  // Minutes au repos après le dernier tour avant qu'une session SDK rende son processus (la fiche reste reprenable).
+  sommeilMinutes: z.number().min(0).default(SOMMEIL_MINUTES_DEFAUT),
 });
 
 export interface ConfigPoste {
@@ -28,6 +32,7 @@ export interface ConfigPoste {
   readonly distants: string[]; // mutée en place à chaque bascule (écrite dans le fichier par enregistrerDistants)
   readonly donnees: string;
   readonly fenetreContexte: number;
+  readonly sommeilMinutes?: number; // défaut : SOMMEIL_MINUTES_DEFAUT
   // Moteur de session factice (bancs d'essai), lu une fois au démarrage : voir sdkFacticeDemande.
   readonly sdkFactice?: boolean;
   // API du relais pour les outils de machines (session SDK) : URL et jeton claude-code (environnement).

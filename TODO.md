@@ -3,6 +3,8 @@
 
 ## En cours
 
+- [ ] Sommeil des sessions SDK (22/11, `agent/sessions-sommeil`) : valider sur le portable (processus `claude` au démarrage, réveil au premier message, Remote Control) avant fusion ; mesurer la RAM avec de vrais processus (le banc est factice).
+- [ ] Découper `poste/session/gestionnaire.ts` (521 lignes, > 500).
 - [ ] W2 Lanterne (19/11) : valider en vrai sur la tour après fusion — style, annexe, connecteur coupé, CLAUDE.md, plug-in, Remote Control à la création (branchement au premier repos).
 - [ ] W2 : dette de taille — découper `poste/session/session-sdk.ts` (584 lignes, > 500) : `optionsDe` et `crochets` d'abord.
 - [ ] W2 : réglages qui ne survivent pas à la fermeture (connecteur coupé dans une session arrêtée ; rechargement à la reprise).

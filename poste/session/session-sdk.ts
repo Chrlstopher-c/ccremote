@@ -179,8 +179,13 @@ export class SessionSdk implements SessionPoste {
     this.n.aReprendre = false;
   }
 
-  reprendreApresRedemarrage(texte: string | null): string | null {
+  reprendreApresRedemarrage(texte: string): string | null {
     return processus.reprendreApresRedemarrage(this.n, texte);
+  }
+
+  /** Au repos depuis `seuilMs` : le processus s'arrête, la fiche reste (voir session-sdk-processus.ts). */
+  endormirSiRepos(maintenant: number, seuilMs: number): boolean {
+    return processus.endormirSiRepos(this.n, maintenant, seuilMs);
   }
 
   async interrompre(): Promise<string | null> {

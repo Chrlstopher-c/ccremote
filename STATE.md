@@ -142,8 +142,9 @@ l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 - PAS déployé (mode nuit : prod interdite). `deploiement/deployer.sh tout` (essai : `--essai`) sauvegarde la base,
   construit `bureau` et `hq`, pousse sur le Pi. `~/.config/ccremote/deploiement.env` absent de la tour : le lancer
   depuis la machine qui l'a.
-- Une session SDK vit dans le processus du poste : au redémarrage du poste, celles qui tournaient sont reprises toutes
-  seules (vérifié en réel) ; celles éteintes par Chris restent éteintes.
+- Une session SDK vit dans le processus du poste : au redémarrage du poste, seules celles prises en plein tour sont
+  relancées (corrigé le 22/11, voir la section du 22/11) ; les autres repartent au prochain message. Celles éteintes par
+  Chris restent éteintes.
 - Authentik pas encore devant `/hq/` (mot de passe du relais seulement).
 - Banc d’essai local et isolé : `hq/scripts/essai-local.sh` (relais 8790 + poste « essai », tmux à part ; `arreter`).
 
@@ -415,3 +416,34 @@ Ce que cet essai a trouvé et qui est corrigé :
   processus est bien trouvé comme descendant de la racine. Chantiers réels : 101 fichiers (en cours 6, échec 1, inconnu
   19, terminé 75).
 - Tests : 920 → 1009 (`bun test commun poste relais mcp integre`), `tsc --noEmit` vert.
+
+## 22/11 — Sommeil des sessions SDK (branche `agent/sessions-sommeil`, non poussée)
+
+**Cause** : au démarrage du poste, toute session SDK avec `aReprendre` était relancée (`reprisePrevue`), y compris celles
+au repos ; `aReprendre` reste vrai tant que Chris n'a pas fermé la session. Sur le portable : 4 `claude --resume` à
+~250 Mo chacun pour des sessions inactives.
+
+**Correction** :
+- Démarrage : seule une session prise en plein tour (`travail`, `compaction`, `question`) est relancée, avec le
+  message de redémarrage. Les autres restent sans processus (statut et conversation gardés).
+- Sommeil (`sommeil.ts`, balayage toutes les 30 s) : une session SDK au repos depuis `sommeilMinutes` (défaut 5, clé de
+  `poste.json`) rend son processus. Pas de sommeil si un message est en vol, une question est posée, une tâche de fond
+  tourne, ou si le mode nuit est actif (le réveil de nuit a besoin du processus).
+- Réveil : un message, une pièce jointe ou une compaction à une session endormie la relance d'abord (même chemin que
+  la reprise d'une session fermée). Une session fermée par Chris garde son refus de pièce jointe et de message de pair.
+- Usage du compte : sans session vivante, la dernière lecture datée reste rendue (au lieu de rien).
+- Un compte ne se retire pas sous une session endormie qui reprendra sur lui.
+
+**Mesure (banc, moteur factice `sdkFactice`, 3 sessions au repos + 1 en plein tour, journal du poste)** :
+- Au démarrage : 4 reprises avant (HEAD), 1 après (celle en plein tour).
+- Après 40 s : 4 processus encore vivants avant ; après, 0 (la session en plein tour finit son tour puis s'endort).
+- RAM non mesurée avec de vrais `claude` : le banc ne peut pas en lancer sans écrire dans `~/.claude` (interdit) ; le
+  gain attendu est ~250 Mo par session au repos, chiffre de la mesure du portable.
+
+**Limites connues** :
+- Une session endormie n'a plus de panneau vivant (contexte détaillé, connecteurs à jour, usage) : le fil, le statut, le
+  modèle et le contexte résumé viennent de la fiche et du transcript.
+- À chaque mise en sommeil, la queue du transcript est relue une fois (le relais fusionne sans doublon).
+- Fenêtre de course : une conversation prise par Claude Desktop pendant le sommeil n'est reconnue qu'au balayage suivant ;
+  une reprise dans cet intervalle ferait deux processus sur le même transcript (même risque qu'une session fermée).
+- `poste/session/gestionnaire.ts` dépasse 500 lignes (521, déjà 516 avant ce chantier) : découpage à faire.

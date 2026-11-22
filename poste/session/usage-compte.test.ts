@@ -42,12 +42,18 @@ describe('usage d’un compte lu sur la session SDK', () => {
     expect(r?.luLe).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  test('aucune session vivante : null, et rien n’est gardé (la session suivante sera lue)', async () => {
+  test('aucune session vivante : la dernière lecture reste rendue, datée ; jamais lue : null', async () => {
+    let t = 0;
     const liste: SessionUsage[] = [];
-    const u = new UsageComptes(() => liste, journal);
+    const u = new UsageComptes(() => liste, journal, () => t);
     expect(await u.lire('principal')).toBeNull();
     liste.push(session('nouvelle', 'principal', {}));
-    expect((await u.lire('principal'))?.sessionId).toBe('nouvelle');
+    const lue = await u.lire('principal');
+    expect(lue?.sessionId).toBe('nouvelle');
+    liste.length = 0;
+    t += 10 * 60_000;
+    expect(await u.lire('principal')).toEqual(lue);
+    expect(await u.lire('autre')).toBeNull();
   });
 
   test('cache de 5 min par compte : une seule lecture du SDK dans ce délai', async () => {

@@ -42,7 +42,9 @@ cp .env.example .env         # puis renseigner l'empreinte du mot de passe et le
 bun test commun poste relais && (cd bureau && bun test src)
 ```
 
-Un poste se lance avec `bun run poste/bin.ts` et `~/.config/ccremote/poste.json` (voir `poste/config.ts`).
+Un poste se lance avec `bun run poste/bin.ts` et `~/.config/ccremote/poste.json` (voir `poste/config.ts`). Clé
+`sommeilMinutes` (défaut 5) : au repos depuis ce délai après le dernier tour, une session SDK rend son processus Claude ;
+la fiche reste, la reprise part au prochain message.
 Pour que tout `claude` tapé au clavier soit pilotable depuis Quart, sourcer `poste/session/claude-tmux.zsh` dans
 `~/.zshrc`, avant tout autre enrobage de `claude` (`QUART_SANS_TMUX=1 claude` pour un lancement nu).
 

@@ -41,22 +41,28 @@ export async function lancer(
 
 // Pièces jointes : vérifiées avant le message (une pièce refusée n'envoie rien) ; leurs événements suivent le message.
 // `auteur` : message d'un pair (mode duo). La bulle garde le texte d'origine ; Claude reçoit son nom en tête.
+// Session endormie au repos (processus arrêté, reprise prévue) : elle repart d'abord, puis le message suit. Une
+// session fermée par Chris ne reçoit ni pièce ni message de pair sans reprise explicite.
 export async function envoyer(
   n: NoyauSdk,
   texte: string,
   pieces: readonly PieceJointe[] = [],
   auteur?: string,
 ): Promise<string | null> {
-  if (auteur && !n.fil) return 'session fermée : la reprendre avant d’écrire à deux';
   if (!n.fil && !n.etat.claudeSessionId && n.identifiantNeuf) return lancer(n, texte, null, pieces);
-  if (!n.fil) {
-    return pieces.length > 0 ? 'session fermée : la reprendre avant d’y joindre des fichiers' : reprendre(n, texte);
+  if (!n.fil && !n.aReprendre && auteur) return 'session fermée : la reprendre avant d’écrire à deux';
+  if (!n.fil && !n.aReprendre && pieces.length > 0) {
+    return 'session fermée : la reprendre avant d’y joindre des fichiers';
   }
   const jointes =
     pieces.length > 0
       ? (n.presentation?.pieces(pieces) ?? 'pièces jointes non prises en charge par cette session')
       : null;
   if (typeof jointes === 'string') return jointes;
+  if (!n.fil) {
+    const erreur = await reprendre(n);
+    if (erreur) return erreur;
+  }
   const uuid = randomUUID();
   emettre(n, { type: 'message', texte, uuid, ...(auteur ? { auteur } : {}) });
   jointes?.evenements.forEach((evt) => emettre(n, evt));
@@ -110,8 +116,13 @@ export async function reprendre(n: NoyauSdk, message?: string): Promise<string |
   return demarrer(n, true, message, uuid);
 }
 
-export function compacter(n: NoyauSdk): string | null {
-  if (!n.fil) return 'session fermée';
+// Compaction demandée : une session endormie repart d'abord (reprise prévue), une session fermée reste fermée.
+export async function compacter(n: NoyauSdk): Promise<string | null> {
+  if (!n.fil) {
+    if (!n.aReprendre) return 'session fermée';
+    const erreur = await reprendre(n);
+    if (erreur) return erreur;
+  }
   if (n.etat.statut === 'travail') {
     n.bilan.demanderCompaction();
     return null;

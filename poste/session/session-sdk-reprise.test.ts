@@ -5,7 +5,7 @@ import { RAISON_REDEMARRAGE, TEXTE_REDEMARRAGE } from './reprise.ts';
 const pause = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 describe('SessionSdk — reprise au démarrage du poste', () => {
-  test('une session qui attendait Chris reprend sa conversation sans message ni appel au modèle', async () => {
+  test('une session qui attendait Chris n’a aucun processus au démarrage ; elle garde sa conversation', async () => {
     const textes: string[] = [];
     const { session, requetes, evenements } = nouvelleSession(
       async (texte) => {
@@ -15,10 +15,9 @@ describe('SessionSdk — reprise au démarrage du poste', () => {
       { reprise: { statut: 'attente', aReprendre: true } },
     );
     expect(session.resume.statut).toBe('attente');
-    expect(session.reprendreApresRedemarrage(null)).toBeNull();
-    await attendre(() => requetes.length === 1);
+    expect(session.vivante).toBe(false);
     await pause(20);
-    expect(requetes[0]?.options.resume).toBe('claude-abc');
+    expect(requetes).toHaveLength(0);
     expect(textes).toHaveLength(0);
     expect(evenements).toHaveLength(0);
     expect(session.persistee.aReprendre).toBe(true);
@@ -46,7 +45,7 @@ describe('SessionSdk — reprise au démarrage du poste', () => {
     const { session, requetes, evenements } = nouvelleSession(async () => [], {
       reprise: { statut: 'attente', aReprendre: true, claudeSessionId: null },
     });
-    expect(session.reprendreApresRedemarrage(null)).toMatch(/conversation inconnue/);
+    expect(session.reprendreApresRedemarrage(TEXTE_REDEMARRAGE)).toMatch(/conversation inconnue/);
     expect(session.resume.statut).toBe('fermee');
     expect(evenements.some((e) => e.type === 'erreur')).toBe(true);
     expect(requetes).toHaveLength(0);

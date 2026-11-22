@@ -414,16 +414,18 @@ poste/session/politique-compaction.ts                décider QUAND compacter un
 poste/session/processus.ts                           les processus Claude Code vivants de la machine, tels que Claude les…
 poste/session/questions-sdk.ts                       AskUserQuestion et ExitPlanMode du SDK rendus en dialogues du poste (pur)
 poste/session/reprise.test.ts                        tests de reprise.ts
-poste/session/reprise.ts                             au démarrage du poste, reprendre les sessions SDK qui tournaient (jamais les fermées)
+poste/session/reprise.ts                             au démarrage du poste, relancer seulement les sessions SDK prises en plein tour (les autres attendent le message)
 poste/session/rythme.test.ts                         tests de rythme.ts
 poste/session/rythme.ts                              les trois outils de rythme vus du poste — événement au fil et texte rendu (pur)
 poste/session/serveur-local.ts                       le socket Unix local par lequel les crochets et le MCP de rythme des…
 poste/session/session-poste.ts                       contrat commun aux deux moteurs (tmux, sdk) vu du gestionnaire
 poste/session/session-sdk-panneau.test.ts            tests des lectures du panneau sur une session SDK
 poste/session/session-sdk-reprise.test.ts            tests de la reprise d'une session SDK au démarrage du poste
+poste/session/session-sdk-sommeil.test.ts            tests de la mise en sommeil au repos et du réveil au message (processus arrêté, fiche gardée)
 poste/session/session-sdk-vivante.ts                connecteurs MCP, styles et rechargement dans la requête SDK vivante
 poste/session/session-sdk.test.ts                    tests de session-sdk.ts
 poste/session/session-sdk.ts                         UNE session Claude Code pilotée par le Claude Agent SDK
+poste/session/sommeil.ts                             mise en sommeil des sessions SDK au repos : balayage périodique du gestionnaire
 poste/session/session-tmux.ts                        UNE session Claude Code dans tmux — son fil (lu dans le transcript),…
 poste/session/sous-agents.ts                         suivre les sous-agents d'une session — chacun a son transcript dans `…
 poste/session/styles-session.ts                     styles de sortie d'une session (requête vivante ou disque) et rechargement machine

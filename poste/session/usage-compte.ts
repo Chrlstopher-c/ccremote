@@ -1,6 +1,7 @@
 // Responsabilité : l'usage d'un compte vu par le SDK (abonnement, contributeurs), lu sur la première session vivante
 // de ce compte qui porte une requête SDK. Le scan des contributeurs parcourt 7 jours de transcripts : le résultat est
-// gardé 5 min par compte. Sans session vivante, rien n'est lu ni gardé.
+// gardé 5 min par compte. Sans session vivante, rien n'est lu : la dernière lecture datée reste rendue (les sessions
+// au repos n'ont pas de processus).
 import type { Logger } from 'pino';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
 
@@ -27,6 +28,7 @@ interface Memo {
 
 export class UsageComptes {
   private readonly memos = new Map<string, Memo>();
+  private readonly dernieres = new Map<string, UsageSdk>(); // dernière lecture reçue, par compte
 
   constructor(
     private readonly sessions: () => Iterable<SessionUsage>,
@@ -40,7 +42,7 @@ export class UsageComptes {
     const session = Array.from(this.sessions()).find(
       (s) => s.resume.compte === compte && s.vivante && s.usageSdk !== undefined,
     );
-    if (!session) return Promise.resolve(null);
+    if (!session) return Promise.resolve(this.dernieres.get(compte) ?? null);
     const valeur = this.interroger(session, compte);
     this.memos.set(compte, { depuis: this.maintenant(), valeur });
     return valeur;
@@ -50,13 +52,15 @@ export class UsageComptes {
     try {
       const r = await s.usageSdk?.();
       if (!r) return null;
-      return {
+      const usage: UsageSdk = {
         sessionId: s.resume.id,
         session: r.session,
         abonnement: r.subscription_type,
         contributeurs: r.behaviors,
         luLe: new Date(this.maintenant()).toISOString(),
       };
+      this.dernieres.set(compte, usage);
+      return usage;
     } catch (erreur) {
       const motif = erreur instanceof Error ? erreur.name : 'erreur';
       this.journal.warn({ compte, session: s.resume.id, motif }, 'usage du compte non lu');

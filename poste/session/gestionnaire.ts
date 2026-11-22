@@ -6,7 +6,7 @@ import type { UsageSdk } from '../../commun/compte-detail.ts';
 import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
 import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
-import type { ConfigPoste } from '../config.ts';
+import { type ConfigPoste, SOMMEIL_MINUTES_DEFAUT } from '../config.ts';
 import { basculerControle, sortirTui } from './bascule-controle.ts';
 import type { CommandeSession } from './lecture-panneau.ts';
 import {
@@ -25,6 +25,7 @@ import {
   reprisePrevue,
 } from './reprise.ts';
 import { SessionTmux } from './session-tmux.ts';
+import { endormirAuRepos } from './sommeil.ts';
 import { annexer, dupliquer } from './copie.ts';
 import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSessionId } from './styles-session.ts';
@@ -67,6 +68,7 @@ export interface Reponse {
 
 const PERIODE_DECOUVERTE_MS = 2_000;
 const PERIODE_LECTURE_MS = 700;
+const PERIODE_SOMMEIL_MS = 30_000;
 export { moteurDe } from './fiche-initiale.ts';
 
 export class GestionnaireSessions {
@@ -88,6 +90,7 @@ export class GestionnaireSessions {
   private readonly modelesChoisis: ModelesChoisis;
   private readonly recalage: RecalageFils;
   private readonly moteurFactice: Pick<EnvironnementSdk, 'requete'>; // bancs d'essai : LANTERNE_SDK_FACTICE=1 seulement
+  private readonly sommeilMinutes: number; // au repos depuis ce délai, une session SDK rend son processus
   /** Lien au relais ouvert : posé par le poste (bin.ts) ; le recalage des fils n'avance que lien ouvert. */
   relaisOuvert: () => boolean = () => false;
   /** Lien au relais pour les outils de modules des sessions SDK : posé par bin.ts. */
@@ -122,6 +125,7 @@ export class GestionnaireSessions {
     this.balayage = this.creerBalayage();
     this.recalage = this.creerRecalage();
     this.moteurFactice = requeteFactice(config.sdkFactice === true, journal);
+    this.sommeilMinutes = config.sommeilMinutes ?? SOMMEIL_MINUTES_DEFAUT;
   }
 
   private creerDecouvertes(): IndexDecouvertes {
@@ -204,6 +208,7 @@ export class GestionnaireSessions {
     void this.decouvrir();
     setInterval(() => void this.decouvrir(), PERIODE_DECOUVERTE_MS);
     setInterval(() => this.lireTout(), PERIODE_LECTURE_MS);
+    setInterval(() => endormirAuRepos(this.sessions.values(), this.sommeilMinutes, this.journal), PERIODE_SOMMEIL_MS);
     this.distantes.demarrer();
   }
 
@@ -254,9 +259,12 @@ export class GestionnaireSessions {
     return this.sessions.get(id);
   }
 
-  // Un compte ne se retire pas sous une session vivante : pane tmux ou requête SDK ouverte.
+  // Un compte ne se retire pas sous une session vivante (pane tmux, requête SDK ouverte) ni sous une session SDK
+  // endormie qui reprendra sur lui au prochain message.
   enUsage(compte: string): boolean {
-    return [...this.sessions.values()].some((s) => s.resume.compte === compte && s.vivante);
+    return [...this.sessions.values()].some(
+      (s) => s.resume.compte === compte && (s.vivante || s.persistee.aReprendre),
+    );
   }
 
   /** Usage SDK d'un compte (abonnement, contributeurs) : lu sur une session vivante du compte, gardé 5 min. */

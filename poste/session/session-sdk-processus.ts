@@ -26,6 +26,8 @@ import type { EtatTraduction } from './traduction-sdk.ts';
 
 const TEXTE_INTERRUPTION = 'Interrompu par Chris';
 const TEXTE_FERMETURE = 'Session fermée par Chris';
+const TEXTE_SOMMEIL = 'Session endormie au repos';
+const TACHES_TERMINEES: ReadonlySet<string> = new Set(['terminee', 'echouee', 'arretee']);
 
 export function optionsDe(n: NoyauSdk, reprise: boolean): Options {
   return optionsSdk({
@@ -82,6 +84,7 @@ export function demarrer(
   try {
     const requete = n.fabrique({ prompt: messagesAvecConnecteurs(fil, pret), options: optionsDe(n, reprise) });
     n.aReprendre = true;
+    n.reveilLe = Date.now();
     n.requete = requete;
     n.pointReprise = null;
     n.fil = fil;
@@ -197,14 +200,38 @@ export async function arreterTache(n: NoyauSdk, tache: string): Promise<string |
   }
 }
 
-export function reprendreApresRedemarrage(n: NoyauSdk, texte: string | null): string | null {
-  if (texte) emettre(n, { type: 'relance', raison: RAISON_REDEMARRAGE });
-  const erreur = n.etat.claudeSessionId ? demarrer(n, true, texte ?? undefined) : 'conversation inconnue';
+export function reprendreApresRedemarrage(n: NoyauSdk, texte: string): string | null {
+  emettre(n, { type: 'relance', raison: RAISON_REDEMARRAGE });
+  const erreur = n.etat.claudeSessionId ? demarrer(n, true, texte) : 'conversation inconnue';
   if (!erreur) return null;
   n.aReprendre = false;
   emettre(n, { type: 'erreur', message: erreur });
   maj(n, { statut: 'fermee' });
   return erreur;
+}
+
+// Mise en sommeil : au repos depuis `seuilMs` (depuis le dernier tour ou le dernier démarrage, le plus tard), sans
+// rien qui la tienne (pas de messages en vol, ni question, ni tâche de fond, ni mode nuit), le processus s'arrête. La
+// fiche ne change pas (statut « attente », conversation gardée) : la reprise part au prochain message.
+export function endormirSiRepos(n: NoyauSdk, maintenant: number, seuilMs: number): boolean {
+  if (!n.requete || !n.fil || !endormissable(n)) return false;
+  const repos = Math.max(Date.parse(n.etat.majLe), n.reveilLe);
+  if (maintenant - repos < seuilMs) return false;
+  const requete = n.requete;
+  libererRequete(n, TEXTE_SOMMEIL);
+  try {
+    requete.close();
+  } catch (erreur) {
+    n.env.journal.warn({ err: erreur, session: n.etat.id }, 'arrêt du processus SDK au sommeil imparfait');
+  }
+  n.env.journal.info({ session: n.etat.id }, 'session endormie : processus arrêté, reprise au message suivant');
+  return true;
+}
+
+function endormissable(n: NoyauSdk): boolean {
+  const libre = n.etat.statut === 'attente' && !n.etat.dialogue && !n.etat.nuit;
+  if (!libre || n.bilan.enVol > 0 || n.cessionEnAttente) return false;
+  return !n.registreTaches.liste().some((t) => !TACHES_TERMINEES.has(t.statut));
 }
 
 // Rembobiner : la conversation repartira de l'entrée qui précède ce message ; le message et la suite sont retirés de la

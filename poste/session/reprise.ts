@@ -1,5 +1,6 @@
-// Responsabilité : au démarrage du poste, décider quelles sessions SDK reprendre (celles qui tournaient quand le poste
-// s'est arrêté, jamais celles que Chris a fermées) et les relancer une à une par leur conversation.
+// Responsabilité : au démarrage du poste, relancer seulement les sessions SDK prises en plein tour quand le poste
+// s'est arrêté. Les autres (au repos, fermées par Chris) n'ont aucun processus : elles repartent au prochain message
+// (voir session-sdk-envoi.ts) ou à une action qui en a besoin. Les relances se font une à une.
 import type { Logger } from 'pino';
 import type { StatutSession } from '../../commun/session.ts';
 import type { SessionPersistee } from './persistance.ts';
@@ -11,21 +12,22 @@ export const TEXTE_REDEMARRAGE = 'Le poste a redémarré pendant ton tour : repr
 
 const STATUTS_EN_TOUR: ReadonlySet<StatutSession> = new Set(['travail', 'compaction', 'question']);
 
-// Ce que le démarrage demande à une session SDK : la reprendre, avec le texte du poste (null : reprise silencieuse).
+// Ce que le démarrage demande à une session SDK : la reprendre, avec le texte du poste.
 export interface SessionReprenable {
   readonly resume: { readonly id: string };
-  reprendreApresRedemarrage(texte: string | null): string | null;
+  reprendreApresRedemarrage(texte: string): string | null;
 }
 
 export interface ReprisePrevue {
   readonly session: SessionReprenable;
-  readonly texte: string | null;
+  readonly texte: string;
 }
 
-// Le texte de la reprise d'une session persistée, ou null si elle ne se reprend pas (tmux, fermée par Chris).
-export function reprisePrevue(p: SessionPersistee): { readonly texte: string | null } | null {
-  if (p.resume.moteur !== 'sdk' || !p.aReprendre) return null;
-  return { texte: STATUTS_EN_TOUR.has(p.resume.statut) ? TEXTE_REDEMARRAGE : null };
+// La reprise d'une session persistée, ou null : seule une session prise en plein tour se relance (tmux, au repos ou
+// fermée par Chris : aucun processus au démarrage).
+export function reprisePrevue(p: SessionPersistee): { readonly texte: string } | null {
+  if (p.resume.moteur !== 'sdk' || !p.aReprendre || !STATUTS_EN_TOUR.has(p.resume.statut)) return null;
+  return { texte: TEXTE_REDEMARRAGE };
 }
 
 // Reprises une à une, chacune après `pauseMs` : le délai laisse au lien vers le relais le temps de s'ouvrir (les
@@ -41,12 +43,12 @@ export async function relancerApresRedemarrage(
   }
 }
 
-function relancerUne(session: SessionReprenable, texte: string | null, journal: Logger): void {
+function relancerUne(session: SessionReprenable, texte: string, journal: Logger): void {
   const id = session.resume.id;
   try {
     const erreur = session.reprendreApresRedemarrage(texte);
     if (erreur) journal.warn({ session: id, erreur }, 'reprise au démarrage en échec');
-    else journal.info({ session: id, avecMessage: texte !== null }, 'session reprise après le redémarrage du poste');
+    else journal.info({ session: id }, 'session reprise après le redémarrage du poste');
   } catch (erreur) {
     journal.error({ err: erreur, session: id }, 'reprise au démarrage en échec');
   }

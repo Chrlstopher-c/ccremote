@@ -38,7 +38,7 @@ function persistee(statut: StatutSession, aReprendre: boolean, moteur: 'sdk' | '
   return { resume, consignes: null, configDir: null, transcript: null, position: 0, aReprendre };
 }
 
-type Appel = { id: string; texte: string | null; a: number };
+type Appel = { id: string; texte: string; a: number };
 
 function fausseSession(id: string, appels: Appel[], erreur: string | null = null) {
   const session: SessionReprenable = {
@@ -52,10 +52,10 @@ function fausseSession(id: string, appels: Appel[], erreur: string | null = null
 }
 
 describe('reprisePrevue', () => {
-  test('une session qui attendait Chris reprend en silence', () => {
-    expect(reprisePrevue(persistee('attente', true))).toEqual({ texte: null });
-    expect(reprisePrevue(persistee('terminee', true))).toEqual({ texte: null });
-    expect(reprisePrevue(persistee('erreur', true))).toEqual({ texte: null });
+  test('une session au repos n’a pas de processus au démarrage : elle attend le prochain message', () => {
+    expect(reprisePrevue(persistee('attente', true))).toBeNull();
+    expect(reprisePrevue(persistee('terminee', true))).toBeNull();
+    expect(reprisePrevue(persistee('erreur', true))).toBeNull();
   });
 
   test('un tour en cours reprend avec le message du poste', () => {
@@ -67,6 +67,7 @@ describe('reprisePrevue', () => {
   test('une session fermée par Chris ou finie ne se rouvre pas', () => {
     expect(reprisePrevue(persistee('fermee', false))).toBeNull();
     expect(reprisePrevue(persistee('attente', false))).toBeNull();
+    expect(reprisePrevue(persistee('travail', false))).toBeNull();
   });
 
   test('une session tmux n’est pas reprise par ce module', () => {
@@ -78,7 +79,7 @@ describe('relancerApresRedemarrage', () => {
   test('les reprises partent une à une, espacées, dans l’ordre', async () => {
     const appels: Appel[] = [];
     const reprises = [
-      { session: fausseSession('a', appels), texte: null },
+      { session: fausseSession('a', appels), texte: TEXTE_REDEMARRAGE },
       { session: fausseSession('b', appels), texte: TEXTE_REDEMARRAGE },
     ];
     await relancerApresRedemarrage(reprises, journal, 30);
@@ -96,9 +97,9 @@ describe('relancerApresRedemarrage', () => {
       },
     };
     const reprises = [
-      { session: fausseSession('a', appels, 'conversation inconnue'), texte: null },
-      { session: leve, texte: null },
-      { session: fausseSession('d', appels), texte: null },
+      { session: fausseSession('a', appels, 'conversation inconnue'), texte: TEXTE_REDEMARRAGE },
+      { session: leve, texte: TEXTE_REDEMARRAGE },
+      { session: fausseSession('d', appels), texte: TEXTE_REDEMARRAGE },
     ];
     await relancerApresRedemarrage(reprises, journal, 1);
     expect(appels.map((a) => a.id)).toEqual(['a', 'd']);
