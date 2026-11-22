@@ -60,6 +60,7 @@ import { ApiTaches } from './reste/api-taches.ts';
 import { ReseauxConnus } from './entretien/reseaux.ts';
 import { Reveil } from './entretien/reveil.ts';
 import { ouvrirBase } from './registre/base.ts';
+import { sondesFonctions } from './federation/sondes-fonctions.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
 import { lancerRecalculInactivite } from './sessions/recalcul-inactivite.ts';
@@ -224,6 +225,7 @@ const federation = new Federation({
   dossierSecrets,
   servirAppareil: (demande) => servirPourAppareil(demande),
   servirChef: (demande) => servirPourChef(demande),
+  fonctions: sondesFonctions(process.env, journal.child({ domaine: 'fonctions' })),
   machine: machineLocale,
   peutReprendre: process.env['LANTERNE_MOTEUR_AUTONOME'] !== '1',
   pont: {
