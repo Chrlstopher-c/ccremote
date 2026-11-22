@@ -83,6 +83,14 @@ export type MessageClient =
   | { readonly type: 'duo_modifie' }
   // Mode duo : le pair demande un accord (écrire sans permissions, ouvrir une session) ; Chris tranche.
   | { readonly type: 'duo_demande'; readonly demande: DemandeDuo }
+  // L'issue d'une requête qui attendait l'accord du pair (ouvrir une session, passer la main) : accord ou refus.
+  | {
+      readonly type: 'duo_issue';
+      readonly demande: string;
+      readonly accord: boolean;
+      readonly session?: string;
+      readonly raison?: string;
+    }
   // Le pair a ouvert (present) ou fermé une session partagée avec Chris.
   | { readonly type: 'duo_presence'; readonly session: string; readonly present: boolean }
   // Un fichier touché des deux côtés (Chris et le pair) dans un projet partagé : une alerte par fichier et par 30 min.

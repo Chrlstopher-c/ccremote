@@ -26,6 +26,7 @@ export function traiterEchange(c: Contexte, nom: string, m: MessageLien): boolea
       recevoirUsage(c, m.ref);
       return true;
     case 'reponse':
+    case 'attente':
     case 'dossiers_reponse':
     case 'usage_reponse':
     case 'serveur_reponse':

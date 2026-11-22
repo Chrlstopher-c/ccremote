@@ -269,6 +269,8 @@ export const MessageLien = z.discriminatedUnion('type', [
     raison: z.string().optional(),
     session: z.string().optional(),
   }),
+  // Le propriétaire annonce que la requête attend l'accord de Chris ; la réponse finale suivra (même `ref`).
+  z.object({ type: z.literal('attente'), ref: Ref, demande: z.string().min(1).max(64) }),
   z.object({ type: z.literal('dossiers'), ref: Ref }),
   z.object({ type: z.literal('dossiers_reponse'), ref: Ref, dossiers: z.array(DossierPair).max(200) }),
   z.object({ type: z.literal('usage'), ref: Ref }),

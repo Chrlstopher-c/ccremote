@@ -2,13 +2,17 @@
 // dossier que nous lui ouvrons ; elle tourne chez nous, partagée en écriture avec lui. Et la liste de ces dossiers.
 import type { DossierPair, MessageLien } from '../../commun/duo.ts';
 import {
+  annoncerAttente,
   conclure,
   type Contexte,
   DELAI_REPONSE_PAIR_MS,
+  type Engagement,
+  raisonDeRefus,
   requeteAuPair,
+  requeteAvecAccord,
   type Requete,
-  verdictDuPair,
 } from './contexte.ts';
+import type { Reponse } from './demandes.ts';
 import { dossierAutorise } from './droits.ts';
 import { bilan, identifiantSession, type OuvertureChezProprietaire } from './pont-sessions.ts';
 import { echec, ok, type Resultat, STATUT_REFUS_DUO } from './resultat.ts';
@@ -17,11 +21,14 @@ type LigneOuvrir = Extract<MessageLien, { type: 'ouvrir_session' }>;
 
 export async function recevoirOuverture(c: Contexte, nom: string, m: LigneOuvrir): Promise<void> {
   const requete: Requete = { nom, ref: m.ref, action: 'ouvrir_session', cible: `${m.machine}:${m.chemin}` };
-  if (!(await accordeOuverture(c, nom, m))) {
+  const reponse = await accordeOuverture(c, nom, m);
+  if (!reponse.accord) {
     return conclure(c, requete, {
       ok: false,
-      raison: `refusé par ${c.nomLocal()}`,
-      detail: 'refusé : ouverture non permise (droits ou pas d’accord de Chris)',
+      raison: raisonDeRefus(c, reponse),
+      detail: reponse.expiree
+        ? 'délai dépassé sans réponse'
+        : 'refusé : ouverture non permise (droits ou pas d’accord de Chris)',
     });
   }
   const r = await bilan(await c.sessions.ouvrir(demandeOuverture(m, nom)));
@@ -33,11 +40,15 @@ export async function recevoirOuverture(c: Contexte, nom: string, m: LigneOuvrir
 }
 
 // `jamais` refuse ; `toujours` ouvre sans demande dans un dossier autorisé ; dans tous les autres cas, Chris tranche.
-async function accordeOuverture(c: Contexte, nom: string, m: LigneOuvrir): Promise<boolean> {
+async function accordeOuverture(c: Contexte, nom: string, m: LigneOuvrir): Promise<Reponse> {
   const droits = c.droits.lire();
-  if (droits.ouvrirSession === 'jamais') return false;
-  if (droits.ouvrirSession === 'toujours' && dossierAutorise(droits.dossiersOuverts, m.machine, m.chemin)) return true;
-  return (await c.demandes.demander('ouvrir_session', nom, `${m.machine} · ${m.chemin}`)).accord;
+  if (droits.ouvrirSession === 'jamais') return { accord: false };
+  if (droits.ouvrirSession === 'toujours' && dossierAutorise(droits.dossiersOuverts, m.machine, m.chemin)) {
+    return { accord: true };
+  }
+  return c.demandes.demander('ouvrir_session', nom, `${m.machine} · ${m.chemin}`, undefined, undefined, (d) =>
+    annoncerAttente(c, m.ref, d),
+  );
 }
 
 // Session ouverte chez nous comme une session locale, en mode « par défaut » : Claude y redemande les permissions.
@@ -84,16 +95,16 @@ export function recevoirDossiers(c: Contexte, ref: string): void {
   c.envoyer({ type: 'dossiers_reponse', ref, dossiers: dossiersOfferts(c) });
 }
 
-export async function ouvrirChezPair(
+/** Demandeur : ouvre une session chez le pair. Rend `en_attente` si Chris doit trancher chez lui, sinon la session. */
+export function ouvrirChezPair(
   c: Contexte,
   demande: { machine: string; chemin: string; message: string; modele?: string },
-): Promise<Resultat<string | null>> {
-  const r = await requeteAuPair(
+): Promise<Resultat<Engagement>> {
+  return requeteAvecAccord(
     c,
     (ref) => ({ type: 'ouvrir_session', ref, ...demande }),
     c.delaiDemandeMs + DELAI_REPONSE_PAIR_MS,
   );
-  return verdictDuPair(r);
 }
 
 export async function dossiersDuPair(c: Contexte): Promise<Resultat<DossierPair[]>> {

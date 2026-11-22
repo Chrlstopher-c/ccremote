@@ -14,9 +14,12 @@ export interface OptionsDemandes {
 export interface Reponse {
   readonly accord: boolean;
   readonly choix?: ChoixDossier;
+  /** Vrai quand la demande a expiré faute de réponse de Chris (et non parce qu'il a refusé). */
+  readonly expiree?: boolean;
 }
 
 const REFUS: Reponse = { accord: false };
+const EXPIREE: Reponse = { accord: false, expiree: true };
 
 interface Attente {
   readonly demande: DemandeDuo;
@@ -29,8 +32,18 @@ export class Demandes {
 
   constructor(private readonly options: OptionsDemandes) {}
 
-  /** Rend la décision de Chris ; un refus, ou un délai sans réponse, rend `accord: false`. */
-  demander(genre: GenreDemande, de: string, detail: string, session?: string, resume?: string): Promise<Reponse> {
+  /**
+   * Rend la décision de Chris ; un refus rend `accord: false`, un délai sans réponse aussi mais avec `expiree: true`.
+   * `surEnvoi` reçoit la demande dès qu'elle est enregistrée, avant que Chris ne réponde.
+   */
+  demander(
+    genre: GenreDemande,
+    de: string,
+    detail: string,
+    session?: string,
+    resume?: string,
+    surEnvoi?: (demande: DemandeDuo) => void,
+  ): Promise<Reponse> {
     return new Promise((rendre) => {
       const id = nonce();
       const le = new Date(this.options.horloge()).toISOString();
@@ -39,8 +52,9 @@ export class Demandes {
         ...(session ? { session } : {}),
         ...(resume ? { resume } : {}),
       };
-      const minuterie = setTimeout(() => this.trancher(id, REFUS), this.options.delaiMs);
+      const minuterie = setTimeout(() => this.trancher(id, EXPIREE), this.options.delaiMs);
       this.en.set(id, { demande, rendre, minuterie });
+      surEnvoi?.(demande);
       this.options.diffusion.diffuser({ type: 'duo_demande', demande });
     });
   }

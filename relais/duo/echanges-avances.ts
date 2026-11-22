@@ -17,7 +17,7 @@ import type { Postes } from '../parc/postes.ts';
 import type { Registre } from '../registre/registre.ts';
 import { activiteDuo } from './activite.ts';
 import type { Attentes } from './attentes.ts';
-import type { Contexte } from './contexte.ts';
+import type { Contexte, Engagement } from './contexte.ts';
 import { Conflits } from './conflits.ts';
 import type { Demandes } from './demandes.ts';
 import type { DroitsDuo } from './droits.ts';
@@ -74,8 +74,8 @@ export class EchangesAvances {
     });
   }
 
-  /** Donneur : la session part au pair ; rend l'identifiant de la session neuve chez lui. */
-  passerLaMain(session: string, note: string | undefined): Promise<Resultat<string | null>> {
+  /** Donneur : la session part au pair ; rend `en_attente` si Chris doit trancher chez lui, sinon la session neuve. */
+  passerLaMain(session: string, note: string | undefined): Promise<Resultat<Engagement>> {
     return passerLaMainVers(this.d.contexte, session, note);
   }
 

@@ -24,6 +24,14 @@ const MAJ = '2026-11-21T10:00:00.000Z';
 const dossier = (chemin: string): DossierOuvert => ({ machine: 'tour', chemin });
 const ouvertures = (a: Banc): Record<string, unknown>[] => a.commandes.filter((c) => c['kind'] === 'ouvrir');
 
+// L'issue de la demande arrive en diffusion (`duo_issue`) : la session accordée par alice, ou échec du test.
+async function sessionAccordee(b: Banc): Promise<string> {
+  await attendre(() => b.recus.some((m) => m.type === 'duo_issue'));
+  const issue = b.recus.find((m) => m.type === 'duo_issue');
+  if (issue?.type !== 'duo_issue' || !issue.session) throw new Error('pas de session accordée');
+  return issue.session;
+}
+
 describe('session sur le compte de l’autre', () => {
   test('jamais : refusée, rien n’est ouvert', async () => {
     const { a, b } = await duo();
@@ -36,13 +44,12 @@ describe('session sur le compte de l’autre', () => {
 
   test('demander (défaut) : demande, accord → ouverte chez alice, partagée en écriture avec bob', async () => {
     const { a, b } = await duo();
-    const attente = b.duo.ouvrirChezPair({ machine: 'tour', chemin: '/p1', message: 'salut' });
+    const r = await b.duo.ouvrirChezPair({ machine: 'tour', chemin: '/p1', message: 'salut' });
+    expect(r).toMatchObject({ ok: true, valeur: { etat: 'en_attente' } });
     await attendre(() => a.duo.listerDemandes().length === 1);
     expect(a.duo.listerDemandes()[0]).toMatchObject({ genre: 'ouvrir_session', de: 'bob', detail: 'tour · /p1' });
     a.duo.decider(a.duo.listerDemandes()[0]?.id ?? '', true);
-    const r = await attente;
-    expect(r.ok).toBe(true);
-    const id = r.ok ? (r.valeur ?? '') : '';
+    const id = await sessionAccordee(b);
     expect(ouvertures(a)[0]).toMatchObject({ demande: { mode: 'default', autonomie: false, message: 'salut' } });
     expect(a.duo.etat().partages).toContainEqual(
       expect.objectContaining({ cible: id, genre: 'session', niveau: 'ecriture' }),
@@ -53,10 +60,14 @@ describe('session sur le compte de l’autre', () => {
 
   test('demander : refus → « refusé par alice », rien d’ouvert', async () => {
     const { a, b } = await duo();
-    const attente = b.duo.ouvrirChezPair({ machine: 'tour', chemin: '/p1', message: 'non' });
+    const r = await b.duo.ouvrirChezPair({ machine: 'tour', chemin: '/p1', message: 'non' });
+    expect(r).toMatchObject({ ok: true, valeur: { etat: 'en_attente' } });
     await attendre(() => a.duo.listerDemandes().length === 1);
     a.duo.decider(a.duo.listerDemandes()[0]?.id ?? '', false);
-    expect(await attente).toMatchObject({ ok: false, raison: 'refusé par alice' });
+    await attendre(() => b.recus.some((m) => m.type === 'duo_issue'));
+    expect(b.recus).toContainEqual(
+      expect.objectContaining({ type: 'duo_issue', accord: false, raison: 'refusé par alice' }),
+    );
     expect(ouvertures(a)).toEqual([]);
   });
 
@@ -72,10 +83,14 @@ describe('session sur le compte de l’autre', () => {
   test('toujours + dossier hors liste : demande', async () => {
     const { a, b } = await duo();
     a.duo.majDroits(droits({ ouvrirSession: 'toujours', dossiersOuverts: [dossier('/p1')] }));
-    const attente = b.duo.ouvrirChezPair({ machine: 'tour', chemin: '/autre', message: 'ailleurs' });
+    const r = await b.duo.ouvrirChezPair({ machine: 'tour', chemin: '/autre', message: 'ailleurs' });
+    expect(r).toMatchObject({ ok: true, valeur: { etat: 'en_attente' } });
     await attendre(() => a.duo.listerDemandes().length === 1);
     a.duo.decider(a.duo.listerDemandes()[0]?.id ?? '', false);
-    expect(await attente).toMatchObject({ ok: false, raison: 'refusé par alice' });
+    await attendre(() => b.recus.some((m) => m.type === 'duo_issue'));
+    expect(b.recus).toContainEqual(
+      expect.objectContaining({ type: 'duo_issue', accord: false, raison: 'refusé par alice' }),
+    );
   });
 
   test('nom de machine vu du pair : « Cet ordinateur » devient « Ordinateur de <nom> »', async () => {

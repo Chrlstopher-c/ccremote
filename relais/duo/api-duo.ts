@@ -87,7 +87,10 @@ function routesEchanges(duo: Duo, protege: Protection) {
         const c = await lireCorps(req, CorpsOuvertureDuo);
         if (c instanceof Response) return c;
         const r = await duo.ouvrirChezPair(c);
-        return r.ok ? json({ session: r.valeur }, 201) : erreur(r.raison, r.statut);
+        if (!r.ok) return erreur(r.raison, r.statut);
+        return r.valeur.etat === 'en_attente'
+          ? json({ demande: r.valeur.demande, etat: 'en_attente' }, 202)
+          : json({ session: r.valeur.session }, 201);
       }),
     },
     '/api/duo/dossiers': {
@@ -109,7 +112,10 @@ function routesAvances(duo: Duo, protege: Protection) {
         const c = await lireCorps(req, CorpsMain);
         if (c instanceof Response) return c;
         const r = await duo.avances.passerLaMain(c.session, c.note);
-        return r.ok ? json({ sessionPair: r.valeur }) : erreur(r.raison, r.statut);
+        if (!r.ok) return erreur(r.raison, r.statut);
+        return r.valeur.etat === 'en_attente'
+          ? json({ demande: r.valeur.demande, etat: 'en_attente' }, 202)
+          : json({ sessionPair: r.valeur.session });
       }),
     },
     '/api/duo/modules': { GET: protege(() => json(duo.avances.listerModules())) },

@@ -11,9 +11,17 @@ import {
 } from '../../commun/duo.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
-import { conclure, type Contexte, type Requete, requeteAuPair, verdictDuPair } from './contexte.ts';
+import {
+  annoncerAttente,
+  conclure,
+  type Contexte,
+  type Engagement,
+  raisonDeRefus,
+  type Requete,
+  requeteAvecAccord,
+} from './contexte.ts';
 import { bilan, identifiantSession } from './pont-sessions.ts';
-import { echec, ok, type Resultat, STATUT_REFUS_DUO } from './resultat.ts';
+import { echec, type Resultat, STATUT_REFUS_DUO } from './resultat.ts';
 
 type LigneMain = Extract<MessageLien, { type: 'passer_main' }>;
 
@@ -71,34 +79,40 @@ function uneLigne(texte: string): string {
   return texte.replace(/\s*\n\s*/g, ' ').trim();
 }
 
-/** Donneur : envoie la session au pair. Rend l'identifiant de la session neuve chez lui. */
+/**
+ * Donneur : envoie la session au pair. Rend `en_attente` tout de suite si Chris doit trancher chez le pair ; l'issue
+ * arrive ensuite en `duo_issue`, et l'acceptation ajoute la ligne « passée à <nom> » au fil de la session.
+ */
 export async function passerLaMain(
   c: Contexte,
   session: string,
   note: string | undefined,
-): Promise<Resultat<string | null>> {
+): Promise<Resultat<Engagement>> {
   const fiche = c.registre.session(session);
   if (!fiche) return echec(404, 'session introuvable');
   if (fiche.duo) return echec(STATUT_REFUS_DUO, 'session du pair : elle tourne chez lui');
   const paquet = construirePaquet(c.registre, fiche, note);
   const delai = c.delaiDemandeMs + DELAI_MARGE_REPONSE_MS;
-  const r = await requeteAuPair(c, (ref) => ({ type: 'passer_main', ref, paquet }), delai);
-  const verdict = verdictDuPair(r);
-  if (!verdict.ok) return verdict;
-  c.fil(session, { type: 'duo_main', vers: c.nomPair() });
-  return ok(verdict.valeur);
+  return requeteAvecAccord(
+    c,
+    (ref) => ({ type: 'passer_main', ref, paquet }),
+    delai,
+    () => c.fil(session, { type: 'duo_main', vers: c.nomPair() }),
+  );
 }
 
 /** Receveur : demande l'accord de Chris, puis ouvre la session neuve dans le dossier qu'il a choisi. */
 export async function recevoirMain(c: Contexte, nom: string, m: LigneMain): Promise<void> {
   const requete: Requete = { nom, ref: m.ref, action: 'passer_la_main', cible: m.paquet.titre };
   const resume = textePaquet(m.paquet, nom).slice(0, 8000);
-  const reponse = await c.demandes.demander('passer_la_main', nom, m.paquet.titre, undefined, resume);
+  const reponse = await c.demandes.demander('passer_la_main', nom, m.paquet.titre, undefined, resume, (d) =>
+    annoncerAttente(c, m.ref, d),
+  );
   if (!reponse.accord) {
     return conclure(c, requete, {
       ok: false,
-      raison: `refusé par ${c.nomLocal()}`,
-      detail: 'refusée (refus ou délai dépassé)',
+      raison: raisonDeRefus(c, reponse),
+      detail: reponse.expiree ? 'délai dépassé sans réponse' : 'refusée',
     });
   }
   if (!reponse.choix) return conclure(c, requete, { ok: false, raison: 'aucun dossier choisi' });

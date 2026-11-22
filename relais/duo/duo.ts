@@ -20,7 +20,7 @@ import type { Postes } from '../parc/postes.ts';
 import { EchangesAvances } from './echanges-avances.ts';
 import { Attentes } from './attentes.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
-import type { Contexte } from './contexte.ts';
+import type { Contexte, Engagement } from './contexte.ts';
 import { Demandes } from './demandes.ts';
 import { DroitsDuo } from './droits.ts';
 import { ecrireAPair as envoyerAuPair, interrompreAPair as interrompreAuPair } from './ecriture.ts';
@@ -266,7 +266,7 @@ export class Duo {
     return interrompreAuPair(this.contexte, session);
   }
 
-  ouvrirChezPair(demande: CorpsOuvertureDuo): Promise<Resultat<string | null>> {
+  ouvrirChezPair(demande: CorpsOuvertureDuo): Promise<Resultat<Engagement>> {
     return ouvrirChezPair(this.contexte, demande);
   }
 
@@ -454,6 +454,7 @@ export class Duo {
         const evenement = this.registre.ajouterEvenement(session, this.maintenant(), evt);
         this.diffusion.diffuser({ type: 'evenement', evenement });
       },
+      diffuser: (m) => this.diffusion.diffuser(m),
     };
   }
 

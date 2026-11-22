@@ -56,12 +56,13 @@ describe('passer la main', () => {
     poster(b, evenement('p1', { type: 'texte', texte: 'bilan de Claude' }));
     poster(b, evenement('p1', { type: 'fichiers_tour', tour: 't1', fichiers: [fichierTouche('/pb/proj/a.ts')] }));
 
-    const attente = b.duo.avances.passerLaMain('p1', 'à reprendre');
+    const r = await b.duo.avances.passerLaMain('p1', 'à reprendre');
+    expect(r).toMatchObject({ ok: true, valeur: { etat: 'en_attente' } });
     await attendre(() => a.duo.listerDemandes().length === 1);
     expect(a.duo.listerDemandes()[0]).toMatchObject({ genre: 'passer_la_main', de: 'bob', detail: 'Titre p1' });
     a.duo.decider(a.duo.listerDemandes()[0]?.id ?? '', true, { machine: 'tour', chemin: '/pa/neuf' });
-    const r = await attente;
-    expect(r.ok).toBe(true);
+    await attendre(() => b.recus.some((m) => m.type === 'duo_issue'));
+    expect(b.recus).toContainEqual(expect.objectContaining({ type: 'duo_issue', accord: true }));
     const ouverte = ouvertures(a)[0]?.['demande'] as { message: string; projet: { chemin: string } } | undefined;
     expect(ouverte?.projet.chemin).toBe('/pa/neuf');
     expect(ouverte?.message).toContain('Session passée par bob : Titre p1');
@@ -75,10 +76,14 @@ describe('passer la main', () => {
     expect(a.duo.journalDuo()[0]).toMatchObject({ qui: 'bob', action: 'passer_la_main' });
 
     const avant = ouvertures(a).length;
-    const refus = b.duo.avances.passerLaMain('p1', undefined);
+    const refus = await b.duo.avances.passerLaMain('p1', undefined);
+    expect(refus).toMatchObject({ ok: true, valeur: { etat: 'en_attente' } });
     await attendre(() => a.duo.listerDemandes().length === 1);
     a.duo.decider(a.duo.listerDemandes()[0]?.id ?? '', false);
-    expect(await refus).toMatchObject({ ok: false, raison: 'refusé par alice' });
+    await attendre(() => b.recus.filter((m) => m.type === 'duo_issue').length === 2);
+    expect(b.recus).toContainEqual(
+      expect.objectContaining({ type: 'duo_issue', accord: false, raison: 'refusé par alice' }),
+    );
     expect(ouvertures(a)).toHaveLength(avant);
     const passages = b.registre.derniersEvenements('p1', 50).filter((e) => e.evt.type === 'duo_main');
     expect(passages).toHaveLength(1);
