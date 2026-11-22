@@ -141,10 +141,14 @@ async function corpsDeReponse(sortie: Response, enFlux: boolean): Promise<Repons
 }
 
 /** Rejoue une requête d'appareil sur la table interne ; toute erreur devient une réponse 500, journalisée. */
-export function servirAppareil(table: TableInterne, journal: Logger): ServirAppareil {
+export function servirAppareil(
+  table: TableInterne,
+  journal: Logger,
+  options: { readonly toutesRoutes?: boolean } = {},
+): ServirAppareil {
   return async (demande) => {
     const url = new URL(demande.chemin, ORIGINE_INTERNE);
-    if (cheminRefuse(url.pathname)) return reponseJson(403, 'route non servie aux appareils');
+    if (!options.toutesRoutes && cheminRefuse(url.pathname)) return reponseJson(403, 'route non servie aux appareils');
     const trouve = trouverRoute(table, url.pathname, demande.methode);
     if (!trouve) return reponseJson(404, 'route inconnue');
     try {

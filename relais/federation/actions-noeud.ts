@@ -2,7 +2,7 @@
 // sur la machine), réveiller un pair. Une action reçue d'un pair n'est exécutée que s'il est chef dans la charte : la
 // décision se prend sur ce nœud, jamais sur parole de l'aiguilleur.
 import type { Logger } from 'pino';
-import type { ActionNoeud, MessageChiffre } from '../../commun/federation.ts';
+import type { ActionNoeud, MessageChiffre, OrdreSigne } from '../../commun/federation.ts';
 import { commandeExtinction } from '../../poste/parc/alimentation.ts';
 import type { Reveil } from '../entretien/reveil.ts';
 import type { CanalNoeud } from './canal.ts';
@@ -24,6 +24,8 @@ export interface DependancesActions {
   readonly pause: PauseNoeud;
   readonly commandes?: CommandesNoeud;
   readonly estChef: (membre: string) => boolean;
+  /** Vrai si l'ordre signé vaut pour CE nœud (charte, cible, fraîcheur, pas rejoué) et porte `action`. */
+  readonly verifierOrdre: (ordre: OrdreSigne, action: ActionNoeud) => Promise<boolean>;
   readonly echanges: Pick<Echanges, 'requeter' | 'reponse'>;
   readonly machineDe: (membre: string) => string | null;
   readonly reveil: Reveil | null;
@@ -64,9 +66,9 @@ export class ActionsNoeud {
     return this.executer(action);
   }
 
-  /** Une action reçue d'un pair : refusée s'il n'est pas chef ; la réponse repart dans le même canal. */
+  /** Une action reçue d'un pair : chef, ou porteuse d'un ordre signé valide pour ce nœud ; sinon refusée. */
   async recevoir(canal: CanalNoeud, m: ActionRecue): Promise<void> {
-    if (!this.d.estChef(canal.membre)) {
+    if (!(await this.autoriserRecue(canal, m))) {
       this.d.echanges.reponse(canal, m.ref, false, 'action réservée aux chefs du réseau');
       return;
     }
@@ -74,9 +76,19 @@ export class ActionsNoeud {
     this.d.echanges.reponse(canal, m.ref, r.ok, r.ok ? undefined : r.raison);
   }
 
+  private async autoriserRecue(canal: CanalNoeud, m: ActionRecue): Promise<boolean> {
+    if (this.d.estChef(canal.membre)) return true;
+    return m.ordre !== undefined && (await this.d.verifierOrdre(m.ordre, m.action));
+  }
+
   /** Envoie une action à un pair relié et rend son verdict ; rien ne revient à temps : 504. */
-  async demander(canal: CanalNoeud, action: ActionNoeud): Promise<Resultat<null>> {
-    const construire = (ref: string): MessageChiffre => ({ t: 'action_noeud', ref, action });
+  async demander(canal: CanalNoeud, action: ActionNoeud, ordre?: OrdreSigne): Promise<Resultat<null>> {
+    const construire = (ref: string): MessageChiffre => ({
+      t: 'action_noeud',
+      ref,
+      action,
+      ...(ordre ? { ordre } : {}),
+    });
     const r = await this.d.echanges.requeter(canal, construire, this.d.delaiMs ?? DELAI_ACTION_MS);
     if (r === null) return echec(504, 'pas de réponse du nœud à temps');
     if (r.t !== 'reponse') return echec(502, 'réponse inattendue du nœud');

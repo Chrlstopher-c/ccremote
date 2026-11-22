@@ -9,6 +9,8 @@ export interface DemandeAppairage {
   readonly nom: string;
   readonly empreinte: string;
   readonly empreinteLocale: string;
+  /** Identité publique du demandeur (un téléphone la lit pour retrouver le membre de la charte). */
+  readonly identite?: string;
   /** Nœud ou appareil client : Chris le voit avant d'accorder. */
   readonly genre: 'noeud' | 'appareil';
   readonly le: string;

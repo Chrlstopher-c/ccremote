@@ -60,11 +60,16 @@ export interface PortCharte {
 export type SuiteAppairage = 'accord' | 'demande' | 'refus';
 
 type Fonction = (c: Charte, moi: string, le: string) => Edition;
+
+/** Une charte proposée dont l'auteur ou la signature ne tient pas : interdite ; le reste, un conflit (409). */
+function statutRefus(motif: string): number {
+  return motif === 'signataire-non-chef' || motif === 'signature' ? 403 : 409;
+}
 type VerdictNoeud = { readonly ok: true; readonly charte: Charte } | { readonly ok: false; readonly motif: string };
 
 export class CharteNoeud {
   private courante: Charte | null = null;
-  private signee: CharteSignee | null = null;
+  private signeeCourante: CharteSignee | null = null;
   private file: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly port: PortCharte) {}
@@ -80,6 +85,11 @@ export class CharteNoeud {
 
   moi(): string | null {
     return this.port.moi();
+  }
+
+  /** La charte signée courante, telle que reçue ou adoptée (null sans charte). */
+  signee(): CharteSignee | null {
+    return this.signeeCourante;
   }
 
   /** Ce nœud est-il chef du réseau ? Sans charte : non. */
@@ -102,11 +112,26 @@ export class CharteNoeud {
     return moi === null ? null : (membreDe(this.courante, moi)?.compte ?? null);
   }
 
-  /** Appairage entrant : un membre reconnu (même identité, même genre) est admis ; un autre va à un chef. */
-  suiteAppairage(presentation: PresentationDistante): SuiteAppairage {
+  /**
+   * Appairage entrant : un membre reconnu (même identité, même genre) est admis ; un autre va à un chef. Sur un
+   * nœud non chef, la demande n'a de sens que si un téléphone chef est relié ici (il la tranche).
+   */
+  suiteAppairage(presentation: PresentationDistante, chefAppareilRelie = false): SuiteAppairage {
     if (this.courante === null) return 'demande';
     if (this.membreReconnu(presentation)) return 'accord';
-    return this.chefLocal() ? 'demande' : 'refus';
+    return this.chefLocal() || chefAppareilRelie ? 'demande' : 'refus';
+  }
+
+  /** Une charte signée proposée par un téléphone chef : vérifiée contre la courante, adoptée et relayée. */
+  proposer(signee: CharteSignee): Promise<Resultat<Charte>> {
+    return this.enfiler(async () => {
+      const actuelle = this.courante;
+      if (actuelle === null) return echec(409, 'aucun réseau sur ce nœud');
+      const verdict = await verifierCharte(actuelle, signee);
+      if (!verdict.ok) return echec(statutRefus(verdict.motif), verdict.motif);
+      const adoptee = await this.adopter(verdict.charte, signee, null);
+      return adoptee ? ok(verdict.charte) : echec(500, 'charte non sauvegardée');
+    });
   }
 
   private membreReconnu(presentation: PresentationDistante): boolean {
@@ -186,7 +211,7 @@ export class CharteNoeud {
 
   /** À l'ouverture d'un lien : la charte courante part à un nœud pair (jamais à un appareil). */
   envoyerA(lien: LienCharte): void {
-    const signee = this.signee;
+    const signee = this.signeeCourante;
     if (signee === null || !this.port.pairs().some((p) => p.id === lien.membre && p.genre === 'noeud')) return;
     lien.envoyer(messageDe(signee));
   }
@@ -210,7 +235,7 @@ export class CharteNoeud {
     const verdict = await verifierCharte(null, lue);
     if (!verdict.ok) return this.port.journal.error({ motif: verdict.motif }, 'charte locale refusée : ignorée');
     this.courante = verdict.charte;
-    this.signee = lue;
+    this.signeeCourante = lue;
   }
 
   private async traiterRecue(membre: string, signee: CharteSignee): Promise<void> {
@@ -251,7 +276,7 @@ export class CharteNoeud {
       return false;
     }
     this.courante = charte;
-    this.signee = signee;
+    this.signeeCourante = signee;
     this.port.signaler();
     for (const lien of this.port.liensNoeuds()) if (lien.membre !== depuis) lien.envoyer(messageDe(signee));
     if (ancienne !== null) this.revoquerSortis(ancienne, charte);
