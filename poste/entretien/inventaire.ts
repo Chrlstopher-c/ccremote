@@ -85,7 +85,8 @@ export function assemblerInventaire(e: EntreesInventaire): { processus: Processu
   const actifs = desc.map((p) => versProcessus(p, roles.get(p.pid) ?? 'autre', sessionDe(p.pid), e.btime, false));
   const encoreLa = restes.flatMap((r) => {
     const p = e.table.get(r.pid);
-    return p ? [versProcessus(p, 'autre', r.session, e.btime, true)] : [];
+    // Un processus détaché de sa session pendant CE lancement (serveur mis en fond) n'est pas un reste d'avant.
+    return p ? [versProcessus(p, 'autre', r.session, e.btime, r.lancement !== e.lancement)] : [];
   });
   return { processus: [...actifs, ...encoreLa], registre };
 }

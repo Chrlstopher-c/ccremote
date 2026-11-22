@@ -94,6 +94,20 @@ describe('assemblage de l’inventaire', () => {
     expect(registre.map((e) => e.lancement)).toEqual(['L2', 'L2', 'L2', 'L2', 'L2', 'L1']);
   });
 
+  test('un processus détaché pendant le lancement en cours reste listé, sans être un reste', () => {
+    const precedent: EntreeRegistre[] = [{ pid: 1006, debut: '10060', session: 'S1', lancement: 'L2' }];
+    const { processus, registre } = assemblerInventaire({
+      table: TABLE,
+      racine: RACINE,
+      btime: BTIME,
+      precedent,
+      lancement: 'L2',
+      sessionDePid: () => null,
+    });
+    expect(processus.find((x) => x.pid === 1006)).toMatchObject({ reste: false, role: 'autre', session: 'S1' });
+    expect(registre.filter((e) => e.pid === 1006)).toHaveLength(1);
+  });
+
   test('le poste lui-même et ses ancêtres n’entrent jamais dans l’inventaire', () => {
     const { processus } = assemblerInventaire({
       table: TABLE,
