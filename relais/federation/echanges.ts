@@ -13,6 +13,7 @@ import {
   type EvenementFedere,
   type MachineAnnoncee,
   type MessageChiffre,
+  NOMBRE_MAX_SESSIONS_FEDEREES,
 } from '../../commun/federation.ts';
 import { estGesteRelayable, type MethodeGeste, type PorteeGeste } from '../../commun/gestes-federes.ts';
 import { type CorpsGeste, reponseGeste } from './gestes.ts';
@@ -100,7 +101,12 @@ export class Echanges {
 
   /** L'instantané des sessions du nœud, ajusté pour tenir dans une trame. */
   instantane(): MessageChiffre {
-    const sessions = this.options.registre.sessions(false).filter((s) => !s.duo);
+    // Seules les sessions de cette machine (le registre garde aussi des copies d'autres machines, ex. la tour avant sa
+    // bascule), les plus récentes d'abord, dans la limite du protocole : au-delà, le pair ferme le canal en boucle.
+    const sessions = this.options.registre
+      .sessions(false)
+      .filter((s) => !s.duo && s.machine === this.options.machine)
+      .slice(0, NOMBRE_MAX_SESSIONS_FEDEREES);
     const vue = this.machineAnnoncee();
     return tenirDansLaLimite(sessions, (liste) => ({
       t: 'instantane',
@@ -430,7 +436,7 @@ export function tenirDansLaLimite<T>(
   let courante = liste;
   let message = construire(courante);
   while (taille(message) > TAILLE_MAX_CLAIR_OCTETS && courante.length > 0) {
-    courante = courante.slice(Math.max(1, Math.ceil(courante.length / 10)));
+    courante = courante.slice(0, courante.length - Math.max(1, Math.ceil(courante.length / 10)));
     message = construire(courante);
   }
   return message;
