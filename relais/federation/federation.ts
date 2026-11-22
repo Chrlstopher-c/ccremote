@@ -495,8 +495,11 @@ export class Federation {
     canal.decider(accord);
   }
 
+  // Appairage demandé d'ici (« Appairer » : une machine avec Lanterne) : sous une charte dont ce nœud est chef, elle y
+  // entre comme pair. Un nœud ajouté par SSH demande lui-même, et entre comme serveur (decisionAppairage).
   private appairageAccepte(membre: string, presentation: PresentationDistante): void {
     this.enregistrerPair(membre, presentation);
+    if (this.charte.estChef(this.config?.id ?? '')) void this.charte.admettre(membre, presentation, 'pair');
   }
 
   private liaisonOuverte(canal: CanalNoeud): void {

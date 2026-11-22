@@ -17,6 +17,7 @@ import {
   membreDe,
   type RequeteDroit,
   repriseDuParc,
+  type Sorte,
   repriseLEmporte,
   signerCharte,
   TOUS_DROITS,
@@ -112,21 +113,21 @@ export class CharteNoeud {
   }
 
   /** Un appairage accepté par Chris : sous une charte, le membre y entre (signé par ce chef), ou y est déjà. */
-  admettre(membre: string, presentation: PresentationDistante): Promise<boolean> {
-    return this.enfiler(() => this.admettreSerie(membre, presentation)).catch((erreur: unknown) => {
+  admettre(membre: string, presentation: PresentationDistante, sorteNoeud: Sorte = 'serveur'): Promise<boolean> {
+    return this.enfiler(() => this.admettreSerie(membre, presentation, sorteNoeud)).catch((erreur: unknown) => {
       this.port.journal.error({ err: erreur, membre }, 'admission : en échec');
       return false;
     });
   }
 
-  private async admettreSerie(membre: string, presentation: PresentationDistante): Promise<boolean> {
+  private async admettreSerie(membre: string, presentation: PresentationDistante, sorteNoeud: Sorte): Promise<boolean> {
     if (this.courante === null) return true;
     const existant = membreDe(this.courante, membre);
     if (existant !== null) return existant.identite === presentation.identite;
     const nouveau: MembreCharte = {
       id: membre,
       nom: presentation.nom,
-      sorte: presentation.genre === 'appareil' ? 'telephone' : 'serveur',
+      sorte: presentation.genre === 'appareil' ? 'telephone' : sorteNoeud,
       identite: presentation.identite,
       droits: { ...TOUS_DROITS },
       compte: null,
