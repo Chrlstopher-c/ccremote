@@ -34,6 +34,8 @@ import { requeteServeurModule } from '../modules/api-serveur.ts';
 import type { AppelsModules } from '../modules/appels.ts';
 import type { Duo } from '../duo/duo.ts';
 import { routesDuo } from '../duo/api-duo.ts';
+import type { Federation } from '../federation/federation.ts';
+import { routesFederation } from '../federation/api-federation.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -58,6 +60,7 @@ export interface DependancesApi {
   readonly confirmations: ApiConfirmations;
   readonly appels: AppelsModules;
   readonly duo: Duo;
+  readonly federation: Federation;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -225,6 +228,7 @@ export function construireRoutes(d: DependancesApi) {
     ...routesEcho(d.echo, protege),
     ...routesEntretien(d.entretien, protege),
     ...routesDuo(d.duo, protege),
+    ...routesFederation(d.federation, protege),
     ...routesReste(d.reste, protege),
     ...routesResteLot2(d.resteLot2, protege),
     ...routesParite(d.parite, protege),

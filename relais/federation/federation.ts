@@ -1,0 +1,462 @@
+// Responsabilité : la fédération « mes machines » du nœud — relié à l'aiguilleur, il s'appaire à ses pairs (décision de
+// Chris chez le visé), ouvre un lien chiffré avec chacun, puis fait voir et piloter ses sessions. Sans aiguilleur
+// configuré, rien ne démarre : le mode tunnel reste le défaut. Les données des autres nœuds restent en mémoire.
+import type { Logger } from 'pino';
+import type { MessageClient } from '../../commun/api-clients.ts';
+import type { MessageDeAiguilleur, MessageVersAiguilleur } from '../../commun/aiguilleur.ts';
+import {
+  empreinteIdentite,
+  exporterIdentitePrivee,
+  exporterIdentitePublique,
+  genererIdentite,
+  type Identite,
+  importerIdentitePrivee,
+  importerIdentitePublique,
+} from '../../commun/chiffrement/identite.ts';
+import { type EvenementFedere, type MessageChiffre } from '../../commun/federation.ts';
+import type { Diffusion } from '../clients/diffusion.ts';
+import type { Registre } from '../registre/registre.ts';
+import { type CanalNoeud, type HoteCanal, type PresentationDistante } from './canal.ts';
+import { Canaux } from './canaux.ts';
+import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
+import { CacheDistant, type SessionDistante } from './distant.ts';
+import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
+import { Echanges, type PontFederation } from './echanges.ts';
+import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
+import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
+import { echec, ok, type Resultat } from './resultat.ts';
+
+const DELAI_DEMANDE_MS = 10 * 60 * 1000;
+const MARGE_APPAIRAGE_MS = 30_000;
+const DELAI_INSTANTANE_MS = 300;
+const DELAI_LIEN_MIN_MS = 1_000;
+const DELAI_LIEN_MAX_MS = 30_000;
+const INTERVALLE_PLANIFICATION_MS = 5_000;
+/** Demandes d'appairage en attente, au plus : au-delà, la nouvelle est refusée tout de suite. */
+const NOMBRE_MAX_DEMANDES = 5;
+
+export interface OptionsFederation {
+  readonly registre: Registre;
+  readonly diffusion: Diffusion;
+  readonly dossierSecrets: string;
+  readonly machine: string;
+  readonly pont: PontFederation;
+  readonly journal: Logger;
+  readonly delaiDemandeMs?: number;
+  readonly intervallePlanificationMs?: number;
+  /** Observe chaque charge échangée avec l'aiguilleur (essais : prouver qu'il ne voit que du chiffré). */
+  readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
+}
+
+export interface NoeudAppaire {
+  readonly id: string;
+  readonly nom: string;
+  readonly empreinte: string;
+  readonly enLigne: boolean;
+  readonly liaisonOuverte: boolean;
+}
+
+export interface EtatFederation {
+  readonly aiguilleur: {
+    readonly url: string;
+    readonly id: string;
+    readonly nom: string;
+    readonly relie: boolean;
+    readonly motif: MotifArret | null;
+  } | null;
+  readonly empreinteLocale: string;
+  readonly membres: readonly { readonly id: string; readonly enLigne: boolean }[];
+  readonly noeuds: readonly NoeudAppaire[];
+  readonly demandes: readonly DemandeAppairage[];
+  readonly appairages: readonly { readonly membre: string; readonly phase: string }[];
+}
+
+export class Federation {
+  private readonly secrets: SecretsNoeud;
+  private readonly distant = new CacheDistant();
+  private readonly demandes: DemandesAppairage;
+  private readonly echanges: Echanges;
+  private readonly canaux: Canaux;
+  private readonly hote: HoteCanal;
+  private pairs: PairFederee[];
+  private readonly refus = new Set<string>();
+  private readonly presence = new Map<string, boolean>();
+  private config: ConfigAiguilleur | null;
+  private lien: LienAiguilleur | null = null;
+  private motifArret: MotifArret | null = null;
+  private identiteEnCours: Promise<Identite> | null = null;
+  private desabonner: (() => void) | null = null;
+  private planificateur: ReturnType<typeof setInterval> | null = null;
+  private instantaneEnAttente: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly options: OptionsFederation) {
+    this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
+    this.pairs = this.secrets.lirePairs();
+    this.config = this.secrets.lireAiguilleur();
+    this.demandes = new DemandesAppairage(options.delaiDemandeMs ?? DELAI_DEMANDE_MS, () => Date.now());
+    this.echanges = new Echanges({
+      registre: options.registre,
+      pont: options.pont,
+      machine: options.machine,
+      nom: () => this.config?.nom ?? options.machine,
+      distant: this.distant,
+      journal: options.journal,
+    });
+    this.hote = this.creerHote();
+    this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
+  }
+
+  /** Écoute les changements locaux ; démarre le lien si ce nœud est déjà relié à un aiguilleur. */
+  demarrer(): void {
+    this.desabonner = this.options.diffusion.ecouter((m) => this.surDiffusion(m));
+    if (this.config) this.demarrerLien();
+  }
+
+  arreter(): void {
+    this.desabonner?.();
+    this.desabonner = null;
+    if (this.planificateur) clearInterval(this.planificateur);
+    this.planificateur = null;
+    if (this.instantaneEnAttente) clearTimeout(this.instantaneEnAttente);
+    this.instantaneEnAttente = null;
+    this.canaux.fermerTout();
+    this.demandes.arreter();
+    this.lien?.arreter();
+    this.lien = null;
+    this.presence.clear();
+  }
+
+  /** Rejoint un aiguilleur avec un code d'appairage (une seule fois par nœud). */
+  async rejoindreAiguilleur(corps: { url: string; code: string; nom: string }): Promise<Resultat<{ id: string }>> {
+    const adresse = urlAiguilleurValide(corps.url);
+    if (!adresse) return echec(400, 'adresse de l’aiguilleur invalide');
+    if (this.config) return echec(409, 'nœud déjà relié à un aiguilleur');
+    const identite = await this.identite();
+    const cle = exporterIdentitePublique(identite.publique);
+    const r = await appairerNoeud(adresse, { code: corps.code, nom: corps.nom, cle }, this.options.journal);
+    if (!r.ok) return echec(r.statut, r.raison);
+    try {
+      this.config = { url: adresse, jeton: r.jeton, id: r.id, nom: corps.nom };
+      this.secrets.ecrireAiguilleur(this.config);
+    } catch {
+      this.config = null;
+      return echec(500, 'configuration de l’aiguilleur non écrite');
+    }
+    this.demarrerLien();
+    return ok({ id: r.id });
+  }
+
+  /** Premier contact avec un nœud en ligne : une demande part, Chris la tranche chez lui. */
+  appairer(membre: string): Resultat<{ canal: string }> {
+    if (!this.lien?.connecte()) return echec(409, 'aiguilleur non relié');
+    if (this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud déjà apparié');
+    if (this.presence.get(membre) !== true) return echec(409, 'nœud hors ligne');
+    if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
+    const canal = this.canaux.ouvrir(membre, 'appairage');
+    return canal ? ok({ canal: canal.id }) : echec(503, 'aiguilleur indisponible');
+  }
+
+  decider(id: string, accord: boolean): boolean {
+    return this.demandes.decider(id, accord);
+  }
+
+  /** Révocation : le pair perd son accès (un message le lui dit s'il est en ligne) et disparaît d'ici. */
+  revoquer(membre: string): Resultat<null> {
+    if (!this.pairs.some((p) => p.id === membre)) return echec(404, 'nœud non apparié');
+    const canal = this.canaux.avec(membre);
+    if (canal?.ouvert) canal.envoyer({ t: 'revocation' });
+    this.oublierPair(membre);
+    canal?.fermerApresEnvois();
+    return ok(null);
+  }
+
+  sessionsDistantes(): SessionDistante[] {
+    return this.distant.sessions();
+  }
+
+  filDistant(membre: string, session: string): Promise<Resultat<EvenementFedere[]>> {
+    return this.requete(membre, (ref) => ({ t: 'fil', ref, session })).then((r) => {
+      if (!r.ok) return r;
+      return r.valeur.t === 'fil_reponse' ? ok(r.valeur.evenements) : echec(502, 'réponse inattendue');
+    });
+  }
+
+  /** Le fil déjà reçu d'une session distante (mémoire seulement, mis à jour en direct). */
+  filEnMemoire(membre: string, session: string): EvenementFedere[] {
+    return this.distant.fil(membre, session);
+  }
+
+  async ecrireDistant(membre: string, session: string, texte: string): Promise<Resultat<null>> {
+    const r = await this.requete(membre, (ref) => ({ t: 'ecrire', ref, session, texte }));
+    return r.ok ? ok(null) : r;
+  }
+
+  async interrompreDistant(membre: string, session: string): Promise<Resultat<null>> {
+    const r = await this.requete(membre, (ref) => ({ t: 'interrompre', ref, session }));
+    return r.ok ? ok(null) : r;
+  }
+
+  /** Crée une session sur une machine du nœud visé, dans un dossier de cette machine. */
+  async ouvrirDistant(
+    membre: string,
+    machine: string,
+    chemin: string,
+    message: string,
+  ): Promise<Resultat<{ session: string }>> {
+    const r = await this.requete(membre, (ref) => ({ t: 'ouvrir', ref, machine, chemin, message }));
+    if (!r.ok) return r;
+    if (r.valeur.t === 'reponse' && r.valeur.session) return ok({ session: r.valeur.session });
+    return echec(502, 'session ouverte sans identifiant');
+  }
+
+  async etat(): Promise<EtatFederation> {
+    const identite = await this.identite();
+    const noeuds = await Promise.all(this.pairs.map((p) => this.noeudAppaire(p)));
+    const config = this.config;
+    return {
+      aiguilleur: config
+        ? {
+            url: config.url,
+            id: config.id,
+            nom: config.nom,
+            relie: this.lien?.connecte() ?? false,
+            motif: this.motifArret,
+          }
+        : null,
+      empreinteLocale: await empreinteIdentite(identite.publique),
+      membres: [...this.presence].map(([id, enLigne]) => ({ id, enLigne })),
+      noeuds,
+      demandes: this.demandes.lister(),
+      appairages: this.canaux
+        .actifs()
+        .filter((c) => c.intention === 'appairage')
+        .map((c) => ({ membre: c.membre, phase: c.phase })),
+    };
+  }
+
+  // ---- Lien avec l'aiguilleur ---------------------------------------------------------------------------------
+
+  private demarrerLien(): void {
+    const config = this.config;
+    if (!config) return;
+    this.lien?.arreter();
+    this.motifArret = null;
+    this.lien = new LienAiguilleur(
+      {
+        url: config.url,
+        jeton: config.jeton,
+        delaiMinMs: DELAI_LIEN_MIN_MS,
+        delaiMaxMs: DELAI_LIEN_MAX_MS,
+        journal: this.options.journal.child({ domaine: 'aiguilleur' }),
+      },
+      {
+        surMessage: (m) => this.surMessage(m),
+        surConnexion: (connecte) => this.surConnexion(connecte),
+        surArret: (motif) => this.surArret(motif),
+      },
+    );
+    this.lien.demarrer();
+    this.planificateur ??= setInterval(
+      () => this.planifier(),
+      this.options.intervallePlanificationMs ?? INTERVALLE_PLANIFICATION_MS,
+    );
+  }
+
+  private emettre(message: MessageVersAiguilleur): boolean {
+    if (message.t === 'donnees') this.options.observer?.('envoi', message.charge);
+    return this.lien?.envoyer(message) ?? false;
+  }
+
+  private surMessage(message: MessageDeAiguilleur): void {
+    if (message.t === 'presence') return this.surPresence(message.membres);
+    if (message.t === 'donnees') this.options.observer?.('reception', message.charge);
+    this.canaux.surMessage(message);
+  }
+
+  private surPresence(membres: readonly { readonly id: string; readonly enLigne: boolean }[]): void {
+    this.presence.clear();
+    for (const m of membres) this.presence.set(m.id, m.enLigne);
+    this.planifier();
+  }
+
+  // Le lien part du nœud au plus petit identifiant : un seul canal par paire, sans collision à l'ouverture.
+  private planifier(): void {
+    const moi = this.config?.id;
+    if (!moi || !this.lien?.connecte()) return;
+    for (const p of this.pairs) {
+      if (p.id <= moi || this.refus.has(p.id) || this.presence.get(p.id) !== true) continue;
+      if (!this.canaux.avec(p.id)) this.canaux.ouvrir(p.id, 'lien');
+    }
+  }
+
+  private surConnexion(connecte: boolean): void {
+    this.options.journal.info({ connecte }, 'lien vers l’aiguilleur');
+    if (connecte) return;
+    for (const canal of this.canaux.actifs()) canal.surFermetureDistante();
+    this.presence.clear();
+    for (const p of this.pairs) this.distant.enLigne(p.id, false);
+  }
+
+  private surArret(motif: MotifArret): void {
+    this.motifArret = motif;
+    this.options.journal.warn({ motif }, 'lien vers l’aiguilleur arrêté : ce nœud n’est plus relié');
+  }
+
+  // ---- Hôte des canaux ------------------------------------------------------------------------------------------
+
+  private creerHote(): HoteCanal {
+    return {
+      journal: this.options.journal,
+      delaiAppairageMs: (this.options.delaiDemandeMs ?? DELAI_DEMANDE_MS) + MARGE_APPAIRAGE_MS,
+      identiteLocale: () => this.identite(),
+      nomLocal: () => this.config?.nom ?? this.options.machine,
+      pairDe: (membre) => this.pairs.find((p) => p.id === membre) ?? null,
+      envoyerAiguilleur: (m) => this.emettre(m),
+      presentationRecue: (canal, p) => void this.presentationRecue(canal, p),
+      appairageAccepte: (canal, p) => this.appairageAccepte(canal.membre, p),
+      appairageRefuse: (canal, raison) =>
+        this.options.journal.warn({ membre: canal.membre, raison }, 'appairage refusé'),
+      liaisonOuverte: (canal) => this.liaisonOuverte(canal),
+      liaisonRefusee: (canal, raison) => this.liaisonRefusee(canal, raison),
+      messageRecu: (canal, m) => void this.messageRecu(canal, m),
+      canalFerme: (canal) => this.canalFerme(canal),
+    };
+  }
+
+  // Côté visé : la demande part avec les deux empreintes ; Chris accepte ou refuse, l'expiration vaut refus.
+  private async presentationRecue(canal: CanalNoeud, presentation: PresentationDistante): Promise<void> {
+    try {
+      const empreinte = await empreinteIdentite(await importerIdentitePublique(presentation.identite));
+      const locale = await empreinteIdentite((await this.identite()).publique);
+      if (!canal.actif) return;
+      if (this.demandes.lister().length >= NOMBRE_MAX_DEMANDES) return canal.decider(false);
+      this.demandes.ajouter(
+        { membre: canal.membre, nom: presentation.nom, empreinte, empreinteLocale: locale },
+        (accord) => this.decisionAppairage(canal, presentation, accord),
+      );
+    } catch (erreur) {
+      this.options.journal.error({ err: erreur, membre: canal.membre }, 'présentation d’un nœud illisible');
+      canal.fermer();
+    }
+  }
+
+  private decisionAppairage(canal: CanalNoeud, presentation: PresentationDistante, accord: boolean): void {
+    if (accord) this.enregistrerPair(canal.membre, presentation);
+    canal.decider(accord);
+  }
+
+  private appairageAccepte(membre: string, presentation: PresentationDistante): void {
+    this.enregistrerPair(membre, presentation);
+  }
+
+  private liaisonOuverte(canal: CanalNoeud): void {
+    this.refus.delete(canal.membre);
+    this.distant.enLigne(canal.membre, true);
+    canal.envoyer(this.echanges.instantane());
+  }
+
+  private liaisonRefusee(canal: CanalNoeud, raison: string): void {
+    this.refus.add(canal.membre);
+    this.options.journal.warn({ membre: canal.membre, raison }, 'lien refusé par le nœud : appairage à refaire');
+  }
+
+  private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
+    if (message.t === 'revocation') {
+      this.oublierPair(canal.membre);
+      return canal.fermer();
+    }
+    await this.echanges.traiter(canal, message);
+  }
+
+  private canalFerme(canal: CanalNoeud): void {
+    this.canaux.retirer(canal);
+    this.demandes.retirerPour(canal.membre);
+    if (this.canaux.liaisonOuverteAvec(canal.membre)) return;
+    this.distant.enLigne(canal.membre, false);
+    this.echanges.oublier(canal.membre);
+  }
+
+  // ---- Pairs, identité, diffusion locale -----------------------------------------------------------------------
+
+  private enregistrerPair(membre: string, presentation: PresentationDistante): void {
+    const pair: PairFederee = {
+      id: membre,
+      nom: presentation.nom,
+      identite: presentation.identite,
+      creeLe: new Date().toISOString(),
+    };
+    this.pairs = [...this.pairs.filter((p) => p.id !== membre), pair];
+    this.refus.delete(membre);
+    this.distant.connaitre(membre, pair.nom);
+    this.sauverPairs();
+  }
+
+  private oublierPair(membre: string): void {
+    this.pairs = this.pairs.filter((p) => p.id !== membre);
+    this.sauverPairs();
+    this.distant.retirer(membre);
+    this.demandes.retirerPour(membre);
+    this.echanges.oublier(membre);
+    this.refus.delete(membre);
+  }
+
+  private sauverPairs(): void {
+    try {
+      this.secrets.ecrirePairs(this.pairs);
+    } catch {
+      this.options.journal.error('pairs de la fédération non sauvegardés');
+    }
+  }
+
+  private async noeudAppaire(p: PairFederee): Promise<NoeudAppaire> {
+    return {
+      id: p.id,
+      nom: p.nom,
+      empreinte: await empreinteIdentite(await importerIdentitePublique(p.identite)).catch(() => ''),
+      enLigne: this.presence.get(p.id) === true,
+      liaisonOuverte: this.canaux.liaisonOuverteAvec(p.id) !== null,
+    };
+  }
+
+  private identite(): Promise<Identite> {
+    this.identiteEnCours ??= this.chargerIdentite();
+    return this.identiteEnCours;
+  }
+
+  private async chargerIdentite(): Promise<Identite> {
+    const existante = this.secrets.lireIdentitePrivee();
+    if (existante) return importerIdentitePrivee(existante);
+    const neuve = await genererIdentite();
+    this.secrets.ecrireIdentitePrivee(await exporterIdentitePrivee(neuve));
+    return neuve;
+  }
+
+  private surDiffusion(m: MessageClient): void {
+    if (m.type === 'session' || m.type === 'supprimee') return this.programmerInstantane();
+    if (m.type === 'evenement') {
+      this.echanges.diffuserEvenement(m.evenement.sessionId, m.evenement.ts, m.evenement.evt, this.canaux.ouverts());
+    }
+  }
+
+  // Les changements de sessions partent groupés : un instantané complet par rafale, aux liens ouverts.
+  private programmerInstantane(): void {
+    if (this.instantaneEnAttente) return;
+    this.instantaneEnAttente = setTimeout(() => {
+      this.instantaneEnAttente = null;
+      const instantane = this.echanges.instantane();
+      for (const canal of this.canaux.ouverts()) canal.envoyer(instantane);
+    }, DELAI_INSTANTANE_MS);
+  }
+
+  private async requete(
+    membre: string,
+    construire: (ref: string) => MessageChiffre,
+  ): Promise<Resultat<MessageChiffre>> {
+    const canal = this.canaux.liaisonOuverteAvec(membre);
+    if (!canal) return echec(409, 'nœud hors ligne ou non relié');
+    const reponse = await this.echanges.requeter(canal, construire);
+    if (!reponse) return echec(504, 'le nœud n’a pas répondu');
+    if (reponse.t === 'reponse' && !reponse.ok) return echec(409, reponse.raison ?? 'refusé');
+    return ok(reponse);
+  }
+}

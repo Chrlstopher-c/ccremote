@@ -126,6 +126,8 @@ commun/compte-detail.ts                              le contrat de la vue compl�
 commun/comptes.ts                                    le vocabulaire des comptes Claude Code d'une machine — identité, usag…
 commun/configuration.ts                             contrat de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
 commun/echo.ts                                       ce que Quart relaie d'Echo — copie des seuls champs affichés
+commun/federation.ts                                    protocole de la fédération : appairage en clair, messages chiffrés de bout en bout
+commun/federation.test.ts                               tests du protocole de la fédération
 commun/journal.ts                                    le logger unique (pino), lisible en terminal, JSON quand la sortie es…
 commun/panneau.ts                                    vocabulaire du panneau de session — contexte, connecteurs, tâches de fond (lectures relayées)
 commun/protocole-poste.ts                            les messages échangés entre un poste (machine de travail) et le relai…
@@ -479,6 +481,28 @@ relais/machines/ssh-dossiers.test.ts                tests de ssh, des dossiers d
 relais/machines/ssh.ts                              lancer ssh vers une machine configurée (arguments en tableau, délai, lanceur injectable)
 relais/machines/tester.ts                           tester une machine : SSH, Claude Code, tmux, bun, poste connecté
 relais/notifications/regles.ts                       quels événements méritent une notification, et laquelle. Pur.
+relais/federation/adresses.test.ts                      adresses de l’aiguilleur : http(s) seulement, lien ws/wss dérivé
+relais/federation/aiguilleur-http.ts                    appairage du nœud auprès de l’aiguilleur (code, clé publique, jeton reçu)
+relais/federation/aiguilleur-reel.test.ts               fédération sur le vrai processus de l’aiguilleur (relais/bin.ts, commandes locales)
+relais/federation/api-federation.ts                     routes de la fédération (état, appairage, demandes, sessions distantes)
+relais/federation/banc-federation.ts                    banc d’essai : aiguilleur réel en mémoire, nœuds, pont factice
+relais/federation/canal.ts                              un canal de l’aiguilleur entre deux nœuds — appairage puis lien chiffré
+relais/federation/canaux.ts                             table des canaux du nœud et routage des messages de l’aiguilleur
+relais/federation/demandes.test.ts                      tests de demandes.ts
+relais/federation/demandes.ts                           demandes d’appairage en attente de la décision de Chris (expiration = refus)
+relais/federation/distant.test.ts                       tests de distant.ts
+relais/federation/distant.ts                            cache mémoire des nœuds distants : sessions, présence, fil reçu
+relais/federation/echanges.ts                           protocole chiffré une fois le lien ouvert : instantané, fil, écriture, ouverture
+relais/federation/federation.test.ts                    fédération sur un aiguilleur réel en mémoire : appairage, sessions, révocation, aiguilleur
+relais/federation/federation.ts                         la fédération « mes machines » du nœud — lien, appairage, révocation, requêtes vers les pairs
+relais/federation/identifiants.ts                       identifiants aléatoires : canaux et références de requête
+relais/federation/lien-aiguilleur.ts                    lien WebSocket sortant du nœud vers l’aiguilleur, reconnexion avec recul
+relais/federation/resultat.ts                           résultat d’un geste de la fédération (valeur ou statut et raison)
+relais/federation/routes.test.ts                        tests des routes de la fédération
+relais/federation/secrets.test.ts                       tests de secrets.ts
+relais/federation/secrets.ts                            secrets du nœud (identité, jeton de l’aiguilleur, pairs) en fichiers 600
+relais/federation/tunnel.test.ts                        tests de tunnel.ts
+relais/federation/tunnel.ts                             tunnel chiffré d’un canal : envois et réceptions dans l’ordre, rejeu et altération refusés
 relais/parc/postes.ts                                les postes connectés au relais — authentification, comptes rendus reç…
 relais/parc/reveil.test.ts                           tests de reveil.ts
 relais/parc/reveil.ts                                réveiller une machine éteinte par Wake-on-LAN (paquet magique en diff…

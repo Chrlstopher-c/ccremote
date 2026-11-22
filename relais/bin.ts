@@ -1,5 +1,5 @@
 // Responsabilité : point d'entrée du relais — deux serveurs : clients (web, iPhone) et postes (machines de travail).
-import { userInfo } from 'node:os';
+import { hostname, userInfo } from 'node:os';
 import { dirname, join } from 'node:path';
 import { creerJournal } from '../commun/journal.ts';
 import { COMMIT, VERSION } from '../commun/version.ts';
@@ -58,6 +58,7 @@ import { lancerRecalculInactivite } from './sessions/recalcul-inactivite.ts';
 import { RegistreReunions } from './reunion/registre-reunions.ts';
 import { SalleDeReunion } from './reunion/salle.ts';
 import { Duo } from './duo/duo.ts';
+import { Federation } from './federation/federation.ts';
 import { nomUtilisateur } from '../commun/identite.ts';
 import { demarrerAiguilleur } from './aiguilleur/demarrer.ts';
 
@@ -196,6 +197,21 @@ const duo: Duo = new Duo({
   },
 });
 const sessions: ApiSessions = new ApiSessions(registre, postes, diffusion, config.isolees, journal, duo);
+// Fédération « mes machines » : inerte tant que ce nœud n'est pas relié à un aiguilleur (le mode tunnel reste le défaut).
+const federation = new Federation({
+  registre,
+  diffusion,
+  dossierSecrets,
+  machine: process.env['CCREMOTE_MACHINE_LOCALE'] || hostname(),
+  pont: {
+    ouvrir: (demande) => sessions.ouvrirAvec(demande),
+    envoyer: (session, texte) => sessions.envoyerDuPair(session, texte, []),
+    interrompre: (session) => sessions.interrompreDuPair(session),
+  },
+  journal: journal.child({ domaine: 'federation' }),
+});
+federation.demarrer();
+process.once('exit', () => federation.arreter());
 const sessionConfig = new ApiSessionConfig(registre, postes);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
 // Un seul relevé d'usage par compte réel du parc : le relais choisit le poste, cadence et garde la dernière valeur.
@@ -251,6 +267,7 @@ const routes = avecCors(
     confirmations,
     appels: appelsModules,
     duo,
+    federation,
   }),
   config.origines,
 );

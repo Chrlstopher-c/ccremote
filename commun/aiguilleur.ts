@@ -16,6 +16,10 @@ export const LIMITE_CHARGE_OCTETS = 1024 * 1024;
 /** Taille maximale d'une trame WebSocket (enveloppe JSON comprise) : au-delà, le lien est coupé par le serveur. */
 export const TAILLE_MAX_TRAME_OCTETS = 2 * LIMITE_CHARGE_OCTETS;
 
+/** Chemins du protocole : appairage d'un membre (HTTP POST) et lien sortant authentifié (WebSocket). */
+export const CHEMIN_APPAIRAGE_MEMBRE = '/api/membres/appairer';
+export const CHEMIN_LIEN_AIGUILLEUR = '/aiguilleur';
+
 /** Identifiant d'un membre : 12 caractères hexadécimaux, attribués par l'aiguilleur à l'appairage. */
 export const VALIDE_IDENTIFIANT = /^[a-f0-9]{12}$/;
 

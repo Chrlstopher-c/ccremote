@@ -538,7 +538,12 @@ export class ApiSessions {
   }
 
   /** Un message du pair (mode duo), chez le propriétaire : même chemin qu'un message local, signé de son nom. */
-  envoyerDuPair(sessionId: string, texte: string, pieces: readonly PieceJointe[], auteur: string): Promise<Response> {
+  envoyerDuPair(
+    sessionId: string,
+    texte: string,
+    pieces: readonly PieceJointe[],
+    auteur?: string,
+  ): Promise<Response> {
     return this.commander(sessionId, { kind: 'envoyer', texte, pieces: [...pieces], auteur });
   }
 
