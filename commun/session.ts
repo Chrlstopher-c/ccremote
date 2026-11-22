@@ -169,6 +169,8 @@ export const ResumeSession = z.object({
   // terminée) depuis le seuil d'inactivité ; null sinon (travail, compaction, question, démarrage, erreur, fermée).
   inactiveDepuis: z.string().nullable().optional(),
   archivee: z.boolean().optional(), // rangée par Chris : absente des listes par défaut, jamais fermée automatiquement
+  migrable: z.boolean().optional(), // Desktop/terminal observée, pas encore migrée (calculé par le relais)
+  migreeVers: z.string().nullable().optional(), // migrée vers cette session de Lanterne (calculé par le relais)
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
   style_sortie: z.string().nullable().optional(), // style de sortie Claude (SDK) ; null ou absent = défaut
   prompt_systeme: z.string().max(8000).nullable().optional(), // prompt système de la conversation ; null = aucun
@@ -249,6 +251,9 @@ export const Evenement = z.discriminatedUnion('type', [
   }),
   z.object({ type: z.literal('compaction'), avant: z.number(), apres: z.number(), declencheur: z.string() }),
   z.object({ type: z.literal('relance'), raison: z.string() }),
+  // Migration d'une session Desktop/terminal vers Lanterne : `sortie` dans l'ancienne (`session` = la nouvelle),
+  // `entree` dans la nouvelle (`session` = l'ancienne).
+  z.object({ type: z.literal('migration'), sens: z.enum(['sortie', 'entree']), session: z.string(), titre: z.string() }),
   z.object({
     type: z.literal('tour_fini'),
     dureeMs: z.number(),

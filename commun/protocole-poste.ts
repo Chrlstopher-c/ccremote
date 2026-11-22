@@ -156,6 +156,8 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('connecteur'), ...avecSession, nom: z.string().min(1).max(200), actif: z.boolean() }),
   // Conversation annexe : copie complète de la session, en lecture seule, marquée comme annexe de celle-ci.
   z.object({ kind: z.literal('annexer'), ...avecSession }),
+  // Migration d'une session Desktop/terminal vers Lanterne : copie reprenable de la conversation, la source reste intacte.
+  z.object({ kind: z.literal('migrer'), ...avecSession }),
   z.object({ kind: z.literal('repondre'), ...avecSession, reponse: ReponseDialogue }),
   // Réglages d'une session SDK en cours : mode de permission, modèle, effort (null = défaut), titre.
   z.object({ kind: z.literal('mode'), ...avecSession, mode: ModeSession }),

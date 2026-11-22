@@ -276,7 +276,7 @@ const synchro = new ServiceSynchro({
 });
 federation.brancherSynchro((membre, brut) => synchro.recevoir(membre, brut));
 process.once('exit', () => synchro.arreter());
-const sessionConfig = new ApiSessionConfig(registre, postes);
+const sessionConfig = new ApiSessionConfig(registre, postes, diffusion);
 // Outils du parc (sessions hors de Lanterne) et outils de modules : deux familles, un seul lien poste ↔ relais.
 const outilsParc: DependancesOutilsParc = {
   postes,

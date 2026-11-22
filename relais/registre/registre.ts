@@ -14,11 +14,19 @@ import { inactiveDepuis, SEUIL_INACTIVITE_MS } from '../sessions/inactivite.ts';
 import type { JetonsSession, RencontreMessage } from '../../commun/reste.ts';
 import { jetonsSessionBase, rechercherMessagesBase } from './recherche.ts';
 import { RegistreModules } from '../modules/registre-modules.ts';
+import { estMigrable } from '../../commun/migration.ts';
 
 export type FicheMachine = Omit<VueMachine, 'enLigne'>;
 export type { EvenementDate, Notification };
 
-type LigneSession = { id: string; resume: string; archivee: number; epinglee: number; non_lue: number };
+type LigneSession = {
+  id: string;
+  resume: string;
+  archivee: number;
+  epinglee: number;
+  non_lue: number;
+  migree_vers: string | null;
+};
 type LigneMachine = {
   id: string;
   description: string;
@@ -115,7 +123,7 @@ export class Registre {
 
   session(id: string): ResumeSession | null {
     const l = this.db
-      .query('SELECT id, resume, archivee, epinglee, non_lue FROM sessions WHERE id = $id')
+      .query('SELECT id, resume, archivee, epinglee, non_lue, migree_vers FROM sessions WHERE id = $id')
       .get({ id }) as LigneSession | null;
     return l ? this.vue(l) : null;
   }
@@ -124,7 +132,7 @@ export class Registre {
   // ?archivees=1, rétention du fil).
   sessions(avecArchivees = false): ResumeSession[] {
     const lignes = this.db
-      .query('SELECT id, resume, archivee, epinglee, non_lue FROM sessions ORDER BY maj_le DESC')
+      .query('SELECT id, resume, archivee, epinglee, non_lue, migree_vers FROM sessions ORDER BY maj_le DESC')
       .all() as LigneSession[];
     return lignes
       .filter((l) => avecArchivees || (l.archivee === 0 && !this.sessionsMasquees.has(l.id)))
@@ -134,7 +142,7 @@ export class Registre {
   /** Toutes les fiches, sans les masquages des doublons : l'archivage du registre seul (base du rapprochement). */
   sessionsBrutes(): ResumeSession[] {
     const lignes = this.db
-      .query('SELECT id, resume, archivee, epinglee, non_lue FROM sessions ORDER BY maj_le DESC')
+      .query('SELECT id, resume, archivee, epinglee, non_lue, migree_vers FROM sessions ORDER BY maj_le DESC')
       .all() as LigneSession[];
     return lignes.flatMap((l) => this.vue(l, true) ?? []);
   }
@@ -154,6 +162,11 @@ export class Registre {
   // Épinglée : remontée en tête de la liste par le client ; colonne du relais, jamais écrasée par le poste.
   definirEpinglee(id: string, epinglee: boolean): void {
     this.db.query('UPDATE sessions SET epinglee = $e WHERE id = $id').run({ e: epinglee ? 1 : 0, id });
+  }
+
+  // Session Desktop/terminal migrée : la source garde l'identifiant de sa reprise (colonne du relais, jamais le poste).
+  definirMigreeVers(id: string, nouvelle: string): void {
+    this.db.query('UPDATE sessions SET migree_vers = $n WHERE id = $id').run({ n: nouvelle, id });
   }
 
   // Non lue : persistée pour survivre au redémarrage de l'appli (Lanterne la pose à la fin d'un tour hors vue, la retire
@@ -262,6 +275,8 @@ export class Registre {
       ...fiche,
       archivee: l.archivee === 1 || (!brute && this.sessionsMasquees.has(l.id)),
       epinglee: l.epinglee === 1,
+      migreeVers: l.migree_vers,
+      migrable: estMigrable(fiche, l.migree_vers),
       nonLue: l.non_lue === 1,
       inactiveDepuis: inactiveDepuis(fiche.statut, fiche.majLe, new Date(), this.seuilInactiviteMs),
     };
