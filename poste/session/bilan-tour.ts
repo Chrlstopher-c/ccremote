@@ -10,6 +10,7 @@ export interface ContexteFinTour {
   readonly contexte: number;
   readonly maxTokens: number;
   readonly sousAgentsEnCours: number;
+  readonly erreur: boolean;
 }
 
 export class BilanTour {
@@ -92,6 +93,7 @@ export class BilanTour {
       compactionDemandee: this.compactionDemandee,
       sousAgentsActifs: 0, // le SDK ne patiente pas sur ses sous-agents de fond
       sousAgentsEnCours: c.sousAgentsEnCours,
+      erreurTour: c.erreur,
     });
     if (suite.action === 'relancer') this.relancesSansProgres = this.outils === 0 ? this.relancesSansProgres + 1 : 0;
     this.outils = 0;

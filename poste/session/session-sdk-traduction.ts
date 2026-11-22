@@ -31,6 +31,9 @@ export function traiter(n: NoyauSdk, msg: SDKMessage, etatTraduction: EtatTraduc
   const mode = modeDeInit(msg);
   if (mode && mode !== n.etat.mode) maj(n, { mode }); // la fiche dit le mode réel, pas « inconnu »
   if (sortie.compaction) maj(n, { statut: 'compaction' });
+  // Compaction automatique en plein tour : le CLI reprend seul ; à la réponse du modèle, la session repasse à travail.
+  else if (msg.type === 'assistant' && msg.parent_tool_use_id === null && n.etat.statut === 'compaction')
+    maj(n, { statut: 'travail' });
   if (sortie.limite) n.env.limite?.(sortie.limite);
   if (sortie.finDeTour) finDeTour(n, sortie.finDeTour);
 }

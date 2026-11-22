@@ -20,6 +20,8 @@ export interface EtatFinDeTour {
   readonly sousAgentsActifs: number;
   /** Sous-agents encore vivants à la fin du tour. Ne sert qu'à la reprise après compaction. */
   readonly sousAgentsEnCours: number;
+  /** Le tour s'est terminé en erreur (ex. disjoncteur de compaction du CLI) : pas de relance après compaction. */
+  readonly erreurTour?: boolean;
 }
 
 export type Suite =
@@ -39,7 +41,7 @@ export function deciderSuite(e: EtatFinDeTour): Suite {
     if (compaction.agir)
       return { action: 'compacter', raison: compaction.raison === 'etape' ? 'fin d’étape' : 'seuil de contexte' };
   }
-  if (e.sortDeCompaction) return relanceApresCompaction(e);
+  if (e.sortDeCompaction) return e.erreurTour ? { action: 'arreter', statut: 'attente' } : relanceApresCompaction(e);
   if (!e.autonomie || !e.aUnObjectif) return { action: 'arreter', statut: 'attente' };
   if (e.sousAgentsActifs > 0) return { action: 'patienter' };
   return relanceAutonome(e);

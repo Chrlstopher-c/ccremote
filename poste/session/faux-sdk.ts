@@ -28,6 +28,8 @@ type Faux = {
   readonly contexte?: number;
   readonly fast_mode_state?: string;
   readonly fast_mode_disabled_reason?: string;
+  readonly parent_tool_use_id?: null;
+  readonly message?: { readonly content: readonly unknown[] };
 };
 const faux = (f: Faux): SDKMessage => f as unknown as SDKMessage; // forme factice, voir ci-dessus
 const lireFaux = (m: SDKMessage): Faux => m as unknown as Faux; // inverse de faux
@@ -307,9 +309,10 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
     requetes.push(requete);
     return requete;
   };
+  const statuts: StatutSession[] = [];
   const sortie: SortieSession = {
     evenement: (_id, evt) => void evenements.push(evt),
-    resume: () => undefined,
+    resume: (r) => void statuts.push(r.statut),
   };
   const env: EnvironnementSdk = {
     journal,
@@ -324,7 +327,7 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
   };
   const base = persistee(reglages.configDir ?? null, reglages.objectif ?? null, reglages.reprise);
   const persistance = reglages.resume ? { ...base, resume: { ...base.resume, ...reglages.resume } } : base;
-  return { session: new SessionSdk(persistance, env), requetes, evenements };
+  return { session: new SessionSdk(persistance, env), requetes, evenements, statuts };
 }
 
 export async function attendre(condition: () => boolean, delai = 2000): Promise<void> {

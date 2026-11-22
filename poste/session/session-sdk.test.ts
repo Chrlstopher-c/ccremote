@@ -325,6 +325,42 @@ describe('SessionSdk — rythme, fin de tour et mode nuit', () => {
     expect(textes).toHaveLength(2);
   });
 
+  // Constat réel (22/11, CLI 2.1.323, stream-json) : après une compaction automatique en plein tour, le CLI enchaîne
+  // seul (résumé, nouvel appel modèle, result). Le statut doit redevenir « travail » dès la reprise, pas rester à
+  // « compaction » jusqu'au result (sinon « envoyer maintenant » ne coupe plus le tour en cours).
+  test('compaction automatique en plein tour : le statut repasse à travail avant le result', async () => {
+    const { session, statuts } = nouvelleSession(async () => [
+      { type: 'compaction' },
+      { type: 'assistant', parent_tool_use_id: null, message: { content: [] } },
+      { type: 'result', contexte: 2_000 },
+    ]);
+    await session.lancer('un');
+    await attendre(() => session.resume.statut === 'attente');
+    const depuisCompaction = statuts.slice(statuts.indexOf('compaction')).filter((s, i, a) => s !== a[i - 1]);
+    expect(depuisCompaction).toEqual(['compaction', 'travail', 'attente']);
+  });
+
+  // Constat réel (22/11) : quand le CLI abandonne (« Autocompact is thrashing », result en erreur), la relance
+  // après compaction ne doit pas repartir : sinon chaque tour peut rejouer le disjoncteur (boucle non mesurée en réel).
+  test('compaction puis erreur du tour : pas de relance après compaction, la session reste en erreur', async () => {
+    const textes: string[] = [];
+    const { session, evenements } = nouvelleSession(
+      async (texte) => {
+        textes.push(texte);
+        if (textes.length > 1) return [{ type: 'result', contexte: 2_000 }]; // borne : une relance rejouerait la boucle
+        return [{ type: 'compaction' }, { type: 'result', contexte: 2_000, erreur: 'Autocompact is thrashing' }];
+      },
+      { objectif: 'Livrer X' },
+    );
+    session.basculerAutonomie(true);
+    await session.lancer('un');
+    await attendre(() => session.resume.statut !== 'travail');
+    await pause(20);
+    expect(session.resume.statut).toBe('erreur');
+    expect(textes).toHaveLength(1);
+    expect(evenements.some((e) => e.type === 'relance')).toBe(false);
+  });
+
   test('mode nuit : une session à l’arrêt depuis le délai est réveillée par le poste', async () => {
     const dossier = mkdtempSync(join(tmpdir(), 'nuit-sdk-'));
     mkdirSync(join(dossier, 'sessions'));

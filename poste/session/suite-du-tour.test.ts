@@ -16,6 +16,7 @@ const etat = (e: Partial<EtatFinDeTour> = {}): EtatFinDeTour => ({
   compactionDemandee: false,
   sousAgentsActifs: 0,
   sousAgentsEnCours: 0,
+  erreurTour: false,
   ...e,
 });
 
@@ -48,6 +49,11 @@ describe('suite du tour', () => {
     const s = deciderSuite(etat({ sortDeCompaction: true, sousAgentsEnCours: 1, autonomie: false }));
     expect(s).toMatchObject({ action: 'relancer', raison: 'reprise après compaction' });
     expect(s).toMatchObject({ texte: expect.stringContaining('sous-agent') });
+  });
+
+  test('compaction puis tour en erreur (disjoncteur du CLI) : pas de relance, on s’arrête', () => {
+    const s = deciderSuite(etat({ sortDeCompaction: true, erreurTour: true, sousAgentsEnCours: 0 }));
+    expect(s).toEqual({ action: 'arreter', statut: 'attente' });
   });
 
   test('compaction d’une session au repos (ni objectif, ni sous-agent) → reste au repos', () => {

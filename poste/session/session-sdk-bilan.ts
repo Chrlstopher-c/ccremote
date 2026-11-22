@@ -21,14 +21,15 @@ export function constater(n: NoyauSdk, evt: Evenement): void {
 
 export function finDeTour(n: NoyauSdk, fin: NonNullable<SortieTraduction['finDeTour']>): void {
   const tokens = fin.contexte > 0 ? fin.contexte : n.etat.contexte.tokens;
+  const panne = fin.erreur !== null && !n.interrompuParChris;
   const suite = n.bilan.conclure({
     autonomie: n.etat.autonomie,
     aUnObjectif: n.etat.objectif !== null,
     contexte: tokens,
     maxTokens: n.etat.contexte.max,
     sousAgentsEnCours: n.registreTaches.sousAgentsEnCours(),
+    erreur: panne,
   });
-  const panne = fin.erreur && !n.interrompuParChris;
   const statut: StatutSession = suite.action === 'laisser' ? 'travail' : panne ? 'erreur' : 'attente';
   maj(n, { statut, contexte: { ...n.etat.contexte, tokens } });
   if (n.cessionEnAttente) ceder(n);
