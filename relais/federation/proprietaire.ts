@@ -59,6 +59,8 @@ function versInfo(m: MembrePresence): InfoMembre {
 /** Les membres vus dans la présence de l'aiguilleur. */
 export class Voisinage {
   private readonly infos = new Map<string, InfoMembre>();
+  // Pairs joints par une liaison directe : ni la présence de l'aiguilleur ni son remplacement ne les touchent.
+  private readonly directs = new Map<string, InfoMembre>();
 
   /** Remplace tout : chaque présence donne la liste complète des membres joignables. */
   /** Rend vrai si la liste a changé (l'aiguilleur renvoie la même présence à chaque battement). */
@@ -81,29 +83,45 @@ export class Voisinage {
     });
   }
 
+  /** Un membre joint par une liaison directe ouverte est en ligne, quoi qu'en dise la présence de l'aiguilleur. */
   enLigne(id: string): boolean {
-    return this.infos.get(id)?.enLigne === true;
+    return this.infos.get(id)?.enLigne === true || this.directs.has(id);
   }
 
   refusPour(id: string, moi: string | null): string | null {
-    return raisonRefus(this.infos.get(id), moi);
+    return raisonRefus(this.info(id), moi);
   }
 
   refusAppareil(id: string, moi: string | null): string | null {
-    return raisonRefusAppareil(this.infos.get(id), moi);
+    return raisonRefusAppareil(this.info(id), moi);
   }
 
   /** Un de nos nœuds, en ligne : le seul pair qu'on appaire ou qu'on relie. */
   joignable(id: string, moi: string | null): boolean {
-    const info = this.infos.get(id);
-    return info !== undefined && info.enLigne && estDeMesMachines(info, moi);
+    const info = this.info(id);
+    return info !== undefined && this.enLigne(id) && estDeMesMachines(info, moi);
+  }
+
+  /** Un pair joint par une liaison directe : son nom, son genre et son propriétaire sont ceux de la poignée. */
+  memoriserDirect(info: InfoMembre): void {
+    this.directs.set(info.id, info);
+  }
+
+  retirerDirect(id: string): void {
+    this.directs.delete(id);
   }
 
   liste(moi: string | null): MembreVu[] {
-    return [...this.infos.values()].map((i) => ({ ...i, mien: estDeMesMachines(i, moi) }));
+    const membres = new Map<string, InfoMembre>([...this.directs, ...this.infos]);
+    return [...membres.values()].map((i) => ({ ...i, enLigne: this.enLigne(i.id), mien: estDeMesMachines(i, moi) }));
   }
 
+  /** Efface ce que dit l'aiguilleur ; les liaisons directes restent. */
   effacer(): void {
     this.infos.clear();
+  }
+
+  private info(id: string): InfoMembre | undefined {
+    return this.infos.get(id) ?? this.directs.get(id);
   }
 }
