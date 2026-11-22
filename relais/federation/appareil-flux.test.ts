@@ -31,6 +31,43 @@ test('le flux du nœud arrive dans le canal : deltas regroupés, ordre du direct
   }
 });
 
+test('un appareil ne reçoit jamais les messages de fédération (instantané, confirmation) : son canal tient', async () => {
+  const monte = monterAiguilleur();
+  const { noeud, id } = await nouveauNoeud(monte);
+  try {
+    const { appareil, canal } = await appairerAppareil(monte, noeud, id);
+    expect(canal.envoyer({ t: 'diffusion_ouvrir' })).toBe(true);
+    await attendreTout(() => appareil.acquitter.length > 0);
+    noeud.diffusion.diffuser({ type: 'session', session: ficheDe('s1', 'tour', 'Titre') });
+    await attendreTout(() => appareil.diffusions.length >= 1);
+    await Bun.sleep(600);
+    expect(appareil.horsProtocole).toEqual([]);
+    expect(canal.ouvert).toBe(true);
+  } finally {
+    noeud.federation.arreter();
+    monte.serveur.stop(true);
+  }
+});
+
+test('un second abonnement du même canal est acquitté, sans doubler les événements', async () => {
+  const monte = monterAiguilleur();
+  const { noeud, id } = await nouveauNoeud(monte);
+  try {
+    const { appareil, canal } = await appairerAppareil(monte, noeud, id);
+    expect(canal.envoyer({ t: 'diffusion_ouvrir' })).toBe(true);
+    await attendreTout(() => appareil.acquitter.length > 0);
+    expect(canal.envoyer({ t: 'diffusion_ouvrir' })).toBe(true);
+    await attendreTout(() => appareil.acquitter.length > 1);
+    noeud.diffusion.diffuser({ type: 'session', session: ficheDe('s1', 'tour', 'Titre') });
+    await attendreTout(() => appareil.diffusions.length >= 1);
+    await Bun.sleep(150);
+    expect(appareil.diffusions).toHaveLength(1);
+  } finally {
+    noeud.federation.arreter();
+    monte.serveur.stop(true);
+  }
+});
+
 test('une image PNG de quelques centaines de Ko arrive intacte, octet pour octet', async () => {
   const monte = monterAiguilleur();
   const png = pngDeBruit(400);

@@ -26,9 +26,13 @@ export class DiffusionAppareil {
 
   constructor(private readonly diffusion: Diffusion) {}
 
-  /** Le canal de l'appareil reçoit désormais les événements ; l'acquittement `diffusion_ouverte` part tout de suite. */
+  /**
+   * Le canal de l'appareil reçoit désormais les événements ; l'acquittement `diffusion_ouverte` part tout de suite.
+   * Un second abonnement du même canal (l'appli a remplacé son flux sans se désabonner) est acquitté lui aussi :
+   * sans réponse, l'appli croyait le flux muet et repassait à l'interrogation.
+   */
   ouvrir(canal: CanalNoeud): void {
-    if (this.abonnements.has(canal.id)) return;
+    if (this.abonnements.has(canal.id)) return void canal.envoyer({ t: 'diffusion_ouverte' });
     const abonnement: Abonnement = {
       canal,
       retirer: () => undefined,

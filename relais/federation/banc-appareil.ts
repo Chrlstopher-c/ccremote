@@ -136,11 +136,14 @@ export class Appareil {
     if (message.t === 'diffusion_ouverte') return void this.acquitter.push(canal.id);
     if (message.t === 'reponse') return void this.reponsesTerminal.set(message.ref, { ok: message.ok, raison: message.raison });
     if (message.t === 'terminal_sortie') return void this.empiler(message.terminal, message.base64);
-    if (message.t === 'revocation') canal.fermer();
+    if (message.t === 'revocation') return canal.fermer();
+    this.horsProtocole.push(message.t);
   }
 
   /** Diffusions acquittées (identifiants de canal), dans l'ordre. */
   readonly acquitter: string[] = [];
+  /** Messages qu'un appareil ne connaît pas (l'iPhone fermerait son canal) : doit rester vide. */
+  readonly horsProtocole: string[] = [];
 
   private ajouterMorceau(ref: string, rang: number, corps: string): void {
     const liste = this.morceaux.get(ref) ?? [];

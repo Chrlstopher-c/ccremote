@@ -569,7 +569,11 @@ export class Federation {
     return this.identiteEnCours;
   }
   private surDiffusion(m: MessageClient): void {
-    surDiffusionFederee(m, { distantes: this.distantes, echanges: this.echanges, canaux: this.canaux });
+    surDiffusionFederee(m, {
+      distantes: this.distantes,
+      echanges: this.echanges,
+      liensPairs: () => this.canaux.ouverts().filter((c) => !this.estAppareil(c.membre)),
+    });
   }
 
 }

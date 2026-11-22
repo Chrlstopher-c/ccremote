@@ -13,6 +13,16 @@ public. `master` reste la version publique précédente ; `dev` porte le v2.
 Depuis le 05/11 : Claude (claude.ai, Claude Code) pilote le parc via le MCP « quart » (`quart_*`), branché depuis
 l'écran **Accès** de l'app ; relais du Pi = `dev` `2a7fadf`.
 
+## 22/11 — Flux d'un appareil : le canal de l'iPhone ne meurt plus (branche `lanterne/v6-livraison`)
+- **Bug** : la diffusion fédérée (`diffusion-federee.ts`) envoyait instantanés et confirmations à TOUS les canaux
+  ouverts, appareils compris ; l'iPhone fermait son canal sur ce message inconnu → plus de texte en direct à chaque
+  changement de fiche (donc à chaque tour). Désormais `liensPairs` = canaux ouverts vers des nœuds seulement. Test
+  `appareil-flux.test.ts` (« un appareil ne reçoit jamais les messages de fédération »), rouge sans le correctif.
+- `DiffusionAppareil.ouvrir` : un canal déjà abonné qui redemande le flux est ré-acquitté.
+- Banc réel (Sémaphore `leDirectArriveAuFilDeLEau`) : 60 deltas / 30 ms avec fiche modifiée en route → 31 paquets
+  sur 1,84 s, retard médian 32 ms, max 65 ms.
+- **À déployer** sur le moteur du portable (non fait : interdit à l'agent) ; l'iPhone neuf s'en passe déjà.
+
 ## 20/11 — Multi-compte, marche 3 côté Quart (agent Haiku, worktree `quart-mc`, branche `lanterne/multi-compte`)
 
 - Pilotage d'une session claude.ai : `POST /v1/code/sessions/{id}/events` (`{events:[evt]}`) pour message (`user`), interruption (`interrupt`), réglages (`set_model`, `set_permission_mode`, `rename_session` : noms du SDK, identiques aux modes Quart), réponses (`control_response`). Les demandes entrantes `can_use_tool` deviennent un dialogue (permission, AskUserQuestion, ExitPlanMode) ; une réponse close par ailleurs l'efface.
