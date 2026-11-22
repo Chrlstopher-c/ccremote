@@ -29,6 +29,8 @@ export interface CorpsAppairageNoeud {
   readonly code: string;
   readonly nom: string;
   readonly cle: string;
+  /** Vrai si le nœud tourne sans écran (défaut faux) : l'aiguilleur le range ainsi dans sa présence. */
+  readonly sansEcran?: boolean;
 }
 
 /** Urls acceptées pour l'aiguilleur : http ou https, sans chemin imposé (le chemin de l'API est ajouté ici). */

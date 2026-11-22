@@ -12,6 +12,7 @@ const CorpsAiguilleur = z.object({
   url: z.string().min(1).max(500),
   code: z.string().min(1).max(40),
   nom: z.string().trim().min(1).max(80),
+  sansEcran: z.boolean().optional(),
 });
 const CorpsMembre = z.object({ membre: z.string().regex(/^[a-f0-9]{12}$/) });
 const CorpsDecision = z.object({ accord: z.boolean() });

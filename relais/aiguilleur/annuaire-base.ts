@@ -31,6 +31,7 @@ export const MIGRATIONS_ANNUAIRE: readonly string[] = [
   `ALTER TABLE appairages ADD COLUMN portee TEXT NOT NULL DEFAULT 'meme_proprietaire'
      CHECK (portee IN ('meme_proprietaire', 'invitation_duo'));
    ALTER TABLE appairages ADD COLUMN nom_invite TEXT;`,
+  `ALTER TABLE membres ADD COLUMN sans_ecran INTEGER NOT NULL DEFAULT 0;`,
 ];
 
 /** Ouvre (et migre) l'annuaire. `:memory:` pour les essais. */

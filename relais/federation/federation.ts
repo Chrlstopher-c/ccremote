@@ -133,13 +133,19 @@ export class Federation {
   }
 
   /** Rejoint un aiguilleur avec un code d'appairage (une seule fois par nœud). */
-  async rejoindreAiguilleur(corps: { url: string; code: string; nom: string }): Promise<Resultat<{ id: string }>> {
+  async rejoindreAiguilleur(corps: {
+    url: string;
+    code: string;
+    nom: string;
+    sansEcran?: boolean;
+  }): Promise<Resultat<{ id: string }>> {
     const adresse = urlAiguilleurValide(corps.url);
     if (!adresse) return echec(400, 'adresse de l’aiguilleur invalide');
     if (this.config) return echec(409, 'nœud déjà relié à un aiguilleur');
     const identite = await this.identite();
     const cle = exporterIdentitePublique(identite.publique);
-    const r = await appairerNoeud(adresse, { code: corps.code, nom: corps.nom, cle }, this.options.journal);
+    const sansEcran = corps.sansEcran ?? false;
+    const r = await appairerNoeud(adresse, { code: corps.code, nom: corps.nom, cle, sansEcran }, this.options.journal);
     if (!r.ok) return echec(r.statut, r.raison);
     try {
       this.config = { url: adresse, jeton: r.jeton, id: r.id, nom: corps.nom, proprietaire: r.proprietaire };

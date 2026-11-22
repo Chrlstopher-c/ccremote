@@ -12,6 +12,8 @@ export interface Membre {
   readonly empreinteCle: string;
   readonly creeLe: string;
   readonly revoqueLe: string | null;
+  /** Nœud sans écran (la tour) : toujours faux pour un appareil. */
+  readonly sansEcran: boolean;
 }
 
 export interface NouveauMembre {
@@ -21,6 +23,7 @@ export interface NouveauMembre {
   readonly proprietaire: string;
   readonly empreinteCle: string;
   readonly jetonEmpreinte: string;
+  readonly sansEcran: boolean;
 }
 
 /** Ce qu'un code consommé apporte : le propriétaire de l'émetteur, et, pour une invitation, le nom de l'invité. */
@@ -42,6 +45,7 @@ interface LigneMembre {
   empreinte_cle: string;
   cree_le: string;
   revoque_le: string | null;
+  sans_ecran: number;
 }
 
 /** SHA-256 hexadécimal : la forme sous laquelle un jeton ou une clé est gardée. */
@@ -58,6 +62,7 @@ function versMembre(l: LigneMembre): Membre {
     empreinteCle: l.empreinte_cle,
     creeLe: l.cree_le,
     revoqueLe: l.revoque_le,
+    sansEcran: l.sans_ecran === 1,
   };
 }
 
@@ -117,8 +122,19 @@ export class Annuaire {
   creerMembre(m: NouveauMembre): void {
     this.db.transaction(() => {
       this.db
-        .query('INSERT INTO membres (id, genre, nom, proprietaire, empreinte_cle, cree_le) VALUES (?, ?, ?, ?, ?, ?)')
-        .run(m.id, m.genre, m.nom.slice(0, 80), m.proprietaire, m.empreinteCle, new Date().toISOString());
+        .query(
+          `INSERT INTO membres (id, genre, nom, proprietaire, empreinte_cle, cree_le, sans_ecran)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          m.id,
+          m.genre,
+          m.nom.slice(0, 80),
+          m.proprietaire,
+          m.empreinteCle,
+          new Date().toISOString(),
+          m.sansEcran ? 1 : 0,
+        );
       this.db
         .query('INSERT INTO jetons (empreinte, membre, cree_le) VALUES (?, ?, ?)')
         .run(m.jetonEmpreinte, m.id, new Date().toISOString());

@@ -36,6 +36,7 @@ describe('commandes locales de l’aiguilleur', () => {
       proprietaire: 'chris',
       empreinteCle: 'e'.repeat(64),
       jetonEmpreinte: 'f'.repeat(64),
+      sansEcran: false,
     });
     const sortie = executerCommande(['membres'], annuaire);
     expect(sortie).toContain('a1b2c3d4e5f6');
@@ -50,6 +51,7 @@ describe('commandes locales de l’aiguilleur', () => {
       nom: 'iphone',
       proprietaire: 'chris',
       empreinteCle: 'e'.repeat(64),
+      sansEcran: false,
       jetonEmpreinte: 'f'.repeat(64),
     });
     expect(() => executerCommande(['revoquer', '000000000000'], annuaire)).toThrow();

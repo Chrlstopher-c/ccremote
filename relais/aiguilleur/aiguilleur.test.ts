@@ -150,7 +150,16 @@ describe('schéma : l’annuaire seulement', () => {
       .all() as { name: string }[];
     expect(tables.map((t) => t.name)).toEqual(['appairages', 'jetons', 'liens_duo', 'membres']);
     const colonnes = (db.query('PRAGMA table_info(membres)').all() as { name: string }[]).map((c) => c.name);
-    expect(colonnes.sort()).toEqual(['cree_le', 'empreinte_cle', 'genre', 'id', 'nom', 'proprietaire', 'revoque_le']);
+    expect(colonnes.sort()).toEqual([
+      'cree_le',
+      'empreinte_cle',
+      'genre',
+      'id',
+      'nom',
+      'proprietaire',
+      'revoque_le',
+      'sans_ecran',
+    ]);
     db.close();
   });
 });
@@ -387,7 +396,7 @@ describe('révocation, présence, charge, journal', () => {
     await lien(etranger);
     await la.attendre((m) => m['t'] === 'presence' && JSON.stringify(m['membres']).includes('"enLigne":true'));
     expect(la.de('presence').at(-1)?.['membres']).toEqual([
-      { id: b.id, enLigne: true, nom: 'chris-noeud', genre: 'noeud', proprietaire: 'chris' },
+      { id: b.id, enLigne: true, nom: 'chris-noeud', genre: 'noeud', proprietaire: 'chris', sansEcran: false },
     ]);
     expect(la.de('presence').at(-1)?.['proprietaire']).toBe('chris');
   });

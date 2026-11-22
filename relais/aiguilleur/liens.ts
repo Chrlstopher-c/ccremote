@@ -115,7 +115,10 @@ export class Liens {
     }
   }
 
-  /** Envoie à chaque membre connecté la liste des membres qu'il voit (état, nom, genre, propriétaire). */
+  /**
+   * Envoie à chaque membre connecté la liste des membres qu'il voit (état, nom, genre, propriétaire ; `sansEcran`
+   * pour un nœud seulement).
+   */
   diffuserPresence(): void {
     const tous = this.annuaire.membres();
     for (const [id, ws] of this.connectes) {
@@ -130,6 +133,7 @@ export class Liens {
           nom: x.nom,
           genre: x.genre,
           proprietaire: x.proprietaire,
+          ...(x.genre === 'noeud' ? { sansEcran: x.sansEcran } : {}),
         }));
       this.envoyerA(ws, { t: 'presence', membres, proprietaire: moi.proprietaire });
     }
