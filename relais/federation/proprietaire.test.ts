@@ -103,3 +103,12 @@ describe('Voisinage', () => {
     expect(v.enLigne('a')).toBe(false);
   });
 });
+
+describe('Voisinage.remplacer : signale seulement un vrai changement', () => {
+  test('la même présence renvoyée ne compte pas comme un changement', () => {
+    const v = new Voisinage();
+    expect(v.remplacer([{ id: 'a', enLigne: true }])).toBe(true);
+    expect(v.remplacer([{ id: 'a', enLigne: true }])).toBe(false);
+    expect(v.remplacer([{ id: 'a', enLigne: false }])).toBe(true);
+  });
+});

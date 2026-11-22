@@ -282,10 +282,10 @@ export class Federation {
   }
 
   private surPresence(message: Extract<MessageDeAiguilleur, { t: 'presence' }>): void {
-    this.voisins.remplacer(message.membres);
+    const change = this.voisins.remplacer(message.membres);
     this.apprendreProprietaire(message.proprietaire);
     this.planifier();
-    this.signaler();
+    if (change) this.signaler();
   }
 
   /** Le propriétaire du nœud vient de l'appairage ; à défaut, de la présence, et il est alors gardé. */

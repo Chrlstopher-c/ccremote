@@ -61,9 +61,12 @@ export class Voisinage {
   private readonly infos = new Map<string, InfoMembre>();
 
   /** Remplace tout : chaque présence donne la liste complète des membres joignables. */
-  remplacer(membres: readonly MembrePresence[]): void {
+  /** Rend vrai si la liste a changé (l'aiguilleur renvoie la même présence à chaque battement). */
+  remplacer(membres: readonly MembrePresence[]): boolean {
+    const avant = JSON.stringify([...this.infos.values()]);
     this.infos.clear();
     for (const m of membres) this.infos.set(m.id, versInfo(m));
+    return JSON.stringify([...this.infos.values()]) !== avant;
   }
 
   /** Un message `ouvrir` nomme le propriétaire de l'ouvrant (il est en ligne) ; le reste attend la présence. */

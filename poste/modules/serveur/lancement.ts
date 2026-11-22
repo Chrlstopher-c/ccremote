@@ -11,9 +11,16 @@ const PERIODE_SONDE_MS = 100;
  * La commande qui lance le serveur : Bun, borné en mémoire, en CPU et en priorité par systemd-run sous Linux. Sous
  * macOS, pas de systemd ni de limite de mémoire par processus : `nice` seul.
  */
-export function commandeSysteme(point: string, plateforme: NodeJS.Platform = process.platform): string[] {
+export function commandeSysteme(
+  point: string,
+  plateforme: NodeJS.Platform = process.platform,
+  setpriv: string | null = plateforme === 'linux' ? Bun.which('setpriv') : null,
+): string[] {
   if (plateforme === 'darwin') return ['nice', '-n', '10', 'bun', 'run', point];
+  // Le serveur meurt avec le poste (signal à la mort du parent, gardé à travers systemd-run, nice et bun) : sinon
+  // chaque redémarrage du moteur laissait un serveur orphelin.
   return [
+    ...(setpriv ? [setpriv, '--pdeathsig', 'TERM'] : []),
     'systemd-run',
     '--user',
     '--scope',
