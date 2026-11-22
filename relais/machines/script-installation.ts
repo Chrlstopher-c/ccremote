@@ -42,18 +42,20 @@ export XDG_RUNTIME_DIR="\${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="\${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"`;
 
 // Jetons Claude et bornes repris du poste Quart existant (son drop-in). Sans bornes existantes, les défauts Lanterne :
-// petite machine (< 8 Go, Pi) 1 Go et 1,5 cœur ; sinon un quart de la mémoire (8 Go au plus), sans plafond de
-// processeur — une session Claude avec tous ses serveurs MCP dépasse 1 Go (OOM en boucle sur la tour le 20/11).
+// petite machine (< 8 Go, Pi) 1 Go et 1,5 cœur ; sinon les trois quarts de la mémoire, sans plafond de processeur.
+// La borne couvre le poste ET tout ce que ses sessions lancent (entraînement, compilation) : à 8 Go, un entraînement
+// lancé par une session a fait tuer le poste deux fois le 22/11. `OOMPolicy=continue` : si la borne est atteinte, le
+// noyau tue le processus fautif, l'unité (donc le poste et les autres sessions) continue.
 const DROPIN = '"$HOME/.config/systemd/user/quart-poste-distant.service.d"';
 const FILTRE_JETONS = "grep -iE '^EnvironmentFile=.*(token|jeton|claude)' | grep -v 'poste\\.env'";
 const REGLAGES_LANTERNE = `JETONS=$(cat ${DROPIN}/*.conf 2>/dev/null | ${FILTRE_JETONS} || true)
 BORNES=$(grep -hE '^(MemoryMax|MemorySwapMax|CPUQuota|Nice)=' ${DROPIN}/bornes-lanterne.conf 2>/dev/null || true)
-[ -n "$BORNES" ] || { RAM_GO=$(( $(awk '/^MemTotal:/{print $2}' /proc/meminfo) / 1048576 )); if [ "$RAM_GO" -ge 8 ]; then M=$(( RAM_GO / 4 )); [ "$M" -gt 8 ] && M=8; BORNES=$(printf '%s\\n' "MemoryMax=$M"G 'MemorySwapMax=0' 'Nice=10'); else BORNES=$(printf '%s\\n' 'MemoryMax=1G' 'MemorySwapMax=0' 'CPUQuota=150%' 'Nice=10'); fi; }`;
+[ -n "$BORNES" ] || { RAM_GO=$(( $(awk '/^MemTotal:/{print $2}' /proc/meminfo) / 1048576 )); if [ "$RAM_GO" -ge 8 ]; then M=$(( RAM_GO * 3 / 4 )); BORNES=$(printf '%s\\n' "MemoryMax=$M"G 'MemorySwapMax=0' 'Nice=10'); else BORNES=$(printf '%s\\n' 'MemoryMax=1G' 'MemorySwapMax=0' 'CPUQuota=150%' 'Nice=10'); fi; }`;
 
 function unite(id: string, n: Nommage): string {
   const titre = n.lanterne ? 'Lanterne' : 'Quart';
   const socket = n.socketTmux ? [`Environment=CCREMOTE_TMUX_SOCKET=${n.socketTmux}`] : [];
-  const jetons = n.lanterne ? ['EnvironmentFile=-%h/.config/lanterne/claude-token.env', '$JETONS', '$BORNES'] : [];
+  const jetons = n.lanterne ? ['EnvironmentFile=-%h/.config/lanterne/claude-token.env', '$JETONS', '$BORNES', 'OOMPolicy=continue'] : [];
   return [
     '[Unit]',
     `Description=${titre} — poste de la machine ${id} (installé par le relais)`,

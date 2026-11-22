@@ -80,7 +80,7 @@ describe('script d’installation Lanterne', () => {
     }).toString();
     expect(sortie).toContain('EnvironmentFile=-%h/.config/quart-poste/claude-token.env');
     expect(sortie).not.toContain('poste.env');
-    expect(sortie).toMatch(/MemoryMax=[1-8]G/);
+    expect(sortie).toMatch(/MemoryMax=[0-9]+G/);
   });
 });
 
