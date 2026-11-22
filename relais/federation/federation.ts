@@ -1,83 +1,48 @@
-// Responsabilité : la fédération « mes machines » du nœud — relié à l'aiguilleur, il s'appaire à ses pairs (décision de
-// Chris chez le visé), ouvre un lien chiffré avec chacun, puis fait voir et piloter ses sessions. Sans aiguilleur
-// configuré, rien ne démarre : le mode tunnel reste le défaut. Les données des autres nœuds restent en mémoire.
-import type { Logger } from 'pino';
+// Responsabilité : la fédération « mes machines » du nœud — relié à l'aiguilleur, il s'appaire à ses pairs
+// (décision de Chris chez le visé), ouvre un lien chiffré avec chacun, puis fait voir et piloter ses sessions. Sans
+// aiguilleur configuré, rien ne démarre : le mode tunnel reste le défaut. Ce nœud assemble les modules `*-noeud.ts`
+// du dossier.
 import type { MessageClient } from '../../commun/api-clients.ts';
-import type { MessageDeAiguilleur, MessageVersAiguilleur } from '../../commun/aiguilleur.ts';
-import {
-  empreinteIdentite,
-  exporterIdentitePublique,
-  type Identite,
-  importerIdentitePublique,
-} from '../../commun/chiffrement/identite.ts';
-import {
-  type ActionNoeud,
-  type EvenementFedere,
-  type MessageChiffre,
-  NOMBRE_MAX_DEMANDES,
-  type OrdreSigne,
-  TAILLE_MORCEAU_APPAREIL_CARACTERES,
-} from '../../commun/federation.ts';
-import { NoncesVus, verifierOrdre } from '../../commun/ordre-machine.ts';
-import { ChefAppareil, estRouteTelephone } from './chef-appareil.ts';
-import { messagesAvecCorps, Reassemblage } from './transferts.ts';
-import { DiffusionAppareil } from './appareil-diffusion.ts';
-import { TerminalAppareil } from './terminal-appareil.ts';
+import { exporterIdentitePublique, type Identite } from '../../commun/chiffrement/identite.ts';
+import { type MessageChiffre, type OrdreSigne } from '../../commun/federation.ts';
 import type { MessageSynchro } from '../../commun/synchro.ts';
-import { concerneDuo, type HandlerDuoAiguilleur, type PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
-import type { Diffusion } from '../clients/diffusion.ts';
-import type { Registre } from '../registre/registre.ts';
-import { type CanalNoeud, type HoteCanal, type PresentationDistante } from './canal.ts';
+import { type HandlerDuoAiguilleur, type PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
+import { ChefAppareil } from './chef-appareil.ts';
+import { type HoteCanal } from './canal.ts';
 import { Canaux } from './canaux.ts';
 import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
 import { CacheDistant } from './distant.ts';
 import { Distantes } from './distantes.ts';
-import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
-import {
-  fusionner,
-  noeudsAnnonces,
-  type NoeudAnnonce,
-  photoAdmissions,
-  type VerdictSource,
-  verdictSource,
-} from './admissions.ts';
-import { Echanges, type PontFederation } from './echanges.ts';
+import { DemandesAppairage } from './demandes.ts';
+import { noeudsAnnonces, type NoeudAnnonce } from './admissions.ts';
+import { Echanges } from './echanges.ts';
 import { CharteNoeud } from './charte-noeud.ts';
 import { surDiffusionFederee } from './diffusion-federee.ts';
 import { NoeudInvites } from '../invites/noeud-invites.ts';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { type EtatFederation, MEMBRE_MOI, type MachineReseau, type OptionsFederation } from './etat-federation.ts';
+import { type EtatFederation, type MachineReseau, type OptionsFederation } from './etat-federation.ts';
 import type { ActionMachine } from './actions-noeud.ts';
 import { creerMachinesNoeud, type MachinesNoeud } from './machines-noeud.ts';
-import { MOTIF_PAUSE } from './pause-noeud.ts';
 import { TerminalFedere } from './terminal-federe.ts';
-import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
-import { type Locale, identifiantDerive } from './direct-poignee.ts';
-import { adresseDirecteValide, NoeudDirect } from './direct-noeud.ts';
-import { LienDirect } from './direct-lien.ts';
-import { Tuyaux } from './tuyaux.ts';
 import type { TunnelSshConfig } from './tunnel-ssh.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
-import type { DemandeAppareil as DemandeAppareilFedere, ReponseAppareil as ReponseAppareilFedere, ServirAppareil } from './appareils.ts';
-import { envoyerReponseFlux } from './reponse-flux-appareil.ts';
-import { type MembreVu, Voisinage } from './proprietaire.ts';
+import { Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
-import {
-  type AppairageEnCours,
-  appairagesEnCours,
-  chargerIdentite,
-  noeudAppaire,
-  type NoeudAppaire,
-} from './appairages.ts';
+import { chargerIdentite, type NoeudAppaire } from './appairages.ts';
+import { LiensNoeud } from './liens-noeud.ts';
+import { AdmissionsNoeud } from './admissions-noeud.ts';
+import { AppareilsNoeud } from './appareils-noeud.ts';
+import { AppairageNoeud } from './appairage-noeud.ts';
+import { MachinesDuReseau } from './machines-du-reseau.ts';
+import type { PortNoeud } from './noeud-port.ts';
+import { HoteNoeud } from './hote-noeud.ts';
+import { etatFederation } from './vue-federation.ts';
 
 export type { NoeudAppaire };
 
 const DELAI_DEMANDE_MS = 10 * 60 * 1000;
 const MARGE_APPAIRAGE_MS = 30_000;
-const DELAI_LIEN_MIN_MS = 1_000;
-const DELAI_LIEN_MAX_MS = 30_000;
-const INTERVALLE_PLANIFICATION_MS = 5_000;
 export type { EtatFederation, OptionsFederation };
 
 export class Federation {
@@ -97,42 +62,25 @@ export class Federation {
   private readonly refus = new Set<string>();
   private readonly voisins = new Voisinage();
   private config: ConfigAiguilleur | null;
-  private duo: HandlerDuoAiguilleur | null = null;
-  private lien: LienAiguilleur | null = null;
-  private readonly directs: NoeudDirect;
-  private readonly tuyaux: Tuyaux;
-  private readonly adressesEnAttente = new Map<string, string>();
-  private identiteChargee: Identite | null = null;
-  private idDirect: string | null = null;
-  private motifArret: MotifArret | null = null;
-  private identiteEnCours: Promise<Identite> | null = null;
-  private desabonner: (() => void) | null = null;
-  private planificateur: ReturnType<typeof setInterval> | null = null;
-  private recepteurSynchro: ((membre: string, brut: unknown) => void) | null = null;
-  readonly terminaux: TerminalFedere;
-  /** Flux en direct des appareils (par l'aiguilleur) et morceaux de leurs requêtes en route. */
-  private readonly diffusionAppareil: DiffusionAppareil;
-  private readonly terminauxAppareil: TerminalAppareil;
-  private readonly transfertsAppareil = new Reassemblage();
-  private readonly revoques: Set<string>;
-  /** Appareils révoqués (définitif) : une admission reçue d'un pair pour l'un d'eux est ignorée. */
-  private readonly appareilsRevoques: Set<string>;
+  /** Le lien vers l'aiguilleur, les liaisons directes et le duo (`liens-noeud.ts`). */
+  private readonly liens: LiensNoeud;
+  private readonly admissions: AdmissionsNoeud;
+  private readonly appareils: AppareilsNoeud;
+  private readonly appairage: AppairageNoeud;
+  private readonly machinesDuReseau: MachinesDuReseau;
   private readonly machines: MachinesNoeud;
-  /** Téléphone chef : ses routes `/api/reseau/telephone/…`, servies ici (charte, ordres signés, demandes). */
   private readonly chefAppareil: ChefAppareil;
-  /** Nonces des ordres reçus d'un pair, pour ce nœud : un ordre ne s'applique qu'une fois. */
-  private readonly noncesOrdre = new NoncesVus();
+  private readonly port: PortNoeud;
+  private readonly hoteNoeud: HoteNoeud;
+  /** Terminaux des sessions de ce nœud, ouverts par un pair (les terminaux de machine sont aux appareils). */
+  readonly terminaux: TerminalFedere;
+  private desabonner: (() => void) | null = null;
+  private recepteurSynchro: ((membre: string, brut: unknown) => void) | null = null;
+  private identiteEnCours: Promise<Identite> | null = null;
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
     this.pairs = this.secrets.lirePairs();
-    this.revoques = new Set(this.secrets.lireRevoques());
-    this.appareilsRevoques = new Set(this.secrets.lireAppareilsRevoques());
-    this.diffusionAppareil = new DiffusionAppareil(options.diffusion);
-    this.terminauxAppareil = new TerminalAppareil(
-      () => this.terminaux.locauxBranches,
-      (membre, requete) => this.charte.autorise(membre, requete),
-    );
     this.config = this.secrets.lireAiguilleur();
     this.charte = this.creerCharte();
     this.demandes = new DemandesAppairage(options.delaiDemandeMs ?? DELAI_DEMANDE_MS, () => Date.now());
@@ -160,19 +108,20 @@ export class Federation {
       terminaux: { traiter: (c, m) => this.terminaux.traiter(c, m) },
       autoriser: (membre, requete) => this.charte.autorise(membre, requete),
     });
-    const transports = this.creerTransports();
-    this.tuyaux = transports.tuyaux;
-    this.directs = transports.directs;
     this.hote = this.creerHote();
-    this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
-    const { registre, journal } = options;
+    this.canaux = new Canaux(this.hote, (m) => this.liens.emettre(m));
+    this.port = this.portNoeud();
+    this.liens = new LiensNoeud(this.port);
+    this.admissions = new AdmissionsNoeud(this.port);
     this.terminaux = new TerminalFedere({
       echanges: this.echanges,
       canaux: this.canaux,
-      registre,
-      journal,
+      registre: options.registre,
+      journal: options.journal,
       autorise: (membre, requete) => this.charte.autorise(membre, requete),
     });
+    this.chefAppareil = this.creerChefAppareil();
+    this.appareils = new AppareilsNoeud(this.port, this.terminaux, this.chefAppareil);
     this.distantes = new Distantes({
       registre: options.registre,
       diffusion: options.diffusion,
@@ -190,12 +139,132 @@ export class Federation {
     this.machines = creerMachinesNoeud({
       options: optionsMachines,
       echanges: this.echanges,
-      machineDe: (m) => this.machineDe(m),
-      verifierOrdre: (ordre, action) => this.ordreValide(ordre, action),
+      machineDe: (m) => this.machinesDuReseau.machineDe(m),
+      verifierOrdre: (ordre, action) => this.machinesDuReseau.ordreValide(ordre, action),
     });
-    this.chefAppareil = this.creerChefAppareil();
+    this.machinesDuReseau = new MachinesDuReseau(this.port, this.machines);
+    this.appairage = new AppairageNoeud(this.port, {
+      liens: this.liens,
+      admissions: this.admissions,
+      demandes: this.demandes,
+      terminaux: this.terminaux,
+      machines: this.machines,
+      echanges: this.echanges,
+      chefAppareilRelie: () => this.chefAppareilRelie(),
+    });
+    this.hoteNoeud = new HoteNoeud(this.port, {
+      echanges: this.echanges,
+      invites: this.invites,
+      machines: this.machines,
+      admissions: this.admissions,
+      appareils: this.appareils,
+      appairage: this.appairage,
+      terminaux: this.terminaux,
+      demandes: this.demandes,
+      recepteurSynchro: () => this.recepteurSynchro,
+      estAppareil: (membre) => this.estAppareil(membre),
+    });
   }
 
+  /** Ce que les modules du nœud lisent ou écrivent ici : le nœud reste le seul propriétaire de ces données. */
+  private portNoeud(): PortNoeud {
+    return {
+      options: this.options,
+      secrets: this.secrets,
+      canaux: this.canaux,
+      voisins: this.voisins,
+      charte: this.charte,
+      distant: this.distant,
+      refus: this.refus,
+      pairs: () => this.pairs,
+      definirPairs: (pairs) => {
+        this.pairs = pairs;
+      },
+      config: () => this.config,
+      definirConfig: (config) => {
+        this.config = config;
+      },
+      identifiantProtocole: () => this.identifiantProtocole(),
+      proprietaireLocal: () => this.proprietaireLocal(),
+      estNoeud: (membre) => this.estNoeud(membre),
+      identite: () => this.identite(),
+      signaler: () => this.signaler(),
+      sauverPairs: () => this.sauverPairs(),
+    };
+  }
+
+  async etat(): Promise<EtatFederation> {
+    return etatFederation(this.port, this.liens, this.demandes);
+  }
+
+  arreter(): void {
+    this.invites.arreter();
+    this.liens.arreterDirects();
+    this.desabonner?.();
+    this.desabonner = null;
+    this.liens.arreterPlanificateur();
+    this.echanges.arreter();
+    this.machines.etats.arreter();
+    this.machines.actions.arreter();
+    this.canaux.fermerTout();
+    this.appareils.arreter();
+    this.demandes.arreter();
+    this.liens.arreterLien();
+    this.voisins.effacer();
+  }
+
+  /** Premier contact avec un nœud en ligne : une demande part, Chris la tranche chez lui. */
+  appairer(membre: string): Resultat<{ canal: string }> {
+    return this.appairage.appairer(membre);
+  }
+
+  /**
+   * Premier contact sans aiguilleur : une liaison directe vers `adresse` (réseau local, VPN, tunnel), puis la demande
+   * d'appairage, que Chris tranche chez le visé avec les deux empreintes. L'adresse n'est retenue qu'à l'accord.
+   */
+  async appairerDirect(adresse: string): Promise<Resultat<{ membre: string; canal: string }>> {
+    return this.appairage.appairerDirect(adresse);
+  }
+
+  /** Le transport d'un pair apparié : une adresse directe (joignable sans aiguilleur), ou aucune (aiguilleur seul). */
+  transportPair(membre: string, adresse: string | null): Resultat<null> {
+    return this.liens.transportPair(membre, adresse);
+  }
+
+  /** Réglages de la liaison directe : écoute locale (`hôte:port`, vide pour aucune) et propriétaire du réseau. */
+  configurerDirecte(corps: {
+    ecoute?: string | null;
+    proprietaire?: string | null;
+    tunnels?: TunnelSshConfig[];
+  }): Resultat<null> {
+    return this.liens.configurerDirecte(corps);
+  }
+
+  /**
+   * Décision de Chris sur une demande. Locale : tranchée ici. Vue chez un autre nœud : relayée à ce nœud, qui la
+   * tranche chez lui ; si ce nœud n'est pas relié, rien ne part (409). Jamais d'acceptation automatique.
+   */
+  decider(id: string, accord: boolean): Resultat<null> {
+    return this.appairage.decider(id, accord);
+  }
+
+  /** Le duo par l'aiguilleur (étape 7) partage ce lien : ses canaux (préfixe `duo-`) lui sont remis. */
+  brancherDuo(handler: HandlerDuoAiguilleur): void {
+    this.liens.brancherDuo(handler);
+  }
+
+  /** Soi, puis chaque nœud apparié : son dernier état connu (null s'il n'en a jamais envoyé) et s'il est relié. */
+  async machinesReseau(): Promise<MachineReseau[]> {
+    return this.machinesDuReseau.machinesReseau();
+  }
+
+  /**
+   * Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action relayée à un pair relié.
+   * `ordre` : l'ordre signé par le téléphone chef, que le pair vérifiera dans sa propre charte.
+   */
+  async agirSurMachine(membre: string, action: ActionMachine, ordre?: OrdreSigne): Promise<Resultat<null>> {
+    return this.machinesDuReseau.agirSurMachine(membre, action, ordre);
+  }
   private creerChefAppareil(): ChefAppareil {
     const { servirChef } = this.options;
     return new ChefAppareil({
@@ -219,33 +288,8 @@ export class Federation {
     this.invites.demarrer();
     void this.charte.demarrer();
     this.machines.etats.demarrer(() => this.canaux.ouverts().filter((c) => this.estNoeud(c.membre)));
-    if (this.config) this.demarrerLien();
-    void this.demarrerDirect();
-  }
-
-  private async demarrerDirect(): Promise<void> {
-    this.identiteChargee = await this.identite();
-    this.idDirect = await identifiantDerive(this.identiteChargee.publique);
-    this.directs.demarrer();
-    this.demarrerPlanificateur();
-  }
-
-  arreter(): void {
-    this.invites.arreter();
-    this.directs.arreter();
-    this.desabonner?.();
-    this.desabonner = null;
-    if (this.planificateur) clearInterval(this.planificateur);
-    this.planificateur = null;
-    this.echanges.arreter();
-    this.machines.etats.arreter();
-    this.machines.actions.arreter();
-    this.canaux.fermerTout();
-    this.diffusionAppareil.fermerTout();
-    this.demandes.arreter();
-    this.lien?.arreter();
-    this.lien = null;
-    this.voisins.effacer();
+    if (this.config) this.liens.demarrerLien();
+    void this.liens.demarrerDirect();
   }
 
   /** Rejoint un aiguilleur avec un code d'appairage (une seule fois par nœud). */
@@ -270,7 +314,7 @@ export class Federation {
       this.config = null;
       return echec(500, 'configuration de l’aiguilleur non écrite');
     }
-    this.demarrerLien();
+    this.liens.demarrerLien();
     return ok({ id: r.id });
   }
 
@@ -284,94 +328,14 @@ export class Federation {
     return this.charte.compteDeMoi();
   }
 
-  /** Le duo par l'aiguilleur (étape 7) partage ce lien : ses canaux (préfixe `duo-`) lui sont remis. */
-  brancherDuo(handler: HandlerDuoAiguilleur): void {
-    this.duo = handler;
-  }
-
   portDuo(): PortAiguilleurDuo {
     return {
       membreLocal: () => this.config?.id ?? null,
       identiteLocale: () => this.identite(),
-      envoyer: (m) => this.emettre(m),
+      envoyer: (m) => this.liens.emettre(m),
       enLigne: (membre) => this.voisins.enLigne(membre),
-      relie: () => this.lien?.connecte() ?? false,
+      relie: () => this.liens.lien?.connecte() ?? false,
     };
-  }
-
-  /** Premier contact avec un nœud en ligne : une demande part, Chris la tranche chez lui. */
-  appairer(membre: string): Resultat<{ canal: string }> {
-    if (!this.lien?.connecte() && !this.directs.joignable(membre)) return echec(409, 'aiguilleur non relié');
-    if (this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud déjà apparié');
-    const refus = this.voisins.refusPour(membre, this.proprietaireLocal());
-    if (refus) return echec(409, refus);
-    if (!this.voisins.enLigne(membre)) return echec(409, 'nœud hors ligne');
-    if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
-    const canal = this.canaux.ouvrir(membre, 'appairage');
-    this.signaler();
-    return canal ? ok({ canal: canal.id }) : echec(503, 'aucun chemin vers ce nœud');
-  }
-
-  /**
-   * Premier contact sans aiguilleur : une liaison directe vers `adresse` (réseau local, VPN, tunnel), puis la demande
-   * d'appairage, que Chris tranche chez le visé avec les deux empreintes. L'adresse n'est retenue qu'à l'accord.
-   */
-  async appairerDirect(adresse: string): Promise<Resultat<{ membre: string; canal: string }>> {
-    if (!this.identifiantProtocole()) return echec(409, 'identité du nœud pas prête');
-    if (!adresseDirecteValide(adresse)) return echec(400, 'adresse invalide');
-    const lien = await this.directs.composerSortant(adresse, null);
-    if (!lien?.pair) return echec(503, 'nœud injoignable à cette adresse');
-    const membre = lien.pair.id;
-    const refus = this.voisins.refusPour(membre, this.proprietaireLocal());
-    if (refus) {
-      lien.fermer('hors de nos machines');
-      return echec(409, refus);
-    }
-    if (this.pairs.some((p) => p.id === membre)) return echec(409, 'nœud déjà apparié');
-    if (this.canaux.avec(membre)) return echec(409, 'un échange est déjà en cours avec ce nœud');
-    const canal = this.canaux.ouvrir(membre, 'appairage');
-    if (!canal) return echec(503, 'aucun chemin vers ce nœud');
-    this.adressesEnAttente.set(membre, adresse.trim());
-    this.signaler();
-    return ok({ membre, canal: canal.id });
-  }
-
-  /** Le transport d'un pair apparié : une adresse directe (joignable sans aiguilleur), ou aucune (aiguilleur seul). */
-  transportPair(membre: string, adresse: string | null): Resultat<null> {
-    if (!this.pairs.some((p) => p.id === membre && p.genre === 'noeud')) return echec(404, 'nœud non apparié');
-    if (adresse !== null && !adresseDirecteValide(adresse)) return echec(400, 'adresse invalide');
-    if (adresse === null) this.directs.oublier(membre);
-    else this.directs.retenirAdresse(membre, adresse.trim());
-    this.directs.relancer();
-    this.signaler();
-    return ok(null);
-  }
-
-  /** Réglages de la liaison directe : écoute locale (`hôte:port`, vide pour aucune) et propriétaire du réseau. */
-  configurerDirecte(corps: {
-    ecoute?: string | null;
-    proprietaire?: string | null;
-    tunnels?: TunnelSshConfig[];
-  }): Resultat<null> {
-    if (corps.ecoute && !adresseDirecteValide(corps.ecoute)) return echec(400, 'adresse d’écoute invalide');
-    if (corps.proprietaire && !/^[a-z0-9][a-z0-9-]{0,39}$/.test(corps.proprietaire)) {
-      return echec(400, 'propriétaire : minuscules, chiffres, tirets');
-    }
-    this.directs.configurer({
-      ...(corps.ecoute !== undefined ? { ecoute: corps.ecoute || null } : {}),
-      ...(corps.proprietaire !== undefined ? { proprietaire: corps.proprietaire || null } : {}),
-      ...(corps.tunnels !== undefined ? { tunnels: corps.tunnels } : {}),
-    });
-    this.signaler();
-    return ok(null);
-  }
-
-  /**
-   * Décision de Chris sur une demande. Locale : tranchée ici. Vue chez un autre nœud : relayée à ce nœud, qui la
-   * tranche chez lui ; si ce nœud n'est pas relié, rien ne part (409). Jamais d'acceptation automatique.
-   */
-  decider(id: string, accord: boolean): Resultat<null> {
-    return this.demandes.decider(id, accord) ? ok(null) : echec(404, 'demande introuvable');
   }
 
   /**
@@ -383,10 +347,10 @@ export class Federation {
     if (!pair) return echec(404, 'nœud non apparié');
     const canal = this.canaux.avec(membre);
     if (canal?.ouvert) canal.envoyer({ t: 'revocation' });
-    this.marquerRevoque(membre);
-    this.oublierPair(membre);
+    this.admissions.marquerRevoque(membre);
+    this.appairage.oublierPair(membre);
     canal?.fermerApresEnvois();
-    if (pair.genre === 'appareil') this.marquerAppareilRevoque(membre);
+    if (pair.genre === 'appareil') this.admissions.marquerAppareilRevoque(membre);
     return ok(null);
   }
 
@@ -401,14 +365,7 @@ export class Federation {
 
   /** L'identifiant du nœud dans le protocole : celui de l'aiguilleur s'il est relié, sinon celui de son identité. */
   private identifiantProtocole(): string | null {
-    return this.config?.id ?? this.idDirect;
-  }
-
-  private localeDirecte(): Locale | null {
-    const identite = this.identiteChargee;
-    const id = this.identifiantProtocole();
-    if (!identite || !id) return null;
-    return { id, identite, nom: this.config?.nom ?? this.options.machine, proprietaire: this.proprietaireLocal() };
+    return this.config?.id ?? this.liens.idDirect;
   }
 
   /** Un message synchro vers un pair apparié dont le lien est ouvert ; rien ne part sinon. */
@@ -418,182 +375,6 @@ export class Federation {
     if (!canal) return echec(409, 'nœud hors ligne ou non relié');
     return canal.envoyer({ t: 'synchro', m: message }) ? ok(null) : echec(503, 'envoi impossible');
   }
-
-  async etat(): Promise<EtatFederation> {
-    const identite = await this.identite();
-    const lien = (id: string): boolean => this.canaux.liaisonOuverteAvec(id) !== null;
-    const noeuds = await Promise.all(
-      this.pairs
-        .filter((p) => p.genre === 'noeud')
-        .map((p) => noeudAppaire(p, this.voisins.enLigne(p.id), lien(p.id))),
-    );
-    const config = this.config;
-    return {
-      aiguilleur: config
-        ? {
-            url: config.url,
-            id: config.id,
-            nom: config.nom,
-            proprietaire: config.proprietaire ?? null,
-            relie: this.lien?.connecte() ?? false,
-            motif: this.motifArret,
-          }
-        : null,
-      empreinteLocale: await empreinteIdentite(identite.publique),
-      membres: this.voisins.liste(this.proprietaireLocal()),
-      noeuds,
-      demandes: this.demandes.lister(),
-      appairages: await appairagesEnCours(this.canaux.actifs()),
-      directe: this.directs.etat(),
-      liaisons: this.directs.liaisons(),
-    };
-  }
-
-  // ---- Lien avec l'aiguilleur ---------------------------------------------------------------------------------
-
-  private demarrerLien(): void {
-    const config = this.config;
-    if (!config) return;
-    this.lien?.arreter();
-    this.motifArret = null;
-    this.lien = new LienAiguilleur(
-      {
-        url: config.url,
-        jeton: config.jeton,
-        delaiMinMs: DELAI_LIEN_MIN_MS,
-        delaiMaxMs: DELAI_LIEN_MAX_MS,
-        journal: this.options.journal.child({ domaine: 'aiguilleur' }),
-      },
-      {
-        surMessage: (m) => this.surMessage(m),
-        surConnexion: (connecte) => this.surConnexion(connecte),
-        surArret: (motif) => this.surArret(motif),
-      },
-    );
-    this.lien.demarrer();
-    void this.charte.essayerReprise();
-    this.demarrerPlanificateur();
-  }
-
-  private demarrerPlanificateur(): void {
-    this.planificateur ??= setInterval(
-      () => this.planifier(),
-      this.options.intervallePlanificationMs ?? INTERVALLE_PLANIFICATION_MS,
-    );
-  }
-
-  private proprietaireDirecte(): string | null {
-    return this.directs.config.proprietaire;
-  }
-
-  // Liaison directe ouverte : le pair est joignable (le voisinage le sait), et on le retient comme en ligne.
-  private liaisonDirecteOuverte(lien: LienDirect): void {
-    const pair = lien.pair;
-    if (!pair) return;
-    this.voisins.memoriserDirect({
-      id: pair.id,
-      enLigne: true,
-      nom: pair.nom,
-      genre: 'noeud',
-      proprietaire: pair.proprietaire ?? null,
-    });
-    this.options.journal.info({ membre: pair.id }, 'liaison directe : pair joint');
-    this.signaler();
-  }
-
-  private liaisonDirecteFermee(lien: LienDirect): void {
-    const id = lien.pair?.id;
-    if (!id) return;
-    this.voisins.retirerDirect(id);
-    for (const canal of this.canaux.actifs()) if (canal.membre === id) canal.surFermetureDistante();
-    this.signaler();
-  }
-
-  private emettre(message: MessageVersAiguilleur): boolean {
-    if (message.t === 'donnees') this.options.observer?.('envoi', message.charge);
-    return this.tuyaux.envoyer(message);
-  }
-
-  private messageDirect(lien: LienDirect, message: MessageDeAiguilleur): void {
-    const membre = lien.pair?.id;
-    if (!membre || concerneDuo(message)) {
-      return this.options.journal.warn({ membre }, 'liaison directe : message refusé');
-    }
-    if (message.t === 'ouvrir') this.tuyaux.ouvertParPair(message.canal, membre);
-    this.surMessageRelaye(message);
-  }
-
-  private surMessage(message: MessageDeAiguilleur): void {
-    if (message.t === 'presence') return this.surPresence(message);
-    if (message.t === 'ouvrir' && message.proprietaire) this.voisins.memoriserOuvrant(message.de, message.proprietaire);
-    this.surMessageRelaye(message);
-  }
-
-  // Ce que l'aiguilleur et une liaison directe ont en commun : canaux, données, duo.
-  private surMessageRelaye(message: MessageDeAiguilleur): void {
-    if (message.t === 'fermer') this.tuyaux.oublier(message.canal);
-    if (message.t === 'donnees') this.options.observer?.('reception', message.charge);
-    if (concerneDuo(message)) return this.duo?.surMessage(message);
-    this.canaux.surMessage(message);
-  }
-
-  private surPresence(message: Extract<MessageDeAiguilleur, { t: 'presence' }>): void {
-    const change = this.voisins.remplacer(message.membres);
-    this.apprendreProprietaire(message.proprietaire);
-    this.planifier();
-    if (change) this.signaler();
-  }
-
-  /** Le propriétaire du nœud vient de l'appairage ; à défaut, de la présence, et il est alors gardé. */
-  private apprendreProprietaire(proprietaire: string | undefined): void {
-    const config = this.config;
-    if (!config || !proprietaire || config.proprietaire === proprietaire) return;
-    if (config.proprietaire) {
-      return this.options.journal.error('propriétaire différent de celui de la présence : ignoré');
-    }
-    this.config = { ...config, proprietaire };
-    try {
-      this.secrets.ecrireAiguilleur(this.config);
-    } catch {
-      this.options.journal.error('propriétaire du nœud non sauvegardé');
-    }
-  }
-
-  private proprietaireLocal(): string | null {
-    return this.config?.proprietaire ?? this.proprietaireDirecte();
-  }
-
-  // Le lien part du nœud au plus petit identifiant : un seul canal par paire, sans collision à l'ouverture.
-  // Seuls nos nœuds, en ligne, sont reliés : un pair qui n'est plus des nôtres ne reçoit plus de lien.
-  private planifier(): void {
-    const moi = this.identifiantProtocole();
-    if (!moi) return;
-    this.directs.relancer();
-    const proprio = this.proprietaireLocal();
-    for (const p of this.pairs) {
-      if (p.genre === 'appareil') continue;
-      if (p.id <= moi || this.refus.has(p.id) || !this.voisins.joignable(p.id, proprio)) continue;
-      if (!this.canaux.avec(p.id)) this.canaux.ouvrir(p.id, 'lien');
-    }
-  }
-
-  private surConnexion(connecte: boolean): void {
-    this.options.journal.info({ connecte }, 'lien vers l’aiguilleur');
-    this.duo?.surConnexion(connecte);
-    this.signaler();
-    if (connecte) return;
-    for (const canal of this.canaux.actifs()) canal.surFermetureDistante();
-    this.voisins.effacer();
-    for (const p of this.pairs) this.distant.enLigne(p.id, false);
-  }
-
-  private surArret(motif: MotifArret): void {
-    this.motifArret = motif;
-    this.signaler();
-    this.options.journal.warn({ motif }, 'lien vers l’aiguilleur arrêté : ce nœud n’est plus relié');
-  }
-
-  // ---- Hôte des canaux ------------------------------------------------------------------------------------------
 
   private creerCharte(): CharteNoeud {
     const { journal, machine, peutReprendre } = this.options;
@@ -612,27 +393,6 @@ export class Federation {
     });
   }
 
-  // Les deux tuyaux du protocole : l'aiguilleur (son lien) et les liaisons directes (sans aiguilleur).
-  private creerTransports(): { tuyaux: Tuyaux; directs: NoeudDirect } {
-    const directs = new NoeudDirect({
-      journal: this.options.journal.child({ domaine: 'directe' }),
-      config: this.secrets.lireDirecte(),
-      sauver: (c) => this.secrets.ecrireDirecte(c),
-      locale: () => this.localeDirecte(),
-      pairs: () => this.pairs,
-      ouvert: (lien) => this.liaisonDirecteOuverte(lien),
-      ferme: (lien) => this.liaisonDirecteFermee(lien),
-      message: (lien, m) => this.messageDirect(lien, m),
-      commandeSsh: this.options.commandeSsh ?? 'ssh',
-      knownHosts: join(this.options.dossierSecrets, 'federation', 'known_hosts'),
-    });
-    const tuyaux = new Tuyaux({
-      envoyerAiguilleur: (m) => this.lien?.envoyer(m) ?? false,
-      envoyerDirect: (membre, m) => this.directs.envoyer(membre, m),
-    });
-    return { tuyaux, directs };
-  }
-
   private creerHote(): HoteCanal {
     return {
       journal: this.options.journal,
@@ -641,275 +401,33 @@ export class Federation {
       nomLocal: () => this.config?.nom ?? this.options.machine,
       genreLocal: () => 'noeud',
       pairDe: (membre) => this.pairs.find((p) => p.id === membre) ?? null,
-      envoyerAiguilleur: (m) => this.emettre(m),
-      presentationRecue: (canal, p) => void this.presentationRecue(canal, p),
-      appairageAccepte: (canal, p) => this.appairageAccepte(canal.membre, p),
+      envoyerAiguilleur: (m) => this.liens.emettre(m),
+      presentationRecue: (canal, p) => void this.appairage.presentationRecue(canal, p),
+      appairageAccepte: (canal, p) => this.appairage.appairageAccepte(canal.membre, p),
       appairageRefuse: (canal, raison) => {
         this.options.journal.warn({ membre: canal.membre, raison }, 'appairage refusé');
         this.signaler();
       },
-      liaisonOuverte: (canal) => (this.liaisonOuverte(canal), this.signaler()),
-      liaisonRefusee: (canal, raison) => this.liaisonRefusee(canal, raison),
-      messageRecu: (canal, m) => void this.messageRecu(canal, m),
-      canalFerme: (canal) => (this.canalFerme(canal), this.signaler()),
-      motifRefusInconnu: (membre) => (this.revoques.has(membre) ? 'révoqué' : 'identité non appairée'),
+      liaisonOuverte: (canal) => (this.hoteNoeud.liaisonOuverte(canal), this.signaler()),
+      liaisonRefusee: (canal, raison) => this.hoteNoeud.liaisonRefusee(canal, raison),
+      messageRecu: (canal, m) => void this.hoteNoeud.messageRecu(canal, m),
+      canalFerme: (canal) => (this.hoteNoeud.canalFerme(canal), this.signaler()),
+      motifRefusInconnu: (membre) => (this.admissions.estRevoque(membre) ? 'révoqué' : 'identité non appairée'),
     };
   }
 
-  // Côté visé : la demande part avec les deux empreintes ; Chris accepte ou refuse, l'expiration vaut refus.
-  private async presentationRecue(canal: CanalNoeud, presentation: PresentationDistante): Promise<void> {
-    const refus =
-      presentation.genre === 'appareil'
-        ? this.voisins.refusAppareil(canal.membre, this.proprietaireLocal())
-        : this.voisins.refusPour(canal.membre, this.proprietaireLocal());
-    if (refus) {
-      this.options.journal.warn({ membre: canal.membre, raison: refus }, 'présentation refusée : pas un de nos nœuds');
-      return canal.decider(false);
-    }
-    try {
-      const empreinte = await empreinteIdentite(await importerIdentitePublique(presentation.identite));
-      const locale = await empreinteIdentite((await this.identite()).publique);
-      if (!canal.actif) return;
-      const suite = this.charte.suiteAppairage(presentation, this.chefAppareilRelie());
-      if (suite === 'accord') return this.decisionAppairage(canal, presentation, true);
-      if (suite === 'refus') {
-        this.options.journal.warn({ membre: canal.membre }, 'présentation refusée : demande à un chef du réseau');
-        return canal.decider(false);
-      }
-      if (this.demandes.lister().length >= NOMBRE_MAX_DEMANDES) return canal.decider(false);
-      this.demandes.ajouter(
-        {
-          membre: canal.membre,
-          nom: presentation.nom,
-          empreinte,
-          empreinteLocale: locale,
-          genre: presentation.genre ?? 'noeud',
-          identite: presentation.identite,
-        },
-        (accord) => {
-          void this.decisionAppairage(canal, presentation, accord);
-          this.signaler();
-        },
-      );
-      this.options.notifier?.(
-        'Demande d’appairage',
-        `${presentation.nom} demande à rejoindre tes machines : compare les empreintes dans Paramètres › Réseau.`,
-      );
-      this.signaler();
-    } catch (erreur) {
-      this.options.journal.error({ err: erreur, membre: canal.membre }, 'présentation d’un nœud illisible');
-      canal.fermer();
-    }
+  /** Ce nœud est en pause : aucune nouvelle session (les sessions en cours continuent). */
+  enPause(): boolean {
+    return this.machines.pause.enPause();
   }
 
-  // Sous une charte, un accord fait d'abord entrer le membre dans la charte : sinon, le pair n'est pas admis.
-  private async decisionAppairage(
-    canal: CanalNoeud,
-    presentation: PresentationDistante,
-    accord: boolean,
-  ): Promise<void> {
-    if (accord && !(await this.charte.admettre(canal.membre, presentation))) return canal.decider(false);
-    if (accord) this.enregistrerPair(canal.membre, presentation);
-    canal.decider(accord);
+  /** Un téléphone chef est relié à ce nœud : il tranche les demandes d'appairage qui arrivent ici. */
+  private chefAppareilRelie(): boolean {
+    return this.canaux.ouverts().some((c) => this.estAppareil(c.membre) && this.charte.estChef(c.membre));
   }
-
-  // Appairage demandé d'ici (« Appairer » : une machine avec Lanterne) : sous une charte dont ce nœud est chef, elle y
-  // entre comme pair. Un nœud ajouté par SSH demande lui-même, et entre comme serveur (decisionAppairage).
-  private appairageAccepte(membre: string, presentation: PresentationDistante): void {
-    this.enregistrerPair(membre, presentation);
-    const adresse = this.adressesEnAttente.get(membre);
-    if (adresse !== undefined) {
-      this.adressesEnAttente.delete(membre);
-      this.directs.retenirAdresse(membre, adresse);
-    }
-    if (this.charte.estChef(this.identifiantProtocole() ?? '')) void this.charte.admettre(membre, presentation, 'pair');
-  }
-
-  private liaisonOuverte(canal: CanalNoeud): void {
-    this.refus.delete(canal.membre);
-    if (this.estAppareil(canal.membre)) return;
-    this.distant.enLigne(canal.membre, true);
-    if (this.echanges.peutVoir(canal.membre)) {
-      for (const message of this.echanges.instantanes(canal.membre)) canal.envoyer(message);
-    }
-    this.invites.emettreActivites();
-    this.envoyerAdmissionsA(canal);
-    this.charte.envoyerA(canal);
-    void this.machines.etats.envoyerA(canal);
-  }
-
-  private liaisonRefusee(canal: CanalNoeud, raison: string): void {
-    this.refus.add(canal.membre);
-    this.options.journal.warn({ membre: canal.membre, raison }, 'lien refusé par le nœud : appairage à refaire');
-  }
-
-  private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
-    if (message.t === 'charte') return this.charte.recevoir(canal.membre, message, this.sourceDe(canal.membre));
-    if (this.estAppareil(canal.membre)) return this.messageAppareil(canal, message);
-    if (message.t === 'api' || message.t === 'api_reponse') return canal.fermer();
-    if (message.t === 'admissions') return this.messageAdmissions(canal, message);
-    if (message.t === 'revocation') {
-      this.oublierPair(canal.membre);
-      // Un lien rouvert entre-temps (planification) vers ce pair ne doit pas survivre à la révocation.
-      for (const autre of this.canaux.actifs()) if (autre.membre === canal.membre) autre.fermer();
-      return;
-    }
-    if (message.t === 'synchro') return this.recepteurSynchro?.(canal.membre, message.m);
-    if (message.t === 'etat_noeud') return this.machines.etats.recevoir(canal.membre, message.etat);
-    if (message.t === 'activite_invites') return this.invites.recevoirActivite(canal.membre, message.activites);
-    if (message.t === 'action_noeud') return this.machines.actions.recevoir(canal, message);
-    if (message.t === 'ouvrir' && this.machines.pause.enPause()) {
-      return this.echanges.reponse(canal, message.ref, false, MOTIF_PAUSE);
-    }
-    await this.echanges.traiter(canal, message);
-  }
-
-  /**
-   * Un appareil n'échange que l'API clients, le flux en direct et le terminal de ce nœud ; tout autre message ferme
-   * son canal.
-   */
-  private async messageAppareil(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
-    switch (message.t) {
-      case 'api':
-        return this.requeteAppareil(canal, message);
-      case 'morceau':
-        this.transfertsAppareil.recevoir(canal.membre, message);
-        return undefined;
-      case 'diffusion_ouvrir':
-        return this.diffusionAppareil.ouvrir(canal);
-      case 'diffusion_fermer':
-        return this.diffusionAppareil.fermer(canal);
-      case 'terminal_poste':
-        return this.terminauxAppareil.ouvrir(canal, message);
-      case 'terminal_entree':
-      case 'terminal_taille':
-      case 'terminal_fermer':
-        if (this.terminauxAppareil.recu(canal, message)) return undefined;
-        return this.terminaux.traiter(canal, message);
-      case 'terminal_ouvrir':
-        return this.terminaux.traiter(canal, message);
-      default:
-        return canal.fermer();
-    }
-  }
-
-  // Une requête de l'API : son corps (en morceaux si besoin) est réuni, rejoué, et la réponse repart de même.
-  private async requeteAppareil(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'api' }>): Promise<void> {
-    const corps = this.corpsAppareil(canal.membre, m);
-    const reponse: ReponseAppareilFedere =
-      corps === null
-        ? { statut: 400, corps: JSON.stringify({ erreur: 'transfert interrompu' }) }
-        : await this.reponseAppareil(canal.membre, m, corps);
-    if (reponse.flux) {
-      const flux = { statut: reponse.statut, type: reponse.type, flux: reponse.flux };
-      return envoyerReponseFlux((message) => canal.envoyer(message), m.ref, flux, this.options.journal);
-    }
-    for (const message of messagesAvecCorps(m.ref, reponse.corps, (texte, morceaux) => ({
-      t: 'api_reponse',
-      ref: m.ref,
-      statut: reponse.statut,
-      corps: texte,
-      ...(reponse.codage ? { codage: reponse.codage } : {}),
-      ...(reponse.type ? { type: reponse.type } : {}),
-      ...(morceaux !== undefined ? { morceaux } : {}),
-    }), TAILLE_MORCEAU_APPAREIL_CARACTERES)) {
-      canal.envoyer(message);
-    }
-  }
-
-  // Le corps d'une requête : tel quel, ou réuni depuis ses morceaux ; null si le transfert est cassé.
-  private corpsAppareil(membre: string, m: Extract<MessageChiffre, { t: 'api' }>): string | undefined | null {
-    if (m.morceaux === undefined) return m.corps;
-    return this.transfertsAppareil.assembler(membre, m.ref, m.morceaux);
-  }
-
-  // Un appareil sans le droit de la requête (charte) reçoit 403, sans que la route soit servie.
-  private async reponseAppareil(
-    membre: string,
-    m: Extract<MessageChiffre, { t: 'api' }>,
-    corps: string | undefined,
-  ): Promise<ReponseAppareilFedere> {
-    if (estRouteTelephone(m.chemin)) {
-      const demande = { methode: m.methode, chemin: m.chemin, corps, codage: m.codage, type: m.type };
-      return this.chefAppareil.servir(membre, demande);
-    }
-    if (!this.charte.autorise(membre, { genre: 'api', methode: m.methode, chemin: m.chemin })) {
-      return { statut: 403, corps: JSON.stringify({ erreur: 'droit refusé' }) };
-    }
-    return this.servirAppareil({ methode: m.methode, chemin: m.chemin, corps, codage: m.codage, type: m.type });
-  }
-
-  private async servirAppareil(demande: DemandeAppareilFedere): Promise<ReponseAppareilFedere> {
-    if (!this.options.servirAppareil) {
-      return { statut: 503, corps: JSON.stringify({ erreur: 'API appareil non branchée' }) };
-    }
-    return this.options.servirAppareil(demande);
-  }
-
-  // ---- Admissions d'appareils entre nœuds appariés ---------------------------------------------------------------
 
   private estNoeud(membre: string): boolean {
     return this.pairs.some((p) => p.id === membre && p.genre === 'noeud');
-  }
-
-  /** La photo des admissions part à un nœud pair relié, jamais à un appareil. */
-  private envoyerAdmissionsA(canal: CanalNoeud): void {
-    const moi = this.identifiantProtocole();
-    if (!moi || !this.estNoeud(canal.membre)) return;
-    canal.envoyer({ t: 'admissions', ...photoAdmissions(this.pairs, [...this.appareilsRevoques], moi) });
-  }
-
-  /** À chaque admission ou révocation d'appareil, la photo repart à tous les nœuds pairs reliés. */
-  private diffuserAdmissions(): void {
-    for (const canal of this.canaux.ouverts()) this.envoyerAdmissionsA(canal);
-  }
-
-  // Un nœud pair de mêmes propriétaire range les admissions reçues ; s'il change quelque chose, il relaie.
-  private messageAdmissions(canal: CanalNoeud, message: Extract<MessageChiffre, { t: 'admissions' }>): void {
-    const moi = this.identifiantProtocole();
-    const refus = this.voisins.refusPour(canal.membre, this.proprietaireLocal());
-    const verdict = verdictSource(this.pairs, canal.membre, refus);
-    if (verdict === 'non-appaire' || !moi) return canal.fermer();
-    if (verdict === 'autre-proprietaire') {
-      return this.options.journal.warn({ membre: canal.membre }, 'admissions refusées : autre propriétaire');
-    }
-    const liste = this.charte.filtrerAdmissions(message.liste);
-    const fusion = fusionner({ ...message, liste }, this.pairs, [...this.appareilsRevoques], moi);
-    for (const conflit of fusion.conflits) {
-      this.options.journal.warn({ membre: canal.membre, appareil: conflit }, 'admission ignorée : clé différente');
-    }
-    if (!fusion.changee) return;
-    this.pairs = fusion.pairs;
-    this.sauverPairs();
-    this.appareilsRevoques.clear();
-    for (const id of fusion.revoques) this.appareilsRevoques.add(id);
-    this.sauverAppareilsRevoques();
-    for (const id of fusion.retires) this.fermerAppareil(id);
-    this.diffuserAdmissions();
-  }
-
-  // Un appareil révoqué est prévenu s'il est en ligne, son canal est fermé ; il n'est plus admis nulle part.
-  private fermerAppareil(id: string): void {
-    const canal = this.canaux.liaisonOuverteAvec(id);
-    if (canal) {
-      canal.envoyer({ t: 'revocation' });
-      canal.fermerApresEnvois();
-    }
-    this.marquerRevoque(id);
-  }
-
-  private marquerAppareilRevoque(id: string): void {
-    this.appareilsRevoques.add(id);
-    this.sauverAppareilsRevoques();
-    this.diffuserAdmissions();
-  }
-
-  private sauverAppareilsRevoques(): void {
-    try {
-      this.secrets.ecrireAppareilsRevoques([...this.appareilsRevoques]);
-    } catch {
-      this.options.journal.error('révocations d’appareils non sauvegardées');
-    }
   }
 
   /** Les nœuds du réseau, soi compris, avec leur identifiant de membre et leur clé : servi aux appareils admis. */
@@ -921,145 +439,12 @@ export class Federation {
     return { noeuds: noeudsAnnonces(this.pairs, moi) };
   }
 
-  // Un pair révoqué garde son motif de refus, même après un redémarrage du nœud.
-  private marquerRevoque(membre: string): void {
-    this.revoques.add(membre);
-    this.sauverRevoques();
-  }
-
-  private sauverRevoques(): void {
-    try {
-      this.secrets.ecrireRevoques([...this.revoques]);
-    } catch {
-      this.options.journal.error('révocations de la fédération non sauvegardées');
-    }
-  }
-
-  /** Le verdict d'une source (nœud apparié de mêmes propriétaires ou non), pour la charte. */
-  private sourceDe(membre: string): VerdictSource {
-    return verdictSource(this.pairs, membre, this.voisins.refusPour(membre, this.proprietaireLocal()));
-  }
-
   private estAppareil(membre: string): boolean {
     return this.pairs.some((p) => p.id === membre && p.genre === 'appareil');
   }
 
-  private canalFerme(canal: CanalNoeud): void {
-    this.terminaux.fermerPour(canal.membre);
-    this.terminauxAppareil.fermerPour(canal.membre);
-    this.diffusionAppareil.fermer(canal);
-    this.transfertsAppareil.oublier(canal.membre);
-    this.canaux.retirer(canal);
-    this.demandes.retirerPour(canal.membre);
-    if (this.canaux.liaisonOuverteAvec(canal.membre)) return;
-    this.distant.enLigne(canal.membre, false);
-    this.echanges.oublier(canal.membre);
-  }
-
-  // ---- Pairs, identité, diffusion locale -----------------------------------------------------------------------
-
-  private enregistrerPair(membre: string, presentation: PresentationDistante): void {
-    const pair: PairFederee = {
-      id: membre,
-      nom: presentation.nom,
-      identite: presentation.identite,
-      creeLe: new Date().toISOString(),
-      genre: presentation.genre ?? 'noeud',
-      ...(presentation.genre === 'appareil' && this.config ? { admisPar: this.config.id } : {}),
-    };
-    this.pairs = [...this.pairs.filter((p) => p.id !== membre), pair];
-    this.refus.delete(membre);
-    void this.charte.essayerReprise();
-    if (this.revoques.delete(membre)) this.sauverRevoques();
-    if (this.appareilsRevoques.delete(membre)) this.sauverAppareilsRevoques();
-    this.distant.connaitre(membre, pair.nom);
-    this.sauverPairs();
-    if (pair.genre === 'appareil') this.diffuserAdmissions();
-  }
-
-  private oublierPair(membre: string): void {
-    this.terminaux.fermerPour(membre);
-    this.pairs = this.pairs.filter((p) => p.id !== membre);
-    this.sauverPairs();
-    this.distant.retirer(membre);
-    this.machines.etats.oublier(membre);
-    this.demandes.retirerPour(membre);
-    this.echanges.oublier(membre);
-    this.refus.delete(membre);
-    this.directs.oublier(membre);
-    this.directs.fermer(membre);
-    this.voisins.retirerDirect(membre);
-  }
-
-  /** Ce nœud est en pause : aucune nouvelle session (les sessions en cours continuent). */
-  enPause(): boolean {
-    return this.machines.pause.enPause();
-  }
-
-  /** Soi, puis chaque nœud apparié : son dernier état connu (null s'il n'en a jamais envoyé) et s'il est relié. */
-  async machinesReseau(): Promise<MachineReseau[]> {
-    const moi: MachineReseau = {
-      membre: this.identifiantMoi(),
-      nom: this.config?.nom ?? this.options.machine,
-      moi: true,
-      enLigne: true,
-      etat: await this.machines.mesurer(),
-    };
-    const pairs = this.pairs
-      .filter((p) => p.genre === 'noeud')
-      .map((p): MachineReseau => ({
-        membre: p.id,
-        nom: p.nom,
-        moi: false,
-        enLigne: this.canaux.liaisonOuverteAvec(p.id) !== null,
-        etat: this.machines.etats.de(p.id),
-      }));
-    return [moi, ...pairs];
-  }
-
-  /**
-   * Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action relayée à un pair relié.
-   * `ordre` : l'ordre signé par le téléphone chef, que le pair vérifiera dans sa propre charte.
-   */
-  async agirSurMachine(membre: string, action: ActionMachine, ordre?: OrdreSigne): Promise<Resultat<null>> {
-    if (membre === MEMBRE_MOI || membre === this.identifiantProtocole()) {
-      return this.machines.actions.executerLocale(action);
-    }
-    if (!this.estNoeud(membre)) return echec(404, 'nœud inconnu');
-    if (action === 'reveiller') return this.machines.actions.reveiller(membre);
-    const canal = this.canaux.liaisonOuverteAvec(membre);
-    if (!canal) return echec(409, 'nœud hors ligne');
-    return this.machines.actions.demander(canal, action, ordre);
-  }
-
-  /** Un ordre signé reçu d'un pair vaut ici si la charte locale le tient : cette cible, cette action, pas rejoué. */
-  private async ordreValide(ordre: OrdreSigne, action: ActionNoeud): Promise<boolean> {
-    const moi = this.config?.id;
-    if (!moi) return false;
-    const verdict = await verifierOrdre(this.charte.charte(), ordre, {
-      cible: moi,
-      maintenantMs: Date.now(),
-      nonces: this.noncesOrdre,
-    });
-    if (!verdict.ok) {
-      this.options.journal.warn({ motif: verdict.motif }, 'ordre de chef refusé');
-      return false;
-    }
-    return verdict.ordre.action === action;
-  }
-
-  /** Un téléphone chef est relié à ce nœud : il tranche les demandes d'appairage qui arrivent ici. */
-  private chefAppareilRelie(): boolean {
-    return this.canaux.ouverts().some((c) => this.estAppareil(c.membre) && this.charte.estChef(c.membre));
-  }
-
-  private identifiantMoi(): string {
-    return this.identifiantProtocole() ?? MEMBRE_MOI;
-  }
-
-  /** L'identifiant de machine d'un nœud apparié (celui de son instantané), ou null tant qu'il n'est pas connu. */
-  private machineDe(membre: string): string | null {
-    return this.distant.noeudsConnus().find((n) => n.membre === membre)?.machine ?? null;
+  private proprietaireLocal(): string | null {
+    return this.config?.proprietaire ?? this.liens.directs.config.proprietaire;
   }
 
   /** L'état de la fédération a changé : l'appli relit `GET /api/federation`. */
@@ -1080,6 +465,7 @@ export class Federation {
     this.identiteEnCours ??= chargerIdentite(this.secrets);
     return this.identiteEnCours;
   }
+
   /** Un message part aux chefs connectés (jamais à un invité) : l'activité des invités de ce nœud. */
   private envoyerAChefs(m: MessageChiffre): void {
     for (const c of this.canaux.ouverts()) {
@@ -1104,5 +490,5 @@ export class Federation {
       liensPairs: () => this.canaux.ouverts().filter((c) => !this.estAppareil(c.membre)),
     });
   }
-
 }
+
