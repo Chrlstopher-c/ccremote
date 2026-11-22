@@ -17,6 +17,8 @@ export const NOMBRE_MAX_SESSIONS_FEDEREES = 150;
 export const NOMBRE_MAX_ABONNEMENTS = 64;
 /** Délai d'une demande entre nœuds sans réponse : au-delà, le canal est coupé. */
 export const DELAI_REPONSE_FEDEREE_MS = 10_000;
+/** Demandes d'appairage en attente sur un nœud, au plus : au-delà, la nouvelle est refusée tout de suite. */
+export const NOMBRE_MAX_DEMANDES = 5;
 
 const IDENTITE = /^[A-Za-z0-9_-]{86}$/;
 const NOM = z.string().trim().min(1).max(80);
@@ -59,6 +61,20 @@ export type MessageEnClair = z.infer<typeof MessageEnClair>;
 
 // `seq` : numéro de l'événement chez le nœud qui tient la session (absent : nœud d'avant le relais des gestes).
 const EvenementFede = z.object({ seq: z.number().int().nonnegative().optional(), ts: z.string(), evt: Evenement });
+
+/** Plafond des appareils admis (et des révocations) dans une photo : au-delà, la photo est refusée. */
+export const NOMBRE_MAX_APPAREILS_ADMIS = 500;
+const MEMBRE = z.string().regex(/^[a-f0-9]{12}$/);
+
+/** Un appareil admis, tel qu'un nœud le propage à ses pairs : de quoi l'accepter en lien direct, sans demande. */
+export const AppareilAdmis = z.strictObject({
+  id: MEMBRE,
+  nom: NOM,
+  identite: IdentitePubliqueTexte,
+  admisPar: MEMBRE,
+  le: z.string().min(1).max(40),
+});
+export type AppareilAdmis = z.infer<typeof AppareilAdmis>;
 
 /** La machine du nœud telle qu'il l'annonce : de quoi la ranger et y créer une session chez ses pairs. */
 export const MachineAnnoncee = z.strictObject({
@@ -221,6 +237,14 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   z.strictObject({ t: z.literal('terminal_fermer'), terminal: REF }),
   z.strictObject({ t: z.literal('terminal_sortie'), terminal: REF, base64: z.string().max(TAILLE_MAX_CLAIR_OCTETS) }),
   z.strictObject({ t: z.literal('terminal_fin'), terminal: REF, code: z.number().int().nullable() }),
+  // Photo des admissions d'appareils : `liste` = appareils admis chez le nœud (les siens et ceux reçus de ses pairs),
+  // `retires` = identifiants des appareils révoqués (définitif). Entre nœuds appariés seulement : un appareil qui
+  // l'envoie ferme son canal. Remplace tout autre chemin d'admission.
+  z.strictObject({
+    t: z.literal('admissions'),
+    liste: z.array(AppareilAdmis).max(NOMBRE_MAX_APPAREILS_ADMIS),
+    retires: z.array(MEMBRE).max(NOMBRE_MAX_APPAREILS_ADMIS),
+  }),
   // Synchronisation sur demande : le contenu est validé par le service synchro (commun/synchro.ts), pas ici.
   z.strictObject({ t: z.literal('synchro'), m: z.unknown() }),
 ]);

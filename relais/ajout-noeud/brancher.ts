@@ -31,7 +31,7 @@ export function creerAjoutNoeud(s: ServicesAjout): AjoutNoeud {
     },
     federation: {
       etat: () => s.federation.etat(),
-      decider: (id, accord) => s.federation.decider(id, accord),
+      decider: (id, accord) => s.federation.decider(id, accord).ok,
       revoquer: (membre) => s.federation.revoquer(membre),
       sessionsDe: (membre) =>
         s.federation.distantes

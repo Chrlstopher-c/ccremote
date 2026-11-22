@@ -76,13 +76,17 @@ export type ReponseCodeMembre = z.infer<typeof ReponseCodeMembre>;
 /** Propriétaire d'un membre : le nom donné à l'appairage. Optionnel : un aiguilleur ancien ne le transmet pas. */
 const Proprietaire = z.string().min(1).max(40);
 
-/** Un membre de la présence : état, et (optionnels) nom, genre et propriétaire. */
+/**
+ * Un membre de la présence : état, et (optionnels) nom, genre et propriétaire. `sansEcran` n'est donné que pour un
+ * nœud : vrai s'il tourne sans écran (la tour), faux sinon ; absent pour un appareil.
+ */
 const Membre = z.strictObject({
   id: Identifiant,
   enLigne: z.boolean(),
   nom: z.string().max(80).optional(),
   genre: z.enum(GENRES_MEMBRE).optional(),
   proprietaire: Proprietaire.optional(),
+  sansEcran: z.boolean().optional(),
 });
 
 const DeAiguilleur = z.discriminatedUnion('t', [

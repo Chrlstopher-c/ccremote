@@ -4,16 +4,19 @@ import { nonceRef } from './identifiants.ts';
 
 export interface DemandeAppairage {
   readonly id: string;
-  readonly membre: string;
+  /** Le membre qui demande. Absent pour une demande vue chez un autre nœud (la photo ne le transmet pas). */
+  readonly membre?: string;
   readonly nom: string;
   readonly empreinte: string;
   readonly empreinteLocale: string;
   /** Nœud ou appareil client : Chris le voit avant d'accorder. */
   readonly genre: 'noeud' | 'appareil';
   readonly le: string;
+  /** Nœud qui tient la demande, quand elle n'est pas locale : la décision lui est relayée. */
+  readonly noeud?: string;
 }
 
-export type DonneesDemande = Omit<DemandeAppairage, 'id' | 'le'>;
+export type DonneesDemande = Omit<DemandeAppairage, 'id' | 'le' | 'membre' | 'noeud'> & { readonly membre: string };
 
 interface Attente {
   readonly demande: DemandeAppairage;

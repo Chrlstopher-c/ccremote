@@ -24,6 +24,8 @@ const CorpsAppairage = z.object({
   nom: z.string().trim().min(1).max(80),
   genre: z.enum(GENRES_MEMBRE),
   cle: z.string().regex(VALIDE_CLE),
+  // Ignoré pour un appareil : seul un nœud peut être sans écran.
+  sansEcran: z.boolean().optional(),
 });
 
 export interface Serveur {
@@ -116,6 +118,7 @@ function enregistrer(
     proprietaire,
     empreinteCle: empreinteSha256(corps.cle),
     jetonEmpreinte: empreinteSha256(jeton),
+    sansEcran: corps.genre === 'noeud' && corps.sansEcran === true,
   });
   if (invitation) annuaire.lierDuo(code.proprietaire, proprietaire);
   journal.info({ membre: id, genre: corps.genre, proprietaire, portee: code.portee }, 'membre appairé');

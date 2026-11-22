@@ -70,7 +70,7 @@ async function appairer(a: Noeud, b: Noeud): Promise<{ idA: string; idB: string 
   expect(r.ok).toBe(true);
   await attendre(async () => (await b.federation.etat()).demandes.length === 1);
   const demande = (await b.federation.etat()).demandes[0];
-  expect(b.federation.decider(demande?.id ?? '', true)).toBe(true);
+  expect(b.federation.decider(demande?.id ?? '', true).ok).toBe(true);
   await attendre(async () => (await a.federation.etat()).noeuds.some((n) => n.id === idB && n.liaisonOuverte));
   await attendre(async () => (await b.federation.etat()).noeuds.some((n) => n.id === idA && n.liaisonOuverte));
   return { idA, idB };
@@ -90,7 +90,7 @@ describe('appairage entre nœuds', () => {
     expect(demande?.empreinte).toBe(etatA.empreinteLocale);
     expect(demande?.empreinteLocale).toBe(etatB.empreinteLocale);
     expect(demande?.empreinte).not.toBe(demande?.empreinteLocale);
-    expect(b.federation.decider(demande?.id ?? '', true)).toBe(true);
+    expect(b.federation.decider(demande?.id ?? '', true).ok).toBe(true);
     await attendre(async () => (await a.federation.etat()).noeuds.some((n) => n.liaisonOuverte));
     expect((await a.federation.etat()).noeuds[0]?.empreinte).toBe(etatB.empreinteLocale);
   });

@@ -12,6 +12,7 @@ const CorpsAiguilleur = z.object({
   url: z.string().min(1).max(500),
   code: z.string().min(1).max(40),
   nom: z.string().trim().min(1).max(80),
+  sansEcran: z.boolean().optional(),
 });
 const CorpsMembre = z.object({ membre: z.string().regex(/^[a-f0-9]{12}$/) });
 const CorpsDecision = z.object({ accord: z.boolean() });
@@ -51,7 +52,8 @@ function routesLien(fede: Federation, protege: Protection) {
       POST: protege(async (req) => {
         const c = await lireCorps(req, CorpsDecision);
         if (c instanceof Response) return c;
-        return fede.decider(req.params['id'] ?? '', c.accord) ? json({}) : erreur('demande introuvable', 404);
+        const r = fede.decider(req.params['id'] ?? '', c.accord);
+        return r.ok ? json({}) : erreur(r.raison, r.statut);
       }),
     },
     '/api/federation/revoquer': {
@@ -59,6 +61,10 @@ function routesLien(fede: Federation, protege: Protection) {
         const c = await lireCorps(req, CorpsMembre);
         return c instanceof Response ? c : rendre(fede.revoquer(c.membre));
       }),
+    },
+    // Les nœuds du réseau et leurs clés : un appareil admis les apprend par son canal, pour se relier sans appairage.
+    '/api/appareils/noeuds': {
+      GET: protege(async () => json(await fede.noeudsAppareil())),
     },
   };
 }

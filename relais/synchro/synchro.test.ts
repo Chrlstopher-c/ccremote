@@ -69,7 +69,7 @@ async function appairer(a: Noeud, b: Noeud): Promise<void> {
   expect(a.federation.appairer(idB).ok).toBe(true);
   await attendre(async () => (await b.federation.etat()).demandes.length === 1);
   const demande = (await b.federation.etat()).demandes[0];
-  expect(b.federation.decider(demande?.id ?? '', true)).toBe(true);
+  expect(b.federation.decider(demande?.id ?? '', true).ok).toBe(true);
   await attendre(async () => (await a.federation.etat()).noeuds.some((n) => n.id === idB && n.liaisonOuverte));
   await attendre(async () => (await b.federation.etat()).noeuds.some((n) => n.id === idA && n.liaisonOuverte));
 }
