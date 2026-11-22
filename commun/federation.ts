@@ -6,6 +6,7 @@ import { LONGUEUR_MAX_GESTE, METHODES_GESTE } from './gestes-federes.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { Evenement, Projet, ResumeSession } from './session.ts';
 import { CibleTerminal } from './appareil.ts';
+import { ActiviteInvite } from './invites.ts';
 
 /** Taille maximale d'un message en clair (avant chiffrement) : la charge de l'aiguilleur est plafonnée à 1 Mio. */
 export const TAILLE_MAX_CLAIR_OCTETS = 600_000;
@@ -317,6 +318,12 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   z.strictObject({ t: z.literal('action_noeud'), ref: REF, action: z.enum(ACTIONS_NOEUD) }),
   // État de la machine d'un nœud, envoyé à ses pairs à l'ouverture du lien puis périodiquement. Champs ouverts.
   z.strictObject({ t: z.literal('etat_noeud'), etat: EtatNoeud }),
+  // Activité des invités dont ce nœud fait tourner les sessions (télémétrie active), envoyée aux chefs : jamais de
+  // contenu. Un nœud d'avant ignore ce genre de message.
+  z.strictObject({
+    t: z.literal('activite_invites'),
+    activites: z.array(z.strictObject({ membre: MEMBRE, activite: ActiviteInvite })).max(200),
+  }),
 ]);
 export type MessageChiffre = z.infer<typeof MessageChiffre>;
 export type EvenementFedere = z.infer<typeof EvenementFede>;

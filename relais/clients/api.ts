@@ -38,6 +38,7 @@ import type { Federation } from '../federation/federation.ts';
 import { relayerVersNoeuds } from '../federation/interception.ts';
 import { routesFederation } from '../federation/api-federation.ts';
 import { routesCharte } from '../federation/api-charte.ts';
+import type { ApiInvites } from '../invites/api-invites.ts';
 import { routesMachinesReseau } from '../federation/api-machines-reseau.ts';
 import { refusCreationSession } from '../federation/pause-noeud.ts';
 import type { CodesReseau } from '../codes-reseau/codes-reseau.ts';
@@ -72,6 +73,8 @@ export interface DependancesApi {
   readonly appels: AppelsModules;
   readonly duo: Duo;
   readonly federation: Federation;
+  /** Les invités (relais/invites) : garde des routes de contenu, ouverture, routes des réglages. */
+  readonly invites: ApiInvites;
   readonly codesReseau: CodesReseau;
   readonly ajoutNoeud: AjoutNoeud;
   readonly synchro: ServiceSynchro;
@@ -99,8 +102,13 @@ function protegerAvec(acces: Acces): (g: Gestionnaire) => Gestionnaire {
 
 /** Routes des clients. `protection` : celle des routes (par défaut, le jeton) ; l'identité sert aux gestes relayés
  * par un nœud apparié, exécutés en interne, jamais exposés. Une session d'un autre nœud passe par la fédération. */
+/** Garde des invités sur une route locale : le contenu d'une session d'invité n'est jamais servi à un autre. */
+export function avecGardeInvites(d: DependancesApi, g: Gestionnaire): Gestionnaire {
+  return (req) => d.invites.gardeLocale(req.url) ?? g(req);
+}
+
 export function construireRoutes(d: DependancesApi, protection?: (g: Gestionnaire) => Gestionnaire) {
-  const protege = protection ?? protegerAvec(d.acces);
+  const protege = protection ?? ((g: Gestionnaire) => protegerAvec(d.acces)(avecGardeInvites(d, g)));
   return relayerVersNoeuds(tableRoutes(d, protege), d.federation.distantes, (req) => d.acces.autorise(req));
 }
 
@@ -116,7 +124,9 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     '/api/etat': { GET: protege((req) => json(etat(d, req))) },
     '/api/attente': { GET: protege((req) => attente(d, req)) },
     // Nœud en pause (fédération) : aucune nouvelle session ici ; les sessions en cours ne sont pas touchées.
-    '/api/sessions': { POST: protege((req) => refusCreationSession(d.federation) ?? d.sessions.ouvrir(req)) },
+    '/api/sessions': {
+      POST: protege((req) => refusCreationSession(d.federation) ?? d.invites.ouvrirSession(req)),
+    },
     '/api/sessions/:id/evenements': { GET: protege((req) => d.sessions.evenements(req as never)) },
     '/api/sessions/:id/contexte': { GET: protege((req) => d.sessions.contexte(req as never)) },
     '/api/sessions/:id/connecteurs': { GET: protege((req) => d.sessions.connecteurs(req as never)) },
@@ -253,6 +263,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     ...routesDuo(d.duo, protege),
     ...routesFederation(d.federation, protege),
     ...routesCharte(d.federation.charte, protege),
+    ...d.invites.routes(protege),
     ...routesMachinesReseau(d.federation, protege),
     ...routesCodesReseau(d.codesReseau, protege),
     ...routesAjoutNoeud(d.ajoutNoeud, protege),
@@ -304,7 +315,8 @@ function etat(d: DependancesApi, req: Request) {
 
 // Sessions et machines du parc, avec celles des nœuds appariés (fédération) quand il y en a.
 function vueDuParc(d: DependancesApi, req: Request) {
-  const v = d.federation.distantes.vue(d.registre.sessions(avecArchivees(req)), d.postes.vues());
+  const locales = d.registre.sessions(avecArchivees(req));
+  const v = d.federation.distantes.vue(d.invites.sessionsLocales(locales), d.postes.vues());
   return { machines: v.machines, sessions: v.sessions };
 }
 

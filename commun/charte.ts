@@ -5,6 +5,7 @@ import { importerPubliqueSignature } from './chiffrement/cles.ts';
 import { importerIdentitePublique } from './chiffrement/identite.ts';
 import { depuisBase64url, enOctets, type Octets, versBase64url } from './chiffrement/octets.ts';
 import { IdentitePubliqueTexte, TAILLE_MAX_CHARTE_CARACTERES } from './federation.ts';
+import { ReglagesInvite } from './invites.ts';
 
 export const DROITS = ['voir', 'piloter', 'lancer', 'remoteControl'] as const;
 export type Droit = (typeof DROITS)[number];
@@ -33,6 +34,7 @@ export const MembreCharte = z.object({
   identite: IdentitePubliqueTexte,
   droits: Droits,
   compte: z.string().max(200).nullable(),
+  invite: ReglagesInvite.optional(), // membre invité : réglages du chef ; droits de base tous à false
 });
 export type MembreCharte = z.infer<typeof MembreCharte>;
 
@@ -98,8 +100,23 @@ function coherence(c: Charte): Charte | MotifRefusCharte {
     const membre = c.membres.find((m) => m.id === chef);
     if (membre === undefined || membre.sorte === 'serveur') return 'chef-invalide';
   }
+  if (c.membres.some((m) => m.invite !== undefined && c.chefs.includes(m.id))) return 'chef-invalide';
+  if (!c.membres.every((m) => m.invite === undefined || invitePermis(c, m))) return 'illisible';
   if (!c.chefs.includes(c.par)) return 'signataire-non-chef';
   return c;
+}
+
+function estAucunDroit(d: Droits): boolean {
+  return !d.voir && !d.piloter && !d.lancer && !d.remoteControl;
+}
+
+/** Un invité est un pair sans droit de base, dont chaque machine est un membre non invité serveur ou pair. */
+function invitePermis(c: Charte, m: MembreCharte): boolean {
+  if (m.invite === undefined || m.sorte !== 'pair' || !estAucunDroit(m.droits)) return false;
+  return m.invite.machines.every((id) => {
+    const cible = membreDe(c, id);
+    return cible !== null && cible.invite === undefined && (cible.sorte === 'serveur' || cible.sorte === 'pair');
+  });
 }
 
 function diagnostiquer(texte: string): Charte | MotifRefusCharte {
@@ -327,6 +344,7 @@ export function nommerChef(c: Charte, auteur: string, membre: string, chef: bool
   const cible = membreDe(c, membre);
   if (cible === null) return refuse('membre absent');
   if (chef && cible.sorte === 'serveur') return refuse('un serveur ne peut pas être chef');
+  if (chef && cible.invite !== undefined) return refuse('un invité ne peut pas être chef');
   if (!chef && membre === auteur) return refuse('un chef ne retire pas son propre rôle');
   const chefs = chef ? [...new Set([...c.chefs, membre])] : c.chefs.filter((x) => x !== membre);
   return suivante(c, auteur, le, c.membres, chefs);
@@ -344,7 +362,14 @@ export function retirerMembre(c: Charte, auteur: string, membre: string, le: str
   const chefs = c.chefs.filter((x) => x !== membre);
   if (chefs.length === 0) return refuse('dernier chef');
   if (membre === auteur) return refuse('un chef ne se retire pas lui-même');
-  return suivante(c, auteur, le, c.membres.filter((m) => m.id !== membre), chefs);
+  const restants = c.membres.filter((m) => m.id !== membre).map((m) => sansMachine(m, membre));
+  return suivante(c, auteur, le, restants, chefs);
+}
+
+/** Retire un nœud retiré de la liste des machines de ses invités (sinon la charte ne se relirait plus). */
+function sansMachine(m: MembreCharte, machine: string): MembreCharte {
+  if (m.invite === undefined || !m.invite.machines.includes(machine)) return m;
+  return { ...m, invite: { ...m.invite, machines: m.invite.machines.filter((id) => id !== machine) } };
 }
 
 export function changerMembre(
@@ -357,11 +382,98 @@ export function changerMembre(
   if (!estChef(c, auteur)) return refuse('auteur non chef');
   const cible = membreDe(c, membre);
   if (cible === null) return refuse('membre absent');
+  if (champs.droits !== undefined && cible.invite !== undefined) {
+    return refuse("droits d'un invité : régler ses limites");
+  }
   const modifie: MembreCharte = {
     ...cible,
     droits: champs.droits ? { ...champs.droits } : cible.droits,
     compte: champs.compte === undefined ? cible.compte : champs.compte,
     nom: champs.nom === undefined ? cible.nom : nomValide(champs.nom, cible.id),
   };
-  return suivante(c, auteur, le, c.membres.map((m) => (m.id === membre ? modifie : m)), c.chefs);
+  return suivante(
+    c,
+    auteur,
+    le,
+    c.membres.map((m) => (m.id === membre ? modifie : m)),
+    c.chefs,
+  );
+}
+
+export function estInvite(charte: Charte | null, membre: string): boolean {
+  return membreDe(charte, membre)?.invite !== undefined;
+}
+
+export function reglagesInviteDe(charte: Charte | null, membre: string): ReglagesInvite | null {
+  return membreDe(charte, membre)?.invite ?? null;
+}
+
+type ReglagesPermis = { ok: true; reglages: ReglagesInvite } | { ok: false; raison: string };
+
+function raisonMachineInvite(c: Charte, idInvite: string, machine: string): string | null {
+  if (machine === idInvite) return 'un invité ne peut pas être sa propre machine';
+  const cible = membreDe(c, machine);
+  if (cible === null) return `machine inconnue : ${machine}`;
+  const permise = cible.invite === undefined && (cible.sorte === 'serveur' || cible.sorte === 'pair');
+  return permise ? null : `machine non permise : ${machine}`;
+}
+
+function reglagesPermis(c: Charte, idInvite: string, brut: ReglagesInvite): ReglagesPermis {
+  const lu = ReglagesInvite.safeParse(brut);
+  if (!lu.success) return { ok: false, raison: 'réglages invalides' };
+  for (const machine of lu.data.machines) {
+    const raison = raisonMachineInvite(c, idInvite, machine);
+    if (raison !== null) return { ok: false, raison };
+  }
+  return { ok: true, reglages: lu.data };
+}
+
+function membreInvite(m: MembreSansDroits, reglages: ReglagesInvite): MembreCharte {
+  return {
+    id: m.id,
+    nom: nomValide(m.nom, m.id),
+    sorte: 'pair',
+    identite: m.identite,
+    droits: { ...AUCUN_DROIT },
+    compte: null,
+    invite: reglages,
+  };
+}
+
+/** Invite un membre : nouveau (pair invité) ou existant pair (devient invité) ; chef, téléphone, serveur refusés. */
+export function inviterMembre(
+  c: Charte,
+  auteur: string,
+  m: MembreSansDroits,
+  reglages: ReglagesInvite,
+  le: string,
+): Edition {
+  if (!estChef(c, auteur)) return refuse('auteur non chef');
+  const existant = membreDe(c, m.id);
+  if (existant !== null && estChef(c, m.id)) return refuse('un chef ne peut pas être invité');
+  if (existant !== null && existant.sorte !== 'pair') return refuse('seul un pair peut être invité');
+  const verdict = reglagesPermis(c, m.id, reglages);
+  if (!verdict.ok) return refuse(verdict.raison);
+  if (existant === null) return suivante(c, auteur, le, [...c.membres, membreInvite(m, verdict.reglages)], c.chefs);
+  const invite = (x: MembreCharte): MembreCharte =>
+    x.id === m.id ? { ...x, droits: { ...AUCUN_DROIT }, invite: verdict.reglages } : x;
+  return suivante(c, auteur, le, c.membres.map(invite), c.chefs);
+}
+
+/** Change les réglages d'un invité ; ses droits de base restent à AUCUN_DROIT. */
+export function changerInvite(
+  c: Charte,
+  auteur: string,
+  membre: string,
+  reglages: ReglagesInvite,
+  le: string,
+): Edition {
+  if (!estChef(c, auteur)) return refuse('auteur non chef');
+  const cible = membreDe(c, membre);
+  if (cible === null) return refuse('membre absent');
+  if (cible.invite === undefined) return refuse('membre non invité');
+  const verdict = reglagesPermis(c, membre, reglages);
+  if (!verdict.ok) return refuse(verdict.raison);
+  const modifie = (x: MembreCharte): MembreCharte => (x.id === membre ? { ...x, invite: verdict.reglages } : x);
+  return suivante(c, auteur, le, c.membres.map(modifie), c.chefs);
 }

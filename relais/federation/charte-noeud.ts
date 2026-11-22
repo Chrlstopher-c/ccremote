@@ -6,6 +6,7 @@ import type { Logger } from 'pino';
 import {
   ajouterMembre,
   autorise as droitAutorise,
+  inviterMembre,
   type Charte,
   type CharteSignee,
   creerCharte,
@@ -27,6 +28,7 @@ import { exporterIdentitePublique, type Identite } from '../../commun/chiffremen
 import type { MessageChiffre } from '../../commun/federation.ts';
 import type { VerdictSource } from './admissions.ts';
 import type { PresentationDistante } from './canal.ts';
+import type { ReglagesInvite } from '../../commun/invites.ts';
 import { maintenant, messageDe, reseauNeuf, sansDroits } from './charte-noeud-outils.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import type { PairFederee, SecretsNoeud } from './secrets.ts';
@@ -50,6 +52,8 @@ export interface PortCharte {
   liensNoeuds(): readonly LienCharte[];
   revoquer(membre: string): void;
   signaler(): void;
+  /** Réglages d'invité préparés pour ce membre (machine invitée avant son appairage), ou null. */
+  invitePrevue?(membre: string): ReglagesInvite | null;
 }
 
 /** Suite d'un appairage entrant : admis d'office, demandé à un chef, ou refusé (non-chef). */
@@ -132,7 +136,12 @@ export class CharteNoeud {
       droits: { ...TOUS_DROITS },
       compte: null,
     };
-    const r = await this.editerSerie((c, moi, le) => ajouterMembre(c, moi, nouveau, le));
+    const prevu = this.port.invitePrevue?.(membre) ?? null;
+    const r = await this.editerSerie((c, moi, le) =>
+      prevu === null
+        ? ajouterMembre(c, moi, nouveau, le)
+        : inviterMembre(c, moi, { id: membre, nom: presentation.nom, identite: presentation.identite }, prevu, le),
+    );
     if (!r.ok) this.port.journal.warn({ membre, raison: r.raison }, 'appairage : membre non ajouté à la charte');
     return r.ok;
   }

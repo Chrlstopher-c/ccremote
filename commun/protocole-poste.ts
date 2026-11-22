@@ -149,6 +149,8 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('remote_control'), ...avecSession, actif: z.boolean() }),
   // Style de sortie (SDK) : appliqué à la requête vivante, gardé pour la reprise ; `styles` liste les disponibles.
   z.object({ kind: z.literal('style'), ...avecSession, style: z.string().min(1).max(80).nullable() }),
+  // Prompt système propre à la conversation (vide : retiré) : appliqué aux tours suivants, gardé pour la reprise.
+  z.object({ kind: z.literal('prompt_systeme'), ...avecSession, texte: z.string().max(8000) }),
   z.object({ kind: z.literal('styles'), ...avecSession }),
   // Connecteur MCP d'une session SDK vivante (activé ou désactivé pour la suite de la session).
   z.object({ kind: z.literal('connecteur'), ...avecSession, nom: z.string().min(1).max(200), actif: z.boolean() }),

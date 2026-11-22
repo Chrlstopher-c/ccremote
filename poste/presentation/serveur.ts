@@ -9,6 +9,7 @@ import { envoyerFichier, publierArtefact } from './envoi.ts';
 import type { ContexteOutils, Resultat } from './outils.ts';
 import * as machines from './machines-outils.ts';
 import * as reseau from './reseau-outils.ts';
+import * as invites from './reseau-invites-outils.ts';
 import * as modules from './modules-outils.ts';
 import {
   DESCRIPTION_MODULE_APPELER,
@@ -174,6 +175,26 @@ function outilsReseau(c: ContexteOutils) {
   ];
 }
 
+/** Les outils `reseau_invite_*` : mêmes conditions que `reseau_*` (relais joignable). */
+function outilsInvites(c: ContexteOutils) {
+  if (!c.api) return [];
+  const api = c.api;
+  return [
+    tool('reseau_invites_aide', invites.DESCRIPTION_AIDE, {}, async () =>
+      enResultat(await invites.aideInvites(c.journal)),
+    ),
+    tool('reseau_inviter', invites.DESCRIPTION_INVITER, { membre: invites.MEMBRE }, async (a) =>
+      enResultat(await invites.inviter(api, a.membre, c.journal)),
+    ),
+    tool('reseau_invite_regler', invites.DESCRIPTION_REGLER, invites.CHAMPS_REGLER, async (a) =>
+      enResultat(await invites.reglerInvite(api, a, c.journal)),
+    ),
+    tool('reseau_invite_activite', invites.DESCRIPTION_ACTIVITE, { membre: invites.MEMBRE }, async (a) =>
+      enResultat(await invites.activiteInvite(api, a.membre)),
+    ),
+  ];
+}
+
 // `alwaysLoad` : les outils de présentation sont dans le prompt dès le premier tour, jamais différés derrière ToolSearch
 // (sinon l'agent répond sans les chercher). `searchHint` sert si la recherche d'outils reste active.
 export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithInstance {
@@ -212,6 +233,7 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
       ),
       ...outilsMachines(c),
       ...outilsReseau(c),
+      ...outilsInvites(c),
       ...outilsModules(c),
       ...outilRenommer(c),
     ],

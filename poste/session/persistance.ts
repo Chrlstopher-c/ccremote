@@ -3,11 +3,17 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { ResumeSession } from '../../commun/session.ts';
+import { CadreInvite } from '../../commun/cadre-invite.ts';
 
 export const SessionPersistee = z.object({
   resume: ResumeSession,
   consignes: z.string().nullable(), // null : session adoptée (lancée hors ccremote)
-  configDir: z.string().nullable(),
+  configDir: z.string().nullable(), // session d'invité : configuration dédiée du cadre (sans identifiants)
+  // Session d'invité : cadre imposé par le nœud (gardé et réappliqué à la reprise) et dossier du compte du chef, dont
+  // le jeton est relu à chaque lancement. Absent : session ordinaire.
+  invite: z
+    .object({ cadre: CadreInvite, configCompte: z.string().nullable() })
+    .optional(),
   transcript: z.string().nullable(),
   position: z.number(),
   // Vrai tant que la session tourne (ou a planté en tour) : à reprendre au démarrage du poste. Faux après une

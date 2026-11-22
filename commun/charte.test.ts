@@ -1,13 +1,18 @@
 // Responsabilité : tests de la charte signée — genèse, succession, refus, éditions, droits, reprise du parc.
 import { describe, expect, test } from 'bun:test';
 import { exporterIdentitePublique, genererIdentite, type Identite } from './chiffrement/identite.ts';
+import { reglagesParDefaut, type ReglagesInvite } from './invites.ts';
 import {
   AUCUN_DROIT,
   TOUS_DROITS,
   ajouterMembre,
   autorise,
+  changerInvite,
   changerMembre,
   creerCharte,
+  estInvite,
+  inviterMembre,
+  reglagesInviteDe,
   type Charte,
   type CharteSignee,
   type Droit,
@@ -360,5 +365,107 @@ describe('reprise concurrente', () => {
     expect(repriseLEmporte(petit, grand)).toBe(false);
     expect(repriseLEmporte(petit, petit)).toBe(false);
     expect(repriseLEmporte({ ...grand, origine: 'creation' }, petit)).toBe(false);
+  });
+});
+
+describe('invités', () => {
+  const REGLAGES: ReglagesInvite = reglagesParDefaut(A);
+
+  function invite(p: Personne, reglages: ReglagesInvite = REGLAGES): MembreCharte {
+    return { ...membre(p, 'pair', AUCUN_DROIT), invite: reglages };
+  }
+
+  test('inviter un absent : pair sans droit, réglages posés, présent dans la version suivante', async () => {
+    const a = await personne(A);
+    const x = await personne(B);
+    const v1 = charteDe([membre(a)], [A]);
+    const v2 = edition(inviterMembre(v1, A, { id: B, nom: 'Elie', identite: x.publique }, REGLAGES, LE));
+    expect(estInvite(v2, B)).toBe(true);
+    expect(reglagesInviteDe(v2, B)).toEqual(REGLAGES);
+    expect(droitsDe(v2, B)).toEqual(AUCUN_DROIT);
+    expect(v2.version).toBe(2);
+  });
+
+  test('inviter un pair existant : il devient invité, droits remis à zéro', async () => {
+    const a = await personne(A);
+    const b = await personne(B);
+    const v1 = charteDe([membre(a), membre(b)], [A]);
+    const v2 = edition(inviterMembre(v1, A, membre(b), REGLAGES, LE));
+    expect(estInvite(v2, B)).toBe(true);
+    expect(droitsDe(v2, B)).toEqual(AUCUN_DROIT);
+  });
+
+  test('refus : chef, téléphone et serveur ne deviennent pas invités', async () => {
+    const a = await personne(A);
+    const t = await personne(B);
+    const s = await personne(C);
+    const v1 = charteDe([membre(a), membre(t, 'telephone'), membre(s, 'serveur')], [A]);
+    expect(inviterMembre(v1, A, membre(a), REGLAGES, LE).ok).toBe(false);
+    expect(inviterMembre(v1, A, membre(t, 'telephone'), REGLAGES, LE).ok).toBe(false);
+    expect(inviterMembre(v1, A, membre(s, 'serveur'), REGLAGES, LE).ok).toBe(false);
+  });
+
+  test('changerInvite : machine inconnue refusée, réglages valides acceptés', async () => {
+    const a = await personne(A);
+    const x = await personne(B);
+    const v1 = charteDe([membre(a), invite(x)], [A]);
+    const inconnue = { ...REGLAGES, machines: ['cccccccccccc'] };
+    expect(changerInvite(v1, A, B, inconnue, LE).ok).toBe(false);
+    const nouveaux = { ...REGLAGES, prompt: 'Réponds court.' };
+    const v2 = edition(changerInvite(v1, A, B, nouveaux, LE));
+    expect(reglagesInviteDe(v2, B)?.prompt).toBe('Réponds court.');
+  });
+
+  test('changerInvite sur un membre non invité : refusé', async () => {
+    const a = await personne(A);
+    const b = await personne(B);
+    const v1 = charteDe([membre(a), membre(b)], [A]);
+    expect(changerInvite(v1, A, B, REGLAGES, LE)).toEqual({ ok: false, raison: 'membre non invité' });
+  });
+
+  test('un invité ne peut pas être nommé chef, ni recevoir de droits', async () => {
+    const a = await personne(A);
+    const x = await personne(B);
+    const v1 = charteDe([membre(a), invite(x)], [A]);
+    expect(nommerChef(v1, A, B, true, LE)).toEqual({ ok: false, raison: 'un invité ne peut pas être chef' });
+    expect(changerMembre(v1, A, B, { droits: TOUS_DROITS }, LE).ok).toBe(false);
+  });
+
+  test('une charte avec invité signée par son chef se vérifie', async () => {
+    const a = await personne(A);
+    const x = await personne(B);
+    const c = charteDe([membre(a), invite(x)], [A]);
+    const verdict = await verifierCharte(null, await signe(c, a));
+    expect(verdict).toEqual({ ok: true, charte: c });
+    expect(reglagesInviteDe(c, B)).toEqual(REGLAGES);
+  });
+
+  test('un invité porteur de droits, ou un chef invité, rend la charte illisible ou invalide', async () => {
+    const a = await personne(A);
+    const x = await personne(B);
+    const avecDroits = charteDe([membre(a), { ...invite(x), droits: TOUS_DROITS }], [A]);
+    expect(await verifierCharte(null, await signe(avecDroits, a))).toEqual({ ok: false, motif: 'illisible' });
+    const chefInvite = charteDe([{ ...invite(a) }, membre(x)], [A]);
+    expect(await verifierCharte(null, await signe(chefInvite, a))).toEqual({ ok: false, motif: 'chef-invalide' });
+  });
+
+  test('une machine d invité qui est un téléphone rend la charte illisible', async () => {
+    const a = await personne(A);
+    const t = await personne(C);
+    const x = await personne(B);
+    const reglages = { ...REGLAGES, machines: [C] };
+    const c = charteDe([membre(a), membre(t, 'telephone'), invite(x, reglages)], [A]);
+    expect(await verifierCharte(null, await signe(c, a))).toEqual({ ok: false, motif: 'illisible' });
+  });
+
+  test('retirer une machine retire aussi la référence chez ses invités : la charte reste lisible', async () => {
+    const a = await personne(A);
+    const b = await personne(B);
+    const x = await personne(C);
+    const reglages = { ...REGLAGES, machines: [A, B] };
+    const v1 = charteDe([membre(a), membre(b), invite(x, reglages)], [A]);
+    const v2 = edition(retirerMembre(v1, A, B, LE));
+    expect(reglagesInviteDe(v2, C)?.machines).toEqual([A]);
+    expect(await verifierCharte(null, await signe(v2, a))).toEqual({ ok: true, charte: v2 });
   });
 });

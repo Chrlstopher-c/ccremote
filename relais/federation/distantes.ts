@@ -196,6 +196,11 @@ export class Distantes {
     return corps.flatMap((c: unknown) => machinesDe(c));
   }
 
+  /** Ouverture relayée vers un pair (ce nœud est invité : le chef décide). */
+  ouvrirChez(membre: string, corps: string): Promise<Response> {
+    return this.relayer(membre, { geste: 'ouvrir', methode: 'POST' }, corps);
+  }
+
   private async intercepterOuverture(req: Request): Promise<Response | null> {
     const corps = await req.clone().text();
     const machine = machineDe(corps);

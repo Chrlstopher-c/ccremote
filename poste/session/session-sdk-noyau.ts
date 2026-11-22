@@ -47,6 +47,7 @@ export interface NoyauSdk {
   identifiantNeuf: string | null; // conversation recommencée après le rembobinage du premier message
   interrompuParChris: boolean; // le SDK coupe le flux par une erreur après une interruption : pas une panne
   cessionEnAttente: boolean; // conversation tenue ailleurs pendant un tour : la requête se ferme en fin de tour
+  promptEnAttente: boolean; // prompt système changé pendant un tour : la requête se ferme en fin de tour
 }
 
 export function creerNoyau(
@@ -74,6 +75,7 @@ export function creerNoyau(
     identifiantNeuf: null,
     interrompuParChris: false,
     cessionEnAttente: false,
+    promptEnAttente: false,
     reglagesVivants: new ReglagesVivants(() => n.requete, env.journal, p.resume.id),
     registreTaches: new RegistreTaches(),
     suivi: suiviDe(env, p, () => n),
@@ -190,6 +192,7 @@ export function libererRequete(n: NoyauSdk, message: string): void {
   clorTour(n);
   n.avis.refuserTous(message, true);
   n.requete = null;
+  n.promptEnAttente = false; // la prochaine requête part avec le prompt courant
   n.fil?.clore();
   n.fil = null;
 }

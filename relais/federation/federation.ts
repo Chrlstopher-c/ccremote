@@ -40,6 +40,9 @@ import {
 import { Echanges, type PontFederation } from './echanges.ts';
 import { CharteNoeud } from './charte-noeud.ts';
 import { surDiffusionFederee } from './diffusion-federee.ts';
+import { NoeudInvites } from '../invites/noeud-invites.ts';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { type EtatFederation, MEMBRE_MOI, type MachineReseau, type OptionsFederation } from './etat-federation.ts';
 import type { ActionMachine } from './actions-noeud.ts';
 import { creerMachinesNoeud, type MachinesNoeud } from './machines-noeud.ts';
@@ -75,6 +78,8 @@ export class Federation {
   readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
   private readonly echanges: Echanges;
+  /** Les invités de ce nœud : politique appliquée ici, télémétrie, intentions d'invitation. */
+  readonly invites: NoeudInvites;
   /** La charte signée du réseau : droits, appairage, édition (routes `/api/reseau/charte`). */
   readonly charte: CharteNoeud;
   private readonly canaux: Canaux;
@@ -110,7 +115,21 @@ export class Federation {
     this.config = this.secrets.lireAiguilleur();
     this.charte = this.creerCharte();
     this.demandes = new DemandesAppairage(options.delaiDemandeMs ?? DELAI_DEMANDE_MS, () => Date.now());
+    this.invites = new NoeudInvites({
+      moi: () => this.config?.id ?? null,
+      machine: options.machine,
+      charte: () => this.charte.charte(),
+      registre: options.registre,
+      dossier: options.dossierSecrets,
+      racine: options.invitesRacine ?? process.env['LANTERNE_INVITES_DOSSIER'] ?? join(homedir(), 'lanterne-invites'),
+      home: homedir(),
+      racinesMachine: () => options.registre.machines().find((m) => m.id === options.machine)?.racines ?? [],
+      envoyerAChefs: (m) => this.envoyerAChefs(m),
+      journal: options.journal.child({ domaine: 'invites' }),
+    });
+    options.diffusion.vueApplis = (m) => this.invites.vueAppli(m);
     this.echanges = new Echanges({
+      invites: this.invites,
       registre: options.registre,
       pont: options.pont,
       machine: options.machine,
@@ -148,12 +167,14 @@ export class Federation {
   /** Écoute les changements locaux ; démarre le lien si ce nœud est déjà relié à un aiguilleur. */
   demarrer(): void {
     this.desabonner = this.options.diffusion.ecouter((m) => this.surDiffusion(m));
+    this.invites.demarrer();
     void this.charte.demarrer();
     this.machines.etats.demarrer(() => this.canaux.ouverts().filter((c) => this.estNoeud(c.membre)));
     if (this.config) this.demarrerLien();
   }
 
   arreter(): void {
+    this.invites.arreter();
     this.desabonner?.();
     this.desabonner = null;
     if (this.planificateur) clearInterval(this.planificateur);
@@ -414,6 +435,7 @@ export class Federation {
       liensNoeuds: () => this.canaux.ouverts().filter((c) => this.estNoeud(c.membre)),
       revoquer: (membre) => void this.revoquer(membre),
       signaler: () => this.signaler(),
+      invitePrevue: (membre) => this.invites.intentions.prendre(membre),
     });
   }
 
@@ -508,8 +530,9 @@ export class Federation {
     if (this.estAppareil(canal.membre)) return;
     this.distant.enLigne(canal.membre, true);
     if (this.echanges.peutVoir(canal.membre)) {
-      for (const message of this.echanges.instantanes()) canal.envoyer(message);
+      for (const message of this.echanges.instantanes(canal.membre)) canal.envoyer(message);
     }
+    this.invites.emettreActivites();
     this.envoyerAdmissionsA(canal);
     this.charte.envoyerA(canal);
     void this.machines.etats.envoyerA(canal);
@@ -533,6 +556,7 @@ export class Federation {
     }
     if (message.t === 'synchro') return this.recepteurSynchro?.(canal.membre, message.m);
     if (message.t === 'etat_noeud') return this.machines.etats.recevoir(canal.membre, message.etat);
+    if (message.t === 'activite_invites') return this.invites.recevoirActivite(canal.membre, message.activites);
     if (message.t === 'action_noeud') return this.machines.actions.recevoir(canal, message);
     if (message.t === 'ouvrir' && this.machines.pause.enPause()) {
       return this.echanges.reponse(canal, message.ref, false, MOTIF_PAUSE);
@@ -823,7 +847,24 @@ export class Federation {
     this.identiteEnCours ??= chargerIdentite(this.secrets);
     return this.identiteEnCours;
   }
+  /** Un message part aux chefs connectés (jamais à un invité) : l'activité des invités de ce nœud. */
+  private envoyerAChefs(m: MessageChiffre): void {
+    for (const c of this.canaux.ouverts()) {
+      if (this.charte.estChef(c.membre) && !this.invites.estInvite(c.membre)) c.envoyer(m);
+    }
+  }
+
+  /** Ouverture relayée vers le chef (ce nœud est invité) : même corps, la politique du chef décide. */
+  ouvrirChez(membre: string, texte: string): Promise<Response> {
+    return this.distantes.ouvrirChez(membre, texte);
+  }
+
+  machineEnLigne(membre: string): boolean {
+    return this.canaux.liaisonOuverteAvec(membre) !== null;
+  }
+
   private surDiffusion(m: MessageClient): void {
+    if (m.type === 'session') this.invites.surSession(m.session);
     surDiffusionFederee(m, {
       distantes: this.distantes,
       echanges: this.echanges,
