@@ -104,6 +104,78 @@ describe('vue de l’appli', () => {
   });
 });
 
+describe('copies périmées d’une machine tenue par un nœud', () => {
+  test('la vue de B montre la version fédérée (statut, majLe), jamais la copie locale ; le fil part vers A', async () => {
+    const { a, b } = await paire();
+    const perimee = { ...ficheDe(SESSION_A, 'tour', 'Titre A'), statut: 'fermee', majLe: '2026-11-22T10:00:00.000Z' };
+    b.registre.enregistrerSession(perimee as ReturnType<typeof ficheDe>);
+    b.registre.enregistrerSession(ficheDe('locale-disparue', 'tour', 'Disparue'));
+    poser(a, { ...ficheDe(SESSION_A, 'tour', 'Titre A'), statut: 'travail', majLe: '2026-11-22T14:00:00.000Z' } as ReturnType<typeof ficheDe>);
+    await attendre(() => b.federation.distantes.sessions().some((x) => x.session.statut === 'travail'));
+    const v = b.federation.distantes.vue(b.registre.sessions(true), []);
+    const vue = v.sessions.find((s) => s.id === SESSION_A);
+    expect(vue?.statut).toBe('travail');
+    expect(vue?.majLe).toBe('2026-11-22T14:00:00.000Z');
+    expect(v.sessions.filter((s) => s.id === SESSION_A)).toHaveLength(1);
+    expect(v.sessions.map((s) => s.id)).not.toContain('locale-disparue');
+    await b.federation.distantes.intercepter(requete(`/api/sessions/${SESSION_A}/evenements`));
+    expect(a.appels.gestes.some((g) => g.geste === 'evenements' && g.session === SESSION_A)).toBe(true);
+  });
+});
+
+/** Un client du flux (WebSocket) qui consigne ce qu'il reçoit ; le filtre est celui de bin.ts. */
+function clientDuFlux(b: Noeud): string[] {
+  const textes: string[] = [];
+  b.diffusion.filtre = (m) => b.federation.distantes.laisserPasser(m);
+  const ws = { send: (texte: string) => textes.push(texte) } as unknown as Parameters<typeof b.diffusion.ajouter>[0];
+  b.diffusion.ajouter(ws);
+  return textes;
+}
+
+describe('bascule : les copies existent avant que le nœud ne soit en ligne', () => {
+  test('A garde ses copies, le nœud se relie : la vue et le flux montrent la version du nœud', async () => {
+    const a = await nouveau('tour');
+    const b = await nouveau('portable');
+    const textes = clientDuFlux(b);
+    b.registre.enregistrerSession({ ...ficheDe(SESSION_A, 'tour', 'Ancienne'), statut: 'fermee' } as ReturnType<typeof ficheDe>);
+    b.registre.enregistrerSession(ficheDe('locale-disparue', 'tour', 'Disparue'));
+    const idA = await appairer(a, b);
+    poser(a, { ...ficheDe(SESSION_A, 'tour', 'Titre A'), statut: 'travail', majLe: '2026-11-22T14:00:00.000Z' } as ReturnType<typeof ficheDe>);
+    await attendre(() => b.federation.distantes.sessions().some((x) => x.session.statut === 'travail'));
+    const v = b.federation.distantes.vue(b.registre.sessions(true), []);
+    expect(v.sessions.find((s) => s.id === SESSION_A)?.statut).toBe('travail');
+    expect(v.sessions.map((s) => s.id)).not.toContain('locale-disparue');
+    expect(v.routage.get(SESSION_A)).toBe(idA);
+    expect(textes.some((t) => t.includes('"statut":"fermee"'))).toBe(false);
+  });
+});
+
+describe('flux : copies périmées refusées, version fédérée et direct relayés', () => {
+  test('la copie locale d’une session tenue par A ne part pas au client ; la version fédérée oui', async () => {
+    const { a, b } = await paire();
+    const textes = clientDuFlux(b);
+    const perimee = { ...ficheDe(SESSION_A, 'tour', 'Titre A'), statut: 'fermee', majLe: '2026-11-22T10:00:00.000Z' };
+    b.registre.enregistrerSession(perimee as ReturnType<typeof ficheDe>);
+    b.diffusion.diffuser({ type: 'session', session: perimee as ReturnType<typeof ficheDe> });
+    expect(textes.some((t) => t.includes('"statut":"fermee"'))).toBe(false);
+    poser(a, { ...ficheDe(SESSION_A, 'tour', 'Titre A'), statut: 'travail', majLe: '2026-11-22T14:00:00.000Z' } as ReturnType<typeof ficheDe>);
+    await attendre(() => textes.some((t) => t.includes('"statut":"travail"') && t.includes('2026-11-22T14:00:00.000Z')));
+    expect(textes.some((t) => t.includes('"statut":"fermee"'))).toBe(false);
+  });
+
+  test('un événement local d’une session tenue par A ne part pas au client ; le direct de A, si', async () => {
+    const { a, b } = await paire();
+    const textes = clientDuFlux(b);
+    const copie = { seq: 1, sessionId: SESSION_A, ts: MAJ, evt: { type: 'message', texte: 'copie locale' } };
+    b.diffusion.diffuser({ type: 'evenement', evenement: copie } as MessageClient);
+    expect(textes.some((t) => t.includes('copie locale'))).toBe(false);
+    await b.federation.distantes.intercepter(requete(`/api/sessions/${SESSION_A}/evenements?attendre=25`));
+    const e = a.registre.ajouterEvenement(SESSION_A, MAJ, { type: 'message', texte: 'en direct' });
+    a.diffusion.diffuser({ type: 'evenement', evenement: e });
+    await attendre(() => textes.some((t) => t.includes('en direct')));
+  });
+});
+
 describe('gestes relayés', () => {
   test('le modèle, les permissions et les réponses passent par la route du nœud qui tient la session', async () => {
     const { a, b } = await paire();

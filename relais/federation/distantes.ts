@@ -99,14 +99,38 @@ export class Distantes {
     return this.vueCourante().routage.get(session) ?? null;
   }
 
-  /** Filtre du flux des clients : les copies SSH d'une machine tenue par un nœud en ligne ne passent pas. */
+  /**
+   * Filtre du flux des clients : les copies locales d'une machine tenue par un nœud en ligne ne passent pas (même
+   * identifiant de session que la version fédérée : la copie périmée écraserait celle du nœud). Les archivées, elles,
+   * restent ici, comme dans la vue. Ce que ce nœud émet lui-même (version fédérée) passe toujours.
+   */
   laisserPasser(m: MessageClient): boolean {
-    const v = this.derniere;
     if (this.enEmission) return true;
-    if (!v || v.masquees.size === 0) return true;
-    if (m.type === 'session') return v.routage.has(m.session.id) || !v.masquees.has(m.session.machine);
-    if (m.type === 'machine') return !v.machinesRoutees.has(m.machine.id);
+    // Lu à l'instant (pas la vue mémorisée) : une copie arrivée entre deux calculs de la vue est filtrée aussi.
+    if (m.type === 'session') return m.session.archivee === true || !this.machinesTenues().has(m.session.machine);
+    if (m.type === 'evenement') return !this.sessionsTenues().has(m.evenement.sessionId);
+    if (m.type === 'machine') return !this.derniere?.machinesRoutees.has(m.machine.id);
     return true;
+  }
+
+  /** Machines dont un autre nœud en ligne est la machine (une copie locale de l'une d'elles se tait sur le flux). */
+  private machinesTenues(): Set<string> {
+    return new Set(
+      this.o.cache
+        .noeudsConnus()
+        .filter((n) => n.enLigne && n.machine !== this.o.machine)
+        .map((n) => n.machine),
+    );
+  }
+
+  /** Sessions annoncées par un autre nœud en ligne : leurs événements locaux (copies) ne passent pas. */
+  private sessionsTenues(): Set<string> {
+    return new Set(
+      this.o.cache
+        .noeudsConnus()
+        .filter((n) => n.enLigne && n.machine !== this.o.machine)
+        .flatMap((n) => n.sessions.map((s) => s.id)),
+    );
   }
 
   /** Requête de l'appli (déjà authentifiée) : relayée si elle vise une session ou une machine d'un autre nœud. */
@@ -314,24 +338,29 @@ export class Distantes {
 
   private diffuserSession(v: VueFederee, id: string): void {
     const session = v.sessions.find((s) => s.id === id);
-    if (session) this.o.diffusion.diffuser({ type: 'session', session });
+    if (session) this.diffuserFederee({ type: 'session', session });
   }
 
   private diffuserMachine(v: VueFederee, id: string): void {
     const machine = v.machines.find((m) => m.id === id);
-    if (!machine) return;
+    if (machine) this.diffuserFederee({ type: 'machine', machine });
+  }
+
+  // La vue fédérée que ce nœud annonce passe le filtre ; une copie locale de la même session, elle, ne passe pas.
+  private diffuserFederee(m: MessageClient): void {
+    const avant = this.enEmission;
     this.enEmission = true;
     try {
-      this.o.diffusion.diffuser({ type: 'machine', machine });
+      this.o.diffusion.diffuser(m);
     } finally {
-      this.enEmission = false;
+      this.enEmission = avant;
     }
   }
 
   // Le direct d'une session suivie : l'appli le reçoit comme celui d'une session locale (numéro du nœud qui la tient).
   private surEvenement(membre: string, session: string, e: EvenementFedere): void {
     if (e.seq === undefined || this.vueCourante().routage.get(session) !== membre) return;
-    this.o.diffusion.diffuser({
+    this.diffuserFederee({
       type: 'evenement',
       evenement: { seq: e.seq, sessionId: session, ts: e.ts, evt: e.evt },
     });
