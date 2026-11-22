@@ -11,11 +11,21 @@ const COMMANDES_AIGUILLEES: ReadonlySet<string> = new Set(['envoyer', 'interromp
 
 export type Aiguillage = { kind: 'directe' } | { kind: 'jumelle'; session: ResumeSession } | { kind: 'refus' };
 
-/** Fiche `cse_` de la conversation de `fiche` (`claudeSessionId`, ou son id), si elle existe. */
+/**
+ * Fiche `cse_` vivante de la conversation de `fiche` (`claudeSessionId`, ou son id). Une jumelle fermée ou déconnectée
+ * (Remote Control coupé, Desktop relancé) ne compte pas : un envoi vers elle échouait en « session inconnue ».
+ */
 export function jumelleRemoteControl(fiche: ResumeSession, fiches: readonly ResumeSession[]): ResumeSession | null {
   const conversation = fiche.claudeSessionId ?? fiche.id;
   return (
-    fiches.find((c) => c.id !== fiche.id && c.id.startsWith('cse_') && c.distant?.conversation === conversation) ?? null
+    fiches.find(
+      (c) =>
+        c.id !== fiche.id &&
+        c.id.startsWith('cse_') &&
+        c.distant?.conversation === conversation &&
+        c.distant.connexion !== 'deconnectee' &&
+        c.statut !== 'fermee',
+    ) ?? null
   );
 }
 

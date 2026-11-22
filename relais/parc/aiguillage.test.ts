@@ -103,4 +103,15 @@ describe('réglage de modèle d’une session tenue ailleurs', () => {
   test('modèle sans jumelle : refus clair', () => {
     expect(aiguillage(TENUE, 'modele', [TENUE])).toEqual({ kind: 'refus' });
   });
+
+  test('une jumelle fermée ou déconnectée (Remote Control coupé, Desktop relancé) est ignorée : refus clair', () => {
+    const morte = rc('cse_m', 'conv-1');
+    const deconnectee = { ...morte, distant: { ...morte.distant!, connexion: 'deconnectee' as const } };
+    const fermee = { ...morte, statut: 'fermee' as const };
+    expect(jumelleRemoteControl(TENUE, [TENUE, deconnectee])).toBeNull();
+    expect(jumelleRemoteControl(TENUE, [TENUE, fermee])).toBeNull();
+    expect(aiguillage(TENUE, 'envoyer', [TENUE, deconnectee])).toEqual({ kind: 'refus' });
+    const vivante = rc('cse_v', 'conv-1');
+    expect(jumelleRemoteControl(TENUE, [TENUE, deconnectee, vivante])).toBe(vivante);
+  });
 });
