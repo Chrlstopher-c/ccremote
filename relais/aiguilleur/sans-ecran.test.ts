@@ -41,7 +41,12 @@ function demarrer(): Banc {
   const annuaire = new Annuaire(ouvrirAnnuaire(':memory:'));
   const plafond = new PlafondEchecs(join(mkdtempSync(join(tmpdir(), 'sans-ecran-')), 'echecs.json'), journal);
   const aiguilleur = creerAiguilleur({ annuaire, journal, plafond });
-  const serveur = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: aiguilleur.fetch, websocket: aiguilleur.websocket });
+  const serveur = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch: aiguilleur.fetch,
+    websocket: aiguilleur.websocket,
+  });
   const banc = { port: serveur.port ?? 0, annuaire, aiguilleur, serveur };
   bancs.push(banc);
   return banc;
