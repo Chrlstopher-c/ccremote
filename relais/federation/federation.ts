@@ -15,6 +15,7 @@ import {
 } from '../../commun/chiffrement/identite.ts';
 import { type EvenementFedere, type MessageChiffre } from '../../commun/federation.ts';
 import type { MessageSynchro } from '../../commun/synchro.ts';
+import { concerneDuo, type HandlerDuoAiguilleur, type PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import { type CanalNoeud, type HoteCanal, type PresentationDistante } from './canal.ts';
@@ -83,6 +84,7 @@ export class Federation {
   private readonly refus = new Set<string>();
   private readonly presence = new Map<string, boolean>();
   private config: ConfigAiguilleur | null;
+  private duo: HandlerDuoAiguilleur | null = null;
   private lien: LienAiguilleur | null = null;
   private motifArret: MotifArret | null = null;
   private identiteEnCours: Promise<Identite> | null = null;
@@ -146,6 +148,21 @@ export class Federation {
     }
     this.demarrerLien();
     return ok({ id: r.id });
+  }
+
+  /** Le duo par l'aiguilleur (étape 7) partage ce lien : ses canaux (préfixe `duo-`) lui sont remis. */
+  brancherDuo(handler: HandlerDuoAiguilleur): void {
+    this.duo = handler;
+  }
+
+  portDuo(): PortAiguilleurDuo {
+    return {
+      membreLocal: () => this.config?.id ?? null,
+      identiteLocale: () => this.identite(),
+      envoyer: (m) => this.emettre(m),
+      enLigne: (membre) => this.presence.get(membre) === true,
+      relie: () => this.lien?.connecte() ?? false,
+    };
   }
 
   /** Premier contact avec un nœud en ligne : une demande part, Chris la tranche chez lui. */
@@ -289,6 +306,7 @@ export class Federation {
   private surMessage(message: MessageDeAiguilleur): void {
     if (message.t === 'presence') return this.surPresence(message.membres);
     if (message.t === 'donnees') this.options.observer?.('reception', message.charge);
+    if (concerneDuo(message)) return this.duo?.surMessage(message);
     this.canaux.surMessage(message);
   }
 
@@ -310,6 +328,7 @@ export class Federation {
 
   private surConnexion(connecte: boolean): void {
     this.options.journal.info({ connecte }, 'lien vers l’aiguilleur');
+    this.duo?.surConnexion(connecte);
     if (connecte) return;
     for (const canal of this.canaux.actifs()) canal.surFermetureDistante();
     this.presence.clear();

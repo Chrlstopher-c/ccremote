@@ -1,6 +1,7 @@
 // Responsabilité : les routes du mode duo, protégées comme les autres routes clients (jeton habituel).
 import {
   CorpsAccordModule,
+  CorpsAppairage,
   CorpsDecision,
   CorpsDroits,
   CorpsMain,
@@ -22,7 +23,26 @@ function rendre<T>(r: Resultat<T>): Response {
 }
 
 export function routesDuo(duo: Duo, protege: Protection) {
-  return { ...routesLien(duo, protege), ...routesEchanges(duo, protege), ...routesAvances(duo, protege) };
+  return {
+    ...routesLien(duo, protege),
+    ...routesEchanges(duo, protege),
+    ...routesAvances(duo, protege),
+    ...routesAppairage(duo, protege),
+  };
+}
+
+// Étape 7 : décision de Chris sur les empreintes d'un appairage par l'aiguilleur.
+function routesAppairage(duo: Duo, protege: Protection) {
+  return {
+    '/api/duo/appairage': {
+      POST: protege(async (req) => {
+        const c = await lireCorps(req, CorpsAppairage);
+        if (c instanceof Response) return c;
+        const r = duo.confirmerAppairage(c.accord);
+        return r.ok ? json({}) : erreur(r.raison, r.statut);
+      }),
+    },
+  };
 }
 
 // Appairage, lien, partages, présence, droits et nom affiché.

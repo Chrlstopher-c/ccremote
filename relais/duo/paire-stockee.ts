@@ -11,6 +11,11 @@ export const Paire = z.object({
   utilisateur: z.string(),
   adresse: z.string().nullable(), // hôte:port du relais du pair ; null = ce relais écoute, l'autre appelle
   creeLe: z.string(),
+  // Par l'aiguilleur (étape 7) : identifiant du nœud du pair, son identité publique, l'empreinte à comparer.
+  transport: z.enum(['direct', 'aiguilleur']).optional(), // absent = direct (paires d'avant l'étape 7)
+  membre: z.string().optional(),
+  identite: z.string().optional(),
+  empreinte: z.string().optional(),
 });
 export type Paire = z.infer<typeof Paire>;
 

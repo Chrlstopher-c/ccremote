@@ -4,6 +4,13 @@ import { ALPHABET_CODE, DUREE_CODE_MS, ESSAIS_CODE_MAX, LONGUEUR_CODE } from '..
 
 export type VerdictCode = 'ok' | 'faux' | 'expire' | 'utilise';
 
+/** Raison lisible d'un code refusé, pour la réponse à l'appairage. */
+export const RAISON_CODE: Record<Exclude<VerdictCode, 'ok'>, string> = {
+  faux: 'code faux',
+  expire: 'code expiré',
+  utilise: 'code déjà utilisé',
+};
+
 interface CodeEmis {
   readonly expireA: number;
   utilise: boolean;
@@ -32,6 +39,18 @@ export class CodesAppairage {
     if (this.maintenant() >= entree.expireA) return 'expire';
     entree.utilise = true;
     return 'ok';
+  }
+
+  /** Codes encore utilisables (non brûlés, non expirés) : l'appairage par l'aiguilleur les essaie tous. */
+  vivants(): string[] {
+    this.purger();
+    const maintenant = this.maintenant();
+    return [...this.codes].filter(([, e]) => !e.utilise && maintenant < e.expireA).map(([code]) => code);
+  }
+
+  /** Un essai faux venu d'une preuve (appairage par l'aiguilleur) : compté comme une saisie fausse. */
+  echec(): void {
+    this.ratage();
   }
 
   // Un code faux compte ; au bout de ESSAIS_CODE_MAX, plus aucun code en attente : il en faut un nouveau.

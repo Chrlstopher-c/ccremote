@@ -5,6 +5,8 @@ import { type Canal, CHEMIN_LIEN, lireMessage } from './lien-commun.ts';
 import { nonce, preuve, preuveValide } from './preuve.ts';
 
 export const RAISON_INJOIGNABLE = 'pair injoignable';
+const DELAI_APPAIRAGE_MS = 10_000;
+export const DELAI_RECONNEXION_MAX_MS = 30_000;
 
 export type ResultatAppairageDistant =
   { ok: true; paire: string; cle: string; utilisateur: string } | { ok: false; raison: string };
@@ -13,7 +15,7 @@ export function appairerAupres(
   adresse: string,
   code: string,
   utilisateur: string,
-  delaiMs: number,
+  delaiMs = DELAI_APPAIRAGE_MS,
 ): Promise<ResultatAppairageDistant> {
   return new Promise((resoudre) => {
     const ws = new WebSocket(`ws://${adresse}${CHEMIN_LIEN}`);

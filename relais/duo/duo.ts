@@ -1,6 +1,5 @@
 // Responsabilité : le mode duo d'un relais — appairage, lien permanent avec le pair, partages, présence. Ce module
 // orchestre le lien, la synchro et la paire stockée ; le registre et la diffusion restent ceux du relais.
-import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
 import type { MessageClient } from '../../commun/api-clients.ts';
 import {
@@ -16,7 +15,6 @@ import {
   type MessageLien,
   type UsagePartage,
 } from '../../commun/duo.ts';
-import type { Postes } from '../parc/postes.ts';
 import { EchangesAvances } from './echanges-avances.ts';
 import { Attentes } from './attentes.ts';
 import type { PieceJointe } from '../../commun/presentation.ts';
@@ -29,46 +27,27 @@ import { JournalDuo } from './journal.ts';
 import { choisirEcoute, type InterfacesReseau } from './ecoute.ts';
 import { IdentiteDuo } from './identite.ts';
 import { networkInterfaces } from 'node:os';
-import type { PontSessions } from './pont-sessions.ts';
 import { dossiersDuPair, ouvrirChezPair } from './sessions-pair.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import { usageDuPair } from './usage.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
-import { CodesAppairage, type VerdictCode } from './codes.ts';
-import { appairerAupres, LienAppelant, RAISON_INJOIGNABLE } from './lien-appelant.ts';
+import { CodesAppairage, RAISON_CODE } from './codes.ts';
+import { appairerAupres, DELAI_RECONNEXION_MAX_MS, LienAppelant, RAISON_INJOIGNABLE } from './lien-appelant.ts';
 import type { Canal } from './lien-commun.ts';
 import { ouvrirEcouteDuo, type ResultatAppairage, type ServeurDuo } from './lien-serveur.ts';
 import { type Paire, PaireStockee } from './paire-stockee.ts';
 import { PartagesDuo } from './partages.ts';
 import { cleNeuve, nonce } from './preuve.ts';
+import { VALIDE_IDENTIFIANT } from '../../commun/aiguilleur.ts';
+import type { HandlerDuoAiguilleur, PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
+import { LiaisonAiguilleur } from './liaison-aiguilleur.ts';
 import { Synchro } from './synchro.ts';
 
 export type { Resultat } from './resultat.ts';
 
-export interface OptionsDuo {
-  readonly registre: Registre;
-  readonly diffusion: Diffusion;
-  readonly base: Database;
-  readonly utilisateur: string;
-  readonly dossierSecrets: string;
-  readonly ecoute: string | null;
-  readonly port: number;
-  readonly journal: Logger;
-  readonly maintenant?: () => number;
-  readonly delaiReconnexionMs?: number;
-  readonly delaiDemandeMs?: number;
-  readonly sessions: PontSessions;
-  readonly postes: Pick<Postes, 'commander'>;
-}
+import type { OptionsDuo } from './options-duo.ts';
 
-const DELAI_APPAIRAGE_MS = 10_000;
-const DELAI_RECONNEXION_MAX_MS = 30_000;
-const RAISON_CODE: Record<Exclude<VerdictCode, 'ok'>, string> = {
-  faux: 'code faux',
-  expire: 'code expiré',
-  utilise: 'code déjà utilisé',
-};
 
 export class Duo {
   readonly utilisateur: string;
@@ -84,6 +63,7 @@ export class Duo {
   private readonly ecoute: { readonly hote: string; readonly port: number };
   private readonly journal: Logger;
   private serveur: ServeurDuo | null = null;
+  private aiguilleur: LiaisonAiguilleur | null = null;
   private canal: Canal | null = null;
   private appelant: LienAppelant | null = null;
   private refuse = false;
@@ -123,6 +103,17 @@ export class Duo {
     this.avances = this.creerAvances(options);
   }
 
+  brancherAiguilleur(port: PortAiguilleurDuo): HandlerDuoAiguilleur {
+    this.aiguilleur = new LiaisonAiguilleur({ port, paires: this.paires, codes: this.codes, pont: this,
+      utilisateur: this.utilisateur, nomLocal: () => this.identite.nomLocal(), journal: this.journal,
+      maintenant: this.horloge });
+    this.aiguilleur.demarrer();
+    return this.aiguilleur;
+  }
+  confirmerAppairage(accord: boolean): Resultat<null> {
+    return this.aiguilleur?.decider(accord) ?? echec(409, 'nœud non relié à un aiguilleur');
+  }
+
   /** Ouvre le port d'écoute du lien et reprend le lien sortant si une paire existe. */
   demarrer(): void {
     this.desabonner = this.diffusion.ecouter((m) => this.surDiffusion(m));
@@ -147,6 +138,7 @@ export class Duo {
     this.canal = null;
     this.serveur?.stop(true);
     this.serveur = null;
+    this.aiguilleur?.arreter();
   }
 
   get portEcoute(): number {
@@ -165,17 +157,23 @@ export class Duo {
       etat: !paire ? 'absent' : this.canal ? 'connecte' : this.refuse ? 'refuse' : 'hors_ligne',
       partages: this.partages.lister(),
       presences: [...this.presences],
+      ...this.aiguilleur?.etat(),
     };
   }
 
-  codeAppairage(): Resultat<{ code: string; expireLe: string; port: number }> {
+  codeAppairage(): Resultat<{ code: string; expireLe: string; port: number; membre: string | null }> {
     if (this.paires.lire()) return echec(409, 'déjà appairé : révoquez la paire avant');
-    return ok({ ...this.codes.creer(), port: this.portEcoute, adresse: this.adresseEcoute() });
+    return ok({ ...this.codes.creer(), port: this.portEcoute, adresse: this.adresseEcoute(),
+      membre: this.aiguilleur?.membre() ?? null });
   }
 
   async rejoindre(adresse: string, code: string): Promise<Resultat<EtatDuo>> {
     if (this.paires.lire()) return echec(409, 'déjà appairé : révoquez la paire avant');
-    const r = await appairerAupres(adresse, code, this.utilisateur, DELAI_APPAIRAGE_MS);
+    if (VALIDE_IDENTIFIANT.test(adresse)) {
+      const r = await this.aiguilleur?.demanderAppairage(adresse, code);
+      return !r ? echec(409, 'nœud non relié à un aiguilleur') : r.ok ? ok(this.etat()) : r;
+    }
+    const r = await appairerAupres(adresse, code, this.utilisateur);
     if (!r.ok) return echec(r.raison === RAISON_INJOIGNABLE ? 502 : 403, r.raison);
     const paire: Paire = { id: r.paire, cle: r.cle, utilisateur: r.utilisateur, adresse, creeLe: this.maintenant() };
     this.paires.ecrire(paire);
@@ -187,6 +185,7 @@ export class Duo {
 
   /** Révocation des deux côtés : le pair l'apprend par le lien, ses sessions reçues disparaissent. */
   revoquer(): EtatDuo {
+    this.aiguilleur?.annuler();
     const canal = this.dissoudre();
     canal?.envoyer({ type: 'revocation' });
     canal?.fermer();
@@ -487,7 +486,7 @@ export class Duo {
     this.notifier();
   }
 
-  private notifier(): void {
+  notifier(): void {
     this.diffusion.diffuser({ type: 'duo_modifie' });
   }
 

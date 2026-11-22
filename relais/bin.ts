@@ -212,6 +212,8 @@ const federation = new Federation({
   },
   journal: journal.child({ domaine: 'federation' }),
 });
+// Le duo passe par ce même lien (un seul par nœud) : ses canaux `duo-…` lui sont remis.
+federation.brancherDuo(duo.brancherAiguilleur(federation.portDuo()));
 federation.demarrer();
 process.once('exit', () => federation.arreter());
 // Synchronisations sur demande (étape 6) : le journal reste dans le dossier du nœud, jamais de contenu de session.

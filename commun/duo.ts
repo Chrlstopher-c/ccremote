@@ -33,7 +33,7 @@ export const GenrePartage = z.enum(['session', 'projet']);
 export type GenrePartage = z.infer<typeof GenrePartage>;
 
 export const CorpsRejoindre = z.object({
-  adresse: z.string().min(3).max(255), // hôte:port du relais du pair, tel qu'affiché chez lui
+  adresse: z.string().min(3).max(255), // hôte:port du relais du pair, ou identifiant de son nœud sur l'aiguilleur
   code: z.string().length(LONGUEUR_CODE),
 });
 export const CorpsPartage = z.object({
@@ -54,9 +54,18 @@ export const PartageDuo = z.object({
 });
 export type PartageDuo = z.infer<typeof PartageDuo>;
 
+export const CorpsAppairage = z.object({ accord: z.boolean() }); // décision de Chris sur les empreintes
+export type CorpsAppairage = z.infer<typeof CorpsAppairage>;
 export const CorpsNom = z.object({ nom: z.string().trim().max(40) }); // vide : retour au nom d'utilisateur
 export type CorpsNom = z.infer<typeof CorpsNom>;
 
+export const EmpreintesAppairage = z.object({ locale: z.string(), distante: z.string() });
+export const AppairageEnAttente = z.object({
+  nom: z.string(),
+  utilisateur: z.string(),
+  decisionLocale: z.boolean(),
+  empreintes: EmpreintesAppairage,
+});
 export const EtatDuo = z.object({
   utilisateur: z.string(), // nom d'utilisateur de ce relais (machine)
   nom: z.string(), // nom affiché de ce relais, annoncé au pair
@@ -66,8 +75,13 @@ export const EtatDuo = z.object({
   etat: z.enum(['absent', 'connecte', 'hors_ligne', 'refuse']),
   partages: z.array(PartageDuo),
   presences: z.array(z.string()), // sessions partagées ouvertes chez le pair
+  // Étape 7 (par l'aiguilleur) : absents ou nuls en direct. Empreintes à comparer des deux côtés avant l'accord.
+  transport: z.enum(['direct', 'aiguilleur']).nullable().optional(),
+  empreintes: EmpreintesAppairage.nullable().optional(),
+  appairage: AppairageEnAttente.nullable().optional(),
 });
 export type EtatDuo = z.infer<typeof EtatDuo>;
+export type EtatAiguilleurDuo = Pick<EtatDuo, 'transport' | 'empreintes' | 'appairage'>;
 
 export const GenreDemande = z.enum(['message', 'ouvrir_session', 'passer_la_main']);
 export type GenreDemande = z.infer<typeof GenreDemande>;
