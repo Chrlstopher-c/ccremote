@@ -362,10 +362,11 @@ export class Postes {
   }
 
   // Une session que le poste n'annonce plus n'a plus de processus qu'il suit : elle est fermée, pas laissée « en
-  // attente » pour toujours.
+  // attente » pour toujours. Une jumelle Remote Control (`distant`) est suivie par claude.ai, pas par le poste : elle
+  // reste telle quelle, sinon chaque reconnexion du poste éteindrait Remote Control dans l'appli.
   private fermerNonAnnoncees(machine: string, annoncees: ReadonlySet<string>): void {
     for (const s of this.registre.sessions(true)) {
-      if (s.machine !== machine || s.statut === 'fermee' || annoncees.has(s.id)) continue;
+      if (s.machine !== machine || s.statut === 'fermee' || s.distant || annoncees.has(s.id)) continue;
       this.journal.info({ machine, sessionId: s.id, statut: s.statut }, 'session absente de l’annonce : fermée');
       this.registre.enregistrerSession({ ...s, statut: 'fermee' });
       this.diffuserSession(s.id);

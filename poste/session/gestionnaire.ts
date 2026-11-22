@@ -57,6 +57,7 @@ import { Spectateur } from '../distant/spectateur.ts';
 import { BalayageSessions } from './balayage-sessions.ts';
 import { ModelesChoisis } from './modeles-choisis.ts';
 import { TraceRelais, avecTraceRelais } from '../relais-sessions/trace.ts';
+import { controlesARetablir } from './session-sdk-noyau.ts';
 
 export interface Reponse {
   readonly ok: boolean;
@@ -199,6 +200,7 @@ export class GestionnaireSessions {
     for (const p of persistees) this.sessions.set(p.resume.id, this.creer(p));
     setTimeout(() => this.decouvertes.demarrer(), 0); // premier index lourd : après le démarrage du poste
     void relancerApresRedemarrage(this.reprisesPrevues(persistees), this.journal);
+    for (const id of controlesARetablir(persistees.filter((p) => p.aReprendre))) this.controles.ajouter(id);
     void this.decouvrir();
     setInterval(() => void this.decouvrir(), PERIODE_DECOUVERTE_MS);
     setInterval(() => this.lireTout(), PERIODE_LECTURE_MS);

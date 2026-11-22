@@ -94,11 +94,18 @@ function etatInitial(p: SessionPersistee): ResumeSession {
   };
 }
 
-// Une session que le poste pilote par le SDK a un Remote Control connu : éteint tant qu'on ne l'a pas branché. Sans
-// cet état, l'appli le croit « pas encore connu » et grise l'interrupteur. Une session tenue ailleurs garde le sien.
+// Une session que le poste pilote par le SDK a un Remote Control connu : éteint tant qu'on ne l'a pas branché, même
+// s'il était actif avant (le processus est neuf ; le gestionnaire le rebranche, voir `controlesARetablir`). Sans cet
+// état, l'appli le croit « pas encore connu » et grise l'interrupteur. Une session tenue ailleurs garde le sien.
 export function controleInitial(r: ResumeSession): ResumeSession['remoteControl'] {
-  if (r.remoteControl) return r.remoteControl;
   return r.pilotee === false || r.terminal ? (r.remoteControl ?? null) : { actif: false, url: null };
+}
+
+/** Sessions SDK reprises au démarrage dont Remote Control était actif : à rebrancher dès qu'elles sont au repos. */
+export function controlesARetablir(persistees: readonly { resume: ResumeSession }[]): string[] {
+  return persistees
+    .filter((p) => p.resume.remoteControl?.actif && p.resume.pilotee !== false && !p.resume.terminal)
+    .map((p) => p.resume.id);
 }
 
 // Les accesseurs `() => n` sont lus plus tard, au moment des événements : l'objet n'existe pas encore à la

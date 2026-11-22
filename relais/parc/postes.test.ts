@@ -113,6 +113,14 @@ describe('bonjour : sessions absentes de l’annonce du poste', () => {
 
     expect(['a', 'b', 'c'].map((id) => registre.session(id)?.statut)).toEqual(['fermee', 'fermee', 'fermee']);
   });
+
+  test('une jumelle Remote Control absente de l’annonce reste ouverte (suivie par claude.ai, pas par le poste)', () => {
+    const distant = { compte: 'principal', idDistant: 'cse_x', connexion: 'connectee' as const, probleme: null };
+    const { postes, registre } = montage([{ ...session('cse_x', 'tour', 'attente'), distant }]);
+    postes.recu(fauxPoste('tour'), bonjour('tour', []));
+
+    expect(registre.session('cse_x')?.statut).toBe('attente');
+  });
 });
 
 describe('flux : deltas de texte relayés sans persistance', () => {
