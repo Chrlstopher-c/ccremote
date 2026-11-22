@@ -6,11 +6,8 @@ import type { MessageClient } from '../../commun/api-clients.ts';
 import type { MessageDeAiguilleur, MessageVersAiguilleur } from '../../commun/aiguilleur.ts';
 import {
   empreinteIdentite,
-  exporterIdentitePrivee,
   exporterIdentitePublique,
-  genererIdentite,
   type Identite,
-  importerIdentitePrivee,
   importerIdentitePublique,
 } from '../../commun/chiffrement/identite.ts';
 import { type EvenementFedere, type MessageChiffre } from '../../commun/federation.ts';
@@ -29,7 +26,15 @@ import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
 import { type MembreVu, Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
-import { type AppairageEnCours, appairagesEnCours } from './appairages.ts';
+import {
+  type AppairageEnCours,
+  appairagesEnCours,
+  chargerIdentite,
+  noeudAppaire,
+  type NoeudAppaire,
+} from './appairages.ts';
+
+export type { NoeudAppaire };
 
 const DELAI_DEMANDE_MS = 10 * 60 * 1000;
 const MARGE_APPAIRAGE_MS = 30_000;
@@ -53,14 +58,6 @@ export interface OptionsFederation {
   readonly notifier?: (titre: string, texte: string) => void;
   /** Observe chaque charge échangée avec l'aiguilleur (essais : prouver qu'il ne voit que du chiffré). */
   readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
-}
-
-export interface NoeudAppaire {
-  readonly id: string;
-  readonly nom: string;
-  readonly empreinte: string;
-  readonly enLigne: boolean;
-  readonly liaisonOuverte: boolean;
 }
 
 export interface EtatFederation {
@@ -229,7 +226,8 @@ export class Federation {
 
   async etat(): Promise<EtatFederation> {
     const identite = await this.identite();
-    const noeuds = await Promise.all(this.pairs.map((p) => this.noeudAppaire(p)));
+    const lien = (id: string): boolean => this.canaux.liaisonOuverteAvec(id) !== null;
+    const noeuds = await Promise.all(this.pairs.map((p) => noeudAppaire(p, this.voisins.enLigne(p.id), lien(p.id))));
     const config = this.config;
     return {
       aiguilleur: config
@@ -470,27 +468,9 @@ export class Federation {
     }
   }
 
-  private async noeudAppaire(p: PairFederee): Promise<NoeudAppaire> {
-    return {
-      id: p.id,
-      nom: p.nom,
-      empreinte: await empreinteIdentite(await importerIdentitePublique(p.identite)).catch(() => ''),
-      enLigne: this.voisins.enLigne(p.id),
-      liaisonOuverte: this.canaux.liaisonOuverteAvec(p.id) !== null,
-    };
-  }
-
   private identite(): Promise<Identite> {
-    this.identiteEnCours ??= this.chargerIdentite();
+    this.identiteEnCours ??= chargerIdentite(this.secrets);
     return this.identiteEnCours;
-  }
-
-  private async chargerIdentite(): Promise<Identite> {
-    const existante = this.secrets.lireIdentitePrivee();
-    if (existante) return importerIdentitePrivee(existante);
-    const neuve = await genererIdentite();
-    this.secrets.ecrireIdentitePrivee(await exporterIdentitePrivee(neuve));
-    return neuve;
   }
 
   private surDiffusion(m: MessageClient): void {
