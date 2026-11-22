@@ -14,7 +14,7 @@ const MOTIFS_SESSION: readonly RegExp[] = [
   /^(evenements|contexte|connecteurs|taches|chapitres|messages|repondre|mode|modele|effort|rapide|autonomie)$/,
   /^(renommer|interrompre|compacter|reprendre|archiver|desarchiver|epingler|desepingler|marquer_lue)$/,
   /^(annexes|dupliquer|nuit|ultracode|rembobiner|remote-control)$/,
-  /^(marquer_non_lue|parite|dossier|competences|fichiers|contenu|recherche|styles|style)$/,
+  /^(marquer_non_lue|parite|dossier|competences|fichiers|contenu|recherche|styles|style|prompt-systeme)$/,
   /^git\/(modifications|diff|annuler|commiter)$/,
   new RegExp(`^tours/${SEGMENT}/(modifications|diff|annuler)$`),
   new RegExp(`^artefacts/${SEGMENT}/(renommer|dupliquer|supprimer|epingler)$`),
