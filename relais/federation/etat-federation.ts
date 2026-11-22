@@ -76,6 +76,8 @@ export interface OptionsFederation {
   readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
   /** Sert l'API clients à un appareil appairé, dans son canal (absent : 503). */
   readonly servirAppareil?: ServirAppareil;
+  /** Rejoue les routes locales pour le téléphone chef (`/api/reseau/telephone/…`) : absent, 503. */
+  readonly servirChef?: ServirAppareil;
   /** Nœud embarqué (non autonome) : il peut fonder le réseau du parc à la première liaison (migration). */
   readonly peutReprendre?: boolean;
   /** Chef dans la charte du réseau : seul un chef peut agir sur cette machine. Absent : personne ne l'est. */

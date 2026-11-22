@@ -223,6 +223,7 @@ const federation = new Federation({
   diffusion,
   dossierSecrets,
   servirAppareil: (demande) => servirPourAppareil(demande),
+  servirChef: (demande) => servirPourChef(demande),
   machine: machineLocale,
   peutReprendre: process.env['LANTERNE_MOTEUR_AUTONOME'] !== '1',
   pont: {
@@ -371,6 +372,7 @@ const routesInternes = construireRoutes(dependancesApi, (g) => g) as unknown as 
 const routesAppareils = construireRoutes(dependancesApi, (g) => avecGardeInvites(dependancesApi, g)) as unknown as TableInterne;
 // Un appareil appairé (identité acceptée au nœud) : son API passe par la table interne, sur son canal chiffré.
 const servirPourAppareil = servirAppareil(routesAppareils, journal.child({ domaine: 'appareil' }));
+const servirPourChef = servirAppareil(routesInternes, journal.child({ domaine: 'chef' }), { toutesRoutes: true });
 federation.distantes.brancherMachines(() => postes.vues());
 
 // Une demande qui attend la décision de Chris sur ce nœud (appairage, synchronisation) : notification dans l'appli.

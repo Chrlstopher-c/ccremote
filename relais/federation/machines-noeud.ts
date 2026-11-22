@@ -1,7 +1,7 @@
 // Responsabilité : le câblage des machines d'un nœud (pause, état de la machine, actions de chef) à partir des options
 // de la fédération. Chaque pièce vit dans son module ; ce fichier ne fait que les relier.
 import { join } from 'node:path';
-import type { EtatNoeud } from '../../commun/federation.ts';
+import type { ActionNoeud, EtatNoeud, OrdreSigne } from '../../commun/federation.ts';
 import { ActionsNoeud } from './actions-noeud.ts';
 import type { Echanges } from './echanges.ts';
 import type { OptionsFederation } from './etat-federation.ts';
@@ -21,6 +21,7 @@ export interface DependancesMachines {
   readonly options: OptionsFederation;
   readonly echanges: Echanges;
   readonly machineDe: (membre: string) => string | null;
+  readonly verifierOrdre: (ordre: OrdreSigne, action: ActionNoeud) => Promise<boolean>;
 }
 
 export function creerMachinesNoeud(d: DependancesMachines): MachinesNoeud {
@@ -49,6 +50,7 @@ export function creerMachinesNoeud(d: DependancesMachines): MachinesNoeud {
       pause,
       commandes: options.commandes,
       estChef: options.estChef ?? (() => false),
+      verifierOrdre: d.verifierOrdre,
       echanges: d.echanges,
       machineDe,
       reveil: options.reveil ?? null,

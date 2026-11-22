@@ -51,6 +51,13 @@ export const TAILLE_MAX_CHARTE_CARACTERES = 256 * 1024;
 /** Actions d'un chef sur la machine d'un nœud. `reveiller` n'en est pas : il part d'un nœud voisin en ligne. */
 export const ACTIONS_NOEUD = ['arreter', 'pause', 'reprendre', 'redemarrer'] as const;
 export type ActionNoeud = (typeof ACTIONS_NOEUD)[number];
+/** Ordre signé par un téléphone chef (`commun/ordre-machine.ts` le lit) : texte JSON exact, Ed25519 en base64url. */
+export const TAILLE_MAX_ORDRE_CARACTERES = 2000;
+export const OrdreSigne = z.strictObject({
+  texte: z.string().min(2).max(TAILLE_MAX_ORDRE_CARACTERES),
+  signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
+});
+export type OrdreSigne = z.infer<typeof OrdreSigne>;
 const ETAT_FONCTION = z.enum(['lancee', 'arretee', 'absente']);
 /** État d'une machine de nœud (`etat_noeud`) : objets ouverts, un champ inconnu d'une version plus récente passe. */
 export const EtatNoeud = z.object({
@@ -315,7 +322,13 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   }),
   // Action d'un chef sur la machine d'un nœud : l'émetteur doit être chef dans la charte du nœud visé (identité du
   // canal chiffré). Réponse : `reponse` (même `ref`).
-  z.strictObject({ t: z.literal('action_noeud'), ref: REF, action: z.enum(ACTIONS_NOEUD) }),
+  // `ordre` : un téléphone chef relié à un autre nœud signe l'action ; le nœud visé la vérifie dans sa charte.
+  z.strictObject({
+    t: z.literal('action_noeud'),
+    ref: REF,
+    action: z.enum(ACTIONS_NOEUD),
+    ordre: OrdreSigne.optional(),
+  }),
   // État de la machine d'un nœud, envoyé à ses pairs à l'ouverture du lien puis périodiquement. Champs ouverts.
   z.strictObject({ t: z.literal('etat_noeud'), etat: EtatNoeud }),
   // Activité des invités dont ce nœud fait tourner les sessions (télémétrie active), envoyée aux chefs : jamais de

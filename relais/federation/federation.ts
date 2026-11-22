@@ -11,11 +11,15 @@ import {
   importerIdentitePublique,
 } from '../../commun/chiffrement/identite.ts';
 import {
+  type ActionNoeud,
   type EvenementFedere,
   type MessageChiffre,
   NOMBRE_MAX_DEMANDES,
+  type OrdreSigne,
   TAILLE_MORCEAU_APPAREIL_CARACTERES,
 } from '../../commun/federation.ts';
+import { NoncesVus, verifierOrdre } from '../../commun/ordre-machine.ts';
+import { ChefAppareil, estRouteTelephone } from './chef-appareil.ts';
 import { messagesAvecCorps, Reassemblage } from './transferts.ts';
 import { DiffusionAppareil } from './appareil-diffusion.ts';
 import { TerminalAppareil } from './terminal-appareil.ts';
@@ -104,6 +108,10 @@ export class Federation {
   /** Appareils révoqués (définitif) : une admission reçue d'un pair pour l'un d'eux est ignorée. */
   private readonly appareilsRevoques: Set<string>;
   private readonly machines: MachinesNoeud;
+  /** Téléphone chef : ses routes `/api/reseau/telephone/…`, servies ici (charte, ordres signés, demandes). */
+  private readonly chefAppareil: ChefAppareil;
+  /** Nonces des ordres reçus d'un pair, pour ce nœud : un ordre ne s'applique qu'une fois. */
+  private readonly noncesOrdre = new NoncesVus();
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
@@ -161,6 +169,25 @@ export class Federation {
       options: optionsMachines,
       echanges: this.echanges,
       machineDe: (m) => this.machineDe(m),
+      verifierOrdre: (ordre, action) => this.ordreValide(ordre, action),
+    });
+    this.chefAppareil = this.creerChefAppareil();
+  }
+
+  private creerChefAppareil(): ChefAppareil {
+    const { servirChef } = this.options;
+    return new ChefAppareil({
+      journal: this.options.journal.child({ domaine: 'chef-appareil' }),
+      charte: () => this.charte.charte(),
+      signee: () => this.charte.signee(),
+      moi: () => this.config?.id ?? null,
+      estChef: (membre) => this.charte.estChef(membre),
+      proposer: (signee) => this.charte.proposer(signee),
+      machinesReseau: () => this.machinesReseau(),
+      agir: (membre, action, ordre) => this.agirSurMachine(membre, action, ordre),
+      demandes: () => this.demandes.lister(),
+      decider: (id, accord) => this.demandes.decider(id, accord),
+      ...(servirChef ? { rejouer: servirChef } : {}),
     });
   }
 
@@ -476,7 +503,7 @@ export class Federation {
       const empreinte = await empreinteIdentite(await importerIdentitePublique(presentation.identite));
       const locale = await empreinteIdentite((await this.identite()).publique);
       if (!canal.actif) return;
-      const suite = this.charte.suiteAppairage(presentation);
+      const suite = this.charte.suiteAppairage(presentation, this.chefAppareilRelie());
       if (suite === 'accord') return this.decisionAppairage(canal, presentation, true);
       if (suite === 'refus') {
         this.options.journal.warn({ membre: canal.membre }, 'présentation refusée : demande à un chef du réseau');
@@ -490,6 +517,7 @@ export class Federation {
           empreinte,
           empreinteLocale: locale,
           genre: presentation.genre ?? 'noeud',
+          identite: presentation.identite,
         },
         (accord) => {
           void this.decisionAppairage(canal, presentation, accord);
@@ -629,6 +657,10 @@ export class Federation {
     m: Extract<MessageChiffre, { t: 'api' }>,
     corps: string | undefined,
   ): Promise<ReponseAppareilFedere> {
+    if (estRouteTelephone(m.chemin)) {
+      const demande = { methode: m.methode, chemin: m.chemin, corps, codage: m.codage, type: m.type };
+      return this.chefAppareil.servir(membre, demande);
+    }
     if (!this.charte.autorise(membre, { genre: 'api', methode: m.methode, chemin: m.chemin })) {
       return { statut: 403, corps: JSON.stringify({ erreur: 'droit refusé' }) };
     }
@@ -810,14 +842,38 @@ export class Federation {
     return [moi, ...pairs];
   }
 
-  /** Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action de chef relayée à un pair relié. */
-  async agirSurMachine(membre: string, action: ActionMachine): Promise<Resultat<null>> {
+  /**
+   * Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action relayée à un pair relié.
+   * `ordre` : l'ordre signé par le téléphone chef, que le pair vérifiera dans sa propre charte.
+   */
+  async agirSurMachine(membre: string, action: ActionMachine, ordre?: OrdreSigne): Promise<Resultat<null>> {
     if (membre === MEMBRE_MOI || membre === this.config?.id) return this.machines.actions.executerLocale(action);
     if (!this.estNoeud(membre)) return echec(404, 'nœud inconnu');
     if (action === 'reveiller') return this.machines.actions.reveiller(membre);
     const canal = this.canaux.liaisonOuverteAvec(membre);
     if (!canal) return echec(409, 'nœud hors ligne');
-    return this.machines.actions.demander(canal, action);
+    return this.machines.actions.demander(canal, action, ordre);
+  }
+
+  /** Un ordre signé reçu d'un pair vaut ici si la charte locale le tient : cette cible, cette action, pas rejoué. */
+  private async ordreValide(ordre: OrdreSigne, action: ActionNoeud): Promise<boolean> {
+    const moi = this.config?.id;
+    if (!moi) return false;
+    const verdict = await verifierOrdre(this.charte.charte(), ordre, {
+      cible: moi,
+      maintenantMs: Date.now(),
+      nonces: this.noncesOrdre,
+    });
+    if (!verdict.ok) {
+      this.options.journal.warn({ motif: verdict.motif }, 'ordre de chef refusé');
+      return false;
+    }
+    return verdict.ordre.action === action;
+  }
+
+  /** Un téléphone chef est relié à ce nœud : il tranche les demandes d'appairage qui arrivent ici. */
+  private chefAppareilRelie(): boolean {
+    return this.canaux.ouverts().some((c) => this.estAppareil(c.membre) && this.charte.estChef(c.membre));
   }
 
   private identifiantMoi(): string {
