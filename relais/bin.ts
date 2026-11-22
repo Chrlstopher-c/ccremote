@@ -39,7 +39,7 @@ import { AccesMachines } from './machines/acces-machines.ts';
 import { Installations } from './machines/installations.ts';
 import { RegistreMachines } from './machines/registre-machines.ts';
 import { nommageLanterne } from './machines/script-installation.ts';
-import { chargerSecretsPostes, dossierSecretsPostes } from './machines/secrets.ts';
+import { chargerSecretsPostes } from './machines/secrets.ts';
 import { Ssh } from './machines/ssh.ts';
 import { Tunnels } from './machines/tunnels.ts';
 import { ApiEntretien } from './entretien/api-entretien.ts';
@@ -66,7 +66,7 @@ const registre = new Registre(base, journal, config.inactiviteMs);
 const diffusion = new Diffusion();
 const plafond = new PlafondEchecs(config.fichierEchecs, journal.child({ domaine: 'acces' }));
 const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
-const dossierSecrets = dossierSecretsPostes();
+const dossierSecrets = config.dossierSecrets;
 const secretsPostes = new Map<string, string>([...config.secretsPostes, ...chargerSecretsPostes(dossierSecrets)]);
 const postes = new Postes(registre, diffusion, secretsPostes, journal);
 const appelsModules = new AppelsModules({ registre, diffusion });
@@ -247,7 +247,7 @@ const routes = avecCors(
 const routesGestionAcces = avecCors(routesAcces(acces, journal.child({ domaine: 'acces' })), config.origines);
 const connecteurs = routesMcp(
   acces,
-  adresseBoucle(config.hotesWeb[0] ?? '127.0.0.1', config.portWeb),
+  adresseBoucle(config.boucleWeb.hote, config.boucleWeb.port),
   journal.child({ domaine: 'mcp' }),
 );
 
@@ -256,10 +256,10 @@ function fichierBureau(req: Request): Response {
   return servirStatique(config.web, new URL(req.url).pathname) ?? indexSpa(config.web);
 }
 
-for (const hostname of config.hotesWeb) {
+for (const { hote, port } of config.ecouteWeb) {
   Bun.serve({
-    hostname,
-    port: config.portWeb,
+    hostname: hote,
+    port,
     // Au-delà des 10 s par défaut : le long-poll attend jusqu'à 30 s, une commande de poste jusqu'à 60 s.
     idleTimeout: 75,
     routes: {
@@ -300,28 +300,31 @@ for (const hostname of config.hotesWeb) {
   });
 }
 
-Bun.serve({
-  hostname: config.hotePostes,
-  port: config.portPostes,
-  fetch(req, serveur) {
-    if (new URL(req.url).pathname !== CHEMIN_POSTE) return new Response('introuvable', { status: 404 });
-    const machine = postes.authentifier(req);
-    if (!machine) {
-      journal.warn({ machine: req.headers.get('x-ccremote-machine') }, 'poste refusé : secret invalide');
-      return new Response('refusé', { status: 401 });
-    }
-    return serveur.upgrade(req, { data: { machine } }) ? undefined : new Response('WebSocket attendu', { status: 426 });
-  },
-  websocket: {
-    data: {} as DonneesPoste,
-    open: (ws) => postes.ouvert(ws),
-    close: (ws) => postes.ferme(ws),
-    message: (ws, m) => postes.recu(ws, String(m)),
-    idleTimeout: 120,
-    sendPings: true,
-    maxPayloadLength: 64 * 1024 * 1024, // un module de 20 Mo part en base64 (~27 Mo) dans un seul message (v1.2)
-  },
-});
+for (const { hote, port } of config.ecoutePostes)
+  Bun.serve({
+    hostname: hote,
+    port,
+    fetch(req, serveur) {
+      if (new URL(req.url).pathname !== CHEMIN_POSTE) return new Response('introuvable', { status: 404 });
+      const machine = postes.authentifier(req);
+      if (!machine) {
+        journal.warn({ machine: req.headers.get('x-ccremote-machine') }, 'poste refusé : secret invalide');
+        return new Response('refusé', { status: 401 });
+      }
+      return serveur.upgrade(req, { data: { machine } })
+        ? undefined
+        : new Response('WebSocket attendu', { status: 426 });
+    },
+    websocket: {
+      data: {} as DonneesPoste,
+      open: (ws) => postes.ouvert(ws),
+      close: (ws) => postes.ferme(ws),
+      message: (ws, m) => postes.recu(ws, String(m)),
+      idleTimeout: 120,
+      sendPings: true,
+      maxPayloadLength: 64 * 1024 * 1024, // un module de 20 Mo part en base64 (~27 Mo) dans un seul message (v1.2)
+    },
+  });
 
 duo.demarrer();
 lancerRetention(registre, journal);
@@ -329,9 +332,9 @@ lancerRecalculInactivite(registre, diffusion, journal.child({ domaine: 'sessions
 
 journal.info(
   {
-    web: config.portWeb,
-    hotesWeb: config.hotesWeb,
-    postes: config.portPostes,
+    central: config.central,
+    web: config.ecouteWeb.map((a) => `${a.hote}:${a.port}`),
+    postes: config.ecoutePostes.map((a) => `${a.hote ?? '*'}:${a.port}`),
     machinesAutorisees: [...config.secretsPostes.keys()],
   },
   'relais démarré',

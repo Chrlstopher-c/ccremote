@@ -1,6 +1,8 @@
-// Responsabilité : la configuration du relais, lue exclusivement dans l'environnement (aucune valeur réelle dans le
-// dépôt).
+// Responsabilité : la configuration du relais, lue dans l'environnement (aucune valeur réelle dans le dépôt).
+// Deux modes : local (relais embarqué dans l'appli, postes joints par tunnels SSH) et central (relais du Pi, les postes
+// se connectent eux-mêmes ; écoute et données explicites).
 import { dirname, join } from 'node:path';
+import { dossierSecretsPostes } from './machines/secrets.ts';
 
 /** Relais intégré à l'appli (variables LANTERNE_MOTEUR_*) : postes Lanterne joints par tunnel SSH inverse. */
 export interface ConfigIntegre {
@@ -9,18 +11,35 @@ export interface ConfigIntegre {
   readonly codePoste: string | null; // archive du code du poste embarquée (LANTERNE_MOTEUR_CODE_POSTE)
 }
 
-export interface ConfigRelais {
+/** Une adresse d'écoute de l'API des clients : hôte et port. */
+export interface AdresseEcoute {
+  readonly hote: string;
+  readonly port: number;
+}
+
+/** Une adresse d'écoute du lien des postes : hôte absent = toutes les interfaces (comportement d'origine). */
+export interface EcoutePostes {
+  readonly hote: string | undefined;
+  readonly port: number;
+}
+
+interface Ecoute {
+  readonly ecouteWeb: readonly AdresseEcoute[];
+  readonly boucleWeb: AdresseEcoute; // adresse par laquelle le connecteur MCP local rejoint le relais
+  readonly ecoutePostes: readonly EcoutePostes[];
+}
+
+export interface ConfigRelais extends Ecoute {
+  readonly central: boolean; // LANTERNE_RELAIS_MODE=central : aucun tunnel SSH vers les postes
   readonly empreinteMotDePasse: string;
   readonly secretsPostes: ReadonlyMap<string, string>;
+  readonly dossierSecrets: string; // un fichier <machine>.secret par poste
   readonly isolees: ReadonlySet<string>;
   readonly wol: ReadonlyMap<string, string>;
   readonly diffusionWol: string;
   readonly base: string;
-  readonly portWeb: number;
-  readonly hotesWeb: readonly string[];
   readonly fichierEchecs: string;
   readonly portPostes: number;
-  readonly hotePostes: string | undefined; // absent : toutes les interfaces (comportement d'origine)
   readonly web: string;
   readonly hq: string;
   readonly inactiviteMs: number;
@@ -29,10 +48,12 @@ export interface ConfigRelais {
   readonly reunionLimite: number; // demandes de Chris relayées par réunion (CCREMOTE_REUNION_LIMITE)
   readonly relaisPostes: string | null; // adresse WebSocket du relais vue des machines SSH (CCREMOTE_RELAIS_POSTES)
   readonly urlApiPostes: string | null; // URL HTTP de l'API vue des postes distants (CCREMOTE_URL_API_POUR_POSTES)
-  readonly integre: ConfigIntegre | null; // présent seulement si LANTERNE_MOTEUR_PORT_POSTES est défini
+  readonly integre: ConfigIntegre | null; // présent seulement si LANTERNE_MOTEUR_PORT_POSTES est défini (hors central)
   // lien du mode duo (LANTERNE_DUO_ECOUTE / _PORT) ; écoute absente : adresse WireGuard
   readonly duo: { readonly ecoute: string | null; readonly port: number };
 }
+
+const PORT_POSTES_CENTRAL_DEFAUT = 8721;
 
 // « a=x,b=y » → Map ; « a,b » → Set
 function paires(v: string | undefined): Map<string, string> {
@@ -63,26 +84,43 @@ function requis(nom: string): string {
   return v;
 }
 
+// Central : données explicites (relais.db dans LANTERNE_RELAIS_DONNEES) ; local : CCREMOTE_BASE ou le dépôt.
+function cheminBase(donnees: string | null): string {
+  if (donnees) return join(donnees, 'relais.db');
+  return process.env['CCREMOTE_BASE'] ?? join(import.meta.dir, '..', '.donnees/relais.db');
+}
+
+function portPostesDe(central: boolean): number {
+  if (central) return entierPositif(process.env['LANTERNE_RELAIS_PORT_POSTES'], PORT_POSTES_CENTRAL_DEFAUT);
+  return Number(process.env['LANTERNE_MOTEUR_PORT_POSTES'] ?? process.env['CCREMOTE_PORT_POSTES'] ?? 8721);
+}
+
+function configDuo(): ConfigRelais['duo'] {
+  return {
+    ecoute: process.env['LANTERNE_DUO_ECOUTE'] || null, // absente : adresse WireGuard, à défaut la boucle locale
+    port: entierPositif(process.env['LANTERNE_DUO_PORT'], 8722),
+  };
+}
+
 export function chargerConfig(): ConfigRelais {
   const racine = join(import.meta.dir, '..');
-  const base = process.env['CCREMOTE_BASE'] ?? join(racine, '.donnees/relais.db');
+  const central = process.env['LANTERNE_RELAIS_MODE'] === 'central';
+  const donnees = central ? requis('LANTERNE_RELAIS_DONNEES') : null;
+  const base = cheminBase(donnees);
+  const portPostes = portPostesDe(central);
   return {
-    duo: {
-      ecoute: process.env['LANTERNE_DUO_ECOUTE'] || null, // absente : adresse WireGuard, à défaut la boucle locale
-      port: entierPositif(process.env['LANTERNE_DUO_PORT'], 8722),
-    },
+    central,
+    ...(central ? ecouteCentrale(portPostes) : ecouteLocale(portPostes)),
+    duo: configDuo(),
     empreinteMotDePasse: requis('CCREMOTE_EMPREINTE_MOT_DE_PASSE'),
-    secretsPostes: paires(requis('CCREMOTE_SECRETS_POSTES')),
+    secretsPostes: paires(central ? process.env['CCREMOTE_SECRETS_POSTES'] : requis('CCREMOTE_SECRETS_POSTES')),
+    dossierSecrets: donnees ? join(donnees, 'postes') : dossierSecretsPostes(),
     isolees: new Set(liste(process.env['CCREMOTE_MACHINES_ISOLEES'])),
     wol: paires(process.env['CCREMOTE_WOL']),
     diffusionWol: process.env['CCREMOTE_DIFFUSION_WOL'] ?? '255.255.255.255',
     base,
-    portWeb: Number(process.env['LANTERNE_MOTEUR_PORT_WEB'] ?? process.env['CCREMOTE_PORT_WEB'] ?? 8766),
-    // Boucle locale seulement : le tunnel Cloudflare est le seul chemin d'accès aux clients.
-    hotesWeb: liste(process.env['CCREMOTE_HOTES_WEB'] ?? '127.0.0.1,::1'),
     fichierEchecs: process.env['CCREMOTE_ECHECS'] ?? join(dirname(base), 'echecs-connexion.json'),
-    portPostes: Number(process.env['LANTERNE_MOTEUR_PORT_POSTES'] ?? process.env['CCREMOTE_PORT_POSTES'] ?? 8721),
-    hotePostes: process.env['CCREMOTE_HOTE_POSTES'] || undefined,
+    portPostes,
     web: process.env['CCREMOTE_WEB'] ?? join(racine, 'bureau/dist'),
     hq: process.env['CCREMOTE_HQ'] ?? join(racine, 'hq/dist'),
     inactiviteMs: minutes(process.env['CCREMOTE_INACTIVITE_MIN'], 30) * 60_000,
@@ -90,11 +128,54 @@ export function chargerConfig(): ConfigRelais {
     reunionLimite: entierPositif(process.env['CCREMOTE_REUNION_LIMITE'], 20),
     relaisPostes: process.env['CCREMOTE_RELAIS_POSTES'] || null,
     urlApiPostes: process.env['CCREMOTE_URL_API_POUR_POSTES'] || null,
-    integre: configIntegre(),
+    integre: central ? null : configIntegre(),
     origines: new Set(
       liste(process.env['CCREMOTE_ORIGINES'] ?? 'tauri://localhost,http://tauri.localhost,http://localhost:1420'),
     ),
   };
+}
+
+// Local : écoute sur la boucle locale (le tunnel Cloudflare est le seul chemin d'accès aux clients), postes sur
+// CCREMOTE_HOTE_POSTES ou toutes les interfaces.
+function ecouteLocale(portPostes: number): Ecoute {
+  const portWeb = Number(process.env['LANTERNE_MOTEUR_PORT_WEB'] ?? process.env['CCREMOTE_PORT_WEB'] ?? 8766);
+  const hotesWeb = liste(process.env['CCREMOTE_HOTES_WEB'] ?? '127.0.0.1,::1');
+  return {
+    ecouteWeb: hotesWeb.map((hote) => ({ hote, port: portWeb })),
+    boucleWeb: { hote: hotesWeb[0] ?? '127.0.0.1', port: portWeb },
+    ecoutePostes: [{ hote: process.env['CCREMOTE_HOTE_POSTES'] || undefined, port: portPostes }],
+  };
+}
+
+// Central : l'API des clients écoute sur chaque adresse de LANTERNE_RELAIS_ECOUTE ; le lien des postes écoute sur les
+// mêmes hôtes, au port LANTERNE_RELAIS_PORT_POSTES (un port séparé de l'API, jamais exposé par le tunnel).
+function ecouteCentrale(portPostes: number): Ecoute {
+  const adresses = parserEcoute(requis('LANTERNE_RELAIS_ECOUTE'));
+  const boucle = adresses.find((a) => a.hote === '127.0.0.1') ?? adresses[0];
+  if (!boucle) throw new Error('LANTERNE_RELAIS_ECOUTE vide');
+  const hotes = [...new Set(adresses.map((a) => a.hote))];
+  return {
+    ecouteWeb: adresses,
+    boucleWeb: boucle,
+    ecoutePostes: hotes.map((hote) => ({ hote, port: portPostes })),
+  };
+}
+
+/** « hôte:port,[ipv6]:port » → adresses d'écoute ; une entrée invalide arrête le relais au démarrage. */
+export function parserEcoute(brut: string): AdresseEcoute[] {
+  const adresses = liste(brut).map(lireAdresse);
+  if (adresses.length === 0) throw new Error('LANTERNE_RELAIS_ECOUTE vide : indiquer hôte:port');
+  return adresses;
+}
+
+function lireAdresse(entree: string): AdresseEcoute {
+  const i = entree.lastIndexOf(':');
+  const hote = entree.slice(0, Math.max(i, 0)).replace(/^\[(.*)\]$/, '$1');
+  const port = Number(entree.slice(i + 1));
+  if (i <= 0 || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`LANTERNE_RELAIS_ECOUTE : « ${entree} » n’est pas hôte:port`);
+  }
+  return { hote, port };
 }
 
 // « a, b » → liste sans espaces ni vides
