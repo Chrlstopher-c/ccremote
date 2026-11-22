@@ -67,7 +67,15 @@ function resumerTache(t: TacheVue, transcript: string, maintenant: number, journ
 function statutPresente(t: TacheVue, transcript: string, maintenant: number, journal: Logger): StatutPresente {
   if (t.notifiee) return { statut: t.statut, finLe: t.finLe };
   if (t.genre === 'agent') return statutAgentSansFin(t, transcript, maintenant, journal);
+  if (t.echeance !== null) return statutAEcheance(t.echeance, maintenant);
   return statutCommandeSansFin(t, maintenant, journal) ?? { statut: 'en_cours', finLe: null };
+}
+
+// Monitor sans arrêt : en cours jusqu'à son échéance, arrêté à l'échéance (sa durée, timeout_ms).
+function statutAEcheance(echeance: string, maintenant: number): StatutPresente {
+  const fin = Date.parse(echeance);
+  if (Number.isNaN(fin) || maintenant < fin) return { statut: 'en_cours', finLe: null };
+  return { statut: 'arretee', finLe: echeance };
 }
 
 // Agent sans notification : terminé si son méta-fichier dit « finished » ; en cours si son journal a bougé depuis

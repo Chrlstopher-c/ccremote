@@ -13,6 +13,7 @@ export interface NouvelleTache {
   readonly debutLe: string;
   readonly prompt: string | null;
   readonly modele: string | null;
+  readonly echeance?: string | null;
 }
 
 /** Statut final d'une fin rapportée par le transcript ; null pour un statut qui n'en est pas une. */
@@ -39,6 +40,7 @@ export function ouvrirTache(etat: EtatTranscript, nouvelle: NouvelleTache): Tach
     tacheId: null,
     sortie: null,
     notifiee: false,
+    echeance: nouvelle.echeance ?? null,
   };
   etat.taches.set(nouvelle.id, tache);
   return tache;

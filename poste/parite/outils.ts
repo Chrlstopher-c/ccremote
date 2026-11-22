@@ -3,7 +3,7 @@
 import type { AppelEnAttente, EtatTranscript } from './etat.ts';
 import { MAX_PROMPT } from '../../commun/parite.ts';
 import { arreterTache, lierIdentifiant, type NouvelleTache, ouvrirTache, reprendreTache } from './taches.ts';
-import { blocs, estObjet, texte, type Objet } from './lignes.ts';
+import { blocs, estObjet, nombre, texte, type Objet } from './lignes.ts';
 
 const MAX_INDICES = 80;
 const OUTILS_FICHIER = ['Edit', 'Write', 'Read', 'NotebookEdit'];
@@ -40,6 +40,8 @@ export function appliquerAppelOutil(etat: EtatTranscript, bloc: Objet, le: strin
       return ouvrirAgent(etat, id, entree, le);
     case 'Bash':
       return ouvrirCommande(etat, id, entree, le);
+    case 'Monitor':
+      return ouvrirMoniteur(etat, id, entree, le);
     case 'TaskStop':
       return arreterTache(etat, texte(entree['task_id']), le);
     case 'SendMessage':
@@ -61,7 +63,7 @@ export function appliquerResultatOutil(etat: EtatTranscript, bloc: Objet, result
   }
   const tache = etat.taches.get(id);
   if (!tache) return;
-  const identifiant = texte(detail['agentId']) ?? texte(detail['backgroundTaskId']);
+  const identifiant = texte(detail['agentId']) ?? texte(detail['backgroundTaskId']) ?? texte(detail['taskId']);
   if (identifiant !== null) lierIdentifiant(etat, tache, identifiant);
   const modele = texte(detail['resolvedModel']);
   if (modele !== null) tache.modele = modele;
@@ -109,6 +111,23 @@ function ouvrirCommande(etat: EtatTranscript, id: string, entree: Objet, le: str
     modele: null,
   };
   ouvrirTache(etat, nouvelle);
+}
+
+// Monitor : surveillance de fond, sans run_in_background ; ses événements ne la terminent pas, son arrêt oui (TaskStop)
+// ou son échéance (timeout_ms).
+function ouvrirMoniteur(etat: EtatTranscript, id: string, entree: Objet, le: string): void {
+  const commande = texte(entree['command']) ?? '';
+  const duree = nombre(entree['timeout_ms']);
+  const debut = Date.parse(le);
+  ouvrirTache(etat, {
+    id,
+    genre: 'commande',
+    description: texte(entree['description']) ?? commande.slice(0, 80),
+    debutLe: le,
+    prompt: tronquer(commande),
+    modele: null,
+    echeance: duree > 0 && !Number.isNaN(debut) ? new Date(debut + duree).toISOString() : null,
+  });
 }
 
 function enregistrerResultat(etat: EtatTranscript, chemin: string, origine: 'envoye' | 'cree', le: string): void {

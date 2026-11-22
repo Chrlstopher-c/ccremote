@@ -94,10 +94,11 @@ export class BalayageSessions {
       if (a && !s.transcriptConnu) this.associer(s, a);
     }
     for (const pane of panes.filter((p) => !vus.has(p.nom))) this.adopterPane(pane, panes, parPid, entrees);
-    // CCREMOTE_ADOPTER_TERMINAUX=non : ne lit pas les Claude lancés hors tmux (moteur intégré, isolement d'essai).
+    // CCREMOTE_ADOPTER_TERMINAUX=non : n'adopte pas les Claude hors tmux inconnus (moteur intégré, isolement d'essai) ;
+    // les conversations déjà connues restent suivies (statut en travail / en attente).
     const terminaux = process.env['CCREMOTE_ADOPTER_TERMINAUX'] !== 'non';
     this.cederTenues(procs);
-    this.suivreTerminaux(terminaux ? processusAdoptables(procs, (p) => this.transcriptPresent(p)) : [], entrees);
+    this.suivreTerminaux(procs, entrees, terminaux);
     this.suivreFermees(entrees, panes, procs);
     this.recalerFermees();
   }
@@ -115,9 +116,12 @@ export class BalayageSessions {
     else this.d.journal.debug({ tmux: pane.nom }, 'pane claude sans identifiant : non adoptée');
   }
 
-  // Sessions Claude lancées dans un terminal ordinaire : visibles en lecture, fermées quand leur processus s'arrête.
-  private suivreTerminaux(procs: readonly ProcessusClaude[], entrees: readonly EntreeCc[]): void {
-    const vivants = new Set(procs.map((p) => p.sessionId));
+  // Sessions Claude lancées hors tmux (terminal ordinaire, Claude Desktop) : suivies en lecture, en travail ou en
+  // attente tant que leur processus les tient, fermées quand il s'arrête. Une session déjà connue reçoit toujours
+  // son statut ; une conversation inconnue n'est adoptée que si `adopter` (le moteur intégré ne l'exige pas).
+  suivreTerminaux(procs: readonly ProcessusClaude[], entrees: readonly EntreeCc[], adopter: boolean): void {
+    const hors = processusAdoptables(procs, (p) => this.transcriptPresent(p));
+    const vivants = new Set(hors.map((p) => p.sessionId));
     const cartes = fichesDesktop(this.racine(), this.d.journal);
     for (const s of this.d.sessions.values()) {
       if (!s.resume.terminal) continue;
@@ -127,13 +131,12 @@ export class BalayageSessions {
       const modele = vivant ? this.modeleLu(cwd, claudeSessionId, s.persistee.configDir, cartes) : null;
       s.rattacherTerminal(vivant, enTour, modele);
     }
-    for (const p of procs) {
+    for (const p of hors) {
       const connue = this.d.fichePour(p.sessionId);
       if (connue) {
         const modele = this.modeleLu(p.cwd, p.sessionId, p.configDir, cartes);
         connue.rattacherTerminal(true, this.tourEnCours(p.cwd, p.sessionId, p.configDir), modele);
-      }
-      else if (!this.d.fichePour(p.sessionId)) {
+      } else if (adopter) {
         this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
       }
     }

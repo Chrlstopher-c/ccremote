@@ -56,9 +56,13 @@ function appliquerUtilisateur(etat: EtatTranscript, ligne: Objet, le: string): v
   }
 }
 
+// Claude Desktop 2.1.325 livre une notification de fond en pièce jointe `queued_command` (texte dans `prompt`).
 function appliquerPieceJointe(etat: EtatTranscript, ligne: Objet, le: string): void {
   const piece = ligne['attachment'];
-  if (estObjet(piece) && piece['type'] === 'task_status') appliquerEtatAttachement(etat, piece, le);
+  if (!estObjet(piece)) return;
+  if (piece['type'] === 'task_status') appliquerEtatAttachement(etat, piece, le);
+  const corps = texte(piece['prompt']);
+  if (piece['type'] === 'queued_command' && corps !== null) appliquerNotifications(etat, corps, le);
 }
 
 function appliquerPrLink(etat: EtatTranscript, ligne: Objet): void {
