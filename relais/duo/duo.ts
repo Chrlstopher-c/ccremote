@@ -40,7 +40,7 @@ import { type Paire, PaireStockee } from './paire-stockee.ts';
 import { PartagesDuo } from './partages.ts';
 import { cleNeuve, nonce } from './preuve.ts';
 import { VALIDE_IDENTIFIANT } from '../../commun/aiguilleur.ts';
-import type { HandlerDuoAiguilleur, PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
+import type { PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
 import { LiaisonAiguilleur } from './liaison-aiguilleur.ts';
 import { Synchro } from './synchro.ts';
 
@@ -61,6 +61,7 @@ export class Duo {
   private readonly presences = new Set<string>();
   private readonly delaiMin: number;
   private readonly ecoute: { readonly hote: string; readonly port: number };
+  private readonly ecouteDirecte: boolean;
   private readonly journal: Logger;
   private serveur: ServeurDuo | null = null;
   private aiguilleur: LiaisonAiguilleur | null = null;
@@ -91,6 +92,7 @@ export class Duo {
       this.identite.nomPair(),
     );
     this.ecoute = { hote: options.ecoute ?? choisirEcoute(networkInterfaces()), port: options.port };
+    this.ecouteDirecte = options.ecouteDirecte !== false;
     this.journal = options.journal;
     this.stockDroits = new DroitsDuo(options.base, options.journal);
     this.historique = new JournalDuo(options.base, options.journal);
@@ -103,7 +105,7 @@ export class Duo {
     this.avances = this.creerAvances(options);
   }
 
-  brancherAiguilleur(port: PortAiguilleurDuo): HandlerDuoAiguilleur {
+  brancherAiguilleur(port: PortAiguilleurDuo): LiaisonAiguilleur {
     this.aiguilleur = new LiaisonAiguilleur({ port, paires: this.paires, codes: this.codes, pont: this,
       utilisateur: this.utilisateur, nomLocal: () => this.identite.nomLocal(), journal: this.journal,
       maintenant: this.horloge });
@@ -118,7 +120,7 @@ export class Duo {
   demarrer(): void {
     this.desabonner = this.diffusion.ecouter((m) => this.surDiffusion(m));
     try {
-      this.serveur = ouvrirEcouteDuo(this.ecoute.hote, this.ecoute.port, this);
+      if (this.ecouteDirecte) this.serveur = ouvrirEcouteDuo(this.ecoute.hote, this.ecoute.port, this);
     } catch (erreur) {
       // Port pris ou adresse absente : le relais tourne sans le mode duo plutôt que de tomber.
       this.journal.error({ err: erreur, port: this.ecoute.port }, 'lien duo non ouvert');
@@ -173,6 +175,7 @@ export class Duo {
       const r = await this.aiguilleur?.demanderAppairage(adresse, code);
       return !r ? echec(409, 'nœud non relié à un aiguilleur') : r.ok ? ok(this.etat()) : r;
     }
+    if (!this.ecouteDirecte) return echec(409, 'lien direct réservé au premier ami');
     const r = await appairerAupres(adresse, code, this.utilisateur);
     if (!r.ok) return echec(r.raison === RAISON_INJOIGNABLE ? 502 : 403, r.raison);
     const paire: Paire = { id: r.paire, cle: r.cle, utilisateur: r.utilisateur, adresse, creeLe: this.maintenant() };
@@ -229,7 +232,7 @@ export class Duo {
   majDroits(droits: Droits): Droits {
     const enregistres = this.stockDroits.ecrire(droits);
     this.avances.synchroniser();
-    this.notifier();
+    this.envoyerInstantane();
     return enregistres;
   }
 

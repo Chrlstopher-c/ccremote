@@ -32,8 +32,9 @@ import { lireModules, servirFichierModule } from '../modules/api-modules.ts';
 import { appelerModule, lireCapacites, repondreModule } from '../modules/api-appels.ts';
 import { requeteServeurModule } from '../modules/api-serveur.ts';
 import type { AppelsModules } from '../modules/appels.ts';
-import type { Duo } from '../duo/duo.ts';
+import type { AmisDuo } from '../duo/amis.ts';
 import { routesDuo } from '../duo/api-duo.ts';
+import { routesAmis } from '../duo/api-amis.ts';
 import type { Federation } from '../federation/federation.ts';
 import { relayerVersNoeuds } from '../federation/interception.ts';
 import { routesFederation } from '../federation/api-federation.ts';
@@ -71,7 +72,7 @@ export interface DependancesApi {
   readonly parite: ApiParite;
   readonly confirmations: ApiConfirmations;
   readonly appels: AppelsModules;
-  readonly duo: Duo;
+  readonly duo: AmisDuo;
   readonly federation: Federation;
   /** Les invités (relais/invites) : garde des routes de contenu, ouverture, routes des réglages. */
   readonly invites: ApiInvites;
@@ -232,7 +233,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     '/api/modules/:id/serveur': {
       POST: protege((req) =>
         requeteServeurModule(d.registre, d.postes, req.params['id'] ?? '', req, (id, demande) =>
-          d.duo.avances.serveurDuPair(id, demande),
+          d.duo.serveurDuPair(id, demande),
         ),
       ),
     },
@@ -264,6 +265,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     ...routesEcho(d.echo, protege),
     ...routesEntretien(d.entretien, protege),
     ...routesDuo(d.duo, protege),
+    ...routesAmis(d.duo, protege),
     ...routesFederation(d.federation, protege),
     ...routesCharte(d.federation.charte, protege),
     ...d.invites.routes(protege),
