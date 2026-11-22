@@ -1,7 +1,8 @@
-// Responsabilité : une conversation Claude Code vue par plusieurs fiches (la fiche de poste et ses jumelles Remote
-// Control `cse_…`) n'en garde qu'une entrée. La principale est la fiche de poste quand elle existe et n'est pas
-// rangée ; sinon la vivante, puis la plus récente (même critère que l'aiguillage). Les autres sont masquées.
-// Chaque activation de Remote Control dans Claude Desktop crée une jumelle neuve : l'ancienne reste, déconnectée.
+// Responsabilité : une conversation Claude Code vue par plusieurs fiches (la fiche de poste — sdk, tmux ou terminal —
+// et ses jumelles Remote Control `cse_…`) n'en garde qu'une entrée. La principale est la fiche de poste quand elle
+// existe et n'est pas rangée ; sinon la vivante, puis la plus récente (même critère que l'aiguillage). Les autres sont
+// masquées. Chaque activation de Remote Control dans Claude Desktop crée une jumelle neuve : l'ancienne reste,
+// déconnectée. Une reprise (`--resume`) crée une fiche neuve pour la même conversation : même règle.
 // Pur : aucune écriture ici.
 import type { ResumeSession } from '../../commun/session.ts';
 
@@ -10,15 +11,21 @@ export interface PlanDoublons {
   readonly masquees: ReadonlyMap<string, string>;
 }
 
-/** Conversation vue par une fiche : celle de sa jumelle Remote Control, ou celle d'une fiche de poste ; null sinon. */
+/**
+ * Conversation vue par une fiche : celle de sa jumelle Remote Control (`distant.conversation`), ou celle d'une fiche de
+ * poste (`claudeSessionId`, ou son identifiant : même repli que l'appariement et l'aiguillage). Null si inconnue.
+ */
 export function conversationDe(s: ResumeSession): string | null {
   if (s.id.startsWith('cse_')) return s.distant?.conversation ?? null;
-  return s.terminal === true ? (s.claudeSessionId ?? null) : null;
+  return s.claudeSessionId ?? s.id;
 }
 
-/** Fiche de poste (hors Remote Control) : elle prime sur les jumelles de sa conversation. */
+/**
+ * Fiche de poste (sdk, tmux ou terminal, hors Remote Control et hors copie du duo) : elle prime sur les jumelles de sa
+ * conversation. Une copie du duo ne prime jamais : elle appartient au pair.
+ */
 export function estPoste(s: ResumeSession): boolean {
-  return !s.id.startsWith('cse_') && s.terminal === true;
+  return !s.id.startsWith('cse_') && s.duo === undefined;
 }
 
 /** Vivante : connectée à claude.ai et pas fermée. Même critère que `jumelleRemoteControl` (aiguillage). */

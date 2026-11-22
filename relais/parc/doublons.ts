@@ -3,6 +3,7 @@
 // la vue change sont diffusées. Sans changement, rien n'est écrit ni diffusé : le rapprochement peut être
 // relancé à chaque écriture.
 import type { Logger } from 'pino';
+import type { Categorie } from '../../commun/categories.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import {
@@ -61,10 +62,10 @@ export class Doublons {
     }
   }
 
-  // Catégories : une fiche masquée est remplacée par sa principale (dans les deux sens, selon qui est principal).
+  // Catégories : une fiche masquée est remplacée par sa principale ; l'entrée reste dans une seule catégorie.
   private reporterCategories(plan: PlanDoublons): void {
     const avant = this.registre.categories();
-    const apres = avant.map((c) => ({ ...c, sessions: c.sessions.map((id) => plan.masquees.get(id) ?? id) }));
+    const apres = categoriesUniques(avant, plan);
     if (JSON.stringify(avant) === JSON.stringify(apres)) return;
     this.registre.enregistrerCategories(apres);
   }
@@ -73,6 +74,26 @@ export class Doublons {
     const session = this.registre.session(id);
     if (session) this.diffusion.diffuser({ type: 'session', session });
   }
+}
+
+// Catégories remappées sur les principales. Une entrée n'occupe qu'une catégorie : celle de la principale si elle y
+// est, sinon la première qui contient une de ses fiches. Les sessions hors groupe ne changent pas.
+function categoriesUniques(avant: readonly Categorie[], plan: PlanDoublons): Categorie[] {
+  const principales = new Set(plan.masquees.values());
+  const cibleDe = (id: string): string => plan.masquees.get(id) ?? id;
+  const foyer = new Map<string, number>();
+  avant.forEach((c, i) => {
+    for (const id of c.sessions) {
+      const cible = cibleDe(id);
+      if (principales.has(cible) && (!foyer.has(cible) || id === cible)) foyer.set(cible, i);
+    }
+  });
+  return avant.map((c, i) => ({
+    ...c,
+    sessions: [...new Set(c.sessions.map(cibleDe))].filter(
+      (cible) => !principales.has(cible) || foyer.get(cible) === i,
+    ),
+  }));
 }
 
 // Fiches dont le masquage a changé depuis le rapprochement précédent (masquées ou redevenues visibles).
