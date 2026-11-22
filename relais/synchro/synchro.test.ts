@@ -142,6 +142,32 @@ describe('demande, accord, fusion', () => {
     expect(b.noeud.registre.categories().map((c) => c.id)).toEqual(['c9']);
   });
 
+  test('favoris reçus : une jumelle épinglée passe à la fiche de poste de sa conversation', async () => {
+    const { a, b } = await duo();
+    const distant = {
+      compte: 'principal',
+      idDistant: 'cse_b',
+      connexion: 'connectee' as const,
+      probleme: null,
+      conversation: 'conv-9',
+    };
+    const jumelle = { ...ficheDe('cse_b', 'a', 'jumelle'), id: 'cse_b', distant };
+    a.noeud.registre.enregistrerSession(jumelle);
+    a.noeud.registre.definirEpinglee('cse_b', true);
+    b.noeud.registre.enregistrerSession({ ...ficheDe('cse_b', 'b', 'jumelle'), id: 'cse_b', distant });
+    b.noeud.registre.enregistrerSession({
+      ...ficheDe('sb', 'b', 'poste'),
+      terminal: true,
+      claudeSessionId: 'conv-9',
+    });
+    b.service.demander(a.id, ['favoris']);
+    a.service.decider(await demandeRecue(a), true);
+    await etatEnvoyee(b, 'appliquee');
+    expect(b.noeud.registre.session('sb')?.epinglee).toBe(true);
+    expect(b.noeud.registre.session('cse_b')?.epinglee).toBe(false);
+    expect(b.noeud.registre.sessions(false).map((s) => s.id)).not.toContain('cse_b');
+  });
+
   test('le périmètre est respecté : rien d autre ne bouge si seuls les favoris sont demandés', async () => {
     const { a, b } = await duo();
     b.service.demander(a.id, ['favoris']);

@@ -18,6 +18,7 @@ import { ArchivagesEnMemoire } from '../registre/archivages-desktop.ts';
 import { RechercheJumelle } from './recherche-jumelle.ts';
 import { StatutsPaires } from './statut-paire.ts';
 import { Doublons } from './doublons.ts';
+import { conversationDe } from './doublons-conversation.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { ReseauPoste, VersionsClaude } from '../../commun/entretien.ts';
 import { RelecturesFil } from './relectures-fil.ts';
@@ -388,7 +389,7 @@ export class Postes {
   private enregistrerRapportee(s: ResumeSession): void {
     const jumelle = this.paires.enregistrer(this.desktop.avecDesktop(this.jumelles.avecJumelle(s)));
     if (jumelle) this.diffuserSession(jumelle.id);
-    if (s.id.startsWith('cse_')) this.doublons.reconcilier();
+    if (conversationDe(s) !== null) this.doublons.reconcilier();
   }
 
   /** Une conversation, une entrée : relancé à chaque changement d'une jumelle Remote Control, et au démarrage. */

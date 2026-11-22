@@ -188,6 +188,12 @@ describe('statut d’une conversation vue par sa fiche de poste et sa jumelle Re
     expect(registre.session('cse_1')?.statut).toBe('travail');
   });
 
+  test('une fiche de poste qui arrive après sa jumelle Remote Control devient l’entrée de la conversation', () => {
+    const { postes, registre } = montage([rc('attente')]);
+    rapporte(postes, 'tour', { ...avecConversation(session('tour-1', 'tour', 'attente'), 'conv-1'), terminal: true });
+    expect(registre.sessions(false).map((s) => s.id).sort()).toEqual(['tour-1']);
+  });
+
   test('une fiche de poste sans jumelle garde son statut rapporté', () => {
     const { postes, registre } = montage([]);
     rapporte(postes, 'tour', session('seule', 'tour', 'attente'));

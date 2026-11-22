@@ -139,7 +139,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     },
     '/api/categories': {
       GET: protege(() => lireCategories(d.registre)),
-      PUT: protege((req) => remplacerCategories(d.registre, req)),
+      PUT: protege((req) => remplacerCategories(d.registre, req, () => d.sessions.rapprocherDoublons())),
     },
     '/api/groupes-masques': {
       GET: protege(() => lireGroupesMasques(d.registre)),

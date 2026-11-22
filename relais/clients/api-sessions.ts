@@ -400,7 +400,7 @@ export class ApiSessions {
 
   // Une conversation, une entrée : l'épinglage, la non-lecture et l'archivage d'une jumelle Remote Control peuvent
   // changer la fiche principale.
-  private rapprocherDoublons(): void {
+  rapprocherDoublons(): void {
     this.doublons().reconcilier();
   }
 

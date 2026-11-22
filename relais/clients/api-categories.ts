@@ -10,8 +10,15 @@ export function lireCategories(registre: Registre): Response {
   return json({ categories: registre.categories() });
 }
 
-export async function remplacerCategories(registre: Registre, req: Request): Promise<Response> {
+// `rapprocher` relance le rapprochement des doublons après l'écriture (une catégorie peut viser une jumelle).
+export async function remplacerCategories(
+  registre: Registre,
+  req: Request,
+  rapprocher: () => void = () => undefined,
+): Promise<Response> {
   const c = await lireCorps(req, CorpsCategories);
   if (c instanceof Response) return c;
-  return json({ categories: registre.enregistrerCategories(c.categories) });
+  const normalisees = registre.enregistrerCategories(c.categories);
+  rapprocher();
+  return json({ categories: normalisees });
 }

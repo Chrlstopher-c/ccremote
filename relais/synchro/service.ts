@@ -21,6 +21,7 @@ import {
 } from '../../commun/synchro.ts';
 import { nonceRef } from '../federation/identifiants.ts';
 import { echec, ok, type Resultat } from '../federation/resultat.ts';
+import { Doublons } from '../parc/doublons.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { EntreeJournal, JournalSynchro } from './journal.ts';
 import { appliquerPaquet, type BilanFusion, construirePaquet } from './paquet.ts';
@@ -204,6 +205,7 @@ export class ServiceSynchro {
   private appliquer(suivie: Suivie, paquet: PaquetSynchro): void {
     try {
       const resultat = appliquerPaquet(this.options.registre, paquet);
+      new Doublons(this.options.registre, this.options.diffusion, this.options.logger).reconcilier();
       this.terminer(suivie, 'appliquee', undefined, resultat.bilan);
       for (const id of resultat.sessions) this.diffuserSession(id);
     } catch (erreur) {

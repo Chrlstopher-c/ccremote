@@ -48,6 +48,17 @@ describe('routes des catégories', () => {
     expect(await rep.json()).toEqual({ categories: [cat('a', ['z', 'm']), cat('b', ['a', 'k'])] });
   });
 
+  test('une écriture relance le rapprochement des doublons, un refus non', async () => {
+    let appels = 0;
+    const rapprocher = (): void => {
+      appels += 1;
+    };
+    await remplacerCategories(nouveauRegistre(), corps({ categories: [] }), rapprocher);
+    expect(appels).toBe(1);
+    await remplacerCategories(nouveauRegistre(), corps({ categories: 'pas une liste' }), rapprocher);
+    expect(appels).toBe(1);
+  });
+
   test('corps invalide (sessions pas une liste) : 400 avec erreur', async () => {
     const rep = await remplacerCategories(nouveauRegistre(), corps({ categories: 'pas une liste' }));
     expect(rep.status).toBe(400);
