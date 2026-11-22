@@ -175,3 +175,25 @@ describe('appairage vu de l’ouvrant', () => {
     expect((await a.federation.etat()).empreinteLocale).toBe(demande?.empreinte ?? 'absente');
   });
 });
+
+describe('machine annoncée', () => {
+  test('ses projets passent ; « Cet ordinateur » devient le nom du nœud chez le pair', async () => {
+    const a = await nouveau('tour');
+    const b = await nouveau('portable');
+    a.registre.enregistrerMachine({
+      id: 'tour',
+      description: 'Cet ordinateur',
+      racines: ['/projets'],
+      projets: [{ machine: 'tour', chemin: '/projets/x', nom: 'x' }],
+      comptes: ['defaut'],
+      version: '1',
+      derniereVue: MAJ,
+    });
+    await appairer(a, b);
+    poser(a, ficheDe(SESSION_A, 'tour', 'Titre A'));
+    await attendre(() => b.federation.distantes.estDistante(SESSION_A));
+    const tour = b.federation.distantes.vue([], []).machines.find((m) => m.id === 'tour');
+    expect(tour?.description).toBe('tour');
+    expect(tour?.projets).toEqual([{ machine: 'tour', chemin: '/projets/x', nom: 'x' }]);
+  });
+});

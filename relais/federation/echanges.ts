@@ -14,6 +14,8 @@ import {
   type MessageChiffre,
 } from '../../commun/federation.ts';
 import { reponseGeste } from './gestes.ts';
+
+const DESCRIPTION_LOCALE = 'Cet ordinateur';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
@@ -73,7 +75,8 @@ export class Echanges {
     const fiche = this.options.registre.machines().find((m) => m.id === this.options.machine);
     if (!fiche) return null;
     return {
-      description: fiche.description.slice(0, 200),
+      // « Cet ordinateur » ne veut rien dire chez un pair : il voit le nom du nœud à la place.
+      description: (fiche.description === DESCRIPTION_LOCALE ? this.options.nom() : fiche.description).slice(0, 200),
       racines: fiche.racines.slice(0, 50),
       projets: fiche.projets.slice(0, 500),
       comptes: fiche.comptes.slice(0, 20),
