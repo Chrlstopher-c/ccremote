@@ -37,6 +37,8 @@ import { routesDuo } from '../duo/api-duo.ts';
 import type { Federation } from '../federation/federation.ts';
 import { relayerVersNoeuds } from '../federation/interception.ts';
 import { routesFederation } from '../federation/api-federation.ts';
+import { routesMachinesReseau } from '../federation/api-machines-reseau.ts';
+import { refusCreationSession } from '../federation/pause-noeud.ts';
 import type { CodesReseau } from '../codes-reseau/codes-reseau.ts';
 import { routesCodesReseau } from '../codes-reseau/api-codes-reseau.ts';
 import type { AjoutNoeud } from '../ajout-noeud/ajout-noeud.ts';
@@ -112,7 +114,8 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     },
     '/api/etat': { GET: protege((req) => json(etat(d, req))) },
     '/api/attente': { GET: protege((req) => attente(d, req)) },
-    '/api/sessions': { POST: protege((req) => d.sessions.ouvrir(req)) },
+    // Nœud en pause (fédération) : aucune nouvelle session ici ; les sessions en cours ne sont pas touchées.
+    '/api/sessions': { POST: protege((req) => refusCreationSession(d.federation) ?? d.sessions.ouvrir(req)) },
     '/api/sessions/:id/evenements': { GET: protege((req) => d.sessions.evenements(req as never)) },
     '/api/sessions/:id/contexte': { GET: protege((req) => d.sessions.contexte(req as never)) },
     '/api/sessions/:id/connecteurs': { GET: protege((req) => d.sessions.connecteurs(req as never)) },
@@ -248,6 +251,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     ...routesEntretien(d.entretien, protege),
     ...routesDuo(d.duo, protege),
     ...routesFederation(d.federation, protege),
+    ...routesMachinesReseau(d.federation, protege),
     ...routesCodesReseau(d.codesReseau, protege),
     ...routesAjoutNoeud(d.ajoutNoeud, protege),
     ...routesSynchro(d.synchro, protege),

@@ -226,6 +226,9 @@ const federation = new Federation({
     geste: (g) => executerGeste(routesInternes, g),
   },
   notifier: (titre, texte) => notifierChris(titre, texte),
+  reseaux,
+  reveil,
+  postesEnLigne: () => postes.vues().filter((v) => v.enLigne).map((v) => v.id),
   journal: journal.child({ domaine: 'federation' }),
 });
 // Codes d'appairage demandés par l'appli (même propriétaire, invitation en duo) : relayés à l'aiguilleur de ce nœud.
