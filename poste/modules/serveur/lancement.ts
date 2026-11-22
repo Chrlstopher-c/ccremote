@@ -1,6 +1,7 @@
 // Responsabilité : les briques du lancement d'un serveur de module sur le poste — commande bornée (systemd-run), port
 // libre sur 127.0.0.1, environnement, empreinte des fichiers serveur/, attente qu'il écoute. Ne garde aucun processus.
 import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
 import { createConnection, createServer } from 'node:net';
 import { DOSSIER_SERVEUR } from '../../../commun/modules.ts';
 import type { FichierLu } from '../validation.ts';
@@ -49,7 +50,7 @@ export interface ParamsEnvironnement {
 export function environnementServeur(p: ParamsEnvironnement): Record<string, string> {
   const env: Record<string, string> = {
     PATH: process.env['PATH'] ?? '',
-    HOME: process.env['HOME'] ?? '',
+    HOME: process.env['HOME'] ?? homedir(),
     PORT: String(p.port),
     MODULE_ID: p.id,
     MODULE_DONNEES: p.donnees,
