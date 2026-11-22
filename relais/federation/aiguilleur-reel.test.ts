@@ -93,7 +93,7 @@ test('deux nœuds sur le vrai aiguilleur : appairage, sessions, fil, écriture, 
 
     expect(a.federation.appairer(idB).ok).toBe(true);
     await attendre(async () => (await b.federation.etat()).demandes.length === 1);
-    expect(b.federation.decider((await b.federation.etat()).demandes[0]?.id ?? '', true)).toBe(true);
+    expect(b.federation.decider((await b.federation.etat()).demandes[0]?.id ?? '', true).ok).toBe(true);
     await attendre(async () => (await b.federation.etat()).noeuds.some((n) => n.liaisonOuverte), 8000);
 
     a.registre.enregistrerSession(ficheDe('s-reelle', 'tour', 'Titre réel'));

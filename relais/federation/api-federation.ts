@@ -52,7 +52,8 @@ function routesLien(fede: Federation, protege: Protection) {
       POST: protege(async (req) => {
         const c = await lireCorps(req, CorpsDecision);
         if (c instanceof Response) return c;
-        return fede.decider(req.params['id'] ?? '', c.accord) ? json({}) : erreur('demande introuvable', 404);
+        const r = fede.decider(req.params['id'] ?? '', c.accord);
+        return r.ok ? json({}) : erreur(r.raison, r.statut);
       }),
     },
     '/api/federation/revoquer': {

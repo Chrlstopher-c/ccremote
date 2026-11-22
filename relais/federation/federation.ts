@@ -10,7 +10,12 @@ import {
   type Identite,
   importerIdentitePublique,
 } from '../../commun/chiffrement/identite.ts';
-import { type EvenementFedere, type MessageChiffre, TAILLE_MORCEAU_APPAREIL_CARACTERES } from '../../commun/federation.ts';
+import {
+  type EvenementFedere,
+  type MessageChiffre,
+  NOMBRE_MAX_DEMANDES,
+  TAILLE_MORCEAU_APPAREIL_CARACTERES,
+} from '../../commun/federation.ts';
 import { messagesAvecCorps, Reassemblage } from './transferts.ts';
 import { DiffusionAppareil } from './appareil-diffusion.ts';
 import { TerminalAppareil } from './terminal-appareil.ts';
@@ -24,6 +29,7 @@ import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
 import { CacheDistant } from './distant.ts';
 import { Distantes } from './distantes.ts';
 import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
+import { DemandesFederees, photoDemandesAppareil } from './demandes-federees.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
 import { surDiffusionFederee } from './diffusion-federee.ts';
 import type { EtatFederation, OptionsFederation } from './etat-federation.ts';
@@ -48,9 +54,6 @@ const MARGE_APPAIRAGE_MS = 30_000;
 const DELAI_LIEN_MIN_MS = 1_000;
 const DELAI_LIEN_MAX_MS = 30_000;
 const INTERVALLE_PLANIFICATION_MS = 5_000;
-/** Demandes d'appairage en attente, au plus : au-delà, la nouvelle est refusée tout de suite. */
-const NOMBRE_MAX_DEMANDES = 5;
-
 export type { EtatFederation, OptionsFederation };
 
 export class Federation {
@@ -59,6 +62,8 @@ export class Federation {
   /** Sessions des autres nœuds : vue fusionnée pour l'appli, gestes relayés. */
   readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
+  /** Demandes d'appareil vues chez les autres nœuds (photos reçues, en mémoire seulement). */
+  private readonly demandesFederees = new DemandesFederees();
   private readonly echanges: Echanges;
   private readonly canaux: Canaux;
   private readonly hote: HoteCanal;
@@ -186,8 +191,17 @@ export class Federation {
     return canal ? ok({ canal: canal.id }) : echec(503, 'aiguilleur indisponible');
   }
 
-  decider(id: string, accord: boolean): boolean {
-    return this.demandes.decider(id, accord);
+  /**
+   * Décision de Chris sur une demande. Locale : tranchée ici. Vue chez un autre nœud : relayée à ce nœud, qui la
+   * tranche chez lui ; si ce nœud n'est pas relié, rien ne part (409). Jamais d'acceptation automatique.
+   */
+  decider(id: string, accord: boolean): Resultat<null> {
+    if (this.demandes.decider(id, accord)) return ok(null);
+    const noeud = this.demandesFederees.noeudDe(id);
+    if (!noeud) return echec(404, 'demande introuvable');
+    const canal = this.canaux.liaisonOuverteAvec(noeud);
+    if (!canal) return echec(409, 'nœud hors ligne');
+    return canal.envoyer({ t: 'decision', id, accord }) ? ok(null) : echec(503, 'envoi impossible');
   }
 
   /** Révocation : le pair perd son accès (un message le lui dit s'il est en ligne) et disparaît d'ici. */
@@ -241,7 +255,7 @@ export class Federation {
       empreinteLocale: await empreinteIdentite(identite.publique),
       membres: this.voisins.liste(this.proprietaireLocal()),
       noeuds,
-      demandes: this.demandes.lister(),
+      demandes: [...this.demandes.lister(), ...this.demandesFederees.lister()],
       appairages: await appairagesEnCours(this.canaux.actifs()),
     };
   }
@@ -390,13 +404,14 @@ export class Federation {
           empreinteLocale: locale,
           genre: presentation.genre ?? 'noeud',
         },
-        (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler()),
+        (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler(), this.diffuserDemandes()),
       );
       this.options.notifier?.(
         'Demande d’appairage',
         `${presentation.nom} demande à rejoindre tes machines : compare les empreintes dans Paramètres › Réseau.`,
       );
       this.signaler();
+      this.diffuserDemandes();
     } catch (erreur) {
       this.options.journal.error({ err: erreur, membre: canal.membre }, 'présentation d’un nœud illisible');
       canal.fermer();
@@ -417,6 +432,7 @@ export class Federation {
     if (this.estAppareil(canal.membre)) return;
     this.distant.enLigne(canal.membre, true);
     canal.envoyer(this.echanges.instantane());
+    this.envoyerDemandesA(canal);
   }
 
   private liaisonRefusee(canal: CanalNoeud, raison: string): void {
@@ -427,6 +443,7 @@ export class Federation {
   private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     if (this.estAppareil(canal.membre)) return this.messageAppareil(canal, message);
     if (message.t === 'api' || message.t === 'api_reponse') return canal.fermer();
+    if (message.t === 'demandes' || message.t === 'decision') return this.messageDemandes(canal, message);
     if (message.t === 'revocation') {
       this.oublierPair(canal.membre);
       // Un lien rouvert entre-temps (planification) vers ce pair ne doit pas survivre à la révocation.
@@ -499,6 +516,42 @@ export class Federation {
     return this.options.servirAppareil(demande);
   }
 
+  // ---- Demandes d'appareil entre nœuds appariés ------------------------------------------------------------------
+
+  private estNoeud(membre: string): boolean {
+    return this.pairs.some((p) => p.id === membre && p.genre === 'noeud');
+  }
+
+  /** La photo des demandes d'appareil part à un nœud pair relié, jamais à un appareil. */
+  private envoyerDemandesA(canal: CanalNoeud): void {
+    if (!this.estNoeud(canal.membre)) return;
+    canal.envoyer({ t: 'demandes', liste: photoDemandesAppareil(this.demandes.lister()) });
+  }
+
+  /** À chaque changement des demandes locales, la photo repart à tous les nœuds pairs reliés. */
+  private diffuserDemandes(): void {
+    for (const canal of this.canaux.ouverts()) this.envoyerDemandesA(canal);
+  }
+
+  private messageDemandes(canal: CanalNoeud, message: Extract<MessageChiffre, { t: 'demandes' | 'decision' }>): void {
+    if (!this.estNoeud(canal.membre)) return canal.fermer();
+    if (message.t === 'demandes') {
+      this.demandesFederees.recevoir(canal.membre, message.liste);
+      return this.signaler();
+    }
+    this.decisionDistante(canal.membre, message.id, message.accord);
+  }
+
+  // Une décision relayée par un nœud pair ne tranche qu'une demande d'appareil existante ici ; le reste est ignoré.
+  private decisionDistante(noeud: string, id: string, accord: boolean): void {
+    const existe = this.demandes.lister().some((d) => d.id === id && d.genre === 'appareil');
+    if (!existe) {
+      const motif = 'décision distante ignorée : demande inconnue';
+      return this.options.journal.warn({ membre: noeud, demande: id }, motif);
+    }
+    this.demandes.decider(id, accord);
+  }
+
   // Un pair révoqué garde son motif de refus, même après un redémarrage du nœud.
   private marquerRevoque(membre: string): void {
     this.revoques.add(membre);
@@ -524,7 +577,9 @@ export class Federation {
     this.transfertsAppareil.oublier(canal.membre);
     this.canaux.retirer(canal);
     this.demandes.retirerPour(canal.membre);
+    this.diffuserDemandes();
     if (this.canaux.liaisonOuverteAvec(canal.membre)) return;
+    this.demandesFederees.oublier(canal.membre);
     this.distant.enLigne(canal.membre, false);
     this.echanges.oublier(canal.membre);
   }
@@ -552,6 +607,7 @@ export class Federation {
     this.sauverPairs();
     this.distant.retirer(membre);
     this.demandes.retirerPour(membre);
+    this.demandesFederees.oublier(membre);
     this.echanges.oublier(membre);
     this.refus.delete(membre);
   }
