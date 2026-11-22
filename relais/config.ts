@@ -216,3 +216,28 @@ function configEcho(): ConfigRelais['echo'] {
   const jeton = process.env['CCREMOTE_ECHO_JETON'];
   return url && jeton ? { url, jeton } : null;
 }
+
+/** Aiguilleur (LANTERNE_RELAIS_MODE=aiguilleur) : écoute, et dossier de l'annuaire seulement (aucune autre donnée). */
+export interface ConfigAiguilleur {
+  readonly ecouteWeb: readonly AdresseEcoute[];
+  readonly base: string;
+  readonly fichierEchecs: string;
+}
+
+/** Chemin de l'annuaire : LANTERNE_RELAIS_DONNEES/annuaire.db (les commandes locales ne demandent que celui-là). */
+export function cheminAnnuaire(env: Environnement): string {
+  const donnees = env['LANTERNE_RELAIS_DONNEES'];
+  if (!donnees) throw new Error('LANTERNE_RELAIS_DONNEES absent de l’environnement de l’aiguilleur');
+  return join(donnees, 'annuaire.db');
+}
+
+export function chargerConfigAiguilleur(env: Environnement = process.env): ConfigAiguilleur {
+  const base = cheminAnnuaire(env);
+  return {
+    ecouteWeb: parserEcoute(env['LANTERNE_RELAIS_ECOUTE'] ?? ''),
+    base,
+    fichierEchecs: join(dirname(base), 'echecs-membres.json'),
+  };
+}
+
+type Environnement = Readonly<Record<string, string | undefined>>;

@@ -59,6 +59,14 @@ import { RegistreReunions } from './reunion/registre-reunions.ts';
 import { SalleDeReunion } from './reunion/salle.ts';
 import { Duo } from './duo/duo.ts';
 import { nomUtilisateur } from '../commun/identite.ts';
+import { demarrerAiguilleur } from './aiguilleur/demarrer.ts';
+
+// Mode aiguilleur (même binaire) : annuaire et liens seulement. Le reste de ce fichier, qui ouvre le relais complet,
+// n'est pas lancé ; le service vit par les serveurs démarrés ici.
+if (process.env['LANTERNE_RELAIS_MODE'] === 'aiguilleur') {
+  demarrerAiguilleur();
+  await new Promise<never>(() => undefined);
+}
 
 const journal = creerJournal('relais');
 const config = chargerConfig();
