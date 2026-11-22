@@ -8,7 +8,7 @@ import type { ApiArtefacts } from './api-artefacts.ts';
 import type { ApiModifications } from './api-modifications.ts';
 import type { ApiFichiersSession } from './api-fichiers-session.ts';
 import type { ApiSessions } from './api-sessions.ts';
-import type { ApiSessionConfig } from './api-session-config.ts';
+import { type ApiSessionConfig, refusMigrer } from './api-session-config.ts';
 import type { ApiConfiguration } from './api-configuration.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import { lireCategories, remplacerCategories } from './api-categories.ts';
@@ -151,6 +151,9 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     '/api/sessions/:id/relais': { POST: protege((req) => d.sessions.relais(req as never)) },
     '/api/sessions/:id/rembobiner': { POST: protege((req) => d.sessions.rembobiner(req as never)) },
     '/api/sessions/:id/dupliquer': { POST: protege((req) => d.sessions.dupliquer(req as never)) },
+    '/api/sessions/:id/migrer': {
+      POST: protege((req) => refusMigrer(d.federation) ?? d.sessionConfig.migrer(req as never)),
+    },
     '/api/sessions/:id/style': { POST: protege((req) => d.sessionConfig.style(req as never)) },
     '/api/sessions/:id/styles': { GET: protege((req) => d.sessionConfig.styles(req as never)) },
     '/api/sessions/:id/connecteurs/:nom': { POST: protege((req) => d.sessionConfig.connecteur(req as never)) },

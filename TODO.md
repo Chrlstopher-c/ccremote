@@ -79,3 +79,7 @@
       éprouvé quelques jours.
 - [ ] Fusionner `dev` dans `master` (dépôt public) après validation par Chris.
 - [ ] Remote Control : après ON, `statut` restait `fermee` alors que le pane tmux tournait (19/11). Cause : le processus SDK fermé, encore vivant hors tmux avec le même identifiant, passait la session tmux en « terminal », puis sa disparition la fermait. Corrigé par `SessionTmux.rattacherTerminal` (un pane tmux l'emporte) ; test dans `session-tmux.test.ts` (branche `lanterne/rc-statut`). Corrigé, tests verts ; essai réel pas encore refait.
+
+- [ ] Migration Desktop → Lanterne : vérifier en réel (Chris) que la copie garde l'historique ; décider si le fil de la
+  source affiche bien l'événement `migration` (client Rust : variante inconnue à gérer) ; entrée de menu (agent Opus).
+- [ ] Épingle copiée sur la nouvelle session : suppose que la fiche du poste arrive au relais avant la réponse (à vérifier).

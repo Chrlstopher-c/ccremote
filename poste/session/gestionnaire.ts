@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import type { UsageSdk } from '../../commun/compte-detail.ts';
 import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { LimiteSdk } from '../../commun/comptes.ts';
-import type { DemandeSession, ResumeSession } from '../../commun/session.ts';
+import type { DemandeSession, Evenement, ResumeSession } from '../../commun/session.ts';
 import { type ConfigPoste, SOMMEIL_MINUTES_DEFAUT } from '../config.ts';
 import { basculerControle, sortirTui } from './bascule-controle.ts';
 import type { CommandeSession } from './lecture-panneau.ts';
@@ -27,6 +27,7 @@ import {
 import { SessionTmux } from './session-tmux.ts';
 import { endormirAuRepos } from './sommeil.ts';
 import { annexer, dupliquer } from './copie.ts';
+import { migrer } from './migration.ts';
 import { ControlesDifferes } from './controle-differe.ts';
 import { stylesDeSessionId } from './styles-session.ts';
 import { SessionSdk, trouverClaude, type EnvironnementSdk } from './session-sdk.ts';
@@ -223,6 +224,12 @@ export class GestionnaireSessions {
   }
 
   // Message relayé entre deux sessions : tracé sur le poste (daté), puis émis en direct dans le fil de la session.
+  // Événement du fil écrit par le poste (hors transcript, jamais dans un transcript tenu par un autre processus).
+  evenement(id: string, evt: Evenement): void {
+    const h = this.trace.ecrire(id, evt);
+    if (h) this.sortie.evenement(id, h.evt);
+  }
+
   private tracer(c: Extract<CommandeSession, { kind: 'tracer_relais' }>): Reponse {
     if (!this.sessions.has(c.sessionId) && !this.distantes.session(c.sessionId)) {
       return { ok: false, erreur: `session inconnue sur ${this.config.machine}` };
@@ -303,6 +310,7 @@ export class GestionnaireSessions {
     if (c.kind === 'supprimer') return this.supprimer(c.sessionId);
     if (c.kind === 'dupliquer') return dupliquer(this, c.sessionId, c.messageId);
     if (c.kind === 'annexer') return annexer(this, c.sessionId);
+    if (c.kind === 'migrer') return migrer(this, c.sessionId);
     if (c.kind === 'styles') return stylesDeSessionId(this.sessions, c.sessionId, this.config.machine, this.journal);
     if (c.kind === 'fichier_session') return fichierPresente(this.contexteCommandes(), c.sessionId, c.fichier);
     if (estCommandeArtefact(c)) return executerArtefacts(this.stockage, c, this.journal);

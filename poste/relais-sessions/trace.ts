@@ -27,8 +27,12 @@ export class TraceRelais {
 
   /** Garde le message sur le poste, daté ; rend l'événement de fil, ou null si la trace n'a pas pu être écrite. */
   tracer(sessionId: string, demande: DemandeTrace, ts: string = new Date().toISOString()): EvenementHorodate | null {
+    return this.ecrire(sessionId, { type: 'relais', sens: demande.sens, ...demande.autre, texte: demande.texte }, ts);
+  }
+
+  /** Garde un événement du fil sur le poste, daté ; rend l'événement, ou null s'il n'a pas pu être écrit. */
+  ecrire(sessionId: string, evt: Evenement, ts: string = new Date().toISOString()): EvenementHorodate | null {
     if (!IDENTIFIANT.test(sessionId)) return null;
-    const evt: Evenement = { type: 'relais', sens: demande.sens, ...demande.autre, texte: demande.texte };
     try {
       mkdirSync(join(this.dossier, 'relais'), { recursive: true });
       appendFileSync(this.fichier(sessionId), `${JSON.stringify({ ts, evt })}\n`);

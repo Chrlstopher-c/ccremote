@@ -447,3 +447,13 @@ au repos ; `aReprendre` reste vrai tant que Chris n'a pas fermé la session. Sur
 - Fenêtre de course : une conversation prise par Claude Desktop pendant le sommeil n'est reconnue qu'au balayage suivant ;
   une reprise dans cet intervalle ferait deux processus sur le même transcript (même risque qu'une session fermée).
 - `poste/session/gestionnaire.ts` dépasse 500 lignes (521, déjà 516 avant ce chantier) : découpage à faire.
+
+## Migration Claude Desktop / terminal → Lanterne (22/11/2026, branche agent/migrer-desktop)
+- Route `POST /api/sessions/:id/migrer` (relais), commande poste `migrer` → `poste/session/migration.ts` : fork SDK
+  (`forkSession`, historique complet), nouvelle session SDK pilotée, titre/modèle/effort/mode repris ; Remote Control non repris.
+- Choix (a) seulement : la source n'est jamais écrite. (b) reprise du même id refusée : la règle « un seul écrivain » ne
+  tient pas si Desktop rouvre la conversation pendant un tour Lanterne (la cession ne couvre que le tour en cours).
+- Champs de vue `migrable` / `migreeVers` (relais, colonne `migree_vers`) ; événement de fil `migration` (sortie/entree),
+  tracé sur le poste hors transcript. Épingle copiée sur la nouvelle.
+- Garde : chef du réseau si une charte existe (pas de rôle « appareil » dans le code). Invités refusés par le poste.
+- Non vérifié en réel (banc non lancé, consigne de Chris) : que `--resume --fork-session` garde l'historique.

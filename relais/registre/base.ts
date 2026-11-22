@@ -57,6 +57,8 @@ export const MIGRATIONS: readonly string[] = [
   // Appairage d'un appareil : code à usage unique (empreinte seulement), valable jusqu'à expire_le.
   `CREATE TABLE appairages (
      empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, par TEXT NOT NULL);`,
+  // Migration Desktop/terminal → Lanterne : identifiant de la session qui l'a reprise (colonne du relais).
+  `ALTER TABLE sessions ADD COLUMN migree_vers TEXT;`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 
