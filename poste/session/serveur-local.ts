@@ -6,6 +6,12 @@ import type { Logger } from 'pino';
 import type { GestionnaireSessions } from './gestionnaire.ts';
 
 export function servirLocal(socket: string, sessions: GestionnaireSessions, journal: Logger): void {
+  if (process.platform === 'win32') {
+    // Bun sous Windows ne sait pas écouter sur un socket Unix (EAFNOSUPPORT). Les crochets et le rythme ne servent qu'aux
+    // sessions Claude lancées sur cette machine : un poste Windows d'invité n'en lance pas, on le désactive proprement.
+    journal.warn({ socket }, 'socket local désactivé sous Windows : crochets et rythme des sessions locales indisponibles');
+    return;
+  }
   mkdirSync(dirname(socket), { recursive: true }); // premier démarrage : le dossier de données n'existe pas encore
   if (existsSync(socket)) unlinkSync(socket);
   Bun.serve({
