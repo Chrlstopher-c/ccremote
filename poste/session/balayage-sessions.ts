@@ -11,12 +11,13 @@ import {
   ficheFermee,
   identitePane,
   identiteProcessus,
+  processusAdoptables,
   titreDe,
 } from './adoption.ts';
 import { cheminTranscript } from './transcript.ts';
 import { tenueParAilleurs } from './cession-sdk.ts';
 import { type EtatTranscript, etatDuTranscript, tourEnCours as tourEnCoursEtat } from './etat-transcript.ts';
-import { statSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { titreDuTranscript } from './titre-transcript.ts';
 import { type ProcessusClaude, processusClaude } from './processus.ts';
 import { type SourcesFiche, modeleDeSources, recalerFiche, sourcesDe } from './recalage-fiche.ts';
@@ -96,7 +97,7 @@ export class BalayageSessions {
     // CCREMOTE_ADOPTER_TERMINAUX=non : ne lit pas les Claude lancés hors tmux (moteur intégré, isolement d'essai).
     const terminaux = process.env['CCREMOTE_ADOPTER_TERMINAUX'] !== 'non';
     this.cederTenues(procs);
-    this.suivreTerminaux(terminaux ? procs.filter((p) => !p.enTmux) : [], entrees);
+    this.suivreTerminaux(terminaux ? processusAdoptables(procs, (p) => this.transcriptPresent(p)) : [], entrees);
     this.suivreFermees(entrees, panes, procs);
     this.recalerFermees();
   }
@@ -136,6 +137,11 @@ export class BalayageSessions {
         this.adopter(identiteProcessus(p, entrees.find((e) => e.id === p.sessionId)), null, p.cwd);
       }
     }
+  }
+
+  // Un processus sans transcript n'a pas encore d'échange (ou n'en aura jamais) : rien à adopter.
+  private transcriptPresent(p: ProcessusClaude): boolean {
+    return existsSync(cheminTranscript(p.cwd, p.sessionId, p.configDir));
   }
 
   // Conversation tenue par un processus interactif hors SDK : la session SDK qui la porte rend la main.

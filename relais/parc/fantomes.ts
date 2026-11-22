@@ -9,11 +9,13 @@ export interface FicheFantome {
   readonly archivee: boolean;
 }
 
-/** Identifiants des fiches à masquer. `annonces` : transcripts annoncés par machine. */
+/** Identifiants des fiches à ranger (archivées, jamais supprimées). `annonces` : transcripts annoncés par machine ;
+ *  `avecMessages` : la fiche a un fil de messages en base (elle reste lisible même sans transcript). */
 export function fantomesARetirer(
   fiches: readonly FicheFantome[],
   annonces: ReadonlyMap<string, ReadonlySet<string>>,
   connectees: ReadonlySet<string>,
+  avecMessages: (id: string) => boolean,
 ): string[] {
   if (connectees.size === 0) return [];
   for (const machine of connectees) if (!annonces.has(machine)) return [];
@@ -26,7 +28,8 @@ export function fantomesARetirer(
         !f.archivee &&
         f.statut === 'fermee' &&
         f.conversation !== null &&
-        !existantes.has(f.conversation),
+        !existantes.has(f.conversation) &&
+        !avecMessages(f.id),
     )
     .map((f) => f.id);
 }

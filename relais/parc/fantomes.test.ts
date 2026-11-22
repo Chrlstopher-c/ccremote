@@ -1,7 +1,9 @@
 // Responsabilité : tests des fiches fantômes (écart #9) : seules les fiches d'un poste en ligne, fermées, sans
-// transcript sur aucun poste en ligne, sont retirées.
+// transcript sur aucun poste en ligne et sans message, sont retirées. Une fiche avec des messages reste lisible.
 import { describe, expect, test } from 'bun:test';
 import { type FicheFantome, fantomesARetirer } from './fantomes.ts';
+
+const aucunMessage = (): boolean => false;
 
 const fiche = (over: Partial<FicheFantome>): FicheFantome => ({
   id: 'f1',
@@ -18,6 +20,7 @@ describe('fantomesARetirer', () => {
       [fiche({ id: 'fantome', conversation: 'disparue' }), fiche({ id: 'ok', conversation: 'c1' })],
       new Map([['tour', new Set(['c1'])]]),
       new Set(['tour']),
+      aucunMessage,
     );
     expect(r).toEqual(['fantome']);
   });
@@ -30,6 +33,7 @@ describe('fantomesARetirer', () => {
         ['portable', new Set(['c2'])],
       ]),
       new Set(['tour', 'portable']),
+      aucunMessage,
     );
     expect(r).toEqual([]);
   });
@@ -39,6 +43,7 @@ describe('fantomesARetirer', () => {
       [fiche({ machine: 'pi', conversation: 'x' })],
       new Map([['tour', new Set<string>()]]),
       new Set(['tour']),
+      aucunMessage,
     );
     expect(r).toEqual([]);
   });
@@ -48,6 +53,7 @@ describe('fantomesARetirer', () => {
       [fiche({ conversation: 'x' })],
       new Map([['portable', new Set<string>()]]),
       new Set(['tour', 'portable']),
+      aucunMessage,
     );
     expect(r).toEqual([]);
   });
@@ -61,7 +67,18 @@ describe('fantomesARetirer', () => {
       ],
       new Map([['tour', new Set<string>()]]),
       new Set(['tour']),
+      aucunMessage,
     );
     expect(r).toEqual([]);
+  });
+
+  test('une fiche qui a des messages reste lisible même si son transcript a disparu', () => {
+    const r = fantomesARetirer(
+      [fiche({ id: 'avec-fil', conversation: 'perdue' }), fiche({ id: 'vide', conversation: 'perdue' })],
+      new Map([['tour', new Set<string>()]]),
+      new Set(['tour']),
+      (id) => id === 'avec-fil',
+    );
+    expect(r).toEqual(['vide']);
   });
 });

@@ -91,6 +91,10 @@ function vide(): Indices {
   return { majLe: null, modele: null, modeleLe: null, mode: null, contexte: null, travail: null, travailVu: false };
 }
 
+function absent(erreur: unknown): boolean {
+  return typeof erreur === 'object' && erreur !== null && 'code' in erreur && erreur.code === 'ENOENT';
+}
+
 function mtimeDe(chemin: string): number {
   try {
     return statSync(chemin).mtimeMs;
@@ -115,6 +119,7 @@ export function etatDuTranscript(chemin: string, journal: Logger): EtatTranscrip
       ecritLe: mtimeDe(chemin),
     };
   } catch (erreur) {
+    if (absent(erreur)) return null; // pas encore de transcript : rien à signaler à chaque passage
     journal.warn({ err: erreur, chemin }, 'état du transcript non lu');
     return null;
   }

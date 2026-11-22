@@ -355,6 +355,17 @@ export class Registre {
     }));
   }
 
+  /** Vrai si le fil de la session contient au moins un message (utilisateur ou assistant). */
+  aDesMessages(sessionId: string): boolean {
+    const ligne = this.db
+      .query(
+        `SELECT 1 AS ok FROM evenements WHERE session_id = $s
+      AND json_extract(evt, '$.type') IN ('message', 'texte') LIMIT 1`,
+      )
+      .get({ s: sessionId });
+    return ligne !== null;
+  }
+
   // Les derniers événements d'une session, pour ouvrir son fil sans tout recharger.
   derniersEvenements(sessionId: string, nombre: number): EvenementDate[] {
     const lignes = this.db

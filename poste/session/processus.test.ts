@@ -97,3 +97,43 @@ describe('processusClaude : processus SDK repérés', () => {
     }
   });
 });
+
+// `claude -p` (ou un SDK en mode impression) n'est pas une session interactive : jamais adoptée, jamais une
+// conversation tenue ailleurs. La déclaration porte soit un `kind` non interactif, soit l'entrypoint `sdk-cli`.
+const declNonInteractive = (pid: number, extra: Record<string, string>): string =>
+  JSON.stringify({ pid, sessionId: `sess-${pid}`, cwd: '/home/x', ...extra });
+
+const lecteurClaude = (): { comm: string; exe: string; demarrage: string; enTmux: boolean } => ({
+  comm: 'claude', exe: '/usr/bin/claude', demarrage: '1', enTmux: false,
+});
+
+describe('processusClaude : processus non interactifs écartés', () => {
+  test('un claude -p (entrypoint sdk-cli, sans kind) n est pas une session interactive', () => {
+    const { dossier, nettoyer } = configAvec({ '3001.json': declNonInteractive(3001, { entrypoint: 'sdk-cli' }) });
+    try {
+      expect(processusClaude([dossier], journal, lecteurClaude)).toEqual([]);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('une déclaration de kind non interactif est écartée', () => {
+    const { dossier, nettoyer } = configAvec({ '3002.json': declNonInteractive(3002, { kind: 'print' }) });
+    try {
+      expect(processusClaude([dossier], journal, lecteurClaude)).toEqual([]);
+    } finally {
+      nettoyer();
+    }
+  });
+
+  test('une session interactive du terminal reste reconnue', () => {
+    const { dossier, nettoyer } = configAvec({
+      '3003.json': declNonInteractive(3003, { kind: 'interactive', entrypoint: 'cli' }),
+    });
+    try {
+      expect(processusClaude([dossier], journal, lecteurClaude).map((p) => p.sessionId)).toEqual(['sess-3003']);
+    } finally {
+      nettoyer();
+    }
+  });
+});

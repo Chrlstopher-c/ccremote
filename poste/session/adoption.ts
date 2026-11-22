@@ -55,6 +55,14 @@ export function identiteProcessus(proc: ProcessusClaude, entree: EntreeCc | unde
   return depuisProcessus(proc, entree);
 }
 
+/** Processus hors tmux à adopter : seulement ceux dont la conversation a déjà un transcript (sinon fantôme). */
+export function processusAdoptables(
+  procs: readonly ProcessusClaude[],
+  transcriptExiste: (proc: ProcessusClaude) => boolean,
+): ProcessusClaude[] {
+  return procs.filter((p) => !p.enTmux && transcriptExiste(p));
+}
+
 /** Une session supprimée par Chris n'est jamais réadoptée, même si son processus ou son pane tourne encore. */
 export function adoptionAutorisee(id: string, supprimees: { has(identifiant: string): boolean }): boolean {
   return !supprimees.has(id);

@@ -352,7 +352,8 @@ export class Postes {
       statut: s.statut,
       archivee: false,
     }));
-    for (const id of fantomesARetirer(fiches, this.transcriptsDuPoste, new Set(this.connectes.keys()))) {
+    const avecMessages = (id: string): boolean => this.registre.aDesMessages(id);
+    for (const id of fantomesARetirer(fiches, this.transcriptsDuPoste, new Set(this.connectes.keys()), avecMessages)) {
       this.journal.info({ sessionId: id }, 'fiche sans transcript sur aucun poste en ligne : masquée');
       this.registre.definirArchivee(id, true);
       this.diffuserSession(id);

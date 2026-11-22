@@ -194,3 +194,53 @@ describe('statut d’une conversation vue par sa fiche de poste et sa jumelle Re
     expect(registre.session('seule')?.statut).toBe('attente');
   });
 });
+
+function bonjourAvecTranscripts(machine: string, transcripts: string[]): string {
+  return JSON.stringify({
+    kind: 'bonjour',
+    version: 'test',
+    description: machine,
+    racines: [],
+    projets: [],
+    comptes: ['defaut'],
+    sessions: [],
+    transcripts,
+  });
+}
+
+describe('fiches fantômes : rangées au démarrage, jamais supprimées', () => {
+  const fantome = (id: string, statut: ResumeSession['statut']): ResumeSession => ({
+    ...session(id, 'tour', statut),
+    claudeSessionId: `conv-${id}`,
+    terminal: true,
+  });
+
+  test('une fiche fermée, sans message et sans transcript sur le poste, est archivée et conservée', () => {
+    const { postes, registre } = montage([fantome('vide', 'fermee')]);
+    postes.ouvert(fauxPoste('tour'));
+    postes.recu(fauxPoste('tour'), bonjourAvecTranscripts('tour', []));
+
+    expect(registre.session('vide')?.archivee).toBe(true);
+  });
+
+  test('une fiche fermée qui a des messages reste lisible, même sans transcript', () => {
+    const { postes, registre } = montage([fantome('avec-fil', 'fermee')]);
+    registre.ajouterEvenement('avec-fil', MAJ, { type: 'message', texte: 'bonjour' });
+    postes.ouvert(fauxPoste('tour'));
+    postes.recu(fauxPoste('tour'), bonjourAvecTranscripts('tour', []));
+
+    expect(registre.session('avec-fil')?.archivee).toBe(false);
+  });
+
+  test('une fiche qui n est pas fermée (session vivante, pas encore de message) n est jamais rangée', () => {
+    const { postes, registre } = montage([fantome('neuve', 'attente')]);
+    const annoncee = JSON.stringify({
+      kind: 'bonjour', version: 'test', description: 'tour', racines: [], projets: [], comptes: ['defaut'],
+      sessions: [fantome('neuve', 'attente')], transcripts: [],
+    });
+    postes.ouvert(fauxPoste('tour'));
+    postes.recu(fauxPoste('tour'), annoncee);
+
+    expect(registre.session('neuve')?.archivee).toBe(false);
+  });
+});

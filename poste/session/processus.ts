@@ -101,6 +101,15 @@ function declarationValide(
   return d.success ? d.data : null;
 }
 
+// Entrypoints des processus non interactifs (`claude -p` : pas de session à reprendre ni à adopter).
+const ENTREES_NON_INTERACTIVES = new Set(['sdk-cli']);
+
+/** Une déclaration est celle d'une session interactive : `kind` absent ou interactif, et pas un mode impression. */
+export function estInteractif(decl: { readonly kind?: string; readonly entrypoint?: string }): boolean {
+  if (decl.kind !== undefined && decl.kind !== 'interactive') return false;
+  return !ENTREES_NON_INTERACTIVES.has(decl.entrypoint ?? '');
+}
+
 /** Les sessions interactives vivantes déclarées dans chacun des dossiers de config donnés (null = ~/.claude). */
 export function processusClaude(
   configDirs: readonly (string | null)[],
@@ -113,7 +122,7 @@ export function processusClaude(
     if (!existsSync(dossier)) continue;
     for (const f of readdirSync(dossier).filter((n) => /^\d+\.json$/.test(n))) {
       const d = declarationValide(join(dossier, f), journal);
-      if (!d || (d.kind && d.kind !== 'interactive')) continue;
+      if (!d || !estInteractif(d)) continue;
       const etat = lecteur(d.pid);
       if (!processusVivant(d, etat)) continue;
       resultat.push({
