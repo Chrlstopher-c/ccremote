@@ -259,11 +259,10 @@ describe('mes machines : propriétaire', () => {
     const a = await nouveau('tour', 'alice');
     const b = await nouveau('portable', 'bob');
     const idB = await idDe(b);
-    await enLignePour(a, idB);
-    expect(a.federation.appairer(idB)).toEqual({ ok: false, statut: 409, raison: 'ce nœud n’est pas à toi' });
-    expect((await a.federation.etat()).membres).toEqual([
-      { id: idB, enLigne: true, nom: 'portable', genre: 'noeud', proprietaire: 'bob', mien: false },
-    ]);
+    // L'aiguilleur ne montre pas un nœud d'un autre propriétaire (fd01f7b) : inconnu, donc pas des nôtres.
+    await attendre(async () => (await a.federation.etat()).aiguilleur?.relie === true);
+    expect(a.federation.appairer(idB)).toEqual({ ok: false, statut: 409, raison: 'propriétaire inconnu' });
+    expect((await a.federation.etat()).membres.some((m) => m.id === idB)).toBe(false);
     expect((await b.federation.etat()).demandes).toEqual([]);
   });
 
@@ -272,7 +271,6 @@ describe('mes machines : propriétaire', () => {
     const b = await nouveau('portable', 'alice');
     const idB = await idDe(b);
     const { ws, recus } = await lienFaux(await fauxMembre('bob'));
-    await attendre(async () => (await b.federation.etat()).membres.some((m) => m.proprietaire === 'bob'));
     ws.send(JSON.stringify({ t: 'ouvrir', canal: 'intrus1', vers: idB }));
     await attendre(() => recus.some((m) => m['t'] === 'accepter'));
     const identite = exporterIdentitePublique((await genererIdentite()).publique);

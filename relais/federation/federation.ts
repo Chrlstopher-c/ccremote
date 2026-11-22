@@ -416,7 +416,9 @@ export class Federation {
   private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     if (message.t === 'revocation') {
       this.oublierPair(canal.membre);
-      return canal.fermer();
+      // Un lien rouvert entre-temps (planification) vers ce pair ne doit pas survivre à la révocation.
+      for (const autre of this.canaux.actifs()) if (autre.membre === canal.membre) autre.fermer();
+      return;
     }
     if (message.t === 'synchro') return this.recepteurSynchro?.(canal.membre, message.m);
     await this.echanges.traiter(canal, message);

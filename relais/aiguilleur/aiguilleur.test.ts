@@ -401,16 +401,14 @@ describe('révocation, présence, charge, journal', () => {
     await lien(telephone);
     await lien(d);
     await la.attendre(
-      (m) => m['t'] === 'presence' && JSON.stringify(m['membres']).includes(`"${d.id}","enLigne":true`),
+      (m) => m['t'] === 'presence' && JSON.stringify(m['membres']).includes(`"${telephone.id}","enLigne":true`),
     );
     const vus = la.de('presence').at(-1)?.['membres'];
-    expect(vus).toHaveLength(2);
-    expect(vus).toEqual(
-      expect.arrayContaining([
-        { id: telephone.id, enLigne: true, nom: 'chris-appareil', genre: 'appareil', proprietaire: 'chris' },
-        { id: d.id, enLigne: true, nom: 'matheo-noeud', genre: 'noeud', proprietaire: 'matheo' },
-      ]),
-    );
+    // Le nœud du duo (autre propriétaire) n'est pas dans la présence tant qu'aucun canal duo n'est accepté.
+    expect(vus).toHaveLength(1);
+    expect(vus).toEqual([
+      { id: telephone.id, enLigne: true, nom: 'chris-appareil', genre: 'appareil', proprietaire: 'chris' },
+    ]);
   });
 
   test('une charge au-delà de 1 Mio est refusée, rien n’est livré', async () => {
