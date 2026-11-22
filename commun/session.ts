@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { FichierModifie } from './modifications.ts';
 import { ModeFichier, NOMBRE_MAX_PIECES, PieceJointe } from './presentation.ts';
 import { ConnecteurSession } from './panneau.ts';
+import { CadreInvite } from './cadre-invite.ts';
 
 export const LanceurSession = z.enum(['kitty', 'quart', 'echo']); // qui a lancé la session (registre `cc`)
 export type LanceurSession = z.infer<typeof LanceurSession>;
@@ -170,6 +171,9 @@ export const ResumeSession = z.object({
   archivee: z.boolean().optional(), // rangée par Chris : absente des listes par défaut, jamais fermée automatiquement
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
   style_sortie: z.string().nullable().optional(), // style de sortie Claude (SDK) ; null ou absent = défaut
+  prompt_systeme: z.string().max(8000).nullable().optional(), // prompt système de la conversation ; null = aucun
+  // Session d'un invité (vue des autres : titre générique, fil refusé) : membre et nom affiché.
+  invite: z.object({ membre: z.string(), nom: z.string() }).optional(),
   annexe_de: z.string().nullable().optional(), // conversation annexe : identifiant de la session parente
   parent: z.string().nullable().optional(), // née d'une duplication : identifiant de la session d'origine
   bac_a_sable: BacASable.optional(), // réglé à la création, réappliqué à la reprise ; absent = non
@@ -319,6 +323,8 @@ export const DemandeSession = z.object({
   rapide: z.boolean().optional(), // mode rapide demandé à l'ouverture (moteur SDK)
   ultracode: z.boolean().optional(), // Ultracode demandé à l'ouverture (moteur SDK)
   style_sortie: z.string().min(1).max(80).nullable().optional(),
+  prompt_systeme: z.string().max(8000).optional(), // prompt système de la conversation, ajouté à celui de l'appli
+  invite: CadreInvite.optional(), // session d'invité : cadre imposé par le nœud du chef
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(), // Remote Control branché à la fin du premier tour
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(), // jointes au premier message (moteur SDK)
