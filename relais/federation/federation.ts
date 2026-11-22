@@ -48,6 +48,7 @@ import { TerminalFedere } from './terminal-federe.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
 import type { DemandeAppareil as DemandeAppareilFedere, ReponseAppareil as ReponseAppareilFedere, ServirAppareil } from './appareils.ts';
+import { envoyerReponseFlux } from './reponse-flux-appareil.ts';
 import { type MembreVu, Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import {
@@ -571,10 +572,14 @@ export class Federation {
   // Une requête de l'API : son corps (en morceaux si besoin) est réuni, rejoué, et la réponse repart de même.
   private async requeteAppareil(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'api' }>): Promise<void> {
     const corps = this.corpsAppareil(canal.membre, m);
-    const reponse =
+    const reponse: ReponseAppareilFedere =
       corps === null
         ? { statut: 400, corps: JSON.stringify({ erreur: 'transfert interrompu' }) }
         : await this.reponseAppareil(canal.membre, m, corps);
+    if (reponse.flux) {
+      const flux = { statut: reponse.statut, type: reponse.type, flux: reponse.flux };
+      return envoyerReponseFlux((message) => canal.envoyer(message), m.ref, flux, this.options.journal);
+    }
     for (const message of messagesAvecCorps(m.ref, reponse.corps, (texte, morceaux) => ({
       t: 'api_reponse',
       ref: m.ref,

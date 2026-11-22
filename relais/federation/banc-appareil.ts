@@ -22,6 +22,25 @@ export interface Reponse {
   readonly type?: string;
 }
 
+/** Une réponse en flux, réunie. `premierMs` et `finMs` : délais depuis l'envoi de la requête (premier son). */
+export interface ReponseFluxRecue {
+  readonly statut: number;
+  readonly type?: string;
+  readonly octets: Uint8Array;
+  readonly ok: boolean;
+  readonly premierMs: number | null;
+  readonly finMs: number;
+}
+
+interface FluxEnCours {
+  readonly debut: number;
+  readonly resoudre: (r: ReponseFluxRecue) => void;
+  premierMs: number | null;
+  statut?: number;
+  type?: string;
+  morceaux: Uint8Array[];
+}
+
 /** Un appareil de test : identité propre, membre de l'aiguilleur, machine à états du canal côté appareil. */
 export class Appareil {
   readonly canaux = new Map<string, CanalNoeud>();
@@ -38,6 +57,7 @@ export class Appareil {
   private ws: WebSocket | null = null;
   private readonly reponses = new Map<string, (r: Reponse) => void>();
   private readonly morceaux = new Map<string, string[]>();
+  private readonly fluxEnCours = new Map<string, FluxEnCours>();
   private compteur = 0;
 
   constructor(readonly identite: Identite) {}
@@ -85,6 +105,18 @@ export class Appareil {
     });
   }
 
+  /** Une requête `?flux=1` dans le canal : la réponse est rendue entière, à la fin du flux (ou de la réponse). */
+  appelerFlux(canal: CanalNoeud, chemin: string, corps: string): Promise<ReponseFluxRecue> {
+    const ref = this.suivant();
+    return new Promise((ok) => {
+      this.fluxEnCours.set(ref, { debut: performance.now(), resoudre: ok, premierMs: null, morceaux: [] });
+      if (!canal.envoyer({ t: 'api', ref, methode: 'POST', chemin, corps })) {
+        this.fluxEnCours.delete(ref);
+        ok({ statut: 0, octets: new Uint8Array(), ok: false, premierMs: null, finMs: 0 });
+      }
+    });
+  }
+
   /** Un message chiffré quelconque, avec sa référence de requête (morceaux d'abord, comme la fédération). */
   envoyerGros(canal: CanalNoeud, message: MessageChiffre & { ref: string; corps?: string }): boolean {
     const corps = message.corps ?? '';
@@ -123,7 +155,14 @@ export class Appareil {
   }
 
   private recevoir(canal: CanalNoeud, message: MessageChiffre): void {
-    if (message.t === 'morceau') return this.ajouterMorceau(message.ref, message.rang, message.corps);
+    if (message.t === 'api_flux') return this.entete(message.ref, message.statut, message.type);
+    if (message.t === 'api_fin') return this.finirFlux(message.ref, message.morceaux, message.ok);
+    if (message.t === 'morceau') return this.morceau(message.ref, message.rang, message.corps);
+    if (message.t === 'api_reponse' && this.fluxEnCours.has(message.ref)) {
+      const corps = this.reunir(message.ref, message.corps, message.morceaux);
+      const octets = message.codage === 'base64' ? Buffer.from(corps, 'base64') : new TextEncoder().encode(corps);
+      return this.finirFlux(message.ref, 0, true, { statut: message.statut, type: message.type, octets });
+    }
     if (message.t === 'api_reponse') {
       return this.reponses.get(message.ref)?.({
         statut: message.statut,
@@ -144,6 +183,36 @@ export class Appareil {
   readonly acquitter: string[] = [];
   /** Messages qu'un appareil ne connaît pas (l'iPhone fermerait son canal) : doit rester vide. */
   readonly horsProtocole: string[] = [];
+
+  private entete(ref: string, statut: number, type?: string): void {
+    const flux = this.fluxEnCours.get(ref);
+    if (!flux) return;
+    flux.statut = statut;
+    flux.type = type;
+  }
+
+  // Un morceau d'un flux (en-tête reçu) part tout de suite au compte-gouttes ; sinon il est d'un corps en morceaux.
+  private morceau(ref: string, rang: number, corps: string): void {
+    const flux = this.fluxEnCours.get(ref);
+    if (!flux || flux.statut === undefined) return this.ajouterMorceau(ref, rang, corps);
+    flux.premierMs ??= performance.now() - flux.debut;
+    if (rang === flux.morceaux.length) flux.morceaux.push(Buffer.from(corps, 'base64'));
+  }
+
+  private finirFlux(
+    ref: string,
+    morceaux: number,
+    ok: boolean,
+    entier?: { statut: number; type?: string; octets: Uint8Array },
+  ): void {
+    const flux = this.fluxEnCours.get(ref);
+    if (!flux) return;
+    this.fluxEnCours.delete(ref);
+    const finMs = performance.now() - flux.debut;
+    const reunis = entier ?? { statut: flux.statut ?? 0, type: flux.type, octets: concatener(flux.morceaux) };
+    const complet = ok && (entier !== undefined || flux.morceaux.length === morceaux);
+    flux.resoudre({ ...reunis, ok: complet, premierMs: entier ? finMs : flux.premierMs, finMs });
+  }
 
   private ajouterMorceau(ref: string, rang: number, corps: string): void {
     const liste = this.morceaux.get(ref) ?? [];
@@ -223,3 +292,14 @@ export async function appairerAppareil(monte: Monte, noeud: Noeud, id: string) {
 }
 
 export { creerNoeud, monterAiguilleur, attendre };
+
+function concatener(morceaux: Uint8Array[]): Uint8Array {
+  const total = morceaux.reduce((somme, m) => somme + m.byteLength, 0);
+  const sortie = new Uint8Array(total);
+  let decalage = 0;
+  for (const m of morceaux) {
+    sortie.set(m, decalage);
+    decalage += m.byteLength;
+  }
+  return sortie;
+}

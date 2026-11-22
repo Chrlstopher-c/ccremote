@@ -24,6 +24,8 @@ export interface ReponseAppareil {
   readonly corps: string;
   readonly codage?: 'base64';
   readonly type?: string;
+  /** Requête `?flux=1` dont la réponse est binaire : ses octets au fil de leur arrivée (corps vide). */
+  readonly flux?: ReadableStream<Uint8Array>;
 }
 
 export type ServirAppareil = (demande: DemandeAppareil) => Promise<ReponseAppareil>;
@@ -121,7 +123,16 @@ function estTexte(type: string | null, octets: Uint8Array): boolean {
   }
 }
 
-async function corpsDeReponse(sortie: Response): Promise<ReponseAppareil | null> {
+/** Une réponse binaire à une requête `flux=1` part au fil de son corps ; tout le reste est lu entier, comme avant. */
+function fluxDeReponse(sortie: Response, enFlux: boolean): ReponseAppareil | null {
+  const type = sortie.headers.get('content-type');
+  if (!enFlux || !sortie.ok || !sortie.body || !type || TYPE_TEXTE.test(type)) return null;
+  return { statut: sortie.status, corps: '', type, flux: sortie.body };
+}
+
+async function corpsDeReponse(sortie: Response, enFlux: boolean): Promise<ReponseAppareil | null> {
+  const enFluxReponse = fluxDeReponse(sortie, enFlux);
+  if (enFluxReponse) return enFluxReponse;
   const octets = new Uint8Array(await sortie.arrayBuffer());
   if (octets.byteLength > TAILLE_MAX_TRANSFERT_CARACTERES) return null;
   const type = sortie.headers.get('content-type');
@@ -139,7 +150,7 @@ export function servirAppareil(table: TableInterne, journal: Logger): ServirAppa
     try {
       const sortie = await trouve.gestionnaire(construireRequete(url, demande, trouve.params), SERVEUR_INTERNE);
       if (!(sortie instanceof Response)) return reponseJson(500, 'réponse illisible');
-      const reponse = await corpsDeReponse(sortie);
+      const reponse = await corpsDeReponse(sortie, url.searchParams.get('flux') === '1');
       return reponse ?? reponseJson(413, 'réponse trop grande pour le canal');
     } catch (erreur) {
       journal.error({ err: erreur, chemin: url.pathname }, 'appareil : route en échec');

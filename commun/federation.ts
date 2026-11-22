@@ -232,6 +232,20 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     type: z.string().max(120).optional(),
     morceaux: z.number().int().min(1).max(NOMBRE_MAX_MORCEAUX_APPAREIL).optional(),
   }),
+  // Réponse en flux (requête `?flux=1`, corps binaire) : l'en-tête, puis ses morceaux (`morceau`, base64, au fil de
+  // leur arrivée) et la fin (`morceaux` = leur nombre ; `ok` faux si le flux a été coupé en route).
+  z.strictObject({
+    t: z.literal('api_flux'),
+    ref: REF,
+    statut: z.number().int().min(100).max(599),
+    type: z.string().max(120).optional(),
+  }),
+  z.strictObject({
+    t: z.literal('api_fin'),
+    ref: REF,
+    morceaux: z.number().int().min(0).max(NOMBRE_MAX_MORCEAUX_APPAREIL),
+    ok: z.boolean(),
+  }),
   // Flux en direct par l'aiguilleur : l'appareil demande les événements du nœud, qui acquitte ; chaque événement
   // (`corps` : un MessageClient en JSON, en morceaux si besoin) part ensuite sans requête.
   z.strictObject({ t: z.literal('diffusion_ouvrir') }),
