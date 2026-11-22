@@ -15,7 +15,7 @@
 // Limite : pas de message de confirmation dédié ; la première trame chiffrée du répondeur confirme les clés.
 import { ErreurChiffrement } from './erreur.ts';
 import { concatener, depuisBase64url, enOctets, type Octets, transcription, versBase64url } from './octets.ts';
-import { genererPaireDh, hkdf, importerPubliqueSignature, secretDh, sha256 } from './cles.ts';
+import { genererPaireDh, hkdf, importerPubliqueSignature, type PaireDh, secretDh, sha256 } from './cles.ts';
 import { champTexte, estObjet } from './lecture.ts';
 import { type Canal, creerCanal, importerCleAes } from './messages.ts';
 import {
@@ -114,12 +114,14 @@ export function lireMessageReponse(brut: unknown): MessageReponse {
 }
 
 /** Premier message de l'initiateur, et l'état à garder pour la réponse. */
+// L'éphémère n'est fourni que par les vecteurs croisés (graines fixées) ; la production le tire au hasard.
 export async function initierPoignee(
   moi: Identite,
   destinataire: IdentitePublique,
   canal: string,
+  fixe?: PaireDh,
 ): Promise<{ message: MessageInitial; attente: AttentePoignee }> {
-  const ephemere = await genererPaireDh(false);
+  const ephemere = fixe ?? (await genererPaireDh(false));
   const signature = await signer(
     moi.signaturePrivee,
     contexte(LABEL_INITIAL, { canal, idI: moi.publique, idR: destinataire, eI: ephemere.publique }),
@@ -146,6 +148,7 @@ export async function repondrePoignee(
   moi: Identite,
   brut: unknown,
   accepte: (identite: IdentitePublique) => boolean | Promise<boolean>,
+  fixe?: PaireDh,
 ): Promise<{ reponse: MessageReponse; canal: Canal }> {
   const message = lireMessageInitial(brut);
   const idI = await importerIdentitePublique(message.identite);
@@ -153,7 +156,7 @@ export async function repondrePoignee(
   const eI = depuisBase64url(message.ephemere, TAILLE_CLE_DH);
   const sigI = depuisBase64url(message.signature, TAILLE_SIGNATURE);
   await verifier(idI.signature, sigI, contexte(LABEL_INITIAL, { canal: message.canal, idI, idR: moi.publique, eI }));
-  const eR = await genererPaireDh(false);
+  const eR = fixe ?? (await genererPaireDh(false));
   const c: Contexte = { canal: message.canal, idI, idR: moi.publique, eI, eR: eR.publique };
   const ikm = concatener(
     await secretDh(eR.privee, eI),

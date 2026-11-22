@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "identites": {
+    "I": {
+      "graineDh": "0101010101010101010101010101010101010101010101010101010101010101",
+      "graineSignature": "1111111111111111111111111111111111111111111111111111111111111111",
+      "publique": "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ognQSrIydCu0qzoTaL1GFeTm0CJKtxoBa6-FIKMyyXeHNw"
+    },
+    "R": {
+      "graineDh": "0202020202020202020202020202020202020202020202020202020202020202",
+      "graineSignature": "2222222222222222222222222222222222222222222222222222222222222222",
+      "publique": "zo060cy2M-x7cMF4FKXHbs0CloUFDTRHRboFhw5YfVmgmqX0emdZgC_5VfjcLSoUpcmdI76X-GQSf_k4NFWk8A"
+    }
+  },
+  "poignee": {
+    "canal": "vecteur-1",
+    "ephemereI": {
+      "graine": "0303030303030303030303030303030303030303030303030303030303030303",
+      "publique": "Xf7dO2vUf2-ijuFdlp1bsOpTd01Ii9r53xxuASSz7yI"
+    },
+    "ephemereR": {
+      "graine": "0404040404040404040404040404040404040404040404040404040404040404",
+      "publique": "rAGyIJ6GNU-4UyN7XeD0-rE8f8v0M6YcAZNpYX_s8Qs"
+    },
+    "messageInitial": {
+      "version": 1,
+      "canal": "vecteur-1",
+      "identite": "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ognQSrIydCu0qzoTaL1GFeTm0CJKtxoBa6-FIKMyyXeHNw",
+      "ephemere": "Xf7dO2vUf2-ijuFdlp1bsOpTd01Ii9r53xxuASSz7yI",
+      "signature": "qM5tb742g6Qcj4UrlHhyMsndR2Kf2U5w5f1Fjyp-7ihRomJXB18G2peugr_RZOajwpEQLH_fLwlCYvMB29qXBg"
+    },
+    "messageReponse": {
+      "ephemere": "rAGyIJ6GNU-4UyN7XeD0-rE8f8v0M6YcAZNpYX_s8Qs",
+      "signature": "4s2zg-c4i9wpwILjO32_v5PnxQQO24KWsDNKL_gUO1amLl1Xf2jalRG_S2-dKUeIpGDaeFVBMYPN6z56NUezDg"
+    }
+  },
+  "canal": {
+    "trames": [
+      {
+        "sens": "i>r",
+        "clair": "626f6e6a6f7572",
+        "trame": "00000000000000003b225830440c0147596b6c52b27edb4e1f3ce600bc02c0"
+      },
+      {
+        "sens": "i>r",
+        "clair": "",
+        "trame": "0000000000000001df0348632eaeb79a6cc980d3a59fd3fd"
+      },
+      {
+        "sens": "i>r",
+        "clair": "646f6e6ec3a96520e29c9320616363656e747320c3a9c3a0",
+        "trame": "00000000000000024fb98c2458b6b52b2f82a90c80f650dc2f633ed7ed8d29d7dad04d82f3d0f0117478459d5c912455"
+      },
+      {
+        "sens": "r>i",
+        "clair": "72c3a9706f6e73652031",
+        "trame": "00000000000000007bb42c5b0e6b781ec473f399f21226b2c43d9f35597b0e1bf7ec"
+      },
+      {
+        "sens": "r>i",
+        "clair": "7b2274223a22617069227d",
+        "trame": "000000000000000157d0d09e7e31e60ff06392a5486a74c67c2c4054596af59457d14f"
+      }
+    ]
+  }
+}
