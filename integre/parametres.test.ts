@@ -15,6 +15,13 @@ describe('lecture des paramètres du moteur intégré', () => {
     expect(p.donnees).toBe('/home/u/.local/share/lanterne/moteur');
     expect(p.socketTmux).toBe('lanterne');
     expect(p.codePoste).toBeUndefined();
+    expect(p.relaisDistant).toBeNull();
+  });
+
+  test('un relais distant (poste seul) se lit avec son jeton de poste, et une configuration partielle est refusée', () => {
+    const distant = { ...complet, LANTERNE_RELAIS_DISTANT: 'wss://relais.exemple.test/poste', LANTERNE_RELAIS_DISTANT_JETON: 'j' };
+    expect(lireParametres(distant, '/home/u').relaisDistant).toEqual({ url: 'wss://relais.exemple.test/poste', jeton: 'j' });
+    expect(() => lireParametres({ ...complet, LANTERNE_RELAIS_DISTANT: 'wss://x.test/poste' })).toThrow(ErreurParametres);
   });
 
   test('XDG_DATA_HOME et LANTERNE_MOTEUR_DONNEES passent avant le défaut', () => {

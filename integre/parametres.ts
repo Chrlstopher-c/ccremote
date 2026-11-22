@@ -1,6 +1,7 @@
 // Responsabilité : lire les variables LANTERNE_MOTEUR_* posées par l'appli Lanterne (pur, sans effet de bord).
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { lireRelaisDistant, type RelaisDistant } from '../poste/relais-distant.ts';
 
 export interface ParametresLancement {
   readonly donnees: string;
@@ -9,6 +10,8 @@ export interface ParametresLancement {
   readonly jeton: string;
   readonly codePoste: string | undefined;
   readonly socketTmux: string;
+  /** Relais distant (poste seul) : `null` = le moteur lance son relais local. */
+  readonly relaisDistant: RelaisDistant | null;
 }
 
 export class ErreurParametres extends Error {}
@@ -36,6 +39,14 @@ export function dossierDonneesDefaut(env: Env, maison: string = homedir()): stri
   return join(base, 'lanterne/moteur');
 }
 
+function relaisDistantOuErreur(env: Env): RelaisDistant | null {
+  try {
+    return lireRelaisDistant(env);
+  } catch (erreur) {
+    throw new ErreurParametres(erreur instanceof Error ? erreur.message : String(erreur));
+  }
+}
+
 export function lireParametres(env: Env, maison: string = homedir()): ParametresLancement {
   return {
     donnees: env['LANTERNE_MOTEUR_DONNEES'] || dossierDonneesDefaut(env, maison),
@@ -44,5 +55,6 @@ export function lireParametres(env: Env, maison: string = homedir()): Parametres
     jeton: requis(env, 'LANTERNE_MOTEUR_JETON'),
     codePoste: env['LANTERNE_MOTEUR_CODE_POSTE'] || undefined,
     socketTmux: env['LANTERNE_MOTEUR_TMUX_SOCKET'] || SOCKET_TMUX_PAR_DEFAUT,
+    relaisDistant: relaisDistantOuErreur(env),
   };
 }
