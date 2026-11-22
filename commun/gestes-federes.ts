@@ -21,7 +21,7 @@ const MOTIFS_SESSION: readonly RegExp[] = [
   new RegExp(`^fichiers/${SEGMENT}$`),
   new RegExp(`^connecteurs/${SEGMENT}$`),
   new RegExp(`^taches/${SEGMENT}(/arreter)?$`),
-  new RegExp(`^parite/(taches/${SEGMENT}|resultat)$`),
+  new RegExp(`^parite/(taches/${SEGMENT}(/fil)?|resultat)$`), // fil d’un sous-agent (panneau)
 ];
 
 /** Routes du nœud entier : les artefacts, la synthèse vocale et son service, la réponse à une confirmation. */
