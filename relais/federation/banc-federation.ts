@@ -80,7 +80,7 @@ function pontFactice(appels: Appels): PontFederation {
     },
     geste: async (g) => {
       appels.gestes.push(g);
-      if (g.geste === 'ouvrir') return Response.json({ id: 'ouverte-par-geste' }, { status: 201 });
+      if (g.geste === 'ouvrir') return Response.json(ficheDe('ouverte-par-geste', 'tour', 'Neuve'), { status: 201 });
       return Response.json({ geste: g.geste, session: g.session ?? null });
     },
   };

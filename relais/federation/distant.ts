@@ -78,6 +78,14 @@ export class CacheDistant {
     this.observateur?.changement();
   }
 
+  /** Une session que ce nœud vient d'ouvrir chez un pair : connue tout de suite, avant son prochain instantané. */
+  ajouterSession(membre: string, session: ResumeSession): void {
+    const noeud = this.noeuds.get(membre);
+    if (!noeud) return;
+    noeud.sessions.set(session.id, session);
+    this.observateur?.changement();
+  }
+
   /** Les nœuds connus, avec leurs sessions (ordre d'arrivée). */
   noeudsConnus(): NoeudDistant[] {
     return [...this.noeuds].map(([membre, n]) => ({

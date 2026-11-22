@@ -129,8 +129,10 @@ describe('gestes relayés', () => {
       requete('/api/sessions', 'POST', { machine: 'tour', projet: { machine: 'tour', chemin: '/p', nom: 'p' } }),
     );
     expect(r?.status).toBe(201);
-    expect(await r?.json()).toEqual({ id: 'ouverte-par-geste' });
+    expect(((await r?.json()) as { id: string }).id).toBe('ouverte-par-geste'); // réponse de la route d’ouverture
     expect(a.appels.gestes[0]?.geste).toBe('ouvrir');
+    // Routée tout de suite : l'appli règle l'effort de la session neuve dès la réponse.
+    expect(b.federation.distantes.estDistante('ouverte-par-geste')).toBe(true);
     const locale = await b.federation.distantes.intercepter(requete('/api/sessions', 'POST', { machine: 'portable' }));
     expect(locale).toBeNull();
   });

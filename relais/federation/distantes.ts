@@ -4,7 +4,7 @@
 import type { Logger } from 'pino';
 import type { MessageClient, VueMachine } from '../../commun/api-clients.ts';
 import type { EvenementFedere, MessageChiffre } from '../../commun/federation.ts';
-import type { ResumeSession } from '../../commun/session.ts';
+import { ResumeSession } from '../../commun/session.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
@@ -126,7 +126,18 @@ export class Distantes {
       long ? DELAI_GESTE_LONG_MS : DELAI_GESTE_MS,
     );
     if (!reponse || reponse.t !== 'geste_reponse') return reponseErreur(504, 'la machine n’a pas répondu à temps');
+    if (g.geste === 'ouvrir' && reponse.statut < 300) this.connaitreOuverte(membre, reponse.corps);
     return new Response(reponse.corps, { status: reponse.statut, headers: { 'content-type': 'application/json' } });
+  }
+
+  // L'appli règle la session neuve (effort, modèle…) dès la réponse : elle doit déjà être routée vers le nœud.
+  private connaitreOuverte(membre: string, corps: string): void {
+    try {
+      const fiche = ResumeSession.safeParse(JSON.parse(corps));
+      if (fiche.success) this.o.cache.ajouterSession(membre, fiche.data);
+    } catch (erreur) {
+      this.o.journal.warn({ err: erreur }, 'session ouverte chez un pair : fiche illisible');
+    }
   }
 
   // ---- Gestes nommés (routes /api/federation/sessions/*) ------------------------------------------------------
