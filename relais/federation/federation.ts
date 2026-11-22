@@ -107,6 +107,7 @@ export class Federation {
       journal: options.journal,
       terminaux: { traiter: (c, m) => this.terminaux.traiter(c, m) },
       autoriser: (membre, requete) => this.charte.autorise(membre, requete),
+      autoriserAmi: (ami, requete) => this.charte.autoriseAmi(ami, requete),
     });
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.liens.emettre(m));

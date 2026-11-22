@@ -20,3 +20,23 @@ export function reponseRefusDroit(m: MessageChiffre, requete: RequeteDroit): Mes
   }
   return 'ref' in m ? { t: 'reponse', ref: m.ref, ok: false, raison } : null;
 }
+
+/** L'ami du duo au nom duquel la requête arrive, ou null (requête du pair seul). */
+export function amiDeMessage(m: MessageChiffre): string | null {
+  return 'ami' in m && m.ami !== undefined ? m.ami : null;
+}
+
+/**
+ * Vrai si la requête reçue est permise : le pair relais doit l'avoir, et si elle vient au nom d'un ami du duo, la
+ * machine visée (celle qui la reçoit) vérifie d'après la charte que l'ami a ce droit sur elle-même.
+ */
+export function requetePermise(
+  message: MessageChiffre,
+  requete: RequeteDroit,
+  pairPermis: boolean,
+  amiPermis: (ami: string, requete: RequeteDroit) => boolean,
+): boolean {
+  if (!pairPermis) return false;
+  const ami = amiDeMessage(message);
+  return ami === null || amiPermis(ami, requete);
+}

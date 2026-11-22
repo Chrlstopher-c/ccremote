@@ -26,6 +26,7 @@ import {
 } from '../../commun/charte.ts';
 import { exporterIdentitePublique, type Identite } from '../../commun/chiffrement/identite.ts';
 import type { MessageChiffre } from '../../commun/federation.ts';
+import { autoriseAmi as droitAmiAutorise } from '../../commun/charte-amis.ts';
 import type { VerdictSource } from './admissions.ts';
 import type { PresentationDistante } from './canal.ts';
 import type { ReglagesInvite } from '../../commun/invites.ts';
@@ -105,6 +106,12 @@ export class CharteNoeud {
   /** Sans charte, tout est permis entre nœuds de mêmes propriétaires ; avec une charte, les droits du membre. */
   autorise(membre: string, requete: RequeteDroit): boolean {
     return droitAutorise(this.courante, membre, requete);
+  }
+
+  /** Droits d'un ami du duo sur CETTE machine, vérifiés ici d'après la charte courante (fermé sans charte). */
+  autoriseAmi(ami: string, requete: RequeteDroit): boolean {
+    const moi = this.port.moi();
+    return moi !== null && droitAmiAutorise(this.courante, ami, moi, requete);
   }
 
   compteDeMoi(): string | null {

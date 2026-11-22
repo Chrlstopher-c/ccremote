@@ -7,6 +7,7 @@ import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { Evenement, Projet, ResumeSession } from './session.ts';
 import { CibleTerminal } from './appareil.ts';
 import { ActiviteInvite } from './invites.ts';
+import { ID_MEMBRE } from './charte-droits.ts';
 
 /** Taille maximale d'un message en clair (avant chiffrement) : la charge de l'aiguilleur est plafonnée à 1 Mio. */
 export const TAILLE_MAX_CLAIR_OCTETS = 600_000;
@@ -153,21 +154,22 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     ts: z.string(),
     evt: Evenement,
   }),
-  z.strictObject({ t: z.literal('fil'), ref: REF, session: SESSION }),
+  z.strictObject({ t: z.literal('fil'), ref: REF, session: SESSION, ami: ID_MEMBRE.optional() }),
   z.strictObject({
     t: z.literal('fil_reponse'),
     ref: REF,
     session: SESSION,
     evenements: z.array(EvenementFede).max(TAILLE_FIL_FEDERE),
   }),
-  z.strictObject({ t: z.literal('ecrire'), ref: REF, session: SESSION, texte: TEXTE }),
-  z.strictObject({ t: z.literal('interrompre'), ref: REF, session: SESSION }),
+  z.strictObject({ t: z.literal('ecrire'), ref: REF, session: SESSION, texte: TEXTE, ami: ID_MEMBRE.optional() }),
+  z.strictObject({ t: z.literal('interrompre'), ref: REF, session: SESSION, ami: ID_MEMBRE.optional() }),
   z.strictObject({
     t: z.literal('ouvrir'),
     ref: REF,
     machine: NOM,
     chemin: z.string().min(1).max(4096),
     message: TEXTE,
+    ami: ID_MEMBRE.optional(),
   }),
   z.strictObject({
     t: z.literal('reponse'),
@@ -185,6 +187,7 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     methode: z.enum(METHODES_GESTE),
     session: SESSION.optional(),
     machine: NOM.optional(),
+    ami: ID_MEMBRE.optional(),
     requete: z.string().max(4000).optional(),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS).optional(),
     // Corps en morceaux : `morceaux` = leur nombre, envoyés avant ce message sous la même référence.

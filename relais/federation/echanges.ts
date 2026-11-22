@@ -15,7 +15,7 @@ import {
 } from '../../commun/federation.ts';
 import { estGesteRelayable, type MethodeGeste, type PorteeGeste } from '../../commun/gestes-federes.ts';
 import { droitRequis, type RequeteDroit } from '../../commun/charte.ts';
-import { reponseRefusDroit, requeteDeMessage } from './droits-noeud-requete.ts';
+import { reponseRefusDroit, requeteDeMessage, requetePermise } from './droits-noeud-requete.ts';
 import { type CorpsGeste, reponseGeste } from './gestes.ts';
 import { decouper, nombreDeMorceaux, Reassemblage } from './transferts.ts';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
@@ -98,6 +98,8 @@ export interface OptionsEchanges {
   readonly terminaux?: RecepteurTerminal;
   /** Droits de la charte : un pair sans le droit d'une requête la voit refusée. Absent : tout est permis. */
   readonly autoriser?: (membre: string, requete: RequeteDroit) => boolean;
+  /** Droits d'un ami du duo sur cette machine (la machine visée vérifie) ; absent : fermé. */
+  readonly autoriserAmi?: (ami: string, requete: RequeteDroit) => boolean;
   /** Politique des invités : elle remplace la charte pour un invité, et restreint ce que les autres voient. */
   readonly invites?: PorteInvites;
 }
@@ -301,12 +303,18 @@ export class Echanges {
   /** Un message qui exige un droit que le pair n'a pas est refusé ici (rend vrai), journalisé sans contenu. */
   private refuseSansDroit(canal: CanalNoeud, message: MessageChiffre): boolean {
     const requete = requeteDeMessage(message);
-    if (!requete || this.permis(canal.membre, requete)) return false;
+    if (!requete || this.permisRequete(canal.membre, message, requete)) return false;
     const droit = droitRequis(requete);
     this.options.journal.warn({ membre: canal.membre, t: message.t, droit }, 'requête refusée : droit manquant');
     const reponse = reponseRefusDroit(message, requete);
     if (reponse) canal.envoyer(reponse);
     return true;
+  }
+
+  // Le pair relais doit avoir le droit ; une requête au nom d'un ami du duo, la machine visée la vérifie aussi.
+  private permisRequete(membre: string, message: MessageChiffre, requete: RequeteDroit): boolean {
+    const amiPermis = (ami: string, r: RequeteDroit): boolean => this.options.autoriserAmi?.(ami, r) ?? false;
+    return requetePermise(message, requete, this.permis(membre, requete), amiPermis);
   }
 
   // Instantané et événement d'un pair : le cache mémoire les garde.

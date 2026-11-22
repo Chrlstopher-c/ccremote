@@ -6,18 +6,19 @@ import { importerIdentitePublique } from './chiffrement/identite.ts';
 import { depuisBase64url, enOctets, type Octets, versBase64url } from './chiffrement/octets.ts';
 import { IdentitePubliqueTexte, TAILLE_MAX_CHARTE_CARACTERES } from './federation.ts';
 import { ReglagesInvite } from './invites.ts';
+import {
+  AUCUN_DROIT,
+  AmiCharte,
+  amisCoherents,
+  DROITS,
+  Droits,
+  NOMBRE_MAX_AMIS,
+  sansMachineAmis,
+  TOUS_DROITS,
+  type Droit,
+} from './charte-droits.ts';
 
-export const DROITS = ['voir', 'piloter', 'lancer', 'remoteControl'] as const;
-export type Droit = (typeof DROITS)[number];
-export const Droits = z.object({
-  voir: z.boolean(),
-  piloter: z.boolean(),
-  lancer: z.boolean(),
-  remoteControl: z.boolean(),
-});
-export type Droits = z.infer<typeof Droits>;
-export const TOUS_DROITS: Droits = { voir: true, piloter: true, lancer: true, remoteControl: true };
-export const AUCUN_DROIT: Droits = { voir: false, piloter: false, lancer: false, remoteControl: false };
+export { AUCUN_DROIT, AmiCharte, DROITS, Droits, TOUS_DROITS, type Droit };
 
 export const SORTES = ['serveur', 'pair', 'telephone'] as const;
 export type Sorte = (typeof SORTES)[number];
@@ -48,6 +49,7 @@ export const Charte = z.object({
   le: z.string().max(40),
   par: ID,
   origine: z.enum(['creation', 'reprise']),
+  amis: z.array(AmiCharte).max(NOMBRE_MAX_AMIS).optional(), // absent : aucun ami du duo
 });
 export type Charte = z.infer<typeof Charte>;
 
@@ -102,6 +104,7 @@ function coherence(c: Charte): Charte | MotifRefusCharte {
   }
   if (c.membres.some((m) => m.invite !== undefined && c.chefs.includes(m.id))) return 'chef-invalide';
   if (!c.membres.every((m) => m.invite === undefined || invitePermis(c, m))) return 'illisible';
+  if (!amisCoherents(c)) return 'illisible';
   if (!c.chefs.includes(c.par)) return 'signataire-non-chef';
   return c;
 }
@@ -368,7 +371,8 @@ export function retirerMembre(c: Charte, auteur: string, membre: string, le: str
   if (chefs.length === 0) return refuse('dernier chef');
   if (membre === auteur) return refuse('un chef ne se retire pas lui-même');
   const restants = c.membres.filter((m) => m.id !== membre).map((m) => sansMachine(m, membre));
-  return suivante(c, auteur, le, restants, chefs);
+  const edition = suivante(c, auteur, le, restants, chefs);
+  return edition.ok ? { ok: true, charte: sansMachineAmis(edition.charte, membre) } : edition;
 }
 
 /** Retire un nœud retiré de la liste des machines de ses invités (sinon la charte ne se relirait plus). */
