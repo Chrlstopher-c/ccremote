@@ -11,6 +11,7 @@ import type { SortieSession } from '../session/session-poste.ts';
 import { demarrerFauxApi, type FauxApi, evenementApi, sessionApi, tourApi } from './faux-claude-ai.ts';
 import { type SessionBrute, lireSession } from './donnees.ts';
 import { PAS_ENCORE_CLAUDE_AI, SessionDistante } from './session-distante.ts';
+import { avecEnteteChris } from '../../commun/entete-chris.ts';
 
 // Pilotage d'une session claude.ai contre le faux serveur : corps exacts des POST, dialogues, erreurs. Aucun appel
 // réel.
@@ -119,7 +120,7 @@ describe('envoi de messages et d’interruption', () => {
       session_id: ID,
       type: 'user',
       parent_tool_use_id: null,
-      message: { role: 'user', content: 'Bonjour' },
+      message: { role: 'user', content: avecEnteteChris('Bonjour') },
     });
     expect(typeof evt?.['uuid']).toBe('string');
   });
@@ -133,7 +134,7 @@ describe('envoi de messages et d’interruption', () => {
       message: {
         content: [
           { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
-          { type: 'text', text: 'Voir' },
+          { type: 'text', text: avecEnteteChris('Voir') },
         ],
       },
     });

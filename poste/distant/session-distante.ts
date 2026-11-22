@@ -10,6 +10,7 @@ import type { SessionPersistee } from '../session/persistance.ts';
 import type { Reglage, ReponseCrochet, SessionPoste, SortieSession } from '../session/session-poste.ts';
 import { type EtatTraduction, nouvelEtatTraduction } from '../session/traduction-sdk.ts';
 import { type ResultatApi, envoyerEvenement, lireEvenements } from './client-claude-ai.ts';
+import { avecEnteteChris } from '../../commun/entete-chris.ts';
 import { type EvenementBrut, type SessionBrute, lireEvenement } from './donnees.ts';
 import { objet, texte } from '../comptes/valeurs.ts';
 import { type ModeleDate, plusRecent } from '../../commun/modele-date.ts';
@@ -384,7 +385,8 @@ export class SessionDistante implements SessionPoste {
   // Pilotage : chaque envoi est un événement POSTé à la session ; la réponse de claude.ai dit si elle est acceptée.
   async envoyer(texte: string, pieces: readonly PieceJointe[] = []): Promise<string | null> {
     if (pieces.some((p) => !p.mime.startsWith('image/'))) return PIECES_REFUSEES;
-    const contenu = pieces.length > 0 ? contenuAvecImages(texte, pieces) : texte;
+    const marque = avecEnteteChris(texte);
+    const contenu = pieces.length > 0 ? contenuAvecImages(marque, pieces) : marque;
     // « next » : remis à la prochaine frontière d'outil, comme le chemin SDK (le bridge lit ce champ).
     return this.poster(messageUtilisateur(this.resume.id, contenu, randomUUID(), 'next'));
   }

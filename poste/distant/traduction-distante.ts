@@ -8,6 +8,7 @@ import { estTypeImage, imagesDeContenu } from '../presentation/images.ts';
 import { objet } from '../comptes/valeurs.ts';
 import type { EvenementBrut } from './donnees.ts';
 import type { Evenement } from '../../commun/session.ts';
+import { sansEnteteChris } from '../../commun/entete-chris.ts';
 
 /** Pièce d'un message (image, document) à stocker : base64 + type. */
 export interface PieceBrute {
@@ -66,7 +67,7 @@ function messageUtilisateur(payload: SDKMessage, pieces?: StockeurPieces): Evene
   if (blocs.some((b) => b['type'] === 'tool_result')) return [];
   const uuid = typeof p['uuid'] === 'string' ? { uuid: p['uuid'] } : {};
   const { textes, joints } = lireBlocs(blocs, pieces);
-  const texte = textes.join('\n').trim();
+  const texte = sansEnteteChris(textes.join('\n').trim()).trim();
   const message: Evenement[] = texte === '' ? [] : [{ type: 'message', texte, ...uuid }];
   return [...message, ...joints];
 }
