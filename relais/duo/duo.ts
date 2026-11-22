@@ -43,6 +43,7 @@ import { VALIDE_IDENTIFIANT } from '../../commun/aiguilleur.ts';
 import type { PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
 import { LiaisonAiguilleur } from './liaison-aiguilleur.ts';
 import { Synchro } from './synchro.ts';
+import { type SocleDuo, construireContexte, creerAvances } from './assemblage-duo.ts';
 
 export type { Resultat } from './resultat.ts';
 
@@ -101,8 +102,9 @@ export class Duo {
       horloge: this.horloge,
       delaiMs: options.delaiDemandeMs ?? DUREE_DEMANDE_MS,
     });
-    this.contexte = this.construireContexte(options);
-    this.avances = this.creerAvances(options);
+    const socle = this.socle(options);
+    this.contexte = construireContexte(socle);
+    this.avances = creerAvances(socle, this.contexte);
   }
 
   brancherAiguilleur(port: PortAiguilleurDuo): LiaisonAiguilleur {
@@ -414,49 +416,24 @@ export class Duo {
     if (sortant) this.canal.envoyer(sortant);
   }
 
-  private creerAvances(options: OptionsDuo): EchangesAvances {
-    return new EchangesAvances({
-      base: options.base,
-      registre: options.registre,
-      postes: options.postes,
-      diffusion: options.diffusion,
-      partages: this.partages,
-      demandes: this.demandes,
-      historique: this.historique,
-      droits: this.stockDroits,
-      attentes: this.attentes,
-      contexte: this.contexte,
-      horloge: this.horloge,
-      envoyer: (m) => this.envoyerLien(m),
-      maintenant: () => this.maintenant(),
-      nomLocal: () => this.identite.nomLocal(),
-      nomPair: () => this.identite.nomPair() ?? 'le pair',
-      log: options.journal,
-    });
-  }
-
-  private construireContexte(options: OptionsDuo): Contexte {
+  // Les dépendances que le contexte des échanges et les échanges avancés reçoivent de ce Duo.
+  private socle(options: OptionsDuo): SocleDuo {
     return {
-      nomLocal: () => this.identite.nomLocal(),
-      registre: this.registre,
+      options,
+      registre: options.registre,
+      diffusion: options.diffusion,
+      horloge: this.horloge,
       partages: this.partages,
-      droits: this.stockDroits,
       demandes: this.demandes,
       historique: this.historique,
-      sessions: options.sessions,
+      droits: this.stockDroits,
       attentes: this.attentes,
-      log: options.journal,
-      delaiDemandeMs: options.delaiDemandeMs ?? DUREE_DEMANDE_MS,
+      nomLocal: () => this.identite.nomLocal(),
+      nomPair: () => this.identite.nomPair(),
       maintenant: () => this.maintenant(),
       envoyer: (m) => this.envoyerLien(m),
       connecte: () => this.canal !== null,
-      nomPair: () => this.identite.nomPair() ?? 'le pair',
       partagerOuverte: (session) => this.partagerOuverte(session),
-      fil: (session, evt) => {
-        const evenement = this.registre.ajouterEvenement(session, this.maintenant(), evt);
-        this.diffusion.diffuser({ type: 'evenement', evenement });
-      },
-      diffuser: (m) => this.diffusion.diffuser(m),
     };
   }
 

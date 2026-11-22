@@ -12,7 +12,6 @@ import { type EtatTraduction, nouvelEtatTraduction } from '../session/traduction
 import { type ResultatApi, envoyerEvenement, lireEvenements } from './client-claude-ai.ts';
 import { avecEnteteChris } from '../../commun/entete-chris.ts';
 import { type EvenementBrut, type SessionBrute, lireEvenement } from './donnees.ts';
-import { objet, texte } from '../comptes/valeurs.ts';
 import { type ModeleDate, plusRecent } from '../../commun/modele-date.ts';
 import { FluxDistant, type TrameSse } from './flux-distant.ts';
 import {
@@ -30,17 +29,12 @@ import { type ContexteDistant, resumeDistant } from './resume-distant.ts';
 import { type StockeurPieces, traduireLot } from './traduction-distante.ts';
 import { stockeurPieces } from './pieces-distantes.ts';
 import type { Stockage } from '../presentation/stockage.ts';
+import { enTour, modeleDuFil } from './modele-du-fil.ts';
+
+export { enTour, modeleDuFil };
 
 export const PAS_ENCORE_CLAUDE_AI = 'pilotage claude.ai : pas encore pris en charge';
 
-// Modèle qu'un événement du fil annonce : `system/init`, ou un message assistant (jamais un modèle « <…> »).
-export function modeleDuFil(payload: unknown): string | null {
-  const p = objet(payload);
-  if (texte(p['type']) === 'system' && texte(p['subtype']) === 'init') return texte(p['model']);
-  if (texte(p['type']) !== 'assistant') return null;
-  const modele = texte(objet(p['message'])['model']);
-  return modele !== null && !modele.startsWith('<') ? modele : null;
-}
 const PIECES_REFUSEES = 'à distance, seules les images peuvent être jointes';
 const REGLAGE_REFUSE = 'réglage non pris en charge à distance';
 const APPAREIL_REFUSE = 'Ce compte exige un appareil de confiance pour piloter cette session';
@@ -67,11 +61,6 @@ export interface DependancesDistante {
 type EchecEnvoi = Extract<ResultatApi<null>, { ok: false }>;
 
 const REPUBLICATION_MS = 30_000;
-
-/** La session travaille (ou attend Chris) selon claude.ai : son fil avance sans que last_event_at ne bouge. */
-export function enTour(travail: string | null): boolean {
-  return travail === 'running' || travail === 'requires_action';
-}
 
 export class SessionDistante implements SessionPoste {
   // Le résumé publié se dérive de `base` (l'état de la liste, réglages compris) plus le dialogue et les erreurs.
