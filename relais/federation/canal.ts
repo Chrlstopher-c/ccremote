@@ -48,6 +48,8 @@ export interface HoteCanal {
   liaisonRefusee(canal: CanalNoeud, raison: string): void;
   messageRecu(canal: CanalNoeud, message: MessageChiffre): void;
   canalFerme(canal: CanalNoeud): void;
+  /** Motif du refus d'une identité que le nœud ne reconnaît pas (un pair révoqué n'est pas un inconnu). */
+  motifRefusInconnu?(membre: string): string;
 }
 
 const DELAI_POIGNEE_MS = 20_000;
@@ -214,7 +216,7 @@ export class CanalNoeud {
 
   // Un nœud inconnu qui tente un lien (pairing révoqué de notre côté) : on le lui dit, il cesse de réessayer.
   private refuserNonAppaire(): void {
-    this.envoyerClair({ t: 'refus', raison: 'non appairé' });
+    this.envoyerClair({ t: 'refus', raison: this.hote.motifRefusInconnu?.(this.membre) ?? 'non appairé' });
     this.fermer();
   }
 
@@ -240,7 +242,7 @@ export class CanalNoeud {
       this.tunnel = new Tunnel(canal, this.hote.journal);
     } catch (erreur) {
       this.hote.journal.warn({ err: erreur, canal: this.id }, 'poignée refusée : identité non appairée');
-      this.envoyerClair({ t: 'refus', raison: 'identité non appairée' });
+      this.envoyerClair({ t: 'refus', raison: this.hote.motifRefusInconnu?.(this.membre) ?? 'identité non appairée' });
       return this.terminer();
     }
     this.devenirOuvert();

@@ -31,6 +31,7 @@ export const PairFederee = z.object({
 export type PairFederee = z.infer<typeof PairFederee>;
 
 const PAIRS = z.array(PairFederee);
+const IDENTIFIANTS_REVOQUES = z.array(z.string().regex(IDENTIFIANT));
 
 export class SecretsNoeud {
   private readonly dossier: string;
@@ -68,6 +69,15 @@ export class SecretsNoeud {
 
   ecrirePairs(pairs: readonly PairFederee[]): void {
     this.ecrireJson('pairs.json', pairs);
+  }
+
+  /** Identifiants révoqués : un pair qui revient est refusé comme révoqué, pas comme inconnu. */
+  lireRevoques(): string[] {
+    return this.lireJson('revoques.json', IDENTIFIANTS_REVOQUES) ?? [];
+  }
+
+  ecrireRevoques(ids: readonly string[]): void {
+    this.ecrireJson('revoques.json', ids);
   }
 
   private lireJson<T>(nom: string, schema: z.ZodType<T>): T | null {

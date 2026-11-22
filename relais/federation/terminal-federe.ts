@@ -63,6 +63,11 @@ export class TerminalFedere {
     this.locaux = locaux;
   }
 
+  /** Les terminaux du relais, une fois branchés (les terminaux de machine d'un appareil y passent aussi). */
+  get locauxBranches(): TerminauxLocaux | null {
+    return this.locaux;
+  }
+
   // ---- Côté qui demande (WebSocket de l'appli) ----------------------------------------------------------------
 
   /** Ouvre le terminal chez le pair : la réponse du pair dit si le PTY est là ; sinon le WebSocket est fermé. */

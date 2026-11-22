@@ -19,17 +19,41 @@ interface EnRoute {
 }
 
 /** Le corps coupé en morceaux (dans l'ordre), ou rien s'il tient dans une trame. */
-export function decouper(ref: string, corps: string): Morceau[] {
-  const morceaux: Morceau[] = [];
-  for (let debut = 0, rang = 0; debut < corps.length; debut += TAILLE_MORCEAU_CARACTERES, rang += 1) {
-    morceaux.push({ t: 'morceau', ref, rang, corps: corps.slice(debut, debut + TAILLE_MORCEAU_CARACTERES) });
+export function decouper(ref: string, corps: string, taille = TAILLE_MORCEAU_CARACTERES): Morceau[] {
+  return decoupeCorps(corps, taille).map((morceau, rang) => ({ t: 'morceau', ref, rang, corps: morceau }));
+}
+
+// Un couple de substituts ne se coupe pas : un morceau sans son second substitut ne serait pas du JSON valide.
+function decoupeCorps(corps: string, taille: number): string[] {
+  const morceaux: string[] = [];
+  let debut = 0;
+  while (debut < corps.length) {
+    let fin = Math.min(debut + taille, corps.length);
+    const dernier = corps.charCodeAt(fin - 1);
+    if (fin < corps.length && dernier >= 0xd800 && dernier <= 0xdbff) fin -= 1;
+    morceaux.push(corps.slice(debut, fin));
+    debut = fin;
   }
   return morceaux;
 }
 
+/**
+ * Un corps à envoyer sous une référence : un seul message s'il tient dans une trame, sinon ses morceaux puis le
+ * message final (corps vide) qui annonce leur nombre. `construire` rend le message porteur du corps.
+ */
+export function messagesAvecCorps(
+  ref: string,
+  corps: string,
+  construire: (corps: string, morceaux?: number) => MessageChiffre,
+  taille = TAILLE_MORCEAU_CARACTERES,
+): MessageChiffre[] {
+  if (corps.length <= taille) return [construire(corps)];
+  return [...decouper(ref, corps, taille), construire('', nombreDeMorceaux(corps, taille))];
+}
+
 /** Nombre de morceaux d'un corps (0 : il tient dans une trame, aucun morceau). */
-export function nombreDeMorceaux(corps: string): number {
-  return Math.ceil(corps.length / TAILLE_MORCEAU_CARACTERES);
+export function nombreDeMorceaux(corps: string, taille = TAILLE_MORCEAU_CARACTERES): number {
+  return decoupeCorps(corps, taille).length;
 }
 
 /** Un corps au-delà de la limite de transfert : refusé, sans rien envoyer. */

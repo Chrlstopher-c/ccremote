@@ -52,3 +52,11 @@ describe('réassemblage', () => {
     expect(accordes.filter(Boolean)).toHaveLength(16);
   });
 });
+
+test('un corps coupé ne sépare jamais un couple de substituts, et se réunit à l’identique', () => {
+  const corps = `${'a'.repeat(TAILLE_MORCEAU_CARACTERES - 1)}😀${'b'.repeat(10)}`;
+  const morceaux = decouper('r1', corps);
+  expect(morceaux.length).toBe(nombreDeMorceaux(corps));
+  expect(morceaux.map((m) => m.corps).join('')).toBe(corps);
+  for (const m of morceaux) expect(/[\ud800-\udbff]$/.test(m.corps)).toBe(false);
+});

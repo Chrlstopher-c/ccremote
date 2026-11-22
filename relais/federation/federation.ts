@@ -10,7 +10,10 @@ import {
   type Identite,
   importerIdentitePublique,
 } from '../../commun/chiffrement/identite.ts';
-import { type EvenementFedere, type MessageChiffre } from '../../commun/federation.ts';
+import { type EvenementFedere, type MessageChiffre, TAILLE_MORCEAU_APPAREIL_CARACTERES } from '../../commun/federation.ts';
+import { messagesAvecCorps, Reassemblage } from './transferts.ts';
+import { DiffusionAppareil } from './appareil-diffusion.ts';
+import { TerminalAppareil } from './terminal-appareil.ts';
 import type { MessageSynchro } from '../../commun/synchro.ts';
 import { concerneDuo, type HandlerDuoAiguilleur, type PortAiguilleurDuo } from '../../commun/duo-aiguilleur.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
@@ -27,7 +30,7 @@ import type { EtatFederation, OptionsFederation } from './etat-federation.ts';
 import { TerminalFedere } from './terminal-federe.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
-import type { ServirAppareil } from './appareils.ts';
+import type { DemandeAppareil as DemandeAppareilFedere, ReponseAppareil as ReponseAppareilFedere, ServirAppareil } from './appareils.ts';
 import { type MembreVu, Voisinage } from './proprietaire.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import {
@@ -71,10 +74,18 @@ export class Federation {
   private planificateur: ReturnType<typeof setInterval> | null = null;
   private recepteurSynchro: ((membre: string, brut: unknown) => void) | null = null;
   readonly terminaux: TerminalFedere;
+  /** Flux en direct des appareils (par l'aiguilleur) et morceaux de leurs requêtes en route. */
+  private readonly diffusionAppareil: DiffusionAppareil;
+  private readonly terminauxAppareil: TerminalAppareil;
+  private readonly transfertsAppareil = new Reassemblage();
+  private readonly revoques: Set<string>;
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
     this.pairs = this.secrets.lirePairs();
+    this.revoques = new Set(this.secrets.lireRevoques());
+    this.diffusionAppareil = new DiffusionAppareil(options.diffusion);
+    this.terminauxAppareil = new TerminalAppareil(() => this.terminaux.locauxBranches);
     this.config = this.secrets.lireAiguilleur();
     this.demandes = new DemandesAppairage(options.delaiDemandeMs ?? DELAI_DEMANDE_MS, () => Date.now());
     this.echanges = new Echanges({
@@ -114,6 +125,7 @@ export class Federation {
     this.planificateur = null;
     this.echanges.arreter();
     this.canaux.fermerTout();
+    this.diffusionAppareil.fermerTout();
     this.demandes.arreter();
     this.lien?.arreter();
     this.lien = null;
@@ -177,6 +189,7 @@ export class Federation {
     if (!this.pairs.some((p) => p.id === membre)) return echec(404, 'nœud non apparié');
     const canal = this.canaux.avec(membre);
     if (canal?.ouvert) canal.envoyer({ t: 'revocation' });
+    this.marquerRevoque(membre);
     this.oublierPair(membre);
     canal?.fermerApresEnvois();
     return ok(null);
@@ -344,6 +357,7 @@ export class Federation {
       liaisonRefusee: (canal, raison) => this.liaisonRefusee(canal, raison),
       messageRecu: (canal, m) => void this.messageRecu(canal, m),
       canalFerme: (canal) => (this.canalFerme(canal), this.signaler()),
+      motifRefusInconnu: (membre) => (this.revoques.has(membre) ? 'révoqué' : 'identité non appairée'),
     };
   }
 
@@ -417,13 +431,80 @@ export class Federation {
     await this.echanges.traiter(canal, message);
   }
 
-  /** Un appareil n'échange que l'API clients ; tout autre message ferme son canal. */
+  /**
+   * Un appareil n'échange que l'API clients, le flux en direct et le terminal de ce nœud ; tout autre message ferme
+   * son canal.
+   */
   private async messageAppareil(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
-    if (message.t !== 'api') return canal.fermer();
-    const reponse = this.options.servirAppareil
-      ? await this.options.servirAppareil({ methode: message.methode, chemin: message.chemin, corps: message.corps })
-      : { statut: 503, corps: JSON.stringify({ erreur: 'API appareil non branchée' }) };
-    canal.envoyer({ t: 'api_reponse', ref: message.ref, statut: reponse.statut, corps: reponse.corps });
+    switch (message.t) {
+      case 'api':
+        return this.requeteAppareil(canal, message);
+      case 'morceau':
+        this.transfertsAppareil.recevoir(canal.membre, message);
+        return undefined;
+      case 'diffusion_ouvrir':
+        return this.diffusionAppareil.ouvrir(canal);
+      case 'diffusion_fermer':
+        return this.diffusionAppareil.fermer(canal);
+      case 'terminal_poste':
+        return this.terminauxAppareil.ouvrir(canal, message);
+      case 'terminal_entree':
+      case 'terminal_taille':
+      case 'terminal_fermer':
+        if (this.terminauxAppareil.recu(canal, message)) return undefined;
+        return this.terminaux.traiter(canal, message);
+      case 'terminal_ouvrir':
+        return this.terminaux.traiter(canal, message);
+      default:
+        return canal.fermer();
+    }
+  }
+
+  // Une requête de l'API : son corps (en morceaux si besoin) est réuni, rejoué, et la réponse repart de même.
+  private async requeteAppareil(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'api' }>): Promise<void> {
+    const corps = this.corpsAppareil(canal.membre, m);
+    const reponse =
+      corps === null
+        ? { statut: 400, corps: JSON.stringify({ erreur: 'transfert interrompu' }) }
+        : await this.servirAppareil({ methode: m.methode, chemin: m.chemin, corps, codage: m.codage, type: m.type });
+    for (const message of messagesAvecCorps(m.ref, reponse.corps, (texte, morceaux) => ({
+      t: 'api_reponse',
+      ref: m.ref,
+      statut: reponse.statut,
+      corps: texte,
+      ...(reponse.codage ? { codage: reponse.codage } : {}),
+      ...(reponse.type ? { type: reponse.type } : {}),
+      ...(morceaux !== undefined ? { morceaux } : {}),
+    }), TAILLE_MORCEAU_APPAREIL_CARACTERES)) {
+      canal.envoyer(message);
+    }
+  }
+
+  // Le corps d'une requête : tel quel, ou réuni depuis ses morceaux ; null si le transfert est cassé.
+  private corpsAppareil(membre: string, m: Extract<MessageChiffre, { t: 'api' }>): string | undefined | null {
+    if (m.morceaux === undefined) return m.corps;
+    return this.transfertsAppareil.assembler(membre, m.ref, m.morceaux);
+  }
+
+  private async servirAppareil(demande: DemandeAppareilFedere): Promise<ReponseAppareilFedere> {
+    if (!this.options.servirAppareil) {
+      return { statut: 503, corps: JSON.stringify({ erreur: 'API appareil non branchée' }) };
+    }
+    return this.options.servirAppareil(demande);
+  }
+
+  // Un pair révoqué garde son motif de refus, même après un redémarrage du nœud.
+  private marquerRevoque(membre: string): void {
+    this.revoques.add(membre);
+    this.sauverRevoques();
+  }
+
+  private sauverRevoques(): void {
+    try {
+      this.secrets.ecrireRevoques([...this.revoques]);
+    } catch {
+      this.options.journal.error('révocations de la fédération non sauvegardées');
+    }
   }
 
   private estAppareil(membre: string): boolean {
@@ -432,6 +513,9 @@ export class Federation {
 
   private canalFerme(canal: CanalNoeud): void {
     this.terminaux.fermerPour(canal.membre);
+    this.terminauxAppareil.fermerPour(canal.membre);
+    this.diffusionAppareil.fermer(canal);
+    this.transfertsAppareil.oublier(canal.membre);
     this.canaux.retirer(canal);
     this.demandes.retirerPour(canal.membre);
     if (this.canaux.liaisonOuverteAvec(canal.membre)) return;
@@ -451,6 +535,7 @@ export class Federation {
     };
     this.pairs = [...this.pairs.filter((p) => p.id !== membre), pair];
     this.refus.delete(membre);
+    if (this.revoques.delete(membre)) this.sauverRevoques();
     this.distant.connaitre(membre, pair.nom);
     this.sauverPairs();
   }

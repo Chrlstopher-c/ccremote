@@ -5,6 +5,7 @@ import { GENRES_MEMBRE } from './aiguilleur.ts';
 import { LONGUEUR_MAX_GESTE, METHODES_GESTE } from './gestes-federes.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { Evenement, Projet, ResumeSession } from './session.ts';
+import { CibleTerminal } from './appareil.ts';
 
 /** Taille maximale d'un message en clair (avant chiffrement) : la charge de l'aiguilleur est plafonnée à 1 Mio. */
 export const TAILLE_MAX_CLAIR_OCTETS = 600_000;
@@ -31,6 +32,12 @@ export const TAILLE_MORCEAU_CARACTERES = 128 * 1024;
 /** Plus grand contenu relayé (corps encodé) : au-delà de ce que les limites locales permettent, refus. */
 export const TAILLE_MAX_TRANSFERT_CARACTERES = 16 * 1024 * 1024;
 export const NOMBRE_MAX_MORCEAUX = TAILLE_MAX_TRANSFERT_CARACTERES / TAILLE_MORCEAU_CARACTERES;
+/**
+ * Morceau d'un corps servi à un appareil par l'aiguilleur : petit, car une trame de plus de ~16 Ko est tronquée par
+ * certains transports WebSocket (URLSession hors iOS). Le fil de la fédération garde les grands morceaux.
+ */
+export const TAILLE_MORCEAU_APPAREIL_CARACTERES = 4 * 1024;
+export const NOMBRE_MAX_MORCEAUX_APPAREIL = TAILLE_MAX_TRANSFERT_CARACTERES / TAILLE_MORCEAU_APPAREIL_CARACTERES;
 
 export const IdentitePubliqueTexte = z.string().regex(IDENTITE);
 
@@ -129,7 +136,7 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   z.strictObject({
     t: z.literal('morceau'),
     ref: REF,
-    rang: z.number().int().min(0).max(NOMBRE_MAX_MORCEAUX - 1),
+    rang: z.number().int().min(0).max(NOMBRE_MAX_MORCEAUX_APPAREIL - 1),
     corps: z.string().max(TAILLE_MORCEAU_CARACTERES),
   }),
   // Confirmation d'un outil du nœud (Claude demande, Chris répond) : relayée à ses pairs, qui l'affichent.
@@ -145,18 +152,36 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     }),
   }),
   // Appareil (client) : une requête de l'API clients, rejouée par le nœud sur ses routes locales.
+  // `codage: base64` : corps binaire (image, fichier), `type` : son type MIME. `morceaux` : corps en morceaux.
   z.strictObject({
     t: z.literal('api'),
     ref: REF,
     methode: METHODE_API,
     chemin: CHEMIN_API,
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS).optional(),
+    codage: z.literal('base64').optional(),
+    type: z.string().max(120).optional(),
+    morceaux: z.number().int().min(1).max(NOMBRE_MAX_MORCEAUX_APPAREIL).optional(),
   }),
   z.strictObject({
     t: z.literal('api_reponse'),
     ref: REF,
     statut: z.number().int().min(100).max(599),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
+    codage: z.literal('base64').optional(),
+    type: z.string().max(120).optional(),
+    morceaux: z.number().int().min(1).max(NOMBRE_MAX_MORCEAUX_APPAREIL).optional(),
+  }),
+  // Flux en direct par l'aiguilleur : l'appareil demande les événements du nœud, qui acquitte ; chaque événement
+  // (`corps` : un MessageClient en JSON, en morceaux si besoin) part ensuite sans requête.
+  z.strictObject({ t: z.literal('diffusion_ouvrir') }),
+  z.strictObject({ t: z.literal('diffusion_fermer') }),
+  z.strictObject({ t: z.literal('diffusion_ouverte') }),
+  z.strictObject({
+    t: z.literal('diffusion'),
+    ref: REF,
+    corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
+    morceaux: z.number().int().min(1).max(NOMBRE_MAX_MORCEAUX).optional(),
   }),
   // Texte en cours d'écriture (delta, non persisté) : relayé en direct à qui suit le fil de la session.
   z.strictObject({
@@ -173,6 +198,16 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     ref: REF,
     terminal: REF,
     session: SESSION,
+    colonnes: z.number().int().min(2).max(1000),
+    lignes: z.number().int().min(2).max(1000),
+  }),
+  // Terminal d'une machine du nœud (le shell ou tmux d'un poste) : même canal, même suite de messages.
+  z.strictObject({
+    t: z.literal('terminal_poste'),
+    ref: REF,
+    terminal: REF,
+    machine: NOM,
+    cible: CibleTerminal,
     colonnes: z.number().int().min(2).max(1000),
     lignes: z.number().int().min(2).max(1000),
   }),
