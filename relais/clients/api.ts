@@ -107,9 +107,18 @@ export function avecGardeInvites(d: DependancesApi, g: Gestionnaire): Gestionnai
   return (req) => d.invites.gardeLocale(req.url) ?? g(req);
 }
 
-export function construireRoutes(d: DependancesApi, protection?: (g: Gestionnaire) => Gestionnaire) {
+/**
+ * `relaisAutorise` : qui peut être relayé vers le nœud qui tient la session. Par défaut le jeton HTTP ; pour un
+ * appareil (requête interne, sans en-tête, déjà authentifiée par son canal chiffré) l'appelant passe `() => true` —
+ * sans cela l'iPhone recevait la copie locale périmée d'une session tenue par un autre nœud (22/11).
+ */
+export function construireRoutes(
+  d: DependancesApi,
+  protection?: (g: Gestionnaire) => Gestionnaire,
+  relaisAutorise: (req: Request) => boolean = (req) => d.acces.autorise(req),
+) {
   const protege = protection ?? ((g: Gestionnaire) => protegerAvec(d.acces)(avecGardeInvites(d, g)));
-  return relayerVersNoeuds(tableRoutes(d, protege), d.federation.distantes, (req) => d.acces.autorise(req));
+  return relayerVersNoeuds(tableRoutes(d, protege), d.federation.distantes, relaisAutorise);
 }
 
 function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnaire) {

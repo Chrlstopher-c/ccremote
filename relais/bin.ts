@@ -368,7 +368,11 @@ const routes = avecCors(construireRoutes(dependancesApi), config.origines);
 // Les valeurs de la table sont les gestionnaires par méthode de Bun.serve : même forme que TableInterne.
 const routesInternes = construireRoutes(dependancesApi, (g) => g) as unknown as TableInterne;
 // Les appareils lisent les routes locales : la garde des invités s'y applique (le pair, lui, passe par la politique).
-const routesAppareils = construireRoutes(dependancesApi, (g) => avecGardeInvites(dependancesApi, g)) as unknown as TableInterne;
+const routesAppareils = construireRoutes(
+  dependancesApi,
+  (g) => avecGardeInvites(dependancesApi, g),
+  () => true, // l'appareil est authentifié par son canal : ses requêtes suivent la session jusqu'au nœud qui la tient
+) as unknown as TableInterne;
 // Un appareil appairé (identité acceptée au nœud) : son API passe par la table interne, sur son canal chiffré.
 const servirPourAppareil = servirAppareil(routesAppareils, journal.child({ domaine: 'appareil' }));
 federation.distantes.brancherMachines(() => postes.vues());
