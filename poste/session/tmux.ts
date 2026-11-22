@@ -27,12 +27,18 @@ export interface PaneTmux {
 
 // -u : UTF-8 forcé (un service n'a pas forcément de LANG) ; -f ne compte qu'au démarrage du serveur tmux.
 export async function tmux(args: readonly string[], entree?: string): Promise<Resultat> {
-  const p = Bun.spawn(['tmux', '-L', SOCKET, '-f', CONFIG, '-u', ...args], {
-    stdin: entree === undefined ? 'ignore' : new TextEncoder().encode(entree),
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, LANG: process.env['LANG'] ?? 'C.UTF-8' },
-  });
+  let p: ReturnType<typeof Bun.spawn>;
+  try {
+    p = Bun.spawn(['tmux', '-L', SOCKET, '-f', CONFIG, '-u', ...args], {
+      stdin: entree === undefined ? 'ignore' : new TextEncoder().encode(entree),
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: { ...process.env, LANG: process.env['LANG'] ?? 'C.UTF-8' },
+    });
+  } catch (erreur) {
+    // tmux absent (poste Windows d'invité, sans session locale) : aucune session, l'appelant voit un échec propre.
+    return { code: 127, sortie: '', erreur: erreur instanceof Error ? erreur.message : String(erreur) };
+  }
   const [code, sortie, erreur] = await Promise.all([
     p.exited,
     new Response(p.stdout).text(),
