@@ -7,8 +7,8 @@ import { ajouterMembre, type Charte, type CharteSignee, creerCharte, TOUS_DROITS
 import { exporterIdentitePublique, genererIdentite, type Identite } from '../../commun/chiffrement/identite.ts';
 import type { OrdreMachine } from '../../commun/ordre-machine.ts';
 import { signerOrdre } from '../../commun/ordre-machine.ts';
-import type { DemandeAppareil, MethodeApi, ServirAppareil } from './appareils.ts';
-import { ChefAppareil, type PortChefAppareil } from './chef-appareil.ts';
+import { cheminRefuse, type DemandeAppareil, type MethodeApi, type ServirAppareil } from './appareils.ts';
+import { ChefAppareil, estRouteTelephone, type PortChefAppareil } from './chef-appareil.ts';
 import type { DemandeAppairage } from './demandes.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 
@@ -150,6 +150,15 @@ describe('lecture de la charte', () => {
     const lu = await sans(requete('GET', `${PREFIXE}/charte`));
     expect(JSON.parse(lu.corps)).toMatchObject({ charte: null, signee: null, chef: false });
     expect((await sans(requete('GET', `${PREFIXE}/machines`))).statut).toBe(409);
+  });
+
+  test('lecture de la charte : refusée par la table générique, servie par le chef', async () => {
+    const chemin = `${PREFIXE}/charte`;
+    expect(cheminRefuse(chemin)).toBe(true);
+    expect(estRouteTelephone(chemin)).toBe(true);
+    const m = await monde();
+    const lu = await servirAvec({ charte: m.charte }, trace())(requete('GET', chemin));
+    expect(lu.statut).toBe(200);
   });
 });
 
