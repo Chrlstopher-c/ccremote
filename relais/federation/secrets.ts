@@ -27,6 +27,8 @@ export const PairFederee = z.object({
   creeLe: z.string(),
   /** Un nœud (fédération) ou un appareil client (canal d'API, sans fédération). */
   genre: z.enum(GENRES_MEMBRE).default('noeud'),
+  /** Appareil : le nœud qui l'a admis (le nôtre, ou celui qui a propagé l'admission). */
+  admisPar: z.string().regex(IDENTIFIANT).optional(),
 });
 export type PairFederee = z.infer<typeof PairFederee>;
 
@@ -78,6 +80,15 @@ export class SecretsNoeud {
 
   ecrireRevoques(ids: readonly string[]): void {
     this.ecrireJson('revoques.json', ids);
+  }
+
+  /** Appareils révoqués (définitif) : une admission reçue d'un pair pour l'un d'eux est ignorée. */
+  lireAppareilsRevoques(): string[] {
+    return this.lireJson('appareils-revoques.json', IDENTIFIANTS_REVOQUES) ?? [];
+  }
+
+  ecrireAppareilsRevoques(ids: readonly string[]): void {
+    this.ecrireJson('appareils-revoques.json', ids);
   }
 
   private lireJson<T>(nom: string, schema: z.ZodType<T>): T | null {

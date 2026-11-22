@@ -62,6 +62,10 @@ function routesLien(fede: Federation, protege: Protection) {
         return c instanceof Response ? c : rendre(fede.revoquer(c.membre));
       }),
     },
+    // Les nœuds du réseau et leurs clés : un appareil admis les apprend par son canal, pour se relier sans appairage.
+    '/api/appareils/noeuds': {
+      GET: protege(async () => json(await fede.noeudsAppareil())),
+    },
   };
 }
 

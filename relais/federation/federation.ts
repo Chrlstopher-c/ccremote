@@ -29,7 +29,7 @@ import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
 import { CacheDistant } from './distant.ts';
 import { Distantes } from './distantes.ts';
 import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
-import { DemandesFederees, photoDemandesAppareil } from './demandes-federees.ts';
+import { fusionner, noeudsAnnonces, type NoeudAnnonce, photoAdmissions, verdictSource } from './admissions.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
 import { surDiffusionFederee } from './diffusion-federee.ts';
 import type { EtatFederation, OptionsFederation } from './etat-federation.ts';
@@ -62,8 +62,6 @@ export class Federation {
   /** Sessions des autres nœuds : vue fusionnée pour l'appli, gestes relayés. */
   readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
-  /** Demandes d'appareil vues chez les autres nœuds (photos reçues, en mémoire seulement). */
-  private readonly demandesFederees = new DemandesFederees();
   private readonly echanges: Echanges;
   private readonly canaux: Canaux;
   private readonly hote: HoteCanal;
@@ -84,11 +82,14 @@ export class Federation {
   private readonly terminauxAppareil: TerminalAppareil;
   private readonly transfertsAppareil = new Reassemblage();
   private readonly revoques: Set<string>;
+  /** Appareils révoqués (définitif) : une admission reçue d'un pair pour l'un d'eux est ignorée. */
+  private readonly appareilsRevoques: Set<string>;
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
     this.pairs = this.secrets.lirePairs();
     this.revoques = new Set(this.secrets.lireRevoques());
+    this.appareilsRevoques = new Set(this.secrets.lireAppareilsRevoques());
     this.diffusionAppareil = new DiffusionAppareil(options.diffusion);
     this.terminauxAppareil = new TerminalAppareil(() => this.terminaux.locauxBranches);
     this.config = this.secrets.lireAiguilleur();
@@ -196,22 +197,22 @@ export class Federation {
    * tranche chez lui ; si ce nœud n'est pas relié, rien ne part (409). Jamais d'acceptation automatique.
    */
   decider(id: string, accord: boolean): Resultat<null> {
-    if (this.demandes.decider(id, accord)) return ok(null);
-    const noeud = this.demandesFederees.noeudDe(id);
-    if (!noeud) return echec(404, 'demande introuvable');
-    const canal = this.canaux.liaisonOuverteAvec(noeud);
-    if (!canal) return echec(409, 'nœud hors ligne');
-    return canal.envoyer({ t: 'decision', id, accord }) ? ok(null) : echec(503, 'envoi impossible');
+    return this.demandes.decider(id, accord) ? ok(null) : echec(404, 'demande introuvable');
   }
 
-  /** Révocation : le pair perd son accès (un message le lui dit s'il est en ligne) et disparaît d'ici. */
+  /**
+   * Révocation : le pair perd son accès (un message le lui dit s'il est en ligne) et disparaît d'ici. Un appareil
+   * révoqué l'est partout : sa révocation part à tous les nœuds pairs.
+   */
   revoquer(membre: string): Resultat<null> {
-    if (!this.pairs.some((p) => p.id === membre)) return echec(404, 'nœud non apparié');
+    const pair = this.pairs.find((p) => p.id === membre);
+    if (!pair) return echec(404, 'nœud non apparié');
     const canal = this.canaux.avec(membre);
     if (canal?.ouvert) canal.envoyer({ t: 'revocation' });
     this.marquerRevoque(membre);
     this.oublierPair(membre);
     canal?.fermerApresEnvois();
+    if (pair.genre === 'appareil') this.marquerAppareilRevoque(membre);
     return ok(null);
   }
 
@@ -255,7 +256,7 @@ export class Federation {
       empreinteLocale: await empreinteIdentite(identite.publique),
       membres: this.voisins.liste(this.proprietaireLocal()),
       noeuds,
-      demandes: [...this.demandes.lister(), ...this.demandesFederees.lister()],
+      demandes: this.demandes.lister(),
       appairages: await appairagesEnCours(this.canaux.actifs()),
     };
   }
@@ -404,14 +405,13 @@ export class Federation {
           empreinteLocale: locale,
           genre: presentation.genre ?? 'noeud',
         },
-        (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler(), this.diffuserDemandes()),
+        (accord) => (this.decisionAppairage(canal, presentation, accord), this.signaler()),
       );
       this.options.notifier?.(
         'Demande d’appairage',
         `${presentation.nom} demande à rejoindre tes machines : compare les empreintes dans Paramètres › Réseau.`,
       );
       this.signaler();
-      this.diffuserDemandes();
     } catch (erreur) {
       this.options.journal.error({ err: erreur, membre: canal.membre }, 'présentation d’un nœud illisible');
       canal.fermer();
@@ -432,7 +432,7 @@ export class Federation {
     if (this.estAppareil(canal.membre)) return;
     this.distant.enLigne(canal.membre, true);
     canal.envoyer(this.echanges.instantane());
-    this.envoyerDemandesA(canal);
+    this.envoyerAdmissionsA(canal);
   }
 
   private liaisonRefusee(canal: CanalNoeud, raison: string): void {
@@ -443,7 +443,7 @@ export class Federation {
   private async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     if (this.estAppareil(canal.membre)) return this.messageAppareil(canal, message);
     if (message.t === 'api' || message.t === 'api_reponse') return canal.fermer();
-    if (message.t === 'demandes' || message.t === 'decision') return this.messageDemandes(canal, message);
+    if (message.t === 'admissions') return this.messageAdmissions(canal, message);
     if (message.t === 'revocation') {
       this.oublierPair(canal.membre);
       // Un lien rouvert entre-temps (planification) vers ce pair ne doit pas survivre à la révocation.
@@ -516,40 +516,78 @@ export class Federation {
     return this.options.servirAppareil(demande);
   }
 
-  // ---- Demandes d'appareil entre nœuds appariés ------------------------------------------------------------------
+  // ---- Admissions d'appareils entre nœuds appariés ---------------------------------------------------------------
 
   private estNoeud(membre: string): boolean {
     return this.pairs.some((p) => p.id === membre && p.genre === 'noeud');
   }
 
-  /** La photo des demandes d'appareil part à un nœud pair relié, jamais à un appareil. */
-  private envoyerDemandesA(canal: CanalNoeud): void {
-    if (!this.estNoeud(canal.membre)) return;
-    canal.envoyer({ t: 'demandes', liste: photoDemandesAppareil(this.demandes.lister()) });
+  /** La photo des admissions part à un nœud pair relié, jamais à un appareil. */
+  private envoyerAdmissionsA(canal: CanalNoeud): void {
+    const moi = this.config?.id;
+    if (!moi || !this.estNoeud(canal.membre)) return;
+    canal.envoyer({ t: 'admissions', ...photoAdmissions(this.pairs, [...this.appareilsRevoques], moi) });
   }
 
-  /** À chaque changement des demandes locales, la photo repart à tous les nœuds pairs reliés. */
-  private diffuserDemandes(): void {
-    for (const canal of this.canaux.ouverts()) this.envoyerDemandesA(canal);
+  /** À chaque admission ou révocation d'appareil, la photo repart à tous les nœuds pairs reliés. */
+  private diffuserAdmissions(): void {
+    for (const canal of this.canaux.ouverts()) this.envoyerAdmissionsA(canal);
   }
 
-  private messageDemandes(canal: CanalNoeud, message: Extract<MessageChiffre, { t: 'demandes' | 'decision' }>): void {
-    if (!this.estNoeud(canal.membre)) return canal.fermer();
-    if (message.t === 'demandes') {
-      this.demandesFederees.recevoir(canal.membre, message.liste);
-      return this.signaler();
+  // Un nœud pair de mêmes propriétaire range les admissions reçues ; s'il change quelque chose, il relaie.
+  private messageAdmissions(canal: CanalNoeud, message: Extract<MessageChiffre, { t: 'admissions' }>): void {
+    const moi = this.config?.id;
+    const refus = this.voisins.refusPour(canal.membre, this.proprietaireLocal());
+    const verdict = verdictSource(this.pairs, canal.membre, refus);
+    if (verdict === 'non-appaire' || !moi) return canal.fermer();
+    if (verdict === 'autre-proprietaire') {
+      return this.options.journal.warn({ membre: canal.membre }, 'admissions refusées : autre propriétaire');
     }
-    this.decisionDistante(canal.membre, message.id, message.accord);
+    const fusion = fusionner(message, this.pairs, [...this.appareilsRevoques], moi);
+    for (const conflit of fusion.conflits) {
+      this.options.journal.warn({ membre: canal.membre, appareil: conflit }, 'admission ignorée : clé différente');
+    }
+    if (!fusion.changee) return;
+    this.pairs = fusion.pairs;
+    this.sauverPairs();
+    this.appareilsRevoques.clear();
+    for (const id of fusion.revoques) this.appareilsRevoques.add(id);
+    this.sauverAppareilsRevoques();
+    for (const id of fusion.retires) this.fermerAppareil(id);
+    this.diffuserAdmissions();
   }
 
-  // Une décision relayée par un nœud pair ne tranche qu'une demande d'appareil existante ici ; le reste est ignoré.
-  private decisionDistante(noeud: string, id: string, accord: boolean): void {
-    const existe = this.demandes.lister().some((d) => d.id === id && d.genre === 'appareil');
-    if (!existe) {
-      const motif = 'décision distante ignorée : demande inconnue';
-      return this.options.journal.warn({ membre: noeud, demande: id }, motif);
+  // Un appareil révoqué est prévenu s'il est en ligne, son canal est fermé ; il n'est plus admis nulle part.
+  private fermerAppareil(id: string): void {
+    const canal = this.canaux.liaisonOuverteAvec(id);
+    if (canal) {
+      canal.envoyer({ t: 'revocation' });
+      canal.fermerApresEnvois();
     }
-    this.demandes.decider(id, accord);
+    this.marquerRevoque(id);
+  }
+
+  private marquerAppareilRevoque(id: string): void {
+    this.appareilsRevoques.add(id);
+    this.sauverAppareilsRevoques();
+    this.diffuserAdmissions();
+  }
+
+  private sauverAppareilsRevoques(): void {
+    try {
+      this.secrets.ecrireAppareilsRevoques([...this.appareilsRevoques]);
+    } catch {
+      this.options.journal.error('révocations d’appareils non sauvegardées');
+    }
+  }
+
+  /** Les nœuds du réseau, soi compris, avec leur identifiant de membre et leur clé : servi aux appareils admis. */
+  async noeudsAppareil(): Promise<{ noeuds: NoeudAnnonce[] }> {
+    const config = this.config;
+    if (!config) return { noeuds: noeudsAnnonces(this.pairs, null) };
+    const identite = exporterIdentitePublique((await this.identite()).publique);
+    const moi = { id: config.id, nom: config.nom, identite };
+    return { noeuds: noeudsAnnonces(this.pairs, moi) };
   }
 
   // Un pair révoqué garde son motif de refus, même après un redémarrage du nœud.
@@ -577,9 +615,7 @@ export class Federation {
     this.transfertsAppareil.oublier(canal.membre);
     this.canaux.retirer(canal);
     this.demandes.retirerPour(canal.membre);
-    this.diffuserDemandes();
     if (this.canaux.liaisonOuverteAvec(canal.membre)) return;
-    this.demandesFederees.oublier(canal.membre);
     this.distant.enLigne(canal.membre, false);
     this.echanges.oublier(canal.membre);
   }
@@ -593,12 +629,15 @@ export class Federation {
       identite: presentation.identite,
       creeLe: new Date().toISOString(),
       genre: presentation.genre ?? 'noeud',
+      ...(presentation.genre === 'appareil' && this.config ? { admisPar: this.config.id } : {}),
     };
     this.pairs = [...this.pairs.filter((p) => p.id !== membre), pair];
     this.refus.delete(membre);
     if (this.revoques.delete(membre)) this.sauverRevoques();
+    if (this.appareilsRevoques.delete(membre)) this.sauverAppareilsRevoques();
     this.distant.connaitre(membre, pair.nom);
     this.sauverPairs();
+    if (pair.genre === 'appareil') this.diffuserAdmissions();
   }
 
   private oublierPair(membre: string): void {
@@ -607,7 +646,6 @@ export class Federation {
     this.sauverPairs();
     this.distant.retirer(membre);
     this.demandes.retirerPour(membre);
-    this.demandesFederees.oublier(membre);
     this.echanges.oublier(membre);
     this.refus.delete(membre);
   }
