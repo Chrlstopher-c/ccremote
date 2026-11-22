@@ -26,6 +26,8 @@ export interface TacheVue {
   modele: string | null;
   /** agentId (agent) ou backgroundTaskId (commande), une fois connu. */
   tacheId: string | null;
+  /** Agent relancé par SendMessage après une fin : son ancien méta-fichier « finished » ne vaut plus. */
+  reprise?: boolean;
   /** Fichier de sortie d'une commande en arrière-plan. */
   sortie: string | null;
   /** Vrai dès qu'une fin est venue du transcript (notification, attachement, arrêt) : sinon le statut est déduit. */

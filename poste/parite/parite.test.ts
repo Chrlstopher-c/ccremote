@@ -229,6 +229,37 @@ describe("détail d'une tâche", () => {
     expect(actionsDe('')).toBeNull();
   });
 
+  test('agent fini puis relancé par SendMessage : de nouveau en cours, puis terminé à sa nouvelle notification', () => {
+    const debut = [
+      assistant(horodatage(1), [
+        outil('u-rel', 'Agent', { description: 'Relance', prompt: 'Fais', run_in_background: true }),
+      ]),
+      utilisateur(horodatage(2), [resultatOutil('u-rel', 'ok')], { isAsync: true, agentId: 'ag-rel' }),
+      utilisateur(horodatage(3), [
+        { type: 'text', text: '<task-notification><task-id>ag-rel</task-id><status>completed</status></task-notification>' },
+      ]),
+      assistant(horodatage(4), [outil('u-msg', 'SendMessage', { to: 'ag-rel', message: 'Continue' })]),
+    ];
+    const sousAgents = join(dossier, 'relance', 'subagents');
+    mkdirSync(sousAgents, { recursive: true });
+    writeFileSync(join(sousAgents, 'agent-ag-rel.meta.json'), JSON.stringify({ finished: true }));
+    writeFileSync(join(sousAgents, 'agent-ag-rel.jsonl'), assistant(horodatage(5), [{ type: 'text', text: 'Je reprends' }]) + '\n');
+    const relance = ecrireTranscript('relance.jsonl', debut);
+    const etat = lireEtat(relance, JOURNAL);
+    if (!etat) throw new Error('état attendu');
+    expect(detailTache(etat, 'u-rel', relance, JOURNAL)?.statut).toBe('en_cours');
+    oublierEtats();
+    const fini = ecrireTranscript('relance.jsonl', [
+      ...debut,
+      utilisateur(horodatage(6), [
+        { type: 'text', text: '<task-notification><task-id>ag-rel</task-id><status>completed</status></task-notification>' },
+      ]),
+    ]);
+    const etatFin = lireEtat(fini, JOURNAL);
+    if (!etatFin) throw new Error('état attendu');
+    expect(detailTache(etatFin, 'u-rel', fini, JOURNAL)?.statut).toBe('terminee');
+  });
+
   test("commande sans fin dont la sortie n'a pas bougé depuis 10 min : arrêtée", async () => {
     const sortie = join(dossier, 'vieille-sortie.output');
     writeFileSync(sortie, 'figé\n');

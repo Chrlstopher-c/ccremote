@@ -79,7 +79,7 @@ function statutAgentSansFin(t: TacheVue, transcript: string, maintenant: number,
   const meta = identifiant === null ? null : lireMeta(join(dossier, `agent-${identifiant}.meta.json`), journal);
   const mtime = identifiant === null ? null : mtimeDe(join(dossier, `agent-${identifiant}.jsonl`), journal);
   const finLe = new Date(mtime ?? Date.parse(t.debutLe)).toISOString();
-  if (meta?.['finished'] === true) return { statut: 'terminee', finLe };
+  if (meta?.['finished'] === true && !t.reprise) return { statut: 'terminee', finLe };
   if (mtime !== null && maintenant - mtime < DELAI_SORTIE_FIGEE_MS) return { statut: 'en_cours', finLe: null };
   const debut = Date.parse(t.debutLe);
   if (!Number.isNaN(debut) && maintenant - debut >= DELAI_SORTIE_FIGEE_MS) return { statut: 'arretee', finLe };

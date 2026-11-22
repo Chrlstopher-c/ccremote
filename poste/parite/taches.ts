@@ -91,3 +91,13 @@ function balise(corps: string, nom: string): string | null {
   const valeur = m?.[1]?.trim() ?? '';
   return valeur === '' ? null : valeur;
 }
+
+/** Agent relancé par SendMessage (`to` = son identifiant) : il retravaille, sa fin précédente ne compte plus. */
+export function reprendreTache(etat: EtatTranscript, tacheId: string | null): void {
+  const tache = trouverTache(etat, null, tacheId);
+  if (!tache || tache.genre !== 'agent') return;
+  tache.statut = 'en_cours';
+  tache.finLe = null;
+  tache.notifiee = false;
+  tache.reprise = true;
+}

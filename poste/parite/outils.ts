@@ -2,7 +2,7 @@
 // arrière-plan (Agent, Bash), arrêts (TaskStop), et les chemins récents qui désignent le dépôt de travail.
 import type { AppelEnAttente, EtatTranscript } from './etat.ts';
 import { MAX_PROMPT } from '../../commun/parite.ts';
-import { arreterTache, lierIdentifiant, type NouvelleTache, ouvrirTache } from './taches.ts';
+import { arreterTache, lierIdentifiant, type NouvelleTache, ouvrirTache, reprendreTache } from './taches.ts';
 import { blocs, estObjet, texte, type Objet } from './lignes.ts';
 
 const MAX_INDICES = 80;
@@ -42,6 +42,8 @@ export function appliquerAppelOutil(etat: EtatTranscript, bloc: Objet, le: strin
       return ouvrirCommande(etat, id, entree, le);
     case 'TaskStop':
       return arreterTache(etat, texte(entree['task_id']), le);
+    case 'SendMessage':
+      return reprendreTache(etat, texte(entree['to']));
     default:
       return;
   }
