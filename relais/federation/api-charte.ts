@@ -2,7 +2,7 @@
 // Elles relaient vers CharteNoeud, sans règle. `/api/reseau` n'est jamais servi à un appareil (appareils.ts).
 // Création possible si ce nœud n'a pas de charte et qu'il est relié à un aiguilleur (il lui faut son identifiant).
 import { z } from 'zod';
-import { changerMembre, Droits, nommerChef, retirerMembre, type Charte } from '../../commun/charte.ts';
+import { changerMembre, Droits, nommerChef, retirerMembre, reglagesInviteDe, type Charte } from '../../commun/charte.ts';
 import { erreur, json, lireCorps } from '../clients/http.ts';
 import type { CharteNoeud } from './charte-noeud.ts';
 import type { Resultat } from './resultat.ts';
@@ -26,7 +26,7 @@ const CorpsMembre = z.object({
 function vue(port: PortRoutesCharte) {
   const charte = port.charte();
   const moi = port.moi();
-  return { charte, moi, chef: port.chefLocal(), peutCreer: charte === null && moi !== null };
+  return { charte, moi, chef: port.chefLocal(), peutCreer: charte === null && moi !== null, invite: reglagesInviteDe(charte, moi ?? '') };
 }
 
 function rendre(port: PortRoutesCharte, r: Resultat<Charte>): Response {

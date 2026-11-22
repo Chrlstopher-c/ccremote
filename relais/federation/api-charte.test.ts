@@ -51,6 +51,7 @@ describe('lecture', () => {
       moi: null,
       chef: false,
       peutCreer: false,
+      invite: null,
     });
     const relie = routesCharte(faux({ charte: null, moi: A, chef: false }), protege)['/api/reseau/charte'].GET;
     expect(await (await relie(requete('GET', '/api/reseau/charte'))).json()).toEqual({
@@ -58,6 +59,7 @@ describe('lecture', () => {
       moi: A,
       chef: false,
       peutCreer: true,
+      invite: null,
     });
   });
 });

@@ -13,6 +13,7 @@ import {
   SensRelais,
 } from '../../commun/session.ts';
 import { estIdFichier, FichierLu, NOMBRE_MAX_PIECES, PieceJointe } from '../../commun/presentation.ts';
+import type { CadreInvite } from '../../commun/cadre-invite.ts';
 import { reponseFichier } from './fichiers-session.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from '../../commun/fichiers-session.ts';
 import type { Registre } from '../registre/registre.ts';
@@ -30,7 +31,7 @@ import {
   TEXTE_REFUS_DUO,
 } from './api-sessions-pair.ts';
 
-const CorpsOuverture = z.object({
+export const CorpsOuverture = z.object({
   machine: z.string(),
   projet: Projet,
   message: z.string().min(1),
@@ -44,6 +45,7 @@ const CorpsOuverture = z.object({
   rapide: z.boolean().optional(), // mode rapide demandé à l'ouverture (SDK)
   ultracode: z.boolean().optional(), // Ultracode demandé à l'ouverture (SDK)
   style_sortie: z.string().min(1).max(80).nullable().optional(),
+  prompt_systeme: z.string().max(8000).optional(), // prompt système de la conversation (ajouté à celui de l'appli)
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
@@ -106,7 +108,8 @@ export class ApiSessions {
   }
 
   /** Ouverture à partir d'un corps déjà lu : route de Chris, et ouverture demandée par le pair (mode duo). */
-  async ouvrirAvec(c: CorpsOuverture): Promise<Response> {
+  /** `invite` : cadre posé par le nœud pour une session d'invité (jamais lu d'un corps HTTP, qui le perd). */
+  async ouvrirAvec(c: CorpsOuverture, invite?: CadreInvite): Promise<Response> {
     const refus = verifierOuverture(c.machine, c.projet, this.isolees);
     if (refus) return erreur(refus, 403);
     const compte = c.compte ?? this.compteDefaut(c.machine) ?? undefined;
@@ -128,6 +131,8 @@ export class ApiSessions {
       bac_a_sable: c.bac_a_sable ?? 'non',
       controle_distant: c.controle_distant ?? false,
       ...(c.pieces ? { pieces: c.pieces } : {}),
+      ...(c.prompt_systeme ? { prompt_systeme: c.prompt_systeme } : {}),
+      ...(invite ? { invite } : {}),
     };
     if (c.auteur) this.postes.attendreAuteur?.(demande.sessionId, c.auteur);
     const r = await this.postes.commander(c.machine, { kind: 'ouvrir', demande });

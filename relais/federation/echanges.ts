@@ -20,13 +20,17 @@ import { type CorpsGeste, reponseGeste } from './gestes.ts';
 import { decouper, nombreDeMorceaux, Reassemblage } from './transferts.ts';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
 import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
-import type { Evenement } from '../../commun/session.ts';
+import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
 import { AssemblageInstantane, messagesInstantane } from './instantane.ts';
 import { CacheDistant } from './distant.ts';
 import { nonceRef } from './identifiants.ts';
 import { tenirDansLaLimite } from './trames.ts';
+import type { CadreInvite } from '../../commun/cadre-invite.ts';
+import type { VerdictRequete } from '../invites/politique-requete.ts';
+import type { VerdictGeste, GesteRecu } from '../invites/politique-geste.ts';
+import { enListe, erreurTransfert, lireBilan, type Bilan } from './echanges-aides.ts';
 
 const DESCRIPTION_LOCALE = 'Cet ordinateur';
 /** Un delta de texte attend au plus ce délai avant de partir, avec les suivants du même bloc. */
@@ -50,6 +54,16 @@ export interface GesteLocal {
   readonly machine?: string;
   readonly requete?: string;
   readonly corps?: string;
+  /** Ouverture d'un invité : cadre posé par le nœud (jamais par un corps reçu). */
+  readonly invite?: CadreInvite;
+}
+
+/** Politique des invités (relais/invites) : requêtes et gestes d'un pair, instantanés vus par un membre. */
+export interface PorteInvites {
+  requete(membre: string, message: MessageChiffre): VerdictRequete;
+  geste(membre: string, m: GesteRecu): VerdictGeste;
+  sessionsPour(membre: string, sessions: readonly ResumeSession[]): ResumeSession[];
+  estInvite(membre: string): boolean;
 }
 
 /** Le texte d'un bloc en cours d'écriture, tel que le nœud local le reçoit (`flux` local). */
@@ -84,6 +98,8 @@ export interface OptionsEchanges {
   readonly terminaux?: RecepteurTerminal;
   /** Droits de la charte : un pair sans le droit d'une requête la voit refusée. Absent : tout est permis. */
   readonly autoriser?: (membre: string, requete: RequeteDroit) => boolean;
+  /** Politique des invités : elle remplace la charte pour un invité, et restreint ce que les autres voient. */
+  readonly invites?: PorteInvites;
 }
 
 type Attente = (m: MessageChiffre | null) => void;
@@ -109,10 +125,11 @@ export class Echanges {
    * 150 plus récentes, puis la tête (instantane.ts). Seules les sessions de cette machine : le registre garde aussi des
    * copies d'autres machines (ex. la tour avant sa bascule).
    */
-  instantanes(): MessageChiffre[] {
-    const sessions = this.options.registre
+  instantanes(membre: string | null = null): MessageChiffre[] {
+    const locales = this.options.registre
       .sessions(false)
       .filter((s) => !s.duo && s.machine === this.options.machine);
+    const sessions = this.options.invites?.sessionsPour(membre ?? '', locales) ?? locales;
     const vue = this.machineAnnoncee();
     return messagesInstantane(sessions, (liste) => ({
       t: 'instantane',
@@ -140,9 +157,8 @@ export class Echanges {
     if (this.instantaneEnAttente) return;
     this.instantaneEnAttente = setTimeout(() => {
       this.instantaneEnAttente = null;
-      const messages = this.instantanes();
       for (const canal of canaux()) {
-        if (this.peutVoir(canal.membre)) for (const message of messages) canal.envoyer(message);
+        if (this.peutVoir(canal.membre)) for (const message of this.instantanes(canal.membre)) canal.envoyer(message);
       }
     }, DELAI_INSTANTANE_MS);
   }
@@ -231,7 +247,9 @@ export class Echanges {
 
   /** Une requête entrante ou une réponse d'un pair, sur un lien ouvert. */
   async traiter(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
-    if (this.refuseSansDroit(canal, message)) return undefined;
+    const politique = this.options.invites?.requete(canal.membre, message) ?? { ok: true as const, invite: false };
+    if (!politique.ok) return politique.reponse ? void canal.envoyer(politique.reponse) : undefined;
+    if (!politique.invite && this.refuseSansDroit(canal, message)) return undefined;
     return this.despacher(canal, message);
   }
 
@@ -273,7 +291,7 @@ export class Echanges {
 
   /** Un pair sans `voir` ne reçoit ni instantané, ni événement, ni flux de session. */
   peutVoir(membre: string): boolean {
-    return this.permis(membre, { genre: 'fil' });
+    return this.options.invites?.estInvite(membre) === true || this.permis(membre, { genre: 'fil' });
   }
 
   private permis(membre: string, requete: RequeteDroit): boolean {
@@ -347,11 +365,13 @@ export class Echanges {
     if (!m) return refuser(400, 'transfert interrompu');
     const pont = this.options.pont.geste;
     if (!pont) return refuser(501, 'geste non pris en charge par ce nœud');
+    const porte = this.options.invites?.geste(canal.membre, m) ?? { ok: true as const, geste: m };
+    if (!porte.ok) return refuser(porte.statut, porte.raison);
     const refus = this.refusGeste(m);
     if (refus) return refuser(404, refus);
-    if (m.geste === 'evenements' && m.session) this.abonner(canal.membre, m.session);
+    if (porte.geste.geste === 'evenements' && porte.geste.session) this.abonner(canal.membre, porte.geste.session);
     try {
-      const reponse = await pont({ ...m });
+      const reponse = await pont(porte.geste);
       this.envoyerReponse(canal, m.ref, await reponseGeste(reponse, m.geste));
     } catch (erreur) {
       this.options.journal.error({ err: erreur, geste: m.geste }, 'geste relayé en échec');
@@ -467,28 +487,4 @@ export class Echanges {
     this.options.distant.remplacerFil(canal.membre, session, evenements);
     this.resoudre(ref, { t: 'fil_reponse', ref, session, evenements: [...evenements] });
   }
-}
-
-interface Bilan {
-  readonly ok: boolean;
-  readonly raison?: string;
-  readonly corps?: unknown;
-}
-
-/** Relit la réponse HTTP d'un geste local : statut, motif d'erreur, corps. */
-async function lireBilan(reponse: Response): Promise<Bilan> {
-  const corps: unknown = await reponse.json().catch(() => null);
-  if (reponse.ok) return { ok: true, corps };
-  const erreur =
-    corps && typeof corps === 'object' && 'erreur' in corps ? String(corps.erreur) : `refus ${reponse.status}`;
-  return { ok: false, raison: erreur };
-}
-
-/** Une liste de messages à envoyer dans l'ordre (un seul message : une liste d'un élément). */
-function enListe(m: MessageChiffre | readonly MessageChiffre[]): readonly MessageChiffre[] {
-  return 't' in m ? [m] : m;
-}
-
-function erreurTransfert(ref: string): MessageChiffre {
-  return { t: 'geste_reponse', ref, statut: 502, corps: JSON.stringify({ erreur: 'transfert interrompu' }) };
 }

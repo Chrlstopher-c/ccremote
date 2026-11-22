@@ -6,7 +6,9 @@ import { COMMIT, VERSION } from '../commun/version.ts';
 import { CHEMIN_POSTE } from '../commun/protocole-poste.ts';
 import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
-import { construireRoutes, type DependancesApi } from './clients/api.ts';
+import { avecGardeInvites, construireRoutes, type DependancesApi } from './clients/api.ts';
+import type { GesteLocal } from './federation/echanges.ts';
+import { ApiInvites } from './invites/api-invites.ts';
 import { executerGeste, type TableInterne } from './federation/executeur.ts';
 import { servirAppareil } from './federation/appareils.ts';
 import { ApiVoix, urlVoix } from './voix/api-voix.ts';
@@ -227,7 +229,10 @@ const federation = new Federation({
     ouvrir: (demande) => sessions.ouvrirAvec(demande),
     envoyer: (session, texte) => sessions.envoyerDuPair(session, texte, []),
     interrompre: (session) => sessions.interrompreDuPair(session),
-    geste: (g) => executerGeste(routesInternes, g),
+    geste: (g: GesteLocal): Promise<Response> =>
+      g.invite
+        ? federation.invites.executerOuverture(g, (c, cadre) => sessions.ouvrirAvec(c, cadre))
+        : executerGeste(routesInternes, g),
   },
   notifier: (titre, texte) => notifierChris(titre, texte),
   reseaux,
@@ -313,7 +318,23 @@ const echo = config.echo
   : null;
 echo?.demarrer();
 type DonneesClient = { readonly type: 'flux' } | DonneesTerminal | DonneesTerminalFedere;
+// Les invités : ouverture par la politique, routes des réglages et de l'activité (relais/invites).
+const invitesApi = new ApiInvites({
+  invites: federation.invites,
+  charte: () => federation.charte.charte(),
+  moi: () => federation.charte.moi(),
+  chefLocal: () => federation.charte.chefLocal(),
+  editer: (fn) => federation.charte.editer(fn),
+  appairer: (membre) => federation.appairer(membre),
+  ouvrirAvec: (c, cadre) => sessions.ouvrirAvec(c, cadre),
+  ouvrirChez: (membre, texte) => federation.ouvrirChez(membre, texte),
+  enLigne: (membre) => federation.machineEnLigne(membre),
+  commander: (machine, commande) => postes.commander(machine, commande),
+  session: (id) => registre.session(id),
+  repli: (req) => sessions.ouvrir(req),
+});
 const dependancesApi: DependancesApi = {
+  invites: invitesApi,
   acces,
   registre,
   postes,
@@ -346,8 +367,10 @@ const routes = avecCors(construireRoutes(dependancesApi), config.origines);
 // Table interne (sans jeton) : seuls les gestes relayés par un nœud apparié, sur le lien chiffré, y passent.
 // Les valeurs de la table sont les gestionnaires par méthode de Bun.serve : même forme que TableInterne.
 const routesInternes = construireRoutes(dependancesApi, (g) => g) as unknown as TableInterne;
+// Les appareils lisent les routes locales : la garde des invités s'y applique (le pair, lui, passe par la politique).
+const routesAppareils = construireRoutes(dependancesApi, (g) => avecGardeInvites(dependancesApi, g)) as unknown as TableInterne;
 // Un appareil appairé (identité acceptée au nœud) : son API passe par la table interne, sur son canal chiffré.
-const servirPourAppareil = servirAppareil(routesInternes, journal.child({ domaine: 'appareil' }));
+const servirPourAppareil = servirAppareil(routesAppareils, journal.child({ domaine: 'appareil' }));
 federation.distantes.brancherMachines(() => postes.vues());
 
 // Une demande qui attend la décision de Chris sur ce nœud (appairage, synchronisation) : notification dans l'appli.
