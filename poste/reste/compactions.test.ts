@@ -28,8 +28,26 @@ describe('résumés de compaction', () => {
       }),
     ].join('\n');
     expect(resumesDeTranscript(contenu, journal)).toEqual([
-      { ts: '2026-11-01T11:00:00.000Z', texte: 'Premier résumé' },
-      { ts: '2026-11-02T09:00:00.000Z', texte: 'Second\nrésumé' },
+      { ts: '2026-11-01T11:00:00.000Z', texte: 'Premier résumé', avant: null, apres: null },
+      { ts: '2026-11-02T09:00:00.000Z', texte: 'Second\nrésumé', avant: null, apres: null },
+    ]);
+  });
+
+  // Les jetons du marqueur `compact_boundary` qui précède le résumé identifient la compaction : ils sont les mêmes
+  // que ceux de l'événement `compaction` du relais (fil). Un résumé sans marqueur juste avant n'en a pas.
+  test('jetons avant et après pris sur le marqueur de compaction qui précède le résumé', () => {
+    const marqueur = {
+      type: 'system',
+      subtype: 'compact_boundary',
+      timestamp: '2026-11-01T10:59:00.000Z',
+      compactMetadata: { trigger: 'manual', preTokens: 100000, postTokens: 20000 },
+    };
+    const resume = { type: 'user', isCompactSummary: true, timestamp: '2026-11-01T11:00:00.000Z', message: { content: 'R' } };
+    const sansMarqueur = { type: 'user', isCompactSummary: true, timestamp: '2026-11-02T11:00:00.000Z', message: { content: 'S' } };
+    const contenu = [JSON.stringify(marqueur), JSON.stringify(resume), JSON.stringify(sansMarqueur)].join('\n');
+    expect(resumesDeTranscript(contenu, journal)).toEqual([
+      { ts: '2026-11-01T11:00:00.000Z', texte: 'R', avant: 100000, apres: 20000 },
+      { ts: '2026-11-02T11:00:00.000Z', texte: 'S', avant: null, apres: null },
     ]);
   });
 
@@ -53,7 +71,7 @@ describe('résumés de compaction', () => {
       const chemin = join(dossier, 'session.jsonl');
       const ligne = { type: 'user', isCompactSummary: true, timestamp: 't1', message: { content: 'Résumé' } };
       writeFileSync(chemin, `${JSON.stringify(ligne)}\n`);
-      expect(lireResumesCompaction(chemin, journal)).toEqual([{ ts: 't1', texte: 'Résumé' }]);
+      expect(lireResumesCompaction(chemin, journal)).toEqual([{ ts: 't1', texte: 'Résumé', avant: null, apres: null }]);
     } finally {
       rmSync(dossier, { recursive: true, force: true });
     }

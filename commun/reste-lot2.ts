@@ -23,7 +23,14 @@ const IdSession = z.string().min(1).max(200);
 const DateIso = z.string().refine((v) => !Number.isNaN(Date.parse(v)), 'date attendue');
 
 // B5 — résumés de compaction lus dans le transcript de la session, plus ancien d'abord.
-export const ResumeCompaction = z.object({ ts: z.string(), texte: z.string() });
+// `avant` / `apres` : jetons du marqueur de compaction (les mêmes que l'événement `compaction` du fil) ; null si le
+// marqueur n'est pas dans le transcript.
+export const ResumeCompaction = z.object({
+  ts: z.string(),
+  texte: z.string(),
+  avant: z.number().nullish(),
+  apres: z.number().nullish(),
+});
 export type ResumeCompaction = z.infer<typeof ResumeCompaction>;
 export const Compactions = z.object({ resumes: z.array(ResumeCompaction) });
 export type Compactions = z.infer<typeof Compactions>;
