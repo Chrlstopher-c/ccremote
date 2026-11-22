@@ -15,6 +15,11 @@ import { BilanTour } from './bilan-tour.ts';
 import { attendreConnecteurs, FileAsynchrone, messagesAvecConnecteurs } from './file-messages-sdk.ts';
 import { serveurRythme } from './lanceur.ts';
 import { optionsSdk } from './options-sdk.ts';
+import { avecPromptSysteme } from './consignes.ts';
+import { confinementDe, crochetConfinement, permissionInvite } from './confinement-invite.ts';
+import { jetonInvite, MESSAGE_JETON_INVITE, optionsInvite } from './cadre-invite.ts';
+import type { CadreInvite } from '../../commun/cadre-invite.ts';
+import type { Suite } from './suite-du-tour.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
 import type { RequeteSdk } from './session-sdk.ts';
@@ -28,14 +33,27 @@ const TEXTE_INTERRUPTION = 'Interrompu par Chris';
 const TEXTE_FERMETURE = 'Session fermée par Chris';
 const TEXTE_SOMMEIL = 'Session endormie au repos';
 const TACHES_TERMINEES: ReadonlySet<string> = new Set(['terminee', 'echouee', 'arretee']);
+const TEXTE_PROMPT_CHANGE = 'Prompt système changé';
 
-export function optionsDe(n: NoyauSdk, reprise: boolean): Options {
+function identifiantDe(n: NoyauSdk, reprise: boolean): string {
+  return reprise ? (n.etat.claudeSessionId ?? n.etat.id) : (n.identifiantNeuf ?? n.etat.id);
+}
+
+// Une session d'invité n'a que les options de son cadre (cadre-invite.ts) : jamais celles d'une session ordinaire.
+export function optionsDe(n: NoyauSdk, reprise: boolean, jeton: string | null = null): Options {
+  const invite = n.p.invite;
+  if (!invite) return optionsDeSession(n, reprise);
+  if (jeton === null) throw new Error(MESSAGE_JETON_INVITE);
+  return optionsDeInvite(n, invite.cadre, reprise, jeton);
+}
+
+function optionsDeSession(n: NoyauSdk, reprise: boolean): Options {
   return optionsSdk({
-    identifiant: reprise ? (n.etat.claudeSessionId ?? n.etat.id) : (n.identifiantNeuf ?? n.etat.id),
+    identifiant: identifiantDe(n, reprise),
     reprise,
     reprisePoint: n.pointReprise,
     cwd: n.etat.cwd,
-    consignes: n.p.consignes ?? '',
+    consignes: avecPromptSysteme(n.p.consignes ?? '', n.etat.prompt_systeme ?? null),
     modele: n.etat.modele === 'défaut' ? undefined : n.etat.modele,
     rapide: n.etat.rapide?.demande === true,
     ultracode: n.etat.ultracode?.demande === true,
@@ -61,6 +79,24 @@ export function optionsDe(n: NoyauSdk, reprise: boolean): Options {
   });
 }
 
+function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeton: string): Options {
+  const confinement = confinementDe(cadre);
+  return optionsInvite({
+    identifiant: identifiantDe(n, reprise),
+    reprise,
+    reprisePoint: n.pointReprise,
+    cadre,
+    promptSysteme: n.etat.prompt_systeme ?? null,
+    jeton,
+    source: n.env.env ?? process.env,
+    executable: n.env.executable,
+    modele: n.etat.modele === 'défaut' ? undefined : n.etat.modele,
+    effort: n.etat.effort ?? null,
+    confinement: crochetConfinement(confinement, n.env.journal),
+    canUseTool: permissionInvite(confinement, n.env.journal),
+  });
+}
+
 // Relève le contenu d'un fichier avant que l'outil d'édition le modifie (sans jamais décider de l'outil).
 function crochets(n: NoyauSdk): Options['hooks'] {
   const tours = n.env.tours;
@@ -75,6 +111,8 @@ export function demarrer(
   uuid?: SDKUserMessage['uuid'],
   blocs?: PiecesPreparees['blocs'],
 ): string | null {
+  const jeton = n.p.invite ? jetonInvite(n.p.invite.configCompte, n.env.journal) : null;
+  if (n.p.invite && jeton === null) return echouerDemarrage(n, MESSAGE_JETON_INVITE);
   const fil = new FileAsynchrone<SDKUserMessage>();
   let liberer: () => void = () => undefined;
   const pret = new Promise<void>((r) => {
@@ -82,7 +120,7 @@ export function demarrer(
   });
   n.bilan = new BilanTour();
   try {
-    const requete = n.fabrique({ prompt: messagesAvecConnecteurs(fil, pret), options: optionsDe(n, reprise) });
+    const requete = n.fabrique({ prompt: messagesAvecConnecteurs(fil, pret), options: optionsDe(n, reprise, jeton) });
     n.aReprendre = true;
     n.reveilLe = Date.now();
     n.requete = requete;
@@ -102,6 +140,13 @@ export function demarrer(
     maj(n, { statut: 'erreur' });
     return `démarrage impossible : ${String(erreur)}`;
   }
+}
+
+function echouerDemarrage(n: NoyauSdk, message: string): string {
+  n.env.journal.warn({ session: n.etat.id }, 'démarrage de la session impossible : jeton du chef absent');
+  emettre(n, { type: 'erreur', message });
+  maj(n, { statut: 'erreur' });
+  return message;
 }
 
 function attendreConnecteursDemarrage(n: NoyauSdk, requete: RequeteSdk): Promise<void> {
@@ -125,6 +170,46 @@ async function ecouter(n: NoyauSdk, requete: RequeteSdk, etatTraduction: EtatTra
   } catch (erreur) {
     echouer(n, requete, erreur);
   }
+}
+
+function fermerRequete(n: NoyauSdk, requete: RequeteSdk): void {
+  try {
+    requete.close();
+  } catch (erreur) {
+    n.env.journal.warn({ err: erreur, session: n.etat.id }, 'arrêt du processus SDK imparfait');
+  }
+}
+
+/** Prompt système changé : le SDK ne le change pas dans une requête vivante. Au repos, la requête se ferme ; la reprise
+ *  au message suivant part avec le nouveau prompt. En tour, elle se ferme en fin de tour (relancerAvecPrompt). */
+export function changerPromptSysteme(n: NoyauSdk, texte: string | null): string | null {
+  maj(n, { prompt_systeme: texte });
+  const requete = n.requete;
+  if (!requete) return null;
+  if (n.bilan.enVol > 0 || !endormissable(n)) {
+    n.promptEnAttente = true;
+    return null;
+  }
+  libererRequete(n, TEXTE_PROMPT_CHANGE);
+  fermerRequete(n, requete);
+  return null;
+}
+
+/** Fin de tour d'une requête dont le prompt a changé : elle se ferme ; une relance de l'autonomie repart tout de suite
+ *  avec le nouveau prompt, les autres suites (compaction, arrêt) attendent le message suivant de Chris. */
+export function relancerAvecPrompt(n: NoyauSdk, suite: Suite): void {
+  const requete = n.requete;
+  if (requete) {
+    libererRequete(n, TEXTE_PROMPT_CHANGE);
+    fermerRequete(n, requete);
+  }
+  if (suite.action !== 'relancer') {
+    maj(n, { statut: 'attente' });
+    return;
+  }
+  emettre(n, { type: 'relance', raison: suite.raison });
+  const erreur = demarrer(n, true, suite.texte);
+  if (erreur) emettre(n, { type: 'erreur', message: erreur });
 }
 
 function arreterSansErreur(n: NoyauSdk, requete: RequeteSdk): void {
@@ -219,11 +304,7 @@ export function endormirSiRepos(n: NoyauSdk, maintenant: number, seuilMs: number
   if (maintenant - repos < seuilMs) return false;
   const requete = n.requete;
   libererRequete(n, TEXTE_SOMMEIL);
-  try {
-    requete.close();
-  } catch (erreur) {
-    n.env.journal.warn({ err: erreur, session: n.etat.id }, 'arrêt du processus SDK au sommeil imparfait');
-  }
+  fermerRequete(n, requete);
   n.env.journal.info({ session: n.etat.id }, 'session endormie : processus arrêté, reprise au message suivant');
   return true;
 }

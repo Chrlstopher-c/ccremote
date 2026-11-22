@@ -236,6 +236,11 @@ export class SessionSdk implements SessionPoste {
     return this.n.avis.repondre(r);
   }
 
+  // Prompt système de la conversation : appliqué à la reprise qui suit (voir session-sdk-processus.ts).
+  promptSysteme(texte: string | null): string | null {
+    return processus.changerPromptSysteme(this.n, texte);
+  }
+
   // Réglages en cours de session : appliqués à la requête vivante s'il y en a une, sinon au prochain démarrage.
   async reglerSession(r: Reglage): Promise<string | null> {
     return reglages.reglerSession(this.n, r);

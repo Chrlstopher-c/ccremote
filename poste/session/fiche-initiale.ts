@@ -39,6 +39,8 @@ export function resumeInitial(config: ConfigPoste, d: DemandeSession, cwd: strin
     moteur: moteurDe(d),
     style_sortie: d.style_sortie ?? null,
     ...modesDeOuverture(d),
+    ...(d.prompt_systeme ? { prompt_systeme: d.prompt_systeme } : {}),
+    ...(d.invite ? { invite: { membre: d.invite.membre, nom: d.invite.nom } } : {}),
     bac_a_sable: d.bac_a_sable ?? 'non',
     tmux: null,
     attachee: false,
