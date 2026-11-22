@@ -10,19 +10,22 @@ import { dossierDeTravail } from '../parite/depot.ts';
 import type { ServiceMoteurDictee } from './dictee-service.ts';
 import { creerFusion, etatFusion } from './fusion.ts';
 import type { ServiceTaches } from './taches-planifiees.ts';
+import type { ServiceVoix } from './voix-service.ts';
 
 export type CommandeResteLot2 = Extract<CommandeRelais, { kind: (typeof GENRES_RESTE_LOT2)[number] }>;
 type CommandeDictee = Extract<
   CommandeResteLot2,
   { kind: 'dictee_etat' | 'dictee_transcrire' | 'dictee_service_etat' | 'dictee_service' }
 >;
+type CommandeVoix = Extract<CommandeResteLot2, { kind: 'voix_service_etat' | 'voix_service' }>;
 
-/** Ce que le lot 2 touche du poste : une session, les tâches, le socket de dictée et le service de dictée. */
+/** Ce que le lot 2 touche du poste : une session, les tâches, le socket de dictée, les services de dictée et voix. */
 export interface ContexteResteLot2 {
   readonly session: (id: string) => { readonly cwd: string; readonly transcript: string | null } | null;
   readonly taches: Pick<ServiceTaches, 'lister' | 'enregistrer' | 'supprimer' | 'executer'>;
   readonly socketDictee: () => string;
   readonly dicteeService: Pick<ServiceMoteurDictee, 'etat' | 'piloter' | 'noterTranscription'>;
+  readonly voixService: Pick<ServiceVoix, 'etat' | 'piloter'>;
   readonly journal: Logger;
 }
 
@@ -36,29 +39,17 @@ export async function executerResteLot2(c: CommandeResteLot2, x: ContexteResteLo
       const transcript = x.session(c.sessionId)?.transcript ?? null;
       return { ok: true, donnees: { resumes: lireResumesCompaction(transcript, x.journal) } };
     }
-    case 'pr_etat': {
-      const s = x.session(c.sessionId);
-      const donnees = s
-        ? await etatFusion(await dossierDeTravail(s.cwd, s.transcript, x.journal), x.journal)
-        : { etat: 'absente', raison: 'session inconnue sur ce poste' };
-      return { ok: true, donnees };
-    }
-    case 'pr_creer': {
-      const s = x.session(c.sessionId);
-      const donnees = s
-        ? await creerFusion(
-            await dossierDeTravail(s.cwd, s.transcript, x.journal),
-            { titre: c.titre, corps: c.corps, brouillon: c.brouillon },
-            x.journal,
-          )
-        : { etat: 'erreur', raison: 'session inconnue sur ce poste' };
-      return { ok: true, donnees };
-    }
+    case 'pr_etat':
+    case 'pr_creer':
+      return executerFusion(c, x);
     case 'dictee_etat':
     case 'dictee_transcrire':
     case 'dictee_service_etat':
     case 'dictee_service':
       return executerDictee(c, x);
+    case 'voix_service_etat':
+    case 'voix_service':
+      return executerVoix(c, x);
     case 'taches_lister':
       return x.taches.lister();
     case 'tache_enregistrer':
@@ -68,6 +59,28 @@ export async function executerResteLot2(c: CommandeResteLot2, x: ContexteResteLo
     case 'tache_executer':
       return x.taches.executer(c.tache);
   }
+}
+
+// La demande de fusion (P3) de la branche d'une session : son état, puis sa création par `gh` sur le poste.
+async function executerFusion(
+  c: Extract<CommandeResteLot2, { kind: 'pr_etat' | 'pr_creer' }>,
+  x: ContexteResteLot2,
+): Promise<Reponse> {
+  const s = x.session(c.sessionId);
+  if (c.kind === 'pr_etat') {
+    const donnees = s
+      ? await etatFusion(await dossierDeTravail(s.cwd, s.transcript, x.journal), x.journal)
+      : { etat: 'absente', raison: 'session inconnue sur ce poste' };
+    return { ok: true, donnees };
+  }
+  const donnees = s
+    ? await creerFusion(
+        await dossierDeTravail(s.cwd, s.transcript, x.journal),
+        { titre: c.titre, corps: c.corps, brouillon: c.brouillon },
+        x.journal,
+      )
+    : { etat: 'erreur', raison: 'session inconnue sur ce poste' };
+  return { ok: true, donnees };
 }
 
 // La dictée : le démon (transcription, état du socket) et le service de son moteur (état, démarrer, arrêter, régler).
@@ -87,4 +100,11 @@ async function executerDictee(c: CommandeDictee, x: ContexteResteLot2): Promise<
       return r.ok ? { ok: true, donnees: r.etat } : { ok: false, erreur: r.erreur };
     }
   }
+}
+
+// Le service de voix du poste : son état, démarrer ou arrêter (pilotés par le relais).
+async function executerVoix(c: CommandeVoix, x: ContexteResteLot2): Promise<Reponse> {
+  if (c.kind === 'voix_service_etat') return { ok: true, donnees: await x.voixService.etat() };
+  const r = await x.voixService.piloter(c.action);
+  return r.ok ? { ok: true, donnees: r.etat } : { ok: false, erreur: r.erreur };
 }

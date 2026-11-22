@@ -182,6 +182,16 @@ export class Distantes {
     return null;
   }
 
+  /** L'état du service de voix des postes de chaque pair en ligne (`local=1` : les siens seuls), listes aplaties. */
+  async voixServiceDesPairs(): Promise<unknown[]> {
+    const membres = this.o.cache.noeudsConnus().filter((n) => n.enLigne).map((n) => n.membre);
+    const reponses = await Promise.all(
+      membres.map((membre) => this.relayer(membre, { geste: 'voix/service', methode: 'GET', requete: 'local=1' }, '')),
+    );
+    const corps = await Promise.all(reponses.map((r) => (r.ok ? r.json().catch(() => null) : null)));
+    return corps.flatMap((c: unknown) => machinesDe(c));
+  }
+
   private async intercepterOuverture(req: Request): Promise<Response | null> {
     const corps = await req.clone().text();
     const machine = machineDe(corps);
@@ -387,6 +397,12 @@ function messagesDuGeste(ref: string, g: GesteLocal, corps: string): MessageChif
   };
   if (corps.length <= TAILLE_MORCEAU_CARACTERES) return corps ? { ...requete, corps } : requete;
   return [...decouper(ref, corps), { ...requete, morceaux: nombreDeMorceaux(corps) }];
+}
+
+/** La liste `machines` d'une réponse de `voix/service` d'un pair ; vide si elle n'a pas cette forme. */
+function machinesDe(corps: unknown): unknown[] {
+  if (corps && typeof corps === 'object' && 'machines' in corps && Array.isArray(corps.machines)) return corps.machines;
+  return [];
 }
 
 function machineDe(corps: string): string | null {

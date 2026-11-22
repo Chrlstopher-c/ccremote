@@ -39,6 +39,7 @@ import { type ContextePariteposte, estParite, executerParite } from './parite/ex
 import { transcriptDeSession } from './parite/transcript-session.ts';
 import { MinuterieTaches } from './reste/minuterie-taches.ts';
 import { ServiceTaches } from './reste/taches-planifiees.ts';
+import { ServiceVoix, urlVoixPoste } from './reste/voix-service.ts';
 import { cheminTranscript } from './session/transcript.ts';
 import { dossiersProjets } from './session/decouverte.ts';
 import { SOCKET } from './session/tmux.ts';
@@ -205,6 +206,11 @@ const dicteeService = new ServiceMoteurDictee({
   fichierReglages: join(config.donnees, 'dictee-service.json'),
   journal: journal.child({ domaine: 'dictee' }),
 });
+// Le service de voix de ce poste (lanterne-voix) : état et démarrer/arrêter, pilotés depuis le relais.
+const voixService = new ServiceVoix({
+  url: urlVoixPoste(process.env, journal.child({ domaine: 'voix' })),
+  journal: journal.child({ domaine: 'voix' }),
+});
 const contexteResteLot2: ContexteResteLot2 = {
   session: (id) => {
     const s = sessions.session(id);
@@ -216,6 +222,7 @@ const contexteResteLot2: ContexteResteLot2 = {
   taches,
   socketDictee: () => cheminSocketDictee(process.env, process.getuid?.()),
   dicteeService,
+  voixService,
   journal,
 };
 const minuterieTaches = new MinuterieTaches(taches, journal.child({ domaine: 'taches' }));
