@@ -103,6 +103,11 @@ export class LiaisonAiguilleur implements HandlerDuoAiguilleur {
     for (const canal of [...this.canaux.values()]) canal.fermer('duo arrêté');
   }
 
+  /** Intention d'une ouverture entrante de ce membre, sans l'ouvrir (null : ce nœud ne l'accepte pas). */
+  intentionEntrante(de: string): Intention | null {
+    return this.canalActifAvec(de) ? null : this.intentionPour(de);
+  }
+
   /** Identifiant de ce nœud sur l'aiguilleur (null si le nœud n'y est pas relié). */
   membre(): string | null {
     return this.options.port.membreLocal();

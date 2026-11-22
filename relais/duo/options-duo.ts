@@ -15,6 +15,8 @@ export interface OptionsDuo {
   readonly dossierSecrets: string;
   readonly ecoute: string | null;
   readonly port: number;
+  /** Faux pour un ami ajouté : pas de port d'écoute, le lien passe par l'aiguilleur seulement (défaut : vrai). */
+  readonly ecouteDirecte?: boolean;
   readonly journal: Logger;
   readonly maintenant?: () => number;
   readonly delaiReconnexionMs?: number;

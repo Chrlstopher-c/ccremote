@@ -66,7 +66,7 @@ import { lancerRetention } from './registre/retention.ts';
 import { lancerRecalculInactivite } from './sessions/recalcul-inactivite.ts';
 import { RegistreReunions } from './reunion/registre-reunions.ts';
 import { SalleDeReunion } from './reunion/salle.ts';
-import { Duo } from './duo/duo.ts';
+import { AmisDuo } from './duo/amis.ts';
 import { Federation } from './federation/federation.ts';
 import { SecretsNoeud } from './federation/secrets.ts';
 import { CodesReseau } from './codes-reseau/codes-reseau.ts';
@@ -197,7 +197,7 @@ const resteLot2 = {
 const parite = new ApiParite({ registre, postes, journal: journal.child({ domaine: 'parite' }) });
 // Mode duo : deux relais reliés par le lien (appairage, partages, présence, échanges). Écoute à part, jamais sur les
 // clients. Les sessions du pair passent par ApiSessions (même chemin qu'une commande de Chris).
-const duo: Duo = new Duo({
+const duo: AmisDuo = new AmisDuo({
   registre,
   diffusion,
   base,
