@@ -104,10 +104,20 @@ function memeConnexion(a: CibleTunnel, b: CibleTunnel): boolean {
   );
 }
 
+// Sous Linux, `setpriv --pdeathsig TERM` lie chaque tunnel à la vie du moteur : si le moteur meurt (appli tuée,
+// plantage), le noyau arrête le `ssh`. Sans cela, l'ancien tunnel orphelin gardait le port distant et le poste de la
+// machine ne retrouvait plus l'appli relancée (« port distant déjà pris », 22/11/2026).
+const SETPRIV = process.platform === 'linux' ? Bun.which('setpriv') : null;
+
+/** La commande d'un tunnel : `ssh`, lié à la vie du moteur quand le système le permet. */
+export function commandeTunnel(args: readonly string[], setpriv: string | null = SETPRIV): string[] {
+  return setpriv ? [setpriv, '--pdeathsig', 'TERM', 'ssh', ...args] : ['ssh', ...args];
+}
+
 /** Le vrai lanceur : un processus `ssh` par tunnel. Un lancement impossible devient une sortie en échec. */
 export const lancerTunnelSsh: LanceurTunnel = (args) => {
   try {
-    const p = Bun.spawn(['ssh', ...args], { stdin: 'ignore', stdout: 'ignore', stderr: 'pipe' });
+    const p = Bun.spawn(commandeTunnel(args), { stdin: 'ignore', stdout: 'ignore', stderr: 'pipe' });
     return {
       pid: p.pid,
       sortie: p.exited,

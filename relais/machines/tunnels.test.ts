@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { argumentsTunnel, attenteRelance, type CibleTunnel, phraseSsh, Tunnels, type ProcessusTunnel } from './tunnels.ts';
+import { argumentsTunnel, commandeTunnel, attenteRelance, type CibleTunnel, phraseSsh, Tunnels, type ProcessusTunnel } from './tunnels.ts';
 
 const CONNEXION = { hote: 'machine.exemple.test', port: 2222, utilisateur: 'utilisateur', cle: '/k/cle' };
 const PI: CibleTunnel = { id: 'pi', connexion: CONNEXION, portDistant: 47322 };
@@ -184,5 +184,40 @@ describe('gestionnaire de tunnels', () => {
     m.tunnels.arreterTout();
     expect(m.lances[1]?.processus.arrete).toBe(true);
     expect(m.attentes[0]?.annulee).toBe(true);
+  });
+});
+
+describe('tunnel lié à la vie du moteur', () => {
+  test('avec setpriv : le ssh reçoit TERM à la mort du moteur', () => {
+    expect(commandeTunnel(['-N', 'hote'], '/usr/bin/setpriv')).toEqual([
+      '/usr/bin/setpriv',
+      '--pdeathsig',
+      'TERM',
+      'ssh',
+      '-N',
+      'hote',
+    ]);
+  });
+
+  test('sans setpriv (macOS) : ssh seul', () => {
+    expect(commandeTunnel(['-N', 'hote'], null)).toEqual(['ssh', '-N', 'hote']);
+  });
+
+  test('un vrai processus lancé par setpriv meurt avec son parent', async () => {
+    const setpriv = Bun.which('setpriv');
+    if (!setpriv) return;
+    const parent = Bun.spawn(['sh', '-c', `${setpriv} --pdeathsig TERM sleep 30 & echo $!; sleep 0.3`], {
+      stdout: 'pipe',
+    });
+    const enfant = Number((await new Response(parent.stdout).text()).trim());
+    await parent.exited;
+    await Bun.sleep(300);
+    let vivant = true;
+    try {
+      process.kill(enfant, 0);
+    } catch {
+      vivant = false;
+    }
+    expect(vivant).toBe(false);
   });
 });
