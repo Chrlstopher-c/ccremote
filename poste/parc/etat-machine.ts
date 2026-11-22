@@ -30,16 +30,29 @@ export class SondeMachine {
     private readonly journal: Logger,
   ) {}
 
+  // Un dossier mesuré absent ou illisible ne doit jamais arrêter le poste (appel dans un minuteur) : repli sur la racine.
+  private lireDisque(): EtatMachine['disque'] {
+    for (const chemin of [this.disque, '/']) {
+      try {
+        const fs = statfsSync(chemin);
+        return { utilise: (fs.blocks - fs.bfree) * fs.bsize, total: fs.blocks * fs.bsize };
+      } catch (erreur) {
+        this.journal.warn({ err: erreur, chemin }, 'mesure du disque impossible');
+      }
+    }
+    return { utilise: 0, total: 0 };
+  }
+
   mesurer(): EtatMachine {
     const courant = echantillonCpu();
     const dTotal = courant.total - this.precedent.total;
     const cpu = dTotal > 0 ? (courant.actif - this.precedent.actif) / dTotal : 0;
     this.precedent = courant;
-    const fs = statfsSync(this.disque);
+    const disque = this.lireDisque();
     return {
       cpu: Math.round(cpu * 1000) / 10,
       memoire: { utilisee: totalmem() - freemem(), totale: totalmem() },
-      disque: { utilise: (fs.blocks - fs.bfree) * fs.bsize, total: fs.blocks * fs.bsize },
+      disque,
       charge: loadavg()[0] ?? 0,
       demarreeDepuis: Math.round(uptime()),
       utilisateur: userInfo().username,
