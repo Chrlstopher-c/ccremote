@@ -32,6 +32,8 @@ export interface TacheVue {
   sortie: string | null;
   /** Vrai dès qu'une fin est venue du transcript (notification, attachement, arrêt) : sinon le statut est déduit. */
   notifiee: boolean;
+  /** Fin programmée sans notification (durée d'un Monitor), ISO ; null sinon. */
+  echeance: string | null;
 }
 
 /** Un appel d'outil en attente de son résultat (Agent sans run_in_background, qui peut devenir asynchrone). */
