@@ -412,7 +412,8 @@ export class Postes {
     this.diffusion.diffuser({ type: 'evenement', evenement: e });
     this.reunions?.observer(sessionId, evt);
     const fiche = this.registre.session(sessionId);
-    if (fiche?.annexe_de) return; // une conversation annexe ne notifie pas Chris
+    // Une conversation annexe ne notifie pas Chris ; celle d'un invité non plus (titre et texte sont son contenu).
+    if (fiche?.annexe_de || fiche?.invite) return;
     const titre = fiche?.titre ?? 'Session';
     const brouillon = notificationPour(titre, evt);
     if (!brouillon) return;
