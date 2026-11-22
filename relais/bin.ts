@@ -28,6 +28,7 @@ import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
 import { AppelsModules } from './modules/appels.ts';
 import { traiterRequeteRelais } from './modules/api-appels.ts';
+import { type DependancesOutilsParc, estOperationParc, traiterRequeteParc } from './parc/outils-parc.ts';
 import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
 import { chargerConfig } from './config.ts';
@@ -152,7 +153,6 @@ if (tunnels) {
 // Entretien : le dernier réseau de chaque machine (réveil), les gestes de l'entretien et le réveil délégué.
 const reseaux = new ReseauxConnus(join(dirname(config.base), 'reveil.json'), journal.child({ domaine: 'reveil' }));
 postes.reseauRecu = (id, reseau) => reseaux.retenir(id, reseau);
-postes.requetes.surRequete = (quoi, args) => traiterRequeteRelais(appelsModules, quoi, args);
 const reveil = new Reveil({
   wol: config.wol,
   diffusionWol: config.diffusionWol,
@@ -239,6 +239,16 @@ const synchro = new ServiceSynchro({
 federation.brancherSynchro((membre, brut) => synchro.recevoir(membre, brut));
 process.once('exit', () => synchro.arreter());
 const sessionConfig = new ApiSessionConfig(registre, postes);
+// Outils du parc (sessions hors de Lanterne) et outils de modules : deux familles, un seul lien poste ↔ relais.
+const outilsParc: DependancesOutilsParc = {
+  postes,
+  registre,
+  sessions,
+  entretien,
+  journal: journal.child({ domaine: 'outils-parc' }),
+};
+postes.requetes.surRequete = (quoi, args) =>
+  estOperationParc(quoi) ? traiterRequeteParc(outilsParc, quoi, args) : traiterRequeteRelais(appelsModules, quoi, args);
 const configuration = new ApiConfiguration(postes, journal.child({ domaine: 'configuration' }));
 // Un seul relevé d'usage par compte réel du parc : le relais choisit le poste, cadence et garde la dernière valeur.
 const usage = new ReleveUsage(base, registre, postes, journal.child({ domaine: 'usage' }), () => {

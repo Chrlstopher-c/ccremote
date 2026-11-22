@@ -2,6 +2,7 @@
 // transportent. Les limites et la forme sont celles de recherche/MODULES.md ; le poste valide, le relais fait confiance
 // à ce qu'il reçoit après zod.
 import { z } from 'zod';
+import { OPERATIONS_PARC } from './parc.ts';
 
 export const TAILLE_MAX_MODULE = 20 * 1024 * 1024; // octets, tous fichiers réunis (serveur/node_modules exclu)
 export const FICHIERS_MAX_MODULE = 2000;
@@ -79,7 +80,8 @@ export function cheminModuleValide(chemin: string): boolean {
 }
 
 // Outils d'agent (v1.1) : ce que le relais rend au poste pour un outil de module, comme la route HTTP correspondante.
-export const QuoiRelais = z.enum(['modules_lister', 'module_appeler']);
+// Outils du poste relayés au relais : modules (v1.1) et parc (sessions hors de Lanterne, voir parc.ts).
+export const QuoiRelais = z.enum(['modules_lister', 'module_appeler', ...OPERATIONS_PARC]);
 export type QuoiRelais = z.infer<typeof QuoiRelais>;
 export const ReponseRelais = z.object({
   ok: z.boolean(),

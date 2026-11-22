@@ -39,7 +39,8 @@ export function cheminSocketOutils(
 /** Les arguments relayés au relais : `module_appeler` part toujours sans session (le poste ne l'attribue jamais). */
 export function argsRelais(demande: DemandeOutils): unknown {
   if (demande.quoi === 'modules_lister') return {};
-  return { ...demande.args, session: null };
+  if (demande.quoi === 'module_appeler') return { ...demande.args, session: null };
+  return demande.args ?? {};
 }
 
 export type DecodageDemande =
