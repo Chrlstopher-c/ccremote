@@ -12,6 +12,8 @@ export interface ParametresLancement {
   readonly socketTmux: string;
   /** Relais distant (poste seul) : `null` = le moteur lance son relais local. */
   readonly relaisDistant: RelaisDistant | null;
+  /** Nœud en service (sans appli) : l'entrée standard n'est pas un lien de vie, le moteur ne s'arrête pas sur sa fermeture. */
+  readonly autonome: boolean;
 }
 
 export class ErreurParametres extends Error {}
@@ -56,5 +58,6 @@ export function lireParametres(env: Env, maison: string = homedir()): Parametres
     codePoste: env['LANTERNE_MOTEUR_CODE_POSTE'] || undefined,
     socketTmux: env['LANTERNE_MOTEUR_TMUX_SOCKET'] || SOCKET_TMUX_PAR_DEFAUT,
     relaisDistant: relaisDistantOuErreur(env),
+    autonome: env['LANTERNE_MOTEUR_AUTONOME'] === '1',
   };
 }

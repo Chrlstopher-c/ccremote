@@ -39,7 +39,7 @@ async function demarrer(p: ParametresLancement, donnees: Donnees, journal: Logge
   Object.assign(process.env, construireEnvironnement(parametresEnv));
   ecrirePosteJson(chemins.posteJson, contenuPosteJson(parametresEnv), journal);
   enregistrerJeton(chemins.base, p.jeton, journal);
-  arretALaFermetureEntree(journal);
+  if (!p.autonome) arretALaFermetureEntree(journal);
   await import('../relais/bin.ts');
   await import('../poste/bin.ts');
   await attendrePosteLocal(`http://127.0.0.1:${p.portWeb}`, p.jeton, donnees.machine, DELAI_PRET_MS, journal);
@@ -60,7 +60,7 @@ async function demarrerPosteSeul(
   const parametresEnv = parametresDuMoteur(p, donnees, code, distant.jeton, '');
   Object.assign(process.env, construireEnvironnement(parametresEnv));
   ecrirePosteJson(chemins.posteJson, { ...contenuPosteJson(parametresEnv), relais: distant.url }, journal);
-  arretALaFermetureEntree(journal);
+  if (!p.autonome) arretALaFermetureEntree(journal);
   await import('../poste/bin.ts');
   process.stdout.write(ligneDePret(donnees.machine, VERSION));
   journal.info({ machine: donnees.machine, relais: distant.url }, 'moteur intégré prêt : poste seul, relais distant');

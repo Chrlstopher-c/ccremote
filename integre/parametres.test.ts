@@ -35,3 +35,14 @@ describe('lecture des paramètres du moteur intégré', () => {
     expect(() => lireParametres({ ...complet, LANTERNE_MOTEUR_JETON: '' })).toThrow(ErreurParametres);
   });
 });
+
+describe('mode nœud autonome (service, sans appli)', () => {
+  test('désactivé par défaut : la fermeture de l entrée arrête le moteur, comme avec l appli', () => {
+    expect(lireParametres(complet, '/home/u').autonome).toBe(false);
+    expect(lireParametres({ ...complet, LANTERNE_MOTEUR_AUTONOME: '0' }).autonome).toBe(false);
+  });
+
+  test('LANTERNE_MOTEUR_AUTONOME=1 : le moteur ne dépend plus de son entrée standard', () => {
+    expect(lireParametres({ ...complet, LANTERNE_MOTEUR_AUTONOME: '1' }).autonome).toBe(true);
+  });
+});
