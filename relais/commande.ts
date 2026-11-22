@@ -1,19 +1,16 @@
 // Responsabilité : commandes locales du relais, lancées sur sa machine avec son fichier d'environnement — `appairer`
 // (affiche un code d'appairage à échanger contre une clé d'appareil) et `jeton-poste` (émet le secret d'un poste neuf,
-// à poser dans sa configuration). Le relais lit les jetons de poste au démarrage : le redémarrer après une émission.
-import { join } from 'node:path';
+// à poser dans sa configuration). Ce processus est distinct du relais, qui lit les jetons au démarrage : le redémarrer
+// après une émission (l'appairage avec `machine` est, lui, pris en compte à chaud).
 import { chargerConfig, type ConfigRelais } from './config.ts';
 import { codeAppairageNeuf } from './acces/appairage.ts';
 import { ouvrirBase } from './registre/base.ts';
 import { Registre } from './registre/registre.ts';
-import { fichiersPoste } from './machines/installer.ts';
-import { chargerSecretsPostes, secretPoste } from './machines/secrets.ts';
+import { emettreJetonPoste } from './machines/jeton-poste.ts';
 
 const AIDE = `usage :
   bun run relais/commande.ts appairer
   bun run relais/commande.ts jeton-poste <machine> <adresse WebSocket du relais, ws://…/poste>`;
-const MACHINE_VALIDE = /^[a-z0-9-]+$/;
-const RELAIS_VALIDE = /^wss?:\/\//;
 
 /** Un code d'appairage neuf, stocké (empreinte seulement) : rendu une fois, valable 10 minutes, usage unique. */
 export function appairerLocal(config: ConfigRelais): string {
@@ -27,20 +24,14 @@ export function appairerLocal(config: ConfigRelais): string {
   }
 }
 
-/** Émet le secret d'un poste : fichier 600 dans le dossier des secrets, et les deux fichiers de config du poste. */
+/** Émet le secret d'un poste (commande locale : jamais de renouvellement silencieux) et rend ses deux fichiers. */
 export function jetonPoste(
   dossier: string,
   machine: string,
   relais: string,
 ): { readonly posteJson: string; readonly posteEnv: string } {
-  if (!MACHINE_VALIDE.test(machine)) throw new Error(`identifiant de poste invalide : « ${machine} »`);
-  if (!RELAIS_VALIDE.test(relais)) throw new Error('adresse du relais invalide : ws:// ou wss:// attendu');
-  if (chargerSecretsPostes(dossier).has(machine)) {
-    const fichier = join(dossier, `${machine}.secret`);
-    throw new Error(`un jeton existe déjà pour « ${machine} » : supprimer ${fichier} pour le renouveler`);
-  }
-  const secret = secretPoste(dossier, machine, new Map());
-  return fichiersPoste(machine, machine, relais, secret);
+  const { fichiers } = emettreJetonPoste({ dossier, machine, relais, secrets: new Map(), remplacer: false });
+  return fichiers;
 }
 
 /** Exécute une commande et rend ce qu'elle affiche. Une commande inconnue ou absente lève une erreur avec l'aide. */

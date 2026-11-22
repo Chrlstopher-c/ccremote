@@ -14,6 +14,7 @@ interface Relais {
   readonly env: Record<string, string>;
   readonly web1: number;
   readonly web2: number;
+  readonly web3: number;
   readonly postes: number;
 }
 
@@ -72,10 +73,12 @@ beforeAll(async () => {
   const donnees = mkdtempSync(join(tmpdir(), 'relais-central-essai-'));
   const web1 = portLibre();
   const web2 = portLibre();
+  const web3 = portLibre();
   const postes = portLibre();
   const env = environnement({
     LANTERNE_RELAIS_MODE: 'central',
-    LANTERNE_RELAIS_ECOUTE: `127.0.0.1:${web1},127.0.0.1:${web2}`,
+    // 127.0.0.2 : adresse « joignable » (non boucle au sens du relais) pour l'adresse remise aux postes.
+    LANTERNE_RELAIS_ECOUTE: `127.0.0.1:${web1},127.0.0.1:${web2},127.0.0.2:${web3}`,
     LANTERNE_RELAIS_PORT_POSTES: String(postes),
     LANTERNE_RELAIS_DONNEES: donnees,
     // Un tunnel intégré est demandé : le mode central doit l'ignorer.
@@ -92,9 +95,10 @@ beforeAll(async () => {
     stdout: Bun.file(join(donnees, 'relais.log')),
     stderr: Bun.file(join(donnees, 'relais.err')),
   });
-  relais = { processus, env, web1, web2, postes };
+  relais = { processus, env, web1, web2, web3, postes };
   await attendre(`http://127.0.0.1:${web1}/api/etat`, 401);
   await attendre(`http://127.0.0.1:${web2}/api/etat`, 401);
+  await attendre(`http://127.0.0.2:${web3}/api/etat`, 401);
 }, 60_000);
 
 afterAll(async () => {
@@ -154,3 +158,38 @@ test('jeton de poste : la CLI rend la configuration du poste avec son secret (le
   expect(sortie).toContain('CCREMOTE_SECRET_POSTE=');
   expect(sortie).toContain('essai-poste');
 });
+
+test('appairage avec machine : le poste se connecte à chaud ; son renouvellement coupe l’ancienne connexion', async () => {
+  const r = appele();
+  const entetes = (secret: string): Record<string, string> => ({
+    'x-ccremote-machine': 'chaud',
+    authorization: `Bearer ${secret}`,
+  });
+  const lien = `http://127.0.0.1:${r.postes}/poste`;
+  expect((await fetch(lien, { headers: entetes('inconnu') })).status).toBe(401);
+  const appairer = async (code: string): Promise<{ urlPoste: string; jetonPoste: string }> => {
+    const r2 = await fetch(`http://127.0.0.2:${r.web3}/api/appareils/appairer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code, nom: 'chaud', machine: 'chaud' }),
+    });
+    expect(r2.status).toBe(200);
+    return (await r2.json()) as { urlPoste: string; jetonPoste: string };
+  };
+  const premier = await appairer((await lancer(['appairer'], r.env)).split('\n')[0]?.trim() ?? '');
+  expect(premier.urlPoste).toBe(`ws://127.0.0.2:${r.postes}/poste`);
+  expect((await fetch(lien, { headers: entetes(premier.jetonPoste) })).status).toBe(426);
+  const ws = new WebSocket(`ws://127.0.0.1:${r.postes}/poste`, { headers: entetes(premier.jetonPoste) });
+  await new Promise<void>((ouvert, echec) => {
+    ws.onopen = () => ouvert();
+    ws.onerror = () => echec(new Error('connexion du poste refusée'));
+  });
+  const fermee = new Promise<number>((resoudre) => {
+    ws.onclose = (e) => resoudre(e.code);
+  });
+  const second = await appairer((await lancer(['appairer'], r.env)).split('\n')[0]?.trim() ?? '');
+  expect(second.jetonPoste).not.toBe(premier.jetonPoste);
+  expect((await fetch(lien, { headers: entetes(premier.jetonPoste) })).status).toBe(401);
+  expect((await fetch(lien, { headers: entetes(second.jetonPoste) })).status).toBe(426);
+  expect(await fermee).toBe(4001);
+}, 20_000);

@@ -31,6 +31,7 @@ interface Ecoute {
 
 export interface ConfigRelais extends Ecoute {
   readonly central: boolean; // LANTERNE_RELAIS_MODE=central : aucun tunnel SSH vers les postes
+  readonly urlPoste: string | null; // lien des postes vu des clients (central, première adresse hors boucle)
   readonly empreinteMotDePasse: string;
   readonly secretsPostes: ReadonlyMap<string, string>;
   readonly dossierSecrets: string; // un fichier <machine>.secret par poste
@@ -108,9 +109,11 @@ export function chargerConfig(): ConfigRelais {
   const donnees = central ? requis('LANTERNE_RELAIS_DONNEES') : null;
   const base = cheminBase(donnees);
   const portPostes = portPostesDe(central);
+  const ecoute = central ? ecouteCentrale(portPostes) : ecouteLocale(portPostes);
   return {
     central,
-    ...(central ? ecouteCentrale(portPostes) : ecouteLocale(portPostes)),
+    ...ecoute,
+    urlPoste: central ? urlPostePour(ecoute.ecouteWeb, portPostes) : null,
     duo: configDuo(),
     empreinteMotDePasse: requis('CCREMOTE_EMPREINTE_MOT_DE_PASSE'),
     secretsPostes: paires(central ? process.env['CCREMOTE_SECRETS_POSTES'] : requis('CCREMOTE_SECRETS_POSTES')),
@@ -159,6 +162,16 @@ function ecouteCentrale(portPostes: number): Ecoute {
     boucleWeb: boucle,
     ecoutePostes: hotes.map((hote) => ({ hote, port: portPostes })),
   };
+}
+
+// Adresses qu'un poste distant ne peut pas joindre : la boucle et les adresses « toutes interfaces ».
+const ADRESSES_NON_JOIGNABLES = new Set(['127.0.0.1', '::1', 'localhost', '0.0.0.0', '::']);
+
+/** ws://<première adresse joignable>:<port des postes>/poste, ou null si l'écoute n'a que des adresses locales. */
+export function urlPostePour(adresses: readonly AdresseEcoute[], port: number): string | null {
+  const hote = adresses.find((a) => !ADRESSES_NON_JOIGNABLES.has(a.hote))?.hote;
+  if (!hote) return null;
+  return `ws://${hote.includes(':') ? `[${hote}]` : hote}:${port}/poste`;
 }
 
 /** « hôte:port,[ipv6]:port » → adresses d'écoute ; une entrée invalide arrête le relais au démarrage. */

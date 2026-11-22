@@ -8,6 +8,7 @@ import { Acces, PROTOCOLE_FLUX } from './acces/acces.ts';
 import { PlafondEchecs } from './acces/plafond.ts';
 import { construireRoutes } from './clients/api.ts';
 import { routesAcces } from './acces/api-acces.ts';
+import type { PosteRelais } from './acces/api-appairage.ts';
 import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
 import { ApiFichiers } from './appareils/api-fichiers.ts';
 import { ApiArtefacts } from './clients/api-artefacts.ts';
@@ -244,7 +245,14 @@ const routes = avecCors(
   }),
   config.origines,
 );
-const routesGestionAcces = avecCors(routesAcces(acces, journal.child({ domaine: 'acces' })), config.origines);
+// Appairage avec machine : le relais central remet le lien des postes et le jeton (table partagée avec les postes).
+const posteRelais: PosteRelais | null = config.central
+  ? { dossier: dossierSecrets, secrets: secretsPostes, urlPoste: config.urlPoste, couper: (m) => postes.couper(m) }
+  : null;
+const routesGestionAcces = avecCors(
+  routesAcces(acces, journal.child({ domaine: 'acces' }), posteRelais),
+  config.origines,
+);
 const connecteurs = routesMcp(
   acces,
   adresseBoucle(config.boucleWeb.hote, config.boucleWeb.port),

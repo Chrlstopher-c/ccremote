@@ -5,7 +5,7 @@ import type { Logger } from 'pino';
 import { z } from 'zod';
 import type { Acces } from './acces.ts';
 import { erreur, json, lireCorps } from '../clients/http.ts';
-import { type Gestionnaire, reserveAppareil, routesAppairage } from './api-appairage.ts';
+import { type Gestionnaire, type PosteRelais, reserveAppareil, routesAppairage } from './api-appairage.ts';
 
 const CorpsAcces = z.object({
   nom: z.string().trim().min(1).max(80),
@@ -13,10 +13,14 @@ const CorpsAcces = z.object({
   jours: z.number().int().min(1).max(3650),
 });
 
-export function routesAcces(acces: Acces, journal: Logger): Record<string, Record<string, Gestionnaire>> {
+export function routesAcces(
+  acces: Acces,
+  journal: Logger,
+  poste: PosteRelais | null = null,
+): Record<string, Record<string, Gestionnaire>> {
   const reserve = reserveAppareil(acces);
   return {
-    ...routesAppairage(acces, journal),
+    ...routesAppairage(acces, journal, poste),
     '/api/acces': {
       GET: reserve((req) => json(acces.lister(req))),
       POST: reserve(async (req) => {

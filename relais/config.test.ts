@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chargerConfig, parserEcoute } from './config.ts';
+import { chargerConfig, parserEcoute, urlPostePour } from './config.ts';
 
 const VARIABLES = [
   'LANTERNE_RELAIS_MODE',
@@ -17,6 +17,7 @@ const VARIABLES = [
   'CCREMOTE_HOTE_POSTES',
   'LANTERNE_MOTEUR_PORT_POSTES',
   'LANTERNE_MOTEUR_INSTANCE',
+  'LANTERNE_RELAIS_ECOUTE',
 ];
 const sauvegarde = new Map<string, string | undefined>();
 
@@ -112,4 +113,22 @@ test('mode central : un tunnel intégré (LANTERNE_MOTEUR_PORT_POSTES) est ignor
   process.env['LANTERNE_MOTEUR_PORT_POSTES'] = '47000';
   expect(chargerConfig().central).toBe(true);
   expect(chargerConfig().ecoutePostes).toEqual([{ hote: '127.0.0.1', port: 8721 }]);
+});
+
+test('adresse du lien des postes : première adresse hors boucle, port des postes, sans valeur en dur', () => {
+  const ecoute = parserEcoute('127.0.0.1:8767,192.0.2.7:8768');
+  expect(urlPostePour(ecoute, 8721)).toBe('ws://192.0.2.7:8721/poste');
+  expect(urlPostePour(parserEcoute('[fd00::7]:8767,127.0.0.1:8768'), 8721)).toBe('ws://[fd00::7]:8721/poste');
+  expect(urlPostePour(parserEcoute('127.0.0.1:8767,0.0.0.0:8768'), 8721)).toBeNull();
+});
+
+test('mode central : le relais connaît l’adresse de son lien des postes ; local : aucune', () => {
+  process.env['LANTERNE_RELAIS_MODE'] = 'central';
+  process.env['LANTERNE_RELAIS_ECOUTE'] = '127.0.0.1:8767,192.0.2.7:8768';
+  process.env['LANTERNE_RELAIS_DONNEES'] = '/srv/donnees-test';
+  process.env['LANTERNE_RELAIS_PORT_POSTES'] = '8721';
+  expect(chargerConfig().urlPoste).toBe('ws://192.0.2.7:8721/poste');
+  delete process.env['LANTERNE_RELAIS_MODE'];
+  process.env['CCREMOTE_SECRETS_POSTES'] = 'tour=secret';
+  expect(chargerConfig().urlPoste).toBeNull();
 });

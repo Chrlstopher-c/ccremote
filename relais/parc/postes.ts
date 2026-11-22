@@ -116,6 +116,11 @@ export class Postes {
     return this.connectes.has(machine);
   }
 
+  /** Coupe la connexion en cours d'un poste dont le jeton vient d'être renouvelé : il doit se reconnecter. */
+  couper(machine: string): void {
+    this.connectes.get(machine)?.close(4001, 'jeton de poste renouvelé');
+  }
+
   /** Sessions découvertes sur les postes connectés, sans celles que le relais connaît déjà (fiche, identifiant SDK). */
   decouvertes(connues: ReadonlySet<string>): Decouverte[] {
     const candidates = [...this.decouvertesDuPoste.entries()]
