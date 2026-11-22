@@ -3,6 +3,7 @@
 // app/ui/src/reste/contrat-lot2.ts.
 import { z } from 'zod';
 import { CorpsServiceDictee } from './dictee-service.ts';
+import { CorpsServiceVoix } from './voix-service.ts';
 
 export const MAX_TITRE_FUSION = 256;
 export const MAX_CORPS_FUSION = 65_536;
@@ -151,6 +152,8 @@ export const commandesResteLot2 = [
     pcm16: z.string().min(1).max(MAX_PCM16_BASE64),
     langue: z.string().min(2).max(10),
   }),
+  z.object({ kind: z.literal('voix_service_etat'), id: z.string() }),
+  z.object({ kind: z.literal('voix_service'), id: z.string(), ...CorpsServiceVoix.shape }),
   z.object({ kind: z.literal('taches_lister'), id: z.string() }),
   z.object({
     kind: z.literal('tache_enregistrer'),
@@ -170,6 +173,8 @@ export const GENRES_RESTE_LOT2 = [
   'dictee_service_etat',
   'dictee_service',
   'dictee_transcrire',
+  'voix_service_etat',
+  'voix_service',
   'taches_lister',
   'tache_enregistrer',
   'tache_supprimer',

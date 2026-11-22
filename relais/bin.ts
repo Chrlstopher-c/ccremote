@@ -51,6 +51,7 @@ import { Tunnels } from './machines/tunnels.ts';
 import { ApiEntretien } from './entretien/api-entretien.ts';
 import { ApiReste } from './reste/api-reste.ts';
 import { ApiDictee } from './reste/api-dictee.ts';
+import { ApiServiceVoix } from './reste/api-voix-service.ts';
 import { ApiResteSessions } from './reste/api-reste-sessions.ts';
 import { ApiParite } from './parite/api-parite.ts';
 import { ApiTaches } from './reste/api-taches.ts';
@@ -184,6 +185,11 @@ const resteLot2 = {
   sessions: new ApiResteSessions({ registre, postes, journal: journal.child({ domaine: 'reste' }) }),
   dictee: new ApiDictee({ postes, journal: journal.child({ domaine: 'dictee' }) }),
   taches: new ApiTaches({ postes, journal: journal.child({ domaine: 'taches' }) }),
+  voix: new ApiServiceVoix({
+    postes,
+    pairs: { voixServiceDesPairs: () => federation.distantes.voixServiceDesPairs() },
+    journal: journal.child({ domaine: 'voix' }),
+  }),
 };
 const parite = new ApiParite({ registre, postes, journal: journal.child({ domaine: 'parite' }) });
 // Mode duo : deux relais reliés par le lien (appairage, partages, présence, échanges). Écoute à part, jamais sur les

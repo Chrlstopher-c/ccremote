@@ -3,6 +3,14 @@ import { describe, expect, test } from 'bun:test';
 import { estGesteRelayable, estMethodeRelayable } from './gestes-federes.ts';
 
 describe('estGesteRelayable', () => {
+  test('synthèse vocale et service de voix : relayés (noeud, dossier de machine) ; sous-chemins refusés', () => {
+    expect(estGesteRelayable('noeud', 'voix')).toBe(true);
+    expect(estGesteRelayable('noeud', 'voix/service')).toBe(true);
+    expect(estGesteRelayable('machine', 'voix')).toBe(true);
+    expect(estGesteRelayable('noeud', 'voix/service/x')).toBe(false);
+    expect(estGesteRelayable('machine', 'voix/service')).toBe(false);
+  });
+
   test('fichiers, git, artefacts, contenu, remote-control, rembobiner et dossiers de machine passent', () => {
     expect(estGesteRelayable('session', 'remote-control')).toBe(true);
     expect(estGesteRelayable('session', 'rembobiner')).toBe(true);
