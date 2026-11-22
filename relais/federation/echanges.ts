@@ -8,14 +8,17 @@ import {
   TAILLE_FIL_FEDERE,
   TAILLE_FLUX_MAX_CARACTERES,
   TAILLE_MAX_CLAIR_OCTETS,
+  TAILLE_MORCEAU_CARACTERES,
   DELAI_REPONSE_FEDEREE_MS,
   type EvenementFedere,
   type MachineAnnoncee,
   type MessageChiffre,
 } from '../../commun/federation.ts';
 import { estGesteRelayable, type MethodeGeste, type PorteeGeste } from '../../commun/gestes-federes.ts';
-import { reponseGeste } from './gestes.ts';
+import { type CorpsGeste, reponseGeste } from './gestes.ts';
+import { decouper, nombreDeMorceaux, Reassemblage } from './transferts.ts';
 import type { OuvertureChezProprietaire } from '../duo/pont-sessions.ts';
+import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
@@ -78,10 +81,16 @@ export interface OptionsEchanges {
   readonly terminaux?: RecepteurTerminal;
 }
 
-type Attente = (m: MessageChiffre) => void;
+type Attente = (m: MessageChiffre | null) => void;
+/** Une requête en attente de réponse ; `membre` dit à qui elle est partie (un lien perdu la résout tout de suite). */
+interface Attendue {
+  readonly membre: string;
+  readonly fin: Attente;
+}
 
 export class Echanges {
-  private readonly attentes = new Map<string, Attente>();
+  private readonly attentes = new Map<string, Attendue>();
+  private readonly transferts = new Reassemblage();
   private readonly abonnements = new Map<string, Set<string>>();
   private readonly tampons = new Map<string, TamponFlux>();
   private minuterieFlux: ReturnType<typeof setTimeout> | null = null;
@@ -187,10 +196,20 @@ export class Echanges {
     if (tampon && tampon.canal.ouvert) tampon.canal.envoyer(tampon.message);
   }
 
-  /** Oublie les abonnements et les deltas en attente d'un pair (canal fermé ou révoqué). */
+  /** Une confirmation de ce nœud part à chaque pair ouvert : eux l'affichent, et leur réponse revient ici. */
+  diffuserConfirmation(confirmation: ConfirmationDemandee, canaux: readonly CanalNoeud[]): void {
+    for (const canal of canaux) canal.envoyer({ t: 'confirmation', confirmation });
+  }
+
+  /**
+   * Oublie ce qu'on gardait d'un pair (canal fermé ou révoqué) : abonnements, deltas, morceaux en route. Les requêtes
+   * qui l'attendaient rendent « rien » tout de suite, sans attendre leur délai.
+   */
   oublier(membre: string): void {
     this.abonnements.delete(membre);
+    this.transferts.oublier(membre);
     for (const [cle, tampon] of [...this.tampons]) if (tampon.canal.membre === membre) this.tampons.delete(cle);
+    for (const [ref, attente] of [...this.attentes]) if (attente.membre === membre) this.resoudre(ref, null);
   }
 
   /** Une requête entrante ou une réponse d'un pair, sur un lien ouvert. */
@@ -212,8 +231,14 @@ export class Echanges {
       case 'geste':
         return this.repondreGeste(canal, message);
       case 'reponse':
+        return this.resoudre(message.ref, message);
       case 'geste_reponse':
-        return this.attentes.get(message.ref)?.(message);
+        return this.recevoirReponse(canal.membre, message);
+      case 'morceau':
+        this.transferts.recevoir(canal.membre, message);
+        return undefined;
+      case 'confirmation':
+        return this.options.distant.recevoirConfirmation(canal.membre, message.confirmation);
       case 'flux':
         return this.options.distant.recevoirFlux(canal.membre, message);
       default:
@@ -230,10 +255,13 @@ export class Echanges {
     return this.options.distant.ajouterEvenement(membre, m.session, evenement);
   }
 
-  /** Envoie une requête à un pair et rend sa réponse (ou null : hors ligne, trame trop grande, délai dépassé). */
+  /**
+   * Envoie une requête à un pair et rend sa réponse (ou null : hors ligne, lien perdu, trame refusée, délai dépassé).
+   * `construire` rend un message, ou la suite de messages à envoyer dans l'ordre (morceaux puis requête).
+   */
   requeter(
     canal: CanalNoeud,
-    construire: (ref: string) => MessageChiffre,
+    construire: (ref: string) => MessageChiffre | readonly MessageChiffre[],
     delaiMs?: number,
   ): Promise<MessageChiffre | null> {
     const ref = nonceRef();
@@ -244,17 +272,32 @@ export class Echanges {
         resoudre(m);
       };
       const minuterie = setTimeout(() => fin(null), delaiMs ?? this.options.delaiReponseMs ?? DELAI_REPONSE_FEDEREE_MS);
-      this.attentes.set(ref, fin);
-      if (!canal.envoyer(construire(ref))) fin(null);
+      this.attentes.set(ref, { membre: canal.membre, fin });
+      for (const m of enListe(construire(ref))) if (!canal.envoyer(m)) return fin(null);
     });
+  }
+
+  // Rend la réponse à la requête `ref`, si elle attend encore.
+  private resoudre(ref: string, m: MessageChiffre | null): void {
+    this.attentes.get(ref)?.fin(m);
+  }
+
+  // Une réponse dont le corps est en morceaux est réunie avant d'être rendue ; un transfert cassé devient un refus.
+  private recevoirReponse(membre: string, m: Extract<MessageChiffre, { t: 'geste_reponse' }>): void {
+    if (m.morceaux === undefined) return this.resoudre(m.ref, m);
+    const corps = this.transferts.assembler(membre, m.ref, m.morceaux);
+    if (corps === null) return this.resoudre(m.ref, erreurTransfert(m.ref));
+    return this.resoudre(m.ref, { ...m, corps, morceaux: undefined });
   }
 
   // ---- Côté qui tient la session ------------------------------------------------------------------------------
 
-  /** Relayés : une session (ou une machine) d'ici, par une route de la liste fermée. Lire le fil abonne au direct. */
-  private async repondreGeste(canal: CanalNoeud, m: Extract<MessageChiffre, { t: 'geste' }>): Promise<void> {
+  /** Relayés : une session, une machine ou le nœud, par une route de la liste fermée. Lire le fil abonne au direct. */
+  private async repondreGeste(canal: CanalNoeud, recu: Extract<MessageChiffre, { t: 'geste' }>): Promise<void> {
     const refuser = (statut: number, texte: string): void =>
-      void canal.envoyer({ t: 'geste_reponse', ref: m.ref, statut, corps: JSON.stringify({ erreur: texte }) });
+      void canal.envoyer({ t: 'geste_reponse', ref: recu.ref, statut, corps: JSON.stringify({ erreur: texte }) });
+    const m = this.corpsEntier(canal.membre, recu);
+    if (!m) return refuser(400, 'transfert interrompu');
     const pont = this.options.pont.geste;
     if (!pont) return refuser(501, 'geste non pris en charge par ce nœud');
     const refus = this.refusGeste(m);
@@ -262,11 +305,31 @@ export class Echanges {
     if (m.geste === 'evenements' && m.session) this.abonner(canal.membre, m.session);
     try {
       const reponse = await pont({ ...m });
-      canal.envoyer({ t: 'geste_reponse', ref: m.ref, ...(await reponseGeste(reponse, m.geste)) });
+      this.envoyerReponse(canal, m.ref, await reponseGeste(reponse, m.geste));
     } catch (erreur) {
       this.options.journal.error({ err: erreur, geste: m.geste }, 'geste relayé en échec');
       refuser(500, 'geste en échec sur le nœud');
     }
+  }
+
+  // Le corps d'une requête reçue en morceaux, réuni ; null si le transfert est cassé.
+  private corpsEntier(membre: string, m: Extract<MessageChiffre, { t: 'geste' }>): typeof m | null {
+    if (m.morceaux === undefined) return m;
+    const corps = this.transferts.assembler(membre, m.ref, m.morceaux);
+    return corps === null ? null : { ...m, corps, morceaux: undefined };
+  }
+
+  // La réponse d'un geste : une trame si elle tient, sinon ses morceaux puis l'annonce de leur nombre.
+  private envoyerReponse(canal: CanalNoeud, ref: string, r: CorpsGeste): void {
+    const type = r.type ? { type: r.type } : {};
+    const codage = r.codage ? { codage: r.codage } : {};
+    if (r.corps.length <= TAILLE_MORCEAU_CARACTERES) {
+      canal.envoyer({ t: 'geste_reponse', ref, statut: r.statut, corps: r.corps, ...type, ...codage });
+      return;
+    }
+    for (const morceau of decouper(ref, r.corps)) canal.envoyer(morceau);
+    const morceaux = nombreDeMorceaux(r.corps);
+    canal.envoyer({ t: 'geste_reponse', ref, statut: r.statut, corps: '', morceaux, ...type, ...codage });
   }
 
   // Un geste relayé ne vise qu'une route de la liste : une session partagée (pas du duo), notre machine, ou le nœud.
@@ -355,7 +418,7 @@ export class Echanges {
 
   private recevoirFil(canal: CanalNoeud, ref: string, session: string, evenements: readonly EvenementFedere[]): void {
     this.options.distant.remplacerFil(canal.membre, session, evenements);
-    this.attentes.get(ref)?.({ t: 'fil_reponse', ref, session, evenements: [...evenements] });
+    this.resoudre(ref, { t: 'fil_reponse', ref, session, evenements: [...evenements] });
   }
 }
 
@@ -390,4 +453,13 @@ async function lireBilan(reponse: Response): Promise<Bilan> {
   const erreur =
     corps && typeof corps === 'object' && 'erreur' in corps ? String(corps.erreur) : `refus ${reponse.status}`;
   return { ok: false, raison: erreur };
+}
+
+/** Une liste de messages à envoyer dans l'ordre (un seul message : une liste d'un élément). */
+function enListe(m: MessageChiffre | readonly MessageChiffre[]): readonly MessageChiffre[] {
+  return 't' in m ? [m] : m;
+}
+
+function erreurTransfert(ref: string): MessageChiffre {
+  return { t: 'geste_reponse', ref, statut: 502, corps: JSON.stringify({ erreur: 'transfert interrompu' }) };
 }

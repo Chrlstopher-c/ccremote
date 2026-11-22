@@ -1,5 +1,6 @@
 // Forme des gestes relayés : lecture de la route (session, machine, nœud) et réponse réduite (texte, binaire).
 import { describe, expect, test } from 'bun:test';
+import { TAILLE_MAX_TRANSFERT_CARACTERES } from '../../commun/federation.ts';
 import { lireRoute, reponseGeste } from './gestes.ts';
 
 describe('lireRoute', () => {
@@ -42,13 +43,19 @@ describe('reponseGeste', () => {
     });
   });
 
-  test('texte trop grand : 502 lisible ; liste d’évènements : les plus anciens partent', async () => {
-    const grand = JSON.stringify('x'.repeat(700_000));
-    const refus = await reponseGeste(new Response(grand), 'contenu');
-    expect(refus.statut).toBe(502);
-    const liste = JSON.stringify(Array.from({ length: 4000 }, (_, i) => ({ i, texte: 'y'.repeat(200) })));
+  test('un texte entier reste entier jusqu’au plus grand transfert ; au-delà, refus 413', async () => {
+    const gros = JSON.stringify('x'.repeat(700_000));
+    const entier = await reponseGeste(new Response(gros), 'contenu');
+    expect(entier).toEqual({ statut: 200, corps: gros });
+    const trop = await reponseGeste(new Response('x'.repeat(TAILLE_MAX_TRANSFERT_CARACTERES + 1)), 'contenu');
+    expect(trop.statut).toBe(413);
+  });
+
+  test('liste d’évènements au-delà du plus grand transfert : les plus anciens partent', async () => {
+    const liste = JSON.stringify(Array.from({ length: 90_000 }, (_, i) => ({ i, texte: 'y'.repeat(200) })));
     const reduite = await reponseGeste(new Response(liste), 'evenements');
     expect(reduite.statut).toBe(200);
-    expect(JSON.parse(reduite.corps).at(-1).i).toBe(3999);
+    expect(reduite.corps.length).toBeLessThanOrEqual(TAILLE_MAX_TRANSFERT_CARACTERES);
+    expect(JSON.parse(reduite.corps).at(-1).i).toBe(89_999);
   });
 });

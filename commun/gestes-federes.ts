@@ -13,7 +13,7 @@ const SEGMENT = '[A-Za-z0-9_.-]{1,160}';
 const MOTIFS_SESSION: readonly RegExp[] = [
   /^(evenements|contexte|connecteurs|taches|chapitres|messages|repondre|mode|modele|effort|rapide|autonomie)$/,
   /^(renommer|interrompre|compacter|reprendre|archiver|desarchiver|epingler|desepingler|marquer_lue)$/,
-  /^(annexes|dupliquer|nuit|ultracode)$/,
+  /^(annexes|dupliquer|nuit|ultracode|rembobiner|remote-control)$/,
   /^(marquer_non_lue|parite|dossier|competences|fichiers|contenu|recherche|styles|style)$/,
   /^git\/(modifications|diff|annuler|commiter)$/,
   new RegExp(`^tours/${SEGMENT}/(modifications|diff|annuler)$`),
@@ -24,7 +24,8 @@ const MOTIFS_SESSION: readonly RegExp[] = [
   new RegExp(`^parite/(taches/${SEGMENT}|resultat)$`),
 ];
 
-const MOTIFS_NOEUD: readonly RegExp[] = [/^artefacts$/];
+/** Routes du nœud entier : les artefacts, et la réponse à une confirmation qu'il a demandée. */
+const MOTIFS_NOEUD: readonly RegExp[] = [/^artefacts$/, /^confirmations\/[A-Za-z0-9-]{1,80}\/reponse$/];
 
 const MOTIFS_MACHINE: readonly RegExp[] = [
   /^(dossiers|competences|competences\/contenu|instructions|styles|projets|importables|importer)$/,

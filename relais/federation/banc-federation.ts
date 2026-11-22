@@ -63,8 +63,11 @@ export function codeAppairage(monte: Monte, proprietaire: string): string {
   return executerCommande(['appairer', proprietaire], monte.annuaire).split('\n')[0] ?? '';
 }
 
+/** Comportement d'un nœud pour un geste relayé : une réponse, ou `undefined` pour la réponse factice. */
+export type Gestes = (g: GesteLocal) => Promise<Response | undefined> | Response | undefined;
+
 /** Pont factice : consigne ce qu'un nœud demande au relais local, et répond comme le relais le ferait. */
-function pontFactice(appels: Appels): PontFederation {
+function pontFactice(appels: Appels, gestes?: Gestes): PontFederation {
   return {
     ouvrir: async (d) => {
       appels.ouvrir.push({ chemin: d.projet.chemin, message: d.message });
@@ -80,6 +83,8 @@ function pontFactice(appels: Appels): PontFederation {
     },
     geste: async (g) => {
       appels.gestes.push(g);
+      const propre = await gestes?.(g);
+      if (propre) return propre;
       if (g.geste === 'ouvrir') return Response.json(ficheDe('ouverte-par-geste', 'tour', 'Neuve'), { status: 201 });
       if (g.geste === 'artefacts') return Response.json([{ id: `art-${g.requete ?? 'tous'}`, sessionId: 'session-a' }]);
       return Response.json({ geste: g.geste, session: g.session ?? null });
@@ -87,13 +92,13 @@ function pontFactice(appels: Appels): PontFederation {
   };
 }
 
-export function creerNoeud(nom: string, options: Partial<OptionsFederation> = {}): Noeud {
+export function creerNoeud(nom: string, options: Partial<OptionsFederation> = {}, gestes?: Gestes): Noeud {
   const base = ouvrirBase(':memory:');
   const registre = new Registre(base, journal);
   const diffusion = new Diffusion();
   const appels: Appels = { ecrire: [], interrompre: [], ouvrir: [], gestes: [] };
   const charges: string[] = [];
-  const pont = pontFactice(appels);
+  const pont = pontFactice(appels, gestes);
   const dossierSecrets = mkdtempSync(join(tmpdir(), `fede-${nom}-`));
   const federation = new Federation({
     registre,

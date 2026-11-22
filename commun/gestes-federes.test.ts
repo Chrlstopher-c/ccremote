@@ -3,7 +3,10 @@ import { describe, expect, test } from 'bun:test';
 import { estGesteRelayable, estMethodeRelayable } from './gestes-federes.ts';
 
 describe('estGesteRelayable', () => {
-  test('fichiers, git, artefacts, contenu et dossiers de machine passent', () => {
+  test('fichiers, git, artefacts, contenu, remote-control, rembobiner et dossiers de machine passent', () => {
+    expect(estGesteRelayable('session', 'remote-control')).toBe(true);
+    expect(estGesteRelayable('session', 'rembobiner')).toBe(true);
+    expect(estGesteRelayable('noeud', 'confirmations/c-1/reponse')).toBe(true);
     expect(estGesteRelayable('session', 'git/commiter')).toBe(true);
     expect(estGesteRelayable('session', 'fichiers/f-1')).toBe(true);
     expect(estGesteRelayable('session', 'artefacts/a-1/supprimer')).toBe(true);
@@ -15,9 +18,9 @@ describe('estGesteRelayable', () => {
   test('ce qui reste local par nature, ou hors liste, est refusé', () => {
     expect(estGesteRelayable('machine', 'comptes')).toBe(false);
     expect(estGesteRelayable('session', 'supprimer')).toBe(false);
-    expect(estGesteRelayable('session', 'rembobiner')).toBe(false);
     expect(estGesteRelayable('session', 'jetons')).toBe(false);
-    expect(estGesteRelayable('session', 'remote-control')).toBe(false);
+    expect(estGesteRelayable('session', 'relais')).toBe(false);
+    expect(estGesteRelayable('session', 'confirmations/x/reponse')).toBe(false);
     expect(estGesteRelayable('machine', 'eteindre')).toBe(false);
     expect(estGesteRelayable('machine', 'reveiller')).toBe(false);
     expect(estGesteRelayable('session', 'ouvrir')).toBe(false);

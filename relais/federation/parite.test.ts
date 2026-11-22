@@ -4,80 +4,27 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { MessageClient } from '../../commun/api-clients.ts';
 import type { ClientTerminal, DonneesTerminal } from '../appareils/terminaux.ts';
+import { attendre, ficheDe } from './banc-federation.ts';
 import {
-  attendre,
-  creerNoeud,
-  ficheDe,
-  MAJ,
-  monterAiguilleur,
-  type Monte,
-  type Noeud,
-  relier,
-} from './banc-federation.ts';
-import type { DonneesTerminalFedere } from './terminal-federe.ts';
+  appairer,
+  arreterBanc,
+  demarrerBanc,
+  ecouter,
+  idDe,
+  nouveau,
+  requete,
+  SESSION_A,
+  sessionVue,
+} from './parite-banc.ts';
+import { type DonneesTerminalFedere, type TerminauxLocaux } from './terminal-federe.ts';
 
-const SESSION_A = 'session-a';
 const TEXTE_CONFIDENTIEL = 'phrase confidentielle en cours d’écriture';
 
-let monte: Monte;
-let noeuds: Noeud[] = [];
+beforeEach(() => demarrerBanc());
+afterEach(() => arreterBanc());
 
-beforeEach(() => {
-  monte = monterAiguilleur();
-  noeuds = [];
-});
-
-afterEach(() => {
-  for (const n of noeuds) n.federation.arreter();
-  monte.serveur.stop(true);
-});
-
-async function nouveau(nom: string): Promise<Noeud> {
-  const n = creerNoeud(nom);
-  noeuds.push(n);
-  await relier(n, monte, 'alice');
-  return n;
-}
-
-async function idDe(n: Noeud): Promise<string> {
-  const id = (await n.federation.etat()).aiguilleur?.id;
-  if (!id) throw new Error('nœud non relié');
-  return id;
-}
-
-async function enLignePour(vu: Noeud, cible: string): Promise<void> {
-  await attendre(async () => (await vu.federation.etat()).membres.some((m) => m.id === cible && m.enLigne));
-}
-
-async function appairer(a: Noeud, b: Noeud): Promise<{ idA: string; idB: string }> {
-  const idA = await idDe(a);
-  const idB = await idDe(b);
-  await enLignePour(a, idB);
-  expect(a.federation.appairer(idB).ok).toBe(true);
-  await attendre(async () => (await b.federation.etat()).demandes.length === 1);
-  const demande = (await b.federation.etat()).demandes[0];
-  expect(b.federation.decider(demande?.id ?? '', true)).toBe(true);
-  await attendre(async () => (await a.federation.etat()).noeuds.some((n) => n.id === idB && n.liaisonOuverte));
-  await attendre(async () => (await b.federation.etat()).noeuds.some((n) => n.id === idA && n.liaisonOuverte));
-  return { idA, idB };
-}
-
-/** Une session de A, annoncée, vue de B : prête pour les gestes relayés. */
-async function sessionVue(a: Noeud, b: Noeud): Promise<void> {
-  await appairer(a, b);
-  a.registre.enregistrerSession(ficheDe(SESSION_A, 'tour', 'Titre A'));
-  a.diffusion.diffuser({ type: 'session', session: ficheDe(SESSION_A, 'tour', 'Titre A') });
-  await attendre(() => b.federation.distantes.sessions().some((s) => s.session.id === SESSION_A));
-}
-
-function ecouter(n: Noeud): MessageClient[] {
-  const recus: MessageClient[] = [];
-  n.diffusion.ecouter((m) => recus.push(m));
-  return recus;
-}
-
-function requete(chemin: string, methode = 'GET', corps?: string): Request {
-  return new Request(`http://noeud.local${chemin}`, { method: methode, ...(corps ? { body: corps } : {}) });
+function textesFlux(recus: MessageClient[]): string {
+  return recus.map((m) => (m.type === 'flux' ? m.delta : '')).join('');
 }
 
 describe('texte en cours d’écriture', () => {
@@ -101,10 +48,6 @@ describe('texte en cours d’écriture', () => {
     expect(a.charges.join('')).not.toContain(TEXTE_CONFIDENTIEL);
   });
 });
-
-function textesFlux(recus: MessageClient[]): string {
-  return recus.map((m) => (m.type === 'flux' ? m.delta : '')).join('');
-}
 
 describe('gestes relayés : fichiers, git, artefacts, dossiers', () => {
   test('une route de la liste fermée est relayée avec son chemin, sa requête et son corps', async () => {
@@ -165,16 +108,7 @@ describe('terminal d’une session distante', () => {
     await sessionVue(a, b);
     const ouverts: ClientTerminal<DonneesTerminal>[] = [];
     const fermes: string[] = [];
-    a.federation.terminaux.brancher({
-      ouvert: async (ws) => {
-        ouverts.push(ws);
-        ws.send(Buffer.from('invite$ '));
-        return true;
-      },
-      // Le PTY écho : la saisie telle quelle, la taille annoncée en texte ; la sortie part toujours en binaire.
-      recu: (ws, m) => ws.send(Buffer.from(typeof m === 'string' ? `taille:${m}` : m)),
-      ferme: (ws) => fermes.push(ws.data.terminal),
-    });
+    a.federation.terminaux.brancher(terminalEcho(ouverts, fermes));
     const sortie: string[] = [];
     const terminal = '6f0e2d5a-1c3b-4e5f-8a9b-0c1d2e3f4a5b';
     const donnees = { type: 'terminal-federe' as const, terminal, membre: await idDe(a), session: SESSION_A };
@@ -209,6 +143,19 @@ describe('terminal d’une session distante', () => {
     expect(ferme).toBe(1);
   });
 });
+
+/** Un PTY d'essai : affiche une invite, fait écho de la saisie, rend la taille annoncée en texte. */
+function terminalEcho(ouverts: ClientTerminal<DonneesTerminal>[], fermes: string[]): TerminauxLocaux {
+  return {
+    ouvert: async (ws) => {
+      ouverts.push(ws);
+      ws.send(Buffer.from('invite$ '));
+      return true;
+    },
+    recu: (ws, m) => ws.send(Buffer.from(typeof m === 'string' ? `taille:${m}` : m)),
+    ferme: (ws) => fermes.push(ws.data.terminal),
+  };
+}
 
 function fauxWs(data: DonneesTerminalFedere, sortie: string[]): ClientTerminal<DonneesTerminalFedere> {
   return {

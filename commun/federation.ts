@@ -26,6 +26,11 @@ const METHODE_API = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const CHEMIN_API = z.string().min(5).max(4096).regex(/^\/api\//);
 /** Un delta de texte relayé : les deltas d'un même bloc se regroupent avant l'envoi, bornés ici. */
 export const TAILLE_FLUX_MAX_CARACTERES = 32_000;
+/** Un corps qui dépasse une trame part en morceaux de cette taille (en caractères : jamais plus de 384 Ko d'UTF-8). */
+export const TAILLE_MORCEAU_CARACTERES = 128 * 1024;
+/** Plus grand contenu relayé (corps encodé) : au-delà de ce que les limites locales permettent, refus. */
+export const TAILLE_MAX_TRANSFERT_CARACTERES = 16 * 1024 * 1024;
+export const NOMBRE_MAX_MORCEAUX = TAILLE_MAX_TRANSFERT_CARACTERES / TAILLE_MORCEAU_CARACTERES;
 
 export const IdentitePubliqueTexte = z.string().regex(IDENTITE);
 
@@ -107,6 +112,8 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     machine: NOM.optional(),
     requete: z.string().max(4000).optional(),
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS).optional(),
+    // Corps en morceaux : `morceaux` = leur nombre, envoyés avant ce message sous la même référence.
+    morceaux: z.number().int().min(1).max(NOMBRE_MAX_MORCEAUX).optional(),
   }),
   // `codage: base64` : corps binaire (fichier téléchargé), `type` : son type MIME.
   z.strictObject({
@@ -116,6 +123,26 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     corps: z.string().max(TAILLE_MAX_CLAIR_OCTETS),
     type: z.string().max(120).optional(),
     codage: z.literal('base64').optional(),
+    morceaux: z.number().int().min(1).max(NOMBRE_MAX_MORCEAUX).optional(),
+  }),
+  // Un morceau d'un corps trop grand pour une trame (même référence que la requête ou la réponse).
+  z.strictObject({
+    t: z.literal('morceau'),
+    ref: REF,
+    rang: z.number().int().min(0).max(NOMBRE_MAX_MORCEAUX - 1),
+    corps: z.string().max(TAILLE_MORCEAU_CARACTERES),
+  }),
+  // Confirmation d'un outil du nœud (Claude demande, Chris répond) : relayée à ses pairs, qui l'affichent.
+  z.strictObject({
+    t: z.literal('confirmation'),
+    confirmation: z.strictObject({
+      id: REF,
+      action: z.string().max(60),
+      cible: z.string().max(120),
+      resume: z.string().max(500),
+      statut: z.enum(['en_attente', 'accordee', 'refusee', 'expiree']),
+      cree_le: z.string().max(40),
+    }),
   }),
   // Appareil (client) : une requête de l'API clients, rejouée par le nœud sur ses routes locales.
   z.strictObject({

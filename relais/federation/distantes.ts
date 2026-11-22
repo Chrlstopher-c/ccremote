@@ -3,15 +3,21 @@
 // la session (même route, exécutée là-bas). Rien n'entre dans la base : tout vit dans le cache mémoire.
 import type { Logger } from 'pino';
 import type { MessageClient, VueMachine } from '../../commun/api-clients.ts';
-import type { EvenementFedere, MessageChiffre } from '../../commun/federation.ts';
+import {
+  type EvenementFedere,
+  type MessageChiffre,
+  TAILLE_MORCEAU_CARACTERES,
+} from '../../commun/federation.ts';
+import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
 import { ResumeSession } from '../../commun/session.ts';
 import type { Diffusion } from '../clients/diffusion.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { CanalNoeud } from './canal.ts';
 import { CacheDistant, type FluxDistant, type SessionDistante } from './distant.ts';
 import { type Echanges, type GesteLocal } from './echanges.ts';
-import { lireRoute } from './gestes.ts';
+import { lireRoute, type RouteDemandee } from './gestes.ts';
 import { estGesteRelayable } from '../../commun/gestes-federes.ts';
+import { decouper, nombreDeMorceaux, tropGrandPourTransfert } from './transferts.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
 import { fusionnerVue, type VueFederee } from './vue-federee.ts';
 
@@ -51,6 +57,7 @@ export class Distantes {
       changement: () => this.surChangement(),
       evenement: (membre, session, evt) => this.surEvenement(membre, session, evt),
       flux: (membre, message) => this.surFlux(membre, message),
+      confirmation: (_membre, confirmation) => this.surConfirmation(confirmation),
     };
   }
 
@@ -80,6 +87,11 @@ export class Distantes {
     return this.vueCourante().routage.has(session);
   }
 
+  /** Une confirmation venue d'un pair (réglée ou non) : elle ne se renvoie pas. */
+  estConfirmationDistante(id: string): boolean {
+    return this.o.cache.estConfirmationDistante(id);
+  }
+
   /** Le nœud qui tient une session d'un autre nœud, ou null si elle est locale (ou inconnue). */
   membreDe(session: string): string | null {
     return this.vueCourante().routage.get(session) ?? null;
@@ -100,19 +112,22 @@ export class Distantes {
     const url = new URL(req.url);
     if (url.pathname === '/api/sessions') return req.method === 'POST' ? this.intercepterOuverture(req) : null;
     const route = lireRoute(url, req.method);
-    if (!route || route.portee === 'noeud') return null;
-    const vue = this.vueCourante();
-    const membre = route.portee === 'session' ? vue.routage.get(route.id) : vue.machinesRoutees.get(route.id);
+    if (!route) return null;
+    const membre = this.membreDeRoute(route);
     if (!membre) return null;
     if (!estGesteRelayable(route.portee, route.geste)) return reponseErreur(409, TEXTE_INDISPONIBLE);
     const corps = req.method === 'GET' ? '' : await req.text();
-    const geste: GesteLocal = {
-      geste: route.geste,
-      methode: route.methode,
-      ...(route.portee === 'session' ? { session: route.id } : { machine: route.id }),
-      ...(route.requete ? { requete: route.requete } : {}),
-    };
-    return this.relayer(membre, geste, corps);
+    return this.relayer(membre, gesteDe(route), corps);
+  }
+
+  // Le nœud qui tient la cible de la route : session, machine, ou la confirmation qu'il a demandée. Les artefacts
+  // sont lus ici et là (fusion dans la route locale) : jamais relayés, donc sans nœud.
+  private membreDeRoute(route: RouteDemandee): string | null {
+    const vue = this.vueCourante();
+    if (route.portee === 'session') return vue.routage.get(route.id) ?? null;
+    if (route.portee === 'machine') return vue.machinesRoutees.get(route.id) ?? null;
+    if (route.geste === 'artefacts') return null;
+    return this.o.cache.membreDeConfirmation(route.geste.split('/')[1] ?? '');
   }
 
   /** Les listes du nœud (artefacts) de chaque pair en ligne, lues par `local=1` : chacun ne rend que les siennes. */
@@ -136,19 +151,12 @@ export class Distantes {
   private async relayer(membre: string, g: GesteLocal, corps: string): Promise<Response> {
     const canal = this.o.liaison(membre);
     if (!canal) return reponseErreur(409, TEXTE_HORS_LIGNE);
-    const long = GESTES_LONGS.has(g.geste);
+    if (tropGrandPourTransfert(corps)) return reponseErreur(413, 'contenu trop grand pour le lien entre machines');
+    const gros = corps.length > TAILLE_MORCEAU_CARACTERES || g.geste.startsWith('fichiers/');
+    const long = GESTES_LONGS.has(g.geste) || gros;
     const reponse = await this.o.echanges.requeter(
       canal,
-      (ref) => ({
-        t: 'geste',
-        ref,
-        geste: g.geste,
-        methode: g.methode,
-        ...(g.session ? { session: g.session } : {}),
-        ...(g.machine !== undefined ? { machine: g.machine } : {}),
-        ...(g.requete ? { requete: g.requete } : {}),
-        ...(corps ? { corps } : {}),
-      }),
+      (ref) => messagesDuGeste(ref, g, corps),
       long ? DELAI_GESTE_LONG_MS : DELAI_GESTE_MS,
     );
     if (!reponse || reponse.t !== 'geste_reponse') return reponseErreur(504, 'la machine n’a pas répondu à temps');
@@ -233,6 +241,11 @@ export class Distantes {
     }
   }
 
+  // Une confirmation d'un pair : l'interface la montre comme une demande locale (la réponse part vers le pair).
+  private surConfirmation(confirmation: ConfirmationDemandee): void {
+    this.o.diffusion.diffuser({ type: 'confirmation', confirmation });
+  }
+
   // Le delta d'une session d'un pair : relayé à l'interface comme celui d'une session locale.
   private surFlux(membre: string, message: FluxDistant): void {
     if (this.vueCourante().routage.get(message.session) !== membre) return;
@@ -305,6 +318,28 @@ export class Distantes {
       evenement: { seq: e.seq, sessionId: session, ts: e.ts, evt: e.evt },
     });
   }
+}
+
+function gesteDe(route: RouteDemandee): GesteLocal {
+  const requete = route.requete ? { requete: route.requete } : {};
+  if (route.portee === 'session') return { geste: route.geste, methode: route.methode, session: route.id, ...requete };
+  if (route.portee === 'machine') return { geste: route.geste, methode: route.methode, machine: route.id, ...requete };
+  return { geste: route.geste, methode: route.methode, ...requete };
+}
+
+/** La requête d'un geste, suivie de ses morceaux quand le corps ne tient pas dans une trame. */
+function messagesDuGeste(ref: string, g: GesteLocal, corps: string): MessageChiffre | readonly MessageChiffre[] {
+  const requete: Extract<MessageChiffre, { t: 'geste' }> = {
+    t: 'geste',
+    ref,
+    geste: g.geste,
+    methode: g.methode,
+    ...(g.session ? { session: g.session } : {}),
+    ...(g.machine !== undefined ? { machine: g.machine } : {}),
+    ...(g.requete ? { requete: g.requete } : {}),
+  };
+  if (corps.length <= TAILLE_MORCEAU_CARACTERES) return corps ? { ...requete, corps } : requete;
+  return [...decouper(ref, corps), { ...requete, morceaux: nombreDeMorceaux(corps) }];
 }
 
 function machineDe(corps: string): string | null {

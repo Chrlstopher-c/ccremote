@@ -6,10 +6,8 @@ import {
   type MethodeGeste,
   type PorteeGeste,
 } from '../../commun/gestes-federes.ts';
-import { TAILLE_MAX_CLAIR_OCTETS } from '../../commun/federation.ts';
-
-/** Marge laissée à l'enveloppe (`t`, `ref`, statut, type) autour du corps rendu. */
-const MARGE_ENVELOPPE = 2_000;
+import { TAILLE_MAX_TRANSFERT_CARACTERES } from '../../commun/federation.ts';
+import { tropGrandPourTransfert } from './transferts.ts';
 
 export interface RouteDemandee {
   readonly portee: PorteeGeste;
@@ -26,6 +24,11 @@ export function lireRoute(url: URL, methode: string): RouteDemandee | null {
   if (!estMethodeRelayable(methode)) return null;
   const morceaux = url.pathname.split('/');
   if (url.pathname === '/api/artefacts') return { portee: 'noeud', id: '', geste: 'artefacts', methode };
+  if (url.pathname.startsWith('/api/confirmations/')) {
+    const requete = requeteSansAttente(url);
+    const geste = url.pathname.slice('/api/'.length);
+    return { portee: 'noeud', id: '', geste, methode, ...(requete ? { requete } : {}) };
+  }
   if (morceaux.length < 5 || morceaux[1] !== 'api') return null;
   const portee = porteeDe(morceaux[2]);
   if (!portee) return null;
@@ -57,15 +60,17 @@ export interface CorpsGeste {
   readonly codage?: 'base64';
 }
 
-/** Statut et corps d'une réponse locale, réduits pour tenir dans une trame (fil : les plus anciens partent). */
+/**
+ * Statut et corps d'une réponse locale, prêts à partir : un texte ou un binaire entier (il sera découpé en morceaux
+ * s'il ne tient pas dans une trame). Au-delà du plus grand transfert, refus. Pour `evenements`, la liste est réduite.
+ */
 export async function reponseGeste(reponse: Response, geste: string): Promise<CorpsGeste> {
-  const limite = TAILLE_MAX_CLAIR_OCTETS - MARGE_ENVELOPPE;
-  if (estBinaire(reponse)) return corpsBinaire(reponse, limite);
+  if (estBinaire(reponse)) return corpsBinaire(reponse);
   const texte = await reponse.text();
-  if (octets(texte) <= limite) return { statut: reponse.status, corps: texte };
-  const reduit = geste === 'evenements' ? reduireListe(texte, limite) : null;
+  if (!tropGrandPourTransfert(texte)) return { statut: reponse.status, corps: texte };
+  const reduit = geste === 'evenements' ? reduireListe(texte, TAILLE_MAX_TRANSFERT_CARACTERES) : null;
   if (reduit !== null) return { statut: reponse.status, corps: reduit };
-  return { statut: 502, corps: JSON.stringify({ erreur: 'réponse trop grande pour le lien entre machines' }) };
+  return refusTaille();
 }
 
 function estBinaire(reponse: Response): boolean {
@@ -73,12 +78,16 @@ function estBinaire(reponse: Response): boolean {
   return !(type.startsWith('application/json') || type.startsWith('text/'));
 }
 
-async function corpsBinaire(reponse: Response, limite: number): Promise<CorpsGeste> {
+async function corpsBinaire(reponse: Response): Promise<CorpsGeste> {
   const brut = new Uint8Array(await reponse.arrayBuffer());
   const type = reponse.headers.get('content-type') ?? 'application/octet-stream';
   const base64 = Buffer.from(brut).toString('base64');
-  if (base64.length <= limite) return { statut: reponse.status, corps: base64, type, codage: 'base64' };
-  return { statut: 502, corps: JSON.stringify({ erreur: 'fichier trop grand pour le lien entre machines' }) };
+  if (tropGrandPourTransfert(base64)) return refusTaille();
+  return { statut: reponse.status, corps: base64, type, codage: 'base64' };
+}
+
+function refusTaille(): CorpsGeste {
+  return { statut: 413, corps: JSON.stringify({ erreur: 'contenu trop grand pour le lien entre machines' }) };
 }
 
 function reduireListe(texte: string, limite: number): string | null {

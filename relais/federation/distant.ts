@@ -1,5 +1,6 @@
 // Responsabilité : ce que le nœud sait des autres nœuds, en mémoire seulement — leurs sessions (fiches reçues), leur
 // présence et le fil récemment lu. Rien de cela n'entre dans la base du relais : quitter le nœud efface tout.
+import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import {
   TAILLE_FIL_FEDERE,
@@ -24,7 +25,12 @@ export interface ObservateurDistant {
   evenement(membre: string, session: string, evenement: EvenementFedere): void;
   /** Un delta de texte en cours d'écriture chez un pair (non cache : relayé en direct). */
   flux(membre: string, message: FluxDistant): void;
+  /** Une confirmation d'un pair : nouvelle, ou son état a changé. */
+  confirmation(membre: string, confirmation: ConfirmationDemandee): void;
 }
+
+/** Confirmations de pairs gardées en mémoire : au-delà, les réglées sont oubliées en premier. */
+const CONFIRMATIONS_MAX = 200;
 
 /** Le delta d'un bloc tel qu'un pair l'envoie (la session est celle du message). */
 export type FluxDistant = Extract<MessageChiffre, { t: 'flux' }>;
@@ -48,6 +54,7 @@ interface EtatNoeud {
 export class CacheDistant {
   private readonly noeuds = new Map<string, EtatNoeud>();
   private readonly fils = new Map<string, EvenementFedere[]>();
+  private readonly confirmations = new Map<string, { membre: string; confirmation: ConfirmationDemandee }>();
   observateur: ObservateurDistant | null = null;
 
   /** Un nœud connu, en ligne ou non ; ses sessions restent visibles hors ligne jusqu'à sa révocation. */
@@ -85,7 +92,35 @@ export class CacheDistant {
   retirer(membre: string): void {
     this.noeuds.delete(membre);
     for (const cle of [...this.fils.keys()]) if (cle.startsWith(`${membre}/`)) this.fils.delete(cle);
+    for (const [id, e] of this.confirmations) {
+      if (e.membre !== membre || e.confirmation.statut !== 'en_attente') continue;
+      this.recevoirConfirmation(membre, { ...e.confirmation, statut: 'expiree' });
+    }
     this.observateur?.changement();
+  }
+
+  /** Une confirmation d'un pair : gardée (pour répondre à son nœud), et annoncée à l'interface. */
+  recevoirConfirmation(membre: string, confirmation: ConfirmationDemandee): void {
+    this.confirmations.set(confirmation.id, { membre, confirmation });
+    this.elaguerConfirmations();
+    this.observateur?.confirmation(membre, confirmation);
+  }
+
+  /** Le nœud qui a demandé cette confirmation (y répondre l'y fait parvenir), ou null si elle n'est pas d'un pair. */
+  membreDeConfirmation(id: string): string | null {
+    return this.confirmations.get(id)?.membre ?? null;
+  }
+
+  /** Vrai pour toute confirmation venue d'un pair, réglée ou non : jamais renvoyée à nouveau. */
+  estConfirmationDistante(id: string): boolean {
+    return this.confirmations.has(id);
+  }
+
+  private elaguerConfirmations(): void {
+    for (const [id, e] of this.confirmations) {
+      if (this.confirmations.size <= CONFIRMATIONS_MAX) return;
+      if (e.confirmation.statut !== 'en_attente') this.confirmations.delete(id);
+    }
   }
 
   /** Une session que ce nœud vient d'ouvrir chez un pair : connue tout de suite, avant son prochain instantané. */

@@ -22,6 +22,8 @@ import { CacheDistant } from './distant.ts';
 import { Distantes } from './distantes.ts';
 import { type DemandeAppairage, DemandesAppairage } from './demandes.ts';
 import { Echanges, type PontFederation } from './echanges.ts';
+import { surDiffusionFederee } from './diffusion-federee.ts';
+import type { EtatFederation, OptionsFederation } from './etat-federation.ts';
 import { TerminalFedere } from './terminal-federe.ts';
 import { LienAiguilleur, type MotifArret } from './lien-aiguilleur.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
@@ -46,39 +48,7 @@ const INTERVALLE_PLANIFICATION_MS = 5_000;
 /** Demandes d'appairage en attente, au plus : au-delà, la nouvelle est refusée tout de suite. */
 const NOMBRE_MAX_DEMANDES = 5;
 
-export interface OptionsFederation {
-  readonly registre: Registre;
-  readonly diffusion: Diffusion;
-  readonly dossierSecrets: string;
-  readonly machine: string;
-  readonly pont: PontFederation;
-  readonly journal: Logger;
-  readonly delaiDemandeMs?: number;
-  readonly intervallePlanificationMs?: number;
-  /** Notification à Chris (une demande attend sa décision sur ce nœud). */
-  readonly notifier?: (titre: string, texte: string) => void;
-  /** Observe chaque charge échangée avec l'aiguilleur (essais : prouver qu'il ne voit que du chiffré). */
-  readonly observer?: (sens: 'envoi' | 'reception', charge: string) => void;
-  /** Sert l'API clients à un appareil appairé, dans son canal (absent : 503). */
-  readonly servirAppareil?: ServirAppareil;
-}
-
-export interface EtatFederation {
-  readonly aiguilleur: {
-    readonly url: string;
-    readonly id: string;
-    readonly nom: string;
-    readonly proprietaire: string | null;
-    readonly relie: boolean;
-    readonly motif: MotifArret | null;
-  } | null;
-  readonly empreinteLocale: string;
-  /** Les membres de la présence de l'aiguilleur ; `mien` : un nœud de notre propriétaire. */
-  readonly membres: readonly MembreVu[];
-  readonly noeuds: readonly NoeudAppaire[];
-  readonly demandes: readonly DemandeAppairage[];
-  readonly appairages: readonly AppairageEnCours[];
-}
+export type { EtatFederation, OptionsFederation };
 
 export class Federation {
   private readonly secrets: SecretsNoeud;
@@ -118,7 +88,8 @@ export class Federation {
     });
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.emettre(m));
-    this.terminaux = new TerminalFedere({ echanges: this.echanges, canaux: this.canaux, registre: options.registre, journal: options.journal });
+    const { registre, journal } = options;
+    this.terminaux = new TerminalFedere({ echanges: this.echanges, canaux: this.canaux, registre, journal });
     this.distantes = new Distantes({
       registre: options.registre,
       diffusion: options.diffusion,
@@ -512,21 +483,8 @@ export class Federation {
     this.identiteEnCours ??= chargerIdentite(this.secrets);
     return this.identiteEnCours;
   }
-
   private surDiffusion(m: MessageClient): void {
-    if (m.type === 'flux') return this.surFlux(m);
-    if (m.type === 'session' && this.distantes.estDistante(m.session.id)) return;
-    if (m.type === 'session' || m.type === 'supprimee') {
-      return this.echanges.programmerInstantane(() => this.canaux.ouverts());
-    }
-    if (m.type === 'evenement') {
-      const e = m.evenement;
-      this.echanges.diffuserEvenement(e.sessionId, e.seq, e.ts, e.evt, this.canaux.ouverts());
-    }
+    surDiffusionFederee(m, { distantes: this.distantes, echanges: this.echanges, canaux: this.canaux });
   }
 
-  // Le delta d'une session locale part aux pairs qui suivent son fil ; celui d'une session d'un pair ne repart pas.
-  private surFlux(m: Extract<MessageClient, { type: 'flux' }>): void {
-    if (!this.distantes.estDistante(m.sessionId)) this.echanges.diffuserFlux(m, this.canaux.ouverts());
-  }
 }

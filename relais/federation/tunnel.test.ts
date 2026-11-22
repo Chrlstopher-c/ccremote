@@ -4,6 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import pino from 'pino';
 import { genererIdentite } from '../../commun/chiffrement/identite.ts';
 import type { Canal } from '../../commun/chiffrement/messages.ts';
+import { depuisBase64url, versBase64url } from '../../commun/chiffrement/octets.ts';
 import { initierPoignee, repondrePoignee, terminerPoignee } from '../../commun/chiffrement/poignee.ts';
 import { type MessageChiffre, TAILLE_MAX_CLAIR_OCTETS } from '../../commun/federation.ts';
 import { Tunnel } from './tunnel.ts';
@@ -26,6 +27,20 @@ function trameDe(charge: string): string {
 
 function attendreCycles(n = 5): Promise<void> {
   return new Promise((r) => setTimeout(r, n));
+}
+
+/** Attend qu'une condition devienne vraie (WebCrypto répond plus ou moins vite selon la charge), au plus `ms`. */
+async function attendreQue(condition: () => boolean, ms = 3000): Promise<void> {
+  const fin = Date.now() + ms;
+  while (!condition() && Date.now() < fin) await attendreCycles(2);
+}
+
+/** La trame avec un bit du tag d'authentification retourné : déchiffrement refusé à coup sûr. */
+function alterer(trame: string): string {
+  const octets = depuisBase64url(trame);
+  const dernier = octets.length - 1;
+  octets[dernier] = (octets[dernier] ?? 0) ^ 0x01;
+  return versBase64url(octets);
 }
 
 describe('tunnel chiffré entre nœuds', () => {
@@ -76,16 +91,15 @@ describe('tunnel chiffré entre nœuds', () => {
     const { a, b } = await deuxBouts();
     const charges: string[] = [];
     new Tunnel(a, journal).envoyer({ t: 'revocation' }, (c) => charges.push(c));
-    await attendreCycles();
-    const trame = trameDe(charges[0] ?? '');
-    const abimee = `${trame.slice(0, -2)}${trame.endsWith('A') ? 'B' : 'A'}${trame.slice(-1)}`;
+    await attendreQue(() => charges.length === 1);
+    const abimee = alterer(trameDe(charges[0] ?? ''));
     const raisons: string[] = [];
     new Tunnel(b, journal).recevoir(
       abimee,
       () => undefined,
       (r) => raisons.push(r),
     );
-    await attendreCycles();
+    await attendreQue(() => raisons.length > 0);
     expect(raisons).toEqual(['trame altérée : authentification échouée']);
   });
 
