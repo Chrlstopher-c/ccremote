@@ -52,6 +52,8 @@ export class Distantes {
   private readonly enLigneMembre = new Map<string, boolean>();
   private enEmission = false;
 
+  private membreVoix: string | null = null;
+
   constructor(private readonly o: OptionsDistantes) {
     o.cache.observateur = {
       changement: () => this.surChangement(),
@@ -138,6 +140,22 @@ export class Distantes {
     );
     const listes = await Promise.all(reponses.map((r) => (r.ok ? r.json().catch(() => null) : null)));
     return listes.flatMap((liste: unknown) => (Array.isArray(liste) ? liste : []));
+  }
+
+  /** Synthèse vocale demandée à un pair en ligne (celui qui a déjà parlé d'abord) ; null si aucun n'a de voix. */
+  async voixDesPairs(corps: string): Promise<Response | null> {
+    const membres = this.o.cache.noeudsConnus().filter((n) => n.enLigne).map((n) => n.membre);
+    const ordre = this.membreVoix && membres.includes(this.membreVoix)
+      ? [this.membreVoix, ...membres.filter((m) => m !== this.membreVoix)]
+      : membres;
+    for (const membre of ordre) {
+      const reponse = await this.relayer(membre, { geste: 'voix', methode: 'POST', requete: 'local=1' }, corps);
+      if (reponse.ok) {
+        this.membreVoix = membre;
+        return reponse;
+      }
+    }
+    return null;
   }
 
   private async intercepterOuverture(req: Request): Promise<Response | null> {

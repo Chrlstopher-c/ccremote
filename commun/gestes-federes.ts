@@ -24,8 +24,8 @@ const MOTIFS_SESSION: readonly RegExp[] = [
   new RegExp(`^parite/(taches/${SEGMENT}|resultat)$`),
 ];
 
-/** Routes du nœud entier : les artefacts, et la réponse à une confirmation qu'il a demandée. */
-const MOTIFS_NOEUD: readonly RegExp[] = [/^artefacts$/, /^confirmations\/[A-Za-z0-9-]{1,80}\/reponse$/];
+/** Routes du nœud entier : les artefacts, la synthèse vocale, et la réponse à une confirmation qu'il a demandée. */
+const MOTIFS_NOEUD: readonly RegExp[] = [/^artefacts$/, /^voix$/, /^confirmations\/[A-Za-z0-9-]{1,80}\/reponse$/];
 
 const MOTIFS_MACHINE: readonly RegExp[] = [
   /^(dossiers|competences|competences\/contenu|instructions|styles|projets|importables|importer)$/,

@@ -9,6 +9,7 @@ import { PlafondEchecs } from './acces/plafond.ts';
 import { construireRoutes, type DependancesApi } from './clients/api.ts';
 import { executerGeste, type TableInterne } from './federation/executeur.ts';
 import { servirAppareil } from './federation/appareils.ts';
+import { ApiVoix, urlVoix } from './voix/api-voix.ts';
 import { routesAcces } from './acces/api-acces.ts';
 import type { PosteRelais } from './acces/api-appairage.ts';
 import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
@@ -313,6 +314,7 @@ const dependancesApi: DependancesApi = {
   federation,
   codesReseau,
   synchro,
+  voix: new ApiVoix(urlVoix(process.env), federation.distantes, journal.child({ domaine: 'voix' })),
 };
 const routes = avecCors(construireRoutes(dependancesApi), config.origines);
 // Table interne (sans jeton) : seuls les gestes relayés par un nœud apparié, sur le lien chiffré, y passent.

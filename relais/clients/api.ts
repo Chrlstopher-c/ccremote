@@ -41,6 +41,7 @@ import type { CodesReseau } from '../codes-reseau/codes-reseau.ts';
 import { routesCodesReseau } from '../codes-reseau/api-codes-reseau.ts';
 import { routesSynchro } from '../synchro/api-synchro.ts';
 import type { ServiceSynchro } from '../synchro/service.ts';
+import type { ApiVoix } from '../voix/api-voix.ts';
 
 export interface DependancesApi {
   readonly acces: Acces;
@@ -68,6 +69,7 @@ export interface DependancesApi {
   readonly federation: Federation;
   readonly codesReseau: CodesReseau;
   readonly synchro: ServiceSynchro;
+  readonly voix: ApiVoix;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -195,6 +197,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
       GET: protege((req) => json(d.registre.notifications(entier(new URL(req.url).searchParams.get('apres'), 0)))),
     },
     '/api/notifications/lues': { POST: protege((req) => marquerLues(d, req)) },
+    '/api/voix': { POST: protege((req) => d.voix.synthese(req)) },
     '/api/machines/:id/eteindre': { POST: protege((req) => machine(d, req.params['id'] ?? '', 'eteindre')) },
     '/api/machines/:id/projets': { GET: protege((req) => machine(d, req.params['id'] ?? '', 'projets')) },
     '/api/machines/:id/comptes': { POST: protege((req) => d.comptes.connecter(req as never)) },

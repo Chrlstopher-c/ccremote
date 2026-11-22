@@ -1,0 +1,21 @@
+# Service de voix du mode vocal (tour) : copier dans ~/.config/systemd/user/lanterne-voix.service, remplacer
+# <PORT> et <DOSSIER>, puis : systemctl --user daemon-reload && systemctl --user enable --now lanterne-voix
+# Le nœud Quart de la même machine le trouve par LANTERNE_VOIX_URL ou ~/.config/ccremote/voix.url (http://127.0.0.1:<PORT>).
+[Unit]
+Description=Lanterne voix (synthèse de Reflet pour le mode vocal de l'iPhone)
+
+[Service]
+WorkingDirectory=<DOSSIER>
+Environment=LANTERNE_VOIX_PORT=<PORT>
+Environment=REFLET_RACINE=/mnt/projects/reflet
+Environment=REFLET_VOIX_REF=ingrid
+Environment=REFLET_CACHE_TTS=%h/.cache/huggingface/hub
+Environment=REFLET_MODELE_TTS=<dossier du modèle Qwen3-TTS-12Hz-0.6B-Base dans le cache Hugging Face>
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+Environment=HF_HUB_OFFLINE=1
+ExecStart=/mnt/projects/reflet/.venv/bin/python <DOSSIER>/serveur.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
