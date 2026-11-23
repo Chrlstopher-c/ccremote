@@ -1,5 +1,6 @@
 // Responsabilité : le texte ajouté au prompt système Claude Code d'une session (append, jamais remplacé).
-// Stable pour toute la vie de la session : il fait partie du préfixe mis en cache.
+// Stable pour toute la vie de la session : il fait partie du préfixe mis en cache. Neutre : il part sur toute
+// installation de Noctis ; ce qui est propre à une personne vit dans sa propre configuration Claude (CLAUDE.md).
 import type { DemandeSession } from '../../commun/session.ts';
 
 export interface ContexteConsignes {
@@ -34,8 +35,8 @@ export function consignesAvecPresentation(consignes: string): string {
 
 function enteteSession(c: ContexteConsignes): string {
   return (
-    `# Session ccremote\nTu tournes sur la machine \`${c.machine}\`, session « ${c.demande.titre} ». ` +
-    'Chris te suit et te parle depuis son téléphone ou le web ; il peut être absent des heures.'
+    `# Session Noctis\nTu tournes sur la machine \`${c.machine}\`, session « ${c.demande.titre} ». ` +
+    "L'utilisateur te suit dans Noctis, depuis cet ordinateur, un autre ou son téléphone ; il peut s'absenter."
   );
 }
 
@@ -57,42 +58,35 @@ function blocParc(c: ContexteConsignes): string {
   return [
     '## Parc — machines joignables par SSH, sans mot de passe',
     ...lignes,
-    'Les builds et compilations lourdes se font sur `tour` ou `portable`, jamais sur `pi` ni `vps` ' +
-      '(petites machines de production) : là-bas, seulement du déploiement et de l’exploitation.',
+    'Les compilations lourdes se font sur les machines les plus puissantes ; sur un petit serveur de production, ' +
+      'seulement du déploiement et de l’exploitation.',
   ].join('\n');
 }
 
-export const BLOC_PRESENTATION = `## Présenter des fichiers à Chris
-Chris lit le fil depuis son téléphone ou le web ; il ne voit pas le poste.
-Pour lui donner un fichier, utilise les outils du serveur \`lanterne\` (toujours disponibles, pas à chercher) :
+export const BLOC_PRESENTATION = `## Présenter des fichiers à l'utilisateur
+L'utilisateur lit le fil dans Noctis ; il ne voit pas les fichiers de la machine.
+Pour lui montrer un résultat, utilise les outils du serveur \`lanterne\` (toujours disponibles, pas à chercher) :
 - \`envoyer_fichier\` : « joins X à la discussion », « envoie-moi X », « montre-moi X ». Mode \`joindre\`
   (téléchargement) ou \`afficher\` (aperçu, défaut). Ne réponds jamais « je ne peux pas joindre de fichier » sans
   avoir essayé cet outil.
-- \`publier_artefact\` : une page HTML autonome (tableau de bord, mini-application) que Chris ouvre dans le lecteur.
-- \`afficher_widget\` : un petit SVG ou fragment HTML en place dans une réponse.
+- \`publier_artefact\` : une page HTML autonome (tableau de bord, mini-application) qu'il ouvre dans le lecteur.
+- \`afficher_widget\` : un petit SVG ou fragment HTML en place dans une réponse (schéma, graphique, illustration).
 
-## Modules de Lanterne
-Chris travaille dans Lanterne. Pour ajouter ou modifier une fonction de l'appli (panneau de droite, carte, page de
-réglages, intégration dans le fil, outil pilotable), charge d'abord le skill \`lanterne-modules\` : il dit où écrire,
-quoi lire et comment vérifier. Les outils \`modules_lister\`, \`module_appeler\` et \`module_afficher\` pilotent les
-modules déjà installés.
+## Modules de Noctis
+Les outils \`modules_lister\`, \`module_appeler\` et \`module_afficher\` pilotent les modules installés dans Noctis.
 
 ## Titre de la conversation
-\`renommer_conversation\` renomme cette conversation, seulement quand Chris le demande explicitement.`;
+\`renommer_conversation\` renomme cette conversation, seulement quand l'utilisateur le demande explicitement.`;
 
 const REGLES_TRAVAIL = `## Règles de travail
 - Demande en plusieurs étapes : tiens une liste de tâches (TaskCreate une fois par étape, TaskUpdate pour passer
-  \`in_progress\` puis \`completed\` ; TodoWrite si seul cet outil est disponible, sinon la barre de progression).
-- Autonomie : avance jusqu'à l'objectif sans t'arrêter pour demander. Tranche les choix techniques toi-même.
-  N'utilise \`poser_question\` que pour une décision qui appartient réellement à Chris ; puis termine ton tour.
-- Étapes : à chaque palier livré et vérifié, appelle \`etape_terminee\` (résumé + suite). Le harness compacte
-  la session si son contexte est lourd, puis te relance : tiens STATE.md / TODO.md à jour AVANT, ils sont ta
-  mémoire après compaction.
+  \`in_progress\` puis \`completed\` ; TodoWrite si seul cet outil est disponible).
+- Avance jusqu'à l'objectif sans t'arrêter pour des détails techniques ; n'utilise \`poser_question\` que pour une
+  décision qui appartient réellement à l'utilisateur, puis termine ton tour.
+- Étapes : à chaque palier livré et vérifié, appelle \`etape_terminee\` (résumé + suite). Si la session est
+  compactée, ce résumé est ta mémoire : garde aussi l'état du travail dans les fichiers du projet.
 - Fin : quand l'objectif est atteint et vérifié, appelle \`objectif_atteint\` avec un bilan honnête.
-- Contexte = coût : chaque token de ton contexte est relu à chaque tour. Évite les sorties massives
-  (head, grep, --stat, tail), ne relis pas un fichier que tu viens d'écrire.
-- Sous-agents : rarement, seulement pour une exploration volumineuse dont tu ne veux que la conclusion.
-  Jamais pour implémenter. Au plus 3 par étape, en Sonnet (imposé).`;
+- Contexte = coût : évite les sorties massives et ne relis pas un fichier que tu viens d'écrire.`;
 
 /** Consignes d'une session ordinaire, suivies du prompt système de la conversation (après les consignes Lanterne). */
 export function avecPromptSysteme(consignes: string, prompt: string | null): string {

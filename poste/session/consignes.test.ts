@@ -32,7 +32,7 @@ describe('consignes de session', () => {
     const t = composerConsignes({ machine: 'tour', cwd: '/x', demande: demande() });
     expect(t).toContain('`ssh pi`');
     expect(t).not.toContain('`ssh tour`');
-    expect(t).toContain('jamais sur `pi` ni `vps`');
+    expect(t).toContain('petit serveur de production');
   });
 
   test('machine isolée (vps) : aucune autre machine', () => {

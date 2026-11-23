@@ -7,6 +7,7 @@ import { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { DemandeSession, EffortSession } from '../../commun/session.ts';
 import { OUTILS_INVITE_INTERDITS, OUTILS_TERMINAL } from '../../commun/invites-outils.ts';
 import { terminalPermis } from './confinement-invite.ts';
+import { BLOC_PRESENTATION } from './consignes.ts';
 import { lireJetonFichier } from '../comptes/lecture-compte.ts';
 import { envSdk } from './options-sdk.ts';
 
@@ -68,8 +69,14 @@ const ligne = (texte: string | null | undefined): string => (texte ?? '').trim()
 
 /** Consignes d'une session d'invité : ligne d'espace, prompt de la conversation, puis le prompt du chef en dernier. */
 export function consignesInvite(cadre: CadreInvite, promptSysteme: string | null): string {
-  const espace = `Tu travailles dans le dossier ${cadre.espace} ; tu n'as pas accès au reste de la machine.`;
-  return [espace, ligne(promptSysteme), ligne(cadre.prompt)].filter((bloc) => bloc.length > 0).join('\n\n');
+  // Sur sa propre machine (par le relais) : ses outils de Noctis sont là, ils sont décrits comme pour toute session.
+  const local = cadre.relais !== undefined;
+  const espace = local
+    ? `# Session Noctis\nTu travailles dans le dossier ${cadre.espace}, sur l'ordinateur de l'utilisateur.`
+    : `Tu travailles dans le dossier ${cadre.espace} ; tu n'as pas accès au reste de la machine.`;
+  return [espace, local ? BLOC_PRESENTATION : '', ligne(promptSysteme), ligne(cadre.prompt)]
+    .filter((bloc) => bloc.length > 0)
+    .join('\n\n');
 }
 
 export interface ParametresInvite {
