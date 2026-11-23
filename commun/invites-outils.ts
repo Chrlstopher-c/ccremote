@@ -31,19 +31,7 @@ export const OUTILS_INVITE_INTERDITS: readonly string[] = [
   'ReadMcpResource',
 ];
 
-/** Outils de Noctis (serveurs lanterne et ccremote), permis à une session qui tourne sur la machine de l'invité. */
-export const PREFIXES_OUTILS_NOCTIS: readonly string[] = ['mcp__lanterne__', 'mcp__ccremote__'];
 
-/** Outils sans chemin, permis à une session sur la machine de l'invité : mode Plan, chargement d'outils, tâches. */
-export const OUTILS_LOCAUX_SANS_CHEMIN: readonly string[] = [
-  'ExitPlanMode',
-  'EnterPlanMode',
-  'ToolSearch',
-  'TaskCreate',
-  'TaskUpdate',
-  'TaskList',
-  'TaskGet',
-];
 
 /** Outils du terminal, permis seulement sur la machine de l'invité quand le chef l'a accordé. */
 export const OUTILS_TERMINAL: readonly string[] = ['Bash', 'BashOutput', 'KillShell', 'KillBash'];
@@ -222,9 +210,10 @@ function verifierListe(c: Confinement, chemins: readonly string[], sens: Sens): 
 }
 
 export function verifierOutil(c: Confinement, nom: string, entree: Record<string, unknown>): VerdictAcces {
+  // Session sur la machine de l'invité : ses fichiers, son terminal, ses outils ne regardent que lui (Chris, 23/11).
+  // Les limites qui protègent le chef (modèles, effort, part, simultanées) sont tenues par son relais Claude.
+  if (c.local === true) return { ok: true };
   if (c.terminal === true && OUTILS_TERMINAL.includes(nom)) return { ok: true };
-  if (c.local === true && PREFIXES_OUTILS_NOCTIS.some((p) => nom.startsWith(p))) return { ok: true };
-  if (c.local === true && OUTILS_LOCAUX_SANS_CHEMIN.includes(nom)) return { ok: true };
   if (!outilInvitePermis(nom)) return { ok: false, raison: `outil non permis : ${nom}` };
   if (nom === 'WebFetch') {
     const url = verifierUrlSyntaxe(entree.url);

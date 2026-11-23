@@ -5,7 +5,7 @@ import type { CanUseTool, HookCallbackMatcher, Options } from '@anthropic-ai/cla
 import type { Logger } from 'pino';
 import { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { DemandeSession, EffortSession, ModeSession } from '../../commun/session.ts';
-import { OUTILS_INVITE_INTERDITS, OUTILS_LOCAUX_SANS_CHEMIN, OUTILS_TERMINAL } from '../../commun/invites-outils.ts';
+import { OUTILS_INVITE_INTERDITS, OUTILS_TERMINAL } from '../../commun/invites-outils.ts';
 import { terminalPermis } from './confinement-invite.ts';
 import { BLOC_PRESENTATION } from './consignes.ts';
 import { lireJetonFichier } from '../comptes/lecture-compte.ts';
@@ -109,16 +109,18 @@ export function optionsInvite(p: ParametresInvite): Options {
     // Sur sa machine, l'invité choisit son mode (Manuel par défaut, 23/11) ; chez le chef, toujours « default ».
     permissionMode: p.cadre.relais !== undefined ? (p.mode ?? 'default') : 'default',
     // Chez lui, il peut passer en « Ignorer les permissions » en cours de session : le SDK l'exige dès le lancement.
-    // Le crochet de confinement s'applique dans tous les modes (rien hors de son espace).
+    // Le crochet de confinement s'applique dans tous les modes ; sur sa machine, il laisse tout passer.
     ...(p.cadre.relais !== undefined ? { allowDangerouslySkipPermissions: true, promptSuggestions: true } : {}),
-    settingSources: [],
-    strictMcpConfig: true,
+    // Sur sa machine : sa propre configuration Claude (consignes, compétences, serveurs MCP) s'applique ; chez le
+    // chef, aucune (rien du chef ne doit fuiter vers l'invité).
+    settingSources: p.cadre.relais !== undefined ? ['user', 'project', 'local'] : [],
+    strictMcpConfig: p.cadre.relais === undefined,
     mcpServers: p.serveurs ?? {},
-    disallowedTools: OUTILS_INVITE_INTERDITS.filter(
-      (o) =>
-        (!terminalPermis(p.cadre) || !OUTILS_TERMINAL.includes(o)) &&
-        (p.cadre.relais === undefined || !OUTILS_LOCAUX_SANS_CHEMIN.includes(o)),
-    ),
+    // Sur sa machine, aucun outil retiré : ses fichiers et son terminal ne regardent que lui (Chris, 23/11).
+    disallowedTools:
+      p.cadre.relais !== undefined
+        ? []
+        : OUTILS_INVITE_INTERDITS.filter((o) => !terminalPermis(p.cadre) || !OUTILS_TERMINAL.includes(o)),
     hooks: { PreToolUse: [p.confinement] },
     canUseTool: p.canUseTool,
     ...(p.effort ? { effort: p.effort } : {}),
@@ -137,12 +139,11 @@ export function demandeInvite(d: DemandeSession): DemandeSession {
     ...d,
     moteur: 'sdk',
     mode: chezLui ? (d.mode ?? 'default') : 'default',
-    rapide: false,
+    rapide: false, // facturé en plus sur l'abonnement du chef
     ultracode: false,
-    style_sortie: null,
-    bac_a_sable: 'non',
-    controle_distant: false,
-    pieces: [],
+    controle_distant: false, // compte claude.ai du chef
+    // Sur sa machine, style, bac à sable et pièces jointes ne regardent que lui (23/11).
+    ...(chezLui ? {} : { style_sortie: null, bac_a_sable: 'non' as const, pieces: [] }),
   };
 }
 
@@ -151,20 +152,23 @@ export function refusOuvertureInvite(d: DemandeSession): string | null {
   if (!d.invite) return null;
   if (d.controle_distant) return MESSAGE_REMOTE_CONTROL_INVITE;
   if ((d.moteur ?? 'sdk') !== 'sdk') return 'session d’invité : moteur SDK seulement';
-  if (d.pieces?.length) return 'session d’invité : pièces jointes non permises';
+  if (d.pieces?.length && d.invite.relais === undefined) return 'session d’invité : pièces jointes non permises';
   return null;
 }
 
-/** Refus d'une commande adressée à une session d'invité ; null si elle est permise. */
-// Sur la machine de l'invité (session par le relais), c'est lui qui lit : les fichiers que sa session lui présente
-// (visuels `afficher_widget`, pièces) s'affichent dans son fil. Chez le chef, ils restent refusés.
-const COMMANDES_INVITE_CHEZ_LUI: ReadonlySet<string> = new Set(['fichier_session', 'mode']);
+// Sur sa machine (session par le relais), tout ce qui ne regarde que lui est permis : rembobiner, dupliquer, annexer,
+// historique, style, mode, nuit… (Chris, 23/11). Seul reste refusé ce qui touche le réseau ou l'abonnement du chef :
+// Remote Control (son compte claude.ai), mode rapide (facturé en plus), Ultracode, relais entre sessions du réseau.
+const COMMANDES_RESEAU: ReadonlySet<string> = new Set(['remote_control', 'rapide', 'ultracode', 'tracer_relais']);
 
+/** Refus d'une commande adressée à une session d'invité ; null si elle est permise. */
 export function refusCommandeInvite(invite: { cadre: CadreInvite } | undefined, kind: string): string | null {
   if (!invite) return null;
   if (kind === 'remote_control') return MESSAGE_REMOTE_CONTROL_INVITE;
+  if (invite.cadre.relais !== undefined) {
+    return COMMANDES_RESEAU.has(kind) ? `non permis à un invité (réseau ou abonnement du chef) : ${kind}` : null;
+  }
   if (COMMANDES_INVITE.has(kind)) return null;
-  if (invite.cadre.relais !== undefined && COMMANDES_INVITE_CHEZ_LUI.has(kind)) return null;
   return `commande non permise pour une session d’invité : ${kind}`;
 }
 

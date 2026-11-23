@@ -114,6 +114,15 @@ describe('options SDK d’une session d’invité', () => {
     expect(optionsInvite(FAUSSES_OPTIONS).allowDangerouslySkipPermissions).not.toBe(true);
   });
 
+  test('sur sa machine : sa propre configuration Claude et aucun outil retiré ; chez le chef, rien de tout ça', () => {
+    const relais = { url: 'http://127.0.0.1:1/claude', jeton: 'j'.repeat(43) };
+    const chezLui = optionsInvite({ ...FAUSSES_OPTIONS, cadre: { ...CADRE, relais } });
+    expect(chezLui.settingSources).toEqual(['user', 'project', 'local']);
+    expect(chezLui.strictMcpConfig).toBe(false);
+    expect(chezLui.disallowedTools).toEqual([]);
+    expect(optionsInvite(FAUSSES_OPTIONS).settingSources).toEqual([]);
+  });
+
   test('CLAUDE_CONFIG_DIR du cadre, jeton du chef, aucune variable d’authentification du poste', () => {
     const env = envInvite(
       {
@@ -215,11 +224,16 @@ describe('commandes et ouverture d’une session d’invité', () => {
     expect(refusCommandeInvite(undefined, 'historique')).toBeNull();
   });
 
-  test('sur la machine de l’invité (relais), ses visuels et fichiers de session se lisent ; chez le chef, non', () => {
+  test('sur sa machine, tout ce qui ne touche pas le réseau du chef est permis (rembobiner…) ; chez le chef, non', () => {
     const chezLui = { cadre: { ...CADRE, relais: { url: 'http://127.0.0.1:1/claude', jeton: 'j'.repeat(32) } } };
-    expect(refusCommandeInvite(chezLui, 'fichier_session')).toBeNull();
-    expect(refusCommandeInvite(chezLui, 'historique')).not.toBeNull();
+    for (const kind of ['fichier_session', 'historique', 'rembobiner', 'dupliquer', 'annexer', 'style', 'nuit']) {
+      expect(refusCommandeInvite(chezLui, kind)).toBeNull();
+    }
+    for (const kind of ['remote_control', 'rapide', 'ultracode', 'tracer_relais']) {
+      expect(refusCommandeInvite(chezLui, kind)).not.toBeNull();
+    }
     expect(refusCommandeInvite({ cadre: CADRE }, 'fichier_session')).not.toBeNull();
+    expect(refusCommandeInvite({ cadre: CADRE }, 'rembobiner')).not.toBeNull();
   });
 
   test('Remote Control refusé même si le chef l’a cochée (la bascule TUI sortirait du cadre)', () => {

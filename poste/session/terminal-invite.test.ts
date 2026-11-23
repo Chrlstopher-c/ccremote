@@ -22,11 +22,12 @@ describe('terminal d’un invité', () => {
   test('non accordé : refusé', () => {
     expect(terminalPermis({ ...base, terminaux: false, relais })).toBe(false);
   });
-  test('outils de Noctis : permis seulement à une session sur la machine de l’invité', () => {
+  test('sur sa machine, tout outil est permis (fichiers, terminal, outils) ; chez le chef, le cadre tient', () => {
     const local: Confinement = { ...confinement(false), local: true };
     expect(verifierOutil(local, 'mcp__lanterne__artefact_creer', {}).ok).toBe(true);
+    expect(verifierOutil(local, 'Bash', { command: 'ls' }).ok).toBe(true);
+    expect(verifierOutil(local, 'Write', { file_path: '/ailleurs/x.txt', content: 'a' }).ok).toBe(true);
     expect(verifierOutil(confinement(false), 'mcp__lanterne__artefact_creer', {}).ok).toBe(false);
-    expect(verifierOutil(local, 'mcp__autre__x', {}).ok).toBe(false);
   });
   test('le confinement laisse passer Bash seulement si le terminal est permis', () => {
     expect(verifierOutil(confinement(true), 'Bash', { command: 'ls' }).ok).toBe(true);
