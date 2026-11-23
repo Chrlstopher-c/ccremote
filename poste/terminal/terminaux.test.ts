@@ -74,6 +74,7 @@ describe('shell du terminal à distance', () => {
       expect(shellDeLUtilisateur()).not.toBe('/bin/sh');
       expect(shellDeLUtilisateur().startsWith('/')).toBe(true);
       expect(commandeDe({ type: 'shell' })).toEqual([shellDeLUtilisateur(), '-il']);
+      expect(commandeDe({ type: 'shell' }, 'win32')).toEqual(['powershell.exe', '-NoLogo']);
     } finally {
       if (avant === undefined) delete process.env['SHELL'];
       else process.env['SHELL'] = avant;

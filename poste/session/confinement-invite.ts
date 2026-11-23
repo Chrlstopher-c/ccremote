@@ -54,6 +54,7 @@ export function terminalPermis(cadre: CadreInvite): boolean {
 export function confinementDe(cadre: CadreInvite): Confinement {
   return {
     terminal: terminalPermis(cadre),
+    local: cadre.relais !== undefined,
     espace: realpathSync(cadre.espace),
     lecture: cadre.lecture.map(racineReelle),
     home: homedir(),

@@ -93,7 +93,14 @@ function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeto
     effort: n.etat.effort ?? null,
     confinement: crochetConfinement(confinement, n.env.journal),
     canUseTool: permissionInvite(confinement, n.env.journal),
+    ...(cadre.relais !== undefined ? { serveurs: serveursLocauxInvite(n) } : {}),
   });
+}
+
+// Session sur la machine de l'invité : ses outils de Noctis (artefacts, visuels, rythme) agissent chez lui seulement.
+function serveursLocauxInvite(n: NoyauSdk): NonNullable<Options['mcpServers']> {
+  const outils = n.presentation?.serveur();
+  return { ccremote: serveurRythme(n.etat.id, n.env.socket), ...(outils ? { lanterne: outils } : {}) };
 }
 
 // Relève le contenu d'un fichier avant que l'outil d'édition le modifie (sans jamais décider de l'outil).

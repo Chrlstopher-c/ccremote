@@ -53,8 +53,10 @@ export function environnementDuTerminal(
   return env;
 }
 
-export function commandeDe(cible: CibleTerminal): string[] {
+export function commandeDe(cible: CibleTerminal, plateforme: NodeJS.Platform = process.platform): string[] {
   if (cible.type === 'tmux') return ['tmux', '-L', SOCKET, '-u', 'attach', '-t', `=${cible.tmux}`];
+  // Windows : pas de passwd ni de /bin/bash ; PowerShell, présent sur toute installation, sans bannière.
+  if (plateforme === 'win32') return ['powershell.exe', '-NoLogo'];
   return [shellDeLUtilisateur(), '-il'];
 }
 
@@ -77,7 +79,7 @@ export class Terminaux {
     const dossier = cible.type === 'shell' ? cheminAbsolu(cible.dossier) : homedir();
     const processus = Bun.spawn(commandeDe(cible), {
       cwd: dossier,
-      env: environnementDuTerminal(process.env),
+      env: process.platform === 'win32' ? { ...process.env } : environnementDuTerminal(process.env),
       terminal: { cols: colonnes, rows: lignes, data: (_t, octets) => this.recu(terminal, octets) },
     });
     this.ouverts.set(terminal, { processus, tampon: [], minuteur: null });

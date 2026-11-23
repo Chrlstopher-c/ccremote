@@ -31,12 +31,17 @@ export const OUTILS_INVITE_INTERDITS: readonly string[] = [
   'ReadMcpResource',
 ];
 
+/** Outils de Noctis (serveurs lanterne et ccremote), permis à une session qui tourne sur la machine de l'invité. */
+export const PREFIXES_OUTILS_NOCTIS: readonly string[] = ['mcp__lanterne__', 'mcp__ccremote__'];
+
 /** Outils du terminal, permis seulement sur la machine de l'invité quand le chef l'a accordé. */
 export const OUTILS_TERMINAL: readonly string[] = ['Bash', 'BashOutput', 'KillShell', 'KillBash'];
 
 export interface Confinement {
   /** Terminal accordé, et la session tourne sur la machine de l'invité (jamais sur une machine du chef). */
   readonly terminal?: boolean;
+  /** La session tourne sur la machine de l'invité : les outils de Noctis (artefacts, visuels) agissent chez lui. */
+  readonly local?: boolean;
   readonly espace: string;
   readonly lecture: readonly string[];
   readonly home: string;
@@ -181,6 +186,7 @@ function verifierListe(c: Confinement, chemins: readonly string[], sens: Sens): 
 
 export function verifierOutil(c: Confinement, nom: string, entree: Record<string, unknown>): VerdictAcces {
   if (c.terminal === true && OUTILS_TERMINAL.includes(nom)) return { ok: true };
+  if (c.local === true && PREFIXES_OUTILS_NOCTIS.some((p) => nom.startsWith(p))) return { ok: true };
   if (!outilInvitePermis(nom)) return { ok: false, raison: `outil non permis : ${nom}` };
   if (nom === 'WebFetch') {
     const url = verifierUrlSyntaxe(entree.url);

@@ -85,6 +85,8 @@ export interface ParametresInvite {
   readonly effort: EffortSession | null;
   readonly confinement: HookCallbackMatcher; // crochet PreToolUse : refuse tout appel hors du cadre
   readonly canUseTool: CanUseTool; // même vérification, pour les outils soumis à permission
+  /** Serveurs d'outils de Noctis (artefacts, visuels, rythme) : seulement pour une session sur la machine de l'invité. */
+  readonly serveurs?: NonNullable<Options['mcpServers']>;
 }
 
 /** Options du SDK d'une session d'invité : rien n'en vient du corps de la demande, seulement du cadre. */
@@ -99,7 +101,7 @@ export function optionsInvite(p: ParametresInvite): Options {
     permissionMode: 'default',
     settingSources: [],
     strictMcpConfig: true,
-    mcpServers: {},
+    mcpServers: p.serveurs ?? {},
     disallowedTools: OUTILS_INVITE_INTERDITS.filter((o) => !terminalPermis(p.cadre) || !OUTILS_TERMINAL.includes(o)),
     hooks: { PreToolUse: [p.confinement] },
     canUseTool: p.canUseTool,
