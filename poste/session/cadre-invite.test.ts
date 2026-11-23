@@ -108,6 +108,10 @@ describe('options SDK d’une session d’invité', () => {
     expect(options.allowDangerouslySkipPermissions).toBe(true);
     // Réponse probable après chaque tour, comme une session ordinaire (sa machine, ses requêtes passent par le relais).
     expect(options.promptSuggestions).toBe(true);
+    // Annexe d'une session d'invité (copie en lecture seule) : ses outils d'écriture restent retirés chez lui aussi.
+    const annexe = optionsInvite({ ...FAUSSES_OPTIONS, cadre: { ...CADRE, relais }, interdits: ['Write', 'Bash'] });
+    expect(annexe.disallowedTools).toEqual(['Write', 'Bash']);
+    expect(options.disallowedTools).toEqual([]);
     // Mode Plan chez lui : ExitPlanMode n'est pas retiré ; chez le chef, si.
     expect(options.disallowedTools).not.toContain('ExitPlanMode');
     expect(optionsInvite(FAUSSES_OPTIONS).disallowedTools).toContain('ExitPlanMode');

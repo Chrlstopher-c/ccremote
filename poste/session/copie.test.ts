@@ -1,4 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { SessionPersistee } from './persistance.ts';
+import { ecrireTranscriptEssai, UUID_ESSAI } from './transcript-essai.ts';
 import type { forkSession } from '@anthropic-ai/claude-agent-sdk';
 import { CONSIGNE_ANNEXE, TITRE_ANNEXE } from './annexe.ts';
 import { annexer, dupliquer, type DependancesCopie } from './copie.ts';
@@ -18,7 +23,12 @@ const COPIE: TranscriptDecouvert = {
   messages: 1,
 };
 
-type Importe = { t: TranscriptDecouvert; surcharge: Record<string, unknown>; consignes: string | null };
+type Importe = {
+  t: TranscriptDecouvert;
+  surcharge: Record<string, unknown>;
+  consignes: string | null;
+  invite?: SessionPersistee['invite'];
+};
 
 function deps(options: { fork?: 'ok' | 'echec'; trouve?: boolean; parente?: 'annexe' } = {}) {
   const parente = nouvelleSession(
@@ -36,10 +46,11 @@ function deps(options: { fork?: 'ok' | 'echec'; trouve?: boolean; parente?: 'ann
   }) as unknown as typeof forkSession;
   const d: DependancesCopie = {
     sessions: new Map([['parente', parente.session]]),
+    config: { machine: 'tour' },
     journal,
     trouverImportables: () => (options.trouve === false ? [] : [COPIE]),
-    importerUne: (t, surcharge, consignes) =>
-      importes.push({ t, surcharge: surcharge as Record<string, unknown>, consignes }),
+    importerUne: (t, surcharge, consignes, invite) =>
+      importes.push({ t, surcharge: surcharge as Record<string, unknown>, consignes, ...(invite ? { invite } : {}) }),
     attendreParent: (copie, parent) => attentes.push({ copie, parent }),
     sauvegarder: () => {
       sauvegardes += 1;
@@ -126,5 +137,73 @@ describe('Remote Control différé', () => {
     };
     await controles.traiter(g as never);
     expect(journaux).toBe(0);
+  });
+});
+
+describe('session d’invité : copies dans sa propre configuration', () => {
+  const dossiers: string[] = [];
+  afterEach(() => {
+    for (const dossier of dossiers.splice(0)) rmSync(dossier, { recursive: true, force: true });
+  });
+  const CADRE = {
+    membre: '4205bac95084',
+    nom: 'PC invité',
+    espace: '/projets/app',
+    config: '',
+    lecture: [],
+    prompt: '',
+    remoteControl: false,
+    relais: { url: 'http://127.0.0.1:1/relais', jeton: 'j'.repeat(32) },
+  };
+
+  function invite() {
+    const config = mkdtempSync(join(tmpdir(), 'copie-invite-'));
+    dossiers.push(config);
+    ecrireTranscriptEssai(config, '/projets/app');
+    const cadre = { ...CADRE, config };
+    const parente = nouvelleSession(async () => [{ type: 'result' }], {
+      configDir: config,
+      invite: { cadre, configCompte: null },
+      resume: { claudeSessionId: UUID_ESSAI, invite: { membre: cadre.membre, nom: cadre.nom }, prompt_systeme: 'P' },
+    });
+    const importes: Importe[] = [];
+    const d: DependancesCopie = {
+      sessions: new Map([['parente', parente.session]]),
+      config: { machine: 'tour' },
+      journal,
+      trouverImportables: () => [], // la configuration d'un invité n'est pas surveillée par la découverte
+      importerUne: (t, surcharge, consignes, inv) =>
+        importes.push({
+          t,
+          surcharge: surcharge as Record<string, unknown>,
+          consignes,
+          ...(inv ? { invite: inv } : {}),
+        }),
+      attendreParent: () => undefined,
+      sauvegarder: () => undefined,
+    };
+    return { d, importes, config, cadre };
+  }
+
+  test('dupliquer : copie écrite dans sa configuration, importée avec son cadre (vrai SDK)', async () => {
+    const t = invite();
+    const r = await dupliquer(t.d, 'parente', 'a1');
+    expect(r.ok).toBe(true);
+    const copie = t.importes[0];
+    expect(copie?.t.configDir).toBe(t.config);
+    expect(existsSync(copie?.t.chemin ?? '')).toBe(true);
+    expect(copie?.invite).toEqual({ cadre: t.cadre, configCompte: null });
+    expect(copie?.surcharge).toEqual({ parent: 'parente', invite: { membre: t.cadre.membre, nom: t.cadre.nom } });
+  });
+
+  test('annexer : copie complète, en lecture seule, consigne d’annexe dans son prompt (vrai SDK)', async () => {
+    const t = invite();
+    const r = await annexer(t.d, 'parente');
+    expect(r.ok).toBe(true);
+    const copie = t.importes[0];
+    expect(copie?.invite?.cadre).toEqual(t.cadre);
+    expect(copie?.surcharge['annexe_de']).toBe('parente');
+    expect(String(copie?.surcharge['prompt_systeme'])).toContain(CONSIGNE_ANNEXE);
+    expect(String(copie?.surcharge['prompt_systeme'])).toStartWith('P');
   });
 });

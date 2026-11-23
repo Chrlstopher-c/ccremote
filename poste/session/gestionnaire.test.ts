@@ -74,6 +74,7 @@ describe('copie dupliquée dont le transcript n’est pas encore découvert', ()
   function depsDuGestionnaire(g: GestionnaireSessions): DependancesCopie {
     return {
       sessions: g.sessions,
+      config: g.config,
       journal: pino({ enabled: false }),
       trouverImportables: () => g.trouverImportables(),
       importerUne: (t, surcharge, consignes) => g.importerUne(t, surcharge, consignes),

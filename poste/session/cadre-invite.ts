@@ -93,6 +93,7 @@ export interface ParametresInvite {
   readonly mode?: ModeSession; // mode de permission choisi par l'invité (sur sa machine seulement)
   readonly confinement: HookCallbackMatcher; // crochet PreToolUse : refuse tout appel hors du cadre
   readonly canUseTool: CanUseTool; // même vérification, pour les outils soumis à permission
+  readonly interdits?: readonly string[]; // outils retirés en plus (annexe : copie en lecture seule)
   /** Serveurs d'outils de Noctis (artefacts, visuels, rythme) : seulement pour une session sur la machine de l'invité. */
   readonly serveurs?: NonNullable<Options['mcpServers']>;
 }
@@ -117,10 +118,12 @@ export function optionsInvite(p: ParametresInvite): Options {
     strictMcpConfig: p.cadre.relais === undefined,
     mcpServers: p.serveurs ?? {},
     // Sur sa machine, aucun outil retiré : ses fichiers et son terminal ne regardent que lui (Chris, 23/11).
-    disallowedTools:
-      p.cadre.relais !== undefined
+    disallowedTools: [
+      ...(p.cadre.relais !== undefined
         ? []
-        : OUTILS_INVITE_INTERDITS.filter((o) => !terminalPermis(p.cadre) || !OUTILS_TERMINAL.includes(o)),
+        : OUTILS_INVITE_INTERDITS.filter((o) => !terminalPermis(p.cadre) || !OUTILS_TERMINAL.includes(o))),
+      ...(p.interdits ?? []),
+    ],
     hooks: { PreToolUse: [p.confinement] },
     canUseTool: p.canUseTool,
     ...(p.effort ? { effort: p.effort } : {}),

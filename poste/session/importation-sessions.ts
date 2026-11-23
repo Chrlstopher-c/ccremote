@@ -64,12 +64,19 @@ export class ImportationSessions {
     return { importees: aImporter.length, absentes };
   }
 
-  importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
+  // `invite` : copie d'une session d'invité, qui garde son cadre (configuration, espace, relais).
+  importerUne(
+    t: TranscriptDecouvert,
+    surcharge: Partial<ResumeSession> = {},
+    consignes: string | null = null,
+    invite?: SessionPersistee['invite'],
+  ): void {
     const fiche = recalerFiche(ficheImportee(origineDe(this.d.config), t), sourcesDe(t.chemin, t.id, this.d.journal));
     const session = this.d.creer({
       resume: { ...fiche, ...surcharge },
       consignes,
       configDir: t.configDir,
+      ...(invite ? { invite } : {}),
       transcript: t.chemin,
       position: 0,
       aReprendre: false,

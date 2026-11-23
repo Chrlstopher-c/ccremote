@@ -22,6 +22,7 @@ import { confinementDe, crochetConfinement, permissionInvite } from './confineme
 import { jetonPourInvite, MESSAGE_JETON_INVITE, optionsInvite } from './cadre-invite.ts';
 import type { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { Suite } from './suite-du-tour.ts';
+import { optionsMagasin } from './magasin-config.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
 import { RAISON_REDEMARRAGE } from './reprise.ts';
 import type { RequeteSdk } from './session-sdk.ts';
@@ -97,6 +98,7 @@ function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeto
     canUseTool:
       cadre.relais !== undefined ? permissionChezLui(n, confinement) : permissionInvite(confinement, n.env.journal),
     ...(cadre.relais !== undefined ? { mode: n.etat.mode ?? 'default', serveurs: serveursLocauxInvite(n) } : {}),
+    ...(n.etat.annexe_de ? { interdits: OUTILS_INTERDITS_ANNEXE } : {}),
   });
 }
 
@@ -376,7 +378,7 @@ export async function rembobiner(n: NoyauSdk, messageId: string): Promise<string
   if (!id) return 'conversation inconnue : rien à rembobiner';
   let messages: SessionMessage[];
   try {
-    messages = await getSessionMessages(id, { dir: n.etat.cwd });
+    messages = await getSessionMessages(id, { dir: n.etat.cwd, ...optionsMagasin(n.p.configDir) });
   } catch (erreur) {
     n.env.journal.warn({ err: erreur, session: n.etat.id }, 'lecture du transcript impossible');
     return `lecture du transcript impossible : ${String(erreur)}`;

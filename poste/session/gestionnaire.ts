@@ -406,8 +406,13 @@ export class GestionnaireSessions {
     return this.importation.trouverImportables();
   }
 
-  importerUne(t: TranscriptDecouvert, surcharge: Partial<ResumeSession> = {}, consignes: string | null = null): void {
-    this.importation.importerUne(t, surcharge, consignes);
+  importerUne(
+    t: TranscriptDecouvert,
+    surcharge: Partial<ResumeSession> = {},
+    consignes: string | null = null,
+    invite?: SessionPersistee['invite'],
+  ): void {
+    this.importation.importerUne(t, surcharge, consignes, invite);
   }
 
   // Annonce au relais : sessions découvertes et identifiants de tous les transcripts du poste (fantômes).

@@ -137,6 +137,26 @@ function transcriptDe(
   };
 }
 
+/** Transcript lu hors de l'index (copie écrite dans la configuration d'un invité, que la découverte ne surveille pas). */
+export function transcriptHorsIndex(
+  chemin: string,
+  id: string,
+  configDir: string,
+  machine: string,
+): TranscriptDecouvert | null {
+  let contenu: string;
+  let mtime: number;
+  try {
+    contenu = readFileSync(chemin, 'utf8');
+    mtime = statSync(chemin).mtimeMs;
+  } catch {
+    return null; // pas encore écrit : la copie n'est pas importée
+  }
+  const analyse = analyserTranscript(contenu);
+  const base = { id, chemin, configDir, mtime, ponts: analyse.ponts, hoteDesktop: null };
+  return transcriptDe(analyse, contenu, base, machine, undefined);
+}
+
 export class IndexDecouvertes {
   private entrees = new Map<string, EntreeCache>();
   private fichesDesktopVues: ReadonlyMap<string, FicheDesktop> | null = null; // une lecture par passage

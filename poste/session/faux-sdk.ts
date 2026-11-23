@@ -231,6 +231,7 @@ interface Reglages {
   readonly refusReglages?: boolean; // apply_flag_settings refusé
   readonly echecDemarrage?: string; // la fabrique du SDK lève cette erreur (Claude Code introuvable…)
   readonly delaiTourSuivantMs?: number; // délai court pour le test des messages traités ensemble
+  readonly invite?: SessionPersistee['invite']; // session d'invité : cadre et compte du chef
 }
 
 interface ModeleFaux {
@@ -330,7 +331,8 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
     ...(reglages.delaiTourSuivantMs === undefined ? {} : { delaiTourSuivantMs: reglages.delaiTourSuivantMs }),
   };
   const base = persistee(reglages.configDir ?? null, reglages.objectif ?? null, reglages.reprise);
-  const persistance = reglages.resume ? { ...base, resume: { ...base.resume, ...reglages.resume } } : base;
+  const avecFiche = reglages.resume ? { ...base, resume: { ...base.resume, ...reglages.resume } } : base;
+  const persistance = reglages.invite ? { ...avecFiche, invite: reglages.invite } : avecFiche;
   return { session: new SessionSdk(persistance, env), requetes, evenements, statuts };
 }
 
