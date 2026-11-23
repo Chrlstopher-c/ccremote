@@ -12,6 +12,13 @@ import { ApiResteSessions } from './api-reste-sessions.ts';
 import { ApiTaches } from './api-taches.ts';
 
 const JOURNAL = { warn: () => undefined, error: () => undefined, info: () => undefined } as unknown as Logger;
+
+const SANS_PAIRS = {
+  dicteeServiceDesPairs: async () => [],
+  membreDeMachine: () => null,
+  transcrireChez: async () => new Response('{}'),
+};
+
 const MAJ = '2026-11-20T10:00:00.000Z';
 type Commande = Parameters<Postes['commander']>[1];
 type Requete = Request & { params: Record<string, string> };
@@ -102,7 +109,7 @@ describe('compactions et fusion (session)', () => {
 describe('dictée (parc)', () => {
   test('aucun poste en ligne : avis clair', async () => {
     const f = postesFaux([{ id: 'tour', enLigne: false }], () => ({ ok: true }));
-    const r = await new ApiDictee({ postes: f.postes, journal: JOURNAL }).etat();
+    const r = await new ApiDictee({ postes: f.postes, journal: JOURNAL, pairs: SANS_PAIRS }).etat();
     expect(await r.json()).toEqual({
       disponible: false,
       machine: null,
@@ -121,7 +128,7 @@ describe('dictée (parc)', () => {
         donnees: { disponible: machine === 'portable', raison: machine === 'portable' ? null : 'absent' },
       }),
     );
-    const r = await new ApiDictee({ postes: f.postes, journal: JOURNAL }).etat();
+    const r = await new ApiDictee({ postes: f.postes, journal: JOURNAL, pairs: SANS_PAIRS }).etat();
     expect(await r.json()).toEqual({ disponible: true, machine: 'portable', raison: null });
   });
 
@@ -131,7 +138,7 @@ describe('dictée (parc)', () => {
         ? { ok: true, donnees: { disponible: true, raison: null } }
         : { ok: true, donnees: { etat: 'ok', texte: 'bonjour', ms: 12 } },
     );
-    const api = new ApiDictee({ postes: f.postes, journal: JOURNAL });
+    const api = new ApiDictee({ postes: f.postes, journal: JOURNAL, pairs: SANS_PAIRS });
     const r = await api.transcrire(requete('/api/dictee', {}, { pcm16: 'AAAA' }, 'POST'));
     expect(await r.json()).toEqual({ etat: 'ok', texte: 'bonjour', ms: 12, machine: 'tour' });
     expect(f.appels.at(-1)?.commande).toEqual({ kind: 'dictee_transcrire', pcm16: 'AAAA', langue: 'fr' });
@@ -142,7 +149,7 @@ describe('dictée (parc)', () => {
       ok: true,
       donnees: { disponible: false, raison: 'x' },
     }));
-    const r = await new ApiDictee({ postes: f.postes, journal: JOURNAL }).transcrire(
+    const r = await new ApiDictee({ postes: f.postes, journal: JOURNAL, pairs: SANS_PAIRS }).transcrire(
       requete('/api/dictee', {}, { pcm16: 'AAAA' }, 'POST'),
     );
     expect(await r.json()).toEqual({

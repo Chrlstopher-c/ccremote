@@ -97,6 +97,13 @@ beforeEach(() => {
   moteur = new MoteurFaux();
 });
 
+describe('état à l’arrêt', () => {
+  test('moteur installé jamais lancé : installe et arrete (le script rend arrete sans pid)', async () => {
+    const e = await service().etat();
+    expect(e).toMatchObject({ installe: true, etat: 'arrete', lanceParPoste: false });
+  });
+});
+
 describe('découverte du script', () => {
   test('variable explicite prioritaire ; absente du disque = non installé', () => {
     const existe = (c: string) => c === '/opt/moteur.sh';

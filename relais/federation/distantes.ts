@@ -25,7 +25,7 @@ import { fusionnerVue, type VueFederee } from './vue-federee.ts';
 /** Délai d'un geste qui lance du travail chez le nœud (ouvrir, écrire) ; les lectures gardent le délai court. */
 const DELAI_GESTE_LONG_MS = 60_000;
 const DELAI_GESTE_MS = 20_000;
-const GESTES_LONGS: ReadonlySet<string> = new Set(['ouvrir', 'messages', 'git/commiter']);
+const GESTES_LONGS: ReadonlySet<string> = new Set(['ouvrir', 'messages', 'git/commiter', 'dictee']);
 const TEXTE_HORS_LIGNE = 'machine hors ligne : la session est sur un autre nœud du réseau';
 const TEXTE_INDISPONIBLE = 'geste indisponible pour une session d’une autre machine : le faire depuis elle';
 const TEXTE_AMI_SANS_CHARTE = 'requête d’ami non relayée : son identifiant n’est pas celui de la charte';
@@ -189,10 +189,29 @@ export class Distantes {
   }
 
   /** L'état du service de voix des postes de chaque pair en ligne (`local=1` : les siens seuls), listes aplaties. */
-  async voixServiceDesPairs(): Promise<unknown[]> {
+  voixServiceDesPairs(): Promise<unknown[]> {
+    return this.serviceDesPairs('voix/service');
+  }
+
+  /** L'état du service de dictée des postes de chaque pair en ligne (`local=1` : les siens seuls), aplati. */
+  dicteeServiceDesPairs(): Promise<unknown[]> {
+    return this.serviceDesPairs('dictee/service');
+  }
+
+  /** Le pair qui tient cette machine, ou null : une machine de ce nœud, ou inconnue du réseau. */
+  membreDeMachine(machine: string): string | null {
+    return this.vueCourante().machinesRoutees.get(machine) ?? null;
+  }
+
+  /** La transcription envoyée au pair qui tient la machine nommée ; `local=1` : il la sert sur son seul poste. */
+  transcrireChez(membre: string, corps: string): Promise<Response> {
+    return this.relayer(membre, { geste: 'dictee', methode: 'POST', requete: 'local=1' }, corps);
+  }
+
+  private async serviceDesPairs(geste: 'voix/service' | 'dictee/service'): Promise<unknown[]> {
     const membres = this.o.cache.noeudsConnus().filter((n) => n.enLigne).map((n) => n.membre);
     const reponses = await Promise.all(
-      membres.map((membre) => this.relayer(membre, { geste: 'voix/service', methode: 'GET', requete: 'local=1' }, '')),
+      membres.map((membre) => this.relayer(membre, { geste, methode: 'GET', requete: 'local=1' }, '')),
     );
     const corps = await Promise.all(reponses.map((r) => (r.ok ? r.json().catch(() => null) : null)));
     return corps.flatMap((c: unknown) => machinesDe(c));
@@ -425,7 +444,7 @@ function messagesDuGeste(ref: string, g: GesteLocal, corps: string): MessageChif
   return [...decouper(ref, corps), { ...requete, morceaux: nombreDeMorceaux(corps) }];
 }
 
-/** La liste `machines` d'une réponse de `voix/service` d'un pair ; vide si elle n'a pas cette forme. */
+/** La liste `machines` d'une réponse `voix/service` ou `dictee/service` d'un pair ; vide si mal formée. */
 function machinesDe(corps: unknown): unknown[] {
   if (corps && typeof corps === 'object' && 'machines' in corps && Array.isArray(corps.machines)) return corps.machines;
   return [];

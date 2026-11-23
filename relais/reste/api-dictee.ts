@@ -1,6 +1,7 @@
 // Responsabilité : la dictée (P6) côté relais — le poste qui transcrit (celui que la requête nomme s'il a le service,
-// sinon le premier en ligne qui l'a), l'état du service de chaque poste du parc, et son pilotage (démarrer, arrêter,
-// régler). Le relais ne décode ni ne découpe l'audio : il le transmet tel quel au poste choisi.
+// sinon le premier en ligne qui l'a ; ou le pair qui tient la machine nommée), l'état du service de chaque poste
+// du parc et des pairs, et son pilotage (démarrer, arrêter, régler). Le relais ne décode ni ne découpe l'audio :
+// il le transmet tel quel au poste choisi.
 import type { Logger } from 'pino';
 import {
   CorpsDictee,
@@ -14,14 +15,25 @@ import {
   CorpsServiceDictee,
   DELAI_SERVICE_DICTEE_MS,
   EtatServiceDicteePoste,
-  type ServiceDicteeMachine,
+  ServiceDicteeMachine,
 } from '../../commun/dictee-service.ts';
 import { erreur, json, lireCorps, REFUS_POSTE } from '../clients/http.ts';
 import type { Postes } from '../parc/postes.ts';
 import { avecDelai, DELAI } from './api-reste.ts';
 
+/** Les pairs du réseau : leur service de dictée, qui tient une machine, et la transcription qu'ils servent. */
+export interface PairsDictee {
+  /** Le service de dictée des postes des pairs en ligne (listes `machines` aplaties, `local=1` chez chacun). */
+  dicteeServiceDesPairs(): Promise<unknown[]>;
+  /** Le pair qui tient cette machine, ou null si elle n'est pas celle d'un pair joignable. */
+  membreDeMachine(machine: string): string | null;
+  /** La transcription envoyée à ce pair, qui la sert sur son seul poste (corps JSON tel quel). */
+  transcrireChez(membre: string, corps: string): Promise<Response>;
+}
+
 export interface DependancesDictee {
   readonly postes: Pick<Postes, 'vues' | 'commander'>;
+  readonly pairs: PairsDictee;
   readonly journal: Logger;
   /** Délai accordé à chaque poste pour son état (5 s par défaut) : réglable pour les tests. */
   readonly delaiEtatMs?: number;
@@ -46,10 +58,12 @@ export class ApiDictee {
     return json(etat);
   }
 
-  /** Transcrit sur la machine nommée si elle a le service, sinon sur le premier qui l'a ; jamais d'erreur brute. */
+  /** Transcrit sur la machine nommée (son poste, ou le pair qui la tient) si elle a le service, sinon le premier. */
   async transcrire(req: Request): Promise<Response> {
     const c = await lireCorps(req, CorpsDictee);
     if (c instanceof Response) return c;
+    const membre = this.pairQui(c.machine, req);
+    if (membre !== null) return this.relayerTranscription(membre, c);
     const choix = await this.choisir(c.machine);
     if (!('machine' in choix)) return json({ etat: 'absente', raison: choix.raison });
     const r = await this.d.postes.commander(choix.machine, {
@@ -63,10 +77,15 @@ export class ApiDictee {
     return json(lu.data.etat === 'ok' ? { ...lu.data, machine: choix.machine } : lu.data);
   }
 
-  /** Le service de dictée de chaque machine, dans l'ordre du parc ; une machine muette ou hors ligne est listée. */
-  async service(): Promise<Response> {
-    const machines = await Promise.all(this.d.postes.vues().map((v) => this.serviceDe(v.id, v.enLigne)));
-    return json({ machines });
+  /**
+   * Le service de dictée de chaque machine : celles du parc (ordre du parc), puis celles des pairs en ligne ;
+   * `local=1` : les siens seuls. Une machine muette ou hors ligne est listée absente.
+   */
+  async service(req: Request): Promise<Response> {
+    const locales = await Promise.all(this.d.postes.vues().map((v) => this.serviceDe(v.id, v.enLigne)));
+    if (new URL(req.url).searchParams.get('local') === '1') return json({ machines: locales });
+    const distantes = await this.d.pairs.dicteeServiceDesPairs();
+    return json({ machines: [...locales, ...this.lireDistantes(distantes)] });
   }
 
   /** Démarrer, arrêter ou régler le service d'une machine ; l'état rendu est celui relu après l'action. */
@@ -96,6 +115,31 @@ export class ApiDictee {
     const disponible = (x: { readonly etat: EtatDicteePoste | null }): boolean => x.etat?.disponible === true;
     const trouve = etats.find((x) => x.id === preferee && disponible(x)) ?? etats.find(disponible);
     return trouve ? { machine: trouve.id } : { raison: RAISON_AUCUNE };
+  }
+
+  // Une machine qui n'est pas celle de ce poste, ni une requête déjà relayée (`local=1`), va au pair qui la tient.
+  private pairQui(machine: string | undefined, req: Request): string | null {
+    if (machine === undefined || new URL(req.url).searchParams.get('local') === '1') return null;
+    if (this.d.postes.vues().some((v) => v.id === machine)) return null;
+    return this.d.pairs.membreDeMachine(machine);
+  }
+
+  private async relayerTranscription(membre: string, c: CorpsDictee): Promise<Response> {
+    const reponse = await this.d.pairs.transcrireChez(membre, JSON.stringify(c));
+    if (reponse.ok) return reponse;
+    this.d.journal.warn({ membre }, 'dictée : transcription du pair en échec');
+    return json({ etat: 'erreur', raison: 'machine du pair injoignable' });
+  }
+
+  // Une entrée d'un pair qui ne respecte pas la forme est ignorée, sans faire échouer la liste.
+  private lireDistantes(entrees: readonly unknown[]): ServiceDicteeMachine[] {
+    const lues: ServiceDicteeMachine[] = [];
+    for (const entree of entrees) {
+      const lu = ServiceDicteeMachine.safeParse(entree);
+      if (lu.success) lues.push(lu.data);
+      else this.d.journal.warn('dictée : entrée d’un pair illisible, ignorée');
+    }
+    return lues;
   }
 
   private async etatDe(id: string): Promise<EtatDicteePoste | null> {

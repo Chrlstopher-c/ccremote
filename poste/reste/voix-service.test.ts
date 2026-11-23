@@ -75,6 +75,12 @@ describe('état du service de voix', () => {
     expect(f.sondes).toEqual([]);
   });
 
+  test('chargée mais désactivée (UnitFileState=disabled) et arrêtée : arrete, installée', async () => {
+    const sortie = 'LoadState=loaded\nUnitFileState=disabled\nActiveState=inactive\nActiveEnterTimestamp=';
+    const s = new ServiceVoix({ url: URL_VOIX, journal, lancer: async () => ({ code: 0, sortie, erreurs: '' }) });
+    expect(await s.etat()).toEqual({ installe: true, etat: 'arrete', depuis: null, message: null });
+  });
+
   test('active mais modèle pas prêt : demarrage, depuis = entrée en marche', async () => {
     const f = faux({ ActiveState: 'active', ActiveEnterTimestamp: `@${DEPUIS}` });
     f.pret = false;

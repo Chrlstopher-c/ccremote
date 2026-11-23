@@ -11,6 +11,14 @@ describe('estGesteRelayable', () => {
     expect(estGesteRelayable('machine', 'voix/service')).toBe(false);
   });
 
+  test('dictée : transcription et service relayés (noeud), réglage par machine ; sous-chemins refusés', () => {
+    expect(estGesteRelayable('noeud', 'dictee')).toBe(true);
+    expect(estGesteRelayable('noeud', 'dictee/service')).toBe(true);
+    expect(estGesteRelayable('machine', 'dictee')).toBe(true);
+    expect(estGesteRelayable('machine', 'dictee/service')).toBe(false);
+    expect(estGesteRelayable('noeud', 'dictee/service/x')).toBe(false);
+  });
+
   test('fichiers, git, artefacts, contenu, remote-control, rembobiner et dossiers de machine passent', () => {
     expect(estGesteRelayable('session', 'remote-control')).toBe(true);
     expect(estGesteRelayable('session', 'rembobiner')).toBe(true);

@@ -206,7 +206,15 @@ const entretien = new ApiEntretien({
 const reste = new ApiReste({ registre, postes, journal: journal.child({ domaine: 'reste' }) });
 const resteLot2 = {
   sessions: new ApiResteSessions({ registre, postes, journal: journal.child({ domaine: 'reste' }) }),
-  dictee: new ApiDictee({ postes, journal: journal.child({ domaine: 'dictee' }) }),
+  dictee: new ApiDictee({
+    postes,
+    pairs: {
+      dicteeServiceDesPairs: () => federation.distantes.dicteeServiceDesPairs(),
+      membreDeMachine: (machine) => federation.distantes.membreDeMachine(machine),
+      transcrireChez: (membre, corps) => federation.distantes.transcrireChez(membre, corps),
+    },
+    journal: journal.child({ domaine: 'dictee' }),
+  }),
   taches: new ApiTaches({ postes, journal: journal.child({ domaine: 'taches' }) }),
   voix: new ApiServiceVoix({
     postes,
