@@ -133,3 +133,30 @@ describe('adresses privées', () => {
     expect(adressePrivee('::ffff:8.8.8.8')).toBe(false);
   });
 });
+
+describe('chemins Windows (invité sur un PC Windows, recette 0.2)', () => {
+  const ESPACE_W = 'C:\\Users\\Elie\\lanterne-invites\\ab12cd34ef56\\espace';
+  const conf: Confinement = {
+    espace: ESPACE_W,
+    lecture: [],
+    home: 'C:\\Users\\Elie',
+    resoudre: (c) => c,
+    windows: true,
+  };
+
+  test('écrire dans son espace est permis (chemin absolu à barres inverses, relatif, casse différente)', () => {
+    expect(verifierChemin(conf, `${ESPACE_W}\\notes.txt`, 'ecriture')).toEqual({ ok: true });
+    expect(verifierChemin(conf, 'sous\\dossier\\a.txt', 'ecriture')).toEqual({ ok: true });
+    expect(verifierChemin(conf, 'c:/users/elie/lanterne-invites/ab12cd34ef56/espace/b.txt', 'ecriture')).toEqual({
+      ok: true,
+    });
+  });
+
+  test('hors de l’espace, configuration Claude et dossiers sensibles restent refusés', () => {
+    expect(verifierChemin(conf, 'C:\\Users\\Elie\\Desktop\\x.txt', 'ecriture').ok).toBe(false);
+    expect(verifierChemin(conf, `${ESPACE_W}\\..\\..\\x.txt`, 'ecriture').ok).toBe(false);
+    expect(verifierChemin(conf, 'C:\\Users\\Elie\\.claude\\.credentials.json', 'lecture').ok).toBe(false);
+    expect(verifierChemin(conf, `${ESPACE_W}\\.claude\\settings.json`, 'ecriture').ok).toBe(false);
+    expect(verifierChemin(conf, `${ESPACE_W}espace-voisin\\a.txt`, 'ecriture').ok).toBe(false);
+  });
+});

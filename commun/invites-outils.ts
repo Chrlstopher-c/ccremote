@@ -1,6 +1,6 @@
 // Responsabilité : les outils qu'une session d'invité peut appeler, et le confinement de leurs chemins et de leurs URL.
 // Pur : la résolution réelle des chemins (realpath) et du DNS est injectée par l'appelant.
-import { posix } from 'node:path';
+import { posix, win32 } from 'node:path';
 
 export const OUTILS_INVITE_PERMIS: readonly string[] = [
   'Read',
@@ -46,6 +46,18 @@ export interface Confinement {
   readonly lecture: readonly string[];
   readonly home: string;
   resoudre(chemin: string): string; // realpath du plus proche parent existant, fourni par l'appelant
+  /** Chemins Windows (barres inverses, lecteur, casse ignorée) ; absent : celui de la machine qui exécute. */
+  readonly windows?: boolean;
+}
+
+function surWindows(c: Pick<Confinement, 'windows'>): boolean {
+  return c.windows ?? process.platform === 'win32';
+}
+
+/** Forme comparable d'un chemin : barres obliques, et sous Windows sans casse (« C:\\A » = « c:/a »). */
+function forme(chemin: string, windows: boolean): string {
+  if (!windows) return posix.normalize(chemin).replace(/\/+$/, '');
+  return win32.normalize(chemin).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
 export type VerdictAcces = { ok: true } | { ok: false; raison: string };
@@ -63,7 +75,8 @@ export function outilInvitePermis(nom: string): boolean {
   return OUTILS_INVITE_PERMIS.includes(nom) && !nom.startsWith('mcp__');
 }
 
-export function cheminsSensibles(home: string): string[] {
+export function cheminsSensibles(home: string, windows = false): string[] {
+  if (windows) return ['.claude', '.claude.json', '.config', '.ssh', '.local\\share', '.gnupg', 'AppData'].map((d) => win32.join(home, d));
   return [
     `${home}/.claude`,
     `${home}/.claude.json`,
@@ -138,9 +151,10 @@ export function cheminsDeOutil(nom: string, entree: Record<string, unknown>): Ch
   }
 }
 
-function estDessous(chemin: string, racine: string): boolean {
-  const base = posix.normalize(racine).replace(/\/+$/, '');
-  return chemin === base || chemin.startsWith(`${base}/`);
+function estDessous(chemin: string, racine: string, windows = false): boolean {
+  const base = forme(racine, windows);
+  const vise = forme(chemin, windows);
+  return vise === base || vise.startsWith(`${base}/`);
 }
 
 function raisonSyntaxe(chemin: string): string | null {
@@ -150,28 +164,34 @@ function raisonSyntaxe(chemin: string): string | null {
 }
 
 function porteClaude(chemin: string): boolean {
-  return chemin.split('/').includes('.claude');
+  return chemin.split(/[\\/]/).some((partie) => partie.toLowerCase() === '.claude');
 }
 
-function raisonSensible(home: string, chemins: readonly string[]): string | null {
-  const sensibles = cheminsSensibles(home);
-  const touche = chemins.some((chemin) => sensibles.some((s) => estDessous(chemin, s)));
+function raisonSensible(home: string, chemins: readonly string[], windows: boolean): string | null {
+  const sensibles = cheminsSensibles(home, windows);
+  const touche = chemins.some((chemin) => sensibles.some((s) => estDessous(chemin, s, windows)));
   return touche ? 'chemin sensible' : null;
 }
 
 function raisonChemin(c: Confinement, normalise: string, resolu: string, sens: Sens): string | null {
+  const windows = surWindows(c);
   if (porteClaude(normalise) || porteClaude(resolu)) return 'chemin de configuration Claude';
-  const sensible = raisonSensible(c.home, [normalise, resolu]);
-  if (sensible !== null) return sensible;
-  if (sens === 'ecriture') return estDessous(resolu, c.espace) ? null : "écriture hors de l'espace";
-  const lisible = [c.espace, ...c.lecture].some((racine) => estDessous(resolu, racine));
+  const dansEspace = (chemin: string): boolean => estDessous(chemin, c.espace, windows);
+  // L'espace d'un invité vit sous son dossier personnel (AppData compris sous Windows) : il n'est jamais « sensible ».
+  if (!dansEspace(resolu)) {
+    const sensible = raisonSensible(c.home, [normalise, resolu], windows);
+    if (sensible !== null) return sensible;
+  }
+  if (sens === 'ecriture') return dansEspace(resolu) ? null : "écriture hors de l'espace";
+  const lisible = [c.espace, ...c.lecture].some((racine) => estDessous(resolu, racine, windows));
   return lisible ? null : "lecture hors de l'espace";
 }
 
 export function verifierChemin(c: Confinement, chemin: string, sens: Sens): VerdictAcces {
   const syntaxe = raisonSyntaxe(chemin);
   if (syntaxe !== null) return { ok: false, raison: syntaxe };
-  const normalise = posix.normalize(posix.isAbsolute(chemin) ? chemin : posix.join(c.espace, chemin));
+  const chemins = surWindows(c) ? win32 : posix;
+  const normalise = chemins.normalize(chemins.isAbsolute(chemin) ? chemin : chemins.join(c.espace, chemin));
   const raison = raisonChemin(c, normalise, c.resoudre(normalise), sens);
   return raison === null ? { ok: true } : { ok: false, raison };
 }
