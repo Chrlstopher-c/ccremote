@@ -13,6 +13,7 @@ import {
   OUTILS_AVIS,
   QUESTION_PLAN,
   questionsDeAskUser,
+  type Question,
   valeurReponse,
 } from './questions-sdk.ts';
 
@@ -27,6 +28,9 @@ const DECISIONS_PERMISSION = ['autoriser', 'toujours', 'refuser'] as const;
 function autoriserSansQuestion(entree: Record<string, unknown>): PermissionResult {
   return { behavior: 'allow', updatedInput: entree };
 }
+
+export const TEXTE_QUESTION_PASSEE =
+  'Chris a passé la question sans répondre. Continue avec ton meilleur jugement, ou repose-la plus tard si elle bloque.';
 
 export class AvisSdk {
   private readonly file = new FileAvis();
@@ -73,6 +77,7 @@ export class AvisSdk {
   private repondreQuestion(a: AvisEnAttente, r: ReponseDialogue): string | null {
     const courante = a.restantes[0];
     if (!courante) return 'aucune question en attente';
+    if (r.passer) return this.passerQuestions(a, courante);
     const valeur = valeurReponse(courante, r);
     if ('erreur' in valeur) return valeur.erreur;
     a.reponses[courante.texte] = valeur.valeur;
@@ -87,6 +92,13 @@ export class AvisSdk {
       return null;
     }
     this.terminer(a, { behavior: 'allow', updatedInput: { ...a.entree, answers: a.reponses } });
+    return null;
+  }
+
+  // Passer (comme Desktop) : Claude apprend que Chris n'a pas répondu et continue sans ces réponses.
+  private passerQuestions(a: AvisEnAttente, courante: Question): null {
+    this.publication.emettre({ type: 'dialogue_resolu', dialogue: dialogueDeQuestion(a.id, courante), reponses: [] });
+    this.annuler(a, TEXTE_QUESTION_PASSEE);
     return null;
   }
 

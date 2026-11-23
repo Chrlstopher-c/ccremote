@@ -2,7 +2,7 @@
 // (événement `dialogue_resolu`), avec sa réponse, pour être rejouée après rechargement.
 import { describe, expect, test } from 'bun:test';
 import type { Evenement, Dialogue } from '../../commun/session.ts';
-import { AvisSdk } from './avis-sdk.ts';
+import { AvisSdk, TEXTE_QUESTION_PASSEE } from './avis-sdk.ts';
 
 function banc() {
   const evenements: Evenement[] = [];
@@ -36,6 +36,20 @@ describe('réponse de Chris dans le fil', () => {
       dialogue: expect.objectContaining({ titre: 'Couleur ?' }),
       reponses: ['Bleu'],
     });
+  });
+
+  test('Passer : Claude apprend que la question est passée et le dialogue disparaît', async () => {
+    const { avis, evenements, affiche } = banc();
+    const entree = {
+      questions: [
+        { question: 'Couleur ?', options: [{ label: 'Rouge', description: '' }, { label: 'Bleu', description: '' }] },
+        { question: 'Taille ?', options: [{ label: 'S', description: '' }, { label: 'M', description: '' }] },
+      ],
+    };
+    const decision = avis.autoriser('AskUserQuestion', entree, [], new AbortController().signal, false);
+    expect(avis.repondre({ id: affiche().id, passer: true })).toBeNull();
+    expect(await decision).toEqual({ behavior: 'deny', message: TEXTE_QUESTION_PASSEE, interrupt: false });
+    expect(evenements.at(-1)).toMatchObject({ type: 'dialogue_resolu', reponses: [] });
   });
 
   test('une permission refusée rejoue la demande et la décision', () => {

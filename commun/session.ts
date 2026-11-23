@@ -99,6 +99,7 @@ export const ReponseDialogue = z.object({
   index: z.number().int().min(0).optional(),
   cases: z.array(z.number().int().min(0)).optional(),
   texte: z.string().optional(),
+  passer: z.boolean().optional(), // question passée sans réponse (bouton Passer, comme Desktop)
 });
 export type ReponseDialogue = z.infer<typeof ReponseDialogue>;
 
