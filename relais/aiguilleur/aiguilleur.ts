@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import type { Server, WebSocketHandler } from 'bun';
 import {
   CHEMIN_CODES_MEMBRE,
+  CHEMIN_RETRAIT_MEMBRE,
   CHEMIN_VPN_INVITES,
   DELAI_VPN_INVITES_MS,
   TAILLE_MAX_TRAME_OCTETS,
@@ -13,6 +14,7 @@ import type { ConfigVpnInvites } from '../config.ts';
 import { erreur } from '../clients/http.ts';
 import { type Annuaire, type Membre, empreinteSha256 } from './annuaire.ts';
 import { routeCodesMembre } from './api-codes.ts';
+import { routeRetraitMembre } from './api-retrait.ts';
 import { CHEMIN_APPAIRAGE, routeAppairage } from './api-membres.ts';
 import { type DonneesLien, Liens } from './liens.ts';
 import { routeVpnInvites } from './vpn-invites.ts';
@@ -44,6 +46,7 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
   const liens = new Liens(options.annuaire, options.journal, options.maxCanaux);
   const appairage = routeAppairage(options.annuaire, options.plafond, options.journal);
   const codes = routeCodesMembre(options.annuaire, options.journal);
+  const retrait = routeRetraitMembre(options.annuaire, options.journal);
   const vpn = routeVpnInvites({
     annuaire: options.annuaire,
     journal: options.journal,
@@ -60,6 +63,7 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
       if (chemin === CHEMIN_APPAIRAGE && req.method === 'POST') return appairage(req, serveur);
       if (chemin === CHEMIN_CODES_MEMBRE && req.method === 'POST') return codes(req);
       if (chemin === CHEMIN_VPN_INVITES && req.method === 'POST') return vpn(req);
+      if (chemin === CHEMIN_RETRAIT_MEMBRE && req.method === 'POST') return retrait(req);
       return erreur('introuvable', 404);
     },
     websocket: {

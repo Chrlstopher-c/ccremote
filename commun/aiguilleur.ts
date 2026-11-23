@@ -120,6 +120,11 @@ export function octetsCharge(charge: string): number {
   return new TextEncoder().encode(charge).byteLength;
 }
 
+/** Retrait d'un membre de l'annuaire par un nœud de même propriétaire (sorti de la charte par un chef). */
+export const CHEMIN_RETRAIT_MEMBRE = '/api/membres/retirer';
+export const CorpsRetraitMembre = z.strictObject({ membre: z.string().regex(/^[a-f0-9]{12}$/) });
+export type CorpsRetraitMembre = z.infer<typeof CorpsRetraitMembre>;
+
 /** Accès VPN d'un invité : un nœud (jeton de membre) demande une adresse et une configuration WireGuard. */
 export const CHEMIN_VPN_INVITES = '/api/membres/vpn-invites';
 /** Délai laissé au service root pour répondre à une demande ; au-delà, l'aiguilleur répond 504. */

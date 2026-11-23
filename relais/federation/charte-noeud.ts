@@ -33,6 +33,7 @@ import type { PresentationDistante } from './canal.ts';
 import type { ReglagesInvite } from '../../commun/invites.ts';
 import { maintenant, messageDe, reseauNeuf, sansDroits } from './charte-noeud-outils.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
+import { retirerDeLAiguilleur } from './retrait-aiguilleur.ts';
 import type { PairFederee, SecretsNoeud } from './secrets.ts';
 
 /** Un lien chiffré vers un nœud pair : seul ce qu'il faut pour y envoyer un message (CanalNoeud en est un). */
@@ -54,6 +55,8 @@ export interface PortCharte {
   liensNoeuds(): readonly LienCharte[];
   revoquer(membre: string): void;
   signaler(): void;
+  /** Retrait de l'annuaire de l'aiguilleur d'un membre sorti de la charte (défaut : la route de l'aiguilleur). */
+  retirerDeLAiguilleur?(membre: string): void;
   /** Réglages d'invité préparés pour ce membre (machine invitée avant son appairage), ou null. */
   invitePrevue?(membre: string): ReglagesInvite | null;
 }
@@ -312,7 +315,20 @@ export class CharteNoeud {
     if (actuelle === null || moi === null) return echec(409, 'aucun réseau sur ce nœud');
     if (!chefDans(actuelle, moi)) return echec(403, 'ce nœud n’est pas chef du réseau');
     const edition = fonction(actuelle, moi, maintenant());
-    return edition.ok ? this.signerEtAdopter(edition.charte, actuelle) : echec(409, edition.raison);
+    if (!edition.ok) return echec(409, edition.raison);
+    const r = await this.signerEtAdopter(edition.charte, actuelle);
+    if (r.ok) this.retirerSortis(actuelle, r.valeur, moi);
+    return r;
+  }
+
+  /** Les membres qu'une édition de ce chef a sortis de la charte quittent aussi l'annuaire de l'aiguilleur. */
+  private retirerSortis(ancienne: Charte, nouvelle: Charte, moi: string): void {
+    const restants = new Set(nouvelle.membres.map((m) => m.id));
+    for (const m of ancienne.membres) {
+      if (m.id === moi || restants.has(m.id)) continue;
+      if (this.port.retirerDeLAiguilleur) this.port.retirerDeLAiguilleur(m.id);
+      else void retirerDeLAiguilleur(this.port.secrets, this.port.journal, m.id);
+    }
   }
 
   /** Signe avec la clé du nœud, vérifie (contre la précédente, ou seule à la genèse), puis adopte. */

@@ -46,7 +46,7 @@ Paramètres › Réseau › Machines et appareils › ligne de l'invité › **R
   jamais les réglages ni les identifiants). Toujours refusés : terminaux, Remote Control, modules.
 - **Télémétrie** : actif aujourd'hui, sessions, jetons, part consommée — jamais le contenu. Vue **Activité** juste
   en dessous.
-- **Retirer** : il perd tout accès sur toutes les machines du réseau.
+- **Retirer** : il perd tout accès sur toutes les machines du réseau, et l'aiguilleur le retire de son annuaire.
 
 Outils d'agent : `reseau_invite_regler { membre, … }` change seulement les champs donnés (la route
 `POST /api/reseau/charte/membres/:membre/invite` accepte des réglages partiels, fusionnés avec les actuels) (ex. « donne-lui Opus jusqu'à

@@ -346,3 +346,17 @@ describe('admissions, appairage et droits', () => {
     expect(await a.charte.admettre(B, presentation(nouveau))).toBe(false);
   });
 });
+
+describe('retrait d’un membre : l’aiguilleur aussi', () => {
+  test('le chef qui retire un membre de la charte le fait retirer de l’annuaire ; un nœud qui reçoit, non', async () => {
+    const { a, b } = await reseau();
+    const retiresA: string[] = [];
+    const retiresB: string[] = [];
+    (a.port as { retirerDeLAiguilleur?: (m: string) => void }).retirerDeLAiguilleur = (m) => retiresA.push(m);
+    (b.port as { retirerDeLAiguilleur?: (m: string) => void }).retirerDeLAiguilleur = (m) => retiresB.push(m);
+    expect((await a.charte.editer((ch, moi, le) => retirerMembre(ch, moi, C, le))).ok).toBe(true);
+    expect(retiresA).toEqual([C]);
+    await b.charte.recevoir(A, signeeDe(a), 'accepte');
+    expect(retiresB).toEqual([]);
+  });
+});
