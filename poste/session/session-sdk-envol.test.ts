@@ -39,3 +39,35 @@ describe('SessionSdk — messages traités ensemble', () => {
     await attendre(() => session.resume.statut === 'attente');
   });
 });
+
+describe('SessionSdk — tour tardif après la mise au repos', () => {
+  test('un tour qui commence après le délai remet la session au travail, puis au repos à sa fin', async () => {
+    let liberer: () => void = () => undefined;
+    const premier = new Promise<void>((resoudre) => {
+      liberer = resoudre;
+    });
+    let tardif: () => void = () => undefined;
+    const second = new Promise<void>((resoudre) => {
+      tardif = resoudre;
+    });
+    const { session, statuts } = nouvelleSession(
+      async (texte) => {
+        if (texte === 'un') {
+          await premier;
+          return [{ type: 'result' }];
+        }
+        await second;
+        return [{ type: 'texte', texte: 'enfin' }, { type: 'result' }];
+      },
+      { delaiTourSuivantMs: 30 },
+    );
+    await session.lancer('un');
+    expect(await session.envoyer('deux')).toBeNull();
+    liberer();
+    await attendre(() => session.resume.statut === 'attente');
+    const avant = statuts.length;
+    tardif();
+    await attendre(() => statuts.slice(avant).includes('travail') && session.resume.statut === 'attente');
+    expect(statuts.slice(avant)).toContain('travail');
+  });
+});

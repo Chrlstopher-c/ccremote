@@ -188,6 +188,7 @@ async function ecouter(n: NoyauSdk, requete: RequeteSdk, etatTraduction: EtatTra
     for await (const msg of requete) {
       if (n.requete !== requete) break;
       n.messagesSdk += 1;
+      if (n.reposSuppose && msg.type !== 'result') reprendreTravail(n);
       nommerModeleVu(n, msg);
       traiter(n, msg, etatTraduction);
       if (msg.type === 'result') titreRelu(n);
@@ -196,6 +197,12 @@ async function ecouter(n: NoyauSdk, requete: RequeteSdk, etatTraduction: EtatTra
   } catch (erreur) {
     echouer(n, requete, erreur);
   }
+}
+
+// Un tour qu'on croyait absent a bien lieu (API lente à répondre) : la session est remise au travail.
+function reprendreTravail(n: NoyauSdk): void {
+  n.reposSuppose = false;
+  if (n.etat.statut === 'attente') maj(n, { statut: 'travail' });
 }
 
 function fermerRequete(n: NoyauSdk, requete: RequeteSdk): void {

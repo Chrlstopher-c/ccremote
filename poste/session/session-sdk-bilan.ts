@@ -23,6 +23,7 @@ export function constater(n: NoyauSdk, evt: Evenement): void {
 export function finDeTour(n: NoyauSdk, fin: NonNullable<SortieTraduction['finDeTour']>): void {
   const tokens = fin.contexte > 0 ? fin.contexte : n.etat.contexte.tokens;
   const panne = fin.erreur !== null && !n.interrompuParChris;
+  n.reposSuppose = false;
   const suite = n.bilan.conclure({
     autonomie: n.etat.autonomie,
     aUnObjectif: n.etat.objectif !== null,
@@ -44,8 +45,9 @@ export function finDeTour(n: NoyauSdk, fin: NonNullable<SortieTraduction['finDeT
 
 // Claude Code traite ensemble les messages envoyés pendant un tour : un seul `result` pour plusieurs envois, le
 // compteur restait à 1 et la session « travail » sans tour à venir (23/11, 18 min). Sans aucun message du SDK après ce
-// délai, aucun tour ne suit : la session passe au repos.
-export const DELAI_TOUR_SUIVANT_MS = 30_000;
+// délai, aucun tour ne suit : la session passe au repos. Rien n'est coupé : seul le statut change, et le premier
+// message tardif du SDK la remet au travail. Une commande longue ou une réflexion ont lieu DANS un tour déjà commencé.
+export const DELAI_TOUR_SUIVANT_MS = 60_000;
 
 function surveillerTourSuivant(n: NoyauSdk): void {
   const delaiMs = n.env.delaiTourSuivantMs ?? DELAI_TOUR_SUIVANT_MS;
@@ -55,6 +57,7 @@ function surveillerTourSuivant(n: NoyauSdk): void {
     if (n.requete !== requete || n.messagesSdk !== marque || n.etat.statut !== 'travail') return;
     n.env.journal.info({ session: n.etat.id }, 'aucun tour après la fin du tour : messages traités ensemble, au repos');
     n.bilan.oublierEnVol();
+    n.reposSuppose = true;
     maj(n, { statut: 'attente' });
   }, delaiMs);
   minuterie.unref?.();

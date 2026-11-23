@@ -50,6 +50,7 @@ export interface NoyauSdk {
   cessionEnAttente: boolean; // conversation tenue ailleurs pendant un tour : la requête se ferme en fin de tour
   promptEnAttente: boolean; // prompt système changé pendant un tour : la requête se ferme en fin de tour
   messagesSdk: number; // messages reçus du SDK : un tour annoncé qui n'en produit aucun n'a pas lieu
+  reposSuppose: boolean; // mise au repos faute de tour : un message tardif du SDK la remet au travail
 }
 
 export function creerNoyau(
@@ -79,6 +80,7 @@ export function creerNoyau(
     cessionEnAttente: false,
     promptEnAttente: false,
     messagesSdk: 0,
+    reposSuppose: false,
     reglagesVivants: new ReglagesVivants(() => n.requete, env.journal, p.resume.id),
     registreTaches: new RegistreTaches(),
     suivi: suiviDe(env, p, () => n),
