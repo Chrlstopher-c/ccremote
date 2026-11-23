@@ -144,6 +144,7 @@ function presentationDe(env: EnvironnementSdk, p: SessionPersistee, n: () => Noy
     cwd: p.resume.cwd,
     racines: pres.racines,
     stockage: pres.stockage,
+    lireChemin: lecteurImagesChemin(racinesImagesDe(p), env.journal),
     emettre: (evt) => emettre(n(), evt),
     renommer: (titre) => maj(n(), { titre }),
     journal: env.journal,

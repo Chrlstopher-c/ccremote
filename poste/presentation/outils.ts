@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 import type { QuoiRelais, ReponseRelais } from '../../commun/modules.ts';
 import type { Evenement } from '../../commun/session.ts';
 import type { Stockage } from './stockage.ts';
+import type { LireImageChemin } from './images-chemin.ts';
 
 /** Lien au relais pour les outils de modules (sans URL ni jeton) : la réponse revient à l'id de la requête. */
 export type RequeteRelais = (quoi: QuoiRelais, args: unknown) => Promise<ReponseRelais>;
@@ -21,6 +22,8 @@ export interface ContexteOutils {
   readonly api?: { readonly url: string; readonly jeton: string };
   // Lien au relais pour les outils `modules` (absent : refus lisible).
   readonly relais?: RequeteRelais;
+  // Lecture des images désignées par chemin dans un résultat d'outil (absent : pas d'images par chemin).
+  readonly lireChemin?: LireImageChemin;
 }
 
 export interface Resultat {
