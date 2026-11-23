@@ -483,3 +483,11 @@ test('message de Chris rejoué par le SDK à sa prise (isReplay) : aucune bulle 
   });
   expect(traduireSdk(rejeu, etat).evenements).toEqual([]);
 });
+
+describe('réponse probable de Chris (prompt_suggestion)', () => {
+  test('la suggestion du SDK est rendue telle quelle, sans événement de fil', () => {
+    const etat = nouvelEtatTraduction();
+    const msg = sdk({ type: 'prompt_suggestion', suggestion: 'ok publie la 0.2.6', uuid: 'u', session_id: 's1' });
+    expect(traduireSdk(msg, etat)).toEqual({ evenements: [], suggestion: 'ok publie la 0.2.6', claudeSessionId: 's1' });
+  });
+});

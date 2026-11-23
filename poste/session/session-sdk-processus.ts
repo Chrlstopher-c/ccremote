@@ -201,8 +201,10 @@ async function ecouter(n: NoyauSdk, requete: RequeteSdk, etatTraduction: EtatTra
   try {
     for await (const msg of requete) {
       if (n.requete !== requete) break;
-      n.messagesSdk += 1;
-      if (n.reposSuppose && msg.type !== 'result') reprendreTravail(n);
+      if (MESSAGES_DE_TOUR.has(msg.type)) {
+        n.messagesSdk += 1;
+        if (n.reposSuppose) reprendreTravail(n);
+      }
       nommerModeleVu(n, msg);
       traiter(n, msg, etatTraduction);
       if (msg.type === 'result') titreRelu(n);
@@ -212,6 +214,10 @@ async function ecouter(n: NoyauSdk, requete: RequeteSdk, etatTraduction: EtatTra
     echouer(n, requete, erreur);
   }
 }
+
+// Messages qui ne viennent que d'un tour en cours ; la suggestion, les notifications et l'état de session arrivent
+// aussi après la fin du tour et ne comptent pas.
+const MESSAGES_DE_TOUR: ReadonlySet<string> = new Set(['assistant', 'user', 'stream_event']);
 
 // Un tour qu'on croyait absent a bien lieu (API lente à répondre) : la session est remise au travail.
 function reprendreTravail(n: NoyauSdk): void {

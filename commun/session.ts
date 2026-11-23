@@ -173,6 +173,8 @@ export const ResumeSession = z.object({
   migrable: z.boolean().optional(), // Desktop/terminal observée, pas encore migrée (calculé par le relais)
   migreeVers: z.string().nullable().optional(), // migrée vers cette session de Lanterne (calculé par le relais)
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
+  // Réponse probable de Chris au dernier tour (prompt_suggestion du SDK), proposée dans la saisie ; null une fois envoyée.
+  suggestion: z.string().nullable().optional(),
   style_sortie: z.string().nullable().optional(), // style de sortie Claude (SDK) ; null ou absent = défaut
   prompt_systeme: z.string().max(8000).nullable().optional(), // prompt système de la conversation ; null = aucun
   // Session d'un invité (vue des autres : titre générique, fil refusé) : membre et nom affiché.
