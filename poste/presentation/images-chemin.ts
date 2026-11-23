@@ -1,7 +1,7 @@
 // Responsabilité : les images qu'un outil désigne par leur chemin dans son résultat texte (capture d'écran
 // écrite sur disque). Repérage des chemins pur ; lecture bornée (taille, dossiers permis, liens résolus).
 import { readFileSync, realpathSync, statSync } from 'node:fs';
-import { extname, isAbsolute, sep } from 'node:path';
+import { basename, extname, isAbsolute, sep } from 'node:path';
 import type { Logger } from 'pino';
 import { TAILLE_MAX_FICHIER } from '../../commun/presentation.ts';
 import type { ImageSdk } from './images.ts';
@@ -105,7 +105,7 @@ function lireFichier(reel: string, mime: string, journal: Logger): ImageSdk | nu
     journal.warn({ chemin: reel, taille: info.size }, 'image trop lourde pour le fil, écartée');
     return null;
   }
-  return { mime, base64: readFileSync(reel).toString('base64') };
+  return { mime, base64: readFileSync(reel).toString('base64'), nom: basename(reel) };
 }
 
 /**

@@ -14,6 +14,13 @@ export function estTypeImage(mime: string): mime is TypeImage {
 export interface ImageSdk {
   readonly mime: string;
   readonly base64: string;
+  /** Nom du fichier d'origine (image citée par chemin) ; absent : « image-N ». */
+  readonly nom?: string;
+}
+
+/** Le nom affiché d'une image : celui de son fichier s'il est connu, sinon « image-N.<ext> ». */
+export function nomImage(image: ImageSdk, rang: number): string {
+  return image.nom ?? `image-${rang + 1}.${image.mime.split('/')[1] ?? 'png'}`;
 }
 
 type Objet = Record<string, unknown>;
@@ -65,7 +72,7 @@ export function presenterImages(
         return;
       }
       const id = c.stockage.nouvelId();
-      const nom = `image-${rang + 1}.${image.mime.split('/')[1] ?? 'png'}`;
+      const nom = nomImage(image, rang);
       c.stockage.ecrire(c.sessionId, id, octets, { nom, mime: image.mime, taille: octets.length });
       c.emettre({
         type: 'image',
