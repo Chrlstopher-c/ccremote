@@ -222,6 +222,11 @@ function portG(r: Reseau): PortApiInvites {
     commander: async () => ({ ok: true, donnees: {} }),
     session: (id) => r.g.registre.session(id),
     repli: async () => new Response('repli', { status: 500 }),
+    codes: {
+      configuration: () => null,
+      creer: async () => ({ ok: false, statut: 409, raison: 'banc' }),
+      demanderVpn: async () => ({ ok: false, statut: 409, raison: 'banc' }),
+    },
   };
 }
 
