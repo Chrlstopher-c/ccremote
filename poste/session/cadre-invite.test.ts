@@ -91,6 +91,21 @@ describe('options SDK d’une session d’invité', () => {
     expect(optionsInvite(FAUSSES_OPTIONS).permissionMode).toBe('default');
   });
 
+  test('sur sa machine (relais), l’invité garde le mode choisi ; Manuel par défaut', () => {
+    const relais = { url: 'http://127.0.0.1:1/claude', jeton: 'j'.repeat(43) };
+    const chezLui = (mode?: 'bypassPermissions' | 'auto') =>
+      demandeInvite({ ...demande(mode ? { mode } : {}), invite: { ...CADRE, relais } });
+    expect(chezLui('bypassPermissions').mode).toBe('bypassPermissions');
+    expect(chezLui('auto').mode).toBe('auto');
+    expect(chezLui().mode).toBe('default');
+    const options = optionsInvite({ ...FAUSSES_OPTIONS, cadre: { ...CADRE, relais }, mode: 'acceptEdits' });
+    expect(options.permissionMode).toBe('acceptEdits');
+    expect(optionsInvite({ ...FAUSSES_OPTIONS, cadre: { ...CADRE, relais } }).permissionMode).toBe('default');
+    expect(optionsInvite({ ...FAUSSES_OPTIONS, mode: 'bypassPermissions' }).permissionMode).toBe('default');
+    expect(refusCommandeInvite({ cadre: { ...CADRE, relais } }, 'mode')).toBeNull();
+    expect(refusCommandeInvite({ cadre: CADRE }, 'mode')).not.toBeNull();
+  });
+
   test('CLAUDE_CONFIG_DIR du cadre, jeton du chef, aucune variable d’authentification du poste', () => {
     const env = envInvite(
       {

@@ -2,6 +2,7 @@
 // écoute de son flux jusqu'à sa fin ou sa panne, interruption, fermeture, arrêt du poste, reprise après redémarrage,
 // rembobinage.
 import {
+  type CanUseTool,
   getSessionMessages,
   type Options,
   type SDKUserMessage,
@@ -16,6 +17,7 @@ import { attendreConnecteurs, FileAsynchrone, messagesAvecConnecteurs } from './
 import { serveurRythme } from './lanceur.ts';
 import { optionsSdk } from './options-sdk.ts';
 import { avecPromptSysteme } from './consignes.ts';
+import type { Confinement } from '../../commun/invites-outils.ts';
 import { confinementDe, crochetConfinement, permissionInvite } from './confinement-invite.ts';
 import { jetonPourInvite, MESSAGE_JETON_INVITE, optionsInvite } from './cadre-invite.ts';
 import type { CadreInvite } from '../../commun/cadre-invite.ts';
@@ -92,9 +94,21 @@ function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeto
     modele: n.etat.modele === 'défaut' ? undefined : n.etat.modele,
     effort: n.etat.effort ?? null,
     confinement: crochetConfinement(confinement, n.env.journal),
-    canUseTool: permissionInvite(confinement, n.env.journal),
-    ...(cadre.relais !== undefined ? { serveurs: serveursLocauxInvite(n) } : {}),
+    canUseTool: cadre.relais !== undefined ? permissionChezLui(n, confinement) : permissionInvite(confinement, n.env.journal),
+    ...(cadre.relais !== undefined ? { mode: n.etat.mode ?? 'default', serveurs: serveursLocauxInvite(n) } : {}),
   });
+}
+
+// Sur la machine de l'invité : le cadre refuse d'abord ce qui en sort, puis l'invité tranche lui-même comme dans
+// une session ordinaire (Manuel : il est consulté ; Ignorer les permissions : rien ne lui est demandé).
+function permissionChezLui(n: NoyauSdk, confinement: Confinement): CanUseTool {
+  const cadre = permissionInvite(confinement, n.env.journal);
+  return async (nom, entree, opts) => {
+    const verdict = await cadre(nom, entree, opts);
+    if (verdict === null || verdict.behavior === 'deny') return verdict;
+    const bypass = (n.etat.mode ?? 'default') === 'bypassPermissions';
+    return n.avis.autoriser(nom, entree, opts.suggestions ?? [], opts.signal, bypass);
+  };
 }
 
 // Session sur la machine de l'invité : ses outils de Noctis (artefacts, visuels, rythme) agissent chez lui seulement.

@@ -4,7 +4,7 @@
 import type { CanUseTool, HookCallbackMatcher, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { Logger } from 'pino';
 import { CadreInvite } from '../../commun/cadre-invite.ts';
-import type { DemandeSession, EffortSession } from '../../commun/session.ts';
+import type { DemandeSession, EffortSession, ModeSession } from '../../commun/session.ts';
 import { OUTILS_INVITE_INTERDITS, OUTILS_TERMINAL } from '../../commun/invites-outils.ts';
 import { terminalPermis } from './confinement-invite.ts';
 import { BLOC_PRESENTATION } from './consignes.ts';
@@ -90,6 +90,7 @@ export interface ParametresInvite {
   readonly executable: string | null;
   readonly modele: string | undefined;
   readonly effort: EffortSession | null;
+  readonly mode?: ModeSession; // mode de permission choisi par l'invité (sur sa machine seulement)
   readonly confinement: HookCallbackMatcher; // crochet PreToolUse : refuse tout appel hors du cadre
   readonly canUseTool: CanUseTool; // même vérification, pour les outils soumis à permission
   /** Serveurs d'outils de Noctis (artefacts, visuels, rythme) : seulement pour une session sur la machine de l'invité. */
@@ -105,7 +106,8 @@ export function optionsInvite(p: ParametresInvite): Options {
     ...(p.reprise && p.reprisePoint ? { resumeSessionAt: p.reprisePoint } : {}),
     systemPrompt: { type: 'preset', preset: 'claude_code', append: consignesInvite(p.cadre, p.promptSysteme) },
     includePartialMessages: true,
-    permissionMode: 'default',
+    // Sur sa machine, l'invité choisit son mode (Manuel par défaut, 23/11) ; chez le chef, toujours « default ».
+    permissionMode: p.cadre.relais !== undefined ? (p.mode ?? 'default') : 'default',
     settingSources: [],
     strictMcpConfig: true,
     mcpServers: p.serveurs ?? {},
@@ -118,12 +120,16 @@ export function optionsInvite(p: ParametresInvite): Options {
   };
 }
 
-/** La demande d'ouverture d'un invité, ramenée à ce que son cadre permet : mode default, ni rapide, ni Ultracode. */
+/**
+ * La demande d'ouverture d'un invité, ramenée à ce que son cadre permet : ni rapide, ni Ultracode ; mode « default »,
+ * sauf sur sa propre machine où il garde le mode choisi (Manuel par défaut).
+ */
 export function demandeInvite(d: DemandeSession): DemandeSession {
+  const chezLui = d.invite?.relais !== undefined;
   return {
     ...d,
     moteur: 'sdk',
-    mode: 'default',
+    mode: chezLui ? (d.mode ?? 'default') : 'default',
     rapide: false,
     ultracode: false,
     style_sortie: null,
@@ -145,7 +151,7 @@ export function refusOuvertureInvite(d: DemandeSession): string | null {
 /** Refus d'une commande adressée à une session d'invité ; null si elle est permise. */
 // Sur la machine de l'invité (session par le relais), c'est lui qui lit : les fichiers que sa session lui présente
 // (visuels `afficher_widget`, pièces) s'affichent dans son fil. Chez le chef, ils restent refusés.
-const COMMANDES_INVITE_CHEZ_LUI: ReadonlySet<string> = new Set(['fichier_session']);
+const COMMANDES_INVITE_CHEZ_LUI: ReadonlySet<string> = new Set(['fichier_session', 'mode']);
 
 export function refusCommandeInvite(invite: { cadre: CadreInvite } | undefined, kind: string): string | null {
   if (!invite) return null;
