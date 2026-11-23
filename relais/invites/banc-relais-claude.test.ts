@@ -118,8 +118,12 @@ interface Reseau {
 }
 
 /** Un chef (A, réseau), B qui fait tourner les requêtes (jeton du chef), G invité chez le chef. */
-async function reseau(surcharge: Partial<ReglagesInvite> = {}, delaiClaudeMs?: number): Promise<Reseau> {
-  const b = await nouveau('tour', { jetonAbonnement: () => JETON_CHEF, urlApiClaude: amont.url.origin });
+async function reseau(
+  surcharge: Partial<ReglagesInvite> = {},
+  delaiClaudeMs?: number,
+  optionsB: Partial<OptionsFederation> = {},
+): Promise<Reseau> {
+  const b = await nouveau('tour', { jetonAbonnement: () => JETON_CHEF, urlApiClaude: amont.url.origin, ...optionsB });
   const a = await nouveau('portable', { peutReprendre: true });
   const g = await nouveau('elie', delaiClaudeMs !== undefined ? { delaiClaudeMs } : {});
   await appairer(a, b);
@@ -301,5 +305,39 @@ describe('relais Claude : délai et annulation côté invité', () => {
     );
     expect(rep.status).toBe(504);
     expect(JSON.parse(await rep.text())).toMatchObject({ error: { type: 'api_error' } });
+  });
+});
+
+describe('relais Claude : jeton du chef expiré', () => {
+  test('le relais fait rafraîchir le jeton (un seul Claude Code), relit le jeton et rejoue la requête', async () => {
+    let jeton: string | null = null;
+    let rafraichissements = 0;
+    const r = await reseau({}, undefined, {
+      jetonAbonnement: () => jeton,
+      rafraichirJeton: async () => {
+        rafraichissements += 1;
+        jeton = JETON_CHEF;
+        return true;
+      },
+    });
+    const rep = await r.g.federation.relais.client.routeLocale(requete(r.g, corpsDe()));
+    expect(rep.status).toBe(200);
+    expect(await rep.text()).toContain('message_stop');
+    expect(rafraichissements).toBe(1);
+    expect(recues[0]?.entetes.get('authorization')).toBe(`Bearer ${JETON_CHEF}`);
+  });
+
+  test('rafraîchissement en échec : 503 « doit se reconnecter » et alerte au chef', async () => {
+    const alertes: string[] = [];
+    const r = await reseau({}, undefined, {
+      jetonAbonnement: () => null,
+      rafraichirJeton: async () => false,
+      notifier: (titre) => alertes.push(titre),
+    });
+    const rep = await r.g.federation.relais.client.routeLocale(requete(r.g, corpsDe()));
+    expect(rep.status).toBe(503);
+    expect(await rep.text()).toContain('doit se reconnecter');
+    expect(recues).toHaveLength(0);
+    expect(alertes.filter((t) => t === 'Compte Claude à reconnecter')).toHaveLength(1);
   });
 });

@@ -77,6 +77,8 @@ import { JournalSynchro } from './synchro/journal.ts';
 import { ServiceSynchro } from './synchro/service.ts';
 import { nomUtilisateur } from '../commun/identite.ts';
 import { demarrerAiguilleur } from './aiguilleur/demarrer.ts';
+import { DELAI_RAFRAICHISSEMENT_MS, lancerClaudeMinimal, RafraichisseurJeton } from './invites/rafraichir-jeton.ts';
+import { trouverClaude } from '../poste/session/session-sdk.ts';
 
 // Mode aiguilleur (même binaire) : annuaire et liens seulement. Le reste de ce fichier, qui ouvre le relais complet,
 // n'est pas lancé ; le service vit par les serveurs démarrés ici.
@@ -86,10 +88,17 @@ if (process.env['LANTERNE_RELAIS_MODE'] === 'aiguilleur') {
 }
 
 const journal = creerJournal('relais');
+// Un jeton qui expire dans moins de 2 min est traité comme expiré : Claude Code le renouvelle avant de relayer.
+const MARGE_JETON_MS = 120_000;
+const rafraichisseurJeton = new RafraichisseurJeton({
+  journal: journal.child({ domaine: 'relais-claude' }),
+  delaiMs: DELAI_RAFRAICHISSEMENT_MS,
+  lancer: () => lancerClaudeMinimal(trouverClaude() ?? 'claude'),
+});
 // Jeton du compte Claude par défaut de cette machine (relais des invités) ; illisible ou absent : aucun relais.
 function jetonDuCompteParDefaut(): string | null {
   try {
-    return lireJetonFichier(null);
+    return lireJetonFichier(null, MARGE_JETON_MS);
   } catch (erreur) {
     journal.warn({ err: erreur }, 'jeton du compte Claude illisible : relais des invités indisponible');
     return null;
@@ -236,6 +245,7 @@ const federation = new Federation({
   dossierSecrets,
   // Relais Claude : le compte Claude de cette machine sert les requêtes relayées des invités (jamais exposé).
   jetonAbonnement: () => jetonDuCompteParDefaut(),
+  rafraichirJeton: () => rafraichisseurJeton.rafraichir(),
   servirAppareil: (demande) => servirPourAppareil(demande),
   servirChef: (demande) => servirPourChef(demande),
   fonctions: sondesFonctions(process.env, journal.child({ domaine: 'fonctions' })),

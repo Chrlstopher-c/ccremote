@@ -106,6 +106,8 @@ export interface OptionsFederation {
   readonly postesEnLigne?: () => string[];
   /** Jeton OAuth du compte Claude de ce nœud (requêtes relayées des invités) ; absent ou null : aucun relais. */
   readonly jetonAbonnement?: () => string | null;
+  /** Fait renouveler un jeton expiré par un Claude Code minimal (vrai : relire le jeton). Absent : aucun essai. */
+  readonly rafraichirJeton?: () => Promise<boolean>;
   /** Adresse de l'API Claude (défaut : l'API publique). Un faux serveur en essai. */
   readonly urlApiClaude?: string;
   /** Appel HTTP vers l'API (défaut : fetch). Essais uniquement. */

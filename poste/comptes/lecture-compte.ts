@@ -70,15 +70,15 @@ function entetes(jeton: string): Record<string, string> {
   };
 }
 
-/** Le jeton que Claude Code tient à jour dans `.credentials.json` ; absent, illisible ou expiré : null. */
-export function lireJetonFichier(configDir: string | null): string | null {
+/** Jeton tenu à jour par Claude Code dans `.credentials.json` ; absent, illisible, expiré (à `margeMs` près) : null. */
+export function lireJetonFichier(configDir: string | null, margeMs = 0): string | null {
   const fichier = join(configDir ?? join(homedir(), '.claude'), '.credentials.json');
   if (!existsSync(fichier)) return null;
   const brut: unknown = JSON.parse(readFileSync(fichier, 'utf8'));
   const oauth = objet(objet(brut)['claudeAiOauth']);
   const valeur = texte(oauth['accessToken']);
   const expireLe = typeof oauth['expiresAt'] === 'number' ? oauth['expiresAt'] : 0;
-  if (valeur === null || (expireLe > 0 && expireLe < Date.now())) return null;
+  if (valeur === null || (expireLe > 0 && expireLe < Date.now() + margeMs)) return null;
   return valeur;
 }
 

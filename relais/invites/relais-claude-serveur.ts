@@ -30,6 +30,10 @@ export interface PortServeurClaude {
   readonly reglagesDe: (membre: string) => ReglagesInvite | null;
   readonly partDe: (membre: string, reglages: ReglagesInvite) => VerdictPart;
   readonly jetonAbonnement: () => string | null;
+  /** Fait renouveler le jeton expiré par Claude Code (vrai si un jeton neuf est attendu) ; absent : aucun essai. */
+  readonly rafraichirJeton?: () => Promise<boolean>;
+  /** Alerte le chef (notification) quand le compte doit se reconnecter. */
+  readonly alerter?: (titre: string, texte: string) => void;
   readonly urlApi: string;
   readonly fetch: typeof fetch;
   readonly suivi: SuiviSessionsClaude;
@@ -83,7 +87,7 @@ export class ServeurClaude {
       );
       return this.refuser(canal, requete.ref, verdict.statut, verdict.type, verdict.message);
     }
-    const jeton = this.p.jetonAbonnement();
+    const jeton = await this.jetonValide();
     if (jeton === null) {
       return this.refuser(canal, requete.ref, 503, 'api_error', 'le compte Claude du chef doit se reconnecter');
     }
@@ -92,6 +96,21 @@ export class ServeurClaude {
     const debut = this.p.debutRequete(canal.membre);
     const conso = await this.appeler(canal, requete, corps, jeton);
     this.p.finRequete(canal.membre, debut, conso, nouvelle);
+  }
+
+  /** Le jeton du compte ; expiré, Claude Code le renouvelle une fois, puis il est relu. Toujours absent : alerte. */
+  private async jetonValide(): Promise<string | null> {
+    const jeton = this.p.jetonAbonnement();
+    if (jeton !== null || this.p.rafraichirJeton === undefined) return jeton;
+    const relu = (await this.p.rafraichirJeton()) ? this.p.jetonAbonnement() : null;
+    if (relu === null) {
+      this.p.journal.error('relais Claude : jeton du chef expiré et non renouvelé');
+      this.p.alerter?.(
+        'Compte Claude à reconnecter',
+        'Le relais des invités n’a pas pu renouveler le jeton de ce compte : reconnecte-le dans Paramètres › Comptes.',
+      );
+    }
+    return relu;
   }
 
   /** Coupe l'appel à l'API d'une requête de ce pair (`claude_annuler`). */

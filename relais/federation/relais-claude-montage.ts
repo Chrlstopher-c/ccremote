@@ -26,6 +26,8 @@ export function montarRelaisClaude(port: PortNoeud, invites: NoeudInvites): Rela
       reglagesDe: (membre) => invites.reglagesDe(membre),
       partDe: (membre, reglages) => invites.partDe(membre, reglages),
       jetonAbonnement: options.jetonAbonnement ?? (() => null),
+      ...(options.rafraichirJeton ? { rafraichirJeton: options.rafraichirJeton } : {}),
+      ...(options.notifier ? { alerter: options.notifier } : {}),
       urlApi: options.urlApiClaude ?? URL_API_PAR_DEFAUT,
       fetch: options.fetchClaude ?? fetch,
       debutRequete: () => invites.debutRelais(),

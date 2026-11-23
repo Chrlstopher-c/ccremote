@@ -67,4 +67,4 @@ moyen » → `modeles` avec `opus: ['low','medium']` en plus des familles déjà
 - Ses conversations tournent dans un dossier à lui, avec une configuration Claude dédiée et sans identifiants ; elles
   n'ont ni terminal (Bash), ni sous-agents, ni serveurs MCP.
 - Limites connues : la part consommée se mesure par l'écart d'utilisation du compte pendant ses requêtes (un usage
-  simultané du chef lui est compté) ; si le compte du chef doit se reconnecter, ses requêtes échouent avec ce motif.
+  simultané du chef lui est compté) ; si le jeton du compte du chef a expiré, le relais le fait renouveler par un Claude Code minimal (`claude -p`, haiku, sans session gardée) puis rejoue la requête ; s'il n'y arrive pas, la requête échoue avec ce motif et le chef reçoit une alerte.
