@@ -100,6 +100,16 @@ describe('recalerFiche', () => {
     }
   });
 
+  test('modèle changé hors de Lanterne : son nom affiché suit', () => {
+    const base = { majLe: null, modeleLe: '2026-11-23T20:00:00.000Z', mode: null, contexte: null };
+    const etat = { ...base, modele: 'claude-opus-5-5', travailDernier: false, ecritLe: 0 };
+    const ancienne = { ...fiche(), modele: 'claude-fable-5-2', modeleNom: 'Fable 5.2' };
+    expect(recalerFiche(ancienne, { etat, desktop: null })).toMatchObject({
+      modele: 'claude-opus-5-5',
+      modeleNom: 'Opus 5.5',
+    });
+  });
+
   test('sans transcript ni fiche Desktop, la fiche ne change pas', () => {
     expect(recalerFiche(fiche(), { etat: null, desktop: null })).toEqual(fiche());
   });

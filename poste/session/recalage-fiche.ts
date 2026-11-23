@@ -4,6 +4,7 @@
 import type { Logger } from 'pino';
 import type { ResumeSession } from '../../commun/session.ts';
 import { type ModeleDate, plusRecentOpt } from '../../commun/modele-date.ts';
+import { nomLisibleModele } from './modele-affiche.ts';
 import { type EtatTranscript, etatDuTranscript, tourEnCours } from './etat-transcript.ts';
 import type { SessionPersistee } from './persistance.ts';
 import { cheminTranscript } from './transcript.ts';
@@ -39,6 +40,8 @@ export function recalerFiche(fiche: ResumeSession, sources: SourcesFiche): Resum
     majLe: etat?.majLe ?? fiche.majLe,
     modele: modele?.modele ?? fiche.modele,
     ...(modele ? { modeleLe: modele.le } : {}),
+    // Modèle changé : son nom suit (sinon l'ancien restait affiché).
+    ...(modele && modele.modele !== fiche.modele ? { modeleNom: nomLisibleModele(modele.modele) } : {}),
     contexte,
     ...(mode ? { mode } : {}),
     ...(desktop?.archivee ? { archivee: true } : {}),

@@ -4,6 +4,7 @@
 import type { ModeleDate } from '../../commun/modele-date.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import { decisionCession } from './cession-sdk.ts';
+import { nomLisibleModele } from './modele-affiche.ts';
 import { statutExterne } from './recalage-demarrage.ts';
 import { cheminTranscript } from './transcript.ts';
 import { libererRequete, type NoyauSdk } from './session-sdk-noyau.ts';
@@ -23,7 +24,9 @@ export function rattacherTerminal(
   const modele = modeleLu ?? { modele: n.etat.modele, le: n.etat.modeleLe ?? null };
   const inchangee = statut === n.etat.statut && (n.etat.terminal === true) === vivant;
   if (inchangee && modele.modele === n.etat.modele && modele.le === (n.etat.modeleLe ?? null)) return;
-  n.etat = { ...n.etat, statut, terminal: vivant, modele: modele.modele, modeleLe: modele.le };
+  // Modèle changé hors de Lanterne : son nom suit (23/11 : « Fable 5.2 » restait affiché sur une session en Opus 5.5).
+  const modeleNom = modele.modele === n.etat.modele ? n.etat.modeleNom : nomLisibleModele(modele.modele);
+  n.etat = { ...n.etat, statut, terminal: vivant, modele: modele.modele, modeleLe: modele.le, modeleNom };
   n.env.sortie.resume(n.etat);
 }
 
