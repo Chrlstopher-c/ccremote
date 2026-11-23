@@ -29,8 +29,12 @@ const ListeEfforts = z
   .max(5)
   .refine((efforts) => new Set(efforts).size === efforts.length, 'efforts en double');
 
+/** Identifiants exacts permis d'une famille (ex. claude-opus-5-5) ; liste absente ou vide : toutes ses versions. */
+const ListeVersions = z.array(z.string().regex(/^[a-z0-9][a-z0-9.-]{0,59}$/)).max(30);
+
 export const ReglagesInvite = z.object({
   modeles: z.partialRecord(z.enum(FAMILLES), ListeEfforts), // famille absente = modèle interdit
+  versions: z.partialRecord(z.enum(FAMILLES), ListeVersions).optional(),
   part5h: z.number().int().min(0).max(100),
   partSemaine: z.number().int().min(0).max(100).nullable(),
   simultanees: z.number().int().min(1).max(10),
@@ -67,11 +71,24 @@ function plusEleve(efforts: readonly EffortSession[]): EffortSession | null {
   return ordonnes[ordonnes.length - 1] ?? null;
 }
 
+/**
+ * La version demandée est-elle permise ? Comparée à l'identifiant exact, suffixes de date (-20251001) et de fenêtre
+ * ([1m]) tolérés ; « claude-opus-5 » ne couvre donc pas « claude-opus-5-5 ».
+ */
+export function versionPermise(r: ReglagesInvite, modele: string): boolean {
+  const famille = familleDe(modele);
+  const liste = famille === null ? [] : (r.versions?.[famille] ?? []);
+  if (liste.length === 0) return true;
+  const demande = modele.toLowerCase().replace(/\[[^\]]*\]$/, '').replace(/-\d{8}$/, '');
+  return liste.includes(demande);
+}
+
 export function effortApplique(r: ReglagesInvite, modele: string, effort: EffortSession | null): EffortApplique {
   const famille = familleDe(modele);
   const permis = effortsPermis(r, famille);
   const haut = plusEleve(permis);
   if (haut === null) return { ok: false, raison: `modèle non permis : ${famille ?? modele}` };
+  if (!versionPermise(r, modele)) return { ok: false, raison: `version non permise : ${modele}` };
   if (effort === null) return { ok: true, effort: haut };
   if (!permis.includes(effort)) return { ok: false, raison: `effort non permis : ${effort}` };
   return { ok: true, effort };
