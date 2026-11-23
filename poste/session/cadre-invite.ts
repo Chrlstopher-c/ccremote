@@ -5,7 +5,8 @@ import type { CanUseTool, HookCallbackMatcher, Options } from '@anthropic-ai/cla
 import type { Logger } from 'pino';
 import { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { DemandeSession, EffortSession } from '../../commun/session.ts';
-import { OUTILS_INVITE_INTERDITS } from '../../commun/invites-outils.ts';
+import { OUTILS_INVITE_INTERDITS, OUTILS_TERMINAL } from '../../commun/invites-outils.ts';
+import { terminalPermis } from './confinement-invite.ts';
 import { lireJetonFichier } from '../comptes/lecture-compte.ts';
 import { envSdk } from './options-sdk.ts';
 
@@ -99,7 +100,7 @@ export function optionsInvite(p: ParametresInvite): Options {
     settingSources: [],
     strictMcpConfig: true,
     mcpServers: {},
-    disallowedTools: [...OUTILS_INVITE_INTERDITS],
+    disallowedTools: OUTILS_INVITE_INTERDITS.filter((o) => !terminalPermis(p.cadre) || !OUTILS_TERMINAL.includes(o)),
     hooks: { PreToolUse: [p.confinement] },
     canUseTool: p.canUseTool,
     ...(p.effort ? { effort: p.effort } : {}),

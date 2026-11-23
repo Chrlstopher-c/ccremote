@@ -122,5 +122,6 @@ function cadreDe(ctx: CtxOuverture, membre: string, d: { espace: string; config:
     lecture: acces.fichiersHors ? [...ctx.racines] : [],
     prompt: ctx.reglages.prompt,
     remoteControl: acces.remoteControl,
+    terminaux: acces.terminaux,
   };
 }

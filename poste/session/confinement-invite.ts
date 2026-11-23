@@ -45,9 +45,15 @@ function racineReelle(chemin: string): string {
   return existsSync(chemin) ? realpathSync(chemin) : chemin;
 }
 
+/** Terminal : accordé par le chef ET session sur la machine de l'invité (par le relais), jamais chez le chef. */
+export function terminalPermis(cadre: CadreInvite): boolean {
+  return cadre.terminaux === true && cadre.relais !== undefined;
+}
+
 /** Le confinement d'un cadre : espace et racines de lecture réelles ; lève si l'espace n'existe pas. */
 export function confinementDe(cadre: CadreInvite): Confinement {
   return {
+    terminal: terminalPermis(cadre),
     espace: realpathSync(cadre.espace),
     lecture: cadre.lecture.map(racineReelle),
     home: homedir(),
