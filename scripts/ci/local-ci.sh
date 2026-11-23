@@ -10,6 +10,8 @@ BUN_IMAGE=${BUN_IMAGE:-oven/bun:1}
 
 ETAPES=$(cat <<'SCRIPT'
 set -euo pipefail
+# Le runner ubuntu de GitHub a git et pgrep ; l'image oven/bun non : certains tests les appellent.
+command -v git >/dev/null && command -v pgrep >/dev/null || { apt-get update -qq && apt-get install -y -qq git procps >/dev/null; }
 mkdir -p /work && cd /src && tar --exclude=./node_modules --exclude=.git -cf - . | tar -C /work -xf -
 cd /work
 echo "== check : racine"
