@@ -13,7 +13,7 @@ describe('agent relancé par SendMessage', () => {
     t.notifiee = true;
     reprendreTache(etat, 'a1', '2026-11-23T17:00:00.000Z');
     expect(t.debutLe).toBe('2026-11-23T17:00:00.000Z');
-    expect(t.statut).toBe('en_cours');
+    expect(etat.taches.get('u1')?.statut).toBe('en_cours');
   });
 
   test('un message pendant qu’il travaille ne remet pas sa durée à zéro', () => {

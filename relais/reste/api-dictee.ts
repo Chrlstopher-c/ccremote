@@ -85,7 +85,7 @@ export class ApiDictee {
     const locales = await Promise.all(this.d.postes.vues().map((v) => this.serviceDe(v.id, v.enLigne)));
     if (new URL(req.url).searchParams.get('local') === '1') return json({ machines: locales });
     const distantes = await this.d.pairs.dicteeServiceDesPairs();
-    return json({ machines: [...locales, ...this.lireDistantes(distantes)] });
+    return json({ machines: sansDoublonHorsLigne(locales, this.lireDistantes(distantes)) });
   }
 
   /** Démarrer, arrêter ou régler le service d'une machine ; l'état rendu est celui relu après l'action. */
@@ -185,4 +185,15 @@ function absentDe(id: string, message: string): ServiceDicteeMachine {
     lanceParPoste: false,
     message,
   };
+}
+
+// Un ancien poste local hors ligne qui porte le nom d'une machine servie par un pair (la tour reliée en nœud) : seule
+// l'entrée du pair compte, sinon le menu proposerait deux fois la même machine, dont une injoignable.
+function sansDoublonHorsLigne<T extends { machine: string; message: string | null }>(
+  locales: readonly T[],
+  distantes: readonly T[],
+): T[] {
+  const servies = new Set(distantes.map((d) => d.machine));
+  const gardees = locales.filter((l) => !(servies.has(l.machine) && l.message === 'poste hors ligne'));
+  return [...gardees, ...distantes];
 }
