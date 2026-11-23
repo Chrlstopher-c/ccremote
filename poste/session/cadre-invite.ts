@@ -57,12 +57,30 @@ export function envInvite(
   if (cadre.relais !== undefined) {
     return {
       ...env,
-      ANTHROPIC_BASE_URL: cadre.relais.url,
+      ANTHROPIC_BASE_URL: urlRelaisActuelle(cadre.relais.url, source),
       ANTHROPIC_AUTH_TOKEN: cadre.relais.jeton,
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     };
   }
   return jeton === null ? env : { ...env, CLAUDE_CODE_OAUTH_TOKEN: jeton };
+}
+
+/**
+ * Le relais Claude du nœud est sur la boucle locale, au port web du moteur intégré, qui change à chaque lancement de
+ * l'appli. Le cadre gardé dans la fiche porte le port de la création : la reprise d'une conversation après une relance
+ * prend le port actuel (sinon Claude Code répond « Network error »). Une adresse hors de la boucle reste telle quelle.
+ */
+export function urlRelaisActuelle(url: string, source: Record<string, string | undefined>): string {
+  const port = Number(source['LANTERNE_MOTEUR_PORT_WEB']);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return url;
+  try {
+    const adresse = new URL(url);
+    if (adresse.hostname !== '127.0.0.1' && adresse.hostname !== 'localhost') return url;
+    adresse.port = String(port);
+    return adresse.toString();
+  } catch {
+    return url;
+  }
 }
 
 const ligne = (texte: string | null | undefined): string => (texte ?? '').trim();

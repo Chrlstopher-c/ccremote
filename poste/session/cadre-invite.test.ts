@@ -162,6 +162,26 @@ describe('options SDK d’une session d’invité', () => {
     expect(env['ANTHROPIC_API_KEY']).toBeUndefined();
   });
 
+  test('après une relance de l’appli (nouveau port du moteur), la session reprend sur le relais actuel', () => {
+    // Recette 0.2.10 : le port du moteur change à chaque lancement ; le cadre gardé dans la fiche pointait vers
+    // l’ancien, et toute conversation existante répondait « Network error » après une relance ou une mise à jour.
+    const ancien: CadreInvite = {
+      ...CADRE,
+      relais: { url: 'http://127.0.0.1:61583/api/relais-claude', jeton: 'j'.repeat(43) },
+    };
+    const env = envInvite({ PATH: '/usr/bin', LANTERNE_MOTEUR_PORT_WEB: '61852' }, ancien, null);
+    expect(env['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:61852/api/relais-claude');
+    const sansPort = envInvite({ PATH: '/usr/bin' }, ancien, null);
+    expect(sansPort['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:61583/api/relais-claude');
+    const distant: CadreInvite = {
+      ...CADRE,
+      relais: { url: 'http://10.0.0.2:5/api/relais-claude', jeton: 'j'.repeat(43) },
+    };
+    expect(envInvite({ LANTERNE_MOTEUR_PORT_WEB: '61852' }, distant, null)['ANTHROPIC_BASE_URL']).toBe(
+      'http://10.0.0.2:5/api/relais-claude',
+    );
+  });
+
   test('pas de jeton à lire quand le cadre passe par le relais', () => {
     const avecRelais: CadreInvite = { ...CADRE, relais: { url: 'http://127.0.0.1:1/x', jeton: 'j'.repeat(43) } };
     expect(jetonPourInvite(avecRelais, jetable(), journal)).toBeNull();
