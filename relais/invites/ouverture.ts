@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { CadreInvite } from '../../commun/cadre-invite.ts';
 import { type ReglagesInvite, verifierOuverture } from '../../commun/invites.ts';
-import { EffortSession } from '../../commun/session.ts';
+import { EffortSession, ModeSession } from '../../commun/session.ts';
 import { NOMBRE_MAX_PIECES, PieceJointe } from '../../commun/presentation.ts';
 
 /** Ce que l'invité peut donner : message, titre, objectif, modèle, effort, prompt de conversation, jointes. */
@@ -15,6 +15,7 @@ export const CorpsInvite = z.object({
   objectif: z.string().nullable().optional(),
   modele: z.string().min(1).max(120).optional(),
   effort: EffortSession.optional(),
+  mode: ModeSession.optional(), // choisi par l'invité : sa session tourne sur sa machine (Manuel par défaut)
   prompt_systeme: z.string().max(8000).optional(),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(),
 });
@@ -99,7 +100,7 @@ export function preparerOuverture(ctx: CtxOuverture, membre: string, texte: stri
     ...(lu.data.titre ? { titre: lu.data.titre } : {}),
     objectif: lu.data.objectif ?? null,
     autonomie: false,
-    mode: 'default',
+    mode: lu.data.mode ?? 'default',
     modele: verdict.modele,
     effort: verdict.effort,
     ...(ctx.compteDeMoi ? { compte: ctx.compteDeMoi } : {}),

@@ -124,7 +124,7 @@ describe('ouverture par l’invité', () => {
     expect(racineAcceptable('/home/utilisateur/lanterne-invites', '/home/utilisateur')).toBe(true);
   });
 
-  test('le corps de l’invité est réécrit : espace, mode default, sans bac à sable, cadre posé', () => {
+  test('le corps de l’invité est réécrit : espace, mode choisi gardé, sans bac à sable, cadre posé', () => {
     const r = preparerOuverture(
       base(),
       G,
@@ -139,7 +139,10 @@ describe('ouverture par l’invité', () => {
     );
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.corps['mode']).toBe('default');
+    // Décision du 23/11 : la session tourne sur sa machine, l'invité garde le mode choisi (Manuel par défaut).
+    expect(r.corps['mode']).toBe('bypassPermissions');
+    const sansMode = preparerOuverture(base(), G, JSON.stringify({ message: 'x', modele: 'haiku', effort: 'low' }));
+    expect(sansMode.ok && sansMode.corps['mode']).toBe('default');
     expect('bac_a_sable' in r.corps).toBe(false);
     expect(r.corps['machine']).toBe('tour');
     expect(String((r.corps['projet'] as { chemin: string }).chemin).startsWith(join(dossier, 'espaces', G))).toBe(true);
