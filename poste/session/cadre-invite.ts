@@ -108,6 +108,9 @@ export function optionsInvite(p: ParametresInvite): Options {
     includePartialMessages: true,
     // Sur sa machine, l'invité choisit son mode (Manuel par défaut, 23/11) ; chez le chef, toujours « default ».
     permissionMode: p.cadre.relais !== undefined ? (p.mode ?? 'default') : 'default',
+    // Chez lui, il peut passer en « Ignorer les permissions » en cours de session : le SDK l'exige dès le lancement.
+    // Le crochet de confinement s'applique dans tous les modes (rien hors de son espace).
+    ...(p.cadre.relais !== undefined ? { allowDangerouslySkipPermissions: true } : {}),
     settingSources: [],
     strictMcpConfig: true,
     mcpServers: p.serveurs ?? {},

@@ -104,6 +104,9 @@ describe('options SDK d’une session d’invité', () => {
     expect(optionsInvite({ ...FAUSSES_OPTIONS, mode: 'bypassPermissions' }).permissionMode).toBe('default');
     expect(refusCommandeInvite({ cadre: { ...CADRE, relais } }, 'mode')).toBeNull();
     expect(refusCommandeInvite({ cadre: CADRE }, 'mode')).not.toBeNull();
+    // Passer en « Ignorer les permissions » en cours de session : le SDK l'exige dès le lancement (recette 0.2.6).
+    expect(options.allowDangerouslySkipPermissions).toBe(true);
+    expect(optionsInvite(FAUSSES_OPTIONS).allowDangerouslySkipPermissions).not.toBe(true);
   });
 
   test('CLAUDE_CONFIG_DIR du cadre, jeton du chef, aucune variable d’authentification du poste', () => {
