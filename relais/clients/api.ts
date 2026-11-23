@@ -44,6 +44,9 @@ import { routesMachinesReseau } from '../federation/api-machines-reseau.ts';
 import { refusCreationSession } from '../federation/pause-noeud.ts';
 import type { CodesReseau } from '../codes-reseau/codes-reseau.ts';
 import { routesCodesReseau } from '../codes-reseau/api-codes-reseau.ts';
+import { routesMisesAJour } from '../federation/mises-a-jour-noeud.ts';
+import { creerJournal } from '../../commun/journal.ts';
+import type { SecretsNoeud } from '../federation/secrets.ts';
 import type { AjoutNoeud } from '../ajout-noeud/ajout-noeud.ts';
 import { routesAjoutNoeud } from '../ajout-noeud/api-ajout-noeud.ts';
 import { routesSynchro } from '../synchro/api-synchro.ts';
@@ -77,6 +80,8 @@ export interface DependancesApi {
   /** Les invités (relais/invites) : garde des routes de contenu, ouverture, routes des réglages. */
   readonly invites: ApiInvites;
   readonly codesReseau: CodesReseau;
+  /** Secrets du nœud : son jeton de membre pour lire les mises à jour à l'aiguilleur. */
+  readonly secretsNoeud: SecretsNoeud;
   readonly ajoutNoeud: AjoutNoeud;
   readonly synchro: ServiceSynchro;
   readonly voix: ApiVoix;
@@ -271,6 +276,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     ...d.invites.routes(protege),
     ...routesMachinesReseau(d.federation, protege),
     ...routesCodesReseau(d.codesReseau, protege),
+    ...routesMisesAJour(d.secretsNoeud, creerJournal('relais').child({ domaine: 'mises-a-jour' }), protege),
     ...routesAjoutNoeud(d.ajoutNoeud, protege),
     ...routesSynchro(d.synchro, protege),
     ...routesReste(d.reste, protege),

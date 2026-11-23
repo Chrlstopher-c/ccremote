@@ -18,6 +18,7 @@ import { routeRetraitMembre } from './api-retrait.ts';
 import { CHEMIN_APPAIRAGE, routeAppairage } from './api-membres.ts';
 import { type DonneesLien, Liens } from './liens.ts';
 import { routeVpnInvites } from './vpn-invites.ts';
+import { PREFIXE_MISES_A_JOUR, routeMisesAJour } from './mises-a-jour.ts';
 
 export const CHEMIN_LIEN = '/aiguilleur';
 
@@ -32,6 +33,8 @@ export interface OptionsAiguilleur {
   readonly vpnInvites?: ConfigVpnInvites | null;
   /** Délai d'attente de la réponse du service root ; absent : le délai de production. */
   readonly delaiVpnMs?: number;
+  /** Dossier des mises à jour servies aux membres ; absent ou null : 404. */
+  readonly dossierMisesAJour?: string | null;
 }
 
 export interface Aiguilleur {
@@ -53,6 +56,14 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
     config: options.vpnInvites ?? null,
     delaiMs: options.delaiVpnMs ?? DELAI_VPN_INVITES_MS,
   });
+  const misesAJour = routeMisesAJour({
+    dossier: options.dossierMisesAJour ?? null,
+    journal: options.journal,
+    membreDuJeton: (jeton) => {
+      const membre = chercherMembre(options.annuaire, options.journal, jeton);
+      return membre === null ? null : { revoque: membre.revoqueLe !== null };
+    },
+  });
   const minuteur = options.intervalleBalayageMs
     ? setInterval(() => liens.balayer(), options.intervalleBalayageMs)
     : null;
@@ -64,6 +75,7 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
       if (chemin === CHEMIN_CODES_MEMBRE && req.method === 'POST') return codes(req);
       if (chemin === CHEMIN_VPN_INVITES && req.method === 'POST') return vpn(req);
       if (chemin === CHEMIN_RETRAIT_MEMBRE && req.method === 'POST') return retrait(req);
+      if (chemin.startsWith(PREFIXE_MISES_A_JOUR) && req.method === 'GET') return misesAJour(req);
       return erreur('introuvable', 404);
     },
     websocket: {

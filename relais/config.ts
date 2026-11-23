@@ -231,6 +231,7 @@ export interface ConfigAiguilleur {
   readonly base: string;
   readonly fichierEchecs: string;
   readonly vpnInvites: ConfigVpnInvites | null; // null : VPN des invités non configuré (501 côté route)
+  readonly dossierMisesAJour: string | null; // LANTERNE_MAJ_DOSSIER ; null : pas de distribution des mises à jour
 }
 
 /** Chemin de l'annuaire : LANTERNE_RELAIS_DONNEES/annuaire.db (les commandes locales ne demandent que celui-là). */
@@ -247,6 +248,7 @@ export function chargerConfigAiguilleur(env: Environnement = process.env): Confi
     base,
     fichierEchecs: join(dirname(base), 'echecs-membres.json'),
     vpnInvites: configVpnInvites(env),
+    dossierMisesAJour: env['LANTERNE_MAJ_DOSSIER'] || null,
   };
 }
 

@@ -275,7 +275,8 @@ const federation = new Federation({
   journal: journal.child({ domaine: 'federation' }),
 });
 // Codes d'appairage demandés par l'appli (même propriétaire, invitation en duo) : relayés à l'aiguilleur de ce nœud.
-const codesReseau = new CodesReseau(new SecretsNoeud(dossierSecrets, journal), journal.child({ domaine: 'codes' }));
+const secretsNoeud = new SecretsNoeud(dossierSecrets, journal);
+const codesReseau = new CodesReseau(secretsNoeud, journal.child({ domaine: 'codes' }));
 // Ajouter une machine au réseau (Paramètres › Réseau) : installation du nœud par SSH, appairage, reprise d'attribution.
 const ajoutNoeud = creerAjoutNoeud({
   ssh,
@@ -396,6 +397,7 @@ const dependancesApi: DependancesApi = {
   duo,
   federation,
   codesReseau,
+  secretsNoeud,
   ajoutNoeud,
   synchro,
   voix: new ApiVoix(urlVoix(process.env), federation.distantes, journal.child({ domaine: 'voix' })),

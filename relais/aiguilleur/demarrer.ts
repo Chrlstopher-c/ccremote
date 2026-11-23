@@ -20,6 +20,7 @@ export function demarrerAiguilleur(env: Readonly<Record<string, string | undefin
     plafond,
     intervalleBalayageMs: INTERVALLE_BALAYAGE_MS,
     vpnInvites: config.vpnInvites,
+    dossierMisesAJour: config.dossierMisesAJour,
   });
   for (const { hote, port } of config.ecouteWeb) {
     Bun.serve({ hostname: hote, port, idleTimeout: 75, fetch: aiguilleur.fetch, websocket: aiguilleur.websocket });
