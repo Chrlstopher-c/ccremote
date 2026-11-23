@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { Evenement } from './session.ts';
 
 export const MAX_RESULTATS = 100;
-export const MAX_TACHES = 100;
+export const MAX_TACHES = 500;
 export const MAX_ACTIVITE = 4000;
 export const MAX_PROMPT = 20_000;
 /** Contenu d'un résultat rendu à l'appli (image, page) : au-delà, refus lisible. */

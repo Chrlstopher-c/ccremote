@@ -12,6 +12,7 @@ import {
 } from '../../commun/parite.ts';
 import type { EtatTranscript, TacheVue } from './etat.ts';
 import { estAbsent, lireFin } from './fichier.ts';
+import { lireEtat } from './lecture.ts';
 import { blocs, estObjet, lireLigne, type Objet, texte } from './lignes.ts';
 
 export const DELAI_SORTIE_FIGEE_MS = 10 * 60_000;
@@ -20,6 +21,8 @@ const OCTETS_FIN_AGENT = 256 * 1024;
 const ACTIONS_RECENTES = 15;
 const LIBELLE_MAX = 160;
 const OUTILS_FICHIER = ['Edit', 'Write', 'Read', 'NotebookEdit'];
+/** Sous-agents les plus récents dont on lit le journal pour y trouver leurs commandes de fond. */
+const SOUS_AGENTS_LUS = 40;
 
 interface StatutPresente {
   readonly statut: StatutTacheParite;
@@ -28,10 +31,26 @@ interface StatutPresente {
 
 export function tachesResumees(etat: EtatTranscript, transcript: string, journal: Logger): TacheParite[] {
   const maintenant = Date.now();
-  return [...etat.taches.values()]
+  return [...etat.taches.values(), ...commandesDesSousAgents(etat, transcript, journal)]
     .sort((a, b) => b.debutLe.localeCompare(a.debutLe))
     .slice(0, MAX_TACHES)
     .map((t) => resumerTache(t, transcript, maintenant, journal));
+}
+
+/**
+ * Commandes lancées en arrière-plan par les sous-agents (Bash ou Monitor dans leur propre journal), comme Claude
+ * Desktop les montre : le journal du fil principal ne les cite pas. Seuls les sous-agents les plus récents sont lus.
+ */
+export function commandesDesSousAgents(etat: EtatTranscript, transcript: string, journal: Logger): TacheVue[] {
+  const dossier = dossierSousAgents(transcript);
+  return [...etat.taches.values()]
+    .filter((t) => t.genre === 'agent' && t.tacheId !== null)
+    .sort((a, b) => b.debutLe.localeCompare(a.debutLe))
+    .slice(0, SOUS_AGENTS_LUS)
+    .flatMap((t) => {
+      const sous = lireEtat(join(dossier, `agent-${t.tacheId}.jsonl`), journal);
+      return sous === null ? [] : [...sous.taches.values()].filter((c) => c.genre === 'commande');
+    });
 }
 
 /** Le détail d'une tâche (id = id du tool_use), ou null si ce transcript ne la connaît pas. */
@@ -41,7 +60,7 @@ export function detailTache(
   transcript: string,
   journal: Logger,
 ): DetailTacheParite | null {
-  const t = etat.taches.get(id);
+  const t = etat.taches.get(id) ?? commandesDesSousAgents(etat, transcript, journal).find((c) => c.id === id);
   if (!t) return null;
   return {
     ...resumerTache(t, transcript, Date.now(), journal),

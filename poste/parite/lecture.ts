@@ -14,7 +14,7 @@ interface Accumulateur {
   readonly etat: EtatTranscript;
 }
 
-const MAX_ACCUMULATEURS = 24;
+const MAX_ACCUMULATEURS = 64;
 const accumulateurs = new Map<string, Accumulateur>();
 
 /** L'état du transcript à l'instant de l'appel ; null si le fichier n'existe pas ou n'est pas lisible. */

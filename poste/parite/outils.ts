@@ -45,7 +45,7 @@ export function appliquerAppelOutil(etat: EtatTranscript, bloc: Objet, le: strin
     case 'TaskStop':
       return arreterTache(etat, texte(entree['task_id']), le);
     case 'SendMessage':
-      return reprendreTache(etat, texte(entree['to']));
+      return reprendreTache(etat, texte(entree['to']), le);
     default:
       return;
   }

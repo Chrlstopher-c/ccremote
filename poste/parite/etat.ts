@@ -19,7 +19,8 @@ export interface TacheVue {
   readonly id: string;
   readonly genre: 'agent' | 'commande';
   readonly description: string;
-  readonly debutLe: string;
+  /** Début du dernier lancement : relancé par SendMessage, l'agent repart de la relance. */
+  debutLe: string;
   readonly prompt: string | null;
   statut: StatutTacheParite;
   finLe: string | null;
