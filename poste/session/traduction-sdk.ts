@@ -59,6 +59,7 @@ export interface SortieTraduction {
   finDeTour?: { dureeMs: number; contexte: number; erreur: string | null };
   compaction?: boolean;
   limite?: LimiteSdk;
+  suggestion?: string;
 }
 
 type Corps = Omit<SortieTraduction, 'claudeSessionId'>;
@@ -101,6 +102,8 @@ function traduireCorps(msg: SDKMessage, etat: EtatTraduction): Corps {
       return traduireResultat(msg, etat);
     case 'system':
       return traduireSysteme(msg);
+    case 'prompt_suggestion':
+      return { evenements: [], suggestion: msg.suggestion };
     default:
       return { evenements: [] };
   }

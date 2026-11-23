@@ -89,6 +89,8 @@ export function optionsSdk(p: ParametresSdk): Options {
     ...(p.reprise && p.reprisePoint ? { resumeSessionAt: p.reprisePoint } : {}),
     systemPrompt: { type: 'preset', preset: 'claude_code', ...(p.consignes ? { append: p.consignes } : {}) },
     includePartialMessages: true,
+    // Réponse probable de Chris après chaque tour, comme Desktop (placeholder de la saisie, Tab pour la prendre).
+    promptSuggestions: true,
     permissionMode: p.mode,
     // Requis par le SDK pour passer en bypass (en cours de session comme au démarrage) : choix explicite de Lanterne.
     allowDangerouslySkipPermissions: true,

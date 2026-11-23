@@ -195,6 +195,7 @@ export function pousser(
 ): void {
   n.interrompuParChris = false;
   if (!n.fil) return;
+  if (n.etat.suggestion) maj(n, { suggestion: null }); // un nouveau tour part : la proposition ne vaut plus
   n.fil.push(messageUtilisateur(texte, blocs, uuid, priorite));
   n.bilan.envoye();
 }

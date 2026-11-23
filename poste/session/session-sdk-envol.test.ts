@@ -13,7 +13,8 @@ describe('SessionSdk — messages traités ensemble', () => {
       async (texte) => {
         if (texte === 'un') {
           await premier;
-          return [{ type: 'result' }];
+          // La suggestion arrive après la fin du tour : elle ne doit pas passer pour un tour qui commence.
+          return [{ type: 'result' }, { type: 'prompt_suggestion' }];
         }
         return []; // « deux » a été lu avec « un » : aucun tour à lui
       },
@@ -57,7 +58,7 @@ describe('SessionSdk — tour tardif après la mise au repos', () => {
           return [{ type: 'result' }];
         }
         await second;
-        return [{ type: 'texte', texte: 'enfin' }, { type: 'result' }];
+        return [{ type: 'assistant', parent_tool_use_id: null, message: { content: [] } }, { type: 'result' }];
       },
       { delaiTourSuivantMs: 30 },
     );

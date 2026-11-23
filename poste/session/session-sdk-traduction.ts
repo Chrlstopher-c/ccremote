@@ -35,6 +35,7 @@ export function traiter(n: NoyauSdk, msg: SDKMessage, etatTraduction: EtatTraduc
   else if (msg.type === 'assistant' && msg.parent_tool_use_id === null && n.etat.statut === 'compaction')
     maj(n, { statut: 'travail' });
   if (sortie.limite) n.env.limite?.(sortie.limite);
+  if (sortie.suggestion !== undefined && sortie.suggestion.trim() !== '') maj(n, { suggestion: sortie.suggestion.trim() });
   if (sortie.finDeTour) finDeTour(n, sortie.finDeTour);
 }
 
