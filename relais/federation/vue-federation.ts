@@ -44,14 +44,15 @@ export async function etatFederation(
 }
 
 /**
- * Membres de l'annuaire proposés à l'appli. Un invité ne voit que le ou les chefs qui l'ont invité : les autres
- * machines du même propriétaire (celles du chef, d'autres invités) ne lui sont ni montrées ni « appairables ».
+ * Membres de l'annuaire proposés à l'appli. Un invité ne voit que ses chefs et ses machines-relais : les autres
+ * machines du même propriétaire (d'autres invités, le reste du parc) ne lui sont ni montrées ni « appairables ».
  */
 export function membresVisibles<M extends { readonly id: string }>(
   membres: readonly M[],
   charte: Charte | null,
   moi: string | null,
 ): M[] {
-  if (moi === null || reglagesInviteDe(charte, moi) === null) return [...membres];
-  return membres.filter((m) => charte?.chefs.includes(m.id) === true);
+  const reglages = moi === null ? null : reglagesInviteDe(charte, moi);
+  if (reglages === null) return [...membres];
+  return membres.filter((m) => charte?.chefs.includes(m.id) === true || reglages.machines.includes(m.id));
 }
