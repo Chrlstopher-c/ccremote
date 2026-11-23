@@ -73,6 +73,12 @@ export class ApiInvites {
     return this.port.invites.gardeLocale(url);
   }
 
+  /** Vrai si ce nœud est invité : son appli ne voit alors que ses propres machines (jamais celles du chef). */
+  estInviteLocal(): boolean {
+    const moi = this.port.moi();
+    return moi !== null && this.port.invites.estInvite(moi);
+  }
+
   /** Les sessions de ce nœud telles que l'appli locale les voit (sessions d'invité masquées). */
   sessionsLocales(sessions: readonly ResumeSession[]): ResumeSession[] {
     return this.port.invites.sessionsPour(null, sessions);

@@ -1,4 +1,5 @@
 // Responsabilité : la table des routes de l'API des clients (web, iPhone), toutes protégées sauf la connexion.
+import type { VueFederee } from '../federation/vue-federee.ts';
 import { z } from 'zod';
 import type { Acces } from '../acces/acces.ts';
 import { cookieDeSession } from '../acces/acces.ts';
@@ -329,13 +330,17 @@ function etat(d: DependancesApi, req: Request) {
 function vueDuParc(d: DependancesApi, req: Request) {
   const locales = d.registre.sessions(avecArchivees(req));
   const v = d.federation.distantes.vue(d.invites.sessionsLocales(locales), d.postes.vues());
-  if (new URL(req.url).searchParams.get('local') === '1') {
-    return {
-      machines: v.machines.filter((m) => !v.machinesRoutees.has(m.id)),
-      sessions: v.sessions.filter((s) => !v.routage.has(s.id)),
-    };
-  }
-  return { machines: v.machines, sessions: v.sessions };
+  const local = new URL(req.url).searchParams.get('local') === '1' || d.invites.estInviteLocal();
+  return vueParc(v, local);
+}
+
+/** Vue du parc ; `local` (iPhone par nœud, ou nœud invité) : seulement ce que ce nœud tient lui-même. */
+export function vueParc(v: VueFederee, local: boolean): Pick<VueFederee, 'machines' | 'sessions'> {
+  if (!local) return { machines: v.machines, sessions: v.sessions };
+  return {
+    machines: v.machines.filter((m) => !v.machinesRoutees.has(m.id)),
+    sessions: v.sessions.filter((s) => !v.routage.has(s.id)),
+  };
 }
 
 // Sessions des postes que le relais ne connaît pas encore (transcripts seuls) ; une fiche, même archivée, les retire.

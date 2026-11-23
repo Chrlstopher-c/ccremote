@@ -1,5 +1,6 @@
 // Responsabilité : la vue de l'état de la fédération (`GET /api/federation`), assemblée depuis le nœud et ses
 // modules.
+import { reglagesInviteDe, type Charte } from '../../commun/charte.ts';
 import { empreinteIdentite } from '../../commun/chiffrement/identite.ts';
 import { appairagesEnCours, noeudAppaire } from './appairages.ts';
 import type { DemandesAppairage } from './demandes.ts';
@@ -33,11 +34,24 @@ export async function etatFederation(
         }
       : null,
     empreinteLocale: await empreinteIdentite(identite.publique),
-    membres: port.voisins.liste(port.proprietaireLocal()),
+    membres: membresVisibles(port.voisins.liste(port.proprietaireLocal()), port.charte.charte(), port.charte.moi()),
     noeuds,
     demandes: demandes.lister(),
     appairages: await appairagesEnCours(port.canaux.actifs()),
     directe: liens.directs.etat(),
     liaisons: liens.directs.liaisons(),
   };
+}
+
+/**
+ * Membres de l'annuaire proposés à l'appli. Un invité ne voit que le ou les chefs qui l'ont invité : les autres
+ * machines du même propriétaire (celles du chef, d'autres invités) ne lui sont ni montrées ni « appairables ».
+ */
+export function membresVisibles<M extends { readonly id: string }>(
+  membres: readonly M[],
+  charte: Charte | null,
+  moi: string | null,
+): M[] {
+  if (moi === null || reglagesInviteDe(charte, moi) === null) return [...membres];
+  return membres.filter((m) => charte?.chefs.includes(m.id) === true);
 }
