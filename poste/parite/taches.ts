@@ -7,6 +7,7 @@ import { texte, type Objet } from './lignes.ts';
 const BALISE_NOTIFICATION = /<task-notification>([\s\S]*?)<\/task-notification>/g;
 
 export interface NouvelleTache {
+  readonly premierPlan?: boolean;
   readonly id: string;
   readonly genre: 'agent' | 'commande';
   readonly description: string;

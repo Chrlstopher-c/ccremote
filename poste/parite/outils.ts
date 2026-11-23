@@ -1,6 +1,6 @@
 // Responsabilité : les appels d'outils du transcript — résultats envoyés ou créés (SendUserFile, Write), tâches en
 // arrière-plan (Agent, Bash), arrêts (TaskStop), et les chemins récents qui désignent le dépôt de travail.
-import type { AppelEnAttente, EtatTranscript } from './etat.ts';
+import type { AppelEnAttente, EtatTranscript, TacheVue } from './etat.ts';
 import { MAX_PROMPT } from '../../commun/parite.ts';
 import { arreterTache, lierIdentifiant, type NouvelleTache, ouvrirTache, reprendreTache } from './taches.ts';
 import { blocs, estObjet, nombre, texte, type Objet } from './lignes.ts';
@@ -63,12 +63,24 @@ export function appliquerResultatOutil(etat: EtatTranscript, bloc: Objet, result
   }
   const tache = etat.taches.get(id);
   if (!tache) return;
+  if (tache.premierPlan && !finAuPremierPlan(etat, tache, detail)) return;
   const identifiant = texte(detail['agentId']) ?? texte(detail['backgroundTaskId']) ?? texte(detail['taskId']);
   if (identifiant !== null) lierIdentifiant(etat, tache, identifiant);
   const modele = texte(detail['resolvedModel']);
   if (modele !== null) tache.modele = modele;
   const sortie = cheminDeSortie(bloc['content']);
   if (sortie !== null) tache.sortie = sortie;
+}
+
+// Résultat d'une commande au premier plan : passée en fond (Claude Code la détache au bout de son délai) elle reste
+// une tâche ; finie, elle est oubliée. Rend vrai si la tâche continue.
+function finAuPremierPlan(etat: EtatTranscript, tache: TacheVue, detail: Objet): boolean {
+  if (texte(detail['backgroundTaskId']) !== null) {
+    tache.premierPlan = false;
+    return true;
+  }
+  etat.taches.delete(tache.id);
+  return false;
 }
 
 function ouvrirAgentAsync(etat: EtatTranscript, id: string, attente: AppelEnAttente, detail: Objet): void {
@@ -99,10 +111,11 @@ function ouvrirAgent(etat: EtatTranscript, id: string, entree: Objet, le: string
   etat.attentes.set(id, { nom: 'Agent', entree, le });
 }
 
+// Commande de fond, ou au premier plan (montrée tant qu'elle tourne, comme Desktop : 23/11).
 function ouvrirCommande(etat: EtatTranscript, id: string, entree: Objet, le: string): void {
-  if (entree['run_in_background'] !== true) return;
   const commande = texte(entree['command']) ?? '';
   const nouvelle: NouvelleTache = {
+    ...(entree['run_in_background'] === true ? {} : { premierPlan: true }),
     id,
     genre: 'commande',
     description: texte(entree['description']) ?? commande.slice(0, 80),

@@ -34,7 +34,11 @@ export function tachesResumees(etat: EtatTranscript, transcript: string, journal
   return [...etat.taches.values(), ...commandesDesSousAgents(etat, transcript, journal)]
     .sort((a, b) => b.debutLe.localeCompare(a.debutLe))
     .slice(0, MAX_TACHES)
-    .map((t) => resumerTache(t, transcript, maintenant, journal));
+    .flatMap((t) => {
+      const resumee = resumerTache(t, transcript, maintenant, journal);
+      // Premier plan sans résultat (session coupée pendant la commande) : jamais comptée parmi les terminées.
+      return t.premierPlan && resumee.statut !== 'en_cours' ? [] : [resumee];
+    });
 }
 
 /**

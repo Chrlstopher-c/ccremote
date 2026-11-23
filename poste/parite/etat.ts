@@ -35,6 +35,8 @@ export interface TacheVue {
   notifiee: boolean;
   /** Fin programmée sans notification (durée d'un Monitor), ISO ; null sinon. */
   echeance: string | null;
+  /** Commande au premier plan (Bash sans run_in_background) : montrée tant qu'elle tourne, comme Desktop, puis oubliée. */
+  premierPlan?: boolean;
 }
 
 /** Un appel d'outil en attente de son résultat (Agent sans run_in_background, qui peut devenir asynchrone). */
