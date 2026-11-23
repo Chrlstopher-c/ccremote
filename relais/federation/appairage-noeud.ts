@@ -141,7 +141,7 @@ export class AppairageNoeud {
       );
       this.port.options.notifier?.(
         'Demande d’appairage',
-        `${presentation.nom} demande à rejoindre tes machines : compare les empreintes dans Paramètres › Réseau.`,
+        `${presentation.nom} demande à se relier à cette machine : compare les empreintes dans Paramètres › Réseau.`,
       );
       this.port.signaler();
     } catch (erreur) {

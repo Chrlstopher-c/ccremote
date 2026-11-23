@@ -229,6 +229,7 @@ interface Reglages {
   readonly initRapide?: RequeteFausse['initRapide']; // état du mode rapide rendu à l'initialisation
   readonly echecReglages?: boolean; // get_settings refusé
   readonly refusReglages?: boolean; // apply_flag_settings refusé
+  readonly echecDemarrage?: string; // la fabrique du SDK lève cette erreur (Claude Code introuvable…)
 }
 
 interface ModeleFaux {
@@ -300,6 +301,7 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
   const requetes: RequeteFausse[] = [];
   const evenements: Evenement[] = [];
   const fabrique: FabriqueRequete = (p) => {
+    if (reglages.echecDemarrage) throw new Error(reglages.echecDemarrage);
     const flux = reglages.messagesRecus ? espionner(p.prompt, reglages.messagesRecus) : p.prompt;
     const requete = new RequeteFausse(flux, p.options, scenario, reglages.mcp ?? []);
     if (reglages.modeles) requete.modelesInitiaux = reglages.modeles;

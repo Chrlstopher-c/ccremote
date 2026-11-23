@@ -147,9 +147,24 @@ export function demarrer(
     n.requete = null;
     n.fil = null;
     n.env.journal.error({ err: erreur, session: n.etat.id }, 'démarrage de la session SDK impossible');
+    const message = raisonDemarrage(erreur);
+    emettre(n, { type: 'erreur', message });
     maj(n, { statut: 'erreur' });
-    return `démarrage impossible : ${String(erreur)}`;
+    return message;
   }
+}
+
+const CLAUDE_ABSENT = /Native CLI binary .* not found|pathToClaudeCodeExecutable|ENOENT.*claude/i;
+
+/** Raison lisible d'un démarrage refusé, affichée dans le fil (l'utilisateur ne lit pas le journal). */
+export function raisonDemarrage(erreur: unknown): string {
+  const brut = erreur instanceof Error ? erreur.message : String(erreur);
+  if (CLAUDE_ABSENT.test(brut))
+    return (
+      'démarrage impossible : Claude Code est introuvable sur ce PC. ' +
+      'Installe-le dans Paramètres › Réseau › Composants, puis renvoie le message.'
+    );
+  return `démarrage impossible : ${brut}`;
 }
 
 function echouerDemarrage(n: NoyauSdk, message: string): string {
