@@ -1,0 +1,11 @@
+[Unit]
+Description=Lanterne : remet les invités VPN dans le pare-feu au démarrage
+After=nftables.service wg-quick@wg0.service
+Wants=nftables.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lanterne-vpn-invites-resync.sh
+
+[Install]
+WantedBy=multi-user.target

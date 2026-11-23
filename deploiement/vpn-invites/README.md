@@ -87,3 +87,15 @@ Retire le pair de WireGuard, de la configuration et de l'ensemble nftables. La c
   le retirer avec `retirer` si besoin.
 - Les durcissements du fichier `.service` (`ProtectSystem=strict`, `ReadWritePaths`) ne sont pas testés sur un vrai
   serveur : en cas d'échec, les retirer une à une pour isoler la cause (`journalctl -u lanterne-vpn-invites`).
+
+## Après un redémarrage du serveur
+
+Le geste n'ajoute les invités à l'ensemble nftables qu'à chaud : au redémarrage, le pare-feu recharge son fichier et
+les oublie. `lanterne-vpn-invites-resync.sh` (unité `lanterne-vpn-invites-resync.service`, activée une fois) remet dans
+l'ensemble chaque pair de `/etc/wireguard/<interface>.conf` dont l'adresse est dans la plage des invités.
+
+```bash
+sudo install -m 0755 deploiement/vpn-invites/lanterne-vpn-invites-resync.sh /usr/local/sbin/
+sudo install -m 0644 deploiement/vpn-invites/lanterne-vpn-invites-resync.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now lanterne-vpn-invites-resync.service
+```
