@@ -1,0 +1,13 @@
+[Unit]
+Description=Lanterne : traite les demandes d'accès VPN des invités (root, one-shot)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lanterne-vpn-invites.sh
+# Droits minimaux : écriture seulement dans la configuration WireGuard, le dossier des demandes et le verrou.
+# Les chemins doivent correspondre à ceux de /etc/lanterne/vpn-invites.conf (valeurs d'exemple).
+ProtectSystem=strict
+ReadWritePaths=/etc/wireguard /var/lib/lanterne/vpn-invites /run
+PrivateTmp=true
+NoNewPrivileges=true

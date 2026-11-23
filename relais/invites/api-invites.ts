@@ -1,23 +1,33 @@
 // Responsabilité : les routes des invités (Paramètres › Réseau : inviter, réglages, activité ; prompt de conversation)
 // et l'ouverture d'une session locale quand ce nœud est lui-même invité. Relaie vers NoeudInvites, sans règle ici.
 import { z } from 'zod';
-import { changerInvite, type Charte, inviterMembre, membreDe, reglagesInviteDe } from '../../commun/charte.ts';
-import { ReglagesInvite, reglagesParDefaut } from '../../commun/invites.ts';
+import {
+  changerInvite,
+  type Charte,
+  type Edition,
+  inviterMembre,
+  membreDe,
+  reglagesInviteDe,
+} from '../../commun/charte.ts';
+import { fusionnerReglages, ReglagesPartiels, reglagesParDefaut } from '../../commun/invites.ts';
 import type { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import type { ReponsePoste } from '../parc/postes.ts';
 import { erreur, json, lireCorps } from '../clients/http.ts';
 import type { CorpsOuverture } from '../clients/api-sessions.ts';
+import type { CodesReseau } from '../codes-reseau/codes-reseau.ts';
 import type { Resultat } from '../federation/resultat.ts';
 import type { NoeudInvites } from './noeud-invites.ts';
 import { ID_MEMBRE } from './ids.ts';
+import { creerInvitation } from './invitation.ts';
 
 type Requete = Request & { params: Record<string, string> };
 type Protection = (g: (req: Requete) => Response | Promise<Response>) => (req: Requete) => Response | Promise<Response>;
 
 const DUREE_INTENTION_MS = 30 * 60_000;
 const CorpsMembre = z.object({ membre: ID_MEMBRE });
-const CorpsReglages = z.object({ reglages: ReglagesInvite });
+const CorpsReglages = z.object({ reglages: ReglagesPartiels });
+const CorpsInvitation = z.strictObject({});
 const CorpsTexte = z.object({ texte: z.string().max(8000) });
 
 /** Ce que les routes des invités utilisent : la politique, la charte, l'appairage, les postes et les ouvertures. */
@@ -39,6 +49,8 @@ export interface PortApiInvites {
   ) => Promise<ReponsePoste>;
   readonly session: (id: string) => { machine: string } | null;
   readonly repli: (req: Request) => Promise<Response>;
+  /** Codes et accès VPN auprès de l'aiguilleur de ce nœud (invitation tout-en-un). */
+  readonly codes: Pick<CodesReseau, 'configuration' | 'creer' | 'demanderVpn'>;
 }
 
 /** Vue de la charte pour l'appli (même forme que /api/reseau/charte, plus les réglages d'invité de ce nœud). */
@@ -104,8 +116,12 @@ export function routesInvites(port: PortApiInvites, protege: Protection) {
         const c = await lireCorps(req, CorpsReglages);
         if (c instanceof Response) return c;
         if (!ID_MEMBRE.safeParse(membre).success) return erreur('membre invalide', 400);
-        return rendre(port, await port.editer((ch, moi, le) => changerInvite(ch, moi, membre, c.reglages, le)));
+        if (reglagesInviteDe(port.charte(), membre) === null) return erreur('membre non invité', 404);
+        return rendre(port, await port.editer((ch, moi, le) => changerInviteFusionne(ch, moi, membre, c.reglages, le)));
       }),
+    },
+    '/api/reseau/invites/invitation': {
+      POST: protege(async (req) => inviterParInvitation(port, req)),
     },
     '/api/reseau/invites/:membre/activite': {
       GET: protege((req) => {
@@ -135,6 +151,28 @@ async function inviter(port: PortApiInvites, req: Requete): Promise<Response> {
   port.invites.intentions.pose(c.membre, reglages, DUREE_INTENTION_MS);
   const r = port.appairer(c.membre);
   return r.ok ? json(vue(port)) : erreur(r.raison, r.statut);
+}
+
+/** Réglages partiels d'un invité : fusion avec les réglages courants (lus dans la charte de l'édition, pas d'avant). */
+function changerInviteFusionne(
+  c: Charte,
+  moi: string,
+  membre: string,
+  partiels: ReglagesPartiels,
+  le: string,
+): Edition {
+  const actuels = reglagesInviteDe(c, membre);
+  if (actuels === null) return { ok: false, raison: 'membre non invité' };
+  return changerInvite(c, moi, membre, fusionnerReglages(actuels, partiels), le);
+}
+
+/** Invitation tout-en-un (code, accès VPN, texte à remettre) : chef seulement. */
+async function inviterParInvitation(port: PortApiInvites, req: Requete): Promise<Response> {
+  const c = await lireCorps(req, CorpsInvitation);
+  if (c instanceof Response) return c;
+  if (!port.chefLocal()) return erreur('chef requis', 403);
+  const r = await creerInvitation(port.codes);
+  return r.ok ? json(r.valeur) : erreur(r.raison, r.statut);
 }
 
 /** Prompt de conversation : relayé au poste de la session (les tours suivants, gardé pour la reprise). */

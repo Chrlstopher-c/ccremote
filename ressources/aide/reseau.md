@@ -85,3 +85,16 @@ dans une conversation : les clés restent sur les machines.
 - Une liaison directe se rétablit par la machine qui connaît l'adresse du pair ; l'autre attend son appel.
 - Rattacher ensuite un aiguilleur donne au nœud un nouvel identifiant : les pairs directs doivent être appairés de nouveau.
 - Le contenu est chiffré de bout en bout dans les deux cas ; l'authenticité repose sur la comparaison des empreintes.
+
+## VPN des invités
+Un invité qui n'est pas sur le même réseau atteint l'aiguilleur par un accès VPN limité à lui, remis avec l'invitation.
+- Une seule action produit l'invitation (route `POST /api/reseau/invites/invitation`, chef seulement) : code à usage
+  unique et accès VPN dans le même texte.
+- L'aiguilleur n'a pas de privilège système : il dépose une demande, un service root installé une fois la traite
+  (adresse libre dans la plage, pair WireGuard, règle nftables). Le geste et son installation : `deploiement/vpn-invites/`.
+- La clé privée de l'invité est générée à la demande, remise dans l'invitation, et jamais écrite sur le serveur.
+- Un invité n'atteint que l'aiguilleur, sur son seul port ; il ne voit pas le reste du réseau VPN.
+- Sans configuration VPN sur l'aiguilleur (variables `LANTERNE_VPN_*`), l'invitation part sans VPN : l'invité ne joint
+  l'aiguilleur que si son adresse lui est joignable autrement.
+- Retirer un invité : `retirer <clé publique>` sur le serveur (voir le README du geste) ; retirer son accès à l'appli
+  ne suffit pas à couper le VPN.

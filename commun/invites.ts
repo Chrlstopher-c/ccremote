@@ -234,3 +234,13 @@ export function fusionnerActivites(liste: readonly ActiviteInvite[]): ActiviteIn
     semaine: fusionnerPart(liste.map((a) => a.semaine)),
   };
 }
+
+/** Réglages donnés en partie : seuls les champs présents changent ; `acces` se fusionne champ par champ. */
+export const ReglagesPartiels = ReglagesInvite.partial().extend({ acces: AccesInvite.partial().optional() });
+export type ReglagesPartiels = z.infer<typeof ReglagesPartiels>;
+
+/** Réglages actuels fusionnés avec une mise à jour partielle (`modeles`, s'il est donné, remplace la liste entière). */
+export function fusionnerReglages(actuels: ReglagesInvite, partiels: ReglagesPartiels): ReglagesInvite {
+  const { acces, ...reste } = partiels;
+  return { ...actuels, ...reste, acces: { ...actuels.acces, ...acces } };
+}

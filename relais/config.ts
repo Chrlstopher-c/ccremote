@@ -217,11 +217,20 @@ function configEcho(): ConfigRelais['echo'] {
   return url && jeton ? { url, jeton } : null;
 }
 
+/** VPN des invités (aiguilleur) : dossier des demandes déposées pour le service root, et réglages WireGuard. */
+export interface ConfigVpnInvites {
+  readonly dossier: string; // LANTERNE_VPN_INVITES_DOSSIER
+  readonly endpoint: string; // LANTERNE_VPN_ENDPOINT : hôte:port public du WireGuard
+  readonly cleServeur: string; // LANTERNE_VPN_CLE_SERVEUR : clé publique du serveur WireGuard
+  readonly adresseAiguilleur: string; // LANTERNE_VPN_ADRESSE_AIGUILLEUR : adresse VPN de l'aiguilleur
+}
+
 /** Aiguilleur (LANTERNE_RELAIS_MODE=aiguilleur) : écoute, et dossier de l'annuaire seulement (aucune autre donnée). */
 export interface ConfigAiguilleur {
   readonly ecouteWeb: readonly AdresseEcoute[];
   readonly base: string;
   readonly fichierEchecs: string;
+  readonly vpnInvites: ConfigVpnInvites | null; // null : VPN des invités non configuré (501 côté route)
 }
 
 /** Chemin de l'annuaire : LANTERNE_RELAIS_DONNEES/annuaire.db (les commandes locales ne demandent que celui-là). */
@@ -237,7 +246,27 @@ export function chargerConfigAiguilleur(env: Environnement = process.env): Confi
     ecouteWeb: parserEcoute(env['LANTERNE_RELAIS_ECOUTE'] ?? ''),
     base,
     fichierEchecs: join(dirname(base), 'echecs-membres.json'),
+    vpnInvites: configVpnInvites(env),
   };
+}
+
+const VALIDE_HOTE_PORT = /^[A-Za-z0-9._\-[\]:]+$/;
+const VALIDE_CLE_PUBLIQUE = /^[A-Za-z0-9+/]{43}=$/;
+const VALIDE_IPV4 = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+// Les quatre variables vont ensemble : une seule absente = VPN des invités non configuré (null). Une valeur fausse
+// arrête l'aiguilleur au démarrage (elle finirait dans la configuration WireGuard remise aux invités).
+function configVpnInvites(env: Environnement): ConfigVpnInvites | null {
+  const dossier = env['LANTERNE_VPN_INVITES_DOSSIER'];
+  const endpoint = env['LANTERNE_VPN_ENDPOINT'];
+  const cleServeur = env['LANTERNE_VPN_CLE_SERVEUR'];
+  const adresseAiguilleur = env['LANTERNE_VPN_ADRESSE_AIGUILLEUR'];
+  if (!dossier || !endpoint || !cleServeur || !adresseAiguilleur) return null;
+  if (!dossier.startsWith('/')) throw new Error('LANTERNE_VPN_INVITES_DOSSIER : chemin absolu attendu');
+  if (!VALIDE_HOTE_PORT.test(endpoint)) throw new Error('LANTERNE_VPN_ENDPOINT : hôte:port attendu');
+  if (!VALIDE_CLE_PUBLIQUE.test(cleServeur)) throw new Error('LANTERNE_VPN_CLE_SERVEUR : clé WireGuard attendue');
+  if (!VALIDE_IPV4.test(adresseAiguilleur)) throw new Error('LANTERNE_VPN_ADRESSE_AIGUILLEUR : IPv4 attendue');
+  return { dossier, endpoint, cleServeur, adresseAiguilleur };
 }
 
 type Environnement = Readonly<Record<string, string | undefined>>;

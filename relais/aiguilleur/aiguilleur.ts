@@ -2,13 +2,20 @@
 // authentifié par jeton), la configuration du serveur WebSocket et le balayage périodique des révocations.
 import type { Logger } from 'pino';
 import type { Server, WebSocketHandler } from 'bun';
-import { CHEMIN_CODES_MEMBRE, TAILLE_MAX_TRAME_OCTETS } from '../../commun/aiguilleur.ts';
+import {
+  CHEMIN_CODES_MEMBRE,
+  CHEMIN_VPN_INVITES,
+  DELAI_VPN_INVITES_MS,
+  TAILLE_MAX_TRAME_OCTETS,
+} from '../../commun/aiguilleur.ts';
 import type { PlafondEchecs } from '../acces/plafond.ts';
+import type { ConfigVpnInvites } from '../config.ts';
 import { erreur } from '../clients/http.ts';
 import { type Annuaire, type Membre, empreinteSha256 } from './annuaire.ts';
 import { routeCodesMembre } from './api-codes.ts';
 import { CHEMIN_APPAIRAGE, routeAppairage } from './api-membres.ts';
 import { type DonneesLien, Liens } from './liens.ts';
+import { routeVpnInvites } from './vpn-invites.ts';
 
 export const CHEMIN_LIEN = '/aiguilleur';
 
@@ -19,6 +26,10 @@ export interface OptionsAiguilleur {
   readonly maxCanaux?: number;
   /** Intervalle du balayage des révocations ; absent ou nul : pas de minuteur (le balayage se fait à la main). */
   readonly intervalleBalayageMs?: number;
+  /** VPN des invités ; absent ou null : la route répond 501. */
+  readonly vpnInvites?: ConfigVpnInvites | null;
+  /** Délai d'attente de la réponse du service root ; absent : le délai de production. */
+  readonly delaiVpnMs?: number;
 }
 
 export interface Aiguilleur {
@@ -33,6 +44,12 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
   const liens = new Liens(options.annuaire, options.journal, options.maxCanaux);
   const appairage = routeAppairage(options.annuaire, options.plafond, options.journal);
   const codes = routeCodesMembre(options.annuaire, options.journal);
+  const vpn = routeVpnInvites({
+    annuaire: options.annuaire,
+    journal: options.journal,
+    config: options.vpnInvites ?? null,
+    delaiMs: options.delaiVpnMs ?? DELAI_VPN_INVITES_MS,
+  });
   const minuteur = options.intervalleBalayageMs
     ? setInterval(() => liens.balayer(), options.intervalleBalayageMs)
     : null;
@@ -42,6 +59,7 @@ export function creerAiguilleur(options: OptionsAiguilleur): Aiguilleur {
       if (chemin === CHEMIN_LIEN) return ouvrirLien(options.annuaire, options.journal, req, serveur);
       if (chemin === CHEMIN_APPAIRAGE && req.method === 'POST') return appairage(req, serveur);
       if (chemin === CHEMIN_CODES_MEMBRE && req.method === 'POST') return codes(req);
+      if (chemin === CHEMIN_VPN_INVITES && req.method === 'POST') return vpn(req);
       return erreur('introuvable', 404);
     },
     websocket: {
