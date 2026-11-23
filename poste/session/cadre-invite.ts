@@ -110,7 +110,7 @@ export function optionsInvite(p: ParametresInvite): Options {
     permissionMode: p.cadre.relais !== undefined ? (p.mode ?? 'default') : 'default',
     // Chez lui, il peut passer en « Ignorer les permissions » en cours de session : le SDK l'exige dès le lancement.
     // Le crochet de confinement s'applique dans tous les modes (rien hors de son espace).
-    ...(p.cadre.relais !== undefined ? { allowDangerouslySkipPermissions: true } : {}),
+    ...(p.cadre.relais !== undefined ? { allowDangerouslySkipPermissions: true, promptSuggestions: true } : {}),
     settingSources: [],
     strictMcpConfig: true,
     mcpServers: p.serveurs ?? {},

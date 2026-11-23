@@ -106,6 +106,8 @@ describe('options SDK d’une session d’invité', () => {
     expect(refusCommandeInvite({ cadre: CADRE }, 'mode')).not.toBeNull();
     // Passer en « Ignorer les permissions » en cours de session : le SDK l'exige dès le lancement (recette 0.2.6).
     expect(options.allowDangerouslySkipPermissions).toBe(true);
+    // Réponse probable après chaque tour, comme une session ordinaire (sa machine, ses requêtes passent par le relais).
+    expect(options.promptSuggestions).toBe(true);
     expect(optionsInvite(FAUSSES_OPTIONS).allowDangerouslySkipPermissions).not.toBe(true);
   });
 
