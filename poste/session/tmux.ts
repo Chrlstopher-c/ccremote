@@ -27,7 +27,8 @@ export interface PaneTmux {
 
 // -u : UTF-8 forcé (un service n'a pas forcément de LANG) ; -f ne compte qu'au démarrage du serveur tmux.
 export async function tmux(args: readonly string[], entree?: string): Promise<Resultat> {
-  let p: ReturnType<typeof Bun.spawn>;
+  // stdout et stderr en 'pipe' : des flux lisibles (le type générique de Bun.spawn les élargit).
+  let p: { exited: Promise<number>; stdout: ReadableStream<Uint8Array>; stderr: ReadableStream<Uint8Array> };
   try {
     p = Bun.spawn(['tmux', '-L', SOCKET, '-f', CONFIG, '-u', ...args], {
       stdin: entree === undefined ? 'ignore' : new TextEncoder().encode(entree),
