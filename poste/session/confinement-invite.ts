@@ -117,8 +117,6 @@ export function crochetConfinement(c: Confinement, journal: Logger): HookCallbac
 export function permissionInvite(c: Confinement, journal: Logger): CanUseTool {
   return async (nom, entree) => {
     const verdict = await verdictOutil(c, nom, entree, journal);
-    return verdict.ok
-      ? { behavior: 'allow', updatedInput: entree }
-      : { behavior: 'deny', message: verdict.raison };
+    return verdict.ok ? { behavior: 'allow', updatedInput: entree } : { behavior: 'deny', message: verdict.raison };
   };
 }

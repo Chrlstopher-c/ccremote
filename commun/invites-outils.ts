@@ -89,7 +89,10 @@ export function outilInvitePermis(nom: string): boolean {
 }
 
 export function cheminsSensibles(home: string, windows = false): string[] {
-  if (windows) return ['.claude', '.claude.json', '.config', '.ssh', '.local\\share', '.gnupg', 'AppData'].map((d) => win32.join(home, d));
+  if (windows)
+    return ['.claude', '.claude.json', '.config', '.ssh', '.local\\share', '.gnupg', 'AppData'].map((d) =>
+      win32.join(home, d),
+    );
   return [
     `${home}/.claude`,
     `${home}/.claude.json`,

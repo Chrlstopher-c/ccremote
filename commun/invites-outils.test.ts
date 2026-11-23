@@ -163,7 +163,14 @@ describe('chemins Windows (invité sur un PC Windows, recette 0.2)', () => {
 
 describe('mode Plan chez l’invité (recette 0.2.7)', () => {
   const PLANS = '/data/invites/x/config/plans';
-  const chezLui: Confinement = { espace: ESPACE, lecture: [], home: HOME, resoudre: (c) => c, local: true, plans: PLANS };
+  const chezLui: Confinement = {
+    espace: ESPACE,
+    lecture: [],
+    home: HOME,
+    resoudre: (c) => c,
+    local: true,
+    plans: PLANS,
+  };
 
   test('chez lui : ExitPlanMode, ToolSearch et la liste de tâches sont permis ; chez le chef, non', () => {
     for (const nom of ['ExitPlanMode', 'EnterPlanMode', 'ToolSearch', 'TaskCreate', 'TaskUpdate']) {
