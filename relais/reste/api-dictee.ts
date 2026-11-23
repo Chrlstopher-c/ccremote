@@ -120,7 +120,8 @@ export class ApiDictee {
   // Une machine qui n'est pas celle de ce poste, ni une requête déjà relayée (`local=1`), va au pair qui la tient.
   private pairQui(machine: string | undefined, req: Request): string | null {
     if (machine === undefined || new URL(req.url).searchParams.get('local') === '1') return null;
-    if (this.d.postes.vues().some((v) => v.id === machine)) return null;
+    // Un ancien poste local hors ligne du même nom (la tour d'avant le réseau) ne doit pas capter la machine du pair.
+    if (this.d.postes.vues().some((v) => v.id === machine && v.enLigne)) return null;
     return this.d.pairs.membreDeMachine(machine);
   }
 
