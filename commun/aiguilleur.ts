@@ -119,3 +119,33 @@ export function analyserDeAiguilleur(brut: unknown): MessageDeAiguilleur | null 
 export function octetsCharge(charge: string): number {
   return new TextEncoder().encode(charge).byteLength;
 }
+
+/** Accès VPN d'un invité : un nœud (jeton de membre) demande une adresse et une configuration WireGuard. */
+export const CHEMIN_VPN_INVITES = '/api/membres/vpn-invites';
+/** Délai laissé au service root pour répondre à une demande ; au-delà, l'aiguilleur répond 504. */
+export const DELAI_VPN_INVITES_MS = 20_000;
+/** Demandes VPN en cours par propriétaire : au-delà, la demande est refusée (429). */
+export const VPN_INVITES_MAX_PAR_PROPRIETAIRE = 5;
+
+/** Réponse de `POST /api/membres/vpn-invites` : l'adresse VPN de l'invité et sa configuration wg-quick complète. */
+export const ReponseVpnInvite = z.strictObject({
+  adresse: z.string().regex(/^\d{1,3}(\.\d{1,3}){3}$/),
+  config: z.string().min(1).max(4000),
+});
+export type ReponseVpnInvite = z.infer<typeof ReponseVpnInvite>;
+
+/** Demande déposée pour le service root : sa clé publique WireGuard (base64, 44 caractères), jamais la privée. */
+export const DemandeVpnInvite = z.strictObject({
+  id: z.string().regex(/^[a-f0-9]{16}$/),
+  cle: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
+  proprietaire: Proprietaire,
+  le: z.string(),
+});
+export type DemandeVpnInvite = z.infer<typeof DemandeVpnInvite>;
+
+/** Réponse du service root (`<id>.reponse.json`) : une adresse attribuée, ou la raison du refus. */
+export const ReponseRootVpn = z.discriminatedUnion('ok', [
+  z.strictObject({ ok: z.literal(true), adresse: ReponseVpnInvite.shape.adresse }),
+  z.strictObject({ ok: z.literal(false), raison: z.string().min(1).max(200) }),
+]);
+export type ReponseRootVpn = z.infer<typeof ReponseRootVpn>;

@@ -19,10 +19,14 @@ export function demarrerAiguilleur(env: Readonly<Record<string, string | undefin
     journal,
     plafond,
     intervalleBalayageMs: INTERVALLE_BALAYAGE_MS,
+    vpnInvites: config.vpnInvites,
   });
   for (const { hote, port } of config.ecouteWeb) {
     Bun.serve({ hostname: hote, port, idleTimeout: 75, fetch: aiguilleur.fetch, websocket: aiguilleur.websocket });
   }
-  journal.info({ web: config.ecouteWeb.map((a) => `${a.hote}:${a.port}`) }, 'aiguilleur démarré');
+  journal.info(
+    { web: config.ecouteWeb.map((a) => `${a.hote}:${a.port}`), vpnInvites: config.vpnInvites !== null },
+    'aiguilleur démarré',
+  );
   return aiguilleur;
 }

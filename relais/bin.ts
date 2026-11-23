@@ -350,6 +350,7 @@ const invitesApi = new ApiInvites({
   commander: (machine, commande) => postes.commander(machine, commande),
   session: (id) => registre.session(id),
   repli: (req) => sessions.ouvrir(req),
+  codes: codesReseau,
 });
 const dependancesApi: DependancesApi = {
   invites: invitesApi,

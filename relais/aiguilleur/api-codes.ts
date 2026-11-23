@@ -41,7 +41,7 @@ async function creer(annuaire: Annuaire, journal: Logger, req: Request): Promise
   return json({ code: code.code, expireLe: code.expireLe });
 }
 
-function membreDuJeton(annuaire: Annuaire, req: Request): Membre | null {
+export function membreDuJeton(annuaire: Annuaire, req: Request): Membre | null {
   const entete = req.headers.get('authorization') ?? '';
   const jeton = entete.startsWith('Bearer ') ? entete.slice(7) : '';
   return jeton ? annuaire.membreDuJeton(empreinteSha256(jeton)) : null;

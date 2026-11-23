@@ -1,0 +1,10 @@
+[Unit]
+Description=Lanterne : surveille les demandes d'accès VPN des invités
+
+[Path]
+# Même chemin que DOSSIER dans /etc/lanterne/vpn-invites.conf (valeur d'exemple).
+PathChanged=/var/lib/lanterne/vpn-invites
+Unit=lanterne-vpn-invites.service
+
+[Install]
+WantedBy=multi-user.target
