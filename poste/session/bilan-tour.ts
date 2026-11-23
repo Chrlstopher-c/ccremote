@@ -33,6 +33,11 @@ export class BilanTour {
     this.messagesEnVol += 1;
   }
 
+  /** Aucun tour n'a suivi : les messages comptés en vol ont été traités ensemble par le tour fini. */
+  oublierEnVol(): void {
+    this.messagesEnVol = 0;
+  }
+
   /** Chris parle : ses drapeaux et son compte de tours à vide repartent de zéro. */
   messageDeChris(): void {
     this.objectifAtteint = false;

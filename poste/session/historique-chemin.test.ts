@@ -60,7 +60,7 @@ describe('historique : images citées par chemin dans un résultat d’outil', (
     const evts = evenementsDuTranscript(ligneResultat(join(dossierImages, 'g2.png')), stocker, lire);
     const images = imagesDe(evts);
     expect(images).toHaveLength(1);
-    expect(images[0]).toMatchObject({ type: 'image', origine: 'outil', mime: 'image/png', nom: 'image-1.png' });
+    expect(images[0]).toMatchObject({ type: 'image', origine: 'outil', mime: 'image/png', nom: 'g2.png' });
     expect(evts[0]?.ts).toBe(HORODATAGE);
   });
 
@@ -114,7 +114,7 @@ describe('historique : images citées par chemin dans un résultat d’outil', (
       },
     });
     const images = imagesDe(evenementsDuTranscript(ligne, stocker, lire));
-    expect(images.map((i) => i.nom)).toEqual(['image-1.png', 'image-2.png']);
+    expect(images.map((i) => i.nom)).toEqual(['image-1.png', 'g2.png']);
     expect(images.every((i) => i.origine === 'outil')).toBe(true);
   });
 });

@@ -187,6 +187,7 @@ async function ecouter(n: NoyauSdk, requete: RequeteSdk, etatTraduction: EtatTra
   try {
     for await (const msg of requete) {
       if (n.requete !== requete) break;
+      n.messagesSdk += 1;
       nommerModeleVu(n, msg);
       traiter(n, msg, etatTraduction);
       if (msg.type === 'result') titreRelu(n);

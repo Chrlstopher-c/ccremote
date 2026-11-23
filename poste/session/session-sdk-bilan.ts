@@ -38,7 +38,26 @@ export function finDeTour(n: NoyauSdk, fin: NonNullable<SortieTraduction['finDeT
     relancerAvecPrompt(n, suite);
   }
   else appliquerSuite(n, suite);
+  if (suite.action === 'laisser') surveillerTourSuivant(n);
   void n.suiviNuit.tick();
+}
+
+// Claude Code traite ensemble les messages envoyés pendant un tour : un seul `result` pour plusieurs envois, le
+// compteur restait à 1 et la session « travail » sans tour à venir (23/11, 18 min). Sans aucun message du SDK après ce
+// délai, aucun tour ne suit : la session passe au repos.
+export const DELAI_TOUR_SUIVANT_MS = 30_000;
+
+function surveillerTourSuivant(n: NoyauSdk): void {
+  const delaiMs = n.env.delaiTourSuivantMs ?? DELAI_TOUR_SUIVANT_MS;
+  const marque = n.messagesSdk;
+  const requete = n.requete;
+  const minuterie = setTimeout(() => {
+    if (n.requete !== requete || n.messagesSdk !== marque || n.etat.statut !== 'travail') return;
+    n.env.journal.info({ session: n.etat.id }, 'aucun tour après la fin du tour : messages traités ensemble, au repos');
+    n.bilan.oublierEnVol();
+    maj(n, { statut: 'attente' });
+  }, delaiMs);
+  minuterie.unref?.();
 }
 
 function appliquerSuite(n: NoyauSdk, suite: Suite): void {

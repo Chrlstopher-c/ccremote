@@ -98,7 +98,7 @@ describe('lecteurImagesChemin : lecture bornée sur le poste', () => {
 
   test('session normale (racines null) : tout chemin lisible est permis, mime selon l’extension', () => {
     const lire = lecteurImagesChemin(null, journal);
-    expect(lire(join(horsRacine, 'secret.png'))).toEqual({ mime: 'image/png', base64: PNG_1x1.toString('base64') });
+    expect(lire(join(horsRacine, 'secret.png'))).toEqual({ mime: 'image/png', base64: PNG_1x1.toString('base64'), nom: 'secret.png' });
     expect(lire(join(racine, 'sous', 'b.JPEG'))?.mime).toBe('image/jpeg');
   });
 

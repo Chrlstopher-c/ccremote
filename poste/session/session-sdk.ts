@@ -78,6 +78,8 @@ export interface EnvironnementSdk {
   readonly traduction?: TraductionSdk;
   readonly env?: Record<string, string | undefined>;
   readonly delaiMcpMs?: number;
+  /** Délai sans message du SDK après lequel un tour annoncé est tenu pour n'avoir pas lieu (tests). */
+  readonly delaiTourSuivantMs?: number;
   /** Transcript modifié depuis moins longtemps : sa queue est relue dès la première vue (0 : jamais, tests). */
   readonly relectureRecenteMs?: number;
   readonly periodeMcpMs?: number;

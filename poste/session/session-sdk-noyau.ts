@@ -49,6 +49,7 @@ export interface NoyauSdk {
   interrompuParChris: boolean; // le SDK coupe le flux par une erreur après une interruption : pas une panne
   cessionEnAttente: boolean; // conversation tenue ailleurs pendant un tour : la requête se ferme en fin de tour
   promptEnAttente: boolean; // prompt système changé pendant un tour : la requête se ferme en fin de tour
+  messagesSdk: number; // messages reçus du SDK : un tour annoncé qui n'en produit aucun n'a pas lieu
 }
 
 export function creerNoyau(
@@ -77,6 +78,7 @@ export function creerNoyau(
     interrompuParChris: false,
     cessionEnAttente: false,
     promptEnAttente: false,
+    messagesSdk: 0,
     reglagesVivants: new ReglagesVivants(() => n.requete, env.journal, p.resume.id),
     registreTaches: new RegistreTaches(),
     suivi: suiviDe(env, p, () => n),

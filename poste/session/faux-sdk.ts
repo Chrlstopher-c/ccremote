@@ -230,6 +230,7 @@ interface Reglages {
   readonly echecReglages?: boolean; // get_settings refusé
   readonly refusReglages?: boolean; // apply_flag_settings refusé
   readonly echecDemarrage?: string; // la fabrique du SDK lève cette erreur (Claude Code introuvable…)
+  readonly delaiTourSuivantMs?: number; // délai court pour le test des messages traités ensemble
 }
 
 interface ModeleFaux {
@@ -326,6 +327,7 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
     socket: '/run/poste.sock',
     delaiMcpMs: 200,
     periodeMcpMs: 1,
+    ...(reglages.delaiTourSuivantMs === undefined ? {} : { delaiTourSuivantMs: reglages.delaiTourSuivantMs }),
   };
   const base = persistee(reglages.configDir ?? null, reglages.objectif ?? null, reglages.reprise);
   const persistance = reglages.resume ? { ...base, resume: { ...base.resume, ...reglages.resume } } : base;
