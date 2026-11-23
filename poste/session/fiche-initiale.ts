@@ -41,6 +41,8 @@ export function resumeInitial(config: ConfigPoste, d: DemandeSession, cwd: strin
     ...modesDeOuverture(d),
     ...(d.prompt_systeme ? { prompt_systeme: d.prompt_systeme } : {}),
     ...(d.invite ? { invite: { membre: d.invite.membre, nom: d.invite.nom } } : {}),
+    // Invité chez lui : son mode est posé dès la fiche (le lancement le lit) ; « absent » vaudrait Manuel pour lui.
+    ...(d.invite?.relais !== undefined && d.mode ? { mode: d.mode } : {}),
     bac_a_sable: d.bac_a_sable ?? 'non',
     tmux: null,
     attachee: false,

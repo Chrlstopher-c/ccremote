@@ -17,7 +17,7 @@ describe('textes envoyés au modèle', () => {
           readFileSync(join(dossier, nom), 'utf8')
             .split('\n')
             .filter((ligne) => !COMMENTAIRE.test(ligne))
-            .flatMap((ligne) => [...ligne.split(' // ')[0].matchAll(CHAINE)].map((m) => m[0]))
+            .flatMap((ligne) => [...(ligne.split(' // ')[0] ?? '').matchAll(CHAINE)].map((m) => m[0]))
             .filter((chaine) => /\bChris\b/.test(chaine))
             .map((chaine) => `${nom} : ${chaine}`),
         ),
