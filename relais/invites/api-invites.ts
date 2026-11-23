@@ -31,8 +31,8 @@ export interface PortApiInvites {
   ) => Promise<Resultat<Charte>>;
   readonly appairer: (membre: string) => Resultat<{ canal: string }>;
   readonly ouvrirAvec: (c: CorpsOuverture, cadre: CadreInvite) => Promise<Response>;
-  readonly ouvrirChez: (membre: string, texte: string) => Promise<Response>;
-  readonly enLigne: (membre: string) => boolean;
+  /** Le relais Claude de ce nœud (route locale et secret) : Claude Code de l'invité y pointe ; null si indisponible. */
+  readonly relaisLocal: () => { readonly url: string; readonly jeton: string } | null;
   readonly commander: (
     machine: string,
     commande: { kind: 'prompt_systeme'; sessionId: string; texte: string },
@@ -70,27 +70,22 @@ export class ApiInvites {
     return routesInvites(this.port, protege);
   }
 
-  /** `POST /api/sessions` : ce nœud est invité → l'ouverture passe par la politique ; sinon le chemin ordinaire. */
+  /**
+   * `POST /api/sessions` : ce nœud est invité → la session s'ouvre ici, sur son dossier, et son modèle passe par le
+   * relais Claude du chef (le jeton du chef ne vient jamais ici). Sinon, le chemin ordinaire.
+   */
   async ouvrirSession(req: Request): Promise<Response> {
     const moi = this.port.moi();
     if (moi === null || !this.port.invites.estInvite(moi)) return this.port.repli(req);
     const texte = await req.text();
-    const reglages = reglagesInviteDe(this.port.charte(), moi);
-    if (reglages === null) return this.port.repli(req);
-    if (!reglages.surSaMachine || !this.port.invites.compteLocal()) return this.relayer(reglages.machines, texte);
     const pr = this.port.invites.preparer(moi, texte);
     if (!pr.ok) return erreur(pr.raison, pr.statut);
+    const relais = this.port.relaisLocal();
+    if (relais === null) return erreur('relais Claude indisponible sur ce nœud', 503);
     return this.port.invites.executerOuverture(
-      { geste: 'ouvrir', methode: 'POST', corps: JSON.stringify(pr.corps), invite: pr.cadre },
+      { geste: 'ouvrir', methode: 'POST', corps: JSON.stringify(pr.corps), invite: { ...pr.cadre, relais } },
       (c, cadre) => this.port.ouvrirAvec(c, cadre),
     );
-  }
-
-  /** Relayée au chef : la première machine du chef en ligne reçoit l'ouverture (même corps). */
-  private async relayer(machines: readonly string[], texte: string): Promise<Response> {
-    const membre = machines.find((m) => this.port.enLigne(m));
-    if (membre === undefined) return erreur('aucune machine du chef en ligne', 409);
-    return this.port.ouvrirChez(membre, texte);
   }
 }
 

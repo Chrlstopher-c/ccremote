@@ -104,4 +104,12 @@ export interface OptionsFederation {
   readonly reveil?: Reveil;
   /** Postes en ligne pouvant relayer un réveil (vide : le nœud envoie lui-même le paquet). */
   readonly postesEnLigne?: () => string[];
+  /** Jeton OAuth du compte Claude de ce nœud (requêtes relayées des invités) ; absent ou null : aucun relais. */
+  readonly jetonAbonnement?: () => string | null;
+  /** Adresse de l'API Claude (défaut : l'API publique). Un faux serveur en essai. */
+  readonly urlApiClaude?: string;
+  /** Appel HTTP vers l'API (défaut : fetch). Essais uniquement. */
+  readonly fetchClaude?: typeof fetch;
+  /** Délai avant le premier octet d'une réponse relayée (défaut : 60 s). */
+  readonly delaiClaudeMs?: number;
 }

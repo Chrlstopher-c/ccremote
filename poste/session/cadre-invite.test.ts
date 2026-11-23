@@ -13,6 +13,7 @@ import {
   demandeInvite,
   envInvite,
   jetonInvite,
+  jetonPourInvite,
   optionsInvite,
   refusCommandeInvite,
   refusOuvertureInvite,
@@ -110,6 +111,25 @@ describe('options SDK d’une session d’invité', () => {
     expect(env['SSH_AUTH_SOCK']).toBeUndefined();
     const restantes = Object.keys(env).filter((k) => k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_CODE_'));
     expect(restantes.sort()).toEqual(['CLAUDE_CODE_OAUTH_TOKEN']);
+  });
+
+  test('cadre avec relais : Claude Code pointe vers le nœud, sans aucun jeton du chef', () => {
+    const avecRelais: CadreInvite = {
+      ...CADRE,
+      relais: { url: 'http://127.0.0.1:1/api/relais-claude', jeton: 'j'.repeat(43) },
+    };
+    const env = envInvite({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-x' }, avecRelais, null);
+    expect(env['ANTHROPIC_BASE_URL']).toBe('http://127.0.0.1:1/api/relais-claude');
+    expect(env['ANTHROPIC_AUTH_TOKEN']).toBe('j'.repeat(43));
+    expect(env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC']).toBe('1');
+    expect(env['CLAUDE_CODE_OAUTH_TOKEN']).toBeUndefined();
+    expect(env['ANTHROPIC_API_KEY']).toBeUndefined();
+  });
+
+  test('pas de jeton à lire quand le cadre passe par le relais', () => {
+    const avecRelais: CadreInvite = { ...CADRE, relais: { url: 'http://127.0.0.1:1/x', jeton: 'j'.repeat(43) } };
+    expect(jetonPourInvite(avecRelais, jetable(), journal)).toBeNull();
+    expect(jetonPourInvite(CADRE, jetable(), journal)).toBeUndefined();
   });
 
   test('jeton lu du fichier du compte, sans copie ni écriture dans le dossier du compte', () => {

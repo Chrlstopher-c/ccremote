@@ -250,9 +250,9 @@ export class Echanges {
 
   /** Une requête entrante ou une réponse d'un pair, sur un lien ouvert. */
   async traiter(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
-    const politique = this.options.invites?.requete(canal.membre, message) ?? { ok: true as const, invite: false };
+    const politique = this.options.invites?.requete(canal.membre, message) ?? { ok: true as const };
     if (!politique.ok) return politique.reponse ? void canal.envoyer(politique.reponse) : undefined;
-    if (!politique.invite && this.refuseSansDroit(canal, message)) return undefined;
+    if (this.refuseSansDroit(canal, message)) return undefined;
     return this.despacher(canal, message);
   }
 

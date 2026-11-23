@@ -7,6 +7,7 @@ import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
 import { Evenement, Projet, ResumeSession } from './session.ts';
 import { CibleTerminal } from './appareil.ts';
 import { ActiviteInvite } from './invites.ts';
+import { ClaudeAnnuler, ClaudeEntete, ClaudeFin, ClaudeRequete, MORCEAUX_MAX_FLUX } from './relais-claude.ts';
 import { ID_MEMBRE } from './charte-droits.ts';
 
 /** Taille maximale d'un message en clair (avant chiffrement) : la charge de l'aiguilleur est plafonnée à 1 Mio. */
@@ -207,7 +208,7 @@ export const MessageChiffre = z.discriminatedUnion('t', [
   z.strictObject({
     t: z.literal('morceau'),
     ref: REF,
-    rang: z.number().int().min(0).max(NOMBRE_MAX_MORCEAUX_APPAREIL - 1),
+    rang: z.number().int().min(0).max(MORCEAUX_MAX_FLUX - 1),
     corps: z.string().max(TAILLE_MORCEAU_CARACTERES),
   }),
   // Confirmation d'un outil du nœud (Claude demande, Chris répond) : relayée à ses pairs, qui l'affichent.
@@ -340,6 +341,11 @@ export const MessageChiffre = z.discriminatedUnion('t', [
     t: z.literal('activite_invites'),
     activites: z.array(z.strictObject({ membre: MEMBRE, activite: ActiviteInvite })).max(200),
   }),
+  // Relais Claude d'invité (commun/relais-claude.ts) : requête, en-têtes, fin et annulation ; morceaux au même titre.
+  ClaudeRequete,
+  ClaudeEntete,
+  ClaudeFin,
+  ClaudeAnnuler,
 ]);
 export type MessageChiffre = z.infer<typeof MessageChiffre>;
 export type EvenementFedere = z.infer<typeof EvenementFede>;

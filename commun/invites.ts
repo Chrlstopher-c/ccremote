@@ -193,6 +193,8 @@ export const ActiviteInvite = z.object({
   sessionsAujourdhui: z.number().int().min(0),
   sessionsEnCours: z.number().int().min(0),
   jetonsAujourdhui: z.number().int().min(0),
+  requetesAujourdhui: z.number().int().min(0).default(0),
+  dernierModele: z.string().nullable().default(null),
   part5h: BilanPartInvite.nullable(),
   semaine: BilanPartInvite.nullable(),
 });
@@ -230,6 +232,8 @@ export function fusionnerActivites(liste: readonly ActiviteInvite[]): ActiviteIn
     sessionsAujourdhui: somme(liste.map((a) => a.sessionsAujourdhui)),
     sessionsEnCours: somme(liste.map((a) => a.sessionsEnCours)),
     jetonsAujourdhui: somme(liste.map((a) => a.jetonsAujourdhui)),
+    requetesAujourdhui: somme(liste.map((a) => a.requetesAujourdhui)),
+    dernierModele: liste.find((a) => a.dernierModele !== null)?.dernierModele ?? null,
     part5h: fusionnerPart(liste.map((a) => a.part5h)),
     semaine: fusionnerPart(liste.map((a) => a.semaine)),
   };

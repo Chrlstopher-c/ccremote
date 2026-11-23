@@ -10,6 +10,8 @@ const JourCompteur = z.object({
   sessions: z.number().int().min(0),
   jetons: z.number().min(0),
   derniere: z.string().nullable(),
+  requetes: z.number().int().min(0).default(0), // requêtes relayées du jour (relais Claude)
+  modele: z.string().nullable().default(null), // dernier modèle relayé du jour
 });
 const MembreCompteur = z.object({
   session: FenetreCompteur,

@@ -8,6 +8,7 @@ import type { MessageClient } from '../../commun/api-clients.ts';
 import type { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { MessageChiffre } from '../../commun/federation.ts';
 import { type ActiviteInvite, fusionnerActivites, type ReglagesInvite, verifierPart } from '../../commun/invites.ts';
+import type { Consommation } from '../../commun/relais-claude-usage.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import { CorpsOuverture } from '../clients/api-sessions.ts';
 import { json } from '../clients/http.ts';
@@ -15,13 +16,14 @@ import { refusContenuLocal } from './garde-locale.ts';
 import type { GesteLocal } from '../federation/echanges.ts';
 import type { Registre } from '../registre/registre.ts';
 import { activiteDe, jourLocal } from './activite.ts';
-import { CompteursInvites, type MembreCompteur } from './compteurs.ts';
+import { CompteursInvites, type JourCompteur, type MembreCompteur } from './compteurs.ts';
+import { SuiviSessionsClaude } from './relais-claude-suivi.ts';
 import { Intentions } from './intention.ts';
 import { ajouterEcart, consommeCourant, releveDuCompte, type Releve, SuiviTours } from './part.ts';
-import { type CtxGeste, verdictGeste, type GesteRecu, type VerdictGeste } from './politique-geste.ts';
+import { verdictGeste, type GesteRecu, type VerdictGeste } from './politique-geste.ts';
 import { type CtxRequete, type VerdictRequete, verdictRequete } from './politique-requete.ts';
 import { corpsLu, preparerOuverture, type CtxOuverture, type OuvertureInvite } from './ouverture.ts';
-import { inviteDe, sessionsDe, sessionsEnCoursDe } from './sessions-invite.ts';
+import { inviteDe, sessionsEnCoursDe } from './sessions-invite.ts';
 import { messageVuPar, sessionsVues } from './vue.ts';
 
 const INTERVALLE_ACTIVITE_MS = 60_000;
@@ -47,6 +49,8 @@ type OuvrirCadre = (c: CorpsOuverture, cadre: CadreInvite) => Promise<Response>;
 export class NoeudInvites {
   readonly compteurs: CompteursInvites;
   readonly intentions: Intentions;
+  /** Les sessions Claude Code vues par invité (simultanées, activité en cours) : en mémoire seulement. */
+  readonly suivi: SuiviSessionsClaude;
   private readonly tours = new SuiviTours();
   private readonly statuts = new Map<string, string>();
   private readonly recues = new Map<string, Map<string, ActiviteInvite>>();
@@ -55,6 +59,7 @@ export class NoeudInvites {
 
   constructor(private readonly o: OptionsInvites) {
     this.maintenant = o.maintenant ?? Date.now;
+    this.suivi = new SuiviSessionsClaude(this.maintenant);
     this.compteurs = new CompteursInvites(join(o.dossier, 'invites', 'compteurs.json'), o.journal);
     this.intentions = new Intentions(join(o.dossier, 'invites', 'intentions.json'), o.journal, this.maintenant);
   }
@@ -90,17 +95,13 @@ export class NoeudInvites {
   /** Verdict d'une requête (fil, écriture, interruption, ouverture, terminal) ; une écriture ouvre le tour compté. */
   requete(membre: string, message: MessageChiffre): VerdictRequete {
     const verdict = verdictRequete(this.ctxRequete(), membre, message);
-    if (verdict.ok && verdict.invite && message.t === 'ecrire') this.debutTour(message.session, membre);
     if (!verdict.ok) this.o.journal.warn({ membre, t: message.t, raison: 'politique d’invité' }, 'requête refusée');
     return verdict;
   }
 
   /** Verdict d'un geste (corps relu) : rend le geste à exécuter, avec le cadre pour une ouverture. */
   geste(membre: string, m: GesteRecu): VerdictGeste {
-    const verdict = verdictGeste(this.ctxGeste(), membre, m);
-    if (verdict.ok && m.session !== undefined && (m.geste === 'messages' || m.geste === 'repondre')) {
-      if (this.estInvite(membre)) this.debutTour(m.session, membre);
-    }
+    const verdict = verdictGeste(this.ctxRequete(), membre, m);
     if (!verdict.ok) this.o.journal.warn({ membre, geste: m.geste, raison: verdict.raison }, 'geste refusé');
     return verdict;
   }
@@ -162,6 +163,30 @@ export class NoeudInvites {
       consommeCourant(c.session, releves?.session),
       reglages.partSemaine === null ? null : consommeCourant(c.semaine, releves?.semaine),
     );
+  }
+
+  /** Relevé du compte avant une requête relayée : la part se mesure par l'écart pendant la requête. */
+  debutRelais(): Releve | null {
+    return releveDuCompte(this.comptesLocaux(), this.compteDeMoi());
+  }
+
+  /** Une requête relayée terminée : part comptée, jetons, modèle et requête notés (jamais de contenu). */
+  finRelais(membre: string, debut: Releve | null, conso: Consommation, nouvelleSession: boolean): void {
+    const apres = releveDuCompte(this.comptesLocaux(), this.compteDeMoi());
+    const jour = jourLocal(new Date(this.maintenant()));
+    this.compteurs.miseAJour(membre, (m) => ({
+      ...m,
+      session: ajouterEcart(m.session, debut?.session ?? null, apres?.session ?? null),
+      semaine: ajouterEcart(m.semaine, debut?.semaine ?? null, apres?.semaine ?? null),
+      jours: majJour(m, jour, (j) => ({
+        ...j,
+        sessions: j.sessions + (nouvelleSession ? 1 : 0),
+        requetes: j.requetes + 1,
+        jetons: j.jetons + conso.entree + conso.sortie,
+        modele: conso.modele ?? j.modele,
+        derniere: this.iso(),
+      })),
+    }));
   }
 
   private relevesDuNoeud(): Releve | null {
@@ -235,8 +260,9 @@ export class NoeudInvites {
     const charte = this.o.charte();
     if (charte === null) return;
     const activites = charte.membres
-      .filter((m) => m.invite?.telemetrie === true && sessionsDe(this.o.registre, m.id).length > 0)
-      .map((m) => ({ membre: m.id, activite: this.activiteLocale(m.id) }));
+      .filter((m) => m.invite?.telemetrie === true)
+      .map((m) => ({ membre: m.id, activite: this.activiteLocale(m.id) }))
+      .filter((a) => a.activite.actifAujourdhui);
     if (activites.length > 0) this.o.envoyerAChefs({ t: 'activite_invites', activites });
   }
 
@@ -267,7 +293,7 @@ export class NoeudInvites {
     return activiteDe({
       reglages,
       compteurs: this.compteurs.membre(membre),
-      enCours: sessionsEnCoursDe(this.o.registre, membre),
+      enCours: sessionsEnCoursDe(this.o.registre, membre) + this.suivi.recentes(membre).length,
       jour: jourLocal(new Date(this.maintenant())),
       releves: this.relevesDuNoeud(),
     });
@@ -278,17 +304,7 @@ export class NoeudInvites {
   private ctxRequete(): CtxRequete {
     return {
       sessionDe: (id) => this.o.registre.session(id),
-      enCours: (membre) => sessionsEnCoursDe(this.o.registre, membre),
       reglagesDe: (membre) => this.reglagesDe(membre),
-      partDe: (membre, reglages) => this.partDe(membre, reglages),
-      sessionsAutres: (membre) => this.reglagesDe(membre)?.acces.sessionsAutres ?? false,
-    };
-  }
-
-  private ctxGeste(): CtxGeste {
-    return {
-      ...this.ctxRequete(),
-      ouvrir: (membre, texte) => this.preparer(membre, texte),
     };
   }
 
@@ -297,11 +313,11 @@ export class NoeudInvites {
     const reglages = this.reglagesDe(membre);
     if (reglages === null) return { ok: false, statut: 403, raison: 'pas un invité' };
     const charte = this.o.charte();
-    const moi = this.o.moi() ?? '';
     const compteur = this.compteurs.membre(membre);
     const releves = this.relevesDuNoeud();
     const ctx: CtxOuverture = {
-      moi,
+      // La session tourne ici, mais le modèle chez le chef : la machine permise est celle qui répond (premier permis).
+      machineRelais: reglages.machines[0] ?? '',
       machine: this.o.machine,
       reglages,
       nom: membreDe(charte, membre)?.nom ?? membre,
@@ -318,16 +334,8 @@ export class NoeudInvites {
   }
 }
 
-function majJour(
-  m: MembreCompteur,
-  jour: string,
-  fn: (j: { sessions: number; jetons: number; derniere: string | null }) => {
-    sessions: number;
-    jetons: number;
-    derniere: string | null;
-  },
-): MembreCompteur['jours'] {
-  const actuel = m.jours[jour] ?? { sessions: 0, jetons: 0, derniere: null };
+function majJour(m: MembreCompteur, jour: string, fn: (j: JourCompteur) => JourCompteur): MembreCompteur['jours'] {
+  const actuel = m.jours[jour] ?? { sessions: 0, jetons: 0, derniere: null, requetes: 0, modele: null };
   return { ...m.jours, [jour]: fn(actuel) };
 }
 

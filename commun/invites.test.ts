@@ -46,6 +46,8 @@ function activite(surcharge: Partial<ActiviteInvite> = {}): ActiviteInvite {
     sessionsAujourdhui: 0,
     sessionsEnCours: 0,
     jetonsAujourdhui: 0,
+    requetesAujourdhui: 0,
+    dernierModele: null,
     part5h: null,
     semaine: null,
     ...surcharge,

@@ -41,11 +41,13 @@ export function activiteDe(e: EntreeActivite): ActiviteInvite {
           e.releves?.semaine?.reinitialiseLe ?? null,
         );
   return {
-    actifAujourdhui: sessions > 0 || e.enCours > 0,
+    actifAujourdhui: sessions > 0 || (jour?.requetes ?? 0) > 0 || e.enCours > 0,
     derniere: jour?.derniere ?? null,
     sessionsAujourdhui: sessions,
     sessionsEnCours: e.enCours,
     jetonsAujourdhui: Math.round(jour?.jetons ?? 0),
+    requetesAujourdhui: jour?.requetes ?? 0,
+    dernierModele: jour?.modele ?? null,
     part5h: session,
     semaine,
   };

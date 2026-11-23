@@ -14,6 +14,8 @@ import { ApiVoix, urlVoix } from './voix/api-voix.ts';
 import { routesAcces } from './acces/api-acces.ts';
 import type { PosteRelais } from './acces/api-appairage.ts';
 import { adresseBoucle, routesMcp } from './connecteurs/mcp-http.ts';
+import { lireJetonFichier } from '../poste/comptes/lecture-compte.ts';
+import { PREFIXE_ROUTE_CLAUDE } from './invites/relais-claude-client.ts';
 import { ApiFichiers } from './appareils/api-fichiers.ts';
 import { ApiArtefacts } from './clients/api-artefacts.ts';
 import { ApiModifications } from './clients/api-modifications.ts';
@@ -84,6 +86,15 @@ if (process.env['LANTERNE_RELAIS_MODE'] === 'aiguilleur') {
 }
 
 const journal = creerJournal('relais');
+// Jeton du compte Claude par défaut de cette machine (relais des invités) ; illisible ou absent : aucun relais.
+function jetonDuCompteParDefaut(): string | null {
+  try {
+    return lireJetonFichier(null);
+  } catch (erreur) {
+    journal.warn({ err: erreur }, 'jeton du compte Claude illisible : relais des invités indisponible');
+    return null;
+  }
+}
 const config = chargerConfig();
 const base = ouvrirBase(config.base);
 const registre = new Registre(base, journal, config.inactiviteMs);
@@ -223,6 +234,8 @@ const federation = new Federation({
   registre,
   diffusion,
   dossierSecrets,
+  // Relais Claude : le compte Claude de cette machine sert les requêtes relayées des invités (jamais exposé).
+  jetonAbonnement: () => jetonDuCompteParDefaut(),
   servirAppareil: (demande) => servirPourAppareil(demande),
   servirChef: (demande) => servirPourChef(demande),
   fonctions: sondesFonctions(process.env, journal.child({ domaine: 'fonctions' })),
@@ -330,8 +343,10 @@ const invitesApi = new ApiInvites({
   editer: (fn) => federation.charte.editer(fn),
   appairer: (membre) => federation.appairer(membre),
   ouvrirAvec: (c, cadre) => sessions.ouvrirAvec(c, cadre),
-  ouvrirChez: (membre, texte) => federation.ouvrirChez(membre, texte),
-  enLigne: (membre) => federation.machineEnLigne(membre),
+  relaisLocal: () => ({
+    url: `${adresseBoucle(config.boucleWeb.hote, config.boucleWeb.port)}${PREFIXE_ROUTE_CLAUDE}`,
+    jeton: federation.relais.jetonRelais(),
+  }),
   commander: (machine, commande) => postes.commander(machine, commande),
   session: (id) => registre.session(id),
   repli: (req) => sessions.ouvrir(req),
@@ -439,6 +454,7 @@ for (const { hote, port } of config.ecouteWeb) {
           (req as Request & { params: Record<string, string> }).params['id'] ?? '',
           (session) => federation.distantes.membreDe(session),
         ),
+      ...federation.relais.routes(),
       '/api/*': () => erreur('route inconnue', 404),
     },
     fetch: fichierBureau,

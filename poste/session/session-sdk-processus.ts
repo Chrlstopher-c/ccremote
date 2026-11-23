@@ -17,7 +17,7 @@ import { serveurRythme } from './lanceur.ts';
 import { optionsSdk } from './options-sdk.ts';
 import { avecPromptSysteme } from './consignes.ts';
 import { confinementDe, crochetConfinement, permissionInvite } from './confinement-invite.ts';
-import { jetonInvite, MESSAGE_JETON_INVITE, optionsInvite } from './cadre-invite.ts';
+import { jetonPourInvite, MESSAGE_JETON_INVITE, optionsInvite } from './cadre-invite.ts';
 import type { CadreInvite } from '../../commun/cadre-invite.ts';
 import type { Suite } from './suite-du-tour.ts';
 import { pointDeRembobinage } from './rembobinage.ts';
@@ -43,7 +43,6 @@ function identifiantDe(n: NoyauSdk, reprise: boolean): string {
 export function optionsDe(n: NoyauSdk, reprise: boolean, jeton: string | null = null): Options {
   const invite = n.p.invite;
   if (!invite) return optionsDeSession(n, reprise);
-  if (jeton === null) throw new Error(MESSAGE_JETON_INVITE);
   return optionsDeInvite(n, invite.cadre, reprise, jeton);
 }
 
@@ -79,7 +78,7 @@ function optionsDeSession(n: NoyauSdk, reprise: boolean): Options {
   });
 }
 
-function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeton: string): Options {
+function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeton: string | null): Options {
   const confinement = confinementDe(cadre);
   return optionsInvite({
     identifiant: identifiantDe(n, reprise),
@@ -111,8 +110,9 @@ export function demarrer(
   uuid?: SDKUserMessage['uuid'],
   blocs?: PiecesPreparees['blocs'],
 ): string | null {
-  const jeton = n.p.invite ? jetonInvite(n.p.invite.configCompte, n.env.journal) : null;
-  if (n.p.invite && jeton === null) return echouerDemarrage(n, MESSAGE_JETON_INVITE);
+  const invite = n.p.invite;
+  const jeton = invite ? jetonPourInvite(invite.cadre, invite.configCompte, n.env.journal) : null;
+  if (invite && jeton === undefined) return echouerDemarrage(n, MESSAGE_JETON_INVITE);
   const fil = new FileAsynchrone<SDKUserMessage>();
   let liberer: () => void = () => undefined;
   const pret = new Promise<void>((r) => {
@@ -120,7 +120,10 @@ export function demarrer(
   });
   n.bilan = new BilanTour();
   try {
-    const requete = n.fabrique({ prompt: messagesAvecConnecteurs(fil, pret), options: optionsDe(n, reprise, jeton) });
+    const requete = n.fabrique({
+      prompt: messagesAvecConnecteurs(fil, pret),
+      options: optionsDe(n, reprise, jeton ?? null),
+    });
     n.aReprendre = true;
     n.reveilLe = Date.now();
     n.requete = requete;

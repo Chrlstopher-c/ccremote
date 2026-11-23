@@ -41,13 +41,10 @@ function session(id: string, membre: string | null, statut: ResumeSession['statu
   };
 }
 
-function ctxReq(sessions: ResumeSession[], r: ReglagesInvite | null, enCours = 0, sessionsAutres = false): CtxRequete {
+function ctxReq(sessions: ResumeSession[], r: ReglagesInvite | null): CtxRequete {
   return {
     sessionDe: (id) => sessions.find((s) => s.id === id) ?? null,
-    enCours: () => enCours,
     reglagesDe: (m) => (m === G ? r : null),
-    partDe: () => ({ ok: true }),
-    sessionsAutres: () => sessionsAutres,
   };
 }
 
@@ -57,32 +54,18 @@ const ecrire = (session: string): MessageChiffre => ({ t: 'ecrire', ref: 'r2', s
 describe('requêtes', () => {
   const sessions = [session('g-1', G), session('h-1', H), session('libre', null)];
 
-  test('l’invité lit et écrit sa session, pas celle d’un autre invité', () => {
+  test('un invité n’envoie rien au chef : ni lecture, ni écriture, ni ouverture', () => {
     const ctx = ctxReq(sessions, reglages());
-    expect(verdictRequete(ctx, G, fil('g-1'))).toEqual({ ok: true, invite: true });
-    expect(verdictRequete(ctx, G, ecrire('g-1'))).toEqual({ ok: true, invite: true });
-    expect(verdictRequete(ctx, G, fil('h-1')).ok).toBe(false);
-    expect(verdictRequete(ctx, G, ecrire('libre')).ok).toBe(false);
-  });
-
-  test('sessions ordinaires : lecture seule si le chef l’a permis, jamais écrire', () => {
-    const ctx = ctxReq(sessions, reglages(), 0, true);
-    expect(verdictRequete(ctx, G, fil('libre')).ok).toBe(true);
-    expect(verdictRequete(ctx, G, ecrire('libre')).ok).toBe(false);
-  });
-
-  test('écriture refusée quand les sessions simultanées sont atteintes', () => {
-    const ctx = ctxReq(sessions, reglages({ simultanees: 1 }), 1);
+    expect(verdictRequete(ctx, G, fil('g-1')).ok).toBe(false);
     expect(verdictRequete(ctx, G, ecrire('g-1')).ok).toBe(false);
+    expect(verdictRequete(ctx, G, { t: 'ouvrir', ref: 'r', machine: 'x', chemin: '/x', message: 'a' }).ok).toBe(false);
   });
 
-  test('ouvrir par message et terminal : refusés pour un invité ; un pair ordinaire ne lit pas un invité', () => {
-    const ctx = ctxReq(sessions, reglages());
-    expect(verdictRequete(ctx, G, { t: 'ouvrir', ref: 'r', machine: 'x', chemin: '/x', message: 'a' }).ok).toBe(false);
-    const terminal = { t: 'terminal_ouvrir', terminal: 'aaaaaaaaaaaaaaaa' } as unknown as MessageChiffre;
-    expect(verdictRequete(ctx, G, terminal)).toEqual({ ok: false, reponse: null });
+  test('un pair ordinaire ne lit ni n’écrit une session d’invité ; interrompre reste permis', () => {
     const chef = ctxReq(sessions, null);
     expect(verdictRequete(chef, 'cccccccccccc', fil('g-1')).ok).toBe(false);
+    expect(verdictRequete(chef, 'cccccccccccc', ecrire('g-1')).ok).toBe(false);
+    expect(verdictRequete(chef, 'cccccccccccc', fil('libre')).ok).toBe(true);
     expect(verdictRequete(chef, 'cccccccccccc', { t: 'interrompre', ref: 'r', session: 'g-1' }).ok).toBe(true);
   });
 });
@@ -92,10 +75,6 @@ describe('gestes', () => {
   const ctx = (r: ReglagesInvite | null): CtxGeste => ({
     sessionDe: (id) => sessions.find((s) => s.id === id) ?? null,
     reglagesDe: (m) => (m === G ? r : null),
-    partDe: () => ({ ok: true }),
-    enCours: () => 0,
-    sessionsAutres: () => false,
-    ouvrir: () => ({ ok: false, statut: 403, raison: 'non testé ici' }),
   });
   const geste = (suffixe: string, corps?: string, extra: Partial<GesteRecu> = {}): GesteRecu =>
     ({
@@ -108,19 +87,12 @@ describe('gestes', () => {
       ...extra,
     }) as GesteRecu;
 
-  test('modèle et effort relus : opus interdit, effort high interdit, haiku low permis', () => {
+  test('un invité ne relaie aucun geste : tout passe par le relais Claude', () => {
     const c = ctx(reglages());
-    expect(verdictGeste(c, G, geste('modele', '{"modele":"opus"}')).ok).toBe(false);
-    expect(verdictGeste(c, G, geste('modele', '{"modele":"haiku"}')).ok).toBe(true);
-    expect(verdictGeste(c, G, geste('effort', '{"effort":"high"}')).ok).toBe(false);
-    expect(verdictGeste(c, G, geste('effort', '{"effort":"low"}')).ok).toBe(true);
-  });
-
-  test('gestes hors liste, mode, remote-control, portée machine : refusés', () => {
-    const c = ctx(reglages());
-    expect(verdictGeste(c, G, geste('mode', '{"mode":"plan"}')).ok).toBe(false);
-    expect(verdictGeste(c, G, geste('remote-control', '{}')).ok).toBe(false);
-    expect(verdictGeste(c, G, geste('renommer', '{}', { session: undefined, machine: 'tour' })).ok).toBe(false);
+    expect(verdictGeste(c, G, geste('modele', '{"modele":"haiku"}')).ok).toBe(false);
+    expect(verdictGeste(c, G, geste('effort', '{"effort":"low"}')).ok).toBe(false);
+    expect(verdictGeste(c, G, geste('messages')).ok).toBe(false);
+    expect(verdictGeste(c, G, geste('ouvrir', '{}', { session: undefined, machine: 'tour' })).ok).toBe(false);
   });
 
   test('un pair ordinaire ne touche pas le contenu d’une session d’invité ; interrompre reste permis', () => {
@@ -132,7 +104,7 @@ describe('gestes', () => {
 
 describe('ouverture par l’invité', () => {
   const base = (): CtxOuverture => ({
-    moi: 'dddddddddddd',
+    machineRelais: 'dddddddddddd',
     machine: 'tour',
     reglages: reglages({ prompt: 'Réponds court.', machines: ['dddddddddddd'] }),
     nom: 'Elie',
@@ -185,8 +157,8 @@ describe('vue des autres', () => {
   const sessions = [session('g-1', G), session('libre', null)];
   const fiche: ResumeSession[] = sessions.map((s) => s);
 
-  test('un invité voit les siennes ; un autre voit l’invité masqué', () => {
-    expect(sessionsVues(G, reglages(), fiche).map((s) => s.id)).toEqual(['g-1']);
+  test('un invité ne voit aucune session du chef ; un autre voit l’invité masqué', () => {
+    expect(sessionsVues(G, reglages(), fiche)).toEqual([]);
     const vue = sessionsVues('cccccccccccc', null, fiche);
     expect(vue.find((s) => s.id === 'g-1')?.titre).toBe('Conversation de Elie');
     expect(vue.find((s) => s.id === 'libre')?.titre).toBe('libre');
@@ -216,13 +188,14 @@ describe('parts et activité', () => {
       compteurs: {
         session: { cle: null, consomme: 0 },
         semaine: { cle: null, consomme: 0 },
-        jours: { '2026-11-22': { sessions: 2, jetons: 10.4, derniere: MAJ } },
+        jours: { '2026-11-22': { sessions: 2, jetons: 10.4, derniere: MAJ, requetes: 3, modele: 'haiku' } },
       },
       enCours: 1,
       jour: '2026-11-22',
       releves: null,
     });
     expect(a).toMatchObject({ actifAujourdhui: true, sessionsAujourdhui: 2, sessionsEnCours: 1, jetonsAujourdhui: 10 });
+    expect(a).toMatchObject({ requetesAujourdhui: 3, dernierModele: 'haiku' });
     expect(a.part5h?.part).toBe(25);
   });
 });

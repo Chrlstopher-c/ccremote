@@ -20,7 +20,7 @@ export const CorpsInvite = z.object({
 });
 
 export interface CtxOuverture {
-  readonly moi: string; // membre de ce nœud dans la charte
+  readonly machineRelais: string; // nœud du chef qui répond aux requêtes (premier permis) : la machine des limites
   readonly machine: string; // nom de la machine locale (postes, projets)
   readonly reglages: ReglagesInvite;
   readonly nom: string;
@@ -79,7 +79,7 @@ export function preparerOuverture(ctx: CtxOuverture, membre: string, texte: stri
   const lu = CorpsInvite.safeParse(corpsLu(texte));
   if (!lu.success) return refus(400, 'corps de session invalide');
   const verdict = verifierOuverture(ctx.reglages, {
-    machine: ctx.moi,
+    machine: ctx.machineRelais,
     machineInvite: membre,
     modele: lu.data.modele ?? null,
     effort: lu.data.effort ?? null,

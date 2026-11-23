@@ -37,6 +37,7 @@ import { AppairageNoeud } from './appairage-noeud.ts';
 import { MachinesDuReseau } from './machines-du-reseau.ts';
 import type { PortNoeud } from './noeud-port.ts';
 import { HoteNoeud } from './hote-noeud.ts';
+import { montarRelaisClaude, type RelaisClaude } from './relais-claude-montage.ts';
 import { etatFederation } from './vue-federation.ts';
 
 export type { NoeudAppaire };
@@ -54,6 +55,8 @@ export class Federation {
   private readonly echanges: Echanges;
   /** Les invités de ce nœud : politique appliquée ici, télémétrie, intentions d'invitation. */
   readonly invites: NoeudInvites;
+  /** Le relais Claude : la route locale des invités, et les requêtes relayées d'un invité (ce nœud du chef). */
+  readonly relais: RelaisClaude;
   /** La charte signée du réseau : droits, appairage, édition (routes `/api/reseau/charte`). */
   readonly charte: CharteNoeud;
   private readonly canaux: Canaux;
@@ -153,9 +156,11 @@ export class Federation {
       echanges: this.echanges,
       chefAppareilRelie: () => this.chefAppareilRelie(),
     });
+    this.relais = montarRelaisClaude(this.port, this.invites);
     this.hoteNoeud = new HoteNoeud(this.port, {
       echanges: this.echanges,
       invites: this.invites,
+      relais: this.relais,
       machines: this.machines,
       admissions: this.admissions,
       appareils: this.appareils,
@@ -492,4 +497,3 @@ export class Federation {
     });
   }
 }
-

@@ -2,6 +2,7 @@
 // membre) et pairs acceptés. Tout vit dans le dossier de secrets du relais (fichiers 600, écriture atomique) ; rien ici
 // n'est journalisé, seule une erreur d'E/S l'est.
 import type { Logger } from 'pino';
+import { randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -62,6 +63,7 @@ export const CharteStockee = z.object({
   signature: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
 });
 const IDENTIFIANTS_REVOQUES = z.array(z.string().regex(IDENTIFIANT));
+const JETON_RELAIS = z.object({ jeton: z.string().min(32).max(128) });
 
 export class SecretsNoeud {
   private readonly dossier: string;
@@ -134,6 +136,15 @@ export class SecretsNoeud {
 
   ecrireAppareilsRevoques(ids: readonly string[]): void {
     this.ecrireJson('appareils-revoques.json', ids);
+  }
+
+  /** Secret du relais Claude d'invité (32 octets) : créé au premier usage, gardé ici, jamais journalisé. */
+  jetonRelaisClaude(): string {
+    const lu = this.lireJson('relais-claude.json', JETON_RELAIS);
+    if (lu !== null) return lu.jeton;
+    const jeton = randomBytes(32).toString('base64url');
+    this.ecrireJson('relais-claude.json', { jeton });
+    return jeton;
   }
 
   private lireJson<T>(nom: string, schema: z.ZodType<T>): T | null {

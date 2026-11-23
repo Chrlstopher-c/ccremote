@@ -205,10 +205,36 @@ describe('machine fraîche invitée (appli embarquée des deux côtés)', () => 
   });
 });
 
+/** Le port des routes d'invité sur G (un invité qui ouvre une session chez lui). */
+function portG(r: Reseau): PortApiInvites {
+  return {
+    invites: r.g.federation.invites,
+    charte: () => r.g.federation.charte.charte(),
+    moi: () => r.g.federation.charte.moi(),
+    chefLocal: () => false,
+    editer: (fn) => r.g.federation.charte.editer(fn),
+    appairer: (m) => r.g.federation.appairer(m),
+    ouvrirAvec: async (c, cadre) => {
+      ouvertes.push({ corps: c, cadre });
+      return Response.json({ id: `locale-${ouvertes.length}` }, { status: 201 });
+    },
+    relaisLocal: () => ({ url: 'http://127.0.0.1:1/api/relais-claude', jeton: 'j'.repeat(43) }),
+    commander: async () => ({ ok: true, donnees: {} }),
+    session: (id) => r.g.registre.session(id),
+    repli: async () => new Response('repli', { status: 500 }),
+  };
+}
+
+function ouvrirLocal(r: Reseau, corps: Record<string, unknown> = CORPS_HAIKU): Promise<Response> {
+  return new ApiInvites(portG(r)).ouvrirSession(
+    new Request('http://g/api/sessions', { method: 'POST', body: JSON.stringify(corps) }),
+  );
+}
+
 describe('ouverture par l’invité', () => {
-  test('haiku en low : ouverte sur B, corps réécrit, cadre sous la racine des espaces, mode default', async () => {
+  test('haiku en low : session ouverte chez l’invité, corps réécrit, cadre sous la racine, relais posé', async () => {
     const r = await reseau();
-    const rep = await ouvrirChezB(r);
+    const rep = await ouvrirLocal(r);
     expect(rep.status).toBe(201);
     expect(ouvertes).toHaveLength(1);
     const [ouverte] = ouvertes;
@@ -216,33 +242,41 @@ describe('ouverture par l’invité', () => {
     expect(ouverte?.corps.bac_a_sable).toBeUndefined();
     expect(ouverte?.cadre.espace.startsWith(racine)).toBe(true);
     expect(ouverte?.cadre.membre).toBe(r.idG);
+    expect(ouverte?.cadre.relais?.url.endsWith('/api/relais-claude')).toBe(true);
     expect(ouverte?.corps.modele).toBe('haiku');
+    expect(r.b.appels.ouvrir).toHaveLength(0);
   });
 
-  test('opus refusé (modèle non permis)', async () => {
+  test('un invité n’ouvre plus chez le chef : l’ouverture relayée est refusée, rien ne part', async () => {
     const r = await reseau();
-    const rep = await ouvrirChezB(r, { ...CORPS_HAIKU, modele: 'opus' });
-    expect(rep.status).toBe(403);
+    expect((await ouvrirChezB(r)).status).toBe(403);
+    expect(r.b.appels.ouvrir).toHaveLength(0);
     expect(ouvertes).toHaveLength(0);
   });
 
-  test('haiku en high refusé (effort non permis)', async () => {
+  test('opus refusé (modèle non permis) : ouverture locale refusée', async () => {
     const r = await reseau();
-    expect((await ouvrirChezB(r, { ...CORPS_HAIKU, effort: 'high' })).status).toBe(403);
+    expect((await ouvrirLocal(r, { ...CORPS_HAIKU, modele: 'opus' })).status).toBe(403);
+    expect(ouvertes).toHaveLength(0);
   });
 
-  test('consommation ≥ part (fenêtre de 5 h du compte relevée) : ouverture refusée', async () => {
+  test('haiku en high refusé (effort non permis) : ouverture locale refusée', async () => {
     const r = await reseau();
-    poserCompteLocal(r.b, 30, REINIT);
-    r.b.federation.invites.compteurs.miseAJour(r.idG, (m) => ({ ...m, session: { cle: REINIT, consomme: 12 } }));
-    expect((await ouvrirChezB(r)).status).toBe(403);
+    expect((await ouvrirLocal(r, { ...CORPS_HAIKU, effort: 'high' })).status).toBe(403);
+  });
+
+  test('consommation ≥ part (fenêtre de 5 h du compte relevée sur G) : ouverture refusée', async () => {
+    const r = await reseau();
+    poserCompteLocal(r.g, 30, REINIT);
+    r.g.federation.invites.compteurs.miseAJour(r.idG, (m) => ({ ...m, session: { cle: REINIT, consomme: 12 } }));
+    expect((await ouvrirLocal(r)).status).toBe(403);
   });
 
   test('troisième session en cours : refusée', async () => {
     const r = await reseau();
-    poser(r.b, 'en-cours-1', 'tour', r.idG, 'Elie', 'travail');
-    poser(r.b, 'en-cours-2', 'tour', r.idG, 'Elie', 'travail');
-    expect((await ouvrirChezB(r)).status).toBe(403);
+    poser(r.g, 'en-cours-1', 'tour', r.idG, 'Elie', 'travail');
+    poser(r.g, 'en-cours-2', 'tour', r.idG, 'Elie', 'travail');
+    expect((await ouvrirLocal(r)).status).toBe(403);
   });
 
   test('ouvrir chez le chef (machine non permise) : refusé', async () => {
@@ -255,51 +289,22 @@ describe('ouverture par l’invité', () => {
     const lu = Schema.parse({ ...CORPS_HAIKU, invite: { membre: 'aaaaaaaaaaaa', nom: 'x' } });
     expect('invite' in lu).toBe(false);
   });
-
-  test('ouverture locale (G est invité) : relayée à B, la même politique', async () => {
-    const r = await reseau();
-    const port: PortApiInvites = {
-      invites: r.g.federation.invites,
-      charte: () => r.g.federation.charte.charte(),
-      moi: () => r.g.federation.charte.moi(),
-      chefLocal: () => false,
-      editer: (fn) => r.g.federation.charte.editer(fn),
-      appairer: (m) => r.g.federation.appairer(m),
-      ouvrirAvec: async () => new Response('non', { status: 500 }),
-      ouvrirChez: (m, texte) => r.g.federation.ouvrirChez(m, texte),
-      enLigne: (m) => r.g.federation.machineEnLigne(m),
-      commander: async () => ({ ok: true, donnees: {} }),
-      session: (id) => r.g.registre.session(id),
-      repli: async () => new Response('repli', { status: 500 }),
-    };
-    const api = new ApiInvites(port);
-    const rep = await api.ouvrirSession(
-      new Request('http://g/api/sessions', { method: 'POST', body: JSON.stringify(CORPS_HAIKU) }),
-    );
-    expect(rep.status).toBe(201);
-    expect(ouvertes).toHaveLength(1);
-  });
 });
 
 describe('ce que l’invité peut lire et écrire', () => {
-  test('fil d’une session non invitée de B ou du chef : refusé (sessionsAutres coupé)', async () => {
+  test('fil d’une session non invitée de B ou du chef : refusé', async () => {
     const r = await reseau();
     poser(r.b, 'session-b-libre', 'tour', null, '', 'attente');
     expect((await r.g.federation.distantes.fil(r.idB, 'session-b-libre')).ok).toBe(false);
     expect((await r.g.federation.distantes.fil(r.idA, 'session-du-chef')).ok).toBe(false);
   });
 
-  test('instantané reçu par G : seulement ses sessions', async () => {
+  test('instantané reçu par G : aucune session du chef', async () => {
     const r = await reseau();
     poser(r.b, 'session-b-libre', 'tour', null, '', 'attente');
     poser(r.b, 'session-g', 'tour', r.idG, 'Elie', 'attente');
-    await attendre(() => r.g.federation.distantes.sessions().some((s) => s.session.id === 'session-g'));
-    const vues = r.g.federation.distantes
-      .sessions()
-      .filter((s) => s.membre === r.idB)
-      .map((s) => s.session.id);
-    expect(vues).toContain('session-g');
-    expect(vues).not.toContain('session-b-libre');
+    await pause(500);
+    expect(r.g.federation.distantes.sessions().filter((s) => s.membre === r.idB)).toEqual([]);
   });
 
   test('le chef A voit la session de G masquée, son fil lui est refusé, interrompre permis', async () => {
@@ -312,23 +317,6 @@ describe('ce que l’invité peut lire et écrire', () => {
     expect((await r.a.federation.distantes.fil(r.idB, 'session-g')).ok).toBe(false);
     expect((await r.a.federation.distantes.interrompre(r.idB, 'session-g')).ok).toBe(true);
     expect(r.b.appels.interrompre).toContain('session-g');
-  });
-
-  test('geste hors liste blanche (mode) : 403 ; remote-control : 403', async () => {
-    const r = await reseau();
-    poser(r.b, 'session-g', 'tour', r.idG, 'Elie', 'attente');
-    await attendre(() => r.g.federation.distantes.sessions().some((s) => s.session.id === 'session-g'));
-    const mode = await r.g.federation.distantes.intercepter(
-      new Request('http://g/api/sessions/session-g/mode', { method: 'POST', body: JSON.stringify({ mode: 'plan' }) }),
-    );
-    expect(mode?.status).toBe(403);
-    const rc = await r.g.federation.distantes.intercepter(
-      new Request('http://g/api/sessions/session-g/remote-control', {
-        method: 'POST',
-        body: JSON.stringify({ actif: true }),
-      }),
-    );
-    expect(rc?.status).toBe(403);
   });
 
   test('G n’est pas chef : sa charte forgée et son action de chef sont refusées', async () => {
@@ -358,16 +346,6 @@ describe('ce que l’invité peut lire et écrire', () => {
 });
 
 describe('télémétrie', () => {
-  test('ouverture d’un invité : activite_invites arrive chez le chef, GET activite compte la session', async () => {
-    const r = await reseau();
-    await ouvrirChezB(r);
-    r.b.federation.invites.emettreActivites();
-    await attendre(() => r.a.federation.invites.activitePour(r.idG).activite?.sessionsAujourdhui === 1, 4000);
-    const act = r.a.federation.invites.activitePour(r.idG);
-    expect(act.telemetrie).toBe(true);
-    expect(act.activite?.sessionsAujourdhui).toBeGreaterThanOrEqual(1);
-  });
-
   test('télémétrie coupée : activité absente', async () => {
     const r = await reseau();
     const charte: Charte | null = r.a.federation.charte.charte();

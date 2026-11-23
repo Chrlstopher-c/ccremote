@@ -6,6 +6,7 @@ import type { MessageChiffre } from '../../commun/federation.ts';
 import { verdictSource, type VerdictSource } from './admissions.ts';
 import type { Echanges } from './echanges.ts';
 import type { NoeudInvites } from '../invites/noeud-invites.ts';
+import type { RelaisClaude } from '../invites/relais-claude.ts';
 import type { MachinesNoeud } from './machines-noeud.ts';
 import type { AdmissionsNoeud } from './admissions-noeud.ts';
 import type { AppareilsNoeud } from './appareils-noeud.ts';
@@ -19,6 +20,7 @@ import type { PortNoeud } from './noeud-port.ts';
 export interface DepsHote {
   readonly echanges: Echanges;
   readonly invites: NoeudInvites;
+  readonly relais: RelaisClaude;
   readonly machines: MachinesNoeud;
   readonly admissions: AdmissionsNoeud;
   readonly appareils: AppareilsNoeud;
@@ -59,6 +61,10 @@ export class HoteNoeud {
   async messageRecu(canal: CanalNoeud, message: MessageChiffre): Promise<void> {
     if (message.t === 'charte') return this.port.charte.recevoir(canal.membre, message, this.sourceDe(canal.membre));
     if (this.deps.estAppareil(canal.membre)) return this.deps.appareils.messageAppareil(canal, message);
+    // Relais Claude d'invité : ses messages et les morceaux qui les portent ne suivent pas la politique des sessions.
+    if (message.t.startsWith('claude_') || (message.t === 'morceau' && this.deps.relais.possede(message.ref))) {
+      return this.deps.relais.messageRecu(canal, message);
+    }
     if (message.t === 'api' || message.t === 'api_reponse') return canal.fermer();
     if (message.t === 'admissions') return this.deps.admissions.messageAdmissions(canal, message);
     if (message.t === 'revocation') {
@@ -83,6 +89,7 @@ export class HoteNoeud {
     this.port.canaux.retirer(canal);
     this.deps.demandes.retirerPour(canal.membre);
     if (this.port.canaux.liaisonOuverteAvec(canal.membre)) return;
+    this.deps.relais.oublier(canal.membre);
     this.port.distant.enLigne(canal.membre, false);
     this.deps.echanges.oublier(canal.membre);
   }
