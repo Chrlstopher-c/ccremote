@@ -457,3 +457,17 @@ au repos ; `aReprendre` reste vrai tant que Chris n'a pas fermé la session. Sur
   tracé sur le poste hors transcript. Épingle copiée sur la nouvelle.
 - Garde : chef du réseau si une charte existe (pas de rôle « appareil » dans le code). Invités refusés par le poste.
 - Non vérifié en réel (banc non lancé, consigne de Chris) : que `--resume --fork-session` garde l'historique.
+
+## Invités : conversations sur le PC de l'invité, relais d'API du chef (23/11/2026, branche agent/windows-vm)
+- Bug corrigé (4edb8c2) : une machine fraîche reliée/invitée fondait son propre réseau (reprise) en acceptant
+  l'appairage, puis refusait la charte du chef (`autre-reseau`). Seul le demandeur de l'appairage peut fonder par
+  reprise ; une reprise v1 fondée seule cède devant la charte d'un réseau qui la compte, sans révocation. Prouvé en VM.
+- Nouveau modèle (décision de Chris, 23/11) : Claude Code tourne chez l'invité avec `ANTHROPIC_BASE_URL` vers
+  `/api/relais-claude` de son moteur (jeton local), relayé par le lien chiffré au nœud du chef qui vérifie la charte,
+  applique modèle/effort/parts/simultanées, met l'OAuth de l'abonnement et transmet en flux ; télémétrie sans contenu.
+  Vérifié en réel avant de coder : Claude Code 2.1.323 accepte la redirection (200 via relais, `oauth-2025-04-20`).
+- Invitation tout-en-un : `POST /api/reseau/invites/invitation` (code + accès VPN) ; aiguilleur
+  `POST /api/membres/vpn-invites` + geste root `deploiement/vpn-invites/` (NON installé sur le serveur réel : à faire
+  par Chris, voir README). Réglages d'invité partiels acceptés.
+- Limites : annulation à la déconnexion codée non testée ; `surSaMachine` et l'ancien chemin chez le chef restent dans le
+  code sans servir ; sessions d'invité gardent le cadre confiné (pas de Bash) même sur son PC.

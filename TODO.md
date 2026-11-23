@@ -83,3 +83,9 @@
 - [ ] Migration Desktop → Lanterne : vérifier en réel (Chris) que la copie garde l'historique ; décider si le fil de la
   source affiche bien l'événement `migration` (client Rust : variante inconnue à gérer) ; entrée de menu (agent Opus).
 - [ ] Épingle copiée sur la nouvelle session : suppose que la fiche du poste arrive au relais avant la réponse (à vérifier).
+
+## Invités (23/11)
+- [ ] Chris : installer le geste root `deploiement/vpn-invites/` sur l'aiguilleur et déployer l'aiguilleur à jour.
+- [ ] Retirer `surSaMachine` et l'ancien chemin d'ouverture d'invité chez le chef (code mort).
+- [ ] Décider si une session d'invité sur SON PC garde le cadre confiné (pas de Bash) ou devient une session normale.
+- [ ] Tester l'annulation d'une requête relayée quand Claude Code coupe la connexion.
