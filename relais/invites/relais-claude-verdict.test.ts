@@ -69,10 +69,10 @@ describe('verdict d’une requête relayée', () => {
     });
   });
 
-  test('part de la limite atteinte : 429 rate_limit_error', () => {
+  test('part de la limite atteinte : 403 affiché, jamais 429 (réessayé en boucle)', () => {
     const v = verdictRequeteClaude(entree({ part: { ok: false, raison: 'part de la limite de 5 h atteinte' } }));
     expect(v.ok).toBe(false);
-    if (!v.ok) expect([v.statut, v.type]).toEqual([429, 'rate_limit_error']);
+    if (!v.ok) expect([v.statut, v.type]).toEqual([403, 'permission_error']);
   });
 
   test('corps illisible ou sans modèle : 400', () => {
@@ -82,11 +82,11 @@ describe('verdict d’une requête relayée', () => {
     expect(verdictRequeteClaude(entree({ corps: '{}' })).ok).toBe(false);
   });
 
-  test('une troisième session simultanée est refusée (429), une session déjà vue passe', () => {
+  test('une troisième session simultanée est refusée (403 affiché), une session déjà vue passe', () => {
     const deux = ['s-a', 's-b'];
     const nouvelle = verdictRequeteClaude(entree({ session: 's-c', sessionsRecentes: deux }));
     expect(nouvelle.ok).toBe(false);
-    if (!nouvelle.ok) expect([nouvelle.statut, nouvelle.type]).toEqual([429, 'rate_limit_error']);
+    if (!nouvelle.ok) expect([nouvelle.statut, nouvelle.type]).toEqual([403, 'permission_error']);
     expect(verdictRequeteClaude(entree({ session: 's-a', sessionsRecentes: deux })).ok).toBe(true);
   });
 });

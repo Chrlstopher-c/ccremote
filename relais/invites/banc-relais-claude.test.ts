@@ -263,7 +263,7 @@ describe('relais Claude : les refus côté chef', () => {
     expect(recues).toHaveLength(0);
   });
 
-  test('une troisième session simultanée est refusée en 429, une session déjà vue passe', async () => {
+  test('une troisième session simultanée est refusée en 403 (affiché, jamais réessayé), une session déjà vue passe', async () => {
     const r = await reseau({ simultanees: 2 });
     for (const session of ['session-a', 'session-b']) {
       const rep = await r.g.federation.relais.client.routeLocale(
@@ -275,7 +275,7 @@ describe('relais Claude : les refus côté chef', () => {
     const troisieme = await r.g.federation.relais.client.routeLocale(
       requete(r.g, corpsDe(), { 'x-claude-code-session-id': 'session-c' }),
     );
-    expect(troisieme.status).toBe(429);
+    expect(troisieme.status).toBe(403);
     const revue = await r.g.federation.relais.client.routeLocale(
       requete(r.g, corpsDe(), { 'x-claude-code-session-id': 'session-a' }),
     );
