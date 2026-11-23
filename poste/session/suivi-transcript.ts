@@ -4,6 +4,7 @@
 // son ancre. Une réécriture ou une branche cassée repart d'une relecture complète (voir lecture-incrementale.ts).
 import { statSync } from 'node:fs';
 import type { Logger } from 'pino';
+import type { LireImageChemin } from '../presentation/images-chemin.ts';
 import type { EvenementHorodate, StockerImage } from './historique.ts';
 import { LectureIncrementale } from './lecture-incrementale.ts';
 import { SurveillanceFichier } from './surveillance-fichier.ts';
@@ -17,6 +18,7 @@ export interface DependancesSuivi {
   readonly journal: Logger;
   readonly emettre: (evenements: readonly EvenementHorodate[], direct: boolean) => void; // direct : suite écrite en direct
   readonly stockerImage?: StockerImage;
+  readonly lireChemin?: LireImageChemin;
   readonly antiRebondMs?: number;
   readonly recentMs?: number;
 }
@@ -74,7 +76,7 @@ export class SuiviTranscript {
 
   private lecturePour(chemin: string): LectureIncrementale {
     if (this.lecture?.chemin !== chemin) {
-      this.lecture = new LectureIncrementale(chemin, this.d.journal, this.d.stockerImage);
+      this.lecture = new LectureIncrementale(chemin, this.d.journal, this.d.stockerImage, this.d.lireChemin);
       this.envoyes = null;
       this.recents = [];
     }

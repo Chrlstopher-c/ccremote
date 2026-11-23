@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import type { Evenement } from '../../commun/session.ts';
 import { TAILLE_MAX_FICHIER } from '../../commun/presentation.ts';
 import { type ImageSdk, imagesDeContenu } from '../presentation/images.ts';
+import { cheminsImagesDuResultat, type LireImageChemin } from '../presentation/images-chemin.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { brancheActive } from './branche.ts';
 import { CompteTours } from './tours-transcript.ts';
@@ -54,7 +55,10 @@ export class TraducteurHistorique {
   private dernier = EPOQUE;
   private readonly tours = new CompteTours(); // état d'un tour à l'autre : gardé entre les passages du suivi
 
-  constructor(private readonly stockerImage?: StockerImage) {}
+  constructor(
+    private readonly stockerImage?: StockerImage,
+    private readonly lireChemin?: LireImageChemin, // images citées par chemin dans un résultat d'outil
+  ) {}
 
   evenements(l: Ligne): EvenementHorodate[] {
     const ts = horodatage(l, this.dernier);
@@ -65,25 +69,48 @@ export class TraducteurHistorique {
     if (stocker && (l.type === 'user' || enFile) && l.isSidechain !== true) {
       const origine = !enFile && resultatDOutil(l) ? 'outil' : 'utilisateur';
       const contenu = enFile ? l.attachment?.prompt : l.message?.content;
-      imagesDeContenu(contenu).forEach((image, rang) => {
+      const images = imagesDeContenu(contenu);
+      images.forEach((image, rang) => {
         const evt = stocker(image, rang, origine);
         if (evt) sortie.push({ ts, evt });
       });
+      sortie.push(...this.imagesDeChemins(l, ts, images.length));
     }
     return sortie;
+  }
+
+  // Capture écrite sur disque, dont le résultat d'outil ne porte que le chemin : lue par le lecteur, rangs à la suite.
+  private imagesDeChemins(l: Ligne, ts: string, rangDepart: number): EvenementHorodate[] {
+    const stocker = this.stockerImage;
+    const lire = this.lireChemin;
+    if (!stocker || !lire || !resultatDOutil(l)) return [];
+    return cheminsImagesDuResultat(l.message?.content).flatMap((chemin, i) => {
+      const image = lire(chemin);
+      const evt = image ? stocker(image, rangDepart + i, 'outil') : null;
+      return evt ? [{ ts, evt }] : [];
+    });
   }
 }
 
 /** Tous les événements de la branche active d'un transcript, dans l'ordre, sans les sous-agents (leur fil est à part). */
-export function evenementsDuTranscript(contenu: string, stockerImage?: StockerImage): EvenementHorodate[] {
-  const traducteur = new TraducteurHistorique(stockerImage);
+export function evenementsDuTranscript(
+  contenu: string,
+  stockerImage?: StockerImage,
+  lireChemin?: LireImageChemin,
+): EvenementHorodate[] {
+  const traducteur = new TraducteurHistorique(stockerImage, lireChemin);
   return brancheActive(lignesDe(contenu)).flatMap((l) => traducteur.evenements(l));
 }
 
 /** Lit le transcript entier ; un fichier illisible rend une liste vide (journalisé, la session reste ouvrable). */
-export function lireHistorique(chemin: string, journal: Logger, stockerImage?: StockerImage): EvenementHorodate[] {
+export function lireHistorique(
+  chemin: string,
+  journal: Logger,
+  stockerImage?: StockerImage,
+  lireChemin?: LireImageChemin,
+): EvenementHorodate[] {
   try {
-    return evenementsDuTranscript(readFileSync(chemin, 'utf8'), stockerImage);
+    return evenementsDuTranscript(readFileSync(chemin, 'utf8'), stockerImage, lireChemin);
   } catch (erreur) {
     journal.warn({ err: erreur, chemin }, 'historique du transcript illisible');
     return [];

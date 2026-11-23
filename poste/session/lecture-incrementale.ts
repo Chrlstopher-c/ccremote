@@ -4,6 +4,7 @@
 import { closeSync, openSync, readSync, type Stats, statSync } from 'node:fs';
 import type { Logger } from 'pino';
 import { brancheActive, type EtatChaine, etatDeBranche, prolongerBranche } from './branche.ts';
+import type { LireImageChemin } from '../presentation/images-chemin.ts';
 import { type EvenementHorodate, lignesDe, type StockerImage, TraducteurHistorique } from './historique.ts';
 import type { Ligne } from './traduction.ts';
 
@@ -47,6 +48,7 @@ export class LectureIncrementale {
     readonly chemin: string,
     private readonly journal: Logger,
     private readonly stockerImage?: StockerImage,
+    private readonly lireChemin?: LireImageChemin,
   ) {}
 
   get etablie(): boolean {
@@ -90,7 +92,8 @@ export class LectureIncrementale {
   }
 
   private baseDe(octets: number, ino: number | null, lignes: readonly Ligne[]): Base {
-    return { octets, ino, etat: etatDeBranche(lignes), traducteur: new TraducteurHistorique(this.stockerImage) };
+    const traducteur = new TraducteurHistorique(this.stockerImage, this.lireChemin);
+    return { octets, ino, etat: etatDeBranche(lignes), traducteur };
   }
 
   /** Événements ajoutés depuis la base : [] s'il n'y a rien de neuf, `null` si une relecture complète est requise. */

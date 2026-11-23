@@ -7,6 +7,7 @@ import type { PiecesPreparees } from '../presentation/pieces.ts';
 import { PresentationSession } from '../presentation/session-presentation.ts';
 import { AvisSdk } from './avis-sdk.ts';
 import { BilanTour } from './bilan-tour.ts';
+import { lecteurImagesChemin } from '../presentation/images-chemin.ts';
 import { stockeurImages } from './historique.ts';
 import { FileAsynchrone, messageUtilisateur } from './file-messages-sdk.ts';
 import type { SessionPersistee } from './persistance.ts';
@@ -120,8 +121,19 @@ function suiviDe(env: EnvironnementSdk, p: SessionPersistee, n: () => NoyauSdk):
     journal: env.journal,
     emettre: (evenements, direct) => env.sortie.historique?.(n().etat.id, evenements, direct),
     ...(env.relectureRecenteMs !== undefined ? { recentMs: env.relectureRecenteMs } : {}),
-    ...(stockage ? { stockerImage: stockeurImages(stockage, p.resume.id, env.journal) } : {}),
+    ...(stockage
+      ? {
+          stockerImage: stockeurImages(stockage, p.resume.id, env.journal),
+          lireChemin: lecteurImagesChemin(racinesImagesDe(p), env.journal),
+        }
+      : {}),
   });
+}
+
+// Une session d'invité ne lit d'image par chemin que dans son espace et ses dossiers de lecture ; sinon, tout chemin.
+function racinesImagesDe(p: SessionPersistee): string[] | null {
+  const cadre = p.invite?.cadre;
+  return cadre ? [cadre.espace, ...cadre.lecture] : null;
 }
 
 function presentationDe(env: EnvironnementSdk, p: SessionPersistee, n: () => NoyauSdk): PresentationSession | null {
