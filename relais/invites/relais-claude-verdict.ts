@@ -42,7 +42,9 @@ export function verdictRequeteClaude(e: EntreeVerdictClaude): VerdictClaude {
     return refus(403, 'permission_error', 'machine non permise pour cet invité');
   }
   if (e.methode !== 'POST' || !cheminPermis(e.chemin)) return refus(403, 'permission_error', 'chemin non permis');
-  if (!e.part.ok) return refus(429, 'rate_limit_error', e.part.raison);
+  // Limites de l'invité : 403, pas 429. Claude Code réessaie un 429 en boucle sans rien montrer (23/11 : session
+  // figée « 1min 57s » sans message) ; un 403 s'arrête et s'affiche dans le fil, avec ce texte.
+  if (!e.part.ok) return refus(403, 'permission_error', `limite de ta part atteinte : ${e.part.raison}`);
   return verdictCorps(e.reglages, e.corps, e.session === '' ? SANS_SESSION : e.session, e.sessionsRecentes);
 }
 
@@ -52,7 +54,11 @@ function verdictCorps(r: ReglagesInvite, corps: string, session: string, recente
   const effort = verdictEffort(r, lu.model, lu.output_config?.effort);
   if (!effort.ok) return refus(403, 'permission_error', effort.raison);
   if (!recentes.includes(session) && recentes.length >= r.simultanees) {
-    return refus(429, 'rate_limit_error', `trop de sessions simultanées (max ${r.simultanees})`);
+    return refus(
+      403,
+      'permission_error',
+      `trop de conversations en cours en même temps (max ${r.simultanees}) : attends qu'une autre finisse ou ferme-la`,
+    );
   }
   return { ok: true, modele: lu.model, effort: effort.effort };
 }
