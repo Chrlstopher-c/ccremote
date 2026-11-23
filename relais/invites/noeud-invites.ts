@@ -24,7 +24,7 @@ import { verdictGeste, type GesteRecu, type VerdictGeste } from './politique-ges
 import { type CtxRequete, type VerdictRequete, verdictRequete } from './politique-requete.ts';
 import { corpsLu, preparerOuverture, type CtxOuverture, type OuvertureInvite } from './ouverture.ts';
 import { inviteDe, sessionsEnCoursDe } from './sessions-invite.ts';
-import { messageVuPar, sessionsVues } from './vue.ts';
+import { messageVuPar, sessionsLocalesVues, sessionsVues } from './vue.ts';
 
 const INTERVALLE_ACTIVITE_MS = 60_000;
 const DUREE_INTENTION_MS = 30 * 60_000;
@@ -124,8 +124,11 @@ export class NoeudInvites {
 
   /** Vue d'un membre sur les sessions du nœud (l'appli locale = ce nœud) : invité → les siennes, autre → masquées. */
   sessionsPour(viewer: string | null, sessions: readonly ResumeSession[]): ResumeSession[] {
-    const v = viewer ?? this.o.moi() ?? '';
-    return sessionsVues(v, this.reglagesDe(v), sessions);
+    if (viewer === null) {
+      const moi = this.o.moi() ?? '';
+      return sessionsLocalesVues(moi, this.reglagesDe(moi), sessions);
+    }
+    return sessionsVues(viewer, this.reglagesDe(viewer), sessions);
   }
 
   /** Vrai s'il existe au moins un invité dans la charte (sinon aucune vérification de session n'est utile). */

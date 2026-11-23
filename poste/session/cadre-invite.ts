@@ -143,10 +143,16 @@ export function refusOuvertureInvite(d: DemandeSession): string | null {
 }
 
 /** Refus d'une commande adressée à une session d'invité ; null si elle est permise. */
+// Sur la machine de l'invité (session par le relais), c'est lui qui lit : les fichiers que sa session lui présente
+// (visuels `afficher_widget`, pièces) s'affichent dans son fil. Chez le chef, ils restent refusés.
+const COMMANDES_INVITE_CHEZ_LUI: ReadonlySet<string> = new Set(['fichier_session']);
+
 export function refusCommandeInvite(invite: { cadre: CadreInvite } | undefined, kind: string): string | null {
   if (!invite) return null;
   if (kind === 'remote_control') return MESSAGE_REMOTE_CONTROL_INVITE;
-  return COMMANDES_INVITE.has(kind) ? null : `commande non permise pour une session d’invité : ${kind}`;
+  if (COMMANDES_INVITE.has(kind)) return null;
+  if (invite.cadre.relais !== undefined && COMMANDES_INVITE_CHEZ_LUI.has(kind)) return null;
+  return `commande non permise pour une session d’invité : ${kind}`;
 }
 
 /**

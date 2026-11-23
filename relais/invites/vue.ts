@@ -16,6 +16,16 @@ export function sessionsVues(
   return sessions.map((s) => masquee(s, viewer));
 }
 
+/** Sessions que l'appli de ce nœud reçoit : un invité, sur sa propre machine, voit les siennes (et seulement elles). */
+export function sessionsLocalesVues(
+  moi: string,
+  reglages: ReglagesInvite | null,
+  sessions: readonly ResumeSession[],
+): ResumeSession[] {
+  if (reglages === null) return sessionsVues(moi, null, sessions);
+  return sessions.filter((s) => s.invite?.membre === moi);
+}
+
 function masquee(s: ResumeSession, viewer: string): ResumeSession {
   const inv = s.invite;
   return inv && inv.membre !== viewer ? masquerPourAutres(s, inv.nom, inv.membre) : s;

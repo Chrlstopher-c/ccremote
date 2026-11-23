@@ -192,6 +192,13 @@ describe('commandes et ouverture d’une session d’invité', () => {
     expect(refusCommandeInvite(undefined, 'historique')).toBeNull();
   });
 
+  test('sur la machine de l’invité (relais), ses visuels et fichiers de session se lisent ; chez le chef, non', () => {
+    const chezLui = { cadre: { ...CADRE, relais: { url: 'http://127.0.0.1:1/claude', jeton: 'j'.repeat(32) } } };
+    expect(refusCommandeInvite(chezLui, 'fichier_session')).toBeNull();
+    expect(refusCommandeInvite(chezLui, 'historique')).not.toBeNull();
+    expect(refusCommandeInvite({ cadre: CADRE }, 'fichier_session')).not.toBeNull();
+  });
+
   test('Remote Control refusé même si le chef l’a cochée (la bascule TUI sortirait du cadre)', () => {
     expect(refusOuvertureInvite(demande({ controle_distant: true }))).not.toBeNull();
     expect(refusOuvertureInvite(demande({ moteur: 'tmux' }))).not.toBeNull();

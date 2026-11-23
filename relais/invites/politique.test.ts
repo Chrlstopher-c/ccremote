@@ -14,7 +14,7 @@ import { racineAcceptable, preparerOuverture, type CtxOuverture } from './ouvert
 import { type CtxRequete, verdictRequete } from './politique-requete.ts';
 import { type CtxGeste, type GesteRecu, verdictGeste } from './politique-geste.ts';
 import { Intentions } from './intention.ts';
-import { messageVuPar, sessionsVues } from './vue.ts';
+import { messageVuPar, sessionsLocalesVues, sessionsVues } from './vue.ts';
 import { activiteDe } from './activite.ts';
 
 const journal = pino({ enabled: false });
@@ -162,6 +162,12 @@ describe('vue des autres', () => {
     const vue = sessionsVues('cccccccccccc', null, fiche);
     expect(vue.find((s) => s.id === 'g-1')?.titre).toBe('Conversation de Elie');
     expect(vue.find((s) => s.id === 'libre')?.titre).toBe('libre');
+  });
+
+  test('sur sa propre machine, l’invité voit ses sessions (terminal, fichiers) ; jamais celles des autres', () => {
+    expect(sessionsLocalesVues(G, reglages(), fiche).map((s) => s.id)).toEqual(['g-1']);
+    expect(sessionsLocalesVues(H, reglages(), fiche)).toEqual([]);
+    expect(sessionsLocalesVues(H, null, fiche).find((s) => s.id === 'g-1')?.titre).toBe('Conversation de Elie');
   });
 
   test('les événements et le flux d’une session d’invité ne partent pas vers l’appli du chef', () => {
