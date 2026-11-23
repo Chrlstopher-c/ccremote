@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import type { Logger } from 'pino';
 import type { Evenement } from '../../commun/session.ts';
 import { TAILLE_MAX_FICHIER } from '../../commun/presentation.ts';
-import { type ImageSdk, imagesDeContenu } from '../presentation/images.ts';
+import { type ImageSdk, imagesDeContenu, nomImage } from '../presentation/images.ts';
 import { cheminsImagesDuResultat, type LireImageChemin } from '../presentation/images-chemin.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { brancheActive } from './branche.ts';
@@ -132,7 +132,7 @@ export function stockeurImages(stockage: Stockage, sessionId: string, journal: L
         return null;
       }
       const fichier = identifiantImage(octets);
-      const nom = `image-${rang + 1}.${image.mime.split('/')[1] ?? 'png'}`;
+      const nom = nomImage(image, rang);
       if (!stockage.existe(sessionId, fichier)) {
         stockage.ecrire(sessionId, fichier, octets, { nom, mime: image.mime, taille: octets.length });
       }
