@@ -85,14 +85,14 @@ describe('demande explicite', () => {
     const b = monter();
     const r = ok(await b.salle.demander({ texte: 'Bonjour à tous', destinataires: ['atlas', 'boreal'] }));
     expect(b.envoyes.map((e) => e.sessionId)).toEqual(['atlas', 'boreal']);
-    expect(b.envoyes[0]?.texte.startsWith('[Réunion — de Chris] Bonjour à tous')).toBe(true);
+    expect(b.envoyes[0]?.texte.startsWith('[Réunion — de l’utilisateur] Bonjour à tous')).toBe(true);
     expect(r.reunion.participants).toEqual(['atlas', 'boreal']);
     expect(r.reunion.messages[0]).toMatchObject({ auteur: 'chris', destinataires: ['atlas', 'boreal'] });
     expect(r.envois.every((e) => e.ok)).toBe(true);
     expect(b.diffusions.at(-1)).toEqual({ type: 'reunion', reunion: r.reunion });
   });
 
-  test('une réunion existante se poursuit ; la limite de demandes de Chris est refusée (429)', async () => {
+  test('une réunion existante se poursuit ; la limite de demandes de l’utilisateur est refusée (429)', async () => {
     const b = monter(2);
     const a = ok(await b.salle.demander({ texte: 'Premier', destinataires: ['atlas'] }));
     const c = ok(await b.salle.demander({ texte: 'Second', destinataires: ['atlas'], reunionId: a.reunion.id }));

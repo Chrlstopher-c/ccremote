@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { DonneesModule, REGEX_ID_MODULE, REGEX_NOM_OUTIL } from '../../commun/modules.ts';
 
 export const DESCRIPTION_MODULES_LISTER =
-  'Lister les outils et les intégrations des modules Lanterne (extensions de l’appli de Chris : carte, etc.). ' +
+  'Lister les outils et les intégrations des modules Lanterne (extensions de l’appli de l’utilisateur : carte, etc.). ' +
   'À lire avant d’appeler un outil de module ou d’afficher une intégration.';
 
 export const DESCRIPTION_MODULE_APPELER =

@@ -28,7 +28,7 @@ export async function recevoirOuverture(c: Contexte, nom: string, m: LigneOuvrir
       raison: raisonDeRefus(c, reponse),
       detail: reponse.expiree
         ? 'délai dépassé sans réponse'
-        : 'refusé : ouverture non permise (droits ou pas d’accord de Chris)',
+        : 'refusé : ouverture non permise (droits ou pas d’accord de l’utilisateur)',
     });
   }
   const r = await bilan(await c.sessions.ouvrir(demandeOuverture(m, nom)));

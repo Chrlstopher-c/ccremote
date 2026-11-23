@@ -14,13 +14,13 @@ describe('sujetDepuis', () => {
 });
 
 describe('enveloppeDemande', () => {
-  test('attribue la demande à Chris et rappelle les garde-fous', () => {
+  test('attribue la demande à l’utilisateur et rappelle les garde-fous', () => {
     const texte = enveloppeDemande('Facturation', 'Bonjour');
-    expect(texte.startsWith('[Réunion — de Chris] Bonjour')).toBe(true);
+    expect(texte.startsWith('[Réunion — de l’utilisateur] Bonjour')).toBe(true);
     expect(texte).toContain('« Facturation »');
     expect(texte).toContain('quart_*');
     expect(texte).toContain('pentest');
-    expect(texte).toContain('validation de Chris');
+    expect(texte).toContain('validation de l’utilisateur');
   });
 });
 

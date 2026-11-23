@@ -33,7 +33,7 @@ export function envoyerFichier(c: ContexteOutils, args: ArgsEnvoi): Resultat {
     c.stockage.ecrire(c.sessionId, id, readFileSync(trouve.chemin), { nom, mime, taille });
     const legende = args.legende?.trim() || null;
     c.emettre({ type: 'fichier', fichier: id, nom, mime, taille, mode: args.mode ?? 'afficher', legende });
-    return ok(`Fichier présenté à Chris : ${nom}.`);
+    return ok(`Fichier présenté à l’utilisateur : ${nom}.`);
   });
 }
 

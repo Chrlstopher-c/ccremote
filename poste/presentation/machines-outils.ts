@@ -44,7 +44,12 @@ export function messageErreur(r: Reponse): Resultat {
 }
 
 /** Demande l'accord de Chris par la fenêtre de l'appli ; sans réponse dans le délai, c'est un refus. */
-export async function confirmer(api: ApiMachinesOutils, action: string, cible: string, resume: string): Promise<boolean> {
+export async function confirmer(
+  api: ApiMachinesOutils,
+  action: string,
+  cible: string,
+  resume: string,
+): Promise<boolean> {
   const demande = await appeler(api, 'POST', '/api/confirmations', { action, cible, resume });
   if (!demande.ok) return false;
   const id = (demande.corps as { id: string }).id;
@@ -59,16 +64,19 @@ export async function confirmer(api: ApiMachinesOutils, action: string, cible: s
 }
 
 const REFUS = (action: string): Resultat => ({
-  texte: `Chris n'a pas confirmé « ${action} » : rien n'a été modifié.`,
+  texte: `L’utilisateur n'a pas confirmé « ${action} » : rien n'a été modifié.`,
   erreur: false,
 });
 
 export async function listerMachines(api: ApiMachinesOutils): Promise<Resultat> {
   const r = await appeler(api, 'GET', '/api/machines/config');
   if (!r.ok) return messageErreur(r);
-  const machines = (r.corps as { machines: { id: string; hote: string; dossier: string; enLigne: boolean; posteInstalle: boolean }[] }).machines;
+  const machines = (
+    r.corps as { machines: { id: string; hote: string; dossier: string; enLigne: boolean; posteInstalle: boolean }[] }
+  ).machines;
   const lignes = machines.map(
-    (m) => `- ${m.id} : ${m.hote}, dossier ${m.dossier}, poste ${m.enLigne ? 'connecté' : m.posteInstalle ? 'hors ligne' : 'non installé'}`,
+    (m) =>
+      `- ${m.id} : ${m.hote}, dossier ${m.dossier}, poste ${m.enLigne ? 'connecté' : m.posteInstalle ? 'hors ligne' : 'non installé'}`,
   );
   return { texte: lignes.length > 0 ? lignes.join('\n') : 'Aucune machine configurée.', erreur: false };
 }
@@ -85,7 +93,12 @@ export async function testerMachine(api: ApiMachinesOutils, id: string): Promise
 
 export async function ajouterMachine(api: ApiMachinesOutils, machine: Record<string, unknown>): Promise<Resultat> {
   const r = await appeler(api, 'POST', '/api/machines/config', machine);
-  return r.ok ? { texte: `Machine « ${String(machine['id'])} » ajoutée. Installer le poste pour qu'elle héberge des sessions.`, erreur: false } : messageErreur(r);
+  return r.ok
+    ? {
+        texte: `Machine « ${String(machine['id'])} » ajoutée. Installer le poste pour qu'elle héberge des sessions.`,
+        erreur: false,
+      }
+    : messageErreur(r);
 }
 
 export async function modifierMachine(

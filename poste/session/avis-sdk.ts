@@ -30,7 +30,7 @@ function autoriserSansQuestion(entree: Record<string, unknown>): PermissionResul
 }
 
 export const TEXTE_QUESTION_PASSEE =
-  'Chris a passé la question sans répondre. Continue avec ton meilleur jugement, ou repose-la plus tard si elle bloque.';
+  'L’utilisateur a passé la question sans répondre. Continue avec ton meilleur jugement, ou repose-la plus tard si elle bloque.';
 
 export class AvisSdk {
   private readonly file = new FileAvis();
@@ -141,7 +141,10 @@ export class AvisSdk {
     a.id = randomUUID();
     if (a.permission) {
       this.publication.emettre({ type: 'question', question: `Autoriser ${a.outil} ?` });
-      this.publication.maj({ statut: 'question', dialogue: dialoguePermission(a.id, a.outil, a.entree, a.suggestions) });
+      this.publication.maj({
+        statut: 'question',
+        dialogue: dialoguePermission(a.id, a.outil, a.entree, a.suggestions),
+      });
       return;
     }
     const courante = a.restantes[0];

@@ -31,8 +31,8 @@ import { nommerModele, relever } from './session-sdk-reglages.ts';
 import { nommerModeleVu, titreRelu, traiter } from './session-sdk-traduction.ts';
 import type { EtatTraduction } from './traduction-sdk.ts';
 
-const TEXTE_INTERRUPTION = 'Interrompu par Chris';
-const TEXTE_FERMETURE = 'Session fermée par Chris';
+const TEXTE_INTERRUPTION = 'Interrompu par l’utilisateur';
+const TEXTE_FERMETURE = 'Session fermée par l’utilisateur';
 const TEXTE_SOMMEIL = 'Session endormie au repos';
 const TACHES_TERMINEES: ReadonlySet<string> = new Set(['terminee', 'echouee', 'arretee']);
 const TEXTE_PROMPT_CHANGE = 'Prompt système changé';
@@ -94,7 +94,8 @@ function optionsDeInvite(n: NoyauSdk, cadre: CadreInvite, reprise: boolean, jeto
     modele: n.etat.modele === 'défaut' ? undefined : n.etat.modele,
     effort: n.etat.effort ?? null,
     confinement: crochetConfinement(confinement, n.env.journal),
-    canUseTool: cadre.relais !== undefined ? permissionChezLui(n, confinement) : permissionInvite(confinement, n.env.journal),
+    canUseTool:
+      cadre.relais !== undefined ? permissionChezLui(n, confinement) : permissionInvite(confinement, n.env.journal),
     ...(cadre.relais !== undefined ? { mode: n.etat.mode ?? 'default', serveurs: serveursLocauxInvite(n) } : {}),
   });
 }
@@ -275,8 +276,8 @@ function arreterSansErreur(n: NoyauSdk, requete: RequeteSdk): void {
 function echouer(n: NoyauSdk, requete: RequeteSdk, erreur: unknown): void {
   if (n.requete !== requete) return; // fermée volontairement : l'erreur qui suit n'est pas une panne
   if (n.interrompuParChris) {
-    n.env.journal.info({ session: n.etat.id }, 'flux SDK coupé après interruption demandée par Chris');
-    libererRequete(n, 'Interrompue par Chris');
+    n.env.journal.info({ session: n.etat.id }, 'flux SDK coupé après interruption demandée par l’utilisateur');
+    libererRequete(n, 'Interrompue par l’utilisateur');
     maj(n, { statut: 'attente' });
     return;
   }

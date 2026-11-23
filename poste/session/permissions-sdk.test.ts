@@ -46,7 +46,7 @@ describe('decisionPermission', () => {
   test('refuser : deny avec un motif, sans interrompre', () => {
     expect(decisionPermission(entree, REGLE, { id: 'p', index: 2 })).toEqual({
       behavior: 'deny',
-      message: 'Refusé par Chris',
+      message: 'Refusé par l’utilisateur',
     });
   });
 

@@ -53,7 +53,7 @@ export async function recevoirEcriture(c: Contexte, nom: string, m: LigneEcrire)
       return conclure(c, requete, {
         ok: false,
         raison: `refusé par ${c.nomLocal()}`,
-        detail: 'refusé : pas d’accord de Chris (refus ou délai)',
+        detail: 'refusé : pas d’accord de l’utilisateur (refus ou délai)',
       });
     }
   }

@@ -24,12 +24,12 @@ export const TUNNEL = z.object({
 
 export const DESCRIPTION_AIDE =
   'Lire la notice des trois façons de relier ses machines (aiguilleur, adresse directe ou tunnel ssh, réseau ' +
-  'local) et comment faire la même installation que Chris. À lire avant de répondre sur la liaison des machines.';
+  'local) et comment faire la même installation que l’utilisateur. À lire avant de répondre sur la liaison des machines.';
 
 export const DESCRIPTION_AJOUTER_DIRECT =
   'Relier ce nœud à un autre nœud par son adresse, sans aiguilleur (réseau local, VPN, ou port local d’un tunnel ' +
   'ssh). ' +
-  'Le pair présente son identité ; les deux empreintes s’affichent des deux côtés, et Chris accepte chez le visé. ' +
+  'Le pair présente son identité ; les deux empreintes s’affichent des deux côtés, et l’utilisateur accepte chez le visé. ' +
   '`adresse` : `hôte:port`, par exemple `192.168.1.20:47500` ou `127.0.0.1:47591` pour un tunnel.';
 
 export const DESCRIPTION_TRANSPORT =
@@ -41,7 +41,7 @@ export const DESCRIPTION_DIRECTE =
   '`proprietaire` (nom du réseau, identique sur chaque nœud), `tunnels` (tunnels ssh à monter et tenir vers des ' +
   'machines distantes, avec clé dédiée et known_hosts). N’envoyer que les champs à changer.';
 
-const REFUS: Resultat = { texte: 'Chris n’a pas confirmé : rien n’a été fait.', erreur: false };
+const REFUS: Resultat = { texte: 'L’utilisateur n’a pas confirmé : rien n’a été fait.', erreur: false };
 
 export async function aideReseau(log: Logger): Promise<Resultat> {
   try {
@@ -55,7 +55,7 @@ export async function aideReseau(log: Logger): Promise<Resultat> {
 export async function ajouterDirect(api: ApiMachinesOutils, adresse: string, log: Logger): Promise<Resultat> {
   const resume =
     `Relier ce nœud à « ${adresse} » sans aiguilleur : liaison directe, puis demande d’appairage. Les deux ` +
-    'empreintes se comparent à voix haute ; Chris accepte chez le nœud visé.';
+    'empreintes se comparent à voix haute ; l’utilisateur accepte chez le nœud visé.';
   if (!(await confirmer(api, 'appairer_direct', adresse, resume))) return REFUS;
   const r = await appeler(api, 'POST', '/api/federation/directe/appairer', { adresse });
   log.info({ ok: r.ok }, 'outil réseau : appairage direct');
@@ -63,7 +63,7 @@ export async function ajouterDirect(api: ApiMachinesOutils, adresse: string, log
   return {
     texte:
       `Demande envoyée à « ${adresse} ». Les deux empreintes s’affichent sur les deux machines : les faire ` +
-      'comparer à Chris, qui accepte chez le nœud visé.',
+      'comparer à l’utilisateur, qui accepte chez le nœud visé.',
     erreur: false,
   };
 }

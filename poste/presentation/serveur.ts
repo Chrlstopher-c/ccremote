@@ -22,13 +22,13 @@ import {
 export const NOM_SERVEUR = 'lanterne';
 
 const DESCRIPTION_ENVOYER =
-  'Joindre, envoyer ou présenter un fichier à Chris dans le fil (« joins X à la discussion », « envoie-moi X », ' +
+  'Joindre, envoyer ou présenter un fichier à l’utilisateur dans le fil (« joins X à la discussion », « envoie-moi X », ' +
   '« montre-moi X ») : image, PDF, page HTML ou Markdown, texte ou code, pris sur le poste (chemin absolu, ou relatif ' +
   'au dossier de la session). Mode « joindre » : fichier à télécharger, carte dans le fil ; « afficher » (défaut) : ' +
   'aperçu. Ne jamais répondre qu’on ne peut pas joindre un fichier sans essayer cet outil. 5 Mo au plus.';
 
 const DESCRIPTION_ARTEFACT =
-  'Publier une page HTML autonome que Chris ouvre dans le lecteur d’artefacts (tableau de bord, mini-application, ' +
+  'Publier une page HTML autonome que l’utilisateur ouvre dans le lecteur d’artefacts (tableau de bord, mini-application, ' +
   'rapport interactif). Donner soit `chemin` (un fichier .html), soit `contenu` (le HTML complet). Pour mettre à jour ' +
   'une page déjà publiée, passer son `id` renvoyé par l’appel précédent : une nouvelle version est ajoutée. Pour un ' +
   'simple fichier, utiliser envoyer_fichier ; pour un petit schéma, afficher_widget.';
@@ -59,7 +59,11 @@ const DESCRIPTION_RENOMMER =
 
 /** Titre demandé, nettoyé : espaces réduits, guillemets et ponctuation finale retirés, 60 caractères au plus. */
 export function titreNettoye(brut: string): string {
-  const net = brut.replace(/\s+/g, ' ').trim().replace(/^["«»“”']+|["«»“”'.!?…]+$/g, '').trim();
+  const net = brut
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^["«»“”']+|["«»“”'.!?…]+$/g, '')
+    .trim();
   return Array.from(net).slice(0, 60).join('');
 }
 
@@ -112,11 +116,17 @@ function outilsMachines(c: ContexteOutils) {
   if (!c.api) return [];
   const api = c.api;
   return [
-    tool('lister_machines', 'Lister les machines configurées (connexion SSH) de Chris, avec l’état de leur poste.', {}, async () =>
-      enResultat(await machines.listerMachines(api)),
+    tool(
+      'lister_machines',
+      'Lister les machines configurées (connexion SSH) de l’utilisateur, avec l’état de leur poste.',
+      {},
+      async () => enResultat(await machines.listerMachines(api)),
     ),
-    tool('tester_machine', 'Tester une machine : SSH, Claude Code, tmux, bun, poste connecté.', { id: z.string().min(1).max(40) }, async (a) =>
-      enResultat(await machines.testerMachine(api, a.id)),
+    tool(
+      'tester_machine',
+      'Tester une machine : SSH, Claude Code, tmux, bun, poste connecté.',
+      { id: z.string().min(1).max(40) },
+      async (a) => enResultat(await machines.testerMachine(api, a.id)),
     ),
     tool(
       'ajouter_machine',
@@ -134,13 +144,13 @@ function outilsMachines(c: ContexteOutils) {
     ),
     tool(
       'modifier_machine',
-      'Modifier une machine configurée. Chris doit confirmer dans l’appli avant toute modification.',
+      'Modifier une machine configurée. L’utilisateur doit confirmer dans l’appli avant toute modification.',
       { id: z.string().min(1).max(40), modif: z.record(z.string(), z.unknown()) },
       async (a) => enResultat(await machines.modifierMachine(api, a.id, a.modif, c.journal)),
     ),
     tool(
       'supprimer_machine',
-      'Supprimer la configuration d’une machine. Chris doit confirmer dans l’appli ; sans accord, rien n’est supprimé.',
+      'Supprimer la configuration d’une machine. L’utilisateur doit confirmer dans l’appli ; sans accord, rien n’est supprimé.',
       { id: z.string().min(1).max(40) },
       async (a) => enResultat(await machines.supprimerMachine(api, a.id, c.journal)),
     ),
@@ -196,7 +206,11 @@ function outilsReseauDirecte(c: ContexteOutils) {
       directe.DESCRIPTION_DIRECTE,
       {
         ecoute: directe.ADRESSE.nullable().optional(),
-        proprietaire: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/).nullable().optional(),
+        proprietaire: z
+          .string()
+          .regex(/^[a-z0-9][a-z0-9-]{0,39}$/)
+          .nullable()
+          .optional(),
         tunnels: z.array(directe.TUNNEL).max(16).optional(),
       },
       async (a) => enResultat(await directe.configurerDirecte(api, a, c.journal)),

@@ -74,6 +74,7 @@ export function preparerPieces(c: ContexteOutils, pieces: readonly PieceJointe[]
       });
     }
   }
-  const complement = lignes.length > 0 ? `\n\nFichiers joints par Chris (sur le poste) :\n${lignes.join('\n')}` : '';
+  const complement =
+    lignes.length > 0 ? `\n\nFichiers joints par l’utilisateur (sur le poste) :\n${lignes.join('\n')}` : '';
   return { blocs, complement, evenements };
 }

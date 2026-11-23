@@ -12,7 +12,7 @@ export const REVEILS_SANS_EFFET_MAX = 4;
 const DUREE_MAX_H = 10;
 
 export const TEXTE_REVEIL =
-  'MODE NUIT — Chris ne répond plus depuis 6 min et ta session était à l’arrêt : reprends. Relis ton plan, termine ' +
+  'MODE NUIT — l’utilisateur ne répond plus depuis 6 min et ta session était à l’arrêt : reprends. Relis ton plan, termine ' +
   'tout ce qui reste, teste tout toi-même ; quand tout est fini et vérifié, lance `night done` puis termine par ' +
   '« À tester » uniquement. Pas de question, pas de liste de tâches.';
 
@@ -91,7 +91,7 @@ export function deciderVeille(e: EtatVeille): Veille {
   return {
     action: 'reveiller',
     texte: TEXTE_REVEIL,
-    raison: 'mode nuit : session à l’arrêt, 6 min sans réponse de Chris',
+    raison: 'mode nuit : session à l’arrêt, 6 min sans réponse de l’utilisateur',
   };
 }
 

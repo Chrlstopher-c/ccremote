@@ -221,7 +221,11 @@ export class SessionTmux implements SessionPoste {
   private absorber(l: Ligne): Evenement[] {
     const contexte = contexteDe(l);
     if (contexte !== null) this.etat = { ...this.etat, contexte: { ...this.etat.contexte, tokens: contexte } };
-    if (l.type === 'custom-title' && typeof l.customTitle === 'string' && !titreProvisoire(l.customTitle, this.etat.cwd))
+    if (
+      l.type === 'custom-title' &&
+      typeof l.customTitle === 'string' &&
+      !titreProvisoire(l.customTitle, this.etat.cwd)
+    )
       this.etat = { ...this.etat, titre: l.customTitle };
     else if (titreProvisoire(this.etat.titre, this.etat.cwd)) this.etat = this.titreDeLigne(l);
     const travail = travailEnCours(l);
@@ -273,7 +277,7 @@ export class SessionTmux implements SessionPoste {
       this.drapeaux.compactionDemandee = true;
       return null;
     }
-    return this.lancerCompaction('demandée par Chris');
+    return this.lancerCompaction('demandée par l’utilisateur');
   }
 
   async fermer(): Promise<string | null> {

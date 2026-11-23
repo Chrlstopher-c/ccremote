@@ -17,12 +17,12 @@ export function enteteReunion(emetteur: string): string {
 // Ce que reçoit chaque session destinataire : la demande de Chris, le sujet et les règles de la table.
 export function enveloppeDemande(sujet: string, texte: string): string {
   return [
-    `${enteteReunion('Chris')} ${texte}`,
+    `${enteteReunion('l’utilisateur')} ${texte}`,
     '',
     `Réunion « ${sujet} ». Si le sujet ne te concerne pas, réponds « hors sujet » en une ligne.`,
-    'Tu peux te coordonner avec les autres sessions (outils quart_*) sans Chris.',
-    'Si tu as besoin de Chris, notifie-le dans ton bureau, pas à la table.',
-    'Toute action offensive (pentest, scan, exploitation) déclenchée entre agents exige la validation de Chris.',
+    'Tu peux te coordonner avec les autres sessions (outils quart_*) sans l’utilisateur.',
+    'Si tu as besoin de l’utilisateur, notifie-le dans ton bureau, pas à la table.',
+    'Toute action offensive (pentest, scan, exploitation) déclenchée entre agents exige la validation de l’utilisateur.',
   ].join('\n');
 }
 

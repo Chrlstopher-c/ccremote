@@ -51,7 +51,7 @@ describe('SessionSdk', () => {
     expect(session.resume.tmux).toBeNull();
   });
 
-  test('AskUserQuestion devient un dialogue, la réponse de Chris part au SDK', async () => {
+  test('AskUserQuestion devient un dialogue, la réponse de l’utilisateur part au SDK', async () => {
     const decisions: (PermissionResult | null)[] = [];
     const { session, requetes } = nouvelleSession(async (_texte, requete) => {
       decisions.push(await demanderPermission(requete, 'AskUserQuestion', QUESTIONS));
@@ -120,7 +120,7 @@ describe('SessionSdk', () => {
     await attendre(() => session.resume.statut === 'question');
     expect(await session.interrompre()).toBeNull();
     await attendre(() => decisions.length === 1);
-    expect(decisions[0]).toEqual({ behavior: 'deny', message: 'Interrompu par Chris', interrupt: true });
+    expect(decisions[0]).toEqual({ behavior: 'deny', message: 'Interrompu par l’utilisateur', interrupt: true });
     expect(requetes[0]?.interrompue).toBe(true);
   });
 
@@ -264,7 +264,7 @@ describe('SessionSdk — rythme, fin de tour et mode nuit', () => {
     expect(textes).toHaveLength(1);
   });
 
-  test('un message de Chris écrit pendant le tour évite la relance', async () => {
+  test('un message de l’utilisateur écrit pendant le tour évite la relance', async () => {
     const textes: string[] = [];
     let libere: () => void = () => undefined;
     const attente = new Promise<void>((r) => {
@@ -286,7 +286,7 @@ describe('SessionSdk — rythme, fin de tour et mode nuit', () => {
     expect(textes[1]).toBe('deux');
   });
 
-  test('une interruption par Chris ne relance pas le tour interrompu', async () => {
+  test('une interruption par l’utilisateur ne relance pas le tour interrompu', async () => {
     const textes: string[] = [];
     let libere: () => void = () => undefined;
     const attente = new Promise<void>((r) => {

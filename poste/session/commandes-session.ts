@@ -97,7 +97,7 @@ async function rembobiner(ctx: ContexteCommandes, s: SessionPoste, messageId: st
     return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
   }
   if (s instanceof SessionTmux && s.resume.pilotee) return rembobinerTui(ctx.gestion, s, messageId);
-  return { ok: false, erreur: 'rembobinage impossible : session ouverte hors de l’appli (tmux de Chris)' };
+  return { ok: false, erreur: 'rembobinage impossible : session ouverte hors de l’appli (tmux de l’utilisateur)' };
 }
 
 // Historique d'une session dont le fil est vide au relais (fiche migrée, ou adoptée avant la relecture) : son

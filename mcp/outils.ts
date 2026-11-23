@@ -52,7 +52,8 @@ function enregistrerParc(serveur: McpServer, relais: ClientRelais, journal: Jour
   serveur.registerTool(
     'quart_reveiller',
     {
-      description: 'Réveille une machine hors ligne (Wake-on-LAN, ~40 s avant qu’elle soit en ligne). Le dire à Chris.',
+      description:
+        'Réveille une machine hors ligne (Wake-on-LAN, ~40 s avant qu’elle soit en ligne). Le dire à l’utilisateur.',
       inputSchema: { machine: z.string() },
     },
     ({ machine }) =>

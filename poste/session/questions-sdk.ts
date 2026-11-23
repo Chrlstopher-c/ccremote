@@ -18,7 +18,8 @@ export interface Question {
   readonly saisie: number | null; // index de l'option qui accepte une réponse libre
 }
 
-export type ValeurReponse = { readonly valeur: string; readonly valeurs: readonly string[] } | { readonly erreur: string };
+export type ValeurReponse =
+  { readonly valeur: string; readonly valeurs: readonly string[] } | { readonly erreur: string };
 
 const SchemaQuestions = z.object({
   questions: z
@@ -89,5 +90,5 @@ export function valeurReponse(q: Question, r: ReponseDialogue): ValeurReponse {
 export function decisionPlan(entree: Record<string, unknown>, r: ReponseDialogue): PermissionResult | null {
   if (r.index === 0) return { behavior: 'allow', updatedInput: entree };
   if (r.index !== 1) return null;
-  return { behavior: 'deny', message: r.texte?.trim() || 'Plan refusé par Chris' };
+  return { behavior: 'deny', message: r.texte?.trim() || 'Plan refusé par l’utilisateur' };
 }

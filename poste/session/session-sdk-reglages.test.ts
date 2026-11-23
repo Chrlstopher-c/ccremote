@@ -58,7 +58,7 @@ describe('mode de permission en cours de session', () => {
     const refus = demander(r, 'Write', { file_path: '/a' });
     await attendre(() => session.resume.statut === 'question');
     await session.repondre({ id: session.resume.dialogue?.id ?? '', index: 2 });
-    expect(await refus).toEqual({ behavior: 'deny', message: 'Refusé par Chris' });
+    expect(await refus).toEqual({ behavior: 'deny', message: 'Refusé par l’utilisateur' });
   });
 
   test('deux demandes à la fois : la seconde attend la première, puis s’affiche', async () => {
@@ -73,7 +73,7 @@ describe('mode de permission en cours de session', () => {
     expect(await premiere).toEqual({ behavior: 'allow', updatedInput: { command: '1' } });
     await attendre(() => session.resume.dialogue?.permission?.outil === 'Edit');
     await session.repondre({ id: session.resume.dialogue?.id ?? '', index: 2 });
-    expect(await seconde).toEqual({ behavior: 'deny', message: 'Refusé par Chris' });
+    expect(await seconde).toEqual({ behavior: 'deny', message: 'Refusé par l’utilisateur' });
     expect(session.resume.dialogue ?? null).toBeNull();
   });
 
@@ -86,8 +86,8 @@ describe('mode de permission en cours de session', () => {
     const b = demander(r, 'Bash', { command: 'b' });
     await attendre(() => session.resume.statut === 'question');
     await session.interrompre();
-    expect(await a).toEqual({ behavior: 'deny', message: 'Interrompu par Chris', interrupt: true });
-    expect(await b).toEqual({ behavior: 'deny', message: 'Interrompu par Chris', interrupt: true });
+    expect(await a).toEqual({ behavior: 'deny', message: 'Interrompu par l’utilisateur', interrupt: true });
+    expect(await b).toEqual({ behavior: 'deny', message: 'Interrompu par l’utilisateur', interrupt: true });
   });
 });
 

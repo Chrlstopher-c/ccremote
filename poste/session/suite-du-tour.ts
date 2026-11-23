@@ -37,7 +37,7 @@ export function deciderSuite(e: EtatFinDeTour): Suite {
   if (e.questionPosee) return { action: 'arreter', statut: 'question' };
   if (!e.sortDeCompaction) {
     const compaction = deciderCompaction(e.contexte, e.maxTokens, e.etapeTerminee);
-    if (e.compactionDemandee) return { action: 'compacter', raison: 'demandée par Chris' };
+    if (e.compactionDemandee) return { action: 'compacter', raison: 'demandée par l’utilisateur' };
     if (compaction.agir)
       return { action: 'compacter', raison: compaction.raison === 'etape' ? 'fin d’étape' : 'seuil de contexte' };
   }
@@ -76,7 +76,7 @@ function relanceAutonome(e: EtatFinDeTour): Suite {
     action: 'relancer',
     raison: 'objectif non déclaré atteint',
     texte:
-      'Continue vers l’objectif. Bloqué par une décision de Chris → poser_question. ' +
+      'Continue vers l’objectif. Bloqué par une décision de l’utilisateur → poser_question. ' +
       'Fini et vérifié → objectif_atteint.',
   };
 }

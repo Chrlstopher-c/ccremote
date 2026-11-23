@@ -18,7 +18,7 @@ const MORCEAUX_REPONSE = 15;
 const PAUSE_MORCEAU_MS = 150;
 const MOT_OUTIL = 'outil';
 const COMMANDE_OUTIL = 'echo factice';
-const INTERRUPTION = 'Interrompu par Chris';
+const INTERRUPTION = 'Interrompu par l’utilisateur';
 const USAGE_FACTICE = {
   input_tokens: 1200,
   output_tokens: 40,

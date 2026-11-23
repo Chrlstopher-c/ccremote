@@ -4,7 +4,7 @@ import type { PermissionResult, PermissionUpdate } from '@anthropic-ai/claude-ag
 import type { Dialogue, ReponseDialogue } from '../../commun/session.ts';
 
 export const TAILLE_ENTREE = 2_000;
-const TEXTE_REFUS = 'Refusé par Chris';
+const TEXTE_REFUS = 'Refusé par l’utilisateur';
 
 // Ordre fixe : l'index de la réponse de Chris désigne l'option (0, 1 ou 2).
 export const OPTIONS_PERMISSION = [

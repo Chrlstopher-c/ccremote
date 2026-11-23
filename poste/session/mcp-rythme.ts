@@ -41,7 +41,7 @@ serveur.registerTool(
 serveur.registerTool(
   'objectif_atteint',
   {
-    description: 'Déclare l’objectif de la session atteint et vérifié. Chris est notifié.',
+    description: 'Déclare l’objectif de la session atteint et vérifié. L’utilisateur est notifié.',
     inputSchema: { bilan: z.string().describe('Bilan honnête : livré, vérifié, reste éventuel') },
   },
   (a) => relayer('objectif_atteint', a),
@@ -49,7 +49,7 @@ serveur.registerTool(
 serveur.registerTool(
   'poser_question',
   {
-    description: 'Pose à Chris une question qu’il est seul à pouvoir trancher. Il est notifié.',
+    description: 'Pose à l’utilisateur une question qu’il est seul à pouvoir trancher. Il est notifié.',
     inputSchema: { question: z.string().describe('La question, avec ta recommandation') },
   },
   (a) => relayer('poser_question', a),

@@ -34,7 +34,7 @@ export const VAR_SESSION_APPELANTE = 'CCREMOTE_SESSION';
 const NOM_SERVEUR = 'parc';
 const REFUS_SOI =
   'Refusé : une session ne peut pas viser la session dans laquelle elle tourne. ' +
-  'Demander à Chris ou viser une autre session.';
+  'Demander à l’utilisateur ou viser une autre session.';
 
 export interface LienParc {
   readonly journal: Logger;
@@ -95,10 +95,8 @@ function enregistrerLecture(serveur: McpServer, lien: LienParc): void {
     { description: DESCRIPTIONS_PARC.parc_sessions, inputSchema: SCHEMA_PARC_SESSIONS },
     (a) => appeler(lien, 'parc_sessions', a, (d) => lire(SortieSessionsParc, d, texteSessions)),
   );
-  serveur.registerTool(
-    'parc_fil',
-    { description: DESCRIPTIONS_PARC.parc_fil, inputSchema: SCHEMA_PARC_FIL },
-    (a) => appeler(lien, 'parc_fil', a, (d) => lire(SortieFilParc, d, texteFil)),
+  serveur.registerTool('parc_fil', { description: DESCRIPTIONS_PARC.parc_fil, inputSchema: SCHEMA_PARC_FIL }, (a) =>
+    appeler(lien, 'parc_fil', a, (d) => lire(SortieFilParc, d, texteFil)),
   );
 }
 
@@ -112,8 +110,7 @@ function enregistrerAction(serveur: McpServer, lien: LienParc, appelante: string
     'parc_envoyer',
     { description: DESCRIPTIONS_PARC.parc_envoyer, inputSchema: SCHEMA_PARC_ENVOYER },
     async (a) =>
-      refusSoi(lien, appelante, a.session) ??
-      appeler(lien, 'parc_envoyer', a, () => `Message envoyé à ${a.session}.`),
+      refusSoi(lien, appelante, a.session) ?? appeler(lien, 'parc_envoyer', a, () => `Message envoyé à ${a.session}.`),
   );
   serveur.registerTool(
     'parc_ouvrir',

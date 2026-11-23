@@ -16,22 +16,22 @@ const PART = z.number().int().min(0).max(100);
 
 export const DESCRIPTION_AIDE =
   'Lire l’aide des invités : ce qu’est un invité sur le réseau, ce qu’il peut faire, comment régler ses limites. ' +
-  'À lire avant de répondre à Chris sur les invités.';
+  'À lire avant de répondre à l’utilisateur sur les invités.';
 
 export const DESCRIPTION_INVITER =
   'Ajouter un invité au réseau. Un pair déjà membre devient invité, avec les réglages par défaut (Haiku et Sonnet, ' +
-  '25 % des limites, 2 sessions simultanées). `membre` : identifiant de 12 caractères du membre. Chris dit « invite ' +
-  'Elie » → appelle reseau_inviter. Chris confirme dans l’appli.';
+  '25 % des limites, 2 sessions simultanées). `membre` : identifiant de 12 caractères du membre. L’utilisateur dit « invite ' +
+  'Elie » → appelle reseau_inviter. L’utilisateur confirme dans l’appli.';
 
 export const DESCRIPTION_REGLER =
   'Changer les limites d’un invité : modèles et efforts, part des limites 5 h et hebdo, sessions simultanées, ' +
   'machines, prompt imposé, accès, télémétrie. N’envoyer que les champs à changer ; les autres restent. ' +
-  'Chris dit « Elie n’a plus Opus » → appelle reseau_invite_regler avec `modeles` sans opus. Chris confirme ' +
+  'L’utilisateur dit « Elie n’a plus Opus » → appelle reseau_invite_regler avec `modeles` sans opus. L’utilisateur confirme ' +
   'dans l’appli, qui montre ce qui change.';
 
 export const DESCRIPTION_ACTIVITE =
   'Lire l’activité d’un invité : actif aujourd’hui, sessions du jour et en cours, jetons, part de sa limite 5 h. ' +
-  'Chris dit « qu’est-ce que fait Elie » → appelle reseau_invite_activite. Lecture seule, sans confirmation.';
+  'L’utilisateur dit « qu’est-ce que fait Elie » → appelle reseau_invite_activite. Lecture seule, sans confirmation.';
 
 const ACCES = z.object({
   remoteControl: z.boolean().optional(),
@@ -61,7 +61,7 @@ export interface ArgsRegler {
   readonly [cle: string]: unknown;
 }
 
-const REFUS: Resultat = { texte: 'Chris n’a pas confirmé : rien n’a été changé.', erreur: false };
+const REFUS: Resultat = { texte: 'L’utilisateur n’a pas confirmé : rien n’a été changé.', erreur: false };
 const VUE_CHARTE = z.object({
   charte: z.object({ membres: z.array(z.object({ id: z.string(), invite: ReglagesInvite.optional() })) }).nullable(),
 });

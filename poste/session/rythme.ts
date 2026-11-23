@@ -30,13 +30,12 @@ export function effetRythme(
     case 'objectif_atteint':
       return {
         evenement: { type: 'objectif_atteint', bilan: champ('bilan') },
-        reponse: 'Chris est notifié. Termine ton tour.',
+        reponse: 'L’utilisateur est notifié. Termine ton tour.',
       };
     case 'poser_question':
       return {
         evenement: { type: 'question', question: champ('question') },
-        reponse:
-          'Question transmise à Chris. Termine ton tour : sa réponse arrivera comme prochain message.',
+        reponse: 'Question transmise à l’utilisateur. Termine ton tour : sa réponse arrivera comme prochain message.',
       };
     default:
       return null;

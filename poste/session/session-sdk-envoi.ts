@@ -127,7 +127,7 @@ export async function compacter(n: NoyauSdk): Promise<string | null> {
     n.bilan.demanderCompaction();
     return null;
   }
-  lancerCompaction(n, 'demandée par Chris');
+  lancerCompaction(n, 'demandée par l’utilisateur');
   return null;
 }
 

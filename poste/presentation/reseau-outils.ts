@@ -7,12 +7,12 @@ import { type ApiMachinesOutils, appeler, confirmer, messageErreur } from './mac
 import type { Resultat } from './outils.ts';
 
 export const DESCRIPTION_AJOUTER =
-  'Ajouter une machine de Chris au réseau Lanterne (tour, VPS…) : installe son nœud par SSH, le relie à l’aiguilleur ' +
+  'Ajouter une machine de l’utilisateur au réseau Lanterne (tour, VPS…) : installe son nœud par SSH, le relie à l’aiguilleur ' +
   'avec un code à usage unique et demande l’appairage chiffré avec cette machine. Machine déjà configurée dans ' +
   'Paramètres › Machines (ex. « tour ») : donner seulement `machine` (son identifiant, gardé : ses sessions gardent ' +
   'leur badge, leurs titres, catégories et épinglages) et `nom`. Machine neuve : ajouter `hote`, `utilisateur`, ' +
-  '`cle` (chemin de la clé SSH sur cette machine), `port`. Avant d’appeler : demander à Chris l’identifiant, le nom ' +
-  'et, pour une machine neuve, son accès SSH. Chris confirme dans l’appli. Ensuite : `reseau_suivre_ajout` ' +
+  '`cle` (chemin de la clé SSH sur cette machine), `port`. Avant d’appeler : demander à l’utilisateur l’identifiant, le nom ' +
+  'et, pour une machine neuve, son accès SSH. L’utilisateur confirme dans l’appli. Ensuite : `reseau_suivre_ajout` ' +
   'jusqu’à « accord attendu ». Procédure complète : recherche/AJOUTER-UNE-MACHINE.md du dépôt Lanterne.';
 
 export const DESCRIPTION_SUIVRE =
@@ -21,11 +21,11 @@ export const DESCRIPTION_SUIVRE =
 
 export const DESCRIPTION_ACCEPTER =
   'Accepter l’appairage d’une machine en cours d’ajout, seulement quand `reseau_suivre_ajout` dit « accord attendu » ' +
-  'avec des empreintes identiques. Lire d’abord les empreintes à Chris ; il confirme dans l’appli.';
+  'avec des empreintes identiques. Lire d’abord les empreintes à l’utilisateur ; il confirme dans l’appli.';
 
 export const DESCRIPTION_RETOUR =
   'Revenir en arrière sur l’ajout d’une machine : son nœud s’arrête, son ancien poste redémarre (mêmes sessions), la ' +
-  'machine est révoquée du réseau ici. Chris confirme dans l’appli.';
+  'machine est révoquée du réseau ici. L’utilisateur confirme dans l’appli.';
 
 export interface ArgsAjout {
   readonly machine: string;
@@ -36,7 +36,7 @@ export interface ArgsAjout {
   readonly cle?: string | undefined;
 }
 
-const REFUS: Resultat = { texte: 'Chris n’a pas confirmé : rien n’a été fait.', erreur: false };
+const REFUS: Resultat = { texte: 'L’utilisateur n’a pas confirmé : rien n’a été fait.', erreur: false };
 
 function corpsAjout(a: ArgsAjout): Record<string, unknown> {
   const complet = a.hote && a.utilisateur && a.cle;
@@ -46,8 +46,7 @@ function corpsAjout(a: ArgsAjout): Record<string, unknown> {
 
 export async function ajouterAuReseau(api: ApiMachinesOutils, a: ArgsAjout, log: Logger): Promise<Resultat> {
   const neuve = a.hote ? `machine neuve, accès SSH ${a.utilisateur ?? '?'}@${a.hote}` : 'machine déjà configurée';
-  const resume =
-    `Ajouter « ${a.nom} » (${a.machine}) au réseau Lanterne : ${neuve}. Son poste actuel est basculé sur son nœud.`;
+  const resume = `Ajouter « ${a.nom} » (${a.machine}) au réseau Lanterne : ${neuve}. Son poste actuel est basculé sur son nœud.`;
   if (!(await confirmer(api, 'ajouter_machine_reseau', a.machine, resume))) return REFUS;
   const r = await appeler(api, 'POST', '/api/reseau/ajouts', corpsAjout(a));
   log.info({ machine: a.machine, ok: r.ok }, 'outil réseau : ajout lancé');
@@ -70,8 +69,7 @@ export async function accepterAjout(api: ApiMachinesOutils, machine: string, log
   if (!vue || vue.etat !== 'accord_attendu' || vue.concordance !== 'identique') {
     return { texte: 'Aucun accord attendu avec des empreintes identiques pour cette machine.', erreur: true };
   }
-  const resume =
-    `Accepter l’appairage de « ${vue.nom} ». Empreinte lue par SSH et reçue par l’aiguilleur : ${vue.empreinteSsh}.`;
+  const resume = `Accepter l’appairage de « ${vue.nom} ». Empreinte lue par SSH et reçue par l’aiguilleur : ${vue.empreinteSsh}.`;
   if (!(await confirmer(api, 'accepter_appairage', machine, resume))) return REFUS;
   const a = await appeler(api, 'POST', `/api/reseau/ajouts/${encodeURIComponent(machine)}/accepter`);
   log.info({ machine, ok: a.ok }, 'outil réseau : appairage accepté');
@@ -80,8 +78,7 @@ export async function accepterAjout(api: ApiMachinesOutils, machine: string, log
 }
 
 export async function retourArriere(api: ApiMachinesOutils, machine: string, log: Logger): Promise<Resultat> {
-  const resume =
-    `Revenir en arrière sur « ${machine} » : nœud arrêté, ancien poste redémarré, machine révoquée du réseau.`;
+  const resume = `Revenir en arrière sur « ${machine} » : nœud arrêté, ancien poste redémarré, machine révoquée du réseau.`;
   if (!(await confirmer(api, 'retour_arriere_reseau', machine, resume))) return REFUS;
   const r = await appeler(api, 'POST', `/api/reseau/ajouts/${encodeURIComponent(machine)}/retour`);
   log.info({ machine, ok: r.ok }, 'outil réseau : retour arrière');
@@ -91,8 +88,8 @@ export async function retourArriere(api: ApiMachinesOutils, machine: string, log
 const SUITE: Record<VueAjout['etat'], string> = {
   en_cours: 'Patienter puis rappeler reseau_suivre_ajout.',
   accord_attendu:
-    'Lire les empreintes à Chris : il les voit aussi dans Paramètres › Réseau. Identiques : reseau_accepter_ajout.',
-  fini: 'Vérifier avec Chris : la machine « lien chiffré » dans Paramètres › Réseau, ses sessions sous le même badge.',
+    'Lire les empreintes à l’utilisateur : il les voit aussi dans Paramètres › Réseau. Identiques : reseau_accepter_ajout.',
+  fini: 'Vérifier avec l’utilisateur : la machine « lien chiffré » dans Paramètres › Réseau, ses sessions sous le même badge.',
   echec: 'Lire le message ; corriger ; relancer reseau_ajouter_machine (sans risque) ou reseau_retour_arriere.',
   retire: 'Nœud arrêté, ancien poste rétabli.',
 };
