@@ -160,3 +160,21 @@ describe('chemins Windows (invité sur un PC Windows, recette 0.2)', () => {
     expect(verifierChemin(conf, `${ESPACE_W}espace-voisin\\a.txt`, 'ecriture').ok).toBe(false);
   });
 });
+
+describe('mode Plan chez l’invité (recette 0.2.7)', () => {
+  const PLANS = '/data/invites/x/config/plans';
+  const chezLui: Confinement = { espace: ESPACE, lecture: [], home: HOME, resoudre: (c) => c, local: true, plans: PLANS };
+
+  test('chez lui : ExitPlanMode, ToolSearch et la liste de tâches sont permis ; chez le chef, non', () => {
+    for (const nom of ['ExitPlanMode', 'EnterPlanMode', 'ToolSearch', 'TaskCreate', 'TaskUpdate']) {
+      expect(verifierOutil(chezLui, nom, {})).toEqual({ ok: true });
+      expect(verifierOutil(confinement(), nom, {}).ok).toBe(false);
+    }
+  });
+
+  test('chez lui : le fichier de plan s’écrit dans le dossier des plans de sa configuration, pas ailleurs', () => {
+    expect(verifierChemin(chezLui, `${PLANS}/mon-plan.md`, 'ecriture')).toEqual({ ok: true });
+    expect(verifierChemin(chezLui, '/data/invites/x/config/settings.json', 'ecriture').ok).toBe(false);
+    expect(verifierChemin(confinement(), `${PLANS}/mon-plan.md`, 'ecriture').ok).toBe(false);
+  });
+});

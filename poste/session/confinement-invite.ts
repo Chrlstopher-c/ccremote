@@ -56,6 +56,8 @@ export function confinementDe(cadre: CadreInvite): Confinement {
     terminal: terminalPermis(cadre),
     local: cadre.relais !== undefined,
     espace: realpathSync(cadre.espace),
+    // Mode Plan chez lui : Claude Code écrit ses plans dans <configuration>/plans.
+    ...(cadre.relais !== undefined ? { plans: racineReelle(join(cadre.config, 'plans')) } : {}),
     lecture: cadre.lecture.map(racineReelle),
     home: homedir(),
     resoudre: resoudrePlusProche,
