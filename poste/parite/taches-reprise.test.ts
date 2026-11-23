@@ -10,8 +10,19 @@ describe('agent relancé par SendMessage', () => {
     });
     lierIdentifiant(etat, t, 'a1');
     t.statut = 'terminee';
+    t.notifiee = true;
     reprendreTache(etat, 'a1', '2026-11-23T17:00:00.000Z');
     expect(t.debutLe).toBe('2026-11-23T17:00:00.000Z');
     expect(t.statut).toBe('en_cours');
+  });
+
+  test('un message pendant qu’il travaille ne remet pas sa durée à zéro', () => {
+    const etat = etatVide();
+    const t = ouvrirTache(etat, {
+      id: 'u2', genre: 'agent', description: 'b', debutLe: '2026-11-23T16:33:00.000Z', prompt: null, modele: null,
+    });
+    lierIdentifiant(etat, t, 'a2');
+    reprendreTache(etat, 'a2', '2026-11-23T17:27:00.000Z');
+    expect(t.debutLe).toBe('2026-11-23T16:33:00.000Z');
   });
 });

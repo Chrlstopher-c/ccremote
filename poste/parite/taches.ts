@@ -98,8 +98,10 @@ function balise(corps: string, nom: string): string | null {
 export function reprendreTache(etat: EtatTranscript, tacheId: string | null, le: string): void {
   const tache = trouverTache(etat, null, tacheId);
   if (!tache || tache.genre !== 'agent') return;
+  // Message à un agent qui travaille encore : il le lira à son prochain tour, sa durée continue. Relancé après sa fin :
+  // il repart, sa durée aussi (comme Claude Desktop).
+  if (tache.notifiee) tache.debutLe = le;
   tache.statut = 'en_cours';
-  tache.debutLe = le;
   tache.finLe = null;
   tache.notifiee = false;
   tache.reprise = true;
