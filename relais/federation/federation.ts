@@ -12,6 +12,7 @@ import { type HoteCanal } from './canal.ts';
 import { Canaux } from './canaux.ts';
 import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
 import { CacheDistant } from './distant.ts';
+import { MemoireDistante } from './memoire-distante.ts';
 import { Distantes } from './distantes.ts';
 import { DemandesAppairage } from './demandes.ts';
 import { noeudsAnnonces, type NoeudAnnonce } from './admissions.ts';
@@ -48,7 +49,7 @@ export type { EtatFederation, OptionsFederation };
 
 export class Federation {
   private readonly secrets: SecretsNoeud;
-  private readonly distant = new CacheDistant();
+  private readonly distant: CacheDistant;
   /** Sessions des autres nœuds : vue fusionnée pour l'appli, gestes relayés. */
   readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
@@ -83,6 +84,9 @@ export class Federation {
 
   constructor(private readonly options: OptionsFederation) {
     this.secrets = new SecretsNoeud(options.dossierSecrets, options.journal);
+    this.distant = new CacheDistant(
+      new MemoireDistante(join(options.dossierSecrets, 'sessions-distantes.json'), options.journal),
+    );
     this.pairs = this.secrets.lirePairs();
     this.config = this.secrets.lireAiguilleur();
     this.charte = this.creerCharte();

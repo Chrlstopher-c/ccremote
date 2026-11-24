@@ -1,7 +1,9 @@
-// Responsabilité : ce que le nœud sait des autres nœuds, en mémoire seulement — leurs sessions (fiches reçues), leur
-// présence et le fil récemment lu. Rien de cela n'entre dans la base du relais : quitter le nœud efface tout.
+// Responsabilité : ce que le nœud sait des autres nœuds — leurs sessions (fiches reçues), leur présence et le fil
+// récemment lu. Rien n'entre dans la base du relais ; seule la dernière liste de sessions de chaque nœud est gardée sur
+// disque (memoire-distante.ts), pour rester visible au redémarrage pendant que ce nœud est éteint.
 import type { ConfirmationDemandee } from '../../commun/api-clients.ts';
 import type { ResumeSession } from '../../commun/session.ts';
+import type { MemoireDistante } from './memoire-distante.ts';
 import {
   TAILLE_FIL_FEDERE,
   type EvenementFedere,
@@ -57,12 +59,38 @@ export class CacheDistant {
   private readonly confirmations = new Map<string, { membre: string; confirmation: ConfirmationDemandee }>();
   observateur: ObservateurDistant | null = null;
 
-  /** Un nœud connu, en ligne ou non ; ses sessions restent visibles hors ligne jusqu'à sa révocation. */
+  constructor(private readonly memoire: MemoireDistante | null = null) {}
+
+  /**
+   * Un nœud connu, en ligne ou non ; ses sessions restent visibles hors ligne jusqu'à sa révocation, et au redémarrage
+   * de ce nœud elles reviennent de la dernière liste gardée sur disque.
+   */
   connaitre(membre: string, nom: string): void {
     const existant = this.noeuds.get(membre);
     if (existant) existant.nom = nom;
-    else this.noeuds.set(membre, { nom, machine: nom, enLigne: false, sessions: new Map(), vue: null });
+    else {
+      const garde = this.memoire?.noeud(membre) ?? null;
+      this.noeuds.set(membre, {
+        nom,
+        machine: garde?.machine ?? nom,
+        enLigne: false,
+        sessions: new Map((garde?.sessions ?? []).map((s) => [s.id, s])),
+        vue: null,
+      });
+    }
     this.observateur?.changement();
+  }
+
+  private memoriser(): void {
+    if (!this.memoire) return;
+    this.memoire.ecrire(
+      Object.fromEntries(
+        [...this.noeuds].map(([membre, n]) => [
+          membre,
+          { nom: n.nom, machine: n.machine, sessions: [...n.sessions.values()] },
+        ]),
+      ),
+    );
   }
 
   instantane(
@@ -79,6 +107,7 @@ export class CacheDistant {
       sessions: new Map(sessions.map((s) => [s.id, s])),
       vue,
     });
+    this.memoriser();
     this.observateur?.changement();
   }
 
@@ -91,6 +120,7 @@ export class CacheDistant {
 
   retirer(membre: string): void {
     this.noeuds.delete(membre);
+    this.memoriser();
     for (const cle of [...this.fils.keys()]) if (cle.startsWith(`${membre}/`)) this.fils.delete(cle);
     for (const [id, e] of this.confirmations) {
       if (e.membre !== membre || e.confirmation.statut !== 'en_attente') continue;
@@ -128,6 +158,7 @@ export class CacheDistant {
     const noeud = this.noeuds.get(membre);
     if (!noeud) return;
     noeud.sessions.set(session.id, session);
+    this.memoriser();
     this.observateur?.changement();
   }
 
