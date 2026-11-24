@@ -35,13 +35,13 @@ describe('SessionSdk et la présentation', () => {
   test('la requête reçoit le serveur lanterne à côté du serveur de rythme', async () => {
     const { session, options } = sessionAvec(true);
     await session.lancer('bonjour');
-    expect(Object.keys(options[0]?.mcpServers ?? {}).sort()).toEqual(['ccremote', 'lanterne']);
+    expect(Object.keys(options[0]?.mcpServers ?? {}).sort()).toEqual(['ccremote', 'lanterne', 'noctis-connecteurs']);
   });
 
   test('sans présentation, pas de serveur lanterne', async () => {
     const { session, options } = sessionAvec(false);
     await session.lancer('bonjour');
-    expect(Object.keys(options[0]?.mcpServers ?? {})).toEqual(['ccremote']);
+    expect(Object.keys(options[0]?.mcpServers ?? {})).toEqual(['ccremote', 'noctis-connecteurs']);
   });
 
   test('des pièces jointes sans présentation sont refusées, sans rien envoyer', async () => {
