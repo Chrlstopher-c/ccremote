@@ -33,7 +33,7 @@ import { indexSpa, servirStatique } from './clients/statique.ts';
 import { avecCors } from './clients/cors.ts';
 import { Diffusion } from './clients/diffusion.ts';
 import { AppelsModules } from './modules/appels.ts';
-import { traiterRequeteRelais } from './modules/api-appels.ts';
+import { appelerLocalPair, traiterRequeteRelais } from './modules/api-appels.ts';
 import { type DependancesOutilsParc, estOperationParc, traiterRequeteParc } from './parc/outils-parc.ts';
 import { LienEcho } from './echo/lien-echo.ts';
 import { erreur } from './clients/http.ts';
@@ -113,7 +113,11 @@ const acces = new Acces(registre, config.empreinteMotDePasse, plafond);
 const dossierSecrets = config.dossierSecrets;
 const secretsPostes = new Map<string, string>([...config.secretsPostes, ...chargerSecretsPostes(dossierSecrets)]);
 const postes = new Postes(registre, diffusion, secretsPostes, journal);
-const appelsModules = new AppelsModules({ registre, diffusion });
+const appelsModules = new AppelsModules({
+  registre,
+  diffusion,
+  pairs: { relayer: (demande, delai) => federation.relayerAppel(demande, delai) },
+});
 postes.desktop = new DesktopDesPostes(new ArchivagesDesktop(base));
 postes.reconcilierDoublons();
 const confirmations = new ApiConfirmations(new Confirmations((m) => diffusion.diffuser(m)));
@@ -405,7 +409,11 @@ const dependancesApi: DependancesApi = {
 const routes = avecCors(construireRoutes(dependancesApi), config.origines);
 // Table interne (sans jeton) : seuls les gestes relayés par un nœud apparié, sur le lien chiffré, y passent.
 // Les valeurs de la table sont les gestionnaires par méthode de Bun.serve : même forme que TableInterne.
-const routesInternes = construireRoutes(dependancesApi, (g) => g) as unknown as TableInterne;
+// `modules/appel-pair` : l'appel relayé par un pair, exécuté par les applis de ce nœud seulement (jamais relayé).
+const routesInternes = {
+  ...construireRoutes(dependancesApi, (g) => g),
+  '/api/modules/appel-pair': { POST: (req: Request) => appelerLocalPair(appelsModules, req) },
+} as unknown as TableInterne;
 // Les appareils lisent les routes locales : la garde des invités s'y applique (le pair, lui, passe par la politique).
 // Pas de relais ici : l'appareil parle directement au nœud qui tient la session (réseau v3 §7), il n'a pas à passer
 // par un autre nœud. Une session d'un autre nœud, demandée ici, reçoit la copie locale (ou rien) : c'est voulu.

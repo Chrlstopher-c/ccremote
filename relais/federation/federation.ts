@@ -26,6 +26,10 @@ import { type EtatFederation, type MachineReseau, type OptionsFederation } from 
 import type { ActionMachine } from './actions-noeud.ts';
 import { creerMachinesNoeud, type MachinesNoeud } from './machines-noeud.ts';
 import { TerminalFedere } from './terminal-federe.ts';
+import { AppelsPairs, autoriserPair, estPairRelayable } from './appels-pairs.ts';
+import type { ResultatAppel } from '../modules/appels.ts';
+import type { DemandeAppelModule } from '../../commun/modules.ts';
+import type { RequeteDroit } from '../../commun/charte.ts';
 import type { TunnelSshConfig } from './tunnel-ssh.ts';
 import { type ConfigAiguilleur, type PairFederee, SecretsNoeud } from './secrets.ts';
 import { Voisinage } from './proprietaire.ts';
@@ -54,6 +58,7 @@ export class Federation {
   readonly distantes: Distantes;
   private readonly demandes: DemandesAppairage;
   private readonly echanges: Echanges;
+  private readonly appelsPairs: AppelsPairs;
   /** Les invités de ce nœud : politique appliquée ici, télémétrie, intentions d'invitation. */
   readonly invites: NoeudInvites;
   /** Le relais Claude : la route locale des invités, et les requêtes relayées d'un invité (ce nœud du chef). */
@@ -113,8 +118,19 @@ export class Federation {
       distant: this.distant,
       journal: options.journal,
       terminaux: { traiter: (c, m) => this.terminaux.traiter(c, m) },
-      autoriser: (membre, requete) => this.charte.autorise(membre, requete),
+      autoriser: (membre: string, requete: RequeteDroit) =>
+        autoriserPair(
+          membre,
+          requete,
+          (id) => this.pairRelayable(id),
+          (id, r) => this.charte.autorise(id, r),
+        ),
       autoriserAmi: (ami, requete) => this.charte.autoriseAmi(ami, requete),
+    });
+    this.appelsPairs = new AppelsPairs({
+      pairs: () => this.canaux.ouverts().filter((c) => this.pairRelayable(c.membre)),
+      echanges: this.echanges,
+      journal: options.journal.child({ domaine: 'appels' }),
     });
     this.hote = this.creerHote();
     this.canaux = new Canaux(this.hote, (m) => this.liens.emettre(m));
@@ -456,6 +472,20 @@ export class Federation {
 
   private estAppareil(membre: string): boolean {
     return this.pairs.some((p) => p.id === membre && p.genre === 'appareil');
+  }
+
+  /** Un de nos nœuds (même propriétaire, en ligne), pas un invité : il peut relayer un appel de module. */
+  private pairRelayable(membre: string): boolean {
+    return estPairRelayable(
+      membre,
+      (id) => this.voisins.joignable(id, this.proprietaireLocal()),
+      (id) => this.invites.estInvite(id),
+    );
+  }
+
+  /** Un appel de module que les applis locales ne peuvent traiter, relayé aux pairs (premier réussi). */
+  relayerAppel(demande: DemandeAppelModule, delaiMs: number): Promise<ResultatAppel | null> {
+    return this.appelsPairs.relayer(demande, delaiMs);
   }
 
   private proprietaireLocal(): string | null {

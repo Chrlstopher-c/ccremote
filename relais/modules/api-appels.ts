@@ -1,6 +1,7 @@
 // Responsabilité : les appels de modules, une seule logique pour deux chemins — les routes HTTP (`GET /api/modules-outils`,
 // `POST /api/modules-appels`, `POST /api/modules-reponses`) et les requêtes du poste par le lien (`requete_relais`,
-// voir postes.ts). Toutes protégées comme les autres routes du relais.
+// voir postes.ts). Toutes protégées comme les autres routes du relais. L'appel qu'un pair relaie arrive par
+// `appelerLocalPair` : les applis de ce nœud seulement, sans nouveau relais.
 import { DemandeAppelModule, type QuoiRelais, ReponseAppelModule, type ReponseRelais } from '../../commun/modules.ts';
 import { erreur, json, lireCorps, REFUS_POSTE } from '../clients/http.ts';
 import type { AppelsModules } from './appels.ts';
@@ -40,6 +41,14 @@ export async function appelerModule(appels: AppelsModules, req: Request): Promis
   const demande = await lireCorps(req, DemandeAppelModule);
   if (demande instanceof Response) return demande;
   return sortie(await appelerOutil(appels, demande));
+}
+
+/** Un appel relayé par un pair : la réponse est toujours 200 `{ ok, resultat }` ou `{ ok: false, erreur }`. */
+export async function appelerLocalPair(appels: AppelsModules, req: Request): Promise<Response> {
+  const demande = await lireCorps(req, DemandeAppelModule);
+  if (demande instanceof Response) return demande;
+  const r = await appels.appelerLocal(demande);
+  return json(r.ok ? { ok: true, resultat: r.resultat ?? null } : { ok: false, erreur: r.erreur });
 }
 
 export async function repondreModule(appels: AppelsModules, req: Request): Promise<Response> {

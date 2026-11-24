@@ -35,6 +35,7 @@ const MOTIFS_NOEUD: readonly RegExp[] = [
   /^dictee$/,
   /^dictee\/service$/,
   /^confirmations\/[A-Za-z0-9-]{1,80}\/reponse$/,
+  /^modules\/appel-pair$/, // appel de module relayé entre nœuds de même propriétaire (relais/federation/appels-pairs.ts)
 ];
 
 const MOTIFS_MACHINE: readonly RegExp[] = [
