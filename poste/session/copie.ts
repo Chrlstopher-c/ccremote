@@ -64,15 +64,25 @@ export async function annexer(d: DependancesCopie, id: string): Promise<Reponse>
   // Une session d'invité ne lit que son cadre et son prompt : la consigne d'annexe passe par ce prompt.
   const invite = s.persistee.invite;
   const prompt = [s.resume.prompt_systeme ?? '', CONSIGNE_ANNEXE].filter((b) => b !== '').join('\n\n');
-  if (invite) d.importerUne(copie, { ...reglages, ...ficheInvite(s), prompt_systeme: prompt }, null, invite);
+  if (invite) d.importerUne(copie, { ...ficheInvite(s), ...reglages, prompt_systeme: prompt }, null, invite);
   else d.importerUne(copie, reglages, CONSIGNE_ANNEXE);
   d.sauvegarder();
   return { ok: true, donnees: { id: r.id } };
 }
 
-// La fiche d'une copie de session d'invité reste celle d'un invité (mêmes membre et nom).
+// La fiche d'une copie de session d'invité reste celle d'un invité (mêmes membre et nom), pilotée ici, avec le modèle,
+// l'effort et le mode de la parente : sans eux, la copie partait en effort « medium », refusé par la charte du chef
+// (403 « effort non permis », recette 0.2.12), et s'affichait comme ouverte dans un terminal.
 function ficheInvite(s: SessionPoste): Partial<ResumeSession> {
-  return s.resume.invite ? { invite: s.resume.invite } : {};
+  const r = s.resume;
+  if (!r.invite) return {};
+  return {
+    invite: r.invite,
+    pilotee: true,
+    modele: r.modele,
+    ...(r.effort !== undefined ? { effort: r.effort } : {}),
+    ...(r.mode !== undefined ? { mode: r.mode } : {}),
+  };
 }
 
 // La copie est cherchée par la découverte ; une session d'invité l'écrit dans sa configuration, hors de l'index.

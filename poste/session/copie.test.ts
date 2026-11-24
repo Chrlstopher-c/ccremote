@@ -164,7 +164,13 @@ describe('session d’invité : copies dans sa propre configuration', () => {
     const parente = nouvelleSession(async () => [{ type: 'result' }], {
       configDir: config,
       invite: { cadre, configCompte: null },
-      resume: { claudeSessionId: UUID_ESSAI, invite: { membre: cadre.membre, nom: cadre.nom }, prompt_systeme: 'P' },
+      resume: {
+        claudeSessionId: UUID_ESSAI,
+        invite: { membre: cadre.membre, nom: cadre.nom },
+        prompt_systeme: 'P',
+        effort: 'high',
+        mode: 'auto',
+      },
     });
     const importes: Importe[] = [];
     const d: DependancesCopie = {
@@ -193,7 +199,14 @@ describe('session d’invité : copies dans sa propre configuration', () => {
     expect(copie?.t.configDir).toBe(t.config);
     expect(existsSync(copie?.t.chemin ?? '')).toBe(true);
     expect(copie?.invite).toEqual({ cadre: t.cadre, configCompte: null });
-    expect(copie?.surcharge).toEqual({ parent: 'parente', invite: { membre: t.cadre.membre, nom: t.cadre.nom } });
+    expect(copie?.surcharge).toEqual({
+      parent: 'parente',
+      invite: { membre: t.cadre.membre, nom: t.cadre.nom },
+      pilotee: true,
+      modele: 'claude-haiku-5-5',
+      effort: 'high',
+      mode: 'auto',
+    });
   });
 
   test('annexer : copie complète, en lecture seule, consigne d’annexe dans son prompt (vrai SDK)', async () => {
