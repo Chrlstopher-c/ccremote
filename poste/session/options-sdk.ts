@@ -10,6 +10,7 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 import type { BacASable, EffortSession, ModeSession } from '../../commun/session.ts';
 import { VAR_SESSION_PILOTEE } from '../presentation/socket-outils.ts';
+import { environnementNav } from '../nav/environnement.ts';
 import { NOM_SERVEUR_CONNECTEURS } from './outils-connecteurs.ts';
 
 // Hérité d'une session Claude parente (messagerie, identité de session) : le CLI enfant le prendrait pour le sien.
@@ -38,6 +39,7 @@ export function envSdk(source: Record<string, string | undefined>, configDir: st
 }
 
 export interface ParametresSdk {
+  readonly session: string; // id de la session Noctis : LANTERNE_SESSION_PILOTEE, réclamée par la CLI noctis-nav
   readonly identifiant: string; // conversation nouvelle (sessionId) ou reprise (resume)
   readonly reprise: boolean;
   readonly reprisePoint?: string | null; // rembobinage : la reprise part de cette entrée (resumeSessionAt)
@@ -86,7 +88,12 @@ export function optionsSdk(p: ParametresSdk): Options {
   const calque = reglagesDeCalque(p);
   return {
     cwd: p.cwd,
-    env: { ...envSdk(p.source, p.configDir), CLAUDE_CODE_ENABLE_TODO_TOOLS: '1', [VAR_SESSION_PILOTEE]: '1' },
+    env: {
+      ...envSdk(p.source, p.configDir),
+      CLAUDE_CODE_ENABLE_TODO_TOOLS: '1',
+      [VAR_SESSION_PILOTEE]: p.session,
+      ...environnementNav(p.source['PATH']),
+    },
     ...(p.reprise ? { resume: p.identifiant } : { sessionId: p.identifiant }),
     ...(p.reprise && p.reprisePoint ? { resumeSessionAt: p.reprisePoint } : {}),
     systemPrompt: { type: 'preset', preset: 'claude_code', ...(p.consignes ? { append: p.consignes } : {}) },

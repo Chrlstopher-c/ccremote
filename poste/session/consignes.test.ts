@@ -60,3 +60,18 @@ describe('consignes de session', () => {
     expect(composerConsignes({ machine: 'tour', cwd: '/x', demande: demande() })).toContain('plusieurs étapes');
   });
 });
+
+describe('navigateur de Noctis', () => {
+  test('toute session : la CLI noctis-nav et le client du script sont décrits', () => {
+    const t = composerConsignes({ machine: 'tour', cwd: '/x', demande: demande() });
+    expect(t).toContain('## Navigateur de Noctis');
+    expect(t).toContain('`noctis-nav <outil>');
+    expect(t).toContain('process.env.NOCTIS_NAV_CLIENT');
+  });
+
+  test('la règle de référence est donnée : lire avant de cliquer, ref_N valable jusqu’au prochain chargement', () => {
+    const t = composerConsignes({ machine: 'tour', cwd: '/x', demande: demande() });
+    expect(t).toContain('Lis (`lire`, `texte`) avant de cliquer');
+    expect(t).toContain('jusqu’au prochain chargement de la page');
+  });
+});

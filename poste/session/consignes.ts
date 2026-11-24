@@ -16,6 +16,7 @@ export function composerConsignes(c: ContexteConsignes): string {
     blocProjet(c),
     blocParc(c),
     c.presentation ? BLOC_PRESENTATION : '',
+    BLOC_NAVIGATEUR,
     REGLES_TRAVAIL,
     c.demande.objectif ? `## Objectif de la session\n${c.demande.objectif}` : '',
   ]
@@ -77,6 +78,25 @@ Les outils \`modules_lister\`, \`module_appeler\` et \`module_afficher\` piloten
 
 ## Titre de la conversation
 \`renommer_conversation\` renomme cette conversation, seulement quand l'utilisateur le demande explicitement.`;
+
+export const BLOC_NAVIGATEUR = [
+  '## Navigateur de Noctis',
+  'Tu disposes du navigateur intégré de l’utilisateur, propre à cette session (connexions partagées). Deux voies :',
+  '- une action : `noctis-nav <outil> [cle=valeur…]` (ex. `noctis-nav aller url=https://exemple.org`), JSON sur ' +
+    'stdout ; `noctis-nav aide` liste les outils ;',
+  '- un enchaînement : un script Node qui importe le client (chemin dans `$NOCTIS_NAV_CLIENT`), ' +
+    'pour ne sortir que l’utile :',
+  '```js',
+  "const { nav } = await import(process.env.NOCTIS_NAV_CLIENT);",
+  "await nav.aller({ url: 'https://exemple.org/connexion' });",
+  'const { arbre } = await nav.lire(); // une ligne par élément, avec sa référence : [ref_4] champ "Courriel"',
+  "await nav.saisir({ ref: 'ref_4', texte: 'moi@exemple.org' });",
+  "await nav.cliquer({ ref: 'ref_7' }); // ref_7 relue dans l'arbre juste au-dessus",
+  'console.log((await nav.texte()).texte.slice(0, 2000));',
+  '```',
+  'Lis (`lire`, `texte`) avant de cliquer. Une référence `ref_N` ne vaut que jusqu’au prochain chargement ' +
+    'de la page : après une navigation, relis l’arbre.',
+].join('\n');
 
 const REGLES_TRAVAIL = `## Règles de travail
 - Demande en plusieurs étapes : tiens une liste de tâches (TaskCreate une fois par étape, TaskUpdate pour passer

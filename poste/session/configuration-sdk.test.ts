@@ -52,6 +52,7 @@ describe('bac à sable', () => {
 
   test('non : aucune clé sandbox', () => {
     const options = optionsSdk({
+      session: 'x',
       identifiant: 'x',
       reprise: false,
       cwd: '/p',

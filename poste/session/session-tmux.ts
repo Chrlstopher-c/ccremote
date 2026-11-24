@@ -10,6 +10,7 @@ import type { SessionPersistee } from './persistance.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
 import { deciderSuite, type Suite } from './suite-du-tour.ts';
 import { VAR_SESSION_PILOTEE } from '../presentation/socket-outils.ts';
+import { environnementNav } from '../nav/environnement.ts';
 import { effetRythme } from './rythme.ts';
 import * as tmux from './tmux.ts';
 import { SuiviSousAgents } from './sous-agents.ts';
@@ -365,7 +366,8 @@ export class SessionTmux implements SessionPoste {
     return {
       [VAR_SESSION]: this.etat.id,
       [VAR_SOCKET]: this.env.socket,
-      [VAR_SESSION_PILOTEE]: '1',
+      [VAR_SESSION_PILOTEE]: this.etat.id,
+      ...environnementNav(process.env['PATH']),
       ...(this.p.configDir ? { CLAUDE_CONFIG_DIR: this.p.configDir } : {}),
     };
   }

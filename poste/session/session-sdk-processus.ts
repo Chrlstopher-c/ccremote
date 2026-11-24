@@ -53,6 +53,7 @@ export function optionsDe(n: NoyauSdk, reprise: boolean, jeton: string | null = 
 
 function optionsDeSession(n: NoyauSdk, reprise: boolean): Options {
   return optionsSdk({
+    session: n.etat.id,
     identifiant: identifiantDe(n, reprise),
     reprise,
     reprisePoint: n.pointReprise,

@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { attendre, journal, nouvelleSession, persistee, RequeteFausse, traduction } from './faux-sdk.ts';
+import { CHEMIN_CLIENT_NAV, DOSSIER_NAV } from '../nav/environnement.ts';
 import { type EnvironnementSdk, SessionSdk } from './session-sdk.ts';
 import { DELAI_REVEIL_MS, TEXTE_REVEIL } from './nuit.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
@@ -148,7 +149,9 @@ describe('SessionSdk', () => {
       CHEMIN: '/ok',
       CLAUDE_CONFIG_DIR: '/comptes/2',
       CLAUDE_CODE_ENABLE_TODO_TOOLS: '1',
-      LANTERNE_SESSION_PILOTEE: '1',
+      LANTERNE_SESSION_PILOTEE: expect.any(String),
+      PATH: DOSSIER_NAV,
+      NOCTIS_NAV_CLIENT: CHEMIN_CLIENT_NAV,
     });
   });
 

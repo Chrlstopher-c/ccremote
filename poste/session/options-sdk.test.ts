@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { CHEMIN_CLIENT_NAV, DOSSIER_NAV } from '../nav/environnement.ts';
 import { envSdk, optionsSdk, type ParametresSdk } from './options-sdk.ts';
 
 const SERVEUR_RYTHME = {
@@ -9,6 +10,7 @@ const SERVEUR_RYTHME = {
 };
 
 const parametres = (surcharge: Partial<ParametresSdk> = {}): ParametresSdk => ({
+  session: 'sess-1',
   identifiant: 'conv-1',
   reprise: false,
   cwd: '/projets/app',
@@ -53,9 +55,15 @@ describe('optionsSdk', () => {
     expect(env?.['HOME']).toBe('/h');
   });
 
-  test('marque la session comme pilotée par le poste : les outils hors Lanterne s’effacent chez elle', () => {
+  test('marque la session comme pilotée, par son id : les outils hors Lanterne s’effacent chez elle', () => {
     const env = optionsSdk(parametres()).env;
-    expect(env?.['LANTERNE_SESSION_PILOTEE']).toBe('1');
+    expect(env?.['LANTERNE_SESSION_PILOTEE']).toBe('sess-1');
+  });
+
+  test('la CLI noctis-nav est en tête du PATH, et le client est nommé pour les scripts', () => {
+    const env = optionsSdk(parametres({ source: { PATH: '/usr/bin' } })).env;
+    expect(env?.['PATH']).toBe(`${DOSSIER_NAV}:/usr/bin`);
+    expect(env?.['NOCTIS_NAV_CLIENT']).toBe(CHEMIN_CLIENT_NAV);
   });
 
   test('nouvelle conversation : sessionId fixé, pas de resume', () => {
