@@ -30,6 +30,13 @@ describe('traduction transcript → événements', () => {
     ]);
   });
 
+  test('la marque d’interruption écrite par Claude Code n’est pas une bulle de l’utilisateur', () => {
+    const marque = (text: string): Ligne => ({ type: 'user', message: { content: [{ type: 'text', text }] } });
+    expect(traduire(marque('[Request interrupted by user]'))).toEqual([]);
+    expect(traduire(marque('[Request interrupted by user for tool use]'))).toEqual([]);
+    expect(traduire(marque('Bonjour'))).toEqual([{ type: 'message', texte: 'Bonjour' }]);
+  });
+
   test('une ligne de sous-agent n’entre pas dans le fil principal…', () => {
     expect(traduire(assistant([{ type: 'text', text: 'interne' }], { isSidechain: true }))).toEqual([]);
   });
