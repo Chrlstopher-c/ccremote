@@ -12,6 +12,7 @@ import {
   type DemandeOutils,
   decoderDemande,
   ligneReponse,
+  MESSAGE_SESSION_REFUSEE,
   TAILLE_MAX_LIGNE_OUTILS,
 } from './socket-outils.ts';
 
@@ -21,10 +22,14 @@ export interface EcouteOutils {
   arreter(): void;
 }
 
+/** Vrai si la session désignée est pilotée par ce poste et vivante (seule condition pour transmettre sa session). */
+export type SessionVivante = (id: string) => boolean;
+
 interface ParametresEcoute {
   readonly chemin: string;
   readonly relais: RelaisOutils;
   readonly journal: Logger;
+  readonly sessionVivante: SessionVivante;
 }
 
 interface Connexion {
@@ -39,10 +44,11 @@ export function demarrerOutilsHorsLanterne(
   donnees: string,
   relais: RelaisOutils,
   journal: Logger,
+  sessionVivante: SessionVivante,
 ): EcouteOutils | null {
   const chemin = cheminSocketOutils(process.env, process.getuid?.(), donnees);
   try {
-    return demarrerEcouteOutils({ chemin, relais, journal });
+    return demarrerEcouteOutils({ chemin, relais, journal, sessionVivante });
   } catch (erreur) {
     journal.error({ err: erreur, chemin }, 'outils hors Lanterne indisponibles');
     return null;
@@ -99,6 +105,10 @@ async function traiter(s: Prise, ligne: string, p: ParametresEcoute): Promise<vo
   const lue = decoderDemande(ligne);
   if (!lue.ok) {
     refuser(s, p, lue.id, lue.erreur);
+    return;
+  }
+  if (lue.demande.session !== undefined && !p.sessionVivante(lue.demande.session)) {
+    refuser(s, p, lue.demande.id, MESSAGE_SESSION_REFUSEE);
     return;
   }
   const r = await relayer(lue.demande, p);

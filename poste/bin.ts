@@ -303,7 +303,16 @@ lien = new LienRelais({
 });
 sessions.relaisOuvert = () => lien?.estOuvert === true;
 sessions.requeteRelais = (quoi, args) => requetes.requete(quoi, args);
-const ecouteOutils: EcouteOutils | null = demarrerOutilsHorsLanterne(config.donnees, sessions.requeteRelais, journal);
+const sessionVivante = (id: string): boolean => {
+  const s = sessions.session(id);
+  return s?.vivante === true && s.resume.pilotee === true;
+};
+const ecouteOutils: EcouteOutils | null = demarrerOutilsHorsLanterne(
+  config.donnees,
+  sessions.requeteRelais,
+  journal,
+  sessionVivante,
+);
 lien.demarrer();
 new SurveillanceModules({ dossier: DOSSIER_MODULES_SOURCE, envoyer, journal, serveurs }).demarrer();
 setInterval(() => envoyer({ kind: 'etat_machine', etat: sonde.mesurer() }), PERIODE_ETAT_MS);

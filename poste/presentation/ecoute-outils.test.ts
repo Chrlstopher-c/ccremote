@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import pino from 'pino';
 import type { QuoiRelais, ReponseRelais } from '../../commun/modules.ts';
 import { demarrerEcouteOutils, type EcouteOutils, type RelaisOutils } from './ecoute-outils.ts';
-import { TAILLE_MAX_LIGNE_OUTILS } from './socket-outils.ts';
+import { MESSAGE_SESSION_REFUSEE, TAILLE_MAX_LIGNE_OUTILS } from './socket-outils.ts';
 
 const journal = pino({ level: 'silent' });
 const ouverts: EcouteOutils[] = [];
@@ -19,7 +19,10 @@ afterEach(() => {
   for (const d of dossiers.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-function banc(reponse: ReponseRelais = { ok: true, donnees: { modules: [] } }) {
+function banc(
+  reponse: ReponseRelais = { ok: true, donnees: { modules: [] } },
+  sessionVivante: (id: string) => boolean = () => true,
+) {
   const dossier = mkdtempSync(join(tmpdir(), 'ecoute-outils-'));
   dossiers.push(dossier);
   const chemin = join(dossier, 'outils.sock');
@@ -28,7 +31,7 @@ function banc(reponse: ReponseRelais = { ok: true, donnees: { modules: [] } }) {
     appels.push({ quoi, args });
     return reponse;
   };
-  const ecoute = demarrerEcouteOutils({ chemin, relais, journal });
+  const ecoute = demarrerEcouteOutils({ chemin, relais, journal, sessionVivante });
   ouverts.push(ecoute);
   return { chemin, appels, ecoute };
 }
@@ -88,6 +91,24 @@ describe('écoute des outils hors Lanterne', () => {
     expect(appels).toEqual([{ quoi: 'module_appeler', args: { module: 'carte', outil: 'centrer', session: null } }]);
   });
 
+  test('session désignée pilotée et vivante : transmise au relais', async () => {
+    const { chemin, appels } = banc({ ok: true, donnees: { resultat: 1 } }, (id) => id === 'sess-1');
+    const args = { module: 'navigateur', outil: 'lire' };
+    const demande = { id: 'c1', quoi: 'module_appeler', session: 'sess-1', args };
+    const [reponse] = await dialoguer(chemin, [JSON.stringify(demande)], 1);
+    expect(JSON.parse(reponse ?? 'null')).toEqual({ id: 'c1', ok: true, donnees: { resultat: 1 } });
+    expect(appels).toEqual([{ quoi: 'module_appeler', args: { ...args, session: 'sess-1' } }]);
+  });
+
+  test('session inconnue, fermée ou non pilotée : refus clair, rien n’est relayé', async () => {
+    const { chemin, appels } = banc(undefined, (id) => id === 'sess-1');
+    const args = { module: 'navigateur', outil: 'lire' };
+    const demande = { id: 'c2', quoi: 'module_appeler', session: 'autre', args };
+    const [reponse] = await dialoguer(chemin, [JSON.stringify(demande)], 1);
+    expect(JSON.parse(reponse ?? 'null')).toEqual({ id: 'c2', ok: false, erreur: MESSAGE_SESSION_REFUSEE });
+    expect(appels).toEqual([]);
+  });
+
   test('opération hors liste refusée sans être relayée', async () => {
     const { chemin, appels } = banc();
     const lignes = [
@@ -114,7 +135,8 @@ describe('écoute des outils hors Lanterne', () => {
     const chemin = join(dossier, 'outils.sock');
     await laisserSocketPerimee(chemin);
     expect(existsSync(chemin)).toBe(true);
-    const ecoute = demarrerEcouteOutils({ chemin, relais: async () => ({ ok: true }), journal });
+    const relais = async () => ({ ok: true });
+    const ecoute = demarrerEcouteOutils({ chemin, relais, journal, sessionVivante: () => false });
     ouverts.push(ecoute);
     const [reponse] = await dialoguer(chemin, [JSON.stringify({ id: 'e1', quoi: 'modules_lister', args: {} })], 1);
     expect(JSON.parse(reponse ?? 'null')).toMatchObject({ id: 'e1', ok: true });
@@ -125,7 +147,8 @@ describe('écoute des outils hors Lanterne', () => {
     dossiers.push(dossier);
     const chemin = join(dossier, 'outils.sock');
     writeFileSync(chemin, 'pas un socket');
-    expect(() => demarrerEcouteOutils({ chemin, relais: async () => ({ ok: true }), journal })).toThrow();
+    const relais = async () => ({ ok: true });
+    expect(() => demarrerEcouteOutils({ chemin, relais, journal, sessionVivante: () => false })).toThrow();
     expect(existsSync(chemin)).toBe(true);
   });
 

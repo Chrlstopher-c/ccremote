@@ -121,6 +121,7 @@ function poste(reponse: (quoi: OperationParc, args: unknown) => ReponseRelais): 
   const ecoute: EcouteOutils = demarrerEcouteOutils({
     chemin,
     journal,
+    sessionVivante: () => false,
     relais: async (quoi, args) => {
       if (quoi.startsWith('parc_')) demandes.push({ quoi, args });
       return reponse(quoi as OperationParc, args);

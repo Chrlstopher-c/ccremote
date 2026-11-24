@@ -15,11 +15,14 @@ export const DELAI_CONNEXION_OUTILS_MS = 2_000;
 export const DELAI_REPONSE_OUTILS_MS = 40_000; // le relais répond avant 35 s (poste/parc/requetes-relais.ts)
 export const MESSAGE_SERVICE_ABSENT = 'Lanterne n’est pas en service sur cette machine';
 export const MESSAGE_SANS_REPONSE = 'Lanterne ne répond pas dans le délai imparti';
+export const MESSAGE_SESSION_REFUSEE = 'session non pilotée par ce poste ou fermée : outil refusé';
 
 export const DemandeOutils = z.object({
   id: z.string().min(1).max(64),
   quoi: QuoiRelais,
   args: z.record(z.string(), z.unknown()).optional(),
+  // Session appelante, facultative : l'écoute la transmet seulement si elle est pilotée et vivante sur ce poste.
+  session: z.string().min(1).max(64).optional(),
 });
 export type DemandeOutils = z.infer<typeof DemandeOutils>;
 
@@ -36,10 +39,10 @@ export function cheminSocketOutils(
   return join(runtime ? join(runtime, 'lanterne') : donnees, 'outils.sock');
 }
 
-/** Les arguments relayés au relais : `module_appeler` part toujours sans session (le poste ne l'attribue jamais). */
+/** Les arguments relayés au relais : `module_appeler` porte la session validée par l'écoute, sinon `null`. */
 export function argsRelais(demande: DemandeOutils): unknown {
   if (demande.quoi === 'modules_lister') return {};
-  if (demande.quoi === 'module_appeler') return { ...demande.args, session: null };
+  if (demande.quoi === 'module_appeler') return { ...demande.args, session: demande.session ?? null };
   return demande.args ?? {};
 }
 

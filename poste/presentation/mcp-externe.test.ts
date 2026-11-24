@@ -96,6 +96,7 @@ function poste(reponse: ReponseRelais): { chemin: string; appels: { quoi: QuoiRe
   const ecoute: EcouteOutils = demarrerEcouteOutils({
     chemin,
     journal,
+    sessionVivante: () => false,
     relais: async (quoi, args) => {
       appels.push({ quoi, args });
       return reponse;

@@ -1,7 +1,7 @@
 // Responsabilité : le serveur MCP stdio `lanterne` des sessions Claude Code ouvertes hors de Lanterne — deux outils de
 // modules (modules_lister, module_appeler), relayés au poste par son socket local. Lancé par Claude Code
 // (`bun run poste/presentation/mcp-externe.ts`) ; sur stdout, seul le protocole MCP ; le journal va sur stderr.
-// Une session déjà pilotée par le poste (LANTERNE_SESSION_PILOTEE=1) n'expose aucun outil : ils lui viennent du poste.
+// Session déjà pilotée par le poste (LANTERNE_SESSION_PILOTEE = son id) : aucun outil ici, ils viennent du poste.
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -63,7 +63,7 @@ async function principal(): Promise<void> {
   const donnees = join(homedir(), '.local', 'share', 'ccremote', 'poste');
   const chemin = cheminSocketOutils(process.env, process.getuid?.(), donnees);
   const lien: LienModules = { journal, relais: (quoi, args) => requeteOutils(chemin, quoi, args) };
-  const pilotee = process.env[VAR_SESSION_PILOTEE] === '1';
+  const pilotee = Boolean(process.env[VAR_SESSION_PILOTEE]);
   await creerServeurExterne(lien, pilotee).connect(new StdioServerTransport());
   journal.info({ chemin, pilotee }, 'outils hors Lanterne prêts');
 }
