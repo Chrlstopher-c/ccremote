@@ -21,6 +21,7 @@ export class MachinesDuReseau {
   async machinesReseau(): Promise<MachineReseau[]> {
     const moi: MachineReseau = {
       membre: this.identifiantMoi(),
+      machine: this.port.options.machine,
       nom: this.port.config()?.nom ?? this.port.options.machine,
       moi: true,
       enLigne: true,
@@ -30,6 +31,7 @@ export class MachinesDuReseau {
       .filter((p) => p.genre === 'noeud')
       .map((p): MachineReseau => ({
         membre: p.id,
+        machine: this.machineDe(p.id),
         nom: p.nom,
         moi: false,
         enLigne: this.port.canaux.liaisonOuverteAvec(p.id) !== null,

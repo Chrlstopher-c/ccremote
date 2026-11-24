@@ -47,6 +47,8 @@ export interface EtatFederation {
 /** Une machine du réseau (`GET /api/reseau/machines`) : soi, ou un nœud apparié, avec son dernier état connu. */
 export interface MachineReseau {
   readonly membre: string;
+  /** Identifiant de machine du nœud (celui des sessions et projets), null tant qu'il n'est pas connu. */
+  readonly machine: string | null;
   readonly nom: string;
   readonly moi: boolean;
   readonly enLigne: boolean;
