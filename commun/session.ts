@@ -175,6 +175,8 @@ export const ResumeSession = z.object({
   epinglee: z.boolean().optional(), // épinglée par Chris : section « Épinglés » en tête de la liste
   // Réponse probable de Chris au dernier tour (prompt_suggestion du SDK), proposée dans la saisie ; null une fois envoyée.
   suggestion: z.string().nullable().optional(),
+  // Connecteurs coupés dans cette session : réappliqués à chaque démarrage du processus, avant le premier message.
+  connecteursCoupes: z.array(z.string()).optional(),
   style_sortie: z.string().nullable().optional(), // style de sortie Claude (SDK) ; null ou absent = défaut
   prompt_systeme: z.string().max(8000).nullable().optional(), // prompt système de la conversation ; null = aucun
   // Session d'un invité (vue des autres : titre générique, fil refusé) : membre et nom affiché.
@@ -335,6 +337,8 @@ export const DemandeSession = z.object({
   invite: CadreInvite.optional(), // session d'invité : cadre imposé par le nœud du chef
   bac_a_sable: BacASable.optional(),
   controle_distant: z.boolean().optional(), // Remote Control branché à la fin du premier tour
+  // Connecteurs coupés au démarrage (réglage de Noctis) : appliqués avant le premier message, réactivables par l'agent.
+  connecteurs_coupes: z.array(z.string().max(200)).max(100).optional(),
   pieces: z.array(PieceJointe).max(NOMBRE_MAX_PIECES).optional(), // jointes au premier message (moteur SDK)
   // Composé par le relais pour la machine cible : ce que la session a le droit de joindre.
   parc: z.array(z.object({ id: z.string(), description: z.string(), racines: z.array(z.string()) })),

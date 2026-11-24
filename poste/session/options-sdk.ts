@@ -10,6 +10,7 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 import type { BacASable, EffortSession, ModeSession } from '../../commun/session.ts';
 import { VAR_SESSION_PILOTEE } from '../presentation/socket-outils.ts';
+import { NOM_SERVEUR_CONNECTEURS } from './outils-connecteurs.ts';
 
 // Hérité d'une session Claude parente (messagerie, identité de session) : le CLI enfant le prendrait pour le sien.
 // Liste mesurée dans essais/sdk/RAPPORT.md. ANTHROPIC_API_KEY : abonnement uniquement.
@@ -51,6 +52,7 @@ export interface ParametresSdk {
   readonly rythme: McpStdioServerConfig; // le même serveur d'outils de rythme que les sessions tmux
   readonly canUseTool: CanUseTool;
   readonly outils?: McpSdkServerConfigWithInstance; // serveur `lanterne` : présentation de fichiers, artefacts, widgets
+  readonly connecteurs?: McpSdkServerConfigWithInstance; // réactivation par l'agent des connecteurs coupés
   readonly hooks?: Options['hooks']; // crochets des éditions (poste/modifications), sans effet sur les permissions
   readonly style?: string | null; // style de sortie, réappliqué au démarrage comme à la reprise
   readonly rapide?: boolean; // mode rapide demandé : réglage `fastMode` du calque, réappliqué à la reprise
@@ -96,7 +98,11 @@ export function optionsSdk(p: ParametresSdk): Options {
     allowDangerouslySkipPermissions: true,
     ...(p.effort ? { effort: p.effort } : {}),
     canUseTool: p.canUseTool,
-    mcpServers: { ccremote: p.rythme, ...(p.outils ? { lanterne: p.outils } : {}) },
+    mcpServers: {
+      ccremote: p.rythme,
+      ...(p.outils ? { lanterne: p.outils } : {}),
+      ...(p.connecteurs ? { [NOM_SERVEUR_CONNECTEURS]: p.connecteurs } : {}),
+    },
     ...(p.modele ? { model: p.modele } : {}),
     ...(p.hooks ? { hooks: p.hooks } : {}),
     ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),

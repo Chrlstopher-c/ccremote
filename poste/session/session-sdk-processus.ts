@@ -18,6 +18,8 @@ import { serveurRythme } from './lanceur.ts';
 import { optionsSdk } from './options-sdk.ts';
 import { avecPromptSysteme } from './consignes.ts';
 import type { Confinement } from '../../commun/invites-outils.ts';
+import { serveurConnecteurs } from './outils-connecteurs.ts';
+import { basculerConnecteur } from './session-sdk-panneau.ts';
 import { confinementDe, crochetConfinement, permissionInvite } from './confinement-invite.ts';
 import { jetonPourInvite, MESSAGE_JETON_INVITE, optionsInvite } from './cadre-invite.ts';
 import type { CadreInvite } from '../../commun/cadre-invite.ts';
@@ -64,6 +66,10 @@ function optionsDeSession(n: NoyauSdk, reprise: boolean): Options {
     source: n.env.env ?? process.env,
     rythme: serveurRythme(n.etat.id, n.env.socket),
     outils: n.presentation?.serveur(),
+    connecteurs: serveurConnecteurs({
+      coupes: () => n.etat.connecteursCoupes ?? [],
+      activer: (nom) => basculerConnecteur(n, nom, true),
+    }),
     mode: n.etat.mode ?? 'bypassPermissions',
     effort: n.etat.effort ?? null,
     style: n.etat.style_sortie ?? null,
@@ -153,7 +159,9 @@ export function demarrer(
     n.requete = requete;
     n.pointReprise = null;
     n.fil = fil;
-    void attendreConnecteursDemarrage(n, requete).then(() => liberer());
+    void attendreConnecteursDemarrage(n, requete)
+      .then(() => couperAuDemarrage(n))
+      .then(() => liberer());
     void ecouter(n, requete, n.traduction.nouvelEtat());
     void nommerModele(n, requete);
     void relever(n, requete);
@@ -189,6 +197,14 @@ function echouerDemarrage(n: NoyauSdk, message: string): string {
   emettre(n, { type: 'erreur', message });
   maj(n, { statut: 'erreur' });
   return message;
+}
+
+// Connecteurs coupés (réglage de Noctis) : coupés avant que le premier message parte, donc avant tout cache.
+async function couperAuDemarrage(n: NoyauSdk): Promise<void> {
+  for (const nom of n.etat.connecteursCoupes ?? []) {
+    const erreur = await n.reglagesVivants.connecteur(nom, false);
+    if (erreur) n.env.journal.info({ session: n.etat.id, connecteur: nom, erreur }, 'connecteur non coupé au démarrage');
+  }
 }
 
 function attendreConnecteursDemarrage(n: NoyauSdk, requete: RequeteSdk): Promise<void> {

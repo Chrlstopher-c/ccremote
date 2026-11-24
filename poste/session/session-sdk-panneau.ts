@@ -37,8 +37,14 @@ export async function connecteurs(n: NoyauSdk): Promise<ConnecteurSession[]> {
 export async function basculerConnecteur(n: NoyauSdk, nom: string, actif: boolean): Promise<string | null> {
   const requete = n.requete;
   const erreur = await n.reglagesVivants.connecteur(nom, actif);
-  if (!erreur && requete) void releverConnecteurs(n, requete);
-  return erreur;
+  if (erreur) return erreur;
+  // Retenu dans la fiche : réappliqué au prochain démarrage du processus (reprise après sommeil, redémarrage).
+  const coupes = new Set(n.etat.connecteursCoupes ?? []);
+  if (actif) coupes.delete(nom);
+  else coupes.add(nom);
+  maj(n, { connecteursCoupes: [...coupes] });
+  if (requete) void releverConnecteurs(n, requete);
+  return null;
 }
 
 export async function releverConnecteurs(n: NoyauSdk, requete: RequeteSdk): Promise<ConnecteurSession[]> {

@@ -44,6 +44,7 @@ export function resumeInitial(config: ConfigPoste, d: DemandeSession, cwd: strin
     // Invité chez lui : son mode est posé dès la fiche (le lancement le lit) ; « absent » vaudrait Manuel pour lui.
     ...(d.invite?.relais !== undefined && d.mode ? { mode: d.mode } : {}),
     bac_a_sable: d.bac_a_sable ?? 'non',
+    ...(d.connecteurs_coupes?.length ? { connecteursCoupes: [...new Set(d.connecteurs_coupes)] } : {}),
     tmux: null,
     attachee: false,
     pilotee: true,
