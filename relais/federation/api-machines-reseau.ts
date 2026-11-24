@@ -23,7 +23,7 @@ export function routesMachinesReseau(fede: Federation, protege: Protection) {
         if (!MEMBRE_MACHINE.test(membre)) return erreur('machine inconnue', 400);
         const c = await lireCorps(req, CorpsAction);
         if (c instanceof Response) return c;
-        const r = await fede.agirSurMachine(membre, c.action);
+        const r = await fede.agirSurMachine(membre, c.action, 'local');
         return r.ok ? json({ ok: true }) : erreur(r.raison, r.statut);
       }),
     },

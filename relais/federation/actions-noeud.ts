@@ -61,9 +61,9 @@ export class ActionsNoeud {
   }
 
   /** Une action que Chris lance sur la machine de son appli : pas de charte à consulter. */
-  executerLocale(action: ActionMachine): Promise<Resultat<null>> {
+  executerLocale(action: ActionMachine, origine: string): Promise<Resultat<null>> {
     if (action === 'reveiller') return Promise.resolve(echec(400, 'une machine ne se réveille pas elle-même'));
-    return this.executer(action);
+    return this.executer(action, origine);
   }
 
   /** Une action reçue d'un pair : chef, ou porteuse d'un ordre signé valide pour ce nœud ; sinon refusée. */
@@ -72,7 +72,7 @@ export class ActionsNoeud {
       this.d.echanges.reponse(canal, m.ref, false, 'action réservée aux chefs du réseau');
       return;
     }
-    const r = await this.executer(m.action);
+    const r = await this.executer(m.action, `membre:${canal.membre}`);
     this.d.echanges.reponse(canal, m.ref, r.ok, r.ok ? undefined : r.raison);
   }
 
@@ -105,12 +105,12 @@ export class ActionsNoeud {
     return r.ok ? ok(null) : echec(409, r.erreur ?? 'réveil impossible');
   }
 
-  private async executer(action: ActionNoeud): Promise<Resultat<null>> {
+  private async executer(action: ActionNoeud, origine: string): Promise<Resultat<null>> {
     switch (action) {
       case 'pause':
-        return this.mettre(true);
+        return this.mettre(true, origine);
       case 'reprendre':
-        return this.mettre(false);
+        return this.mettre(false, origine);
       case 'arreter':
         return this.arreterMachine();
       case 'redemarrer':
@@ -118,8 +118,8 @@ export class ActionsNoeud {
     }
   }
 
-  private mettre(pause: boolean): Resultat<null> {
-    return this.d.pause.mettreEnPause(pause) ? ok(null) : echec(500, 'drapeau de pause non sauvegardé');
+  private mettre(pause: boolean, origine: string): Resultat<null> {
+    return this.d.pause.mettreEnPause(pause, origine) ? ok(null) : echec(500, 'drapeau de pause non sauvegardé');
   }
 
   private async arreterMachine(): Promise<Resultat<null>> {

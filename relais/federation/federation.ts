@@ -272,8 +272,13 @@ export class Federation {
    * Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action relayée à un pair relié.
    * `ordre` : l'ordre signé par le téléphone chef, que le pair vérifiera dans sa propre charte.
    */
-  async agirSurMachine(membre: string, action: ActionMachine, ordre?: OrdreSigne): Promise<Resultat<null>> {
-    return this.machinesDuReseau.agirSurMachine(membre, action, ordre);
+  async agirSurMachine(
+    membre: string,
+    action: ActionMachine,
+    origine: string,
+    ordre?: OrdreSigne,
+  ): Promise<Resultat<null>> {
+    return this.machinesDuReseau.agirSurMachine(membre, action, origine, ordre);
   }
   private creerChefAppareil(): ChefAppareil {
     const { servirChef } = this.options;
@@ -285,7 +290,7 @@ export class Federation {
       estChef: (membre) => this.charte.estChef(membre),
       proposer: (signee) => this.charte.proposer(signee),
       machinesReseau: () => this.machinesReseau(),
-      agir: (membre, action, ordre) => this.agirSurMachine(membre, action, ordre),
+      agir: (membre, action, origine, ordre) => this.agirSurMachine(membre, action, origine, ordre),
       demandes: () => this.demandes.lister(),
       decider: (id, accord) => this.demandes.decider(id, accord),
       ...(servirChef ? { rejouer: servirChef } : {}),

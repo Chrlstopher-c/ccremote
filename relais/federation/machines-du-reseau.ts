@@ -40,11 +40,17 @@ export class MachinesDuReseau {
 
   /**
    * Une action sur une machine : la nôtre (exécutée ici), un réveil, ou une action relayée à un pair relié.
-   * `ordre` : l'ordre signé par le téléphone chef, que le pair vérifiera dans sa propre charte.
+   * `origine` : qui demande (`local`, `appareil:<id>`…), journalisé par la pause ; `ordre` : l'ordre signé par le
+   * téléphone chef, que le pair vérifiera dans sa propre charte.
    */
-  async agirSurMachine(membre: string, action: ActionMachine, ordre?: OrdreSigne): Promise<Resultat<null>> {
+  async agirSurMachine(
+    membre: string,
+    action: ActionMachine,
+    origine: string,
+    ordre?: OrdreSigne,
+  ): Promise<Resultat<null>> {
     if (membre === MEMBRE_MOI || membre === this.port.identifiantProtocole()) {
-      return this.machines.actions.executerLocale(action);
+      return this.machines.actions.executerLocale(action, origine);
     }
     if (!this.port.estNoeud(membre)) return echec(404, 'nœud inconnu');
     if (action === 'reveiller') return this.machines.actions.reveiller(membre);

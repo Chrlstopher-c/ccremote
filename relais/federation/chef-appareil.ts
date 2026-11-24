@@ -28,7 +28,7 @@ export interface PortChefAppareil {
   estChef(membre: string): boolean;
   proposer(signee: CharteSignee): Promise<Resultat<Charte>>;
   machinesReseau(): Promise<MachineReseau[]>;
-  agir(membre: string, action: ActionMachine, ordre: OrdreSigne): Promise<Resultat<null>>;
+  agir(membre: string, action: ActionMachine, origine: string, ordre: OrdreSigne): Promise<Resultat<null>>;
   demandes(): readonly DemandeAppairage[];
   decider(id: string, accord: boolean): boolean;
   /** Rejoue une requête sur les routes locales du nœud (absent : 503). */
@@ -228,7 +228,7 @@ export class ChefAppareil {
       nonces: this.nonces,
     });
     if (!verdict.ok) return erreur(403, `ordre refusé : ${verdict.motif}`);
-    const r = await this.port.agir(cible, verdict.ordre.action, corps.ordre);
+    const r = await this.port.agir(cible, verdict.ordre.action, `appareil:${membre}`, corps.ordre);
     return r.ok ? reponse(200, { ok: true }) : erreur(r.statut, r.raison);
   }
 

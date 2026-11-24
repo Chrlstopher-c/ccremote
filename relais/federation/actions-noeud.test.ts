@@ -106,7 +106,7 @@ async function tourEtPortable(marque: string): Promise<Duo> {
 describe('actions de chef', () => {
   test('un non-chef est refusé : la pause n’est pas posée', async () => {
     const { a, b, idA } = await tourEtPortable(join(dossier, 'arret'));
-    const r = await b.federation.agirSurMachine(idA, 'pause');
+    const r = await b.federation.agirSurMachine(idA, 'pause', 'local');
     expect(r.ok).toBe(false);
     expect(!r.ok && r.statut).toBe(403);
     expect(a.federation.enPause()).toBe(false);
@@ -115,13 +115,13 @@ describe('actions de chef', () => {
   test('un chef agit : pause puis reprise ; pendant la pause, un pair ne peut pas ouvrir de session', async () => {
     const { a, b, idA, idB } = await tourEtPortable(join(dossier, 'arret'));
     chefs.add(idB);
-    expect((await b.federation.agirSurMachine(idA, 'pause')).ok).toBe(true);
+    expect((await b.federation.agirSurMachine(idA, 'pause', 'local')).ok).toBe(true);
     expect(a.federation.enPause()).toBe(true);
     const refus = await b.federation.distantes.ouvrir(idA, 'tour', '/projets/x', 'un plan');
     expect(refus.ok).toBe(false);
     expect(a.appels.ouvrir).toEqual([]);
     expect(refusCreationSession(a.federation)?.status).toBe(409);
-    expect((await b.federation.agirSurMachine(idA, 'reprendre')).ok).toBe(true);
+    expect((await b.federation.agirSurMachine(idA, 'reprendre', 'local')).ok).toBe(true);
     expect(a.federation.enPause()).toBe(false);
     expect(refusCreationSession(a.federation)).toBeNull();
     expect((await b.federation.distantes.ouvrir(idA, 'tour', '/projets/x', 'un plan')).ok).toBe(true);
@@ -131,25 +131,25 @@ describe('actions de chef', () => {
   test('un chef arrête la machine : la commande factice est exécutée ; un non-chef, non', async () => {
     const marque = join(dossier, 'arret-marque');
     const { b, idA, idB } = await tourEtPortable(marque);
-    expect((await b.federation.agirSurMachine(idA, 'arreter')).ok).toBe(false);
+    expect((await b.federation.agirSurMachine(idA, 'arreter', 'local')).ok).toBe(false);
     expect(existsSync(marque)).toBe(false);
     chefs.add(idB);
-    expect((await b.federation.agirSurMachine(idA, 'arreter')).ok).toBe(true);
+    expect((await b.federation.agirSurMachine(idA, 'arreter', 'local')).ok).toBe(true);
     expect(existsSync(marque)).toBe(true);
   });
 
   test('redémarrage : refusé hors mode autonome, accepté en mode autonome (commande factice)', async () => {
     const { a, idA } = await tourEtPortable(join(dossier, 'arret'));
-    const refus = await a.federation.agirSurMachine(idA, 'redemarrer');
+    const refus = await a.federation.agirSurMachine(idA, 'redemarrer', 'local');
     expect(refus.ok).toBe(false);
     process.env['LANTERNE_MOTEUR_AUTONOME'] = '1';
-    expect((await a.federation.agirSurMachine(idA, 'redemarrer')).ok).toBe(true);
+    expect((await a.federation.agirSurMachine(idA, 'redemarrer', 'local')).ok).toBe(true);
   });
 
   test('réveiller un pair : MAC apprise par son état, envoi au banc (fichier factice)', async () => {
     const { a, idB, reseaux } = await tourEtPortable(join(dossier, 'arret'));
     await attendre(() => reseaux.de('portable') !== null);
-    expect((await a.federation.agirSurMachine(idB, 'reveiller')).ok).toBe(true);
+    expect((await a.federation.agirSurMachine(idB, 'reveiller', 'local')).ok).toBe(true);
     expect(existsSync(join(dossier, 'reveil-factice.json'))).toBe(true);
   });
 });
