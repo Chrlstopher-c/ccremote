@@ -36,7 +36,9 @@ export async function connecteurs(n: NoyauSdk): Promise<ConnecteurSession[]> {
 // Connecteurs MCP : réglés dans la requête vivante (voir session-sdk-vivante.ts).
 export async function basculerConnecteur(n: NoyauSdk, nom: string, actif: boolean): Promise<string | null> {
   const requete = n.requete;
-  const erreur = await n.reglagesVivants.connecteur(nom, actif);
+  // Session endormie : le choix est retenu et appliqué au réveil, avant le premier message (24/11 : « session
+  // arrêtée » refusait la bascule depuis le portable).
+  const erreur = requete ? await n.reglagesVivants.connecteur(nom, actif) : null;
   if (erreur) return erreur;
   // Retenu dans la fiche : réappliqué au prochain démarrage du processus (reprise après sommeil, redémarrage).
   const coupes = new Set(n.etat.connecteursCoupes ?? []);

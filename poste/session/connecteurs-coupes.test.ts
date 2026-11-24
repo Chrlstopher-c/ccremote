@@ -28,6 +28,21 @@ describe('connecteurs coupés au démarrage', () => {
   });
 });
 
+describe('session endormie', () => {
+  test('la bascule est retenue sans processus, puis appliquée au réveil avant le premier message', async () => {
+    const recus: SDKUserMessage[] = [];
+    const { session, requetes } = nouvelleSession(async () => [{ type: 'result' }], {
+      messagesRecus: recus,
+      reprise: { statut: 'attente', aReprendre: true },
+    });
+    expect(await session.basculerConnecteur('claude.ai Gmail', false)).toBeNull();
+    expect(session.resume.connecteursCoupes).toEqual(['claude.ai Gmail']);
+    expect(await session.envoyer('bonjour')).toBeNull();
+    await attendre(() => recus.length === 1);
+    expect(requetes[0]?.connecteursBascules).toEqual(['claude.ai Gmail:inactif']);
+  });
+});
+
 describe('outil connecteur_activer', () => {
   const actions = (coupes: string[], activés: string[]) => ({
     coupes: () => coupes,

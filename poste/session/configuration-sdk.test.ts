@@ -109,9 +109,11 @@ describe('connecteurs MCP', () => {
     ]);
   });
 
-  test('session arrêtée : refus explicite, rien n’est appelé', async () => {
-    const { session } = nouvelleSession(async () => FIN);
-    expect(await session.basculerConnecteur('connecteur-1', false)).toBe('session arrêtée');
+  test('session arrêtée : le choix est retenu pour le prochain démarrage, rien n’est appelé', async () => {
+    const { session, requetes } = nouvelleSession(async () => FIN);
+    expect(await session.basculerConnecteur('connecteur-1', false)).toBeNull();
+    expect(session.resume.connecteursCoupes).toEqual(['connecteur-1']);
+    expect(requetes).toHaveLength(0);
   });
 });
 
