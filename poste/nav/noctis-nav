@@ -1,5 +1,5 @@
-#!/usr/bin/env node
-// Responsabilité : point d'entrée de la CLI `noctis-nav` (PATH des sessions pilotées) ; la logique est dans cli.mjs.
-import { executerCli } from './cli.mjs';
-
-process.exitCode = await executerCli(process.argv.slice(2));
+#!/bin/sh
+# Responsabilité : la CLI noctis-nav en développement, dans le PATH des sessions pilotées. Node si présent, sinon bun.
+case $0 in */*) DIR=${0%/*} ;; *) DIR=. ;; esac
+if command -v node >/dev/null 2>&1; then exec node "$DIR/entree.mjs" "$@"; fi
+exec bun "$DIR/entree.mjs" "$@"

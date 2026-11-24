@@ -9,6 +9,7 @@ import { type CommandeRelais, type MessagePoste, TAILLE_LOT_HISTORIQUE } from '.
 import { Comptes } from './comptes/comptes.ts';
 import { LecteurCompte } from './comptes/lecture-compte.ts';
 import { chargerConfig } from './config.ts';
+import { preparerNav } from './nav/extraction.ts';
 import { eteindreMachine } from './parc/alimentation.ts';
 import { type CommandeAppareil, estAppareil } from './fichiers/appareil.ts';
 import { executerFichiers } from './fichiers/explorateur.ts';
@@ -50,6 +51,7 @@ const PERIODE_ETAT_MS = 15_000;
 
 const journal = creerJournal('poste');
 const config = chargerConfig();
+preparerNav(config.donnees, journal);
 const DELAI_CLAUDE_MS = 20_000;
 const sonde = new SondeMachine(config.racines[0] ?? '/', journal);
 const versionsClaude = await versionsClaudeCode(journal);
