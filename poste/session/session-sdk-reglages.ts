@@ -6,7 +6,7 @@ import { rapideLu, ultracodeDefaut, ultracodeLu } from './modes-sdk.ts';
 import { appliquerReglage, basculerMode, champsReglage, lireModes, type ReglageMode } from './reglages-sdk.ts';
 import type { Reglage } from './session-poste.ts';
 import type { RequeteSdk } from './session-sdk.ts';
-import { maj, type NoyauSdk } from './session-sdk-noyau.ts';
+import { maj, type NoyauSdk, renommerSession } from './session-sdk-noyau.ts';
 
 export async function reglerSession(n: NoyauSdk, r: Reglage): Promise<string | null> {
   if (r.kind === 'rapide' || r.kind === 'ultracode') return reglerMode(n, r);
@@ -18,6 +18,10 @@ export async function reglerSession(n: NoyauSdk, r: Reglage): Promise<string | n
       n.env.journal.warn({ err: erreur, session: n.etat.id, reglage: r.kind }, 'réglage refusé par le SDK');
       return `réglage impossible : ${String(erreur)}`;
     }
+  }
+  if (r.kind === 'renommer') {
+    renommerSession(n, r.titre);
+    return null;
   }
   maj(n, r.kind === 'modele' ? { ...champsReglage(r), modeleLe: new Date().toISOString() } : champsReglage(r));
   if (requete && r.kind === 'modele') {

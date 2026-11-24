@@ -9,6 +9,8 @@ import { AvisSdk } from './avis-sdk.ts';
 import { BilanTour } from './bilan-tour.ts';
 import { lecteurImagesChemin } from '../presentation/images-chemin.ts';
 import { stockeurImages } from './historique.ts';
+import { ecrireTitreRenomme } from './titre-transcript.ts';
+import { cheminTranscript } from './transcript.ts';
 import { FileAsynchrone, messageUtilisateur } from './file-messages-sdk.ts';
 import type { SessionPersistee } from './persistance.ts';
 import type { EnvironnementSdk, FabriqueRequete, RequeteSdk, TraductionSdk } from './session-sdk.ts';
@@ -150,7 +152,7 @@ function presentationDe(env: EnvironnementSdk, p: SessionPersistee, n: () => Noy
     stockage: pres.stockage,
     lireChemin: lecteurImagesChemin(racinesImagesDe(p), env.journal),
     emettre: (evt) => emettre(n(), evt),
-    renommer: (titre) => maj(n(), { titre }),
+    renommer: (titre) => renommerSession(n(), titre),
     journal: env.journal,
     ...(pres.api ? { api: pres.api } : {}),
     ...(pres.relais ? { relais: pres.relais } : {}),
@@ -213,4 +215,12 @@ export function libererRequete(n: NoyauSdk, message: string): void {
   n.promptEnAttente = false; // la prochaine requête part avec le prompt courant
   n.fil?.clore();
   n.fil = null;
+}
+
+/** Nouveau titre : fiche (vue en direct) et transcript (gardé au redémarrage). Chris par Noctis ou l'agent par outil. */
+export function renommerSession(n: NoyauSdk, titre: string): void {
+  maj(n, { titre });
+  const conversation = n.etat.claudeSessionId;
+  if (!conversation) return;
+  ecrireTitreRenomme(cheminTranscript(n.etat.cwd, conversation, n.p.configDir), conversation, titre, n.env.journal);
 }

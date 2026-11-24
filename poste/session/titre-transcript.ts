@@ -1,7 +1,7 @@
 // Responsabilité : le titre d'une conversation Claude Code d'après son transcript, dans l'ordre de Claude Desktop :
 // renommage (custom-title), titre généré (ai-title), sinon le premier message de Chris. Un « renommage » qui reprend
 // le nom par défaut (nom du dossier, « racine » d'un lancement cc) n'est pas un titre.
-import { existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { Logger } from 'pino';
 
@@ -100,5 +100,19 @@ export function titreGenereDuTranscript(chemin: string, cwd: string, journal: Lo
   } catch (erreur) {
     journal.warn({ chemin, err: erreur }, 'titre généré : transcript illisible');
     return null;
+  }
+}
+
+/**
+ * Renommage écrit dans le transcript comme le fait `/rename` de Claude Code (entrée `custom-title`, prioritaire sur le
+ * titre généré) : il survit au redémarrage, que le titre soit relu au lancement ou à la fin d'un tour (24/11 : un titre
+ * changé dans Noctis revenait à l'ancien après relance). Sans transcript encore écrit : rien, la fiche suffit.
+ */
+export function ecrireTitreRenomme(chemin: string, sessionId: string, titre: string, journal: Logger): void {
+  if (!existsSync(chemin)) return;
+  try {
+    appendFileSync(chemin, `${JSON.stringify({ type: 'custom-title', customTitle: titre, sessionId })}\n`);
+  } catch (erreur) {
+    journal.warn({ chemin, err: erreur }, 'titre renommé non écrit dans le transcript');
   }
 }
