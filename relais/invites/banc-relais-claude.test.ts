@@ -327,7 +327,9 @@ describe('relais Claude : jeton du chef expiré', () => {
     expect(recues[0]?.entetes.get('authorization')).toBe(`Bearer ${JETON_CHEF}`);
   });
 
-  test('rafraîchissement en échec : 503 « doit se reconnecter » et alerte au chef', async () => {
+  // 403 et non 503 : Claude Code réessaie un 5xx en silence pendant des minutes (recette VM 0.2.11 : session « en
+  // cours » sans rien afficher) ; un 403 est montré tout de suite à l'invité.
+  test('rafraîchissement en échec : 403 « doit se reconnecter » (affiché, jamais réessayé) et alerte au chef', async () => {
     const alertes: string[] = [];
     const r = await reseau({}, undefined, {
       jetonAbonnement: () => null,
@@ -335,7 +337,7 @@ describe('relais Claude : jeton du chef expiré', () => {
       notifier: (titre) => alertes.push(titre),
     });
     const rep = await r.g.federation.relais.client.routeLocale(requete(r.g, corpsDe()));
-    expect(rep.status).toBe(503);
+    expect(rep.status).toBe(403);
     expect(await rep.text()).toContain('doit se reconnecter');
     expect(recues).toHaveLength(0);
     expect(alertes.filter((t) => t === 'Compte Claude à reconnecter')).toHaveLength(1);

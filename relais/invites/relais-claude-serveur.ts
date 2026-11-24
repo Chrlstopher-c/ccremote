@@ -89,7 +89,8 @@ export class ServeurClaude {
     }
     const jeton = await this.jetonValide();
     if (jeton === null) {
-      return this.refuser(canal, requete.ref, 503, 'api_error', 'le compte Claude du chef doit se reconnecter');
+      // 403 : affiché tout de suite à l'invité ; un 5xx serait réessayé par Claude Code en silence pendant des minutes.
+      return this.refuser(canal, requete.ref, 403, 'permission_error', 'le compte Claude du chef doit se reconnecter');
     }
     const nouvelle = !recentes.includes(session);
     this.p.suivi.noter(canal.membre, session);
