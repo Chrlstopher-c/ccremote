@@ -9,6 +9,9 @@ export type MethodeGeste = (typeof METHODES_GESTE)[number];
 export const LONGUEUR_MAX_GESTE = 200;
 
 const SEGMENT = '[A-Za-z0-9_.-]{1,160}';
+// Nom de connecteur encodé dans l'adresse : « claude.ai Hugging Face » → `claude.ai%20Hugging%20Face` (24/11 : le « % »
+// refusé rendait la bascule impossible depuis le portable sur une session de la tour).
+const SEGMENT_NOM = '(?:[A-Za-z0-9_.~-]|%[0-9A-Fa-f]{2}){1,240}';
 
 const MOTIFS_SESSION: readonly RegExp[] = [
   /^(evenements|contexte|connecteurs|taches|chapitres|messages|repondre|mode|modele|effort|rapide|autonomie)$/,
@@ -19,7 +22,7 @@ const MOTIFS_SESSION: readonly RegExp[] = [
   new RegExp(`^tours/${SEGMENT}/(modifications|diff|annuler)$`),
   new RegExp(`^artefacts/${SEGMENT}/(renommer|dupliquer|supprimer|epingler)$`),
   new RegExp(`^fichiers/${SEGMENT}$`),
-  new RegExp(`^connecteurs/${SEGMENT}$`),
+  new RegExp(`^connecteurs/${SEGMENT_NOM}$`),
   new RegExp(`^taches/${SEGMENT}(/arreter)?$`),
   new RegExp(`^parite/(taches/${SEGMENT}(/fil)?|resultat)$`), // fil d’un sous-agent (panneau)
 ];
@@ -38,7 +41,7 @@ const MOTIFS_MACHINE: readonly RegExp[] = [
   /^(dossiers|competences|competences\/contenu|instructions|styles|projets|importables|importer)$/,
   /^(memoire|taches-planifiees)$/,
   /^(voix|dictee)$/,
-  new RegExp(`^(connecteurs|plugins)(/${SEGMENT})?$`),
+  new RegExp(`^(connecteurs|plugins)(/${SEGMENT_NOM})?$`),
 ];
 
 /** Vrai si la route `suffixe` (après `/api/sessions/:id/` ou `/api/machines/:id/`) peut traverser le lien. */

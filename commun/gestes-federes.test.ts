@@ -50,3 +50,13 @@ describe('estGesteRelayable', () => {
     expect(estMethodeRelayable('DELETE')).toBe(false);
   });
 });
+
+describe('nom de connecteur encodé', () => {
+  test('« claude.ai Hugging Face » passe le lien, un chemin détourné non', () => {
+    expect(estGesteRelayable('session', 'connecteurs/claude.ai%20Hugging%20Face')).toBe(true);
+    expect(estGesteRelayable('machine', 'connecteurs/claude.ai%20Gmail')).toBe(true);
+    expect(estGesteRelayable('session', 'connecteurs/..%2F..%2Fetc')).toBe(true); // encodé : un seul segment, décodé par le pair
+    expect(estGesteRelayable('session', 'connecteurs/a/b')).toBe(false);
+    expect(estGesteRelayable('session', 'connecteurs/a b')).toBe(false);
+  });
+});
