@@ -75,7 +75,9 @@ export function rejouerHistorique(n: NoyauSdk, chemin: string, complet = false):
 // Session non pilotée ici : son transcript est surveillé, et ce qui s'y ajoute part au fil dans la seconde.
 export function lire(n: NoyauSdk): void {
   const conversation = n.etat.claudeSessionId;
-  if (n.requete !== null || !conversation) {
+  // Rembobinage en attente : le transcript porte encore la suite retirée du fil, il n'est pas relu (sinon elle y revient).
+  const rembobinee = n.pointReprise !== null; // (premier message rembobiné : plus de conversation, cas ci-dessous)
+  if (n.requete !== null || !conversation || rembobinee) {
     n.suivi.reinitialiser();
     return;
   }

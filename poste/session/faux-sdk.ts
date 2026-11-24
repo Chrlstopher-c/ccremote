@@ -314,8 +314,10 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
     return requete;
   };
   const statuts: StatutSession[] = [];
+  const historiques: Evenement[] = []; // transcript relu vers le relais (suivi d'une session fermée)
   const sortie: SortieSession = {
     evenement: (_id, evt) => void evenements.push(evt),
+    historique: (_id, lot) => void historiques.push(...lot.map((e) => e.evt)),
     resume: (r) => void statuts.push(r.statut),
   };
   const env: EnvironnementSdk = {
@@ -333,7 +335,7 @@ export function nouvelleSession(scenario: Scenario, reglages: Reglages = {}) {
   const base = persistee(reglages.configDir ?? null, reglages.objectif ?? null, reglages.reprise);
   const avecFiche = reglages.resume ? { ...base, resume: { ...base.resume, ...reglages.resume } } : base;
   const persistance = reglages.invite ? { ...avecFiche, invite: reglages.invite } : avecFiche;
-  return { session: new SessionSdk(persistance, env), requetes, evenements, statuts };
+  return { session: new SessionSdk(persistance, env), requetes, evenements, statuts, historiques };
 }
 
 export async function attendre(condition: () => boolean, delai = 2000): Promise<void> {

@@ -64,4 +64,22 @@ describe('SessionSdk — rembobinage d’une session à configuration dédiée (
     expect(requetes[0]?.options.resume).toBe(UUID_ESSAI);
     expect(requetes[0]?.options.resumeSessionAt).toBe('a1');
   });
+
+  test('après le rembobinage, la session fermée ne renvoie pas au fil la suite abandonnée (relue du transcript)', async () => {
+    // Recette 0.2.11 : le rembobinage retirait le message du fil du relais, puis la surveillance du transcript de la
+    // session fermée relisait sa queue (écrite récemment) et le remettait, avec sa réponse.
+    const config = mkdtempSync(join(tmpdir(), 'rembobinage-suivi-'));
+    dossiers.push(config);
+    ecrireTranscriptEssai(config, '/projets/app');
+    const { session, historiques } = nouvelleSession(async () => [{ type: 'result' }], {
+      configDir: config,
+      reprise: { statut: 'attente', claudeSessionId: UUID_ESSAI },
+    });
+    expect(await session.rembobiner('u2')).toBeNull();
+    session.lire();
+    expect(historiques.filter((e) => e.type === 'message').map((e) => (e.type === 'message' ? e.texte : ''))).not.toContain(
+      'deux',
+    );
+  });
 });
+
