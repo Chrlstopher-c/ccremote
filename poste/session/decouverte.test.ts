@@ -65,6 +65,15 @@ describe('analyse d un transcript', () => {
     });
   });
 
+  test('dossier Windows : la session est retenue (copie d un invité, sessions d un PC Windows)', () => {
+    // Recette 0.2.11 : seul un chemin commençant par « / » comptait ; sous Windows aucune session n'était découverte et
+    // la copie (Dupliquer) d'une session restait sans fiche (« copie absente de l'état du relais »).
+    const ligne = JSON.stringify({ type: 'user', cwd: 'C:\\Users\\invite\\espace', isSidechain: false });
+    const a = analyserTranscript([ligne, humain('Bonjour')].join('\n'));
+    expect(a.cwd).toBe('C:\\Users\\invite\\espace');
+    expect(analyserTranscript(JSON.stringify({ type: 'user', cwd: 'relatif' })).cwd).toBeNull();
+  });
+
   test('une ligne tronquée ne casse pas l analyse', () => {
     const a = analyserTranscript([LIGNE_CWD('/x'), '{"type":"us', humain('Ok')].join('\n'));
     expect(a.cwd).toBe('/x');

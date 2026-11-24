@@ -61,6 +61,10 @@ export function normaliserPont(id: string): string {
   return id.startsWith('session_') ? `cse_${id.slice('session_'.length)}` : id;
 }
 
+/** Chemin absolu POSIX ou Windows (lettre de lecteur, ou partage UNC) : le transcript peut venir d'un PC Windows. */
+const cheminAbsolu = (chemin: string): boolean =>
+  chemin.startsWith('/') || /^[A-Za-z]:[\\/]/.test(chemin) || chemin.startsWith('\\\\');
+
 /** Lit un transcript en une passe : dossier de travail, branche, messages, sous-agent, ponts Remote Control. */
 export function analyserTranscript(contenu: string): Analyse {
   let cwd: string | null = null;
@@ -77,7 +81,7 @@ export function analyserTranscript(contenu: string): Analyse {
     if (cwd !== null && branche !== null && aMessageDeChris) continue;
     const objet = parserLigne(ligne);
     if (!objet) continue;
-    if (cwd === null && typeof objet['cwd'] === 'string' && objet['cwd'].startsWith('/')) cwd = objet['cwd'];
+    if (cwd === null && typeof objet['cwd'] === 'string' && cheminAbsolu(objet['cwd'])) cwd = objet['cwd'];
     if (branche === null && typeof objet['gitBranch'] === 'string' && objet['gitBranch'] !== '') {
       branche = objet['gitBranch'];
     }
