@@ -72,3 +72,10 @@ describe('nom de connecteur encodé', () => {
     expect(estGesteRelayable('session', 'connecteurs/a b')).toBe(false);
   });
 });
+
+describe('détail d’un compte relevé sur une autre machine', () => {
+  test('relayable', () => {
+    expect(estGesteRelayable('machine', 'comptes/principal/detail')).toBe(true);
+    expect(estGesteRelayable('machine', 'comptes/relever')).toBe(true);
+  });
+});

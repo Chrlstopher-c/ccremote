@@ -43,6 +43,7 @@ const MOTIFS_MACHINE: readonly RegExp[] = [
   /^(dossiers|competences|competences\/contenu|instructions|styles|projets|importables|importer)$/,
   /^(memoire|taches-planifiees)$/,
   /^comptes\/relever$/, // relevé des comptes d'une machine (Paramètres › Comptes, bouton ↻)
+  new RegExp(`^comptes/${SEGMENT}/detail$`), // détail d'un compte relevé ailleurs (Utilisation, limites)
   /^(voix|dictee)$/,
   new RegExp(`^(connecteurs|plugins)(/${SEGMENT_NOM})?$`),
 ];
