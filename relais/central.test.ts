@@ -30,7 +30,7 @@ function portLibre(): number {
 function environnement(extra: Record<string, string>): Record<string, string> {
   const base: Record<string, string> = {};
   for (const [cle, valeur] of Object.entries(process.env)) {
-    if (valeur === undefined || cle.startsWith('CCREMOTE_') || cle.startsWith('LANTERNE_')) continue;
+    if (valeur === undefined || /^(CCREMOTE|LANTERNE|QUART)_/.test(cle)) continue;
     base[cle] = valeur;
   }
   return { ...base, ...extra };

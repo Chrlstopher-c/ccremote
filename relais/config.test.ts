@@ -4,25 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chargerConfig, parserEcoute, urlPostePour } from './config.ts';
 
-const VARIABLES = [
-  'LANTERNE_RELAIS_MODE',
-  'LANTERNE_RELAIS_ECOUTE',
-  'LANTERNE_RELAIS_DONNEES',
-  'LANTERNE_RELAIS_PORT_POSTES',
-  'CCREMOTE_EMPREINTE_MOT_DE_PASSE',
-  'CCREMOTE_SECRETS_POSTES',
-  'CCREMOTE_BASE',
-  'CCREMOTE_HOTES_WEB',
-  'CCREMOTE_PORT_WEB',
-  'CCREMOTE_HOTE_POSTES',
-  'LANTERNE_MOTEUR_PORT_POSTES',
-  'LANTERNE_MOTEUR_INSTANCE',
-  'LANTERNE_RELAIS_ECOUTE',
-];
+// Toutes les variables du relais et du poste : une session lancée depuis Noctis en porte (elles fausseraient la config).
+const PREFIXE_VARIABLE = /^(CCREMOTE|LANTERNE|QUART)_/;
 const sauvegarde = new Map<string, string | undefined>();
 
 beforeEach(() => {
-  for (const v of VARIABLES) {
+  sauvegarde.clear();
+  for (const v of Object.keys(process.env).filter((cle) => PREFIXE_VARIABLE.test(cle))) {
     sauvegarde.set(v, process.env[v]);
     delete process.env[v];
   }
@@ -31,10 +19,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  for (const v of VARIABLES) {
-    const valeur = sauvegarde.get(v);
-    if (valeur === undefined) delete process.env[v];
-    else process.env[v] = valeur;
+  for (const v of Object.keys(process.env).filter((cle) => PREFIXE_VARIABLE.test(cle))) delete process.env[v];
+  for (const [v, valeur] of sauvegarde) {
+    if (valeur !== undefined) process.env[v] = valeur;
   }
 });
 
