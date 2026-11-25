@@ -139,6 +139,20 @@ export class Registre {
       .flatMap((l) => this.vue(l) ?? []);
   }
 
+  /** Fiches (archivées et masquées comprises) liées à une conversation : fiche de poste (id ou claudeSessionId) ou
+   *  Remote Control (distant.conversation). Filtré par SQLite : la paire ne relit plus toutes les fiches. */
+  fichesDeConversation(conversation: string): ResumeSession[] {
+    const lignes = this.db
+      .query(
+        `SELECT id, resume, archivee, epinglee, non_lue, migree_vers FROM sessions
+         WHERE id = $c OR json_extract(resume, '$.claudeSessionId') = $c
+            OR json_extract(resume, '$.distant.conversation') = $c
+         ORDER BY maj_le DESC`,
+      )
+      .all({ c: conversation }) as LigneSession[];
+    return lignes.flatMap((l) => this.vue(l) ?? []);
+  }
+
   /** Toutes les fiches, sans les masquages des doublons : l'archivage du registre seul (base du rapprochement). */
   sessionsBrutes(): ResumeSession[] {
     const lignes = this.db

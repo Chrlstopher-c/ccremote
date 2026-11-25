@@ -59,6 +59,13 @@ export const MIGRATIONS: readonly string[] = [
      empreinte TEXT PRIMARY KEY, cree_le TEXT NOT NULL, expire_le TEXT NOT NULL, par TEXT NOT NULL);`,
   // Migration Desktop/terminal → Lanterne : identifiant de la session qui l'a reprise (colonne du relais).
   `ALTER TABLE sessions ADD COLUMN migree_vers TEXT;`,
+  // Raccord d'un lot relu (fusion-fil.ts, clesPresentes) : recherche par identifiant sans parcourir tout le fil d'une
+  // session (une session de 16 000 événements figeait le nœud, 25/11).
+  `CREATE INDEX evenements_uuid ON evenements(session_id, json_extract(evt, '$.uuid'));
+   CREATE INDEX evenements_id ON evenements(session_id, json_extract(evt, '$.id'));
+   CREATE INDEX evenements_outil ON evenements(session_id, json_extract(evt, '$.outilId'));
+   CREATE INDEX sessions_conversation ON sessions(json_extract(resume, '$.claudeSessionId'));
+   CREATE INDEX sessions_distant ON sessions(json_extract(resume, '$.distant.conversation'));`,
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 

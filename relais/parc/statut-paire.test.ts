@@ -119,3 +119,16 @@ describe('modèle de la jumelle Remote Control', () => {
     expect(registre.session('cse_a')?.modele).toBe('claude-fable-5-2');
   });
 });
+
+describe('fiches d’une conversation (recherche indexée de la jumelle)', () => {
+  test('rend la fiche de poste et sa jumelle Remote Control, pas les autres conversations', () => {
+    const { registre } = paires();
+    registre.enregistrerSession(POSTE);
+    registre.enregistrerSession(RC('claude-opus-5-5'));
+    registre.enregistrerSession(fiche('s2', { claudeSessionId: 'conv-2' }));
+    registre.enregistrerSession(fiche('conv-3', { claudeSessionId: null }));
+    expect(registre.fichesDeConversation('conv-1').map((f) => f.id).sort()).toEqual(['cse_a', 's1']);
+    expect(registre.fichesDeConversation('conv-3').map((f) => f.id)).toEqual(['conv-3']);
+    expect(registre.fichesDeConversation('inconnue')).toEqual([]);
+  });
+});

@@ -51,15 +51,45 @@ function clesPresentes(db: Database, sessionId: string, lot: readonly EvenementH
   const { uuids, ids } = identifiantsDuLot(lot);
   if (uuids.length + ids.length === 0) return new Set();
   const marques = (n: number): string => Array.from({ length: n }, () => '?').join(', ');
-  const brutes = db
+  // Une recherche par index (base.ts) par champ, et seuls les champs de la clé : relire chaque événement entier
+  // (résultats d'outil, images) coûtait 80 ms par lot sur une session de 16 000 événements (25/11).
+  const champs = `seq, json_extract(evt, '$.type') AS type, json_extract(evt, '$.uuid') AS uuid,
+    json_extract(evt, '$.texte') AS texte, json_extract(evt, '$.id') AS id, json_extract(evt, '$.outilId') AS outil`;
+  // Les rangs d'abord, par les index de base.ts imposés : sans statistiques, SQLite préfère l'index de session et
+  // parcourt tout le fil.
+  const lignes = db
     .query(
-      `SELECT seq, ts, evt FROM evenements WHERE session_id = ? AND (
-         json_extract(evt, '$.uuid') IN (${marques(uuids.length)})
-         OR json_extract(evt, '$.id') IN (${marques(ids.length)})
-         OR json_extract(evt, '$.outilId') IN (${marques(ids.length)}))`,
+      `SELECT ${champs} FROM evenements WHERE seq IN (
+         SELECT seq FROM evenements INDEXED BY evenements_uuid WHERE session_id = ? AND json_extract(evt, '$.uuid') IN (${marques(uuids.length)})
+         UNION SELECT seq FROM evenements INDEXED BY evenements_id WHERE session_id = ? AND json_extract(evt, '$.id') IN (${marques(ids.length)})
+         UNION SELECT seq FROM evenements INDEXED BY evenements_outil WHERE session_id = ? AND json_extract(evt, '$.outilId') IN (${marques(ids.length)}))`,
     )
-    .all(sessionId, ...uuids, ...ids, ...ids) as LigneBrute[];
-  return new Set(brutes.map((b) => ligneFil(b).cle));
+    .all(sessionId, ...uuids, sessionId, ...ids, sessionId, ...ids) as ChampsCle[];
+  return new Set(lignes.map((l) => cleDesChamps(l) ?? cleParSeq(db, l.seq)));
+}
+
+interface ChampsCle {
+  readonly seq: number;
+  readonly type: string | null;
+  readonly uuid: string | null;
+  readonly texte: string | null;
+  readonly id: string | null;
+  readonly outil: string | null;
+}
+
+// Même clé que cleDeDoublon (fusion-historique.ts), tirée des champs ; null quand il faut l'événement entier.
+function cleDesChamps(l: ChampsCle): string | null {
+  if ((l.type === 'message' || l.type === 'texte') && l.uuid) {
+    return l.texte === null ? null : `${l.type}\u0000${l.uuid}\u0000${l.texte}`;
+  }
+  if ((l.type === 'outil' || l.type === 'sous_agent') && l.id !== null) return `${l.type}\u0000${l.id}`;
+  if (l.type === 'resultat_outil' && l.outil !== null) return `resultat_outil\u0000${l.outil}`;
+  return null;
+}
+
+function cleParSeq(db: Database, seq: number): string {
+  const brute = db.query('SELECT seq, ts, evt FROM evenements WHERE seq = ?').get(seq) as LigneBrute;
+  return ligneFil(brute).cle;
 }
 
 function plusTot(lot: readonly EvenementHorodate[]): string {
@@ -141,6 +171,7 @@ export function fusionnerDansFil(
 export function partageUneLigne(db: Database, sessionId: string, lot: readonly EvenementHorodate[]): boolean {
   if (lot.length === 0) return false;
   const cles = new Set(lot.map(cleDeDoublon));
-  const presentes = [...lignesDepuis(db, sessionId, plusTot(lot)).map((l) => l.cle), ...clesPresentes(db, sessionId, lot)];
-  return presentes.some((c) => cles.has(c));
+  // Les identifiants d'abord (index) : relire le fil depuis le début du lot ne sert qu'aux lignes sans identifiant.
+  if ([...clesPresentes(db, sessionId, lot)].some((c) => cles.has(c))) return true;
+  return lignesDepuis(db, sessionId, plusTot(lot)).some((l) => cles.has(l.cle));
 }
