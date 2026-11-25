@@ -134,6 +134,12 @@ describe('traduction transcript → événements', () => {
     expect(contexteDe(l)).toBeNull();
   });
 
+  test('« No response requested. » synthétique : rien au fil', () => {
+    const l = { type: 'assistant', isApiErrorMessage: false, message: {
+      model: '<synthetic>', content: [{ type: 'text', text: 'No response requested.' }] } };
+    expect(traduire(l)).toEqual([]);
+  });
+
   test('frontière de compaction (camelCase du transcript)', () => {
     expect(
       traduire({

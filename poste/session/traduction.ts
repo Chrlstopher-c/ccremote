@@ -61,8 +61,17 @@ function identifiantDeLigne(l: Ligne): string {
   return envoi || texte(l.uuid);
 }
 
+// Réponse synthétique du CLI quand un tour n'en attend pas (commande locale, copie annexe) : rien à montrer.
+const SANS_REPONSE = 'No response requested.';
+
+function estSansReponse(l: Ligne): boolean {
+  if (l.type !== 'assistant' || l.message?.model !== '<synthetic>' || l.isApiErrorMessage === true) return false;
+  return blocs(l.message?.content).map((b) => texte(b['text'])).join('').trim() === SANS_REPONSE;
+}
+
 function traduireLigne(l: Ligne, agent?: string): Evenement[] {
   if (l.isSidechain === true && agent === undefined) return [];
+  if (estSansReponse(l)) return [];
   const marque = agent === undefined ? {} : { agent };
   if (estErreurApi(l) && agent === undefined) {
     const texteErreur = blocs(l.message?.content).map((b) => texte(b['text'])).join(' ').trim();
