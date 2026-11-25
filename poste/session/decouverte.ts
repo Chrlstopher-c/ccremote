@@ -8,6 +8,7 @@ import { basename, dirname, join } from 'node:path';
 import type { Logger } from 'pino';
 import type { Decouverte } from '../../commun/decouverte.ts';
 import { titreDeContenu, titreDuMessage } from './titre-transcript.ts';
+import { signalerTranscript } from './signalement-transcript.ts';
 import { type FicheDesktop, RACINE_DESKTOP_DEFAUT, fichesDesktop } from './fiche-desktop.ts';
 
 export interface TranscriptDecouvert extends Decouverte {
@@ -252,7 +253,7 @@ export class IndexDecouvertes {
     try {
       contenu = readFileSync(chemin, 'utf8');
     } catch (erreur) {
-      this.options.journal.warn({ chemin, err: erreur }, 'transcript illisible : ignoré');
+      signalerTranscript(this.options.journal, chemin, erreur, 'transcript illisible : ignoré');
       return null;
     }
     const configDir = dirname(projets) === join(homedir(), '.claude') ? null : dirname(projets);

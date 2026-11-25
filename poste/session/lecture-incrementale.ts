@@ -7,6 +7,7 @@ import { brancheActive, type EtatChaine, etatDeBranche, prolongerBranche } from 
 import type { LireImageChemin } from '../presentation/images-chemin.ts';
 import { type EvenementHorodate, lignesDe, type StockerImage, TraducteurHistorique } from './historique.ts';
 import type { Ligne } from './traduction.ts';
+import { signalerTranscript } from './signalement-transcript.ts';
 
 interface Base {
   octets: number; // position juste après la dernière ligne complète lue
@@ -19,7 +20,7 @@ function statOuNull(chemin: string, journal: Logger): Stats | null {
   try {
     return statSync(chemin, { throwIfNoEntry: false }) ?? null;
   } catch (erreur) {
-    journal.warn({ err: erreur, chemin }, 'transcript inaccessible');
+    signalerTranscript(journal, chemin, erreur, 'transcript inaccessible');
     return null;
   }
 }
@@ -31,7 +32,7 @@ function lireDepuis(chemin: string, depuis: number, longueur: number, journal: L
     fd = openSync(chemin, 'r');
     return tampon.subarray(0, readSync(fd, tampon, 0, longueur, depuis));
   } catch (erreur) {
-    journal.warn({ err: erreur, chemin }, 'transcript illisible');
+    signalerTranscript(journal, chemin, erreur, 'transcript illisible');
     return null;
   } finally {
     if (fd !== null) closeSync(fd);
