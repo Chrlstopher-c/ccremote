@@ -1,6 +1,7 @@
 // Responsabilité : relever un compte Claude Code de la machine. Le relevé périodique ne lit que l'identité (`claude auth
 // status`, local). L'usage (API OAuth) n'est lu que sur commande du relais, qui en décide la cadence : un seul poste
 // relève un compte réel. Lecture seule : le jeton n'est jamais renouvelé ici.
+import { renouvelerJeton } from './renouveler-jeton.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -108,8 +109,13 @@ async function lireEndpoint(jetonValeur: string, url: string): Promise<LectureEn
 }
 
 /** Relevé d'usage commandé par le relais : les deux endpoints, un appel chacun. Sans jeton : erreur sans appel. */
-export async function releverUsage(configDir: string | null): Promise<DonneesReleve> {
-  const valeur = jeton(configDir);
+export async function releverUsage(
+  configDir: string | null,
+  renouveler: (configDir: string | null) => Promise<boolean> = renouvelerJeton,
+): Promise<DonneesReleve> {
+  // Jeton expiré (Claude Code n'a pas tourné depuis quelques heures sur ce compte) : renouvelé puis relu, au plus une
+  // fois par demi-heure (renouveler-jeton.ts). Le portable affichait 0 % faute de jeton, 25/11.
+  const valeur = jeton(configDir) ?? ((await renouveler(configDir)) ? jeton(configDir) : null);
   if (valeur === null) {
     return {
       fenetres: null,
