@@ -30,6 +30,7 @@ import {
   type PontPair,
   TEXTE_REFUS_DUO,
 } from './api-sessions-pair.ts';
+import type { CommandeSessionRelais } from './api-sessions-commandes.ts';
 
 export const CorpsOuverture = z.object({
   machine: z.string(),
@@ -85,6 +86,7 @@ const ACTIONS: ReadonlySet<string> = new Set<string>(['interrompre', 'compacter'
 
 type RequeteSession = Request & { params: { id: string; action?: string } };
 type RequeteTache = Request & { params: { id: string; tache: string } };
+type RequeteOutil = Request & { params: { id: string; outil: string } };
 type RequeteMachine = Request & { params: { id: string } };
 type RequeteFichier = Request & { params: { id: string; fichier: string } };
 type Lecture = { kind: 'contexte' } | { kind: 'connecteurs' } | { kind: 'taches' } | { kind: 'tache'; tache: string };
@@ -536,6 +538,13 @@ export class ApiSessions {
     return this.commander(req.params.id, { kind: 'arreter_tache', tache });
   }
 
+  // Commande d'outil au premier plan passée en tâche de fond (Ctrl+B) ; l'identifiant d'appel vient du SDK.
+  mettreEnFond(req: RequeteOutil): Promise<Response> {
+    const appel = req.params.outil;
+    if (!/^[A-Za-z0-9_-]{1,200}$/.test(appel)) return Promise.resolve(erreur('identifiant d’appel invalide', 400));
+    return this.commander(req.params.id, { kind: 'mettre_en_fond', appel });
+  }
+
   // Session adoptée sans fil au relais (son historique n'y remonte pas) : le poste vérifie le message.
   private filVide(id: string): boolean {
     return this.registre.derniersEvenements(id, 1).length === 0;
@@ -589,21 +598,7 @@ export class ApiSessions {
 
   private async commander(
     sessionId: string,
-    c:
-      | { kind: 'envoyer'; texte: string; pieces?: PieceJointe[]; auteur?: string; maintenant?: boolean }
-      | { kind: 'autonomie'; active: boolean }
-      | { kind: 'nuit'; active: boolean; objectif?: string | undefined }
-      | { kind: 'remote_control'; actif: boolean }
-      | { kind: 'repondre'; reponse: ReponseDialogue }
-      | { kind: 'tracer_relais'; sens: SensRelais; autre: AutreSession; texte: string }
-      | { kind: 'mode'; mode: ModeSession }
-      | { kind: 'modele'; modele: string }
-      | { kind: 'effort'; effort: EffortSession | null }
-      | { kind: 'rapide'; actif: boolean }
-      | { kind: 'ultracode'; actif: boolean }
-      | { kind: 'renommer'; titre: string }
-      | { kind: 'arreter_tache'; tache: string }
-      | { kind: Action },
+    c: CommandeSessionRelais,
   ): Promise<Response> {
     const session = await this.sessionDe(sessionId);
     if (session instanceof Response) return session;

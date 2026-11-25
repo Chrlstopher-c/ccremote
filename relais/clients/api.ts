@@ -140,6 +140,7 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     '/api/sessions/:id/taches': { GET: protege((req) => d.sessions.taches(req as never)) },
     '/api/sessions/:id/taches/:tache': { GET: protege((req) => d.sessions.tache(req as never)) },
     '/api/sessions/:id/taches/:tache/arreter': { POST: protege((req) => d.sessions.arreterTache(req as never)) },
+    '/api/sessions/:id/outils/:outil/fond': { POST: protege((req) => d.sessions.mettreEnFond(req as never)) },
     '/api/sessions/:id/messages': { POST: protege((req) => d.sessions.envoyer(req as never)) },
     '/api/sessions/:id/fichiers/:fichier': { GET: protege((req) => d.sessions.fichier(req as never)) },
     '/api/sessions/:id/autonomie': { POST: protege((req) => d.sessions.autonomie(req as never)) },
