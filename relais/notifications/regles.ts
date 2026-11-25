@@ -14,6 +14,12 @@ export function notificationPour(titreSession: string, evt: Evenement): Brouillo
       return { niveau: 'important', titre: `${titreSession} — question`, texte: court(evt.question) };
     case 'etape':
       return { niveau: 'info', titre: `${titreSession} — étape livrée`, texte: court(evt.resume) };
+    case 'notification_agent':
+      return {
+        niveau: 'important',
+        titre: evt.titre ? `${titreSession} — ${evt.titre}` : titreSession,
+        texte: court(evt.message),
+      };
     case 'erreur':
       return { niveau: 'alerte', titre: `${titreSession} — erreur`, texte: court(evt.message) };
     case 'relance':

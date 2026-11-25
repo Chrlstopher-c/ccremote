@@ -20,7 +20,10 @@ export function notifier(
       return echec(c, 'notification trop rapprochée de la précédente : attendre quelques secondes');
     }
     derniers.set(c.sessionId, maintenant);
-    c.notifier(message, args.titre?.trim() || null);
+    const titre = args.titre?.trim() || null;
+    c.notifier(message, titre);
+    // Aussi au fil : le relais en fait une notification « important », relayée à l'iPhone par le pont ntfy (Sémaphore).
+    c.emettre({ type: 'notification_agent', message, titre });
     return ok('Notification envoyée.');
   });
 }

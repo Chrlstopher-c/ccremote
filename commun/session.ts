@@ -297,6 +297,8 @@ export const Evenement = z.discriminatedUnion('type', [
     taille: z.number(),
   }),
   z.object({ type: z.literal('widget'), fichier: z.string(), titre: z.string(), mime: z.string(), taille: z.number() }),
+  // Alerte envoyée à Chris par l'agent (outil `notifier`) : notification « important » du relais (Noctis, iPhone).
+  z.object({ type: z.literal('notification_agent'), message: z.string(), titre: z.string().nullable() }),
   // Intégration d'un module (outil `module_afficher`) : rendue par l'interface, à la volée et à la relecture.
   z.object({
     type: z.literal('integration'),
