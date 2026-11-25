@@ -85,6 +85,8 @@ Une session a un **moteur** (`commun/session.ts`, champ `moteur`) : `sdk` pour l
 Le SDK n'a pas de hook `Stop` : à la fin de chaque tour, `bilan-tour.ts` applique la même politique pure que les sessions
 tmux (`suite-du-tour.ts` : relance autonome, compaction, mode nuit). Le fil, les commandes (envoyer, interrompre, compacter,
 fermer, reprendre, répondre, autonomie, nuit) et les réponses aux dialogues sont les mêmes pour les deux moteurs.
+Mise en fond (Ctrl+B) d'une commande Bash au premier plan : `POST /api/sessions/:id/outils/:outil/fond` → `mettreEnFond` →
+`backgroundTasks(appel)` du SDK (`session-sdk-processus.ts`) ; hors SDK, 409 « non pris en charge pour cette session ». Geste relayé entre nœuds (`commun/gestes-federes.ts`).
 
 ## Cycle de vie d'une session
 
