@@ -17,6 +17,8 @@ import type { CanalNoeud } from './canal.ts';
 import { CacheDistant, type FluxDistant, type SessionDistante } from './distant.ts';
 import { type Echanges, type GesteLocal } from './echanges.ts';
 import { lireRoute, type RouteDemandee } from './gestes.ts';
+import { garderSiFilComplet, reponseHorsLigne } from './historique-hors-ligne.ts';
+import type { HistoriqueDistant } from './historique-distant.ts';
 import { estGesteRelayable } from '../../commun/gestes-federes.ts';
 import { decouper, nombreDeMorceaux, tropGrandPourTransfert } from './transferts.ts';
 import { echec, ok, type Resultat } from './resultat.ts';
@@ -35,6 +37,8 @@ export interface OptionsDistantes {
   readonly diffusion: Diffusion;
   readonly machine: string;
   readonly cache: CacheDistant;
+  /** Fil des sessions des pairs gardé sur disque : servi quand le pair ne répond pas. */
+  readonly historique?: HistoriqueDistant;
   readonly echanges: Echanges;
   readonly liaison: (membre: string) => CanalNoeud | null;
   readonly journal: Logger;
@@ -233,7 +237,7 @@ export class Distantes {
   private async relayer(membre: string, g: GesteLocal, corps: string): Promise<Response> {
     if (!etiquetteValide(g.ami)) return reponseErreur(403, TEXTE_AMI_SANS_CHARTE);
     const canal = this.o.liaison(membre);
-    if (!canal) return reponseErreur(409, TEXTE_HORS_LIGNE);
+    if (!canal) return this.sansPair(g, reponseErreur(409, TEXTE_HORS_LIGNE));
     if (tropGrandPourTransfert(corps)) return reponseErreur(413, 'contenu trop grand pour le lien entre machines');
     const gros = corps.length > TAILLE_MORCEAU_CARACTERES || g.geste.startsWith('fichiers/');
     const long = GESTES_LONGS.has(g.geste) || gros;
@@ -242,9 +246,16 @@ export class Distantes {
       (ref) => messagesDuGeste(ref, g, corps),
       long ? DELAI_GESTE_LONG_MS : DELAI_GESTE_MS,
     );
-    if (!reponse || reponse.t !== 'geste_reponse') return reponseErreur(504, 'la machine n’a pas répondu à temps');
+    if (!reponse || reponse.t !== 'geste_reponse') {
+      return this.sansPair(g, reponseErreur(504, 'la machine n’a pas répondu à temps'));
+    }
+    garderSiFilComplet(this.o.historique, g, reponse);
     if (g.geste === 'ouvrir' && reponse.statut < 300) this.connaitreOuverte(membre, reponse.corps);
     return reponseDuPair(reponse, g.geste);
+  }
+
+  private sansPair(g: GesteLocal, erreur: Response): Response {
+    return reponseHorsLigne(this.o.historique, g) ?? erreur;
   }
 
   // L'appli règle la session neuve (effort, modèle…) dès la réponse : elle doit déjà être routée vers le nœud.

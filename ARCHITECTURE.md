@@ -27,6 +27,9 @@ Chris : on s'y attache dans kitty comme à n'importe quel terminal, et on la sui
   directement dans le terminal y est aussi.
 - **Le pouvoir ne va que dans un sens.** Les clients commandent le relais, le relais commande les postes, un poste ne
   commande jamais rien. Le VPS est **isolé** : il ne joint pas la maison et ne travaille que sur ses propres projets.
+- **La fédération garde le fil des pairs.** Chaque nœud garde sur disque (dossier des secrets, 0600) la première page
+  de `evenements` des sessions d'un pair (40 sessions, 2 Mo chacune) : quand le pair est hors ligne, le fil gardé est
+  servi en 200 avec l'en-tête `X-Lanterne-Hors-Ligne: 1` (`relais/federation/historique-*.ts`).
 
 ## Carte des domaines
 

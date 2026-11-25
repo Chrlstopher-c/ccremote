@@ -515,6 +515,10 @@ relais/federation/distant.ts                            cache mémoire des nœud
 relais/federation/echanges.ts                           protocole chiffré une fois le lien ouvert : instantané, fil, écriture, ouverture
 relais/federation/federation.test.ts                    fédération sur un aiguilleur réel en mémoire : appairage, sessions, révocation, aiguilleur
 relais/federation/federation.ts                         la fédération « mes machines » du nœud — lien, appairage, révocation, requêtes vers les pairs
+relais/federation/historique-distant-relais.test.ts      fil d’un pair gardé servi quand il est hors ligne (X-Lanterne-Hors-Ligne), aiguilleur réel
+relais/federation/historique-distant.test.ts             tests de historique-distant.ts : bornes (40 sessions, 2 Mo), relecture, fichier illisible
+relais/federation/historique-distant.ts                  fil (evenements) d’une session d’un pair gardé sur disque : 40 sessions au plus, écriture atomique, 0600
+relais/federation/historique-hors-ligne.ts               fil gardé servi quand le pair ne répond pas (200 + en-tête), et sa mise en mémoire
 relais/federation/identifiants.ts                       identifiants aléatoires : canaux et références de requête
 relais/federation/lien-aiguilleur.ts                    lien WebSocket sortant du nœud vers l’aiguilleur, reconnexion avec recul
 relais/federation/resultat.ts                           résultat d’un geste de la fédération (valeur ou statut et raison)

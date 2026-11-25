@@ -13,6 +13,7 @@ import { Canaux } from './canaux.ts';
 import { appairerNoeud, urlAiguilleurValide } from './aiguilleur-http.ts';
 import { CacheDistant } from './distant.ts';
 import { MemoireDistante } from './memoire-distante.ts';
+import { HistoriqueDistant } from './historique-distant.ts';
 import { Distantes } from './distantes.ts';
 import { DemandesAppairage } from './demandes.ts';
 import { noeudsAnnonces, type NoeudAnnonce } from './admissions.ts';
@@ -83,6 +84,8 @@ export class Federation {
   private readonly hoteNoeud: HoteNoeud;
   /** Terminaux des sessions de ce nœud, ouverts par un pair (les terminaux de machine sont aux appareils). */
   readonly terminaux: TerminalFedere;
+  /** Fil des sessions des pairs, gardé sur disque pour le hors ligne (`historique-distant.ts`). */
+  private readonly historique: HistoriqueDistant;
   private desabonner: (() => void) | null = null;
   private recepteurSynchro: ((membre: string, brut: unknown) => void) | null = null;
   private identiteEnCours: Promise<Identite> | null = null;
@@ -92,6 +95,7 @@ export class Federation {
     this.distant = new CacheDistant(
       new MemoireDistante(join(options.dossierSecrets, 'sessions-distantes.json'), options.journal),
     );
+    this.historique = new HistoriqueDistant(join(options.dossierSecrets, 'historique-distant.json'), options.journal);
     this.pairs = this.secrets.lirePairs();
     this.config = this.secrets.lireAiguilleur();
     this.charte = this.creerCharte();
@@ -151,6 +155,7 @@ export class Federation {
       diffusion: options.diffusion,
       machine: options.machine,
       cache: this.distant,
+      historique: this.historique,
       echanges: this.echanges,
       liaison: (membre) => this.canaux.liaisonOuverteAvec(membre),
       journal: options.journal.child({ domaine: 'distantes' }),
