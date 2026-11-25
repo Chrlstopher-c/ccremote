@@ -174,6 +174,8 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('tache'), ...avecSession, tache: z.string().min(1).max(200) }),
   // Arrêt d'une tâche de fond du SDK (commande ou sous-agent) ; `stopTask` du SDK.
   z.object({ kind: z.literal('arreter_tache'), ...avecSession, tache: z.string().min(1).max(200) }),
+  // Commande d'outil au premier plan passée en tâche de fond (`backgroundTasks` du SDK) ; `appel` = tool_use id.
+  z.object({ kind: z.literal('mettre_en_fond'), ...avecSession, appel: z.string().min(1).max(200) }),
   // Artefacts d'une session (registre du dossier de la session) : liste, puis gestes sur un artefact.
   z.object({ kind: z.literal('artefacts'), ...avecSession }),
   z.object({

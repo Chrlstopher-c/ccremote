@@ -24,6 +24,7 @@ const MOTIFS_SESSION: readonly RegExp[] = [
   new RegExp(`^fichiers/${SEGMENT}$`),
   new RegExp(`^connecteurs/${SEGMENT_NOM}$`),
   new RegExp(`^taches/${SEGMENT}(/arreter)?$`),
+  new RegExp(`^outils/${SEGMENT}/fond$`), // commande d'outil au premier plan passée en tâche de fond (Ctrl+B)
   new RegExp(`^parite/(taches/${SEGMENT}(/fil)?|resultat)$`), // fil d’un sous-agent (panneau)
 ];
 

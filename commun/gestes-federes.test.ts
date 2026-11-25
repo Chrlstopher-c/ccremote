@@ -45,6 +45,13 @@ describe('estGesteRelayable', () => {
     expect(estGesteRelayable('session', '../etc')).toBe(false);
   });
 
+  test('mise en fond d une commande d outil : relayée ; autres sous-chemins refusés', () => {
+    expect(estGesteRelayable('session', 'outils/toolu_01abc/fond')).toBe(true);
+    expect(estGesteRelayable('session', 'outils/toolu_01abc/fond/x')).toBe(false);
+    expect(estGesteRelayable('session', 'outils/toolu_01abc')).toBe(false);
+    expect(estGesteRelayable('machine', 'outils/toolu_01abc/fond')).toBe(false);
+  });
+
   test('méthodes transportées : GET, POST, PUT', () => {
     expect(['GET', 'POST', 'PUT'].every(estMethodeRelayable)).toBe(true);
     expect(estMethodeRelayable('DELETE')).toBe(false);
