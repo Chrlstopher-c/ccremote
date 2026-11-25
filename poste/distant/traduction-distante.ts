@@ -74,7 +74,8 @@ function messageUtilisateur(payload: SDKMessage, pieces?: StockeurPieces): Evene
   const uuid = typeof p['uuid'] === 'string' ? { uuid: p['uuid'] } : {};
   const { textes, joints } = lireBlocs(blocs, pieces);
   const texte = sansEnteteChris(textes.join('\n').trim()).trim();
-  const message: Evenement[] = texte === '' || estMarqueInterruption(texte) ? [] : [{ type: 'message', texte, ...uuid }];
+  const sansMessage = texte === '' || estMarqueInterruption(texte);
+  const message: Evenement[] = sansMessage ? [] : [{ type: 'message', texte, ...uuid }];
   return [...message, ...joints];
 }
 

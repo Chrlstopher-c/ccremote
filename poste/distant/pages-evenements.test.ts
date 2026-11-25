@@ -9,15 +9,24 @@ const humain = (n: number): EvenementBrut => ({
   creeLe: null,
   payload: { type: 'user', message: { role: 'user', content: `m${n}` }, origin: { kind: 'human' } },
 });
-const systeme = (n: number): EvenementBrut => ({ id: `s${n}`, creeLe: null, payload: { type: 'system', subtype: 'x' } });
+const systeme = (n: number): EvenementBrut => ({
+  id: `s${n}`,
+  creeLe: null,
+  payload: { type: 'system', subtype: 'x' },
+});
 
 // Fil de `total` événements, une page de `taille` par appel ; un événement sur `systemeTous` est système (0 : aucun).
-function fil(total: number, taille: number, systemeTous: number): (c: string | null) => Promise<ResultatApi<PageEvenements>> {
+type Lecteur = (curseur: string | null) => Promise<ResultatApi<PageEvenements>>;
+
+function fil(total: number, taille: number, systemeTous: number): Lecteur {
   const suivant = (curseur: string | null): number => (curseur === null ? 0 : Number(curseur));
   return async (curseur) => {
     const debut = suivant(curseur);
     const evenements: EvenementBrut[] = [];
-    for (let n = debut; n < Math.min(total, debut + taille); n++) evenements.push(systemeTous > 0 && n % systemeTous === 0 ? systeme(n) : humain(n));
+    for (let n = debut; n < Math.min(total, debut + taille); n++) {
+      const estSysteme = systemeTous > 0 && n % systemeTous === 0;
+      evenements.push(estSysteme ? systeme(n) : humain(n));
+    }
     const fin = debut + evenements.length;
     return { ok: true, donnees: { evenements, suivant: fin < total ? String(fin) : null } };
   };
@@ -59,7 +68,7 @@ describe('lecture des pages d’un fil claude.ai', () => {
   });
 
   test('une erreur de page est rendue telle quelle', async () => {
-    const echec = async (): Promise<ResultatApi<PageEvenements>> => ({ ok: false, statut: 500, probleme: 'panne' } as never);
+    const echec: Lecteur = async () => ({ ok: false, statut: 500, probleme: 'panne' });
     const r = await lireFil(echec, bornes({}));
     expect(r.ok).toBe(false);
   });

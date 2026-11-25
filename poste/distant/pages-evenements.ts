@@ -10,7 +10,7 @@ export interface BornesLecture {
   readonly dejaConnu: (id: string) => boolean; // un événement déjà vu arrête la lecture
 }
 
-/** Les événements lus, du plus récent au plus ancien (ordre du fil), jusqu'à une borne ; une erreur de page est rendue. */
+/** Les événements lus (ordre du fil, du plus récent au plus ancien) jusqu'à une borne ; une erreur de page est rendue. */
 export async function lireFil(
   lirePage: (curseur: string | null) => Promise<ResultatApi<PageEvenements>>,
   bornes: BornesLecture,

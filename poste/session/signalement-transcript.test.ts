@@ -2,9 +2,16 @@
 import { describe, expect, test } from 'bun:test';
 import { signalerTranscript } from './signalement-transcript.ts';
 
-function journalFactice(): { warns: unknown[][]; debugs: unknown[][]; warn: (...a: unknown[]) => void; debug: (...a: unknown[]) => void } {
-  const warns: unknown[][] = [];
-  const debugs: unknown[][] = [];
+type Appel = unknown[];
+
+function journalFactice(): {
+  warns: Appel[];
+  debugs: Appel[];
+  warn: (...a: Appel) => void;
+  debug: (...a: Appel) => void;
+} {
+  const warns: Appel[] = [];
+  const debugs: Appel[] = [];
   return { warns, debugs, warn: (...a) => warns.push(a), debug: (...a) => debugs.push(a) };
 }
 
