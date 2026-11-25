@@ -358,6 +358,21 @@ export async function arreterTache(n: NoyauSdk, tache: string): Promise<string |
   }
 }
 
+// Passe en tâche de fond la commande au premier plan de l'appel `appel` (`backgroundTasks` du SDK) : null si fait,
+// sinon le motif lisible du refus (journalisé).
+export async function mettreEnFond(n: NoyauSdk, appel: string): Promise<string | null> {
+  const requete = n.requete;
+  if (!requete) return 'session fermée';
+  try {
+    if (await requete.backgroundTasks(appel)) return null;
+    n.env.journal.warn({ session: n.etat.id, appel }, 'mise en fond refusée : la commande n’est plus en cours');
+    return 'la commande n’est plus en cours';
+  } catch (erreur) {
+    n.env.journal.warn({ err: erreur, session: n.etat.id, appel }, 'mise en fond refusée par le SDK');
+    return `mise en fond impossible : ${String(erreur)}`;
+  }
+}
+
 export function reprendreApresRedemarrage(n: NoyauSdk, texte: string): string | null {
   emettre(n, { type: 'relance', raison: RAISON_REDEMARRAGE });
   const erreur = n.etat.claudeSessionId ? demarrer(n, true, texte) : 'conversation inconnue';

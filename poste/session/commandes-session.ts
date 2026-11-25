@@ -34,8 +34,16 @@ export async function executerSurSession(
   if (enBascule(c.sessionId)) return { ok: false, erreur: 'bascule Remote Control en cours : réessayer' };
   if (estLecture(c)) return { ok: true, donnees: await lecturePanneau(s, c) };
   if (c.kind === 'rembobiner') return rembobiner(ctx, s, c.messageId);
+  if (c.kind === 'mettre_en_fond') return mettreEnFondCommande(s, c.appel);
   const erreur = await appliquerCommande(ctx, s, c);
   return erreur ? { ok: false, erreur } : { ok: true, donnees: s.resume };
+}
+
+// Seul le SDK sait passer une commande en fond : les sessions tmux ou tenues par Desktop le refusent.
+async function mettreEnFondCommande(s: SessionPoste, appel: string): Promise<Reponse> {
+  if (!(s instanceof SessionSdk)) return { ok: false, erreur: 'non pris en charge pour cette session' };
+  const erreur = await s.mettreEnFond(appel);
+  return erreur ? { ok: false, erreur } : { ok: true, donnees: { ok: true, enFond: true } };
 }
 
 async function appliquerCommande(ctx: ContexteCommandes, s: SessionPoste, c: CommandeSession): Promise<string | null> {

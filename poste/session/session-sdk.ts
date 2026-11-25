@@ -35,6 +35,7 @@ import { creerNoyau, type NoyauSdk } from './session-sdk-noyau.ts';
 export interface RequeteSdk extends AsyncIterable<SDKMessage>, RequeteReglable {
   interrupt(): Promise<unknown>;
   stopTask(tache: string): Promise<void>;
+  backgroundTasks(toolUseId?: string): Promise<boolean>;
   close(): void;
   mcpServerStatus(): Promise<readonly { readonly name: string; readonly status: string }[]>;
   getContextUsage(opts: { readonly detail: 'summary' }): Promise<SDKControlGetContextUsageResponse>;
@@ -201,6 +202,11 @@ export class SessionSdk implements SessionPoste {
   // Arrête une tâche de fond (commande ou sous-agent) par son identifiant SDK.
   async arreterTache(tache: string): Promise<string | null> {
     return processus.arreterTache(this.n, tache);
+  }
+
+  // Passe en fond la commande (outil Bash) encore au premier plan de l'appel `appel` (Ctrl+B) ; la tâche continue.
+  async mettreEnFond(appel: string): Promise<string | null> {
+    return processus.mettreEnFond(this.n, appel);
   }
 
   // Rembobiner : la conversation repartira de l'entrée qui précède ce message (voir session-sdk-processus.ts).

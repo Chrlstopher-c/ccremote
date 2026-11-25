@@ -108,6 +108,15 @@ export class RequeteFausse implements RequeteSdk {
     return undefined;
   }
 
+  fonds: (string | undefined)[] = [];
+  resultatFond: boolean | Error = true;
+
+  async backgroundTasks(toolUseId?: string): Promise<boolean> {
+    this.fonds.push(toolUseId);
+    if (this.resultatFond instanceof Error) throw this.resultatFond;
+    return this.resultatFond;
+  }
+
   close(): void {
     this.fermee = true;
     this.sortie.clore();

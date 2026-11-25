@@ -201,6 +201,10 @@ class RequeteFactice implements RequeteSdk {
 
   async stopTask(): Promise<void> {}
 
+  async backgroundTasks(): Promise<boolean> {
+    return true;
+  }
+
   close(): void {
     this.fermee = true;
     this.sortie.clore();
