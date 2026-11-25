@@ -15,7 +15,7 @@ const SEGMENT_NOM = '(?:[A-Za-z0-9_.~-]|%[0-9A-Fa-f]{2}){1,240}';
 
 const MOTIFS_SESSION: readonly RegExp[] = [
   /^(evenements|contexte|connecteurs|taches|chapitres|messages|repondre|mode|modele|effort|rapide|autonomie)$/,
-  /^(renommer|interrompre|compacter|reprendre|archiver|desarchiver|epingler|desepingler|marquer_lue)$/,
+  /^(renommer|interrompre|compacter|fermer|reprendre|archiver|desarchiver|epingler|desepingler|marquer_lue)$/,
   /^(annexes|dupliquer|migrer|nuit|ultracode|rembobiner|remote-control)$/,
   /^(marquer_non_lue|parite|dossier|competences|fichiers|contenu|recherche|styles|style|prompt-systeme)$/,
   /^git\/(modifications|diff|annuler|commiter)$/,
