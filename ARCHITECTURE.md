@@ -99,6 +99,10 @@ Mise en fond (Ctrl+B) d'une commande Bash au premier plan : `POST /api/sessions/
   absente des listes sauf `?archivees=1`. Le client HQ appelle la même route (`hq/src/donnees/transport-http.ts`).
 - **Rétention** : le fil d'une session fermée depuis 30 jours est purgé (`relais/registre/retention.ts`).
 
+Extinction automatique (25/11) : le nœud éteint lui-même ses sessions sdk en `attente` depuis le délai réglé
+(`relais/sessions/extinction-auto.ts`, réglage `PUT /api/machines/:id/extinction-auto` envoyé par Noctis, relayé au
+nœud qui porte la machine). Le poste refuse (`fermer` avec `siInactive`) tant qu'une tâche de fond tourne.
+
 ## Agent HQ (`hq/`)
 
 Agent HQ est l'app web façon jeu (Phaser 3 + Vite, interface React par-dessus) qui remplace Claude Desktop et l'appli

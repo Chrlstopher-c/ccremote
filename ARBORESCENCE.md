@@ -466,6 +466,8 @@ relais/clients/api-categories.ts                     les routes des catégories 
 relais/clients/api-comptes.test.ts                   tests des routes détail et réinitialisation des comptes
 relais/clients/api-comptes.ts                        les routes des comptes Claude Code d'une machine — connexion OAuth en…
 relais/clients/api-configuration.test.ts            tests des routes de configuration de machine
+relais/clients/api-extinction-auto.test.ts          tests de api-extinction-auto.ts
+relais/clients/api-extinction-auto.ts               routes GET/PUT /api/machines/:id/extinction-auto (réglage du nœud)
 relais/clients/api-configuration.ts                 routes de la configuration Claude d'une machine (styles, CLAUDE.md, compétences, connecteurs, plug-ins)
 relais/clients/api-session-config.test.ts           tests des routes de session (style, annexes) et de la création/suppression liées
 relais/clients/api-session-config.ts                routes du style, des connecteurs et des conversations annexes d'une session
@@ -544,6 +546,9 @@ relais/reunion/salle.test.ts                         tests de salle.ts
 relais/reunion/salle.ts                              salle du relais — crée ou poursuit, choisit les destinataires, relaie
 relais/sessions/composition-parc.test.ts             tests de composition-parc.ts
 relais/sessions/composition-parc.ts                  ce qu'une session a le droit de joindre depuis sa machine. Pur.
+relais/sessions/extinction-auto-reglage.ts          délai d'extinction automatique du nœud (table à part, null = jamais)
+relais/sessions/extinction-auto.test.ts             tests de extinction-auto.ts
+relais/sessions/extinction-auto.ts                  extinction des sessions sdk inactives par le nœud (règle pure + balayage à la minute)
 relais/sessions/inactivite.test.ts                   tests de inactivite.ts
 relais/sessions/inactivite.ts                        règle d'inactivité d'une session (pure) — tour fini et silence depuis le seuil
 relais/sessions/recalcul-inactivite.test.ts          tests de recalcul-inactivite.ts
