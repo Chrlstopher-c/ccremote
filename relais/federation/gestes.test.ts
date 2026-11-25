@@ -43,6 +43,15 @@ describe('reponseGeste', () => {
     });
   });
 
+  test('une page HTML garde son type (sinon l’appli d’en face la croit JSON et l’aperçu reste blanc)', async () => {
+    const page = '<!doctype html><h1>Carte</h1>';
+    const html = await reponseGeste(
+      new Response(page, { headers: { 'content-type': 'text/html; charset=utf-8' } }),
+      'fichiers/f1',
+    );
+    expect(html).toEqual({ statut: 200, corps: page, type: 'text/html; charset=utf-8' });
+  });
+
   test('un texte entier reste entier jusqu’au plus grand transfert ; au-delà, refus 413', async () => {
     const gros = JSON.stringify('x'.repeat(700_000));
     const entier = await reponseGeste(new Response(gros), 'contenu');

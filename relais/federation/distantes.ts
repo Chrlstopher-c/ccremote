@@ -468,7 +468,7 @@ function reponseDuPair(r: Extract<MessageChiffre, { t: 'geste_reponse' }>): Resp
       headers: { 'content-type': r.type ?? 'application/octet-stream' },
     });
   }
-  return new Response(r.corps, { status: r.statut, headers: { 'content-type': 'application/json' } });
+  return new Response(r.corps, { status: r.statut, headers: { 'content-type': r.type ?? 'application/json' } });
 }
 
 function reponseErreur(statut: number, texte: string): Response {

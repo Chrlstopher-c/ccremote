@@ -65,7 +65,7 @@ export const MIGRATIONS: readonly string[] = [
 export function ouvrirBase(chemin: string): Database {
   if (chemin !== ':memory:') mkdirSync(dirname(chemin), { recursive: true });
   const db = new Database(chemin, { create: true, strict: true });
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
   migrer(db);
   return db;
 }

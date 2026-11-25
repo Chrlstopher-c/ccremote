@@ -38,7 +38,7 @@ export const MIGRATIONS_ANNUAIRE: readonly string[] = [
 export function ouvrirAnnuaire(chemin: string): Database {
   if (chemin !== ':memory:') mkdirSync(dirname(chemin), { recursive: true });
   const db = new Database(chemin, { create: true, strict: true });
-  db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
   const version = db.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version ?? 0;
   for (let i = version; i < MIGRATIONS_ANNUAIRE.length; i++) {
     db.transaction(() => {

@@ -67,7 +67,10 @@ export interface CorpsGeste {
 export async function reponseGeste(reponse: Response, geste: string): Promise<CorpsGeste> {
   if (estBinaire(reponse)) return corpsBinaire(reponse);
   const texte = await reponse.text();
-  if (!tropGrandPourTransfert(texte)) return { statut: reponse.status, corps: texte };
+  // Une page (artefact HTML, Markdown) garde son type : sans lui, l'appli d'en face la croit JSON et l'aperçu reste blanc.
+  const type = reponse.headers.get('content-type');
+  const avecType = type !== null && !type.startsWith('application/json') ? { type } : {};
+  if (!tropGrandPourTransfert(texte)) return { statut: reponse.status, corps: texte, ...avecType };
   const reduit = geste === 'evenements' ? reduireListe(texte, TAILLE_MAX_TRANSFERT_CARACTERES) : null;
   if (reduit !== null) return { statut: reponse.status, corps: reduit };
   return refusTaille();
