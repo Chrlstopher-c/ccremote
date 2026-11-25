@@ -24,7 +24,7 @@ export type StockerImage = (image: ImageSdk, rang: number, origine: 'outil' | 'u
 const EPOQUE = new Date(0).toISOString();
 
 // Une ligne invalide (écriture en cours, corruption) est ignorée ; le reste du transcript reste lisible.
-function ligneDe(texte: string): Ligne | null {
+export function ligneDe(texte: string): Ligne | null {
   try {
     const v: unknown = JSON.parse(texte);
     return typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Ligne) : null;
