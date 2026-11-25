@@ -186,3 +186,12 @@ describe('jumelle Remote Control d’une session de poste', () => {
     expect(registre.session('cse_x')?.distant?.conversation).toBe('conv');
   });
 });
+
+describe('fin d’une tâche de fond', () => {
+  test('n’est pas un doublon de l’accusé de lancement du même appel (sinon la tâche restait en cours)', async () => {
+    const { cleDeDoublon } = await import('./fusion-historique.ts');
+    const accuse = { ts: 't', evt: { type: 'resultat_outil', outilId: 'a1', extrait: 'lancé', erreur: false } } as const;
+    const fin = { ts: 't', evt: { ...accuse.evt, extrait: 'fini', finDeFond: true } } as const;
+    expect(cleDeDoublon(fin)).not.toBe(cleDeDoublon(accuse));
+  });
+});

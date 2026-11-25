@@ -164,6 +164,7 @@ function resultatDeNotification(prompt: string): Evenement[] {
       outilId,
       extrait: champ('summary') || 'terminé',
       erreur: champ('status') !== 'completed',
+      finDeFond: true,
     },
   ];
 }

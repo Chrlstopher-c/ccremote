@@ -35,7 +35,8 @@ export function cleDeDoublon(e: EvenementHorodate): string {
     return `${evt.type}\u0000${evt.uuid}\u0000${evt.texte}`;
   }
   if (evt.type === 'outil' || evt.type === 'sous_agent') return `${evt.type}\u0000${evt.id}`;
-  if (evt.type === 'resultat_outil') return `resultat_outil\u0000${evt.outilId}`;
+  // La fin d'une tâche de fond suit l'accusé de lancement du même appel : clé à part, sinon elle était jetée (25/11).
+  if (evt.type === 'resultat_outil') return `resultat_outil\u0000${evt.outilId}${evt.finDeFond ? '\u0000fin' : ''}`;
   return cleEvenement(e);
 }
 

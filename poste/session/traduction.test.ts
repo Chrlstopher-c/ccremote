@@ -106,7 +106,7 @@ describe('traduction transcript → événements', () => {
       '<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>toolu_7</tool-use-id>\n<status>completed</status>\n' +
       '<summary>Agent "x" finished</summary>\n</task-notification>';
     expect(traduire({ type: 'attachment', attachment: { type: 'queued_command', prompt } })).toEqual([
-      { type: 'resultat_outil', outilId: 'toolu_7', extrait: 'Agent "x" finished', erreur: false },
+      { type: 'resultat_outil', outilId: 'toolu_7', extrait: 'Agent "x" finished', erreur: false, finDeFond: true },
     ]);
   });
 
@@ -120,6 +120,7 @@ describe('traduction transcript → événements', () => {
         outilId: 'toolu_9',
         extrait: 'Background command "CI" failed (exit code 1)',
         erreur: true,
+        finDeFond: true,
       },
     ]);
   });

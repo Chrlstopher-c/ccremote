@@ -243,6 +243,8 @@ export const Evenement = z.discriminatedUnion('type', [
     outilId: z.string(),
     extrait: z.string(),
     erreur: z.boolean(),
+    // Fin d'une tâche de fond (notification) : distincte de l'accusé de lancement du même appel, jamais un doublon.
+    finDeFond: z.boolean().optional(),
     ...deAgent,
   }),
   z.object({

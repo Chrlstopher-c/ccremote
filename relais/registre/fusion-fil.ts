@@ -54,15 +54,19 @@ function clesPresentes(db: Database, sessionId: string, lot: readonly EvenementH
   // Une recherche par index (base.ts) par champ, et seuls les champs de la clé : relire chaque événement entier
   // (résultats d'outil, images) coûtait 80 ms par lot sur une session de 16 000 événements (25/11).
   const champs = `seq, json_extract(evt, '$.type') AS type, json_extract(evt, '$.uuid') AS uuid,
-    json_extract(evt, '$.texte') AS texte, json_extract(evt, '$.id') AS id, json_extract(evt, '$.outilId') AS outil`;
+    json_extract(evt, '$.texte') AS texte, json_extract(evt, '$.id') AS id, json_extract(evt, '$.outilId') AS outil,
+    json_extract(evt, '$.finDeFond') AS fin`;
   // Les rangs d'abord, par les index de base.ts imposés : sans statistiques, SQLite préfère l'index de session et
   // parcourt tout le fil.
   const lignes = db
     .query(
       `SELECT ${champs} FROM evenements WHERE seq IN (
-         SELECT seq FROM evenements INDEXED BY evenements_uuid WHERE session_id = ? AND json_extract(evt, '$.uuid') IN (${marques(uuids.length)})
-         UNION SELECT seq FROM evenements INDEXED BY evenements_id WHERE session_id = ? AND json_extract(evt, '$.id') IN (${marques(ids.length)})
-         UNION SELECT seq FROM evenements INDEXED BY evenements_outil WHERE session_id = ? AND json_extract(evt, '$.outilId') IN (${marques(ids.length)}))`,
+         SELECT seq FROM evenements INDEXED BY evenements_uuid
+           WHERE session_id = ? AND json_extract(evt, '$.uuid') IN (${marques(uuids.length)})
+         UNION SELECT seq FROM evenements INDEXED BY evenements_id
+           WHERE session_id = ? AND json_extract(evt, '$.id') IN (${marques(ids.length)})
+         UNION SELECT seq FROM evenements INDEXED BY evenements_outil
+           WHERE session_id = ? AND json_extract(evt, '$.outilId') IN (${marques(ids.length)}))`,
     )
     .all(sessionId, ...uuids, sessionId, ...ids, sessionId, ...ids) as ChampsCle[];
   return new Set(lignes.map((l) => cleDesChamps(l) ?? cleParSeq(db, l.seq)));
@@ -75,6 +79,7 @@ interface ChampsCle {
   readonly texte: string | null;
   readonly id: string | null;
   readonly outil: string | null;
+  readonly fin: number | null;
 }
 
 // Même clé que cleDeDoublon (fusion-historique.ts), tirée des champs ; null quand il faut l'événement entier.
@@ -83,7 +88,9 @@ function cleDesChamps(l: ChampsCle): string | null {
     return l.texte === null ? null : `${l.type}\u0000${l.uuid}\u0000${l.texte}`;
   }
   if ((l.type === 'outil' || l.type === 'sous_agent') && l.id !== null) return `${l.type}\u0000${l.id}`;
-  if (l.type === 'resultat_outil' && l.outil !== null) return `resultat_outil\u0000${l.outil}`;
+  if (l.type === 'resultat_outil' && l.outil !== null) {
+    return `resultat_outil\u0000${l.outil}${l.fin ? '\u0000fin' : ''}`;
+  }
   return null;
 }
 

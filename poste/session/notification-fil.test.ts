@@ -12,7 +12,7 @@ const NOTIF = '<task-notification><tool-use-id>toolu_01ABC</tool-use-id><status>
 describe('transcript : notification de tâche', () => {
   test('ligne user à blocs texte : résultat de l’outil, aucune bulle', () => {
     const l: Ligne = { type: 'user', uuid: 'u1', message: { content: [{ type: 'text', text: NOTIF }] } };
-    expect(traduire(l)).toEqual([{ type: 'resultat_outil', outilId: 'toolu_01ABC', extrait: 'fini', erreur: false }]);
+    expect(traduire(l)).toEqual([{ type: 'resultat_outil', outilId: 'toolu_01ABC', extrait: 'fini', erreur: false, finDeFond: true }]);
   });
 
   test('ligne user texte seul : résultat de l’outil, aucune bulle', () => {

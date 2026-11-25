@@ -132,3 +132,17 @@ describe('Monitor : surveillance de fond', () => {
     expect(moniteur).toMatchObject({ statut: 'arretee', finLe: iso(debut + 30 * MINUTE) });
   });
 });
+
+describe('agent de fond dont le lancement est refusé', () => {
+  test('erreur immédiate : la tâche est close en échec, plus jamais « en cours » (25/11)', async () => {
+    const debut = Date.now() - 2 * MINUTE;
+    const lancement = outil('u-ag', 'Agent', { description: 'Fuite mémoire', prompt: 'x', run_in_background: true });
+    const refus = { ...resultatOutil('u-ag', 'Cannot create agent worktree: not in a git repository'), is_error: true };
+    const chemin = ecrire('agent-refuse.jsonl', [
+      assistant(iso(debut), [lancement]),
+      utilisateur(iso(debut + 100), [refus], 'Error: Cannot create agent worktree'),
+    ]);
+    const [tache] = await taches(chemin);
+    expect(tache?.statut).toBe('echouee');
+  });
+});

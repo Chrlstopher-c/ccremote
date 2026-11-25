@@ -2,7 +2,7 @@
 // arrière-plan (Agent, Bash), arrêts (TaskStop), et les chemins récents qui désignent le dépôt de travail.
 import type { AppelEnAttente, EtatTranscript, TacheVue } from './etat.ts';
 import { MAX_PROMPT } from '../../commun/parite.ts';
-import { arreterTache, lierIdentifiant, type NouvelleTache, ouvrirTache, reprendreTache } from './taches.ts';
+import { arreterTache, cloreTache, lierIdentifiant, type NouvelleTache, ouvrirTache, reprendreTache } from './taches.ts';
 import { blocs, estObjet, nombre, texte, type Objet } from './lignes.ts';
 
 const MAX_INDICES = 80;
@@ -63,6 +63,12 @@ export function appliquerResultatOutil(etat: EtatTranscript, bloc: Objet, result
   }
   const tache = etat.taches.get(id);
   if (!tache) return;
+  // Lancement refusé (ex. espace de travail isolé impossible) : aucune notification de fin ne viendra, la tâche
+  // restait « en cours » pour toujours (25/11).
+  if (bloc['is_error'] === true && !tache.premierPlan) {
+    cloreTache(tache, 'echouee', le, null);
+    return;
+  }
   if (tache.premierPlan && !finAuPremierPlan(etat, tache, detail)) return;
   const identifiant = texte(detail['agentId']) ?? texte(detail['backgroundTaskId']) ?? texte(detail['taskId']);
   if (identifiant !== null) lierIdentifiant(etat, tache, identifiant);
