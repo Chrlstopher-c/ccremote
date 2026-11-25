@@ -69,16 +69,53 @@ export const MIGRATIONS: readonly string[] = [
   // Toujours ajouter à la fin : l'ordre est la version de la base (PRAGMA user_version).
 ];
 
+/** Ligne lue par l'appli sur la sortie du moteur intégré : un travail long sur la base commence, attendre plus
+ *  longtemps que le délai de démarrage (une migration de 2 min sur le portable faisait abandonner le moteur, 25/11). */
+export const LIGNE_PATIENCE = 'LANTERNE-MOTEUR-PATIENCE';
+/** Au-delà de cette part de pages vides, la base est compactée une fois au démarrage. */
+const PART_VIDE_MAX = 0.5;
+const PAGES_VIDES_MIN = 25_000; // ~100 Mo en pages de 4 Kio : en dessous, le compactage ne vaut pas l'attente
+/** Pages rendues au disque à chaque passage du compactage continu (voir `compacterPeu`). */
+export const PAGES_PAR_PASSAGE = 2_000;
+
 export function ouvrirBase(chemin: string): Database {
   if (chemin !== ':memory:') mkdirSync(dirname(chemin), { recursive: true });
   const db = new Database(chemin, { create: true, strict: true });
+  // Une base neuve rend ses pages vides au fil de l'eau (`compacterPeu`) ; réglage pris avant la première table.
+  if (versionDe(db) === 0) db.exec('PRAGMA auto_vacuum = INCREMENTAL;');
   db.exec('PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;');
   migrer(db);
+  compacterSiVide(db);
   return db;
 }
 
+function versionDe(db: Database): number {
+  return (db.query('PRAGMA user_version').get() as { user_version: number }).user_version;
+}
+
+function annoncerPatience(raison: string): void {
+  process.stdout.write(`${LIGNE_PATIENCE} ${JSON.stringify({ raison })}\n`);
+}
+
+/** Base surtout vide (événements retirés jamais rendus : 385 Mo sur 532 au portable, 25/11) : un VACUUM, une fois,
+ *  qui passe aussi la base en compactage continu. */
+function compacterSiVide(db: Database): void {
+  const pages = (db.query('PRAGMA page_count').get() as { page_count: number }).page_count;
+  const vides = (db.query('PRAGMA freelist_count').get() as { freelist_count: number }).freelist_count;
+  const continu = (db.query('PRAGMA auto_vacuum').get() as { auto_vacuum: number }).auto_vacuum === 2;
+  if (continu || vides < PAGES_VIDES_MIN || vides / Math.max(pages, 1) < PART_VIDE_MAX) return;
+  annoncerPatience('compactage');
+  db.exec('PRAGMA auto_vacuum = INCREMENTAL; VACUUM;');
+}
+
+/** Rend au disque une petite part des pages vides (base en compactage continu) : à appeler de temps en temps. */
+export function compacterPeu(db: Database): void {
+  db.exec(`PRAGMA incremental_vacuum(${PAGES_PAR_PASSAGE});`);
+}
+
 function migrer(db: Database): void {
-  const { user_version: version } = db.query('PRAGMA user_version').get() as { user_version: number };
+  const version = versionDe(db);
+  if (version > 0 && version < MIGRATIONS.length) annoncerPatience('migration');
   for (let i = version; i < MIGRATIONS.length; i++) {
     db.transaction(() => {
       db.exec(MIGRATIONS[i] as string);

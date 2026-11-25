@@ -61,7 +61,7 @@ import { ApiParite } from './parite/api-parite.ts';
 import { ApiTaches } from './reste/api-taches.ts';
 import { ReseauxConnus } from './entretien/reseaux.ts';
 import { Reveil } from './entretien/reveil.ts';
-import { ouvrirBase } from './registre/base.ts';
+import { compacterPeu, ouvrirBase } from './registre/base.ts';
 import { sondesFonctions } from './federation/sondes-fonctions.ts';
 import { Registre } from './registre/registre.ts';
 import { lancerRetention } from './registre/retention.ts';
@@ -335,6 +335,14 @@ registre.surFusionComptes((c) => usage.appliquer(c));
 postes.surCompteLimite((_machine, cle, limite) => usage.recevoirLimite(cle, limite));
 void usage.tick();
 setInterval(() => void usage.tick(), 60_000);
+// Pages vides rendues au disque par petits morceaux (base en compactage continu, voir base.ts).
+setInterval(() => {
+  try {
+    compacterPeu(base);
+  } catch (erreur) {
+    journal.warn({ err: erreur }, 'compactage continu de la base en échec');
+  }
+}, 10 * 60_000);
 const comptes = new ApiComptes(postes, journal, usage);
 const fichiers = new ApiFichiers(postes, journal);
 const artefacts = new ApiArtefacts(registre, postes, journal);
