@@ -47,13 +47,19 @@ function suivant(
 // Les lignes hors de la conversation (titre, métadonnées) restent ; une entrée chaînée du fil principal n'est
 // gardée que si elle est sur la chaîne de la dernière. Sans uuid exploitable, rien n'est retiré.
 export function brancheActive(lignes: readonly Ligne[]): Ligne[] {
+  const gardees = indicesBrancheActive(lignes);
+  return gardees === null ? [...lignes] : lignes.filter((_, i) => gardees.has(i));
+}
+
+/** Rangs des lignes gardées par `brancheActive` ; `null` : toutes (aucune entrée chaînée exploitable). */
+export function indicesBrancheActive(lignes: readonly Ligne[]): Set<number> | null {
   const parUuid = new Map<string, number>();
   lignes.forEach((l, i) => {
     const uuid = texte(l.uuid);
     if (uuid && chainee(l)) parUuid.set(uuid, i);
   });
   const dernier = indiceDerniere(lignes);
-  if (dernier === undefined) return [...lignes];
+  if (dernier === undefined) return null;
   const actives = new Set<number>();
   let courant: number | undefined = dernier;
   while (courant !== undefined && !actives.has(courant)) {
@@ -61,7 +67,27 @@ export function brancheActive(lignes: readonly Ligne[]): Ligne[] {
     courant = suivant(lignes, courant, parUuid, actives);
   }
   const appels = new Set(appelsDe(lignes, actives));
-  return lignes.filter((l, i) => !chainee(l) || texte(l.uuid) === null || actives.has(i) || reponseA(l, appels));
+  const gardees = new Set<number>();
+  lignes.forEach((l, i) => {
+    if (!chainee(l) || texte(l.uuid) === null || actives.has(i) || reponseA(l, appels)) gardees.add(i);
+  });
+  return gardees;
+}
+
+/** Ce qu'il faut d'une ligne pour trouver la branche active : chaînage et identifiants d'outils, sans les contenus
+ *  (textes, images en base64) qui font le poids d'un transcript géant. */
+export function squelette(l: Ligne): Ligne {
+  const contenu = blocs(l.message?.content).map((b) => ({ type: b.type, id: b.id, tool_use_id: b.tool_use_id }));
+  return {
+    type: l.type,
+    isSidechain: l.isSidechain,
+    uuid: l.uuid,
+    parentUuid: l.parentUuid,
+    logicalParentUuid: l.logicalParentUuid,
+    subtype: l.subtype,
+    isCompactSummary: l.isCompactSummary,
+    message: { content: contenu },
+  };
 }
 
 // Un appel d'outil de la branche active garde sa réponse même si le CLI l'a écrite sur un embranchement voisin.

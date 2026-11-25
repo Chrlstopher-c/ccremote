@@ -3,14 +3,14 @@
 // traducteur garde son horodatage courant entre deux passages). Les images des blocs sont stockées par le poste
 // (`stockerImage`) ; sans lui, elles sont ignorées. Pur hors lecture.
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import type { Logger } from 'pino';
 import type { Evenement } from '../../commun/session.ts';
 import { TAILLE_MAX_FICHIER } from '../../commun/presentation.ts';
 import { type ImageSdk, imagesDeContenu, nomImage } from '../presentation/images.ts';
 import { cheminsImagesDuResultat, type LireImageChemin } from '../presentation/images-chemin.ts';
 import type { Stockage } from '../presentation/stockage.ts';
-import { brancheActive } from './branche.ts';
+import { brancheActive, indicesBrancheActive, squelette } from './branche.ts';
+import { lireLignes } from './lecture-lignes.ts';
 import { CompteTours } from './tours-transcript.ts';
 import { type Ligne, messageEnFile, traduire } from './traduction.ts';
 
@@ -110,7 +110,25 @@ export function lireHistorique(
   lireChemin?: LireImageChemin,
 ): EvenementHorodate[] {
   try {
-    return evenementsDuTranscript(readFileSync(chemin, 'utf8'), stockerImage, lireChemin);
+    // Deux passes par morceaux : la branche active d'après des squelettes de lignes, puis la traduction des seules
+    // lignes gardées. Lire tout le fichier d'un coup coûtait ~2,5 Go pour un transcript de 307 Mo (25/11/2026).
+    const squelettes: Ligne[] = [];
+    lireLignes(chemin, (texte) => {
+      const l = ligneDe(texte);
+      if (l !== null) squelettes.push(squelette(l));
+    });
+    const gardees = indicesBrancheActive(squelettes);
+    squelettes.length = 0;
+    const traducteur = new TraducteurHistorique(stockerImage, lireChemin);
+    const evenements: EvenementHorodate[] = [];
+    let rang = 0;
+    lireLignes(chemin, (texte) => {
+      const l = ligneDe(texte);
+      if (l === null) return;
+      if (gardees === null || gardees.has(rang)) evenements.push(...traducteur.evenements(l));
+      rang += 1;
+    });
+    return evenements;
   } catch (erreur) {
     journal.warn({ err: erreur, chemin }, 'historique du transcript illisible');
     return [];
