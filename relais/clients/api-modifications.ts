@@ -3,7 +3,7 @@
 // part vers le poste qui héberge la session, et un refus du poste part au client avec son message.
 import type { Logger } from 'pino';
 import { z } from 'zod';
-import { CheminModifie, PorteeModifications, TourRef } from '../../commun/modifications.ts';
+import { CheminModifie, estRefusDepot, PorteeModifications, TourRef } from '../../commun/modifications.ts';
 import type { Registre } from '../registre/registre.ts';
 import type { Postes } from '../parc/postes.ts';
 import { erreur, json, lireCorps, REFUS_POSTE } from './http.ts';
@@ -91,7 +91,7 @@ export class ApiModifications {
   private async envoyer(cible: Cible, commande: Commande): Promise<Response> {
     const r = await this.postes.commander(cible.machine, commande);
     if (!r.ok) {
-      this.journal.warn(
+      this.journal[estRefusDepot(r.erreur) ? 'debug' : 'warn'](
         { session: cible.session, commande: commande.kind, erreur: r.erreur },
         'geste sur les modifications refusé',
       );

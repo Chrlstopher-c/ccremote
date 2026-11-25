@@ -2,6 +2,7 @@
 // son dossier, fichiers touchés par tour), et tenir les tours des sessions SDK. Une erreur est journalisée et rendue au
 // relais comme un refus, jamais propagée.
 import type { Logger } from 'pino';
+import { estRefusDepot } from '../../commun/modifications.ts';
 import type { CommandeRelais } from '../../commun/protocole-poste.ts';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { SortieSession } from '../session/session-poste.ts';
@@ -88,8 +89,10 @@ export async function executerModifications(
   try {
     return estGit(c) ? await executerGit(c, ctx.cwd, ctx.journal) : await executerTour(c, ctx.tours);
   } catch (erreur) {
-    ctx.journal.warn({ err: erreur, session: c.sessionId, commande: c.kind }, 'geste sur les modifications refusé');
-    return { ok: false, erreur: erreur instanceof Error ? erreur.message : String(erreur) };
+    const message = erreur instanceof Error ? erreur.message : String(erreur);
+    const niveau = estRefusDepot(message) ? 'debug' : 'warn';
+    ctx.journal[niveau]({ err: erreur, session: c.sessionId, commande: c.kind }, 'geste sur les modifications refusé');
+    return { ok: false, erreur: message };
   }
 }
 

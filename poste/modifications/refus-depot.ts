@@ -1,8 +1,9 @@
 // Responsabilité : mémoire des refus de dépôt git (« hors dépôt git », « aucune branche de base ») par session et
 // dossier. Un dossier hors dépôt ne le devient pas à chaque mise à jour du fil : le refus est gardé quelques
 // minutes, puis redemandé à git.
+import { estRefusDepot } from '../../commun/modifications.ts';
+
 const DUREE_MS = 5 * 60_000;
-const MOTIF = /hors dépôt git|aucune branche de base/;
 
 interface Refus {
   readonly cwd: string;
@@ -28,7 +29,7 @@ export class RefusDepot {
 
   /** Retient un refus de dépôt ; toute autre erreur ou réussite efface le refus précédent de la session. */
   noter(sessionId: string, cwd: string, erreur: string | null): void {
-    if (erreur === null || !MOTIF.test(erreur)) {
+    if (erreur === null || !estRefusDepot(erreur)) {
       this.refus.delete(sessionId);
       return;
     }

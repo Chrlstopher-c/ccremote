@@ -56,3 +56,11 @@ export type Diff = z.infer<typeof Diff>;
 // Référence d'un tour : `dernier` (le dernier tour enregistré) ou son identifiant.
 export const TourRef = z.string().regex(/^(dernier|[A-Za-z0-9-]{1,100})$/);
 export const CheminModifie = z.string().min(1).max(1000);
+
+// Refus attendus du panneau Modifications (dossier hors dépôt git, dépôt sans branche de base) : un état, pas une panne.
+const MOTIF_REFUS_DEPOT = /hors dépôt git|aucune branche de base/;
+
+/** Vrai pour un refus qui dit seulement que le dossier n'a pas de dépôt git utilisable. */
+export function estRefusDepot(erreur: string | null | undefined): boolean {
+  return typeof erreur === 'string' && MOTIF_REFUS_DEPOT.test(erreur);
+}
