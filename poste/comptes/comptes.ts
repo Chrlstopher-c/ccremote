@@ -12,9 +12,11 @@ import { abandonnerConnexion, demarrerConnexion, validerConnexion } from './conn
 import { binaireClaude } from '../session/lanceur.ts';
 import { marquerAccueilFait } from '../session/confiance.ts';
 import { environnementCompte, releverCompte, releverUsage } from './releve.ts';
+import { connexionRefusee, oublierRefus } from './renouveler-jeton.ts';
 import { type Fourni, LecteurCompte } from './lecture-compte.ts';
 
 const PERIODE_RELEVE_MS = 5 * 60_000;
+const CONNEXION_EXPIREE = 'connexion expirée : Anthropic refuse de la renouveler, reconnectez ce compte';
 /** Dossier des comptes créés par Quart, lu à l'appel (CCREMOTE_DOSSIER_COMPTES l'emporte sur ~/.claude-comptes). */
 export function dossierComptes(): string {
   return process.env['CCREMOTE_DOSSIER_COMPTES'] || join(homedir(), '.claude-comptes');
@@ -62,7 +64,10 @@ export class Comptes {
   /** Relevé d'usage d'un compte, commandé par le relais (qui en gère la cadence). */
   async releverUsageCompte(nom: string): Promise<Reponse> {
     if (!Object.hasOwn(this.d.config.comptes, nom)) return this.inconnu(nom);
-    const donnees: DonneesReleve = await releverUsage(this.d.config.comptes[nom] ?? null);
+    const dossier = this.d.config.comptes[nom] ?? null;
+    const donnees: DonneesReleve = await releverUsage(dossier);
+    if (donnees.erreur === null) oublierRefus(dossier);
+    this.marquerSiRefuse(nom);
     return { ok: true, donnees };
   }
 
@@ -160,7 +165,16 @@ export class Comptes {
     const comptes = Object.entries(this.d.config.comptes);
     const etats = await Promise.all(comptes.map(([id, dir]) => releverCompte(id, dir, this.d.journal)));
     for (const e of etats) this.etats.set(e.id, e);
+    for (const [id] of comptes) this.marquerSiRefuse(id, false);
     this.publier();
+  }
+
+  /** Renouvellement refusé à répétition : le compte passe « Déconnecté » (Noctis propose « Se connecter »). */
+  private marquerSiRefuse(nom: string, publier = true): void {
+    const etat = this.etats.get(nom);
+    if (!etat?.connecte || !connexionRefusee(this.d.config.comptes[nom] ?? null)) return;
+    this.etats.set(nom, { ...etat, connecte: false, probleme: CONNEXION_EXPIREE });
+    if (publier) this.publier();
   }
 
   /** Une fenêtre lue dans le flux SDK d'une session du compte : transmise au relais (sans appel à l'API). */

@@ -10,6 +10,20 @@ export const ECART_TENTATIVES_MS = 30 * 60_000;
 const DELAI_MS = 60_000;
 const PREFIXES_RETIRES = ['ANTHROPIC_', 'CLAUDE_CODE_OAUTH'];
 const tentatives = new Map<string, number>();
+/** Refus consécutifs par compte : Claude Code a fini en erreur (connexion refusée), pas un délai ni une tentative sautée. */
+const refus = new Map<string, number>();
+/** À partir de deux refus d'affilée (30 min d'écart au moins), le compte est tenu pour déconnecté. */
+export const REFUS_DECONNEXION = 2;
+
+/** Vrai si les derniers renouvellements de ce compte ont été refusés : il faut le reconnecter. */
+export function connexionRefusee(configDir: string | null): boolean {
+  return (refus.get(configDir ?? 'defaut') ?? 0) >= REFUS_DECONNEXION;
+}
+
+/** Un relevé a réussi : le compte n'est plus tenu pour déconnecté. */
+export function oublierRefus(configDir: string | null): void {
+  refus.delete(configDir ?? 'defaut');
+}
 
 export interface Lanceur {
   (executable: string, configDir: string | null): { readonly fini: Promise<number>; arreter(): void };
@@ -60,5 +74,8 @@ export async function renouvelerJeton(
   const code = await Promise.race([p.fini.catch(() => -1), delai]);
   clearTimeout(minuterie);
   if (code === null) p.arreter();
+  const cle = configDir ?? 'defaut';
+  if (code === 0) refus.delete(cle);
+  else if (code !== null) refus.set(cle, (refus.get(cle) ?? 0) + 1);
   return code === 0;
 }

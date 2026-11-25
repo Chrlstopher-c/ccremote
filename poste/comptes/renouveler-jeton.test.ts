@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { ECART_TENTATIVES_MS, renouvelerJeton } from './renouveler-jeton.ts';
+import { connexionRefusee, ECART_TENTATIVES_MS, oublierRefus, renouvelerJeton } from './renouveler-jeton.ts';
 
 const reussi = () => ({ fini: Promise.resolve(0), arreter: () => undefined });
 
@@ -33,6 +33,28 @@ describe('renouvellement du jeton avant le relevé', () => {
   test('échec de Claude Code : faux', async () => {
     const echoue = () => ({ fini: Promise.resolve(1), arreter: () => undefined });
     expect(await renouvelerJeton('/cfg/d', '/bin/claude', echoue, 1_000)).toBe(false);
+  });
+});
+
+describe('connexion refusée à répétition', () => {
+  const echoue = () => ({ fini: Promise.resolve(1), arreter: () => undefined });
+  test('deux refus d’affilée : compte tenu pour déconnecté ; un succès l’efface', async () => {
+    await renouvelerJeton('/cfg/r', '/bin/claude', echoue, 1_000);
+    expect(connexionRefusee('/cfg/r')).toBe(false);
+    await renouvelerJeton('/cfg/r', '/bin/claude', echoue, 1_000 + ECART_TENTATIVES_MS);
+    expect(connexionRefusee('/cfg/r')).toBe(true);
+    await renouvelerJeton('/cfg/r', '/bin/claude', reussi, 1_000 + 2 * ECART_TENTATIVES_MS);
+    expect(connexionRefusee('/cfg/r')).toBe(false);
+  });
+
+  test('un délai dépassé ou une tentative sautée ne compte pas comme un refus ; un relevé réussi efface', async () => {
+    await renouvelerJeton('/cfg/s', '/bin/claude', echoue, 1_000);
+    await renouvelerJeton('/cfg/s', '/bin/claude', echoue, 2_000);
+    expect(connexionRefusee('/cfg/s')).toBe(false);
+    await renouvelerJeton('/cfg/s', '/bin/claude', echoue, 1_000 + ECART_TENTATIVES_MS);
+    expect(connexionRefusee('/cfg/s')).toBe(true);
+    oublierRefus('/cfg/s');
+    expect(connexionRefusee('/cfg/s')).toBe(false);
   });
 });
 

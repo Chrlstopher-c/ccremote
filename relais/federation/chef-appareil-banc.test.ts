@@ -134,6 +134,10 @@ function pause(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Deux nœuds réels, deux téléphones appairés puis synchronisés : ~4 s au calme, plus de 5 s (délai par défaut) sous
+// charge — d'où les échecs intermittents du 25/11/2026.
+const DELAI_DEUX_NOEUDS = 20_000;
+
 describe('téléphone chef, charte et ordres', () => {
   test('le téléphone chef signe une charte v+1 posée à B : B la relaie, A l’adopte', async () => {
     const m = await monterMonde();
@@ -151,7 +155,7 @@ describe('téléphone chef, charte et ordres', () => {
     expect(r.statut).toBe(200);
     await attendre(() => m.a.federation.charte.charte()?.version === base.version + 1);
     expect(m.a.federation.charte.charte()?.membres.find((x) => x.id === m.idB)?.droits.piloter).toBe(false);
-  });
+  }, DELAI_DEUX_NOEUDS);
 
   test('un téléphone non chef : 403, aucune version nouvelle chez B ni chez A', async () => {
     const m = await monterMonde();
@@ -168,7 +172,7 @@ describe('téléphone chef, charte et ordres', () => {
     await pause(300);
     expect(m.b.federation.charte.charte()?.version).toBe(base.version);
     expect(m.a.federation.charte.charte()?.version).toBe(base.version);
-  });
+  }, DELAI_DEUX_NOEUDS);
 
   test('un ordre pause signé par le chef, posé à B pour A : A en pause ; rejoué, refusé', async () => {
     const m = await monterMonde();
@@ -178,7 +182,7 @@ describe('téléphone chef, charte et ordres', () => {
     expect((await tel.appeler(canal, chemin, { methode: 'POST', corps })).statut).toBe(200);
     await attendre(() => m.a.federation.enPause());
     expect((await tel.appeler(canal, chemin, { methode: 'POST', corps })).statut).toBe(403);
-  });
+  }, DELAI_DEUX_NOEUDS);
 
   test('un ordre signé par un téléphone non chef : refusé, A reste actif', async () => {
     const m = await monterMonde();
@@ -190,5 +194,5 @@ describe('téléphone chef, charte et ordres', () => {
     await pause(300);
     expect(m.a.federation.enPause()).toBe(false);
     expect(chef.tel.membre).not.toBe(membre.tel.membre);
-  });
+  }, DELAI_DEUX_NOEUDS);
 });
