@@ -14,6 +14,8 @@ import type { ApiConfiguration } from './api-configuration.ts';
 import type { ApiComptes } from './api-comptes.ts';
 import { lireCategories, remplacerCategories } from './api-categories.ts';
 import { lireGroupesMasques, remplacerGroupesMasques } from './api-groupes-masques.ts';
+import { lireExtinctionAuto, remplacerExtinctionAuto } from './api-extinction-auto.ts';
+import type { ReglageExtinctionAuto } from '../sessions/extinction-auto-reglage.ts';
 import { type ApiFichiers, routesFichiers } from '../appareils/api-fichiers.ts';
 import type { Diffusion } from './diffusion.ts';
 import type { LienEcho } from '../echo/lien-echo.ts';
@@ -86,6 +88,8 @@ export interface DependancesApi {
   readonly ajoutNoeud: AjoutNoeud;
   readonly synchro: ServiceSynchro;
   readonly voix: ApiVoix;
+  /** Le délai d'extinction automatique du nœud (relais/sessions) : lu et remplacé par les routes machine. */
+  readonly extinctionAuto: ReglageExtinctionAuto;
 }
 
 type Gestionnaire = (req: Request & { params: Record<string, string> }) => Response | Promise<Response>;
@@ -226,6 +230,10 @@ function tableRoutes(d: DependancesApi, protege: (g: Gestionnaire) => Gestionnai
     },
     '/api/notifications/lues': { POST: protege((req) => marquerLues(d, req)) },
     '/api/voix': { POST: protege((req) => d.voix.synthese(req)) },
+    '/api/machines/:id/extinction-auto': {
+      GET: protege(() => lireExtinctionAuto(d.extinctionAuto)),
+      PUT: protege((req) => remplacerExtinctionAuto(d.extinctionAuto, req)),
+    },
     '/api/machines/:id/eteindre': { POST: protege((req) => machine(d, req.params['id'] ?? '', 'eteindre')) },
     '/api/machines/:id/projets': { GET: protege((req) => machine(d, req.params['id'] ?? '', 'projets')) },
     '/api/machines/:id/comptes': { POST: protege((req) => d.comptes.connecter(req as never)) },

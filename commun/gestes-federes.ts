@@ -46,6 +46,7 @@ const MOTIFS_MACHINE: readonly RegExp[] = [
   new RegExp(`^comptes/${SEGMENT}/detail$`), // détail d'un compte relevé ailleurs (Utilisation, limites)
   /^(voix|dictee)$/,
   new RegExp(`^(connecteurs|plugins)(/${SEGMENT_NOM})?$`),
+  /^extinction-auto$/, // délai d'extinction automatique (relais/clients/api-extinction-auto.ts)
 ];
 
 /** Vrai si la route `suffixe` (après `/api/sessions/:id/` ou `/api/machines/:id/`) peut traverser le lien. */

@@ -27,6 +27,8 @@ import { ApiComptes } from './clients/api-comptes.ts';
 import { ReleveUsage } from './usage/releves-usage.ts';
 import { ApiSessions } from './clients/api-sessions.ts';
 import { ApiSessionConfig } from './clients/api-session-config.ts';
+import { ReglageExtinctionAuto } from './sessions/extinction-auto-reglage.ts';
+import { lancerExtinctionAuto } from './sessions/extinction-auto.ts';
 import { ApiConfiguration } from './clients/api-configuration.ts';
 import { routesHq } from './clients/hq.ts';
 import { indexSpa, servirStatique } from './clients/statique.ts';
@@ -335,6 +337,13 @@ registre.surFusionComptes((c) => usage.appliquer(c));
 postes.surCompteLimite((_machine, cle, limite) => usage.recevoirLimite(cle, limite));
 void usage.tick();
 setInterval(() => void usage.tick(), 60_000);
+const extinctionAuto = new ReglageExtinctionAuto(base);
+lancerExtinctionAuto({
+  reglage: extinctionAuto,
+  registre,
+  postes,
+  journal: journal.child({ domaine: 'sessions' }),
+});
 // Pages vides rendues au disque par petits morceaux (base en compactage continu, voir base.ts).
 setInterval(() => {
   try {
@@ -384,6 +393,7 @@ const invitesApi = new ApiInvites({
   codes: codesReseau,
 });
 const dependancesApi: DependancesApi = {
+  extinctionAuto,
   invites: invitesApi,
   acces,
   registre,

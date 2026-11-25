@@ -57,6 +57,11 @@ describe('estGesteRelayable', () => {
     expect(estGesteRelayable('machine', 'outils/toolu_01abc/fond')).toBe(false);
   });
 
+  test('délai d’extinction automatique (machine) : relayé à son nœud, en GET et PUT', () => {
+    expect(estGesteRelayable('machine', 'extinction-auto')).toBe(true);
+    expect(estGesteRelayable('machine', 'extinction-auto/x')).toBe(false);
+  });
+
   test('méthodes transportées : GET, POST, PUT', () => {
     expect(['GET', 'POST', 'PUT'].every(estMethodeRelayable)).toBe(true);
     expect(estMethodeRelayable('DELETE')).toBe(false);
