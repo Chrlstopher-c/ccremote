@@ -153,6 +153,7 @@ function presentationDe(env: EnvironnementSdk, p: SessionPersistee, n: () => Noy
     lireChemin: lecteurImagesChemin(racinesImagesDe(p), env.journal),
     emettre: (evt) => emettre(n(), evt),
     renommer: (titre) => renommerSession(n(), titre),
+    notifier: (message, titre) => maj(n(), { notification: { message, titre, le: new Date().toISOString() } }),
     journal: env.journal,
     ...(pres.api ? { api: pres.api } : {}),
     ...(pres.relais ? { relais: pres.relais } : {}),

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { ModeFichier } from '../../commun/presentation.ts';
 import { DonneesModule, REGEX_ID_MODULE } from '../../commun/modules.ts';
 import { afficherWidget } from './widget.ts';
+import { notifier } from './notifier.ts';
 import { envoyerFichier, publierArtefact } from './envoi.ts';
 import type { ContexteOutils, Resultat } from './outils.ts';
 import * as machines from './machines-outils.ts';
@@ -32,6 +33,12 @@ const DESCRIPTION_ARTEFACT =
   'rapport interactif). Donner soit `chemin` (un fichier .html), soit `contenu` (le HTML complet). Pour mettre à jour ' +
   'une page déjà publiée, passer son `id` renvoyé par l’appel précédent : une nouvelle version est ajoutée. Pour un ' +
   'simple fichier, utiliser envoyer_fichier ; pour un petit schéma, afficher_widget.';
+
+const DESCRIPTION_NOTIFIER =
+  'Notifier l’utilisateur par une courte alerte quand c’est vraiment utile (il fait autre chose et doit le savoir) : ' +
+  'avant une action qui le dérange (« Noctis se réinstalle dans 5 s »), un résultat attendu, un blocage qui demande ' +
+  'sa réponse. Elle sort de la ligne de la session dans Noctis, et en notification système s’il n’y est pas. ' +
+  'Message court (200 caractères), titre facultatif. Jamais pour un simple compte rendu.';
 
 const DESCRIPTION_WIDGET =
   'Afficher un petit visuel en place dans le fil : un SVG (schéma, icône, graphique simple) ou un fragment HTML court ' +
@@ -273,6 +280,12 @@ export function serveurPresentation(c: ContexteOutils): McpSdkServerConfigWithIn
         DESCRIPTION_WIDGET,
         { titre: z.string().min(1).max(120), code: z.string().min(1), type: z.enum(['svg', 'html']) },
         async (args) => enResultat(afficherWidget(c, args)),
+      ),
+      tool(
+        'notifier',
+        DESCRIPTION_NOTIFIER,
+        { message: z.string().min(1).max(200), titre: z.string().max(60).optional() },
+        async (args) => enResultat(notifier(c, args)),
       ),
       ...outilsMachines(c),
       ...outilsReseau(c),

@@ -129,6 +129,12 @@ export const ResumeSession = z.object({
   modeleLe: z.string().nullable().optional(),
   // Version de Claude Code qui écrit la conversation, lue dans le transcript (Desktop, terminal ou harnais de Noctis).
   versionClaude: z.string().nullable().optional(),
+  // Dernière notification envoyée à Chris par l'agent (outil `notifier`) : Noctis l'affiche au bord de la liste et en
+  // notification système si la fenêtre n'est pas au premier plan. `le` distingue deux envois du même texte.
+  notification: z
+    .object({ message: z.string(), titre: z.string().nullable(), le: z.string() })
+    .nullable()
+    .optional(),
   compte: z.string(),
   autonomie: z.boolean(),
   statut: StatutSession,

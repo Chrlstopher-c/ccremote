@@ -17,6 +17,8 @@ export interface ContexteOutils {
   readonly emettre: (evt: Evenement) => void;
   // Renomme la conversation (absent : outil non exposé).
   readonly renommer?: (titre: string) => void;
+  // Notifie Chris depuis la session (absent : outil `notifier` refusé).
+  readonly notifier?: (message: string, titre: string | null) => void;
   readonly journal: Logger;
   // Relais pour les outils de machines (absent : pas d'outils `machines`).
   readonly api?: { readonly url: string; readonly jeton: string };
