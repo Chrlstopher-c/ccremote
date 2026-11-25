@@ -9,7 +9,7 @@ import { OUTILS_INVITE_INTERDITS, OUTILS_TERMINAL } from '../../commun/invites-o
 import { terminalPermis } from './confinement-invite.ts';
 import { BLOC_PRESENTATION } from './consignes.ts';
 import { lireJetonFichier } from '../comptes/lecture-compte.ts';
-import { envSdk } from './options-sdk.ts';
+import { envSdk, lancementClaude } from './options-sdk.ts';
 
 export type { CadreInvite };
 
@@ -146,7 +146,7 @@ export function optionsInvite(p: ParametresInvite): Options {
     canUseTool: p.canUseTool,
     ...(p.effort ? { effort: p.effort } : {}),
     ...(p.modele ? { model: p.modele } : {}),
-    ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),
+    ...lancementClaude(p.executable),
   };
 }
 

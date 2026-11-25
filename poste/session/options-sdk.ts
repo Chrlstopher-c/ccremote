@@ -112,9 +112,19 @@ export function optionsSdk(p: ParametresSdk): Options {
     },
     ...(p.modele ? { model: p.modele } : {}),
     ...(p.hooks ? { hooks: p.hooks } : {}),
-    ...(p.executable ? { pathToClaudeCodeExecutable: p.executable } : {}),
+    ...lancementClaude(p.executable),
     ...(calque ? { settings: calque } : {}),
     ...(p.bacASable && p.bacASable !== 'non' ? { sandbox: sandboxDe(p.bacASable) } : {}),
     ...(p.interdits?.length ? { disallowedTools: [...p.interdits] } : {}),
   };
+}
+
+/**
+ * Le Claude Code installé (souvent plus ancien que celui du SDK) ne lit les serveurs MCP que sur sa ligne de commande :
+ * `argv` explicite (avertissement de dépréciation du SDK à chaque démarrage sinon). Binaire du SDK : rien à régler.
+ */
+export function lancementClaude(
+  executable: string | null,
+): { pathToClaudeCodeExecutable?: string; mcpServersDelivery?: 'argv' } {
+  return executable ? { pathToClaudeCodeExecutable: executable, mcpServersDelivery: 'argv' } : {};
 }
