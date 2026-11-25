@@ -167,3 +167,11 @@ describe('Ultracode', () => {
     expect(lireReglagesAppliques({ applied: { ultracode: 'oui' } })).toEqual({});
   });
 });
+
+describe('version du harnais au démarrage', () => {
+  test('lue dans system/init, ignorée ailleurs', async () => {
+    const { versionDeInit } = await import('./modes-sdk.ts');
+    expect(versionDeInit({ type: 'system', subtype: 'init', claude_code_version: '2.1.332' })).toBe('2.1.332');
+    expect(versionDeInit({ type: 'assistant', claude_code_version: '2.1.332' })).toBeNull();
+  });
+});

@@ -2,7 +2,7 @@
 // modèle réel, identifiant SDK, mode, limites de quota, fin de tour ; et le titre généré relu dans le transcript.
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { nomLisibleModele } from './modele-affiche.ts';
-import { etatRapideLu, modeDeInit, rapideLu } from './modes-sdk.ts';
+import { etatRapideLu, modeDeInit, versionDeInit, rapideLu } from './modes-sdk.ts';
 import { cheminTranscript } from './transcript.ts';
 import { titreGenereDuTranscript } from './titre-transcript.ts';
 import type { EtatTraduction } from './traduction-sdk.ts';
@@ -30,6 +30,8 @@ export function traiter(n: NoyauSdk, msg: SDKMessage, etatTraduction: EtatTraduc
   }
   const mode = modeDeInit(msg);
   if (mode && mode !== n.etat.mode) maj(n, { mode }); // la fiche dit le mode réel, pas « inconnu »
+  const versionClaude = versionDeInit(msg);
+  if (versionClaude && versionClaude !== n.etat.versionClaude) maj(n, { versionClaude });
   if (sortie.compaction) maj(n, { statut: 'compaction' });
   // Compaction automatique en plein tour : le CLI reprend seul ; à la réponse du modèle, la session repasse à travail.
   else if (msg.type === 'assistant' && msg.parent_tool_use_id === null && n.etat.statut === 'compaction')

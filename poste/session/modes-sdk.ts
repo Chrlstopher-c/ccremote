@@ -112,6 +112,14 @@ export function lireReglagesAppliques(retour: unknown): ReglagesAppliques | null
 
 const MODES_INIT: ReadonlySet<string> = new Set(['bypassPermissions', 'default', 'acceptEdits', 'plan', 'auto']);
 
+/** Version de Claude Code annoncée par le message `system/init` du SDK (le harnais de la session) ; null sinon. */
+export function versionDeInit(msg: unknown): string | null {
+  if (typeof msg !== 'object' || msg === null) return null;
+  const m = msg as { type?: unknown; subtype?: unknown; claude_code_version?: unknown }; // trois champs lus
+  if (m.type !== 'system' || m.subtype !== 'init') return null;
+  return typeof m.claude_code_version === 'string' && m.claude_code_version !== '' ? m.claude_code_version : null;
+}
+
 /** Mode de permission réel annoncé par le message `system/init` du SDK ; null pour tout autre message. */
 export function modeDeInit(msg: unknown): ModeSession | null {
   if (typeof msg !== 'object' || msg === null) return null;

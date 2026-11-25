@@ -242,3 +242,15 @@ describe('modèle réel : le plus récent du transcript et de la fiche Desktop',
     }
   });
 });
+
+describe('version de Claude Code relue dans le transcript', () => {
+  test('la dernière ligne datée donne la version', () => {
+    const dossier = mkdtempSync(join(tmpdir(), 'version-'));
+    const chemin = join(dossier, 't.jsonl');
+    const ligne = (v: string): string =>
+      JSON.stringify({ type: 'user', timestamp: '2026-11-25T05:00:00Z', version: v, message: { role: 'user', content: 'x' } });
+    writeFileSync(chemin, `${ligne('2.1.325')}\n${ligne('2.1.332')}\n`);
+    expect(etatDuTranscript(chemin, pino({ enabled: false }))?.versionClaude).toBe('2.1.332');
+    rmSync(dossier, { recursive: true });
+  });
+});

@@ -44,6 +44,7 @@ export function recalerFiche(fiche: ResumeSession, sources: SourcesFiche): Resum
     ...(modele && modele.modele !== fiche.modele ? { modeleNom: nomLisibleModele(modele.modele) } : {}),
     contexte,
     ...(mode ? { mode } : {}),
+    ...(etat?.versionClaude ? { versionClaude: etat.versionClaude } : {}),
     ...(desktop?.archivee ? { archivee: true } : {}),
   };
 }

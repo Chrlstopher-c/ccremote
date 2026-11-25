@@ -127,6 +127,8 @@ export const ResumeSession = z.object({
   modeleNom: z.string().nullable().optional(), // nom affiché par le SDK pour ce modèle (absent : Lanterne le dérive)
   // instant (ISO) où ce modèle a été vu ; le plus récent gagne entre les fiches d'une conversation
   modeleLe: z.string().nullable().optional(),
+  // Version de Claude Code qui écrit la conversation, lue dans le transcript (Desktop, terminal ou harnais de Noctis).
+  versionClaude: z.string().nullable().optional(),
   compte: z.string(),
   autonomie: z.boolean(),
   statut: StatutSession,

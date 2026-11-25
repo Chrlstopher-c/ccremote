@@ -13,6 +13,7 @@ export interface EtatTranscript {
   readonly majLe: string | null;
   readonly modele: string | null;
   readonly modeleLe: string | null; // horodatage du message assistant qui porte ce modèle
+  readonly versionClaude?: string | null; // version de Claude Code qui a écrit la dernière ligne datée
   readonly mode: ModeSession | null;
   readonly contexte: number | null;
   readonly travailDernier: boolean | null; // dernier signal du tour : true (en cours), false (fini), null (inconnu)
@@ -50,6 +51,7 @@ interface Indices {
   majLe: string | null;
   modele: string | null;
   modeleLe: string | null;
+  versionClaude: string | null;
   mode: ModeSession | null;
   contexte: number | null;
   travail: boolean | null;
@@ -61,6 +63,9 @@ function prendre(ligne: string, i: Indices): boolean {
   const objet = parser(ligne);
   if (!objet) return complet(i);
   if (i.majLe === null && typeof objet['timestamp'] === 'string') i.majLe = objet['timestamp'];
+  if (i.versionClaude === null && typeof objet['version'] === 'string' && objet['version'] !== '') {
+    i.versionClaude = objet['version'];
+  }
   const message = enObjet(objet['message']);
   if (message && objet['type'] === 'assistant') {
     const modele = message['model'];
@@ -88,7 +93,16 @@ function complet(i: Indices): boolean {
 }
 
 function vide(): Indices {
-  return { majLe: null, modele: null, modeleLe: null, mode: null, contexte: null, travail: null, travailVu: false };
+  return {
+    majLe: null,
+    modele: null,
+    modeleLe: null,
+    versionClaude: null,
+    mode: null,
+    contexte: null,
+    travail: null,
+    travailVu: false,
+  };
 }
 
 function absent(erreur: unknown): boolean {
@@ -113,6 +127,7 @@ export function etatDuTranscript(chemin: string, journal: Logger): EtatTranscrip
       majLe: i.majLe,
       modele: i.modele,
       modeleLe: i.modeleLe,
+      ...(i.versionClaude ? { versionClaude: i.versionClaude } : {}),
       mode: i.mode,
       contexte: i.contexte,
       travailDernier: i.travail,
