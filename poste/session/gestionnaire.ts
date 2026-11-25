@@ -350,7 +350,9 @@ export class GestionnaireSessions {
       return { ok: false, erreur: 'session ouverte dans un terminal : la fermer avant de la supprimer' };
     }
     try {
-      for (const chemin of transcriptsDeLaSession(id, this.configDirs())) supprimerTranscript(chemin, id, this.journal);
+      // Session d'invité : son transcript vit aussi dans la configuration dédiée du cadre.
+      const dossiers = [...new Set([...this.configDirs(), s.persistee.configDir ?? null])];
+      for (const chemin of transcriptsDeLaSession(id, dossiers)) supprimerTranscript(chemin, id, this.journal);
       this.supprimees.ajouter(id);
     } catch (erreur) {
       this.journal.error({ err: erreur, session: id }, 'suppression impossible');
