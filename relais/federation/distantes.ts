@@ -244,7 +244,7 @@ export class Distantes {
     );
     if (!reponse || reponse.t !== 'geste_reponse') return reponseErreur(504, 'la machine n’a pas répondu à temps');
     if (g.geste === 'ouvrir' && reponse.statut < 300) this.connaitreOuverte(membre, reponse.corps);
-    return reponseDuPair(reponse);
+    return reponseDuPair(reponse, g.geste);
   }
 
   // L'appli règle la session neuve (effort, modèle…) dès la réponse : elle doit déjà être routée vers le nœud.
@@ -461,14 +461,24 @@ function machineDe(corps: string): string | null {
 }
 
 /** La réponse du pair rendue à l'appli : texte (JSON) tel quel, binaire (fichier) décodé de son base64. */
-function reponseDuPair(r: Extract<MessageChiffre, { t: 'geste_reponse' }>): Response {
+// Un pair d'avant le 25/11 ne transmet pas le type d'un texte : une page présentée est reconnue à son début.
+export function typeDevine(geste: string, corps: string): string {
+  if (!geste.startsWith('fichiers/')) return 'application/json';
+  const debut = corps.trimStart().slice(0, 15).toLowerCase();
+  if (debut.startsWith('<!doctype html') || debut.startsWith('<html')) return 'text/html; charset=utf-8';
+  if (debut.startsWith('{') || debut.startsWith('[')) return 'application/json';
+  return 'text/plain; charset=utf-8';
+}
+
+function reponseDuPair(r: Extract<MessageChiffre, { t: 'geste_reponse' }>, geste: string): Response {
   if (r.codage === 'base64') {
     return new Response(Buffer.from(r.corps, 'base64'), {
       status: r.statut,
       headers: { 'content-type': r.type ?? 'application/octet-stream' },
     });
   }
-  return new Response(r.corps, { status: r.statut, headers: { 'content-type': r.type ?? 'application/json' } });
+  const type = r.type ?? (r.statut < 300 ? typeDevine(geste, r.corps) : 'application/json');
+  return new Response(r.corps, { status: r.statut, headers: { 'content-type': type } });
 }
 
 function reponseErreur(statut: number, texte: string): Response {

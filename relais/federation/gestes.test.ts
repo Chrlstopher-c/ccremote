@@ -1,6 +1,7 @@
 // Forme des gestes relayés : lecture de la route (session, machine, nœud) et réponse réduite (texte, binaire).
 import { describe, expect, test } from 'bun:test';
 import { TAILLE_MAX_TRANSFERT_CARACTERES } from '../../commun/federation.ts';
+import { typeDevine } from './distantes.ts';
 import { lireRoute, reponseGeste } from './gestes.ts';
 
 describe('lireRoute', () => {
@@ -66,5 +67,14 @@ describe('reponseGeste', () => {
     expect(reduite.statut).toBe(200);
     expect(reduite.corps.length).toBeLessThanOrEqual(TAILLE_MAX_TRANSFERT_CARACTERES);
     expect(JSON.parse(reduite.corps).at(-1).i).toBe(89_999);
+  });
+});
+
+describe('typeDevine (pair sans type)', () => {
+  test('une page présentée est reconnue ; le reste garde le JSON', () => {
+    expect(typeDevine('fichiers/f1', '  <!DOCTYPE html><p>x</p>')).toBe('text/html; charset=utf-8');
+    expect(typeDevine('fichiers/f1', '# Titre')).toBe('text/plain; charset=utf-8');
+    expect(typeDevine('fichiers/f1', '{"a":1}')).toBe('application/json');
+    expect(typeDevine('fil', '<!doctype html>')).toBe('application/json');
   });
 });
