@@ -24,7 +24,8 @@ export type ReglageMode = Extract<Reglage, { kind: 'rapide' | 'ultracode' }>;
 
 // Ce que la requête vivante accepte en cours de route (le SDK les expose sur son objet `Query`).
 export interface RequeteReglable {
-  setPermissionMode(mode: PermissionMode): Promise<void>;
+  // Le SDK 0.3.332 rend la réponse de contrôle ; seule la fin de l'appel compte ici.
+  setPermissionMode(mode: PermissionMode): Promise<unknown>;
   setModel(model?: string): Promise<void>;
   applyFlagSettings(settings: {
     readonly effortLevel?: EffortLevel | null;
@@ -32,7 +33,7 @@ export interface RequeteReglable {
     readonly fastMode?: boolean;
     readonly ultracode?: boolean;
   }): Promise<void>;
-  // get_settings : présent à l'exécution, absent des types publics du SDK 0.3.325.
+  // get_settings : présent à l'exécution, absent des types publics du SDK (0.3.325 à 0.3.332).
   getSettings?(): Promise<unknown>;
 }
 
@@ -46,7 +47,10 @@ export interface RequeteModes extends RequeteReglable {
 }
 
 export async function appliquerReglage(requete: RequeteReglable, r: Reglage, ultracode: boolean): Promise<void> {
-  if (r.kind === 'mode') return requete.setPermissionMode(r.mode);
+  if (r.kind === 'mode') {
+    await requete.setPermissionMode(r.mode);
+    return undefined;
+  }
   if (r.kind === 'modele') return requete.setModel(r.modele === MODELE_PAR_DEFAUT ? undefined : r.modele);
   if (r.kind === 'effort') return requete.applyFlagSettings(reglageEffort(r.effort, ultracode));
   if (r.kind === 'style') return requete.applyFlagSettings({ outputStyle: r.style });

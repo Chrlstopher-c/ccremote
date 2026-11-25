@@ -55,6 +55,9 @@ function fiche(id: string, machine: string, surcharges: Record<string, unknown> 
 
 function ecrireSource(chemin: string): void {
   const db = ouvrirBase(chemin);
+  // Base source ancienne : sans les index sur le JSON des fiches (migration 18), qui refusent une fiche illisible ;
+  // elle peut donc en contenir une (s-brisee), que la migration doit écarter.
+  db.exec('DROP INDEX sessions_conversation; DROP INDEX sessions_distant;');
   const sessions = db.query(
     'INSERT INTO sessions (id, machine, resume, maj_le, archivee, epinglee, non_lue)' +
       ' VALUES ($id, $m, $r, $maj, $a, $e, $n)',
