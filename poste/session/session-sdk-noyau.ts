@@ -1,6 +1,7 @@
 // Responsabilité : l'état partagé d'une session SDK (fiche, requête vivante, file de messages, bilan du tour, drapeaux)
 // et ses primitives — émission vers le fil, mise à jour de la fiche, file de messages, clôture de la requête. Les
 // modules session-sdk-*.ts y travaillent sans le posséder ; session-sdk.ts en est la façade.
+import type { EvenementHorodate } from './historique.ts';
 import { query as requeteParDefaut, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Evenement, ResumeSession } from '../../commun/session.ts';
 import type { PiecesPreparees } from '../presentation/pieces.ts';
@@ -119,13 +120,34 @@ export function controlesARetablir(persistees: readonly { resume: ResumeSession 
     .map((p) => p.resume.id);
 }
 
+/** Session suivie hors d'ici (Desktop, terminal) : sa fiche suit ce que le transcript vient d'écrire — dernière
+ *  activité et contexte de la dernière fin de tour. Sans cela elle ne bougeait qu'au démarrage du poste (25/11). */
+export function champsSuivis(
+  contexte: ResumeSession['contexte'],
+  evenements: readonly EvenementHorodate[],
+): Partial<ResumeSession> {
+  const dernier = evenements.at(-1);
+  if (!dernier) return {};
+  const fin = [...evenements].reverse().find((e) => e.evt.type === 'tour_fini');
+  const tokens = fin?.evt.type === 'tour_fini' && fin.evt.contexte > 0 ? fin.evt.contexte : null;
+  return { majLe: dernier.ts, ...(tokens !== null ? { contexte: { ...contexte, tokens } } : {}) };
+}
+
+function ficheSuivie(n: NoyauSdk, evenements: readonly EvenementHorodate[]): void {
+  const champs = champsSuivis(n.etat.contexte, evenements);
+  if (champs.majLe && champs.majLe > n.etat.majLe) maj(n, champs);
+}
+
 // Les accesseurs `() => n` sont lus plus tard, au moment des événements : l'objet n'existe pas encore à la
 // construction.
 function suiviDe(env: EnvironnementSdk, p: SessionPersistee, n: () => NoyauSdk): SuiviTranscript {
   const stockage = env.presentation?.stockage;
   return new SuiviTranscript({
     journal: env.journal,
-    emettre: (evenements, direct) => env.sortie.historique?.(n().etat.id, evenements, direct),
+    emettre: (evenements, direct) => {
+      env.sortie.historique?.(n().etat.id, evenements, direct);
+      ficheSuivie(n(), evenements); // relecture comprise : seule une activité plus récente que la fiche la change
+    },
     ...(env.relectureRecenteMs !== undefined ? { recentMs: env.relectureRecenteMs } : {}),
     ...(stockage
       ? {
