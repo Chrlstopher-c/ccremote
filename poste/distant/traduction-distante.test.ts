@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { nouvelEtatTraduction } from '../session/traduction-sdk.ts';
 import type { Evenement } from '../../commun/session.ts';
-import { type PieceBrute, type StockeurPieces, traduireLot } from './traduction-distante.ts';
+import { estAffichable, type PieceBrute, type StockeurPieces, traduireLot } from './traduction-distante.ts';
 import type { EvenementBrut } from './donnees.ts';
 
 const brute = (payload: unknown): EvenementBrut => ({ id: crypto.randomUUID(), payload, creeLe: '2026-11-20T00:00:00Z' });
@@ -159,5 +159,24 @@ describe('tour de Claude venu de claude.ai', () => {
       { ...(humain('consigne du sous-agent') as object), parent_tool_use_id: 'toolu_a', origin: undefined },
     ]);
     expect(sortie).toEqual([expect.objectContaining({ type: 'outil', agent: 'toolu_a' })]);
+  });
+});
+
+describe('interruption et événements affichables', () => {
+  test('« [Request interrupted by user] » n’est pas une bulle de Chris, ni sa variante « … for tool use »', () => {
+    expect(evts([humain('[Request interrupted by user]')])).toEqual([]);
+    expect(evts([humain('[Request interrupted by user for tool use]')])).toEqual([]);
+  });
+
+  test('une demande de Chris qui parle de l’interruption reste une bulle', () => {
+    expect(evts([humain('pourquoi [Request interrupted by user] ?')])).toEqual([
+      { type: 'message', texte: 'pourquoi [Request interrupted by user] ?', uuid: 'u1' },
+    ]);
+  });
+
+  test('estAffichable : un message système ne compte pas, un message de Chris compte', () => {
+    expect(estAffichable(brute({ type: 'system', subtype: 'init' }))).toBe(false);
+    expect(estAffichable(brute(humain('salut')))).toBe(true);
+    expect(estAffichable(brute({ pas: 'un message' }))).toBe(false);
   });
 });

@@ -181,6 +181,11 @@ function resultatDeNotification(prompt: string): Evenement[] {
 // Marque écrite par Claude Code dans le transcript après un arrêt (Échap) : pas un message de l'utilisateur.
 const MARQUE_INTERRUPTION = /^\[Request interrupted by user( for tool use)?\]$/;
 
+/** Vrai pour la marque d'un arrêt (Échap) : elle n'est pas un message, sur le fil local comme à distance. */
+export function estMarqueInterruption(texte: string): boolean {
+  return MARQUE_INTERRUPTION.test(texte);
+}
+
 // Une commande tapée (/compact …) arrive balisée ; ses sorties locales et les rappels système ne sont pas des messages.
 function messageDeChris(brut: string): Evenement[] {
   if (/^<(local-command|system-reminder|command-message|task-notification)/.test(brut.trim())) return [];
@@ -188,7 +193,7 @@ function messageDeChris(brut: string): Evenement[] {
   const texteFinal = commande
     ? `${commande[1]} ${brut.match(/<command-args>([^<]*)<\/command-args>/)?.[1] ?? ''}`.trim()
     : sansEnteteChris(brut.trim()).trim();
-  if (estConsigneCompaction(texteFinal) || MARQUE_INTERRUPTION.test(texteFinal)) return [];
+  if (estConsigneCompaction(texteFinal) || estMarqueInterruption(texteFinal)) return [];
   return texteFinal ? [{ type: 'message', texte: texteFinal }] : [];
 }
 

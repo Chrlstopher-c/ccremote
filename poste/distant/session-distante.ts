@@ -27,6 +27,7 @@ import {
 import { AttenteDistante, type Resolution, titreDe } from './attente-distante.ts';
 import { type ContexteDistant, resumeDistant } from './resume-distant.ts';
 import { type StockeurPieces, traduireLot } from './traduction-distante.ts';
+import { type BornesLecture, lireFil } from './pages-evenements.ts';
 import { stockeurPieces } from './pieces-distantes.ts';
 import type { Stockage } from '../presentation/stockage.ts';
 import { enTour, modeleDuFil } from './modele-du-fil.ts';
@@ -41,7 +42,8 @@ const APPAREIL_REFUSE = 'Ce compte exige un appareil de confiance pour piloter c
 const JETON_EXPIRE = 'jeton expiré : reconnecte le compte';
 
 const TAILLE_PAGE = 100;
-const PAGES_HISTORIQUE = 4; // ~400 derniers événements au premier chargement
+const AFFICHABLES_HISTORIQUE = 400; // événements affichables au premier chargement (les `system` ne comptent pas)
+const PAGES_HISTORIQUE = 40; // plafond de pages lues pour atteindre cette borne
 const PAGES_DIRECT = 5; // plafond d'une lecture de suivi : au-delà, le reste n'est pas relu
 const TAILLE_PAGE_DIRECT = 30; // relu toutes les 5 s pendant un tour : petite page, la suivante si besoin
 
@@ -221,7 +223,10 @@ export class SessionDistante implements SessionPoste {
   async charger(): Promise<ResultatApi<number>> {
     this.etat = nouvelEtatTraduction();
     this.vus = new Set();
-    const r = await this.lirePages(PAGES_HISTORIQUE, () => false, TAILLE_PAGE);
+    const r = await this.lirePages(
+      { pages: PAGES_HISTORIQUE, affichables: AFFICHABLES_HISTORIQUE, dejaConnu: () => false },
+      TAILLE_PAGE,
+    );
     if (!r.ok) return r;
     const chronologique = [...r.donnees].reverse();
     const evenements = traduireLot(chronologique, this.etat, this.pieces);
@@ -237,7 +242,8 @@ export class SessionDistante implements SessionPoste {
 
   /** Suivi en direct : émet un à un les événements arrivés depuis le dernier passage. */
   async suivre(): Promise<ResultatApi<number>> {
-    const r = await this.lirePages(PAGES_DIRECT, (id) => this.vus.has(id), TAILLE_PAGE_DIRECT);
+    const bornes = { pages: PAGES_DIRECT, affichables: Infinity, dejaConnu: (id: string) => this.vus.has(id) };
+    const r = await this.lirePages(bornes, TAILLE_PAGE_DIRECT);
     if (!r.ok) return r;
     const nouveaux = [...r.donnees].reverse();
     this.vuJusqua = this.derniereListe;
@@ -349,27 +355,10 @@ export class SessionDistante implements SessionPoste {
   }
 
   /** Les événements lus page par page, du plus récent au plus ancien ; s'arrête avant le premier déjà connu. */
-  private async lirePages(
-    pages: number,
-    dejaConnu: (id: string) => boolean,
-    taille: number,
-  ): Promise<ResultatApi<EvenementBrut[]>> {
-    const lus: EvenementBrut[] = [];
-    let curseur: string | null = null;
-    for (let i = 0; i < pages; i++) {
-      const page = await lireEvenements(this.d.configDir, this.resume.id, this.d.journal, {
-        curseur,
-        limite: taille,
-      });
-      if (!page.ok) return { ok: false, statut: page.statut, probleme: page.probleme };
-      for (const e of page.donnees.evenements) {
-        if (dejaConnu(e.id)) return { ok: true, donnees: lus };
-        lus.push(e);
-      }
-      if (page.donnees.suivant === null || page.donnees.evenements.length === 0) break;
-      curseur = page.donnees.suivant;
-    }
-    return { ok: true, donnees: lus };
+  private lirePages(bornes: BornesLecture, taille: number): Promise<ResultatApi<EvenementBrut[]>> {
+    const lire = (curseur: string | null) =>
+      lireEvenements(this.d.configDir, this.resume.id, this.d.journal, { curseur, limite: taille });
+    return lireFil(lire, bornes);
   }
 
   // Pilotage : chaque envoi est un événement POSTé à la session ; la réponse de claude.ai dit si elle est acceptée.

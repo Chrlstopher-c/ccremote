@@ -9,6 +9,7 @@ import { objet } from '../comptes/valeurs.ts';
 import type { EvenementBrut } from './donnees.ts';
 import type { Evenement } from '../../commun/session.ts';
 import { sansEnteteChris } from '../../commun/entete-chris.ts';
+import { estMarqueInterruption } from '../session/traduction.ts';
 
 /** Pièce d'un message (image, document) à stocker : base64 + type. */
 export interface PieceBrute {
@@ -23,6 +24,11 @@ export interface StockeurPieces {
 }
 
 type Objet = Record<string, unknown>;
+
+/** Un événement compte pour la limite d'un historique s'il est un message du SDK autre qu'un `system`. */
+export function estAffichable(brute: EvenementBrut): boolean {
+  return estMessageSdk(brute.payload) && objet(brute.payload)['type'] !== 'system';
+}
 
 /** Un payload est un message du SDK s'il porte un type textuel ; le reste n'est pas traduit. */
 export function estMessageSdk(v: unknown): v is SDKMessage {
@@ -68,7 +74,7 @@ function messageUtilisateur(payload: SDKMessage, pieces?: StockeurPieces): Evene
   const uuid = typeof p['uuid'] === 'string' ? { uuid: p['uuid'] } : {};
   const { textes, joints } = lireBlocs(blocs, pieces);
   const texte = sansEnteteChris(textes.join('\n').trim()).trim();
-  const message: Evenement[] = texte === '' ? [] : [{ type: 'message', texte, ...uuid }];
+  const message: Evenement[] = texte === '' || estMarqueInterruption(texte) ? [] : [{ type: 'message', texte, ...uuid }];
   return [...message, ...joints];
 }
 
