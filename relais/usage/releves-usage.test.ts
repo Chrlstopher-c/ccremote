@@ -4,6 +4,7 @@ import pino from 'pino';
 import type { EtatCompte } from '../../commun/comptes.ts';
 import {
   CADENCE_MS,
+  apresRemise,
   type MachinesReleve,
   type PosteReleve,
   ReleveUsage,
@@ -314,5 +315,15 @@ describe('problème affiché selon la fraîcheur', () => {
   test('aucune valeur jamais lue : le problème d’erreur est affiché', () => {
     const texte = problemeAffiche('poste injoignable', null, null, T);
     expect(texte).toContain('relevé d’usage impossible (poste injoignable)');
+  });
+});
+
+describe('fenêtre dont la remise à zéro est passée', () => {
+  const f = { libelle: 'Session (5 h)', pourcent: 81, reinitialiseLe: '2026-11-25T03:30:00Z' };
+  test('passée : 0 %, prochaine remise inconnue', () => {
+    expect(apresRemise(f, Date.parse('2026-11-25T04:00:00Z'))).toEqual({ ...f, pourcent: 0, reinitialiseLe: null });
+  });
+  test('à venir : inchangée', () => {
+    expect(apresRemise(f, Date.parse('2026-11-25T03:00:00Z'))).toEqual(f);
   });
 });

@@ -3,7 +3,7 @@
 // 5 min, recul exponentiel sur 429, Retry-After respecté), garde la dernière valeur bonne en base et la pose sur les vues.
 import type { Database } from 'bun:sqlite';
 import type { Logger } from 'pino';
-import { DonneesReleve, type EtatCompte, FenetresUsage, type LimiteSdk } from '../../commun/comptes.ts';
+import { DonneesReleve, type EtatCompte, type FenetreUsage, FenetresUsage, type LimiteSdk } from '../../commun/comptes.ts';
 
 export const CADENCE_MS = 5 * 60_000;
 const RECUL_DEPART_MIN = 5;
@@ -44,6 +44,14 @@ const FRAICHEUR_MS = 30 * 60_000;
 
 /** Le problème à afficher pour un compte. Rien si la valeur affichée a moins de 30 min : elle est fraîche,
  *  quelle que soit la dernière erreur d'appel. */
+/** Une fenêtre gardée dont l'heure de remise à zéro est passée ne montre plus son ancien taux (81 % resté affiché
+ *  après la remise de 5 h quand le relevé échouait, 25/11) : 0 %, prochaine remise inconnue jusqu'au relevé suivant. */
+export function apresRemise(f: FenetreUsage | null, maintenant: number): FenetreUsage | null {
+  if (f === null || f.reinitialiseLe === null) return f;
+  const remise = Date.parse(f.reinitialiseLe);
+  return Number.isFinite(remise) && remise <= maintenant ? { ...f, pourcent: 0, reinitialiseLe: null } : f;
+}
+
 export function problemeAffiche(
   erreur: string | null,
   releveLe: string | null,
@@ -142,11 +150,12 @@ export class ReleveUsage {
       const l = this.ligne(c.cle);
       const f = l?.fenetres ? FenetresUsage.safeParse(JSON.parse(l.fenetres)) : null;
       const fenetres = f?.success ? f.data : null;
+      const maintenant = this.maintenant();
       return {
         ...c,
-        session: fenetres?.session ?? null,
-        semaine: fenetres?.semaine ?? null,
-        autres: fenetres?.autres ?? [],
+        session: apresRemise(fenetres?.session ?? null, maintenant),
+        semaine: apresRemise(fenetres?.semaine ?? null, maintenant),
+        autres: (fenetres?.autres ?? []).flatMap((x) => apresRemise(x, maintenant) ?? []),
         usageLe: l?.releve_le ?? null,
         prochainReleve: l?.prochain_le ?? null,
         probleme: l ? (this.problemeDe(l) ?? c.probleme) : (c.probleme ?? 'pas encore relevé'),
