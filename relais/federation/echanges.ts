@@ -152,6 +152,7 @@ export class Echanges {
       racines: fiche.racines.slice(0, 50),
       projets: fiche.projets.slice(0, 500),
       comptes: fiche.comptes.slice(0, 20),
+      etatComptes: fiche.etatComptes.slice(0, 20),
     };
   }
 

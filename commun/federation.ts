@@ -1,6 +1,7 @@
 // Responsabilité : le protocole de la fédération « mes machines » (contrat v2, étape 3) — messages en clair de
 // l'appairage entre nœuds, puis messages chiffrés de bout en bout une fois le canal établi. Aucune logique ici.
 import { z } from 'zod';
+import { EtatCompte } from './comptes.ts';
 import { GENRES_MEMBRE } from './aiguilleur.ts';
 import { LONGUEUR_MAX_GESTE, METHODES_GESTE } from './gestes-federes.ts';
 import { TAILLE_MAX_TEXTE_SESSION } from './fichiers-session.ts';
@@ -128,6 +129,9 @@ export const MachineAnnoncee = z.strictObject({
   racines: z.array(z.string().max(4096)).max(50),
   projets: z.array(Projet).max(500),
   comptes: z.array(z.string().max(200)).max(20),
+  // Comptes relevés (limites de 5 h et de la semaine) : un pair dont le relevé échoue (jeton expiré) montre celui-ci.
+  // Les nœuds sont mis à jour ensemble (strictObject : un nœud ancien refuserait l'annonce).
+  etatComptes: z.array(EtatCompte).max(20).optional(),
 });
 export type MachineAnnoncee = z.infer<typeof MachineAnnoncee>;
 

@@ -109,7 +109,7 @@ function vueMachine(n: NoeudDistant, machine: string, depuis: string): VueMachin
     racines: vue?.racines ?? [],
     projets: vue?.projets ?? [],
     comptes: vue?.comptes ?? [],
-    etatComptes: [],
+    etatComptes: vue?.etatComptes ?? [],
     version: '',
     etat: null,
     derniereVue: depuis,

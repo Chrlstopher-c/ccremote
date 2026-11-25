@@ -81,3 +81,16 @@ describe('fusionnerVue', () => {
     expect(v.routage.get('s-1')).toBe('m1');
   });
 });
+
+describe('comptes relevés annoncés par un pair', () => {
+  test('la machine du pair porte ses comptes relevés (limites visibles chez soi)', () => {
+    const session = { libelle: '5 h', pourcent: 34, reinitialiseLe: null };
+    const compte = { id: 'principal', email: 'x@exemple.test', session };
+    const n = {
+      ...noeud('m1', 'tour', true, ['f-1']),
+      vue: { description: 'tour', racines: [], projets: [], comptes: ['principal'], etatComptes: [compte] },
+    } as unknown as NoeudDistant; // compte réduit aux champs lus ici
+    const tour = vue([n]).machines.find((m) => m.id === 'tour');
+    expect(tour?.etatComptes).toEqual([compte]);
+  });
+});
