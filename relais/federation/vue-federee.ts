@@ -1,7 +1,9 @@
 // Responsabilité : ce que l'appli voit du parc quand ce nœud est fédéré — ses sessions et machines, plus celles
 // des nœuds appariés, sans doublon. Règles : une machine tenue par un nœud en ligne passe par lui (ses copies vues par un
-// tunnel SSH sont masquées, sauf les archivées, qui cèdent à la version vivante du nœud) ; hors ligne, la copie
-// locale reprend la main si elle existe ; jamais la machine de ce nœud reçue d'un autre. Fonction pure : aucune E/S.
+// tunnel SSH sont masquées, sauf les archivées, qui cèdent à la version vivante du nœud) ; hors ligne, ses sessions
+// restent visibles (machine injoignable) à côté des copies locales, prioritaires à identifiant égal (avant le 25/11
+// la copie locale masquait tout : les sessions de la tour éteinte disparaissaient) ; jamais la machine de ce nœud
+// reçue d'un autre. Fonction pure : aucune E/S.
 import type { VueMachine } from '../../commun/api-clients.ts';
 import type { ResumeSession } from '../../commun/session.ts';
 import type { NoeudDistant } from './distant.ts';
@@ -43,9 +45,10 @@ export function fusionnerVue(e: EntreeVue): VueFederee {
       machinesRoutees.set(n.machine, n.membre);
     }
     for (const s of n.sessions) {
-      if (routage.has(s.id) || !accepteMachine(regle, n, s.machine) || !ajouterOuRemplacer(sessions, s)) continue;
+      if (routage.has(s.id) || !accepteSession(regle, n, s.machine) || !ajouterOuRemplacer(sessions, s)) continue;
       routage.set(s.id, n.membre);
-      if (!machinesRoutees.has(s.machine)) machinesRoutees.set(s.machine, n.membre);
+      const routable = !machinesRoutees.has(s.machine) && accepteMachine(regle, n, s.machine);
+      if (routable) machinesRoutees.set(s.machine, n.membre);
     }
   }
   return { sessions, machines: machinesFusionnees(e, noeuds, machinesRoutees), routage, machinesRoutees, masquees };
@@ -68,6 +71,12 @@ interface Regle {
   readonly machineLocale: string;
   readonly nativesEnLigne: ReadonlySet<string>;
   readonly connuesLocalement: ReadonlySet<string>;
+}
+
+// Session de la machine du nœud : toujours gardée (hors ligne, elle reste visible) ; relayée : règle de la machine.
+function accepteSession(r: Regle, n: NoeudDistant, machine: string): boolean {
+  if (machine === n.machine) return machine !== r.machineLocale;
+  return accepteMachine(r, n, machine);
 }
 
 // Native (la machine du nœud) : en ligne, ou hors ligne sans copie locale. Relayée par lui (vue par ses tunnels) :

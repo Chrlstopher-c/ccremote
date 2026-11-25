@@ -30,10 +30,17 @@ describe('fusionnerVue', () => {
     expect(v.machines.find((m) => m.id === 'tour')?.enLigne).toBe(true);
   });
 
-  test('nœud hors ligne avec une copie locale : la copie SSH reprend la main', () => {
+  test('nœud hors ligne avec une copie locale : ses sessions restent visibles à côté de la copie (plus de disparition)', () => {
     const v = vue([noeud('m1', 'tour', false, ['f-1'])]);
-    expect(v.sessions.map((s) => s.id)).toEqual(['ssh-1']);
-    expect(v.routage.size).toBe(0);
+    expect(v.sessions.map((s) => s.id)).toEqual(['ssh-1', 'f-1']);
+    expect(v.routage.get('f-1')).toBe('m1');
+    expect(v.machinesRoutees.has('tour')).toBe(false);
+  });
+
+  test('nœud hors ligne : à identifiant égal, la copie locale garde la priorité', () => {
+    const v = vue([noeud('m1', 'tour', false, ['ssh-1', 'f-2'])]);
+    expect(v.sessions.map((s) => s.id)).toEqual(['ssh-1', 'f-2']);
+    expect(v.routage.has('ssh-1')).toBe(false);
   });
 
   test('nœud hors ligne sans copie locale : ses sessions restent, machine hors ligne', () => {
