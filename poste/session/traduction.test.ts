@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { contexteDe, type Ligne, traduire, travailEnCours } from './traduction.ts';
 import { CONSIGNE_COMPACTION } from './politique-compaction.ts';
+import { ENTETE_CHRIS } from '../../commun/entete-chris.ts';
 
 const assistant = (content: object[], extra: object = {}): Ligne => ({
   type: 'assistant',
@@ -202,4 +203,30 @@ test('message mis en file par Chris : bulle à l’identifiant de son envoi (sou
     },
   };
   expect(traduire(l)).toEqual([{ type: 'message', texte: 'vas plus vite', uuid: 'envoi-1' }]);
+});
+
+describe('message de Chris tapé dans Noctis pendant un tour d’une session Desktop', () => {
+  const enFile = (prompt: unknown, origin: unknown): Ligne =>
+    ({ type: 'attachment', attachment: { type: 'queued_command', prompt, commandMode: 'prompt', origin } }) as Ligne;
+
+  test('arrive en file depuis « une autre session » : bulle de Chris, sans en-tête', () => {
+    const l = enFile(`${ENTETE_CHRIS}\nok go, j'te laisse gérer`, { kind: 'peer', from: 'unknown' });
+    expect(traduire(l)).toEqual([{ type: 'message', texte: "ok go, j'te laisse gérer" }]);
+  });
+
+  test('avec image : le texte en blocs est retrouvé', () => {
+    const blocsPrompt = [{ type: 'image', source: {} }, { type: 'text', text: `${ENTETE_CHRIS}\ntiens le screen` }];
+    expect(traduire(enFile(blocsPrompt, { kind: 'peer', from: 'unknown' }))).toEqual([
+      { type: 'message', texte: 'tiens le screen' },
+    ]);
+  });
+
+  test('un vrai message d’agent pair (sans en-tête) n’est pas une bulle de Chris', () => {
+    expect(traduire(enFile('bonjour depuis une autre session', { kind: 'peer', from: 'unknown' }))).toEqual([]);
+  });
+
+  test('l’ancien en-tête « Message de Chris » est aussi retiré', () => {
+    const ancien = '[Message de Chris, tapé dans Lanterne : c’est ton utilisateur, pas un agent]\nsalut';
+    expect(traduire(enFile(ancien, { kind: 'peer', from: 'unknown' }))).toEqual([{ type: 'message', texte: 'salut' }]);
+  });
 });

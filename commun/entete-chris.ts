@@ -7,6 +7,13 @@ export function avecEnteteChris(texte: string): string {
   return texte.startsWith(ENTETE_CHRIS) ? texte : `${ENTETE_CHRIS}\n${texte}`;
 }
 
+// Ancienne forme de l'en-tête (« Message de Chris »), encore dans les transcripts d'avant le changement.
+const ENTETE_ANCIEN = /^\[Message de (l’utilisateur|Chris), tapé dans Lanterne : c’est ton utilisateur, pas un agent\]\n?/u;
+
+export function aEnteteChris(texte: string): boolean {
+  return ENTETE_ANCIEN.test(texte);
+}
+
 export function sansEnteteChris(texte: string): string {
-  return texte.startsWith(ENTETE_CHRIS) ? texte.slice(ENTETE_CHRIS.length).replace(/^\n/, '') : texte;
+  return texte.replace(ENTETE_ANCIEN, '');
 }

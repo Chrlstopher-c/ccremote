@@ -3,7 +3,7 @@
 // Fil principal : les lignes `isSidechain` sont ignorées. Un sous-agent a son propre transcript, traduit avec `agent`.
 import type { Evenement } from '../../commun/session.ts';
 import { estConsigneCompaction } from './politique-compaction.ts';
-import { sansEnteteChris } from '../../commun/entete-chris.ts';
+import { aEnteteChris, sansEnteteChris } from '../../commun/entete-chris.ts';
 
 const TAILLE_DETAIL = 8_000;
 const TAILLE_RESULTAT = 3_000;
@@ -129,22 +129,28 @@ function traduireUtilisateur(l: Ligne): Evenement[] {
 // c'est une bulle comme un message normal (ses images sont relues à part, voir historique.ts).
 function finDeTache(l: Ligne): Evenement[] {
   if (l.attachment?.type !== 'queued_command') return [];
-  const brut = l.attachment.prompt;
-  const prompt =
-    typeof brut === 'string'
-      ? brut
-      : blocs(brut)
-          .filter((b) => b.type === 'text')
-          .map((b) => texte(b['text']))
-          .join('\n');
+  const prompt = texteDuPrompt(l.attachment.prompt);
   if (prompt.includes('<task-notification>')) return resultatDeNotification(prompt);
   return messageEnFile(l) ? messageDeChris(prompt) : [];
 }
 
-/** Message de Chris mis en file pendant un tour (pas une notification de tâche ni une commande interne). */
+function texteDuPrompt(brut: unknown): string {
+  return typeof brut === 'string'
+    ? brut
+    : blocs(brut)
+        .filter((b) => b.type === 'text')
+        .map((b) => texte(b['text']))
+        .join('\n');
+}
+
+/** Message de Chris mis en file pendant un tour (pas une notification de tâche ni une commande interne). Tapé dans
+ *  Noctis pour une session Desktop, il arrive comme message « d'une autre session » (origine `peer`) portant l'en-tête
+ *  de Chris : c'est le sien (invisible au fil jusqu'au 25/11). */
 export function messageEnFile(l: Ligne): boolean {
   const a = l.attachment;
-  return a?.type === 'queued_command' && (a.humanTurn === true || a.origin?.kind === 'human');
+  if (a?.type !== 'queued_command') return false;
+  if (a.humanTurn === true || a.origin?.kind === 'human') return true;
+  return a.origin?.kind === 'peer' && aEnteteChris(texteDuPrompt(a.prompt).trimStart());
 }
 
 function resultatDeNotification(prompt: string): Evenement[] {
