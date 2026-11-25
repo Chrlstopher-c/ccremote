@@ -8,7 +8,7 @@ import { z } from 'zod';
 import type { RequeteDroit } from '../../commun/charte.ts';
 import { type MessageChiffre, TAILLE_MORCEAU_CARACTERES } from '../../commun/federation.ts';
 import type { DemandeAppelModule } from '../../commun/modules.ts';
-import type { ResultatAppel, RelaisPairs } from '../modules/appels.ts';
+import { MODULE_ABSENT, type ResultatAppel, type RelaisPairs, sansAppliUtile } from '../modules/appels.ts';
 import type { CanalNoeud } from './canal.ts';
 import type { Echanges } from './echanges.ts';
 import { decouper, nombreDeMorceaux } from './transferts.ts';
@@ -78,12 +78,15 @@ function lireReponse(statut: number, corps: string): ResultatAppel {
 export class AppelsPairs implements RelaisPairs {
   constructor(private readonly d: DependancesAppelsPairs) {}
 
-  /** Demande l'appel à chaque pair relayable ; rend le premier résultat réussi, ou null si aucun n'a réussi. */
+  /** Demande l'appel à chaque pair relayable ; rend le premier résultat réussi, sinon le refus d'un pair qui a une
+   *  appli (sa vraie raison : « navigateur fermé », référence absente…), sinon null. Avant le 25/11 ce refus était
+   *  jeté et l'agent lisait « Lanterne n'est ouverte sur aucun appareil ». */
   relayer(demande: DemandeAppelModule, delaiMs: number): Promise<ResultatAppel | null> {
     const canaux = this.d.pairs();
     if (canaux.length === 0) return Promise.resolve(null);
     return new Promise((resoudre) => {
       let restants = canaux.length;
+      let refus: ResultatAppel | null = null;
       for (const canal of canaux) {
         void this.interroger(canal, demande, delaiMs).then((r) => {
           if (r?.ok) {
@@ -93,8 +96,11 @@ export class AppelsPairs implements RelaisPairs {
             );
             return resoudre(r);
           }
+          if (r && !r.ok && !sansAppliUtile(r, demande.module) && ![MODULE_ABSENT, 'pair en échec'].includes(r.erreur)) {
+            refus = r;
+          }
           restants -= 1;
-          if (restants === 0) resoudre(null);
+          if (restants === 0) resoudre(refus);
         });
       }
     });

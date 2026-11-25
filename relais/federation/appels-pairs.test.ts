@@ -152,3 +152,11 @@ describe('droits du relais', () => {
     expect(autoriserPair('ami', autre, meme, toujoursPermis)).toBe(true);
   });
 });
+
+describe('refus réel d’un pair qui a une appli', () => {
+  test('sa raison remonte, au lieu de « aucun appareil »', async () => {
+    const distant = pair({ ok: false, erreur: 'navigateur fermé pour cette session' });
+    const relayeur = relayeurAvec([{ membre: 'portable', noeud: distant }]);
+    expect(await relayeur.relayer(DEMANDE, 1000)).toEqual({ ok: false, erreur: 'navigateur fermé pour cette session' });
+  });
+});

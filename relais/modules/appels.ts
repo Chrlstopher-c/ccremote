@@ -46,7 +46,7 @@ export interface ParametresAppels {
 }
 
 // Une issue où aucune appli locale ne peut répondre : le pair doit être essayé.
-function sansAppliUtile(r: ResultatAppel, module: string): boolean {
+export function sansAppliUtile(r: ResultatAppel, module: string): boolean {
   return !r.ok && (r.erreur === AUCUNE_APPLI || r.erreur === absentDeToutes(module));
 }
 
