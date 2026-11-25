@@ -91,6 +91,7 @@ describe('comptes relevés annoncés par un pair', () => {
       vue: { description: 'tour', racines: [], projets: [], comptes: ['principal'], etatComptes: [compte] },
     } as unknown as NoeudDistant; // compte réduit aux champs lus ici
     const tour = vue([n]).machines.find((m) => m.id === 'tour');
-    expect(tour?.etatComptes).toEqual([compte]);
+    expect(tour?.etatComptes.map((c) => c.id)).toEqual(['principal']);
+    expect(tour?.etatComptes[0]?.session?.pourcent).toBe(34);
   });
 });
