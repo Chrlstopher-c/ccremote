@@ -138,7 +138,8 @@ export const CommandeRelais = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('rembobiner'), ...avecSession, messageId: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('dupliquer'), ...avecSession, messageId: z.string().min(1).max(200) }),
   z.object({ kind: z.literal('compacter'), ...avecSession }),
-  z.object({ kind: z.literal('fermer'), ...avecSession }),
+  // `siInactive` : extinction automatique du nœud — refusée tant qu'une tâche de fond de la session tourne.
+  z.object({ kind: z.literal('fermer'), ...avecSession, siInactive: z.boolean().optional() }),
   z.object({ kind: z.literal('reprendre'), ...avecSession }),
   // Adoption d'une session découverte ou fermée du poste : sa fiche (fermée, reprenable par le SDK) est créée,
   // puis renvoyée.

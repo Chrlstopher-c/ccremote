@@ -51,7 +51,7 @@ export interface SourcesExtinction {
     enLigne(machine: string): boolean;
     commander(
       machine: string,
-      commande: { readonly kind: 'fermer'; readonly sessionId: string },
+      commande: { readonly kind: 'fermer'; readonly sessionId: string; readonly siInactive: true },
     ): Promise<ReponsePoste>;
   };
   readonly journal: Logger;
@@ -59,9 +59,10 @@ export interface SourcesExtinction {
 
 async function eteindre(d: SourcesExtinction, machine: string, id: string): Promise<boolean> {
   try {
-    const r = await d.postes.commander(machine, { kind: 'fermer', sessionId: id });
+    const r = await d.postes.commander(machine, { kind: 'fermer', sessionId: id, siInactive: true });
     if (!r.ok) {
-      d.journal.warn({ session: id, machine, erreur: r.erreur }, 'extinction automatique refusée par le poste');
+      // Refus attendu (tâche de fond en cours) : redemandé chaque minute, donc pas d'avertissement répété.
+      d.journal.debug({ session: id, machine, erreur: r.erreur }, 'extinction automatique refusée par le poste');
       return false;
     }
     d.journal.info({ session: id }, 'session éteinte pour inactivité');

@@ -46,11 +46,20 @@ async function mettreEnFondCommande(s: SessionPoste, appel: string): Promise<Rep
   return erreur ? { ok: false, erreur } : { ok: true, donnees: { ok: true, enFond: true } };
 }
 
+export const TACHE_EN_COURS = 'tâche de fond en cours : session laissée allumée';
+
+function tacheDeFondEnCours(s: SessionPoste): boolean {
+  return s instanceof SessionSdk && s.taches().some((tache) => tache.statut === 'en_cours');
+}
+
 async function appliquerCommande(ctx: ContexteCommandes, s: SessionPoste, c: CommandeSession): Promise<string | null> {
   if (c.kind === 'envoyer') return envoyerMessage(s, c.texte, c.pieces ?? [], c.auteur, c.maintenant === true);
   if (c.kind === 'interrompre') return s.interrompre();
   if (c.kind === 'compacter') return s.compacter();
-  if (c.kind === 'fermer') return s.fermer();
+  if (c.kind === 'fermer') {
+    if (c.siInactive === true && tacheDeFondEnCours(s)) return TACHE_EN_COURS;
+    return s.fermer();
+  }
   if (c.kind === 'reprendre') {
     const tenue = tenueAilleurs(s.resume.claudeSessionId, ctx.configDirs(), ctx.journal);
     return tenue ?? (await s.reprendre());

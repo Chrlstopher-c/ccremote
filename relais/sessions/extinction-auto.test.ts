@@ -85,7 +85,7 @@ describe('sessionsAEteindre : règle pure', () => {
 
 interface Appel {
   readonly machine: string;
-  readonly commande: { readonly kind: 'fermer'; readonly sessionId: string };
+  readonly commande: { readonly kind: 'fermer'; readonly sessionId: string; readonly siInactive: true };
 }
 
 interface Montage {
@@ -116,7 +116,7 @@ describe('balayerExtinctionAuto', () => {
     const m = montage({ delai: 30, sessions: [session({ id: 'a' }), session({ id: 'b', statut: 'travail' })] });
     const eteintes = await balayerExtinctionAuto(m.sources, MAINTENANT);
     expect(eteintes).toEqual(['a']);
-    expect(m.appels).toEqual([{ machine: 'tour', commande: { kind: 'fermer', sessionId: 'a' } }]);
+    expect(m.appels).toEqual([{ machine: 'tour', commande: { kind: 'fermer', sessionId: 'a', siInactive: true } }]);
   });
 
   test('délai jamais : aucun appel au poste', async () => {
