@@ -179,7 +179,7 @@ describe('dernière valeur bonne', () => {
     expect(vu?.session?.pourcent).toBe(42);
     expect(vu?.usageLe).toBe(new Date(MAINTENANT).toISOString());
     expect(vu?.prochainReleve).not.toBeNull();
-    expect(vu?.probleme).toContain('prochain relevé vers');
+    expect(vu?.probleme).toContain('prochain essai vers');
   });
 
   test('après un 429 sur une donnée de moins de 30 min, aucun problème affiché', async () => {
@@ -309,12 +309,12 @@ describe('problème affiché selon la fraîcheur', () => {
   test('donnée de plus de 30 min : la limite 429 est annoncée avec l’heure du prochain relevé', () => {
     const releve = new Date(T - 31 * MIN).toISOString();
     const prochain = new Date(T + 5 * MIN).toISOString();
-    expect(problemeAffiche('usage HTTP 429', releve, prochain, T)).toContain('limite de l’API d’usage atteinte');
+    expect(problemeAffiche('usage HTTP 429', releve, prochain, T)).toContain('trop de relevés demandés');
   });
 
   test('aucune valeur jamais lue : le problème d’erreur est affiché', () => {
     const texte = problemeAffiche('poste injoignable', null, null, T);
-    expect(texte).toContain('relevé d’usage impossible (poste injoignable)');
+    expect(texte).toContain('limites pas relevées pour l’instant');
   });
 });
 

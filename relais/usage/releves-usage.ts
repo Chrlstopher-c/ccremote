@@ -62,8 +62,11 @@ export function problemeAffiche(
   const releve = Date.parse(releveLe ?? '');
   if (Number.isFinite(releve) && maintenant - releve < FRAICHEUR_MS) return null;
   const prochain = prochainLe ? heure(Date.parse(prochainLe)) : 'inconnu';
-  if (erreur.includes('429')) return `limite de l’API d’usage atteinte : prochain relevé vers ${prochain}`;
-  return `relevé d’usage impossible (${erreur}) : nouvel essai vers ${prochain}`;
+  if (erreur.includes('429')) return `trop de relevés demandés : prochain essai vers ${prochain}`;
+  // Jeton d'accès expiré : Claude Code n'a pas tourné depuis quelques heures sur cette machine, le compte reste connecté
+  // (le jeton se renouvelle à la prochaine session ; le renouveler ici risquerait de déconnecter Claude Code).
+  if (erreur.includes('jeton')) return `limites à jour à la prochaine session Claude sur cette machine`;
+  return `limites pas relevées pour l’instant : nouvel essai vers ${prochain}`;
 }
 
 export class ReleveUsage {
