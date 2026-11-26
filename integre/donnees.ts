@@ -1,5 +1,5 @@
 // Responsabilité : le dossier de données du moteur intégré — création, journal remis à zéro, identifiant de la machine.
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -34,9 +34,20 @@ export function preparerDonnees(racine: string, hote: string = hostname()): Donn
     mkdirSync(dossier, { recursive: true, mode: 0o700 });
   }
   const journal = join(racine, 'journal/moteur.log');
+  garderJournalPrecedent(journal);
   writeFileSync(journal, ''); // remis à zéro à chaque lancement
   const { machine, description } = lireOuCreerConfig(join(racine, 'config.json'), hote);
   return { racine, journal, machine, description };
+}
+
+// Le journal du lancement d'avant est gardé (`moteur.precedent.log`) : après un plantage suivi d'une relance
+// automatique, la cause n'était plus nulle part (26/11, nœud de la tour sorti en code 1 sans trace).
+function garderJournalPrecedent(journal: string): void {
+  try {
+    if (existsSync(journal)) renameSync(journal, journal.replace(/\.log$/, '.precedent.log'));
+  } catch (erreur) {
+    console.error('journal précédent non gardé', erreur);
+  }
 }
 
 function lireOuCreerConfig(chemin: string, hote: string): { machine: string; description: string } {
