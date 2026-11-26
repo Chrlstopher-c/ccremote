@@ -16,6 +16,8 @@ import type { RelaisDistant } from '../poste/relais-distant.ts';
 import { VERSION } from '../commun/version.ts';
 
 const DELAI_PRET_MS = 25_000;
+// Nœud sans fenêtre (autonome) : au démarrage à froid de la machine (disque lent), le poste peut mettre plus longtemps.
+const DELAI_PRET_AUTONOME_MS = 120_000;
 
 export async function lancerMoteur(parametres: ParametresLancement): Promise<void> {
   const donnees = preparerDonnees(parametres.donnees);
@@ -26,6 +28,7 @@ export async function lancerMoteur(parametres: ParametresLancement): Promise<voi
     else await demarrer(parametres, donnees, journal);
   } catch (erreur) {
     journal.error({ err: erreur }, 'moteur intégré : démarrage impossible');
+    console.error('moteur intégré : démarrage impossible', erreur); // aussi dans le journal du système (systemd)
     process.exit(1);
   }
 }
@@ -42,7 +45,7 @@ async function demarrer(p: ParametresLancement, donnees: Donnees, journal: Logge
   if (!p.autonome) arretALaFermetureEntree(journal);
   await import('../relais/bin.ts');
   await import('../poste/bin.ts');
-  await attendrePosteLocal(`http://127.0.0.1:${p.portWeb}`, p.jeton, donnees.machine, DELAI_PRET_MS, journal);
+  await attendrePosteLocal(`http://127.0.0.1:${p.portWeb}`, p.jeton, donnees.machine, p.autonome ? DELAI_PRET_AUTONOME_MS : DELAI_PRET_MS, journal);
   process.stdout.write(ligneDePret(donnees.machine, VERSION));
   journal.info({ machine: donnees.machine, web: p.portWeb, postes: p.portPostes }, 'moteur intégré prêt');
 }
